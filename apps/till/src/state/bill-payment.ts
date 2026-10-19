@@ -187,6 +187,166 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   return isNetworkFailure(error) ? { ...sent, unconfirmed: true } : sent;
 }
 
+/**
+ * A payment send this phone has out, or whose fate it does not know, on one bill. `uncertain`: it
+ * may have been recorded although no result came back, so the bill is locked until a result or a
+ * balance read settles it. `turn` is the send that last wrote the entry, `dialogId` the dialog that
+ * sent it, `endedTick` when its last send ended (0 while in flight), and `refusal` the last coded
+ * refusal of its sends.
+ */
+export interface PendingSend {
+  billId: string;
+  submission: Submission;
+  turn: number;
+  dialogId: number;
+  inFlight: boolean;
+  uncertain: boolean;
+  endedTick: number;
+  refusal: { code: string } | null;
+}
+
+/** The phone's pending sends, keyed by bill. */
+export type PendingPayments = ReadonlyMap<string, PendingSend>;
+
+function codeOf(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" ? code : null;
+}
+
+/** A failure that may follow a recorded payment: no answer, a server failure (the provider call
+ * that throws outside `REFUSED_START` leaves the pending row, `apps/server/src/bill-payments.ts`),
+ * or an error with no code, which the client reports as `server.internal`. */
+export function isUncertainFailure(error: unknown): boolean {
+  if (isNetworkFailure(error)) return true;
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  if (typeof status === "number" && status >= 500) return true;
+  const code = codeOf(error);
+  return code === null || code === "server.internal";
+}
+
+function withEntry(pending: PendingPayments, entry: PendingSend): PendingPayments {
+  return new Map(pending).set(entry.billId, entry);
+}
+
+function without(pending: PendingPayments, billId: string): PendingPayments {
+  const next = new Map(pending);
+  next.delete(billId);
+  return next;
+}
+
+/** A send of `submission` on `billId` has begun. Sending the same submission id again keeps what is
+ * known of it; a new id starts certain. */
+export function sendStarted(
+  pending: PendingPayments,
+  billId: string,
+  submission: Submission,
+  turn: number,
+  dialogId: number,
+): PendingPayments {
+  const before = pending.get(billId);
+  const same = before?.submission.request.submissionId === submission.request.submissionId;
+  return withEntry(pending, {
+    billId,
+    submission,
+    turn,
+    dialogId,
+    inFlight: true,
+    uncertain: same ? before.uncertain : false,
+    endedTick: 0,
+    refusal: same ? before.refusal : null,
+  });
+}
+
+/** An attempt of the send `turn` on `billId` got no answer: it may have been recorded, whatever its
+ * retries are answered. */
+export function sendUnanswered(
+  pending: PendingPayments,
+  billId: string,
+  turn: number,
+): PendingPayments {
+  const entry = pending.get(billId);
+  if (entry?.turn !== turn) return pending;
+  return withEntry(pending, { ...entry, uncertain: true });
+}
+
+/**
+ * The send `turn` on `billId` ended at `tick`, with a result or with `error`. A result ends the
+ * entry. Once a send is uncertain no refusal makes it certain: the server raises the session,
+ * device and reader refusals before it looks the submission id up, so they say nothing of an
+ * earlier attempt. A {@link FRESH_ID_AFTER} refusal of a certain send drops it.
+ */
+export function sendEnded(
+  pending: PendingPayments,
+  billId: string,
+  turn: number,
+  tick: number,
+  error?: unknown,
+): PendingPayments {
+  const entry = pending.get(billId);
+  if (entry?.turn !== turn) return pending;
+  if (error === undefined) return without(pending, billId);
+  const code = codeOf(error);
+  const ended = { ...entry, inFlight: false, endedTick: tick };
+  if (code === null || isUncertainFailure(error))
+    return withEntry(pending, {
+      ...ended,
+      uncertain: true,
+      refusal: code !== null && code !== "server.internal" ? { code } : entry.refusal,
+    });
+  if (!entry.uncertain && FRESH_ID_AFTER.has(code)) return without(pending, billId);
+  return withEntry(pending, { ...ended, refusal: { code } });
+}
+
+/**
+ * What a balance read says of its bill's ended send. A read sent before the send ended proves
+ * nothing. A payment under the send's submission id is `found` and ends the entry. With none, an
+ * uncertain entry is `freed`: it stays, certain, so an identical retake keeps its submission id —
+ * "not in the balance" means only "not committed when the read ran".
+ */
+export function settledByBalance(
+  pending: PendingPayments,
+  balance: BillBalance,
+  readStartedTick: number,
+): {
+  pending: PendingPayments;
+  found: { payment: BillPaymentView; entry: PendingSend } | null;
+  freed: PendingSend | null;
+} {
+  const entry = pending.get(balance.workingOrderId);
+  if (entry === undefined || entry.inFlight || readStartedTick <= entry.endedTick)
+    return { pending, found: null, freed: null };
+  const payment = balance.payments.find(
+    (each) => each.submissionId === entry.submission.request.submissionId,
+  );
+  if (payment !== undefined)
+    return {
+      pending: without(pending, entry.billId),
+      found: { payment, entry },
+      freed: null,
+    };
+  if (!entry.uncertain) return { pending, found: null, freed: null };
+  const freed = { ...entry, uncertain: false };
+  return { pending: withEntry(pending, freed), found: null, freed };
+}
+
+/** The send that locks `billId` in the dialog `dialogId`: an uncertain one, or one in flight from
+ * another dialog. */
+export function lockFor(
+  pending: PendingPayments,
+  billId: string,
+  dialogId: number,
+): PendingSend | null {
+  const entry = pending.get(billId);
+  if (entry === undefined) return null;
+  return entry.uncertain || (entry.inFlight && entry.dialogId !== dialogId) ? entry : null;
+}
+
+/** Whether a reload would lose a send that is out or may have been recorded. */
+export function holdsReload(pending: PendingPayments): boolean {
+  for (const entry of pending.values()) if (entry.inFlight || entry.uncertain) return true;
+  return false;
+}
+
 /** A refusal's code and the request field it names, as the refund and unpaid departure dialogs
  * show it. The app's own codes: `network`, a request that got no answer; `approvers`, a list of who
  * can approve that could not be read. */

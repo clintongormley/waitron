@@ -1618,3 +1618,73 @@ describe("A773 drafts on a bill that is no longer open", () => {
     s.drop();
   });
 });
+
+describe("resendUnanswered: onUnanswered", () => {
+  const noAnswer = new TypeError("Failed to fetch");
+
+  it("is called once for each attempt that got no answer, before the answer", async () => {
+    const send = vi
+      .fn<(signal: AbortSignal) => Promise<string>>()
+      .mockRejectedValueOnce(noAnswer)
+      .mockRejectedValueOnce(noAnswer)
+      .mockResolvedValueOnce("answered");
+    const onUnanswered = vi.fn();
+    const sent = resendUnanswered(send, new AbortController().signal, () => true, onUnanswered);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onUnanswered).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(await sent).toBe("answered");
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(onUnanswered).toHaveBeenCalledTimes(2);
+  });
+
+  it("is called for the last attempt too, before its failure is thrown", async () => {
+    const send = vi.fn<(signal: AbortSignal) => Promise<string>>(() => Promise.reject(noAnswer));
+    const onUnanswered = vi.fn();
+    const settled = resendUnanswered(
+      send,
+      new AbortController().signal,
+      () => true,
+      onUnanswered,
+    ).catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(await settled).toBe(noAnswer);
+    expect(onUnanswered).toHaveBeenCalledTimes(SUBMIT_RETRIES + 1);
+  });
+
+  it("is never called for a coded refusal", async () => {
+    const refusal = { code: "reader.not_held", status: 409 };
+    const send = vi
+      .fn<(signal: AbortSignal) => Promise<string>>()
+      .mockRejectedValueOnce(noAnswer)
+      .mockRejectedValueOnce(refusal);
+    const onUnanswered = vi.fn();
+    const settled = resendUnanswered(
+      send,
+      new AbortController().signal,
+      () => true,
+      onUnanswered,
+    ).catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(await settled).toBe(refusal);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(onUnanswered).toHaveBeenCalledOnce();
+  });
+
+  it("is never called when the only answer is a coded refusal", async () => {
+    const refusal = { code: "bill.nothing_outstanding", status: 409 };
+    const send = vi.fn<(signal: AbortSignal) => Promise<string>>(() => Promise.reject(refusal));
+    const onUnanswered = vi.fn();
+
+    await expect(
+      resendUnanswered(send, new AbortController().signal, () => true, onUnanswered),
+    ).rejects.toBe(refusal);
+    expect(onUnanswered).not.toHaveBeenCalled();
+  });
+});

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { BillPaymentView, TabLine } from "../api/client.js";
+import type { BillBalance, BillPaymentView, TabLine } from "../api/client.js";
 import {
   confirmationOf,
+  holdsReload,
+  isUncertainFailure,
+  lockFor,
   paidQuantities,
   payLines,
   paymentAsk,
@@ -9,8 +12,14 @@ import {
   refundSubmissionFor,
   refundableOf,
   refusalOf,
+  sendEnded,
+  sendStarted,
+  sendUnanswered,
+  settledByBalance,
   submissionFor,
   unansweredAfter,
+  type PendingPayments,
+  type PendingSend,
   type Submission,
 } from "./bill-payment.js";
 
@@ -569,5 +578,407 @@ describe("a payment's refunds", () => {
     expect(again.request.submissionId).toBe("sub-1");
     expect(confirmed.request).toEqual({ ...ask, manualConfirmed: true, submissionId: "sub-2" });
     expect(otherPayment.request.submissionId).toBe("sub-3");
+  });
+});
+
+describe("a bill's payment that got no answer", () => {
+  const tenEuros = confirmationOf(
+    paymentAsk({ kind: "contribution", amount: "10.00" }, { method: "cash", tendered: "10.00" }),
+    {
+      kind: "allocated",
+      choice: null,
+      applied: "10.00",
+      tip: "0.00",
+      change: "0.00",
+      charged: null,
+    },
+  );
+  const sent = (billId: string, submissionId: string) =>
+    submissionFor(billId, tenEuros, null, () => submissionId);
+  const none: PendingPayments = new Map();
+  const noAnswer = new TypeError("Failed to fetch");
+  const internal = { code: "server.internal", status: 502 };
+  const FRESH_ID_AFTER = [
+    "submission.id_reused",
+    "device.profile_changed",
+    "reader.not_held",
+    "reader.payment_in_progress",
+  ];
+
+  /** Mesa 4's send `sub-1`, turn 1 from dialog 7, ended at tick 5 with `error`. */
+  const ended = (error?: unknown, pending: PendingPayments = none) =>
+    sendEnded(sendStarted(pending, "wo-4", sent("wo-4", "sub-1"), 1, 7), "wo-4", 1, 5, error);
+  /** Mesa 4's send `sub-1`, after an attempt of it got no answer, ended with `error`. */
+  const endedAfterNoAnswer = (error?: unknown) =>
+    sendEnded(
+      sendUnanswered(sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7), "wo-4", 1),
+      "wo-4",
+      1,
+      5,
+      error,
+    );
+
+  const payment = (submissionId: string, state: BillPaymentView["state"]): BillPaymentView => ({
+    id: `pay-${submissionId}`,
+    submissionId,
+    kind: "contribution",
+    shareOf: null,
+    method: "cash",
+    entry: null,
+    applied: "10.00",
+    tip: "0.00",
+    tendered: "10.00",
+    change: "0.00",
+    state,
+    createdAt: "2026-10-19T20:00:00.000Z",
+    receivedAt: null,
+    lines: [],
+    refunds: [],
+  });
+  const balance = (workingOrderId: string, payments: BillPaymentView[]): BillBalance => ({
+    workingOrderId,
+    status: "open",
+    total: "40.00",
+    received: "0.00",
+    reserved: "0.00",
+    outstanding: "40.00",
+    tips: "0.00",
+    payments,
+    paidLines: [],
+  });
+
+  describe("rule 1: isUncertainFailure", () => {
+    it.each([
+      ["a network failure", noAnswer],
+      ["an aborted request", new DOMException("aborted", "AbortError")],
+      [
+        "a status of 500 or more with a code",
+        { code: "reader.provider_disconnected", status: 503 },
+      ],
+      ["a code-less error", { status: 400 }],
+      ["server.internal", { code: "server.internal", status: 400 }],
+    ])("is true for %s", (_name, error) => {
+      expect(isUncertainFailure(error)).toBe(true);
+    });
+
+    it.each([
+      [
+        "reader.provider_disconnected at 409",
+        { code: "reader.provider_disconnected", status: 409 },
+      ],
+      ["bill.nothing_outstanding at 409", { code: "bill.nothing_outstanding", status: 409 }],
+      ["a coded error with a status of 499", { code: "session.required", status: 499 }],
+    ])("is false for %s", (_name, error) => {
+      expect(isUncertainFailure(error)).toBe(false);
+    });
+  });
+
+  describe("rule 2: sendStarted", () => {
+    it("writes the bill's entry in flight", () => {
+      const submission = sent("wo-4", "sub-1");
+
+      expect(sendStarted(none, "wo-4", submission, 1, 7).get("wo-4")).toEqual({
+        billId: "wo-4",
+        submission,
+        turn: 1,
+        dialogId: 7,
+        inFlight: true,
+        uncertain: false,
+        endedTick: 0,
+        refusal: null,
+      } satisfies PendingSend);
+    });
+
+    it("keeps uncertain and the refusal when the same submission id is sent again", () => {
+      const before = ended({ code: "reader.not_held", status: 409 }, endedAfterNoAnswer(noAnswer));
+      const again = sendStarted(before, "wo-4", sent("wo-4", "sub-1"), 2, 8).get("wo-4")!;
+
+      expect(again).toMatchObject({
+        turn: 2,
+        dialogId: 8,
+        inFlight: true,
+        endedTick: 0,
+        uncertain: true,
+        refusal: { code: "reader.not_held" },
+      });
+    });
+
+    it("starts certain with no refusal under a new submission id", () => {
+      const before = endedAfterNoAnswer({ code: "reader.not_held", status: 409 });
+      const fresh = sendStarted(before, "wo-4", sent("wo-4", "sub-2"), 2, 7).get("wo-4")!;
+
+      expect(fresh.submission.request.submissionId).toBe("sub-2");
+      expect(fresh.uncertain).toBe(false);
+      expect(fresh.refusal).toBeNull();
+    });
+
+    it("does not change the map it is given", () => {
+      sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7);
+
+      expect(none.size).toBe(0);
+    });
+  });
+
+  describe("rule 3: sendUnanswered", () => {
+    it("marks the send uncertain at once, while it is still in flight", () => {
+      const started = sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7);
+      const entry = sendUnanswered(started, "wo-4", 1).get("wo-4")!;
+
+      expect(entry.uncertain).toBe(true);
+      expect(entry.inFlight).toBe(true);
+      expect(started.get("wo-4")!.uncertain).toBe(false);
+    });
+
+    it("changes nothing for an older turn's attempt", () => {
+      const started = sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 2, 7);
+
+      expect(sendUnanswered(started, "wo-4", 1)).toBe(started);
+    });
+
+    it("changes nothing for a bill with no entry", () => {
+      expect(sendUnanswered(none, "wo-4", 1)).toBe(none);
+    });
+  });
+
+  describe("rule 4: sendEnded", () => {
+    it("removes the entry on a result", () => {
+      expect(ended().has("wo-4")).toBe(false);
+    });
+
+    it("is uncertain after a network failure", () => {
+      expect(ended(noAnswer).get("wo-4")).toMatchObject({
+        inFlight: false,
+        endedTick: 5,
+        uncertain: true,
+        refusal: null,
+      });
+    });
+
+    it("is uncertain with no refusal after a code-less server.internal at 502", () => {
+      expect(ended(internal).get("wo-4")).toMatchObject({ uncertain: true, refusal: null });
+    });
+
+    it("is uncertain and records the code after a coded error of 500 or more", () => {
+      expect(
+        ended({ code: "reader.provider_disconnected", status: 503 }).get("wo-4"),
+      ).toMatchObject({ uncertain: true, refusal: { code: "reader.provider_disconnected" } });
+    });
+
+    it("keeps a first send certain after reader.provider_disconnected at 409", () => {
+      expect(
+        ended({ code: "reader.provider_disconnected", status: 409 }).get("wo-4"),
+      ).toMatchObject({
+        inFlight: false,
+        uncertain: false,
+        refusal: { code: "reader.provider_disconnected" },
+      });
+    });
+
+    it("keeps a certain send certain after bill.nothing_outstanding", () => {
+      expect(ended({ code: "bill.nothing_outstanding", status: 409 }).get("wo-4")).toMatchObject({
+        uncertain: false,
+        refusal: { code: "bill.nothing_outstanding" },
+      });
+    });
+
+    it.each(["reader.not_held", "device.profile_changed"])(
+      "stays uncertain after an attempt got no answer and the retry was refused with %s",
+      (code) => {
+        expect(endedAfterNoAnswer({ code, status: 409 }).get("wo-4")).toMatchObject({
+          inFlight: false,
+          uncertain: true,
+          refusal: { code },
+        });
+      },
+    );
+
+    it.each([
+      "reader.not_held",
+      "reader.payment_in_progress",
+      "device.profile_changed",
+      "submission.id_reused",
+      "session.required",
+    ])("keeps an uncertain entry uncertain after %s", (code) => {
+      const uncertain = ended(noAnswer);
+      const again = sendStarted(uncertain, "wo-4", sent("wo-4", "sub-1"), 2, 7);
+
+      expect(sendEnded(again, "wo-4", 2, 9, { code, status: 409 }).get("wo-4")).toMatchObject({
+        endedTick: 9,
+        uncertain: true,
+        refusal: { code },
+      });
+    });
+
+    it.each(FRESH_ID_AFTER)("removes a certain send after %s", (code) => {
+      expect(ended({ code, status: 409 }).has("wo-4")).toBe(false);
+    });
+
+    it("leaves Mesa 4's uncertain entry when Mesa 9's send gets a result", () => {
+      const mesa4 = ended(noAnswer);
+      const both = sendStarted(mesa4, "wo-9", sent("wo-9", "sub-9"), 2, 7);
+      const after = sendEnded(both, "wo-9", 2, 6);
+
+      expect(after.has("wo-9")).toBe(false);
+      expect(after.get("wo-4")).toBe(mesa4.get("wo-4"));
+    });
+
+    it("changes nothing for an older turn's answer", () => {
+      const first = sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7);
+      const second = sendStarted(first, "wo-4", sent("wo-4", "sub-2"), 2, 7);
+
+      expect(sendEnded(second, "wo-4", 1, 5)).toBe(second);
+      expect(sendEnded(second, "wo-4", 1, 5, noAnswer)).toBe(second);
+    });
+
+    it("changes nothing for a bill with no entry", () => {
+      expect(sendEnded(none, "wo-4", 1, 5)).toBe(none);
+    });
+  });
+
+  describe("rule 5: settledByBalance", () => {
+    it.each(["pending", "received", "failed", "declined"] as const)(
+      "removes the entry whose submission id the balance lists as %s, and returns it as found",
+      (state) => {
+        const pending = ended(noAnswer);
+        const paid = payment("sub-1", state);
+        const settled = settledByBalance(
+          pending,
+          balance("wo-4", [payment("sub-0", "received"), paid]),
+          6,
+        );
+
+        expect(settled.pending.has("wo-4")).toBe(false);
+        expect(settled.found).toEqual({ payment: paid, entry: pending.get("wo-4") });
+        expect(settled.freed).toBeNull();
+      },
+    );
+
+    it("keeps an uncertain entry absent from the balance, made certain, and returns it as freed", () => {
+      const pending = ended({ code: "reader.not_held", status: 409 }, endedAfterNoAnswer(noAnswer));
+      const settled = settledByBalance(pending, balance("wo-4", [payment("sub-0", "received")]), 6);
+      const kept = settled.pending.get("wo-4")!;
+
+      expect(kept).toEqual({ ...pending.get("wo-4")!, uncertain: false });
+      expect(settled.freed).toEqual(kept);
+      expect(settled.found).toBeNull();
+      expect(
+        submissionFor("wo-4", tenEuros, kept.submission, () => "sub-2").request.submissionId,
+      ).toBe("sub-1");
+    });
+
+    it("leaves a certain entry absent from the balance as it is", () => {
+      const pending = ended({ code: "bill.nothing_outstanding", status: 409 });
+      const settled = settledByBalance(pending, balance("wo-4", []), 6);
+
+      expect(settled).toEqual({ pending, found: null, freed: null });
+    });
+
+    it("does nothing with a read sent before the send ended", () => {
+      const pending = ended(noAnswer);
+
+      expect(settledByBalance(pending, balance("wo-4", [payment("sub-1", "received")]), 5)).toEqual(
+        { pending, found: null, freed: null },
+      );
+      expect(settledByBalance(pending, balance("wo-4", []), 4)).toEqual({
+        pending,
+        found: null,
+        freed: null,
+      });
+    });
+
+    it("does nothing while the send is in flight", () => {
+      const pending = sendUnanswered(
+        sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7),
+        "wo-4",
+        1,
+      );
+
+      expect(settledByBalance(pending, balance("wo-4", [payment("sub-1", "received")]), 6)).toEqual(
+        { pending, found: null, freed: null },
+      );
+      expect(settledByBalance(pending, balance("wo-4", []), 6)).toEqual({
+        pending,
+        found: null,
+        freed: null,
+      });
+    });
+
+    it("acts only on the entry of the balance's own bill", () => {
+      const pending = ended(noAnswer);
+
+      expect(settledByBalance(pending, balance("wo-9", [payment("sub-1", "received")]), 6)).toEqual(
+        { pending, found: null, freed: null },
+      );
+    });
+  });
+
+  describe("rule 6: lockFor", () => {
+    it("returns an uncertain entry for any dialog, in flight or not", () => {
+      const ended4 = ended(noAnswer);
+      const inFlight = sendUnanswered(
+        sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7),
+        "wo-4",
+        1,
+      );
+      const checkingAgain = sendStarted(ended4, "wo-4", sent("wo-4", "sub-1"), 2, 7);
+
+      for (const pending of [ended4, inFlight, checkingAgain])
+        for (const dialogId of [7, 8])
+          expect(lockFor(pending, "wo-4", dialogId)).toBe(pending.get("wo-4"));
+    });
+
+    it("returns a certain send in flight only for another dialog than the one that sent it", () => {
+      const pending = sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7);
+
+      expect(lockFor(pending, "wo-4", 7)).toBeNull();
+      expect(lockFor(pending, "wo-4", 8)).toBe(pending.get("wo-4"));
+    });
+
+    it("returns null for a certain kept entry", () => {
+      const pending = ended({ code: "bill.nothing_outstanding", status: 409 });
+
+      expect(lockFor(pending, "wo-4", 8)).toBeNull();
+    });
+
+    it("returns null for another bill", () => {
+      expect(lockFor(ended(noAnswer), "wo-9", 7)).toBeNull();
+    });
+  });
+
+  describe("rule 7: holdsReload", () => {
+    it("is true while a send is in flight or uncertain", () => {
+      expect(holdsReload(sendStarted(none, "wo-4", sent("wo-4", "sub-1"), 1, 7))).toBe(true);
+      expect(holdsReload(ended(noAnswer))).toBe(true);
+    });
+
+    it("is false for a certain kept entry, and for none", () => {
+      const certain = ended({ code: "bill.nothing_outstanding", status: 409 });
+      const alsoCertain = sendEnded(
+        sendStarted(certain, "wo-9", sent("wo-9", "sub-9"), 2, 7),
+        "wo-9",
+        2,
+        6,
+        { code: "bill.nothing_outstanding", status: 409 },
+      );
+
+      expect(holdsReload(alsoCertain)).toBe(false);
+      expect(holdsReload(none)).toBe(false);
+    });
+  });
+
+  describe("rule 8: submissionFor takes the bill's own entry", () => {
+    it("reuses Mesa 4's kept id for Mesa 4, and not for Mesa 9", () => {
+      const pending = ended(noAnswer);
+      const mint = () => "sub-2";
+
+      expect(
+        submissionFor("wo-4", tenEuros, pending.get("wo-4")?.submission ?? null, mint).request
+          .submissionId,
+      ).toBe("sub-1");
+      expect(
+        submissionFor("wo-9", tenEuros, pending.get("wo-9")?.submission ?? null, mint).request
+          .submissionId,
+      ).toBe("sub-2");
+    });
   });
 });
