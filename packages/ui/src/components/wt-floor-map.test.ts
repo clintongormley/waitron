@@ -53,11 +53,11 @@ const within = (el: WtFloorMap, part: string, id: string) =>
 it("A669 draws an allergy mark beside the existing dot and removes it on refresh", async () => {
   const allergic = t("t1", "T1", {}, { allergy: true, fill: "seated", dot: "ready" });
   const el = await map([allergic, t("t2", "T2", { x: 12 })], {
-    copy: { allergy: "Alergia" },
+    copy: { allergy: "Allergy warning" },
   });
   expect(within(el, "allergy", "t1")?.textContent).toBe("!");
   expect(within(el, "dot", "t1")?.dataset["dot"]).toBe("ready");
-  expect(button(el, "t1").getAttribute("aria-label")).toBe("T1, Free, Alergia");
+  expect(button(el, "t1").getAttribute("aria-label")).toBe("T1, Free, Allergy warning");
   expect(within(el, "allergy", "t2")).toBeNull();
   el.tables = [{ ...allergic, allergy: false }];
   await settled(el);

@@ -1,5 +1,6 @@
 import { page } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupWidgets,
@@ -276,7 +277,7 @@ for (const locale of ["en", "es"]) {
           const mark = map.shadowRoot!.querySelector<HTMLElement>('[part="allergy"]')!;
           expect(mark.textContent).toBe("!");
           expect(mark.closest("button")!.getAttribute("aria-label")).toContain(
-            locale === "es" ? "Alergia" : "Allergy",
+            (locale === "es" ? es : en)["floor.allergy"],
           );
           const marker = mark.getBoundingClientRect();
           const bounds = map.getBoundingClientRect();
