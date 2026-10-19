@@ -2,7 +2,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { table, id, count, newId } from "../packages/db/src/schema/columns.js";
+import { table, id, count } from "../packages/db/src/schema/columns.js";
 import { menuItems } from "../packages/catalogue/src/schema/menu.js";
 import { menuItemVariantOverrides } from "../packages/catalogue/src/schema/variant-overrides.js";
 import { withTransaction } from "../packages/db/src/tenancy.js";
@@ -75,10 +75,10 @@ async function stage(control = false) {
     );
     // Raw SQL, not the catalogue's product code: the staged schema predates unit columns that
     // code reads.
-    soupId = newId();
-    const variantId = newId();
+    soupId = "soup";
+    const variantId = "soup-half";
     store.venue.run(
-      `insert into products(id,catalogue_id,parent_id,name,customer_name,kitchen_name,dietary_declarations,pricing_unit,unit_price,vat_class,diet,name_key,created_at,updated_at) values ('${soupId}','menu',null,'Soup staff','{"en":"Soup guest"}','SOUP','[]','each',500,'general','{"vegan":"unknown","vegetarian":"unknown","contains":[]}','soup staff','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z'),('${variantId}','menu','${soupId}','Half soup',null,null,null,null,300,null,null,'half soup','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')`,
+      `insert into products(id,catalogue_id,parent_id,name,customer_name,kitchen_name,dietary_declarations,pricing_unit,unit_price,vat_class,diet,name_key,created_at,updated_at) values ('soup','menu',null,'Soup staff','{"en":"Soup guest"}','SOUP','[]','each',500,'general','{"vegan":"unknown","vegetarian":"unknown","contains":[]}','soup staff','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z'),('soup-half','menu','soup','Half soup',null,null,null,null,300,null,null,'half soup','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')`,
     );
     await store.venue
       .insert(oldMembers)
