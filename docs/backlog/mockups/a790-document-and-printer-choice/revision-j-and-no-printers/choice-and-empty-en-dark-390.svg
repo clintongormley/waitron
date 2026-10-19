@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1280" viewBox="0 0 390 1280">
+  <title>A790: agreed explicit choice and proposed no-printer options, English dark phone</title>
+  <desc>Four static snapshots. J starts without selection, then names Patio in confirmation. K compares keeping an empty form with returning to the sale. K is unapproved.</desc>
+  <style>
+    svg{background:#101216} text{font-family:Arial,Helvetica,sans-serif;fill:#eceef2;font-size:14px}
+    .bg{fill:#101216}.card{fill:#191c22;stroke:#333945}.field{fill:#262a33;stroke:#7a8291}.line{stroke:#333945}
+    .quiet{fill:#101216;stroke:#333945}.primary{fill:#4c8dff}.on{fill:#06101f}.muted{fill:#a1a7b3}
+    .note{font-size:12px;fill:#a1a7b3}.tag{font-size:11px;font-weight:700;letter-spacing:1px}.agreed{fill:#4ac08d}.proposal{fill:#f2b24c}
+    .heading{font-size:23px;font-weight:700}.bold{font-weight:700}.small{font-size:13px}.center{text-anchor:middle}
+  </style>
+  <rect class="bg" width="390" height="1280"/>
+  <text x="20" y="29" class="tag muted">A790 · 19 OCT 2026 · STATIC DESIGN</text>
+  <text x="20" y="61" class="heading">Your printer, your choice</text>
+  <text x="20" y="85" class="note">Cards = UI · Outside cards = author notes</text>
+  <text x="20" y="119" class="tag agreed">J AGREED · 1 / CHOOSE EXPLICITLY</text>
+  <rect x="16" y="134" width="358" height="274" rx="16" class="card"/>
+  <text x="32" y="161" class="bold">Receipt · Harbour · F/1042</text>
+  <text x="32" y="183" class="small muted">Mar Azul SL · €86.40</text>
+  <text x="32" y="211" class="small muted">Previous printer Bar receipt is unavailable.</text>
+  <text x="32" y="239" class="small bold">Printer *</text>
+  <rect x="32" y="250" width="326" height="42" rx="7" class="field"/>
+  <text x="46" y="277" class="muted">Choose a printer</text><text x="336" y="277">⌄</text>
+  <circle cx="43" cy="313" r="6" fill="none" class="line"/><text x="58" y="318">Office · A4</text>
+  <circle cx="43" cy="338" r="6" fill="none" class="line"/><text x="58" y="343">Patio receipt</text>
+  <rect x="32" y="360" width="110" height="36" rx="7" class="quiet"/><text x="87" y="383" class="center">Cancel</text>
+  <rect x="248" y="360" width="110" height="36" rx="7" class="quiet"/><text x="303" y="383" class="center muted">Print</text>
+  <text x="20" y="435" class="tag agreed">J AGREED · 2 / LUIS SELECTS PATIO</text>
+  <rect x="16" y="448" width="358" height="166" rx="16" class="card"/>
+  <text x="32" y="475" class="bold">Receipt · F/1042</text>
+  <text x="32" y="509">Printer · Patio receipt</text><text x="332" y="509" class="muted">⌄</text>
+  <rect x="32" y="530" width="92" height="52" rx="8" class="quiet"/><text x="78" y="561" class="center small">Cancel</text>
+  <rect x="136" y="530" width="222" height="52" rx="8" class="primary"/>
+  <text x="247" y="552" class="center on bold"><tspan x="247">Print a copy on</tspan><tspan x="247" dy="19">Patio receipt</tspan></text>
+  <text x="20" y="637" class="note"><tspan x="20">Copy label assumes the server designates a copy.</tspan><tspan x="20" dy="18">Selection saves nothing. Acceptance remembers.</tspan></text>
+  <text x="20" y="680" class="tag proposal">K UNAPPROVED · KEEP OPEN / RECOMMENDED</text>
+  <rect x="16" y="694" width="358" height="262" rx="16" class="card"/>
+  <text x="32" y="723" class="bold">Receipt · Harbour · F/1042</text>
+  <text x="32" y="746" class="small muted">Mar Azul SL · €86.40</text>
+  <text x="32" y="783" class="bold"><tspan x="32">No printers available</tspan><tspan x="32" dy="22">for this document</tspan></text>
+  <rect x="32" y="829" width="326" height="42" rx="8" class="card"/>
+  <text x="195" y="856" class="center bold">Refresh printers</text>
+  <line x1="32" y1="891" x2="358" y2="891" class="line"/>
+  <rect x="32" y="905" width="148" height="36" rx="7" class="quiet"/><text x="106" y="929" class="center">Cancel</text>
+  <rect x="196" y="905" width="162" height="36" rx="7" class="quiet"/><text x="277" y="929" class="center muted">Print</text>
+  <text x="20" y="978" class="note"><tspan x="20">Loaded successfully · No prior submission.</tspan><tspan x="20" dy="18">Refresh only reads. If Bar returns alone,</tspan><tspan x="20" dy="18">explicitly choose, then confirm. G is opening-only.</tspan></text>
+  <text x="20" y="1043" class="tag proposal">K UNAPPROVED · RETURN TO SALE / ALTERNATIVE</text>
+  <rect x="16" y="1057" width="358" height="151" rx="16" class="card"/>
+  <text x="32" y="1086" class="bold">Sale · Harbour · F/1042</text>
+  <text x="32" y="1117"><tspan x="32">No printers available</tspan><tspan x="32" dy="21">for this document</tspan></text>
+  <text x="32" y="1183" class="small muted">Return</text>
+  <rect x="127" y="1158" width="231" height="36" rx="7" class="card"/><text x="242" y="1182" class="center bold">Print/reprint</text>
+  <text x="20" y="1233" class="note"><tspan x="20">Reopen after restoration. Neither option prints.</tspan><tspan x="20" dy="18">Memory unchanged · Full design/build unapproved.</tspan></text>
+</svg>

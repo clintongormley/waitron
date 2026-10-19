@@ -3413,93 +3413,65 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     sends the same request.
 
 - **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
-  and latest 2026-10-19 decisions are recorded in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
-  with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A–I approved only in their precise answered scope:** Receipt and Invoice retain
-  the same recorded full invoice; C keeps Invoice's printer row inline and foldable with
-  its named final button, matching Receipt/payment. D's 2026-10-19 ~13:20 **“STRAIGHT TO
-  RECEIPT”** skips the one-document choice for simplified-sale Print/reprint: `S/318`,
-  €14.50, Spanish, one guest, then its Receipt form and named final confirmation, for
-  example **Print a copy on Patio receipt** when server-designated. Keep the recorded
-  invoice facts and offered language. No full-invoice issuance/conversion, email or A4-as-F1.
-  A dashboard without a device profile offers every active printer at the sale's venue, bypassing
-  profile lists, with browser-last-use preselected and collapsible; no Change profile,
-  dedicated profile, borrowed till identity or Equipment update. Harbour's sale excludes
-  Hillside and disabled/deleted printers. A4 and portable printers stay listed for both
-  document choices; Office · A4 is not invalid for Receipt solely because it uses A4. Receipt-holder
-  enforcement remains unresolved. The phone's inline receipt selector at/after payment
-  is its one Equipment setting: Mesa 4 chooses Terraza, Mesa 9 and Equipment show Terraza;
-  no accepted-print-only memory or new receipt-preference storage. Device paths retain
-  their receipt and invoice lists by role. E's 2026-10-19 ~13:32 **“SEPARATE PER DOCUMENT”**
-  approves separate last-used Receipt and Invoice printers for each sale venue in this
-  browser on the dashboard without a device profile. Harbour's Invoice printer leaves
-  its Receipt memory alone; Hillside stays separate. F's 2026-10-19 ~13:48 **“WHEN A PRINT
-  IS ACCEPTED”** approves remembering the selected printer after server acceptance.
-  Harbour's `F/1042` Receipt remembers Bar receipt; selecting Patio then cancelling before
-  submission leaves Bar remembered, as does a refusal. Acceptance remembers Patio even
-  if physical output later fails; it does not establish that paper printed.
-  An unknown response is not presumed accepted/refused: reconcile the same request before
-  claiming an update or offering a fresh request; closing the form resolves no unanswered
-  submission. G's 2026-10-19 ~14:01 **“CHOOSE IT FOR ME”** approves preselection on a
-  **newly opened device-free dashboard form** with no usable remembered printer and
-  exactly one eligible printer. Harbour's `F/1042` Receipt remembers Bar, now disabled;
-  Patio receipt alone is eligible, so select Patio and explain why Bar is unavailable.
-  Retain **Print a copy on Patio receipt** when server-designated.
-  First use follows the same no-memory rule, without a fictitious previous-printer warning.
-  An active eligible Office · A4 also counts for Receipt, so it would make this a
-  multiple-printer case; Invoice's Office memory and Hillside remain separate under E.
-  Several-printer fallback is unapproved J below. Zero eligible explanation, disabled print
-  and offers-read retry remain proposed, distinct from loading/read failure. G approves neither fallback nor
-  automatic print, submitted-request rerouting or open-form selection replacement.
-  Existing selection invalidation still requires explicit
-  reselection and confirmation, even with one option. Suggestion/selection updates no memory;
-  F requires acceptance. Selection, folding and reads never print; final confirmation stays.
-  H's 2026-10-19 ~14:20 **“SHARED BY THE BROWSER”** approves remembered printers belonging
-  to the browser, shared by everyone who signs in, per sale venue, Receipt/Invoice separate,
-  on the dashboard without a device profile. Memory grants no permission to unavailable
-  or inaccessible printers and reveals no inaccessible equipment: recheck current-person
-  authorization/offers, Orders visibility, sale venue and device restrictions. H decides
-  login sharing; I's 2026-10-19 ~16:10 **“KEEP AFTER REOPENING”** settles ordinary
-  close/reopen: this dashboard browser keeps accepted printer choices after all windows
-  close and it is reopened; **clearing site data forgets them**. Same normal browser with
-  site data retained: Ana's accepted Harbour `F/1042` Receipt on Patio receipt remains
-  preselected after all windows close/reopen and Luis signs in, while eligible to him.
-  Bar and Patio both remain active/eligible in that example. Reopening/login/reads/selection/
-  folding never print or update memory; F alone sets the accepted-request update trigger.
-  Invoice's Office · A4 and Hillside remain separate. I chooses no technical storage or
-  extra expiry/reset policy, and claims no existing persistence support, reliable close
-  detection or guarantee for private/unusual lifecycles/errors.
-  Ask **J only** next, as an unapproved proposal: on a newly opened device-free dashboard
-  print form with no usable remembered printer and **several eligible printers**, should
-  you choose a printer yourself (recommended), or should it preselect the first by name?
-  Recommend explicit choice so name ordering does not decide the destination. Worked case:
-  Harbour `F/1042` Receipt remembers Bar receipt, now disabled; Office · A4 and Patio receipt
-  are both active and eligible to Luis for Receipt, Office first by name. Recommended:
-  explain the previous printer is unavailable, show **Choose a printer**, with Print quiet
-  and disabled until selection; Luis chooses Patio, then **Print a copy on Patio receipt**
-  when server-designated. Alternative: preselect Office · A4 and show **Print a copy on
-  Office · A4**; Luis can explicitly choose Patio. Both require named final confirmation,
-  with no implicit print. A4 is valid for Receipt under B; portable printers stay eligible
-  subject to unresolved receipt holding. Two choices keep G from masking J. First use
-  with several/no memory follows the chosen rule without a fabricated prior-printer warning.
-  J only concerns newly opened fallback, not mid-form selection replacement or submitted
-  rerouting. Technical storage/expiry/manual reset/errors/private or unusual lifecycles,
-  concurrent/late accepted-intent and account-transition ordering, device Invoice memory,
-  portable receipt holding, J/zero fallback and wider document steps remain open.
-  A796 Revision 4 owns phone Equipment save/concurrency design, with overridable defaults;
-  phone scope and device role lists stay unchanged. Do not re-ask A–I/A796. A790 integration
-  and full design/plan/build remain unapproved. Q1–Q6 otherwise remain settled, subject
-  to explicit A–I overrides.
-  Preserve authorization and sale-location rechecks in the reservation transaction;
-  freeze sale/document/printer/language/context under request identity; retain uncertain/late
-  outcome reconciliation before a fresh request, separate successful-write/failed-refresh,
-  server-derived original/copy, shared F1 delivery guard and closed public-F1 gate. No silent
-  destination replacement, implicit print, payment, fiscal or drawer side effects.
-  [Eight static I/J boards](backlog/mockups/a790-document-and-printer-choice/revision-i-and-several-printers/README.md)
-  cover EN/ES, light/dark, at 390/1280 px. Each final PNG was rendered in headless Chromium
-  and individually inspected; native SVG text boxes were checked within each drawing. Both old design/README bodies remain exact historical suffixes;
-  conflicting boards remain history. Docs only, with no legal/proof/test/runtime/hardware
-  claim; the source map stays historical and runtime-unverified.
+  and 2026-10-19 decisions are in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+  and [mockups](backlog/mockups/a790-document-and-printer-choice/README.md).
+  **A–J approved only in their precise answered scope; full design/plan/build unapproved.**
+  A keeps identical recorded full-invoice/customer details for Receipt and Invoice; paper
+  changes no identity. C keeps Invoice's printer row inline/foldable with named confirmation.
+  D opens Receipt directly for simplified `S/318` (€14.50, Spanish, one guest), preserving
+  recorded facts/offered language, with no issuance/conversion, email or A4-as-F1.
+  B offers every active sale-venue printer for both documents on a device-free dashboard,
+  including A4/portable, bypassing profile lists but retaining authorization/current offers,
+  Orders visibility and accompanying-device restrictions. Exclude disabled/deleted/other-venue
+  equipment; memory grants no access and reveals no inaccessible printer. No profile step,
+  dedicated profile, borrowed till identity or dashboard Equipment update.
+  E/H/I keep browser memory shared across logins, separate by sale venue/document, retained
+  through ordinary close/reopen; clearing site data forgets it. Harbour Invoice's Office · A4
+  leaves Receipt alone; Hillside stays separate. F updates memory only after server acceptance,
+  never on selection/folding/reads; cancel before submission, refusal and empty offers leave
+  it alone. Later paper failure does not undo acceptance, which establishes no paper output.
+  G preselects the sole eligible printer only on a newly opened form without usable memory,
+  explaining an unavailable previous choice, without an invented first-use warning.
+  **J, 2026-10-19 ~16:18 “PICK IT MYSELF”:** newly opened form, no usable remembered printer,
+  several eligible printers: show **Choose a printer**, with **Print quiet/disabled** until
+  explicit choice. No first-by-name preselection. Harbour `F/1042` Receipt remembers disabled
+  Bar; Office · A4 and Patio receipt are eligible to Luis, Office first by name. Luis chooses
+  Patio, then **Print a copy on Patio receipt** when server-designated. A4 is valid for Receipt;
+  first use has no invented prior-printer warning. Selection changes no memory; acceptance does.
+  G/J authorize no mid-form replacement or submitted rerouting; invalid selection needs explicit
+  reselection/confirmation even with one remaining option. No implicit print.
+  **K only, proposed:** successful loaded offers with no eligible printer: keep the form open
+  with an explanation, quiet disabled Print, **Refresh printers** and **Cancel** (recommended),
+  or explain on return to the sale and require reopening Print/reprint after restoration.
+  Keep open so you can retry after an administrator restores a printer without losing document
+  context. Both print nothing, offer Cancel/return, preserve memory and substitute no venue,
+  profile or printer. Worked Harbour `F/1042` Receipt, no prior submission: Bar disabled, Office
+  deleted, Patio unauthorized, Hillside outside sale venue. Those are author-only setup facts;
+  UI reveals no inaccessible names/details and says **No printers available for this document** /
+  **No hay impresoras disponibles para este documento**. Refresh is an explicit offers read,
+  never print or polling; no existing capability is claimed. If it offers only restored Bar,
+  explicitly choose then confirm: G does not apply mid-form. Add no email, invoice conversion
+  or Settings permission fallback. Loading/failed read is not a successful empty list.
+  An unanswered submission is outside K: reconcile the same identity first, including late
+  outcomes; close/reopen/login/empty offers resolves no unanswered request.
+  Phone receipt choice at/after payment remains its one Equipment setting (Mesa 4 chooses
+  Terraza; Mesa 9 and Equipment show Terraza), with no accepted-print-only memory/new storage.
+  Device role lists stay unchanged. A796 Revision 4 owns phone save/concurrency and overridable
+  defaults. Do not re-ask A–J/A796; Q1–Q6 otherwise remain subject to explicit A–J overrides,
+  with no exclusive invoice-role holder check under Q4.
+  Still open: K; technical storage/expiry/manual reset/errors/private or unusual lifecycles;
+  concurrent/late accepted intents/account transitions; device Invoice memory; portable receipt
+  holding; wider steps; integration; full design/plan/build. No existing persistence support,
+  reliable close detection or private-lifecycle/error guarantee is claimed.
+  Freeze sale/document/printer/language/context under request identity; recheck authorization
+  and sale location in the reservation transaction; retain same-identity uncertain/late
+  reconciliation, successful-write versus failed-refresh, server original/copy, shared F1
+  delivery guard and closed public F1. No payment/fiscal/drawer side effects.
+  [Eight static J/K boards](backlog/mockups/a790-document-and-printer-choice/revision-j-and-no-printers/README.md)
+  cover EN/ES, light/dark, 390/1280 px. All final PNGs rendered/individually inspected; native
+  SVG text bounds checked. Old design/README
+  bytes remain exact historical suffixes; conflicting boards and the runtime-unverified source
+  map stay historical. No runtime/test/accessibility/legal/physical-output evidence claimed.
 
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer

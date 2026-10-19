@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1280" viewBox="0 0 390 1280">
+  <title>A790: elección explícita acordada y opciones sin impresoras propuestas, móvil oscuro</title>
+  <desc>Cuatro imágenes estáticas. J empieza sin selección y después confirma Patio por nombre. K compara mantener el formulario vacío con volver a la venta. K no está aprobado.</desc>
+  <style>
+    svg{background:#101216} text{font-family:Arial,Helvetica,sans-serif;fill:#eceef2;font-size:14px}
+    .bg{fill:#101216}.card{fill:#191c22;stroke:#333945}.field{fill:#262a33;stroke:#7a8291}.line{stroke:#333945}
+    .quiet{fill:#101216;stroke:#333945}.primary{fill:#4c8dff}.on{fill:#06101f}.muted{fill:#a1a7b3}
+    .note{font-size:12px;fill:#a1a7b3}.tag{font-size:11px;font-weight:700;letter-spacing:1px}.agreed{fill:#4ac08d}.proposal{fill:#f2b24c}
+    .heading{font-size:23px;font-weight:700}.bold{font-weight:700}.small{font-size:13px}.center{text-anchor:middle}
+  </style>
+  <rect class="bg" width="390" height="1280"/>
+  <text x="20" y="29" class="tag muted">A790 · 19 OCT 2026 · DISEÑO ESTÁTICO</text>
+  <text x="20" y="61" class="heading">Tú eliges la impresora</text>
+  <text x="20" y="85" class="note">Tarjetas = interfaz · Fuera = notas del autor</text>
+  <text x="20" y="119" class="tag agreed">J ACORDADO · 1 / ELEGIR EXPLÍCITAMENTE</text>
+  <rect x="16" y="134" width="358" height="274" rx="16" class="card"/>
+  <text x="32" y="161" class="bold">Recibo · Harbour · F/1042</text>
+  <text x="32" y="183" class="small muted">Mar Azul SL · 86,40 €</text>
+  <text x="32" y="211" class="small muted">La anterior, Bar receipt, no está disponible.</text>
+  <text x="32" y="239" class="small bold">Impresora *</text>
+  <rect x="32" y="250" width="326" height="42" rx="7" class="field"/>
+  <text x="46" y="277" class="muted">Elige una impresora</text><text x="336" y="277">⌄</text>
+  <circle cx="43" cy="313" r="6" fill="none" class="line"/><text x="58" y="318">Office · A4</text>
+  <circle cx="43" cy="338" r="6" fill="none" class="line"/><text x="58" y="343">Patio receipt</text>
+  <rect x="32" y="360" width="110" height="36" rx="7" class="quiet"/><text x="87" y="383" class="center">Cancelar</text>
+  <rect x="248" y="360" width="110" height="36" rx="7" class="quiet"/><text x="303" y="383" class="center muted">Imprimir</text>
+  <text x="20" y="435" class="tag agreed">J ACORDADO · 2 / LUIS ELIGE PATIO</text>
+  <rect x="16" y="448" width="358" height="166" rx="16" class="card"/>
+  <text x="32" y="475" class="bold">Recibo · F/1042</text>
+  <text x="32" y="509">Impresora · Patio receipt</text><text x="332" y="509" class="muted">⌄</text>
+  <rect x="32" y="530" width="92" height="52" rx="8" class="quiet"/><text x="78" y="561" class="center small">Cancelar</text>
+  <rect x="136" y="530" width="222" height="52" rx="8" class="primary"/>
+  <text x="247" y="552" class="center on bold"><tspan x="247">Imprimir una copia en</tspan><tspan x="247" dy="19">Patio receipt</tspan></text>
+  <text x="20" y="637" class="note"><tspan x="20">«Copia» supone que el servidor la designa así.</tspan><tspan x="20" dy="18">Elegir no guarda. La aceptación sí recuerda.</tspan></text>
+  <text x="20" y="680" class="tag proposal">K SIN APROBAR · ABIERTO / RECOMENDADO</text>
+  <rect x="16" y="694" width="358" height="262" rx="16" class="card"/>
+  <text x="32" y="723" class="bold">Recibo · Harbour · F/1042</text>
+  <text x="32" y="746" class="small muted">Mar Azul SL · 86,40 €</text>
+  <text x="32" y="783" class="bold"><tspan x="32">No hay impresoras disponibles</tspan><tspan x="32" dy="22">para este documento</tspan></text>
+  <rect x="32" y="829" width="326" height="42" rx="8" class="card"/>
+  <text x="195" y="856" class="center bold">Actualizar impresoras</text>
+  <line x1="32" y1="891" x2="358" y2="891" class="line"/>
+  <rect x="32" y="905" width="148" height="36" rx="7" class="quiet"/><text x="106" y="929" class="center">Cancelar</text>
+  <rect x="196" y="905" width="162" height="36" rx="7" class="quiet"/><text x="277" y="929" class="center muted">Imprimir</text>
+  <text x="20" y="978" class="note"><tspan x="20">Lectura correcta · Ningún envío previo.</tspan><tspan x="20" dy="18">Actualizar solo lee. Si vuelve solo Bar, elígela</tspan><tspan x="20" dy="18">y confirma. G solo se aplica al abrir.</tspan></text>
+  <text x="20" y="1043" class="tag proposal">K SIN APROBAR · VOLVER / ALTERNATIVA</text>
+  <rect x="16" y="1057" width="358" height="151" rx="16" class="card"/>
+  <text x="32" y="1086" class="bold">Venta · Harbour · F/1042</text>
+  <text x="32" y="1117"><tspan x="32">No hay impresoras disponibles</tspan><tspan x="32" dy="21">para este documento</tspan></text>
+  <text x="32" y="1183" class="small muted">Volver</text>
+  <rect x="127" y="1158" width="231" height="36" rx="7" class="card"/><text x="242" y="1182" class="center bold">Imprimir/reimprimir</text>
+  <text x="20" y="1233" class="note"><tspan x="20">Reabre tras la reparación. Ninguna opción imprime.</tspan><tspan x="20" dy="18">Memoria intacta · Diseño y desarrollo sin aprobar.</tspan></text>
+</svg>

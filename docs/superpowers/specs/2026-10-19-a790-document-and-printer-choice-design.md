@@ -1,3 +1,94 @@
+# A790: J approved; K proposed, 2026-10-19, after the 16:18 answer
+
+**A–J are approved only in their precise answered scope. K alone is proposed next;
+full design, plan and build remain unapproved.** This addendum takes precedence over
+conflicting text and boards below. Every old byte remains an exact historical suffix,
+including former questions and inspection statements.
+
+J authority: the owner's **“PICK IT MYSELF”** answer in
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 about 16:18.
+On a **newly opened device-free dashboard print form**, with no usable remembered printer
+and **several eligible printers**, show **Choose a printer** and keep **Print quiet and
+disabled** until you choose. Do not preselect the first printer by name.
+
+Worked J: Harbour's `F/1042` Receipt remembers **Bar receipt**, now disabled.
+**Office · A4** and **Patio receipt** are both active and eligible to Luis; Office comes
+first by name and remains valid for Receipt under B. Show Choose a printer. Luis chooses
+Patio, then must press **Print a copy on Patio receipt** when server-designated as a copy.
+Selection changes no memory; server acceptance does. First use follows the same choice
+rule without an invented previous-printer warning. G still preselects a sole eligible
+printer only on a newly opened form with no usable memory. Neither rule replaces a
+selection mid-form or reroutes a submitted request.
+
+## K: the sole next owner question, proposal only
+
+**When the dashboard print form has finished loading and no printer is eligible, should
+it stay open with a clear explanation and Refresh printers (recommended), or close back
+to the sale after explaining why printing is unavailable?**
+
+Recommend keeping it open so you can retry after an administrator restores a printer
+without losing the document context. Both options offer Cancel/return, perform no printing,
+leave remembered choices alone and never substitute another venue, profile or printer.
+Refresh printers is an **explicit offers read**, never a print or automatic polling.
+This is a proposed interaction, not a claim that a refresh capability already exists.
+
+Worked K, **newly opened Harbour `F/1042` Receipt, no prior submission**: a successful
+offers read finds no eligible printer. Bar is disabled; Office is deleted; Patio is not
+permitted to this person; Hillside is outside the sale venue. Those names explain the
+excluded setup to the design reader only. **Do not reveal the names or details of Patio
+or Hillside in the UI.** Show **No printers available for this document** / **No hay
+impresoras disponibles para este documento**.
+
+- **Keep open, recommended, unapproved:** retain the document context, quiet disabled
+  Print, **Refresh printers** / **Actualizar impresoras**, and **Cancel** / **Cancelar**.
+  If an explicit refresh succeeds with exactly one eligible Bar, G's newly-opened rule
+  does not apply mid-form: require an explicit choice, then named confirmation. The read
+  and the choice do not print or update memory.
+- **Return to sale, unapproved:** close the form and show an explanatory notice on the
+  sale. You must reopen **Print/reprint** after restoration. Cancel/return stays available;
+  returning does not print or erase memory. Do not add email, invoice conversion or a
+  Settings permission as a fallback.
+
+Loading and failed reads are not successful empty lists. **An unanswered submitted print
+request is outside K:** reconcile that same request identity first, including late outcomes,
+before fresh work. Empty offers do not prove that an earlier submission printed nothing.
+
+## Unchanged boundaries and remaining agreement
+
+A–I retain their precise scopes: both document formats keep identical recorded full-invoice
+and customer details; C keeps the inline foldable Invoice row; D opens Receipt directly
+for simplified `S/318` (€14.50, Spanish, one guest), keeping facts and offered language.
+B includes every active sale-venue printer for both dashboard documents, A4 and portable
+included, subject to current authorization, offers, Orders visibility and accompanying
+device restrictions. Exclude disabled/deleted/other-venue equipment. No profile step,
+borrowed till identity or dashboard Equipment update; memory grants no access.
+
+E/H/I keep browser memory shared across logins, separate by sale venue/document, retained
+after ordinary close/reopen; clearing site data forgets it. F changes memory only on
+server acceptance. Refusal, cancel before submission and empty offers leave it alone;
+acceptance establishes no paper output, and later paper failure does not undo acceptance.
+Device role lists and the phone's one Equipment receipt setting remain unchanged, without
+separate receipt memory/storage. [A796 Revision 4](2026-10-19-a796-handheld-payments-design.md)
+still owns phone save/concurrency handling and overridable defaults. Do not re-ask A–J/A796.
+Q1–Q6 otherwise remain, subject to explicit A–J overrides; Q4 adds no exclusive invoice-role
+holder check.
+
+Keep sale/document/printer/language/context fixed under request identity; recheck authorization
+and sale location in the reservation transaction. Preserve same-identity uncertain/late
+reconciliation, successful-write versus failed-refresh, server-derived original/copy,
+the shared full-invoice (F1) delivery guard and closed public F1. No implicit print,
+rerouting or added payment, fiscal or drawer effects.
+
+Still open: K; technical storage, expiry, manual reset, errors and private/unusual lifecycles;
+concurrent/late accepted intents and account transitions; device Invoice memory; portable
+receipt holding; wider document steps; integration; and full design/plan/build agreement.
+[Eight static J/K boards](../../backlog/mockups/a790-document-and-printer-choice/revision-j-and-no-printers/README.md)
+cover EN/ES, light/dark, 390/1280 px. Each final PNG was rendered in headless Chromium
+and individually inspected; native SVG text bounds were checked within each drawing. No runtime, test, accessibility, legal or physical-output evidence is claimed;
+the old source map remains historical and runtime-unverified.
+
+---
+
 # A790: I approved; J proposed, 2026-10-19, after the 16:10 answer
 
 **A–I are approved only in their precise answered scope. J alone is proposed next;

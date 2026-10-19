@@ -1,3 +1,68 @@
+# A790: J approved; K proposed, 2026-10-19, after the 16:18 answer
+
+**A–J retain only their precise answered scope. K alone is proposed next; full design,
+plan and build remain unapproved.** This brief and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting text/boards. Every old README byte remains an exact
+historical suffix, including former questions and inspection statements.
+
+J authority: the owner's **“PICK IT MYSELF”** answer in lane F's `questions.md`,
+2026-10-19 about 16:18. On a newly opened device-free dashboard form with no usable
+remembered printer and several eligible printers, show **Choose a printer**, with Print
+quiet and disabled until explicitly chosen. No first-by-name preselection.
+
+Draw Harbour `F/1042` Receipt: remembered Bar receipt is disabled; Office · A4 and Patio
+receipt are active and eligible to Luis, Office first by name. Show the empty choice,
+then Luis's explicit Patio selection with **Print a copy on Patio receipt** when
+server-designated. Selection changes no memory; only server acceptance does. First use
+has no invented prior-printer warning. G's sole-printer rule stays limited to newly opened
+forms; no mid-form replacement or submitted-request rerouting.
+
+**K, proposal only:** when the loaded dashboard form has no eligible printer, keep it open
+with an explanation and **Refresh printers** (recommended), or explain and return to the
+sale? Recommend staying open so restoration by an administrator can be followed by a
+retry without losing document context. Both offer Cancel/return, print nothing, preserve
+memory and substitute no venue/profile/printer. Refresh is an explicit offers read, not
+a print or polling; no existing capability is claimed.
+
+K's worked setup is a newly opened Harbour `F/1042` Receipt with **no prior submission**
+and a **successful empty offers read**. Bar disabled, Office deleted, Patio unauthorized
+and Hillside outside the sale venue are author-only setup facts. UI reveals no inaccessible
+printer names/details. Show **No printers available for this document** / **No hay
+impresoras disponibles para este documento**. Recommended panel keeps quiet disabled Print,
+Refresh printers/Actualizar impresoras and Cancel/Cancelar. After a refresh offers only
+restored Bar, require explicit choice then confirmation: G does not authorize mid-form
+selection. The alternative shows a sale notice and requires reopening Print/reprint after
+restoration. Add no email, invoice conversion or Settings permission fallback.
+
+Loading/read failure is not an empty list. An unanswered submission is outside K and
+must reconcile its same request identity first; preserve late outcomes and the distinction
+between an accepted write and failed refresh. Neither close nor refresh resolves uncertainty.
+
+A–I stay unchanged: identical recorded invoice/customer details; inline foldable Invoice
+row; direct simplified Receipt with facts/language retained; every active sale-venue
+printer including A4/portable, subject to authorization/current offers/Orders/device
+restrictions. No profile step, till identity or dashboard Equipment change. Browser memory
+is shared across logins, separate by venue/document, survives ordinary reopen, and is
+forgotten by clearing site data. Refusal/cancel-before-submit/empty offers preserve memory;
+acceptance changes it without proving paper. Device role lists and the phone's one Equipment
+receipt setting remain; [A796 Revision 4](../../../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)
+still owns save/concurrency handling and overridable defaults. Do not re-ask A–J/A796.
+
+Freeze sale/document/printer/language/context; recheck authorization/location when reserving
+work; retain server original/copy, shared F1 guard and closed public F1. No implicit print
+or new payment/fiscal/drawer effects. K, storage/expiry/manual reset/errors/private lifecycles,
+concurrent/late intents/account transitions, device Invoice memory, portable receipt holding,
+wider steps, integration and complete design/plan/build remain open.
+
+[Eight static J/K boards](revision-j-and-no-printers/README.md)
+cover EN/ES, light/dark, 390/1280 px. Each final PNG was rendered in headless Chromium
+and individually inspected; native SVG text bounds were checked within each drawing.
+These are design assets with no runtime semantics claimed. Earlier evidence statements
+refer to earlier artifacts; the old source map remains historical and runtime-unverified.
+
+---
+
 # A790: I approved; J proposed, 2026-10-19, after the 16:10 answer
 
 **A–I retain only their precise answered scope. J alone is proposed next; full design,
