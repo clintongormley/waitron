@@ -1399,7 +1399,7 @@ export class PaymentsScreen extends LitElement {
     const operation = {};
     this.#billOperation = operation;
     this.billBusy = true;
-    const order = this.#heldNumber(row);
+    const order = this.#heldOrder(row);
     try {
       await this.api.recordHeldOutcome(row.holdId, {
         outcome: outcome as HeldOutcome,
@@ -1669,19 +1669,19 @@ export class PaymentsScreen extends LitElement {
     </section>`;
   }
 
-  #heldNumber(row: HeldPaymentRow): string {
+  #heldOrder(row: HeldPaymentRow): string {
     const order = fill("payments.stuck.order", { number: String(row.orderNumber) });
     return row.label ? `${order} · ${row.label}` : order;
   }
 
-  #heldOrder(row: HeldPaymentRow): string {
-    const order = this.#heldNumber(row);
+  #heldOrderAndTime(row: HeldPaymentRow): string {
+    const order = this.#heldOrder(row);
     return row.settledAt ? `${order} · ${formatAlertTime(row.settledAt)}` : order;
   }
 
   #heldOrderLine(row: HeldPaymentRow): TemplateResult {
     return html`<p class="stuck-order">
-      ${this.#heldNumber(row)}${
+      ${this.#heldOrder(row)}${
         row.settledAt
           ? html` · <time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>`
           : nothing
@@ -1690,7 +1690,7 @@ export class PaymentsScreen extends LitElement {
   }
 
   #renderHeldRow(row: HeldPaymentRow): TemplateResult {
-    const order = this.#heldOrder(row);
+    const order = this.#heldOrderAndTime(row);
     return html`<li class="stuck" data-test=${`held-payment-${row.holdId}`}>
       <div class="stuck-body">
         ${this.#heldOrderLine(row)}

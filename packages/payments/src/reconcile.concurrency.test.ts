@@ -278,8 +278,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
     current: currentIncidentsOf,
     handle: markIncidentHandled,
   };
-  const reversed: string[] = [];
-  const make = (report: SettlementReportSource): ReconcileDeps => ({
+  const make = (report: SettlementReportSource, reversed: string[]): ReconcileDeps => ({
     db: suite.db,
     provider: "fake",
     report,
@@ -292,8 +291,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
   });
 
   async function sweepRacingAnOutcome(nif: string, records: SettlementRecord[]) {
-    await suite.db.execute(sql`delete from incidents`);
-    reversed.length = 0;
+    const reversed: string[] = [];
     const seeded = await seedWorkingOrder(suite.db, nif);
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
@@ -310,11 +308,11 @@ describe("an outcome recorded while a sweep fetches its report", () => {
       .update(workingOrders)
       .set({ status: "abandoned" })
       .where(eq(workingOrders.id, seeded.workingOrderId));
-    await reconcilePayments(make(new FakeSettlementReport([drifted])), PERIOD, NOW);
+    await reconcilePayments(make(new FakeSettlementReport([drifted]), reversed), PERIOD, NOW);
     const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
 
     const x = gatedReport(records);
-    const sweep = reconcilePayments(make(x.source), PERIOD, NOW);
+    const sweep = reconcilePayments(make(x.source, reversed), PERIOD, NOW);
     await x.fetching;
     const personId = "22222222-2222-4222-8222-222222222222";
     await withTransaction(suite.db, async (tx) => {
@@ -339,6 +337,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
       result,
       openCodes: open.rows.map((row) => row.code),
       claimed: claim.rows[0]!.reconcile_remediated_at !== null,
+      reversed,
     };
   }
 
@@ -349,7 +348,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
     expect(end.result.orphan).toEqual([]);
     expect(end.result.drift).toEqual([]);
     expect(end.claimed).toBe(false);
-    expect(reversed).toEqual([]);
+    expect(end.reversed).toEqual([]);
   });
 
   it("leaves it out of every finding when the report includes its settlement", async () => {
@@ -360,6 +359,6 @@ describe("an outcome recorded while a sweep fetches its report", () => {
     expect(end.result.drift).toEqual([]);
     expect(end.result.missingLocal).toEqual([]);
     expect(end.claimed).toBe(false);
-    expect(reversed).toEqual([]);
+    expect(end.reversed).toEqual([]);
   });
 });

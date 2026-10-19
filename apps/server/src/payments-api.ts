@@ -1292,7 +1292,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
           .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id))
           .where(isNull(paymentHoldOutcomes.id))
-          .orderBy(paymentHolds.foundAt, paymentHolds.id),
+          .orderBy(paymentHolds.foundAt, sql`${paymentHolds}.rowid`),
       );
       return c.json(
         rows.map(({ label, ...row }) => ({

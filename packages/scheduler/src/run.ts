@@ -92,8 +92,8 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
         if (completed === null) continue;
         result.ran.push(completed.record);
         // The derivation above was computed from a snapshot taken BEFORE any duty ran, so it
-        // cannot know about the backoff a failure just wrote or the successor a success or a park just
-        // enqueued.
+        // cannot know about the backoff a failure just wrote or the successor a success or a park
+        // just enqueued.
         if (completed.nextDueAt !== null) {
           earliestFuture = Math.min(earliestFuture, completed.nextDueAt.getTime());
         }

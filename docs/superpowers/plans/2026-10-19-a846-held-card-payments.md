@@ -239,7 +239,7 @@ re-check chain are unchanged), so one held payment raises one alert, not three.
 1. `H` = every hold with no outcome, oldest first.
 2. Read two incidents of code `payment.reconcile_held` from the payment check: `open`, the open one
    (the `incidents_open_dedup` index allows at most one), and `lastHandled`, the most recently
-   handled one (newest `acknowledged_at`, then id). Do not pick "the latest, open or handled" by
+   handled one (newest `acknowledged_at`, then the later `detected_at`, then id). Do not pick "the latest, open or handled" by
    `detected_at`: the sweep passes one `now` to T1 and T2, so a replacement in T2 gives the handled
    alert and its successor the same `detected_at`, and the id tie-break between two random UUIDs
    would then pick either.
@@ -258,7 +258,7 @@ throws first, `packages/payments-stripe/src/reconciler.ts:37`, for example with
 `server.credential_unusable` or `payment.credential_environment_mismatch`
 (`apps/server/src/stripe-account.ts:59,63`), because that throw comes before `reconcilePayments`
 opens T1; Open point 7) and again at
-the end of T2 (after new holds are written), with `by: null`. The Record route calls it in its own
+the end of T2 only when T2 wrote a new hold, with `by: null`. The Record route calls it in its own
 transaction with `by` = the recording manager. A replaced alert therefore shows in the Handled tab
 as handled by the manager who recorded an outcome, or by "someone" when the sweep replaced it
 because a new held payment appeared (Open point 3).
@@ -331,7 +331,8 @@ ese pago.`). Spanish list heading `Retenidos: liquidados por otro importe`; row 
 `Conservado: el dinero se debía`, `Nota`, `Registrar`.
 
 **D12. The Record route.** `GET /management-api/payments/held` lists every hold with no outcome,
-oldest first: `{ holdId, paymentRef, provider, orderNumber, settledAt, amount, providerAmount }`
+oldest first: `{ holdId, paymentRef, provider, orderNumber, label, settledAt, amount, providerAmount }`
+(`label` left out when the order has none)
 (amounts as decimal strings via `centsToDecimal`). `POST /management-api/payments/held/:id/outcome`
 with `{ outcome, note?, pin }`: management session, `payments.manage`, the PIN checked before the
 write lock through `pinGated` exactly as the attest route does; one `withTransaction` that

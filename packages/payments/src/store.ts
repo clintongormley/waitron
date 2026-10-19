@@ -774,7 +774,7 @@ export async function listReconcilable(
 }
 
 /** Keeps an `IN` list under the engine's bind-parameter ceiling however large the input. */
-const CHUNK_SIZE = 1000;
+export const CHUNK_SIZE = 1000;
 
 /**
  * Which of these references belongs to ANY payment of this provider? Deliberately unbounded by

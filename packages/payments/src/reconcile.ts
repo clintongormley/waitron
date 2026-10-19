@@ -360,7 +360,8 @@ export async function reconcilePayments(
 
     result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
-    // Every other writer of a hold or an outcome refreshes the alert in its own transaction.
+    // The first transaction refreshed the alert at this same `now`, and every other writer of a
+    // hold or an outcome refreshes it in its own transaction.
     if (wroteHold && (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null }))) {
       result.incidentsRaised += 1;
     }
