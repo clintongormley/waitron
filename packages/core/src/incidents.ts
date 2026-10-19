@@ -208,7 +208,6 @@ export async function findIncident(tx: Transaction, id: string): Promise<TenantI
   return row === undefined ? null : toTenantIncident(row);
 }
 
-/** The handled incident is never chosen by `detected_at`. */
 export async function currentIncidentsOf(
   tx: Transaction,
   input: { origin: Origin; code: string },

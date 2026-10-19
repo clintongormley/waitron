@@ -5,10 +5,7 @@ import { payments } from "./payments.js";
 
 export const paymentHoldOutcome = enumType(["refunded_at_provider", "kept"]);
 
-/**
- * One row per held payment, written the first time it is held. Declared `appendOnly()` in
- * `../classification.ts`.
- */
+/** One row per held payment. Declared `appendOnly()` in `../classification.ts`. */
 export const paymentHolds = table(
   "payment_holds",
   {

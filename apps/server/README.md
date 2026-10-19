@@ -15,9 +15,10 @@ This document is written for whoever deploys this process, not whoever reads its
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` is a claim that
 the pass was not wholesale abandoned and each duty had a clean pass within its budget; a parked
-Stripe settlement-audit period shows in the body's `parked` count and the `reconcile.run_parked` log
-line, not in the status code. It is **not** a claim that every individual fiscal record has
-actually been accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
+Stripe settlement-audit period is not in the status code, and the body's `parked` count shows it
+only until the next recorded pass replaces it. The error-level `reconcile.run_parked` log line,
+written by the pass that parks, is the signal to look for afterwards. It is **not** a claim that
+every individual fiscal record has actually been accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
 `lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
 `drain.complete` log line, the `incidents` and `filing_cases` tables, and the dashboard's alerts
 bell and Alerts screen (as `fiscal.` alerts, among them `fiscal.filing_cases_open`, to anyone
@@ -605,7 +606,8 @@ The ones worth grepping for:
   `sk_live_`/`sk_test_` prefix disagrees with this host's `WAITRON_ENV`).
 - **`reconcile.run_failed`** (`warn`) — `{ duty, period, errorCode }`. One claimed
   reconcile run failed this attempt but is still retrying on its own backoff — a `next_attempt_at`
-  exists. Never flips `/health`; see the `skipped`/`parked` bullets above.
+  exists. Never flips `/health`; see `skipped` and `parked` under
+  ["What `/health` means"](#what-health-means).
 - **`reconcile.run_parked`** (`error`) — `{ duty, period, errorCode }`. One claimed
   reconcile run exhausted `WAITRON_SCHEDULER_MAX_ATTEMPTS`; a fresh run of that (duty, period) is
   due a day later. This is what `/health`'s

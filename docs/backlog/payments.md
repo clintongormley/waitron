@@ -275,8 +275,8 @@ for reconciliation rather than show a receipt).
 - **An orphaned card payment whose settled amount differs from ours is held, never forgotten**
   (owner, 2026-10-17). It is never refunded automatically while the amounts disagree; its alert
   stays up and reminds daily until a person resolves it, and the sweep re-checks closed periods for
-  orphans still unresolved. Built by A846, as the owner refined it in answering Q44 (recorded in
-  [the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)):
+  orphans still unresolved. Built by A846, as the owner refined it in answering Q44 on 2026-10-18
+  (recorded in [the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)):
   the reminder is an ordinary alert that can be marked handled and comes back the next morning
   while any held payment has no outcome, not one that cannot be dismissed; and a manager closes a
   held payment by recording an outcome in the Payments screen's held list.

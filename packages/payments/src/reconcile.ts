@@ -221,10 +221,10 @@ const SEVERITY = {
  *
  * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2
  * writes incidents and markers, and the reversals run outside every transaction (each is a network
- * call). The report is fetched even when T1 read nothing: zero local rows against a non-empty report
- * is the silent-data-loss case. The remediation marker is stamped BEFORE the reversal, so a crash
- * between the processor refunding and us recording it leaves an under-remediated orphan, never a
- * double refund.
+ * call). The report is fetched even when T1 read nothing: zero local rows against a non-empty
+ * report is the silent-data-loss case. The remediation marker is stamped BEFORE the reversal, so a
+ * crash between the processor refunding and us recording it leaves an under-remediated orphan,
+ * never a double refund.
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
