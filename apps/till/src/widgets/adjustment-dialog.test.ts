@@ -633,6 +633,19 @@ describe("till-adjustment-dialog: before confirming", () => {
     );
   });
 
+  it("names no reason it no longer holds in Spanish", async () => {
+    setLocale("es");
+    const { el } = await atConfirm(
+      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      (el) => chooseReason(el, "Complaint"),
+    );
+    el.reasons = [staffMeal];
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      "Alguien que pueda autorizarlo debe introducir su PIN.",
+    );
+  });
+
   it("says when the prices allow a different amount than the one asked for", async () => {
     const { el } = await atConfirm(
       { kind: "discount", reasons: [staffMeal], preview: preview({ reduction: "3.28" }) },
