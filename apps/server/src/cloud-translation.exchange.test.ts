@@ -49,7 +49,7 @@ it("submits, polls, collects and releases one job", () =>
     const done = await f.client.translation.status(job.jobId);
     expect(done).toEqual({ jobId: job.jobId, state: "done", total: 2, done: 2, failed: 0 });
     expect(Object.hasOwn(done, "reason")).toBe(false);
-    const results = await f.client.translation.collect(job.jobId);
+    const results = await f.client.translation.collect(job.jobId, 0);
     expect(results.results.map((r) => r.names)).toEqual([
       { ca: "CA PRODUCT 0", es: "ES PRODUCT 0" },
       { ca: "CA PRODUCT 1", es: "ES PRODUCT 1" },
@@ -107,7 +107,7 @@ it("an expired job's collect is content.suggestion_expired, and an unknown job's
   withFake(async (f) => {
     const job = await f.client.translation.submit(op(), body(1));
     f.expire(job.jobId);
-    await expect(f.client.translation.collect(job.jobId)).rejects.toMatchObject({
+    await expect(f.client.translation.collect(job.jobId, 0)).rejects.toMatchObject({
       code: "content.suggestion_expired",
     });
     await expect(f.client.translation.status(crypto.randomUUID())).rejects.toMatchObject({
@@ -277,36 +277,10 @@ it("refuses a collect reply with a result whose names are not text", () =>
     const job = await f.client.translation.submit(op(), body(1));
     await f.client.translation.status(job.jobId);
     await f.client.translation.status(job.jobId);
-    await expect(f.client.translation.collect(job.jobId)).rejects.toMatchObject({
+    await expect(f.client.translation.collect(job.jobId, 0)).rejects.toMatchObject({
       code: "cloud.unavailable",
     });
   }));
-
-it("a collect reply as large as the contract allows fits under its size limit", () => {
-  // Every text at its bound in characters JSON can only send as a six-byte `\uXXXX` escape.
-  expect(JSON.stringify("\u0001")).toHaveLength(8);
-  const text = (c: string, n = 500) => c.repeat(n);
-  const tags = Array.from({ length: 20 }, (_, i) => `a${String.fromCharCode(97 + i)}a-ES`);
-  const worst = JSON.stringify({
-    ref: text("\u0001", 128),
-    names: Object.fromEntries(tags.map((t) => [t, text("\u0001")])),
-    placeholder: false,
-    corrections: Array.from({ length: 10 }, () => ({
-      field: "internal",
-      wrong: text("\u0001"),
-      right: text("\u0002"),
-    })),
-  });
-  const shell = JSON.stringify({
-    version: 1,
-    jobId: "00000000-0000-4000-8000-000000000001",
-    state: "partly_done",
-    results: [],
-    failed: [],
-  });
-  const reply = Buffer.byteLength(shell) + 1000 * Buffer.byteLength(worst) + 999;
-  expect(reply).toBeLessThanOrEqual(COLLECT_REPLY_BYTES);
-});
 
 it("refuses a collect reply over its size limit, and stops reading it", () =>
   withFake(async (f) => {
@@ -327,7 +301,7 @@ it("refuses a collect reply over its size limit, and stops reading it", () =>
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(stream, { status: 200 }));
     const concat = vi.spyOn(Buffer, "concat");
-    await expect(f.client.translation.collect(JOB)).rejects.toMatchObject({
+    await expect(f.client.translation.collect(JOB, 0)).rejects.toMatchObject({
       code: "cloud.unavailable",
     });
     expect(cancelled).toBe(true);
@@ -342,7 +316,7 @@ const reply = (value: unknown, status = 200) =>
 type Call = (f: Fake) => Promise<unknown>;
 const submit: Call = (f) => f.client.translation.submit(op(), body(1));
 const status: Call = (f) => f.client.translation.status(JOB);
-const collect: Call = (f) => f.client.translation.collect(JOB);
+const collect: Call = (f) => f.client.translation.collect(JOB, 0);
 const release: Call = (f) => f.client.translation.release(JOB);
 const collected = (patch: Record<string, unknown>) => ({
   version: 1,
@@ -350,6 +324,7 @@ const collected = (patch: Record<string, unknown>) => ({
   state: "done",
   results: [result],
   failed: [],
+  nextCursor: null,
   ...patch,
 });
 
@@ -448,12 +423,163 @@ it("accepts a collect reply holding a correction", () =>
         }),
       ),
     );
-    await expect(f.client.translation.collect(JOB)).resolves.toEqual({
+    await expect(f.client.translation.collect(JOB, 0)).resolves.toEqual({
       state: "partly_done",
       results: [{ ...result, corrections: [correction] }],
       failed: ["product:1"],
+      nextCursor: null,
     });
   }));
+
+const withoutNextCursor: Record<string, unknown> = collected({});
+delete withoutNextCursor.nextCursor;
+it.each([
+  ["no nextCursor", withoutNextCursor],
+  ["a nextCursor that is text", collected({ nextCursor: "1" })],
+  ["a nextCursor equal to the cursor", collected({ nextCursor: 0 })],
+  ["a nextCursor one past the entries", collected({ nextCursor: 2 })],
+  ["a null nextCursor and no entries", collected({ results: [], failed: [] })],
+])("refuses a collect reply with %s", (_n, value) =>
+  withFake(async (f) => {
+    await f.client.refresh();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(reply(value));
+    await expect(collect(f)).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  }),
+);
+
+const finished = async (f: Fake, items: number) => {
+  const job = await f.client.translation.submit(op(), body(items));
+  await f.client.translation.status(job.jobId);
+  await f.client.translation.status(job.jobId);
+  return job.jobId;
+};
+const padded = (value: unknown, bytes: number) => {
+  const text = JSON.stringify(value);
+  return text + " ".repeat(bytes - Buffer.byteLength(text));
+};
+
+it("signs the cursor it is given and returns the page's nextCursor", () =>
+  withFake(async (f) => {
+    f.pageItems(1);
+    const jobId = await finished(f, 2);
+    const page = await f.client.translation.collect(jobId, 1);
+    expect(f.calls.at(-1)!.action).toBe("translation-collect");
+    expect(f.calls.at(-1)!.cursor).toBe(1);
+    expect(page.nextCursor).toBeNull();
+    expect(page.results.map((r) => r.ref)).toEqual(["product:1"]);
+  }));
+
+it("reads a page of exactly 16 MiB and refuses one byte more", () =>
+  withFake(async (f) => {
+    await f.client.refresh();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(reply(padded(collected({}), 16_777_216)))
+      .mockResolvedValueOnce(reply(padded(collected({}), 16_777_217)));
+    await expect(f.client.translation.collect(JOB, 0)).resolves.toMatchObject({
+      results: [result],
+    });
+    await expect(f.client.translation.collect(JOB, 0)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  }));
+
+it("refuses an oversized page whatever its Content-Length says", () =>
+  withFake(async (f) => {
+    await f.client.refresh();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(padded(collected({}), 16_777_217), { headers: { "content-length": "100" } }),
+    );
+    await expect(f.client.translation.collect(JOB, 0)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  }));
+
+it("a gzip reply is judged by its decoded size", () =>
+  withFake(async (f) => {
+    f.gzipReplies(true);
+    const jobId = await finished(f, 1);
+    await expect(f.client.translation.collect(jobId, 0)).resolves.toMatchObject({
+      state: "done",
+    });
+    f.collectReply((page) => padded(page, 17 * 1024 * 1024));
+    await expect(f.client.translation.collect(jobId, 0)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  }));
+
+it("refuses a page whose stream breaks off", () =>
+  withFake(async (f) => {
+    await f.client.refresh();
+    const text = JSON.stringify(collected({}));
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(text.slice(0, text.length / 2)));
+        controller.error(new Error("the connection broke"));
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(stream, { status: 200 }));
+    await expect(f.client.translation.collect(JOB, 0)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  }));
+
+it("gives a collect 120 seconds and a status 8", () =>
+  withFake(async (f) => {
+    const jobId = await finished(f, 1);
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    await f.client.translation.collect(jobId, 0);
+    expect(timeout).toHaveBeenCalledWith(120_000);
+    timeout.mockClear();
+    await f.client.translation.status(jobId);
+    expect(timeout).toHaveBeenCalledWith(8000);
+  }));
+
+it.each([
+  [
+    "400 invalid_request for a cursor equal to the job's total",
+    async (f: Fake) => f.client.translation.collect(await finished(f, 1), 1),
+    "cloud.request_invalid",
+  ],
+  [
+    "404 for another job",
+    async (f: Fake) => {
+      await finished(f, 1);
+      return f.client.translation.collect(crypto.randomUUID(), 0);
+    },
+    "content.suggestion_expired",
+  ],
+  [
+    "410 for an expired job",
+    async (f: Fake) => {
+      const jobId = await finished(f, 1);
+      f.expire(jobId);
+      return f.client.translation.collect(jobId, 0);
+    },
+    "content.suggestion_expired",
+  ],
+  [
+    "409 for a running job",
+    async (f: Fake) => {
+      f.hold(true);
+      const jobId = await finished(f, 1);
+      return f.client.translation.collect(jobId, 0);
+    },
+    "cloud.unavailable",
+  ],
+  [
+    "503 temporarily_unavailable when not one item fits",
+    async (f: Fake) => {
+      f.pageBytes(1);
+      return f.client.translation.collect(await finished(f, 1), 0);
+    },
+    "cloud.unavailable",
+  ],
+])("carries collect's %s through as its domain code", (_n, call, code) =>
+  withFake(async (f) => {
+    await expect(call(f)).rejects.toMatchObject({ code });
+  }),
+);
 
 it("a signed body over 4 KiB is cloud.request_invalid and is not sent", () =>
   withFake(async (f) => {
@@ -586,7 +712,9 @@ it.each(["submit", "status", "collect", "release"] as const)(
       await expect(
         call === "submit"
           ? f.client.translation.submit(op(), body(1))
-          : f.client.translation[call](job.jobId),
+          : call === "collect"
+            ? f.client.translation.collect(job.jobId, 0)
+            : f.client.translation[call](job.jobId),
       ).rejects.toMatchObject({ code: "cloud.unavailable" });
       expect(f.calls).toHaveLength(calls + 1);
       const { lifecycle } = await saved(f);

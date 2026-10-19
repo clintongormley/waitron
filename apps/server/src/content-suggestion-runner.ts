@@ -117,9 +117,10 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
         return "wait";
       }
       if (status.state === "done" || status.state === "partly_done") {
-        const collected = await translation.collect(cloudJobId, signal);
+        const cursor = job.collectCursor ?? 0;
+        const collected = await translation.collect(cloudJobId, cursor, signal);
         // Collect's reply carries no reason; the status that finished the job does.
-        const page: SuggestionPage = { ...collected, cursor: 0, nextCursor: null };
+        const page: SuggestionPage = { ...collected, cursor };
         const results: SuggestionPage =
           status.reason === "limit_reached" || status.reason === "provider_failed"
             ? { ...page, reason: status.reason }
