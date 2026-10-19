@@ -1056,6 +1056,132 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
   });
 });
 
+describe("till-bill-pay-dialog: a card already in progress", () => {
+  const pendingCard: BillPaymentView = {
+    id: "pay-9",
+    submissionId: "sub-9",
+    kind: "contribution",
+    shareOf: null,
+    method: "card",
+    entry: "reader",
+    applied: "20.00",
+    tip: "0.00",
+    tendered: null,
+    change: null,
+    state: "pending",
+    createdAt: "2026-10-19T20:00:00.000Z",
+    receivedAt: null,
+    lines: [],
+    refunds: [],
+  };
+  const holding = balanceOf({
+    reserved: "20.00",
+    outstanding: "100.00",
+    payments: [pendingCard],
+  });
+
+  async function chosen(method: "cash" | "card", over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount({ way: "contribution", balance: holding, unanswered: null, ...over });
+    await type(el, "amount", "40");
+    await pick(el, "method", method);
+    if (method === "cash") await type(el, "tendered", "40");
+    return el;
+  }
+  const ask = (el: TillBillPayDialog) => root(el).querySelector("[data-pay-card-ask]");
+
+  for (const cardReader of ["stripe_terminal", "none"] as const) {
+    it(`asks before another card, sending nothing, with cardReader ${cardReader}`, async () => {
+      const el = await chosen("card", { cardReader });
+      const asked = capture<PayRequest>(el, "bill-pay-preview");
+      await click(el, "[data-pay-continue]");
+
+      expect(asked).toEqual([]);
+      expect(text(ask(el))).toContain(t("bill_pay.card_in_progress_ask"));
+      expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+      await click(el, "[data-pay-continue]");
+      expect(asked).toEqual([]);
+    });
+  }
+
+  it("takes another card when asked to, once", async () => {
+    const el = await chosen("card", { cardReader: "stripe_terminal" });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    await click(el, "[data-pay-card-ask-take]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "40" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+    ]);
+    expect(ask(el)).toBeNull();
+  });
+
+  it("goes back to the form without sending anything", async () => {
+    const el = await chosen("card");
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    await click(el, "[data-pay-card-ask-back]");
+
+    expect(ask(el)).toBeNull();
+    expect(asked).toEqual([]);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("does not press Continue from the keyboard while it asks", async () => {
+    const el = await chosen("card");
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    field(el, "amount")!
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await el.updateComplete;
+
+    expect(asked).toEqual([]);
+    expect(ask(el)).not.toBeNull();
+  });
+
+  it("stops asking once the form is changed", async () => {
+    const el = await chosen("card");
+    await click(el, "[data-pay-continue]");
+    await pick(el, "method", "cash");
+
+    expect(ask(el)).toBeNull();
+  });
+
+  it("asks nothing before cash", async () => {
+    const el = await chosen("cash");
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toHaveLength(1);
+    expect(ask(el)).toBeNull();
+  });
+
+  it("asks nothing before a card when no card is in progress", async () => {
+    const el = await chosen("card", {
+      balance: balanceOf({ payments: [{ ...pendingCard, state: "received" }] }),
+    });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toHaveLength(1);
+    expect(ask(el)).toBeNull();
+  });
+
+  it("asks nothing before a card when the payment in progress is cash", async () => {
+    const el = await chosen("card", {
+      balance: balanceOf({ payments: [{ ...pendingCard, method: "cash", entry: null }] }),
+    });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toHaveLength(1);
+  });
+});
+
 describe("till-bill-pay-dialog: the bill's payments", () => {
   function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
     return {

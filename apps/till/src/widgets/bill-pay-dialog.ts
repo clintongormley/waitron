@@ -434,6 +434,14 @@ export class TillBillPayDialog extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .ask-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+        margin-top: var(--wt-space-2);
+      }
+
       .tone-body {
         overflow-wrap: anywhere;
       }
@@ -498,6 +506,7 @@ export class TillBillPayDialog extends LitElement {
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
+  @state() private askingSecondCard = false;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -628,6 +637,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #changedDraft(): void {
+    this.askingSecondCard = false;
     this.#entry?.changed();
     this.#tip?.changed();
   }
@@ -848,8 +858,54 @@ export class TillBillPayDialog extends LitElement {
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
+    if (this.method !== "cash" && this.#cardInProgress()) {
+      this.askingSecondCard = true;
+      return;
+    }
+    this.#send();
+  }
+
+  #cardInProgress(): boolean {
+    return (this.balance?.payments ?? []).some(
+      (payment) => payment.method === "card" && payment.state === "pending",
+    );
+  }
+
+  #send(): void {
+    this.askingSecondCard = false;
     this.#noTip();
     this.#emit("bill-pay-preview", this.#request());
+  }
+
+  #takeSecondCard(): void {
+    if (!this.isConnected || !this.#active || this.busy || !this.askingSecondCard) return;
+    this.#send();
+  }
+
+  #secondCardAsk(): TemplateResult {
+    return html`<div class="tone" role="alert" data-pay-card-ask>
+      <p class="tone-body">${t("bill_pay.card_in_progress_ask")}</p>
+      <div class="ask-actions">
+        <wt-button
+          variant="secondary"
+          data-pay-card-ask-back
+          .disabled=${this.busy}
+          @click=${() => {
+            this.askingSecondCard = false;
+          }}
+        >
+          ${t("action.back")}
+        </wt-button>
+        <wt-button
+          variant="primary"
+          data-pay-card-ask-take
+          .disabled=${this.busy}
+          @click=${() => this.#takeSecondCard()}
+        >
+          ${t("bill_pay.card_in_progress_take")}
+        </wt-button>
+      </div>
+    </div>`;
   }
 
   override render() {
@@ -1192,6 +1248,7 @@ export class TillBillPayDialog extends LitElement {
       </fieldset>
       <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${this.#wayFields(errors)} ${this.#methodFields(errors)}
+      ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
       <wt-form-actions .error=${bottom}>
         <wt-button
           slot="cancel"
@@ -1206,7 +1263,7 @@ export class TillBillPayDialog extends LitElement {
           variant="primary"
           data-pay-continue
           .loading=${this.busy}
-          .disabled=${this.busy || own.size > 0}
+          .disabled=${this.busy || own.size > 0 || this.askingSecondCard}
           @click=${() => void this.#continue()}
         >
           ${t("bill_pay.continue")}

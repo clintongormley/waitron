@@ -54,6 +54,7 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
 }
 
 const lockBackgrounds = new Map<string, string>();
+const askBackgrounds = new Map<string, string>();
 
 describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillBillPayDialog> = {}) =>
@@ -310,6 +311,80 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       await commands.writeFile(
         `src/widgets/${shot}.json`,
         JSON.stringify({ innerWidth: window.innerWidth, panelWidth: box.width, background }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  /** A card contribution on a bill whose balance holds a card in progress, asked about. */
+  async function askingSecondCard() {
+    const pendingCard: BillPaymentView = {
+      id: "pay-9",
+      submissionId: "sub-9",
+      kind: "contribution",
+      shareOf: null,
+      method: "card",
+      entry: "reader",
+      applied: "20.00",
+      tip: "0.00",
+      tendered: null,
+      change: null,
+      state: "pending",
+      createdAt: "2026-10-19T20:00:00.000Z",
+      receivedAt: null,
+      lines: [],
+      refunds: [],
+    };
+    const mounted = await mount({
+      way: "contribution",
+      cardReader: "stripe_terminal",
+      balance: { ...balance, payments: [pendingCard] },
+    });
+    await typed(mounted.el, "amount", "40");
+    await pressed(mounted.el, 'input[name="method"][value="card"]');
+    await pressed(mounted.el, "[data-pay-continue]");
+    if (!mounted.el.shadowRoot!.querySelector("[data-pay-card-ask]"))
+      throw new Error("no question");
+    return mounted;
+  }
+
+  it("has no violations asking before a second card while one is in progress", async () => {
+    const { host } = await askingSecondCard();
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])("looks right asking before a second card at %i px", async (width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await askingSecondCard();
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      askBackgrounds.set(`${theme}-${width}`, background);
+      if (theme === "dark") {
+        const light = askBackgrounds.get(`light-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const question = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-card-ask]")!;
+      question.scrollIntoView({ block: "center" });
+      const shot = `__screenshots__/look/a796-second-card-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const asked = question.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          questionLeft: asked.left - box.left,
+          questionRight: box.right - asked.right,
+          background,
+        }),
       );
     } finally {
       await page.viewport(viewport.width, viewport.height);
