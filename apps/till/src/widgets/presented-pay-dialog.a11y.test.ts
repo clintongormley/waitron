@@ -115,7 +115,10 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-presented-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-presented-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const action = el.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!;
       const pressedBox = action.getBoundingClientRect();
