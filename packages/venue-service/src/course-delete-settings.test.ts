@@ -11,7 +11,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId, type LocationId } from "@waitron/shared";
-import { clearCourseDeleteSettings, readCourseDeleteSettings } from "./index.js";
+import {
+  clearCourseDeleteSettings as clear,
+  courseDeleteSettingsRemoves,
+  readCourseDeleteSettings as read,
+} from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments } from "./schema/service.js";
 import { serviceSteps, type ServiceStepStart } from "./schema/service-steps.js";
@@ -24,6 +28,12 @@ beforeAll(() => {
   db = suite.db;
 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
+
+type Scope = { locationId: LocationId };
+const readCourseDeleteSettings = async (tx: Transaction, cfg: Scope, courseId: string) =>
+  courseDeleteSettingsRemoves(await read(tx, cfg, courseId));
+const clearCourseDeleteSettings = async (tx: Transaction, cfg: Scope, courseId: string) =>
+  clear(tx, await read(tx, cfg, courseId));
 
 type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "dessert"];
 
@@ -180,5 +190,23 @@ it("a first step that does not start after the step before is left as it is", as
   await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
   expect(await stepsOf(dining)).toEqual([
     { name: "Anything else?", start: "all_served", minutes: 10 },
+  ]);
+});
+
+it("leaves a department at another location alone, even when its step names the course", async () => {
+  const { cfg, courseId } = await venue("Here");
+  const other = await venue("Elsewhere");
+  await department(cfg, courseId, "Dining", [["Dessert?", "course_served", 10, "dessert"]]);
+  const away = await department(other.cfg, courseId, "Away", [
+    ["Dessert?", "course_served", 10, "dessert"],
+    ["Coffee", "after_previous", 5],
+  ]);
+  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
+    { key: "course_service_steps", count: 1, targets: [] },
+  ]);
+  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
+  expect(await stepsOf(away)).toEqual([
+    { name: "Dessert?", start: "course_served", minutes: 10 },
+    { name: "Coffee", start: "after_previous", minutes: 5 },
   ]);
 });

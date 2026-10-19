@@ -5,7 +5,13 @@ import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { serviceSteps } from "./schema/service-steps.js";
 
-async function settings(tx: Transaction, cfg: VenueScope, courseId: string) {
+export type CourseDeleteSettings = { readonly named: string[]; readonly seated: string[] };
+
+export async function readCourseDeleteSettings(
+  tx: Transaction,
+  cfg: VenueScope,
+  courseId: string,
+): Promise<CourseDeleteSettings> {
   const named = await tx
     .select({ id: serviceSteps.id, departmentId: serviceSteps.departmentId })
     .from(serviceSteps)
@@ -42,12 +48,10 @@ async function settings(tx: Transaction, cfg: VenueScope, courseId: string) {
   return { named: [...removed], seated };
 }
 
-export async function readCourseDeleteSettings(
-  tx: Transaction,
-  cfg: VenueScope,
-  courseId: string,
-): Promise<DeleteImpactItem[]> {
-  const { named, seated } = await settings(tx, cfg, courseId);
+export function courseDeleteSettingsRemoves({
+  named,
+  seated,
+}: CourseDeleteSettings): DeleteImpactItem[] {
   return [
     { key: "course_service_steps", count: named.length, targets: [] },
     { key: "course_seated_steps", count: seated.length, targets: [] },
@@ -56,10 +60,8 @@ export async function readCourseDeleteSettings(
 
 export async function clearCourseDeleteSettings(
   tx: Transaction,
-  cfg: VenueScope,
-  courseId: string,
+  { named, seated }: CourseDeleteSettings,
 ): Promise<void> {
-  const { named, seated } = await settings(tx, cfg, courseId);
   if (named.length > 0) await tx.delete(serviceSteps).where(inArray(serviceSteps.id, named));
   if (seated.length > 0)
     await tx.update(serviceSteps).set({ start: "seated" }).where(inArray(serviceSteps.id, seated));
