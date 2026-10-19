@@ -231,7 +231,9 @@ export async function currentIncidentsOf(
     .from(incidents)
     .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(and(ofCode, isNotNull(incidents.acknowledgedAt)))
-    .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id))
+    // One sweep's two transactions share a `now`, so a replaced incident and its successor can be
+    // handled at one instant; the later-detected of the two is the successor.
+    .orderBy(desc(incidents.acknowledgedAt), desc(incidents.detectedAt), desc(incidents.id))
     .limit(1);
   return {
     open: open === undefined ? null : toTenantIncident(open),

@@ -896,6 +896,25 @@ describe("tenant incident reads", () => {
     expect(current.lastHandled?.id).toBe(handled);
   });
 
+  it("picks the later-detected of two incidents handled at the same instant, whatever their ids", async () => {
+    const prefix = crypto.randomUUID().slice(0, -2);
+    const handledAt = new Date(BASE.getTime() + 60_000).toISOString();
+    await insertIncident({
+      id: `${prefix}0b`,
+      detectedAt: BASE.toISOString(),
+      acknowledgedAt: handledAt,
+    });
+    const successor = await insertIncident({
+      id: `${prefix}0a`,
+      detectedAt: new Date(BASE.getTime() + 30_000).toISOString(),
+      acknowledgedAt: handledAt,
+    });
+    const current = await asApp((tx) =>
+      currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.current" }),
+    );
+    expect(current.lastHandled?.id).toBe(successor);
+  });
+
   it("marks an incident handled by no one", async () => {
     const origin = deviceOrigin(deviceId);
     const raised = {
