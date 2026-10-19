@@ -3045,12 +3045,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
   Next: the owner's answers to its questions, then a plan.
 
-- **A899. design-system.md's "Retheming a deployment" says a bare `[data-wt-theme-root]` selector
-  "only matches the token layer's own specificity" (`docs/developers/design-system.md:108-110`,
-  from the first commit, b20c26709).** Every token-layer rule is now `:where()`-wrapped, and A841's
-  probe (Chromium 156, the real `colors.css` adopted as `applyTokens` does) found a bare
+- **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
+  `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file
+  was created in b20c26709).** It says such a selector "only matches the token layer's own
+  specificity", but every token-layer rule is now `:where()`-wrapped, and A841's probe (Chromium
+  156, the real `colors.css` adopted as `applyTokens` does) found a bare
   `[data-wt-theme-root] { --wt-color-primary: … }` winning in all six Light / Dark / Follow device ×
-  OS light / dark cases. Next: reword the sentence, or keep the advice with its real reason.
+  OS light / dark cases. The advice against a bare `[data-theme]` selector holds for another reason:
+  Follow device removes the attribute (`packages/ui/src/theme-choice.ts:28`), so such a rule stops
+  matching. Next: reword the sentence with the real reasons.
 
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
