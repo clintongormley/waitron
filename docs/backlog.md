@@ -2136,8 +2136,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (design §10); A758's slices follow it. **Revised again 2026-10-19 for the owner's four answers:**
   the Spanish words (the question and the report column are «En preparación»); no confirmation
   switch on a cash refund; a fired dish removed before preparation started is not listed; the refund
-  screen's Reason is the same drop-down. **One question is open (§11): whether a handheld that takes
-  no cash may record a cash refund** (recommended: no, as today); nothing else waits on it.
+  screen's Reason is the same drop-down. **The owner answered the last question (§11, D28): a cash
+  refund only on a device whose profile takes cash, as today.** No question is open.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)

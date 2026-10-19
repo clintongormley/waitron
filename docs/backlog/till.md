@@ -1390,9 +1390,9 @@ served with a Refund tick each (§3.8, pictures 06–08). Revised a second time 
 owner's four answers to A758r3's question: the Spanish words (§3.9; the question and the report
 column are «En preparación»), no confirmation switch on a cash refund (§3.8.2, with what the drawer
 and its count do), a fired dish removed before preparation started not listed, and the refund
-screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. One
-question is open (§11): whether a handheld that takes no cash may record a cash refund; recommended
-no, as today. The notes below are the review as written before the
+screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. The
+owner answered the last question on 2026-10-19 (§11, D28): a cash refund only on a device whose
+profile takes cash, as today; no question is open. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.

@@ -1,12 +1,10 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
 Status: **design, revised 2026-10-19 a second time, for the owner's four answers to A758r3's
-question (D23–D26).** Settled and buildable: all of it except §11's one question — the Spanish
-words (§3.9), no confirmation switch on a cash refund (§3.8.2), a fired dish answered No not listed
-(§3.3, §3.6) and the refund screen's Reason drop-down (§3.8 item 3). **The open question (§11):
-whether a handheld that does not take cash may record a cash refund.** The build need not wait:
-today's rule stands until it is answered, and only a cash refund on a device that takes no cash
-would change if the owner chooses the other way. Earlier revisions: 2026-10-17, 2026-10-18 and
+question (D23–D26), then for the answer to A758r4's question (D28).** Settled and buildable, all of
+it: the Spanish words (§3.9), no confirmation switch on a cash refund (§3.8.2), a fired dish
+answered No not listed (§3.3, §3.6), the refund screen's Reason drop-down (§3.8 item 3), and a cash
+refund only on a device whose profile takes cash (D28, §3.8.2). No question is open. Earlier revisions: 2026-10-17, 2026-10-18 and
 2026-10-19 (the owner's answers to Q21–Q28, Q40 and Q43). Backlog entry: `docs/backlog.md` "A758" and
 [its detail](../../backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own).
 Pictures: `docs/backlog/mockups/a758-adjustment-reasons/`, all drawn in HTML with the dashboard's
@@ -76,6 +74,7 @@ revision of 2026-10-19 (§3.8.2, §3.9, §9.1's cash checks, §10 item 5, §11) 
 | D25 | **A fired dish removed because preparation had not started is not listed** in Voids and comps: it is treated like a held dish, still editing the order. No record, no migration for it. | owner, 2026-10-19 ~12:40, A758r3 (c) |
 | D26 | **The refund screen's Reason is the same drop-down** (D15): it starts on the cancel's reason when opened from a cancel and on "Choose a reason" otherwise; "Other" gives the typed note; the dishes show on a line under it ("1 × Flan"), not inside the reason. What is stored keeps its shape: the reason's name, or Other's typed words. | owner, 2026-10-19, A758r3 (d), as recommended |
 | D27 | **A venue keeps at least one Void reason that asks for a note**, so a refund can always be given typed words (§6). | our reading of D26, beside the existing "a venue keeps at least one Void reason"; say if wrong |
+| D28 | **Keep today's rule: cash is given back only on a device whose profile takes cash.** On a handheld that takes none, Finish table shows no Refund tick, its button reads "Cancel", and one line, «Devuelve el dinero en una caja: Devolver un pago, en el recibo.», sends staff to a till (§3.8.2). | owner, 2026-10-19 ~14:05, A758r4, as recommended |
 
 Kept from the first version, which the owner did not object to: the page sits under **Service**
 (A755); a search bar, drag handles and a real **Delete** through `wt-delete-dialog` (no Disable,
@@ -784,8 +783,7 @@ of it would need" (`bill-payments-api.ts:284`) — rather than something the har
 whose handhelds should give card payments back turns on `integrated-card-payment` in their profile,
 which also lets them take card payments on a reader (`apps/till/src/till-app.ts:8449-8452`).
 
-**What a device shows when it cannot give the money back** (our reading, under §11's recommended
-answer). The till knows both sides: its profile's actions (`till-app.ts:8445-8452`) and each
+**What a device shows when it cannot give the money back** (D28). The till knows both sides: its profile's actions (`till-app.ts:8445-8452`) and each
 payment's method and whether it was keyed by hand (`apps/till/src/api/tender-refund-types.ts:15-23`).
 
 - On a device that can give back **none** of the bill's payments, Finish table and the table's
@@ -806,7 +804,7 @@ payment's method and whether it was keyed by hand (`apps/till/src/api/tender-ref
 
 The summary relayed with the owner's answer read it the other way ("on a device that cannot (a
 handheld), nothing opens and the refund still goes through"), which today happens only on a device
-whose profile takes cash and opens no drawer; §11 asks.
+whose profile takes cash and opens no drawer; §11 asked, and the owner kept today's rule (D28).
 
 **Taking the money out later without a refund.** The manual open (`POST /api/drawer/open`,
 `apps/server/src/till-api.ts:2489-2523`) needs the profile's `open-cash-drawer` (`:2495`),
@@ -1201,7 +1199,12 @@ also gave D15, D21 and D22. §3.8.1 answers "if we don't refund, they stay on th
   giving the typed note, the dishes on a line under it. D26, §3.8 item 3; D27 is our reading of what
   it needs from the starter list.
 
-**The one open question: a cash refund on a handheld.**
+**A758r4 (2026-10-19 ~14:05), answered: "KEEP TODAY'S RULE"** — cash is given back only on a
+device whose profile takes cash; on a handheld Finish table shows no Refund tick, the button reads
+"Cancel", and the one line «Devuelve el dinero en una caja: Devolver un pago, en el recibo.» sends
+staff to a till. D28. The question as it was asked follows, for the record.
+
+**The question as asked: a cash refund on a handheld.**
 
 **Recommended: keep today's rule — cash is given back only on a device whose profile takes cash,
 such as a till. "Recommended" is a complete answer.** Everything else in A758 is settled and
