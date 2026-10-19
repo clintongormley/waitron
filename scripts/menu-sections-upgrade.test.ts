@@ -2,14 +2,11 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { table, id, count } from "../packages/db/src/schema/columns.js";
+import { table, id, count, newId } from "../packages/db/src/schema/columns.js";
 import { menuItems } from "../packages/catalogue/src/schema/menu.js";
 import { menuItemVariantOverrides } from "../packages/catalogue/src/schema/variant-overrides.js";
-import { setProductVariants } from "../packages/catalogue/src/variants.js";
 import { withTransaction } from "../packages/db/src/tenancy.js";
 import { seedTenant } from "../packages/db/src/testing/seed.js";
-import { seedLegacySellingUnits } from "../packages/catalogue/test/fixtures.js";
-import { createProduct } from "../packages/catalogue/src/operations.js";
 import { buildMenuDocument, menuDocumentHash } from "../packages/catalogue/src/menu-document.js";
 import { publishMenu } from "../packages/catalogue/src/menu-publication.js";
 import { openVenueDatabase } from "../packages/db/src/client.js";
@@ -61,7 +58,6 @@ async function stage(control = false) {
   const store = await openVenueDatabase(venueDir);
   try {
     await seedTenant(store.venue);
-    await seedLegacySellingUnits(store.venue);
     store.venue.run(
       "insert into catalogues(id,name,created_at,updated_at) values ('menu','Lunch','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')",
     );
@@ -77,46 +73,23 @@ async function stage(control = false) {
     store.venue.run(
       "update sections set image = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg' where id = 'library'",
     );
-    const soup = await withTransaction(store.venue, (tx) =>
-      createProduct(tx, {
-        catalogueId: "menu",
-        categoryId: null,
-        name: "Soup staff",
-        customerName: { en: "Soup guest" },
-        kitchenName: "SOUP",
-        pricingUnit: "each",
-        unitPrice: "5",
-        vatClass: "general",
-      }),
+    // Raw SQL, not the catalogue's product code: the staged schema predates unit columns that
+    // code reads.
+    soupId = newId();
+    const variantId = newId();
+    store.venue.run(
+      `insert into products(id,catalogue_id,parent_id,name,customer_name,kitchen_name,dietary_declarations,pricing_unit,unit_price,vat_class,diet,name_key,created_at,updated_at) values ('${soupId}','menu',null,'Soup staff','{"en":"Soup guest"}','SOUP','[]','each',500,'general','{"vegan":"unknown","vegetarian":"unknown","contains":[]}','soup staff','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z'),('${variantId}','menu','${soupId}','Half soup',null,null,null,null,300,null,null,'half soup','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')`,
     );
-    soupId = soup.id;
     await store.venue
       .insert(oldMembers)
-      .values({ id: "soup-placement", sectionId: "root", position: 1, productId: soup.id });
+      .values({ id: "soup-placement", sectionId: "root", position: 1, productId: soupId });
     await store.venue
       .insert(menuItems)
-      .values({ id: "soup-offer", menuId: "menu", productId: soup.id });
-    const [variant] = await withTransaction(store.venue, (tx) =>
-      setProductVariants(
-        tx,
-        soup.id,
-        [
-          {
-            name: "Half soup",
-            customerName: null,
-            kitchenName: null,
-            image: null,
-            unitPrice: "3",
-            available: true,
-          },
-        ],
-        "en",
-      ),
-    );
+      .values({ id: "soup-offer", menuId: "menu", productId: soupId });
     await store.venue.insert(menuItemVariantOverrides).values({
       menuItemId: "soup-offer",
-      productId: soup.id,
-      variantId: variant!.id,
+      productId: soupId,
+      variantId,
       price: 275,
     });
     store.venue.run(
