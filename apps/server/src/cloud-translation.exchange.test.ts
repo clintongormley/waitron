@@ -470,6 +470,24 @@ it("signs the cursor it is given and returns the page's nextCursor", () =>
     expect(page.results.map((r) => r.ref)).toEqual(["product:1"]);
   }));
 
+it("accepts a page before the last, whose nextCursor is the position after it", () =>
+  withFake(async (f) => {
+    f.pageItems(1);
+    const jobId = await finished(f, 3);
+    const page = await f.client.translation.collect(jobId, 1);
+    expect(page.nextCursor).toBe(2);
+    expect(page.results.map((r) => r.ref)).toEqual(["product:1"]);
+  }));
+
+it("refuses a page at a later position whose nextCursor counts only its own entries", () =>
+  withFake(async (f) => {
+    await f.client.refresh();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(reply(collected({ nextCursor: 1 })));
+    await expect(f.client.translation.collect(JOB, 3)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  }));
+
 it("reads a page of exactly 16 MiB and refuses one byte more", () =>
   withFake(async (f) => {
     await f.client.refresh();
