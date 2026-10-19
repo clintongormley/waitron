@@ -537,4 +537,58 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       await expectNoA11yViolations(host);
     },
   );
+
+  it("renders the Record what was done dialog accessibly, empty, refused and filled", async () => {
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      {
+        api: stubApi({
+          listHeldPayments: vi.fn().mockResolvedValue([
+            {
+              holdId: "h-1",
+              paymentRef: "pi_1",
+              provider: "acme",
+              orderNumber: 57,
+              settledAt: "2026-07-01T19:40:00.000Z",
+              amount: "10.00",
+              providerAmount: "12.50",
+            },
+          ]),
+          recordHeldOutcome: vi.fn().mockRejectedValue({ code: "pin.invalid" }),
+        }),
+        request: vi.fn() as unknown as PaymentsScreen["request"],
+        panels: PANELS,
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=record-held-h-1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=held-outcome-dialog]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=held-outcome-pin]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "1234" } }),
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-held-outcome]")!.click();
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "[data-test=held-outcome-outcome]",
+      )!.error,
+    ).not.toBe("");
+    await expectNoA11yViolations(host);
+    await chooseOption(
+      el.shadowRoot!.querySelector("[data-test=held-outcome-outcome]")!,
+      "refunded_at_provider",
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-held-outcome]")!.click();
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=held-outcome-pin]")!
+        .error,
+    ).not.toBe("");
+    await expectNoA11yViolations(host);
+  });
 });

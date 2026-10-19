@@ -368,6 +368,17 @@ it("has a sentence of its own for each refusal of a stuck card payment's check",
   }
 });
 
+it("has the sentence of its own for each refusal of recording a held payment's outcome", () => {
+  expect(codeMessage("payment.hold_not_found", "en")).toBe("That payment is no longer held.");
+  expect(codeMessage("payment.hold_not_found", "es")).toBe("Ese pago ya no está retenido.");
+  expect(codeMessage("payment.hold_already_recorded", "en")).toBe(
+    "Someone has already recorded what was done with that payment.",
+  );
+  expect(codeMessage("payment.hold_already_recorded", "es")).toBe(
+    "Alguien ya ha registrado qué se hizo con ese pago.",
+  );
+});
+
 it("has a sentence in both languages for each refusal of a manager's action on a bill payment or refund", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
