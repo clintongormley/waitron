@@ -52,6 +52,31 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("New order: stored placement and selection", () => {
+  it.each(["locked", "sending", "command"])(
+    "ignores a retained group tick while %s, then allows a fresh selection",
+    async (state) => {
+      const { el } = await mount();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      await el.updateComplete;
+      await openReview(el);
+      const retained = tick(el, "fire")!;
+      let release: (() => void) | undefined;
+      if (state === "locked") release = draft.lockEdits();
+      else if (state === "sending") draft.sending = true;
+      else el.groupCommandBusy = true;
+      retained.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      if (state === "locked") release!();
+      else if (state === "sending") draft.sending = false;
+      else el.groupCommandBusy = false;
+      await el.updateComplete;
+      expect(tick(el, "fire")!.getAttribute("aria-checked")).toBe("false");
+      await userEvent.click(tick(el, "fire")!);
+      await el.updateComplete;
+      expect(tick(el, "fire")!.getAttribute("aria-checked")).toBe("true");
+      expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(1);
+    },
+  );
   it("shows Fire now, numbered new groups and joins, sorting only inside their stored places", async () => {
     const { el } = await mount({ courses, groups: [held("held", 1, 7)] });
     const draft = store(el);

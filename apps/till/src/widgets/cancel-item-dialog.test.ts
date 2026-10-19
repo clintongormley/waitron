@@ -12,7 +12,8 @@ type Dialog = LitElement & {
   unitPrecision: number;
   consent: CancellationRead | null;
   refundAvailable: boolean;
-  reasons: (typeof cancelReason)[];
+  reasons: (typeof cancelReason)[] | null;
+  reasonsLoading: boolean;
   busy: boolean;
   refusal: string;
 };
@@ -283,6 +284,85 @@ it("keeps controls inert while busy and after disconnection", async () => {
   el.remove();
   submit.click();
   expect(calls).toEqual([]);
+});
+it.each(["busy", "disconnected"])("ignores a retained quantity control after %s", async (state) => {
+  const el = await mount();
+  const quantity = root(el).querySelector("wt-number-stepper")!;
+  if (state === "busy") el.busy = true;
+  else el.remove();
+  quantity.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "1" }, bubbles: true, composed: true }),
+  );
+  if (state === "busy") el.busy = false;
+  else document.body.appendChild(el);
+  await el.updateComplete;
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    { lineId: "dish-1", quantity: "3", outcome: "remove_charge", consent: read() },
+  ]);
+});
+it("keeps a nested close event from discarding the cancellation choice", async () => {
+  const el = await mount();
+  await fill(el, "2");
+  const closed: Event[] = [];
+  el.addEventListener("cancel-item-close", (event) => closed.push(event));
+  root(el)
+    .querySelector("wt-number-stepper")!
+    .dispatchEvent(new CustomEvent("wt-close", { detail: {}, bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(closed).toEqual([]);
+  expect(root(el).querySelector("wt-dialog")!.open).toBe(true);
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    { lineId: "dish-1", quantity: "2", outcome: "remove_charge", consent: read() },
+  ]);
+});
+it("does not show a refund amount for an invalid quantity", async () => {
+  const el = await mount({ consent: read("settled"), refundAvailable: true });
+  await pickReason(el);
+  expect(button(el).textContent).toContain("€10.00");
+  await fill(el, "0");
+  expect(button(el).textContent).not.toContain("€");
+  expect(button(el).disabled).toBe(true);
+  const calls = collect(el);
+  button(el).click();
+  await el.updateComplete;
+  expect(calls).toEqual([]);
+  await fill(el, "2");
+  expect(button(el).textContent).toContain("€6.67");
+  expect(button(el).disabled).toBe(false);
+});
+it("loads reasons when preparation is answered and shares the pending read across changed answers", async () => {
+  const consent = read("settled");
+  consent.context.components[0]!.firedAt = "2026-10-19T10:00:00Z";
+  const el = await mount({ consent, reasons: null, refundAvailable: true });
+  const requests: Event[] = [];
+  el.addEventListener("cancel-item-reasons", (event) => requests.push(event));
+  await click(el, 'input[name="preparation"][value="yes"]');
+  expect(requests).toHaveLength(1);
+  el.reasonsLoading = true;
+  await el.updateComplete;
+  await click(el, 'input[name="preparation"][value="no"]');
+  expect(requests).toHaveLength(1);
+  expect(button(el).disabled).toBe(true);
+  el.reasons = [cancelReason];
+  el.reasonsLoading = false;
+  await el.updateComplete;
+  await pickReason(el);
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    {
+      lineId: "dish-1",
+      quantity: "3",
+      outcome: "refund",
+      reasonId: "house",
+      preparationStarted: false,
+      consent,
+    },
+  ]);
 });
 it("does not expose a caller-mutable consent through its choice event", async () => {
   const consent = read();
