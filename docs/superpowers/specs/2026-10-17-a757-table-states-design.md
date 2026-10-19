@@ -1,6 +1,6 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1 and 7 built 2026-10-19; slices 2–6 and 8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19; slices 3–6 and 8 left (§11).**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
@@ -193,6 +193,8 @@ or is getting, a home the code understands:
 the till's status section and floor chip, the dashboard screen, the demo seed's three labels and the
 configuration transfer's copy. Waitron is not live, so nothing is carried forward
 (CLAUDE.md §3, "No backwards-compatibility … until Waitron is in production").
+**2026-10-19:** built by slice 2
+(`docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`); the Tables tab is gone.
 
 ## 3. The lifecycle after the answers
 
@@ -530,6 +532,8 @@ labels are clipped to an ellipsis at 390 and 1280 px (`docs/backlog.md:4048-4052
 `docs/backlog/till.md:1438-1439`) goes with it.
 **2026-10-19:** slice 1 removed `venue-service-tables`; the core `statuses` panel is the tab's only
 content.
+**2026-10-19:** built by slice 2
+(`docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`); the Tables tab is gone.
 
 ## 11. Build slices
 

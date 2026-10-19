@@ -1614,6 +1614,8 @@ files. Current exports still round-trip; future formats keep their version refus
 files; `configuration-transfer.test.ts` retains the receipt-choice round-trip and pins format 3.
 No old settings are converted. Cost: the whole-branch run-it review found the generic refusal
 while checking this reset-only release.
+A757 slice 2 (2026-10-19) moved to format 5 for the same reason when it dropped
+`table_service_statuses`; format-4 files are refused as `setup.configuration_outdated`.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
@@ -2027,6 +2029,7 @@ Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to
 `floor_today_tables.table_id`, `floor_today_join_tables.table_id` and `bookings.table_id`.
 Cascading here would allow removal to discard the records the release and refusal paths must
 handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table_status`.
+**2026-10-19:** A757 slice 2 dropped `parties_clear_table_status` (core 0180).
 
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.

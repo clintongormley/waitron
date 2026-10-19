@@ -119,6 +119,8 @@ The raw final database carries 25 core and 15 media manual triggers; no other se
 | `core` | `working_orders_release_main_bill` / `working_orders` | `packages/db/drizzle/0097_operator_script_restore_triggers.sql:414` | Final stored body, verbatim |
 | `core` | `working_orders_release_main_bill_on_move` / `working_orders` | `packages/db/drizzle/0097_operator_script_restore_triggers.sql:422` | Final stored body, verbatim |
 
+**2026-10-19 (A757 slice 2):** dropped by core 0180/0181; a squash leaves it out.
+
 ### Expression indexes
 
 These five expressions survive. All five are represented in head snapshots, so they are not manual-only additions. They still need explicit attention: preserve the complete expression, collation/order and partial `WHERE`, and compare `pragma_index_xinfo` plus stored SQL. Generate fresh rather than rebuilding a table; if the generator changes the spelling or column order, the preservation pass aligns its SQL with the old fresh object without editing snapshots. Do not add a second migration for an expression.
@@ -367,6 +369,8 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 | `staffing_days` | `staffing_days` | `packages/staffing/src/classification.ts:7` |
 | `staffing_blocks` | `staffing_blocks` | `packages/staffing/src/classification.ts:8` |
 | `shift_assignments` | `shift_assignments` | `packages/staffing/src/classification.ts:9` |
+
+**2026-10-19 (A757 slice 2):** dropped by core 0180/0181; a squash leaves it out.
 
 ## Removed and superseded material
 

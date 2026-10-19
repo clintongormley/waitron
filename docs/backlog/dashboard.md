@@ -488,7 +488,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
-   `kitchen-screen.ts`, `service-status-screen.ts`.
+   `kitchen-screen.ts`, `service-status-screen.ts`. **2026-10-19:** A757 slice 2 deleted
+   `service-status-screen.ts`.
 7. **Workforce** — `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
@@ -838,15 +839,6 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   **2026-10-11:** A435 step 6 prevents public hierarchy Delete from emptying ordering access.
   Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 
-## Service-status colour-field labels are clipped (found during W69, 2026-10-06)
-
-**Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
-The native status colour fields show an ellipsis instead of the full label in the inspected
-EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are
-`~/waitron-campaign-e/receipts/w69-status-rows-20261006/look/`; runtime reproduction on main is
-unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
-adjust the colour-field width using the shared field contract without changing status colour data.
-
 ## Text size after A179 (#988)
 
 **Text size after A179 (#988).** The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
@@ -1005,7 +997,8 @@ registered as `venue-service:week`, and the others register theirs when they exi
   purpose, per its design: searching on the server, disabling single options, taking part in a
   native `<form>`, and showing chosen options as chips (it shows a count instead).
 - **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
-  Supervisors can read Tables and Kitchen, while writes remain manager-only.
+  Supervisors can read Tables and Kitchen, while writes remain manager-only. (2026-10-19: the Tables
+  tab was retired by A757 slice 2; Kitchen stays)
 
 - **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,
   #1037).** Kept as they were, because they answer a question rather than say nothing was made: the

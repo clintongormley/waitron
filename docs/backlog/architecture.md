@@ -403,7 +403,7 @@ run to install the new trigger. Owner question Q5 of A483.
 - **These index and key names still read `tenant`, and the columns they name are gone:**
   `print_agents_tenant_node_key`,
   `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
-  `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
+  `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
   `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
   `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`,
   `tenant_themes*`, `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is

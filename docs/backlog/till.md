@@ -1205,6 +1205,7 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
   marking a table reserved by hand becomes a built-in action, and whether the hand-set labels on
   Venue settings › Tables are still needed after that — the owner expects they may not be, and if
   they stay, they sit beside a table's state as labels rather than being states. From A261 §10.
+  **2026-10-19:** A757 slice 2 retired the hand-set labels and the Tables tab.
 
 ## The till's menu reads (Task 7, #719)
 
@@ -1278,7 +1279,8 @@ steps, and six new owner questions, Q29–Q34](../superpowers/specs/2026-10-17-a
 with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-17; slice 1, Needs clearing per department, landed (plan
 `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`); slice 7, the service steps'
 settings in the department dialog's Service tab, landed (plan
-`docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`).
+`docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slice 2, retiring venue-made
+statuses, landed (plan `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`).
 
 Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
@@ -1292,8 +1294,10 @@ Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts
   table carries at most one (`dining_tables.status_id`), and the floor shows its colour. They sit
   beside the lifecycle the till works out itself — Free, Reserved, Seated, Needs clearing — and
   change none of it.
+  **2026-10-19:** retired by slice 2 — the table, the till's Status section and chip, the dashboard
+  screen and the Tables tab are gone.
 
-The Tables tab now holds only the venue's own statuses, which slice 2 retires.
+Since slice 2 (2026-10-19) the Tables tab is gone.
 
 Decided (owner, 2026-10-16):
 
@@ -1309,7 +1313,7 @@ The review: write down every state a table goes through and what moves it betwee
 the states A508's table QR code would add (call a waiter, bill requested); say which are optional;
 decide what becomes of the statuses a venue has already made. It comes back with the lifecycle
 drawn out and a recommendation. The open note that the Tables tab's colour field label is cut to
-"C…" at 390 px goes with the screen.
+"C…" at 390 px goes with the screen (2026-10-19: deleted with it by slice 2).
 
 **Widened 2026-10-16 (owner): how each state is shown, on the floor and in the order lists.** The
 board shows every state as it looks today beside a proposal, for the owner to choose. Today a table

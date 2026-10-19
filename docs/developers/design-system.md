@@ -383,9 +383,9 @@ tile takes black or white for its labels and its icon, whichever `readableTextCo
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
 its background and computing black or white text, though no screen passes it one. This is a
-different idiom from the one the floor plan and service statuses
-already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
-which was tried for categories and declined: a pale colour nearly disappears as a border in the
+different idiom from a neutral chip with the colour shown only as a border and a dot — which the
+floor's venue-made table statuses used until A757 slice 2 retired them (2026-10-19), and which was
+tried for categories and declined: a pale colour nearly disappears as a border in the
 theme where it's already pale (light colours in light mode, dark colours in dark mode). A painted
 sold-out till tile borrows that idiom's neutral tile, without the dot. Every sold-out till tile,
 painted or not, is filled `--wt-color-surface-sunken` with `--wt-color-text` labels in place of
@@ -2540,8 +2540,7 @@ and the staffing grid's block editor in the A761 entry):
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
   button disabled because its row's own state rules the action out: it is drawn `secondary` while
   ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
-  these under it: Disable on a printer that is already disabled; Disable on a service status whose
-  Active switch is off, saved or not; Publish on a menu's Preview while the menu has clashes, which
+  these under it: Disable on a printer that is already disabled; Publish on a menu's Preview while the menu has clashes, which
   keeps its own variant while its own publish is being sent; and a modifier's Remove in the product
   editor while the variant window, the image picker or any window the Products screen opens for the
   editor is open, which keeps its own variant while the Products screen is sending a request for the
@@ -2577,7 +2576,7 @@ and nothing guards it across screens:
   Move and Delete dialog and the image picker act on what is selected rather than save a draft, so
   they keep their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
-- batch 3a: the service-status rows and the new status's Save; the
+- batch 3a (the service-status rows were retired by A757 slice 2, 2026-10-19): the
   kitchen's late flags; the venue details editor (now the Venue card, A755 below); My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
@@ -4718,9 +4717,9 @@ removing a product from a menu removes that offer.
 
 ### Switching off versus deleting
 
-Something switched off but kept — an options or extras list, a table status, an adjustment reason, a user, a printer, a print
-agent, a device or a card reader — is switched off with **Disable** (options and extras lists and
-table statuses are switched back on with an **Active** switch in their form), and where a screen has
+Something switched off but kept — an options or extras list, an adjustment reason, a user, a printer, a print
+agent, a device or a card reader — is switched off with **Disable** (options and extras lists
+are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** permanently removes a record from current use, and **Remove** for taking a row out of a list or a link off a record,
 which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
@@ -4965,7 +4964,7 @@ preferences and restored URLs retain their capability checks.
 
 A menu's Device Home Page, receipt configuration, tenant themes and the floor-plan editor remain
 independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
-device's `formFactor`. Configuration exports use format 4; an older export is refused as outdated,
+device's `formFactor`. Configuration exports use format 5; an older export is refused as outdated,
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.

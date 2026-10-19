@@ -133,6 +133,8 @@ changing enforcement, keeping each legitimate mutation path.
 | `workforce_chains`       | `DELETE`             | [packages/workforce/src/classification.ts](../../packages/workforce/src/classification.ts)               |
 | `working_order_counters` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 
+**2026-10-19:** `table_service_statuses` was dropped by A757 slice 2; its row needs no decision.
+
 For `invoice_series`, inspect column-scoped updates and allocation separately; do not infer that
 number allocation should stop updating its counter. For `media_image_data`, deletion through the
 image's cascading foreign key is intentional (`packages/media/src/schema/images.ts`); the old
