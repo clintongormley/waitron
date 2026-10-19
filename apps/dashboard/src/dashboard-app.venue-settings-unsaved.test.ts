@@ -171,6 +171,7 @@ it("the actual Kitchen tab keeps late flags through Keep and restores them only 
   await select(app, "venue-details");
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("venue-details");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   expect(input.value).toBe("5");
   expect(input.checkVisibility()).toBe(false);
 });
@@ -266,12 +267,13 @@ async function choose(app: DashboardApp, decision: "keep" | "discard") {
   await expect.poll(() => question.open).toBe(false);
 }
 
-it("ignores repeated tab targets while deciding and changes only to the accepted target", async () => {
+it("ignores a repeated tab target and another leave target while deciding and changes only to the accepted target", async () => {
   const { app } = await mount();
   await editTiming(app);
   await select(app, "venue-details");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.click();
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await tabs(app).updateComplete;
   expect(selected(app)).toBe("kitchen");
   await choose(app, "discard");
