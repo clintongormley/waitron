@@ -19,6 +19,7 @@ import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
+import { payReaderOf } from "./state/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
@@ -48,7 +49,6 @@ import {
   multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
-  tillProviderForReader,
   toScale,
 } from "@waitron/shared";
 import {
@@ -432,9 +432,10 @@ const MOVE_STATION_MAX_LINES = 100;
 
 /** The reader the device pays on now: switched on, and on a provider the till can pay through. */
 function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
-  const resolved = equipment.roles.find((role) => role.role === "card_terminal")?.resolved;
-  const provider = resolved?.available ? tillProviderForReader(resolved.provider) : undefined;
-  return provider === undefined ? null : { id: resolved!.id, name: resolved!.name, provider };
+  const reader = payReaderOf(equipment);
+  return reader.kind === "ready"
+    ? { id: reader.id, name: reader.name, provider: reader.provider }
+    : null;
 }
 
 /** What another device took between two reads: an item a role resolved to before, which it no

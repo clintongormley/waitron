@@ -107,11 +107,10 @@ describe("payReaderOf", () => {
     expect(payReaderOf(read)).toEqual({ kind: "none" });
   });
 
-  // The server reads a switched-off or unpaired chosen reader alike: `selection: "item"`, the
-  // reader as `resolved` and `chosen` with `available: false`, and not among the choices
-  // (`apps/server/src/device-equipment.test.ts`, "reads a chosen reader that was %s as the chosen,
-  // unavailable reader").
-  it.each(["switched off", "unpaired"])("a chosen reader that was %s is switched_off", () => {
+  // The server reads a switched-off and an unpaired chosen reader alike
+  // (`apps/server/src/device-equipment.test.ts`, "reads a chosen reader that was switched off as
+  // the chosen, unavailable reader" and "… that was unpaired as …").
+  it("a chosen reader that was switched off or unpaired is switched_off", () => {
     const read = equipment(
       {},
       {
@@ -225,7 +224,7 @@ describe("payPrinterOf", () => {
 
   // `apps/server/src/device-equipment.test.ts`, "reads a portable default printer another device
   // holds as resolving to nothing".
-  it("a portable default printer this phone does not hold reads by the receipt choices", () => {
+  it("a portable default printer this phone does not hold is unset, with or without choices", () => {
     const held = item("p3", {
       name: "Portátil",
       kind: "receipt",
@@ -235,7 +234,41 @@ describe("payPrinterOf", () => {
     const notHeld = { resolved: null, default: held };
 
     expect(payPrinterOf(equipment({ ...notHeld, choices: [held] }))).toEqual({ kind: "unset" });
-    expect(payPrinterOf(equipment({ ...notHeld, choices: [] }))).toEqual({ kind: "none_listed" });
+    expect(payPrinterOf(equipment({ ...notHeld, choices: [] }))).toEqual({ kind: "unset" });
+  });
+
+  // `apps/server/src/device-equipment.test.ts`, "reads a portable default printer another device
+  // holds, then switched off, as resolving to nothing with no choices".
+  it("a portable default printer another device holds, switched off, is unset and opens the row", () => {
+    const read = equipment({
+      selection: "default",
+      chosenId: null,
+      resolved: null,
+      chosen: null,
+      default: item("p3", {
+        name: "Portátil",
+        kind: "receipt",
+        portable: true,
+        available: false,
+        heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: null },
+      }),
+      choices: [],
+    });
+    const printer = payPrinterOf(read);
+
+    expect(printer).toEqual({ kind: "unset" });
+    expect(
+      rowStartsOpen(
+        { kind: "ready", id: "r1", name: "L", provider: "sumup_cloud", fromDefault: true },
+        printer,
+      ),
+    ).toBe(true);
+  });
+
+  it("a chosen printer that resolves to nothing, with no choices, is unset", () => {
+    const read = equipment({ selection: "item", chosenId: "p3", chosen: item("p3"), choices: [] });
+
+    expect(payPrinterOf(read)).toEqual({ kind: "unset" });
   });
 });
 

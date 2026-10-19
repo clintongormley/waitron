@@ -1,4 +1,4 @@
-import { tillProviderForReader } from "@waitron/shared";
+import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
 import type {
   DeviceEquipment,
   EquipmentItem,
@@ -6,9 +6,9 @@ import type {
   RoleEquipment,
 } from "../api/client.js";
 
-/** The reader a payment from this device would be charged on. `provider` is the till's name for it. */
+/** The reader a payment from this device would be charged on. */
 export type PayReader =
-  | { kind: "ready"; id: string; name: string; provider: string; fromDefault: boolean }
+  | { kind: "ready"; id: string; name: string; provider: TillReaderProvider; fromDefault: boolean }
   | { kind: "switched_off"; id: string; name: string }
   | { kind: "none" };
 
@@ -61,7 +61,11 @@ export function payPrinterOf(equipment: DeviceEquipment | null): PayPrinter {
         }
       : { kind: "switched_off", id: resolved.id, name: resolved.name };
   }
-  return (role?.choices.length ?? 0) > 0 ? { kind: "unset" } : { kind: "none_listed" };
+  // "Sin ticket" only when the profile names no receipt printer at all (design default 19).
+  const named =
+    role !== undefined &&
+    (role.choices.length > 0 || role.default !== null || role.chosen !== null);
+  return named ? { kind: "unset" } : { kind: "none_listed" };
 }
 
 /** Whether the folded row opens by itself: the payment has no reader, or its receipt would not print. */

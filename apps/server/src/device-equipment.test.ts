@@ -696,6 +696,30 @@ describe("readDeviceEquipment", () => {
     });
   });
 
+  it("reads a portable default printer another device holds, then switched off, as resolving to nothing with no choices", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    await printerLists(profile, {
+      receiptPrinterIds: [handheld],
+      receiptPrinterDefaultId: handheld,
+    });
+    const b = await enrol(venue, "Caja B", profile);
+    const a = await enrol(venue, "Caja A", profile);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, handheld));
+
+    const receipt = (await inTx((tx) => readDeviceEquipment(tx, a))).roles[0]!;
+
+    expect(receipt).toMatchObject({
+      selection: "default",
+      chosenId: null,
+      resolved: null,
+      chosen: null,
+      default: { id: handheld, available: false, heldBy: { deviceId: b } },
+      choices: [],
+    });
+  });
+
   it.each(["switched off", "unpaired"] as const)(
     "reads a chosen reader that was %s as the chosen, unavailable reader",
     async (shape) => {
