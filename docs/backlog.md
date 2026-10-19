@@ -3720,7 +3720,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   reversal primitive. Left open by A632.
 
 - **Turn off Stripe's on-reader tip screen, or read the tip back.** If tipping is switched on in
-  Stripe's Dashboard, every tipped reader payment is charged more than Waitron records. **Next
+  Stripe's Dashboard, every tipped reader payment would be charged more than Waitron records. **Next
   action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`, tested against
   Stripe's sandbox. Left open by A846.
   [Detail](backlog/payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
