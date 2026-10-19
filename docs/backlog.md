@@ -162,7 +162,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2. If it can,
   art. 7.1.c requires that date on the receipt. The document builder already prints one on a
-  simplified receipt, under «Factura simplificada» and «Fecha» rows, whenever the receipt's data
+  simplified receipt, in captioned rows, whenever the receipt's data
   carries one (`apps/server/src/receipt-document.ts`, A754), but no sale has one: the only writer of
   a sale's operation date writes none without a customer tax identity
   (`packages/core/src/record-sale.ts:284-286`). Check, then record the date on such a sale if needed.
@@ -4544,9 +4544,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The printed receipt is
   formatted on the server and keeps the language's own pattern. [Detail](backlog/languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
 
-- The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
-  its own line on 58 mm paper; on a simplified receipt it also drops below the order line on 80 mm
-  when that line is long, as «Mesa 6 · Eskaera 41» is.
+- The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
+  paper it drops to its own line wherever it prints in words.
 
 - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
   «Café y tostada») in every language; only its fixed words change.

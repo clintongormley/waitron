@@ -328,7 +328,6 @@ describe("a receipt follows its location's saved language when its order saves n
     for (const label of ["Comanda", "Base imposable 21%", "IVA", "Efectiu", "Canvi"]) {
       expect(startsWith(receipt!, label), label).toBe(true);
     }
-    // The date prints on the row after the order, beside the invoice number.
     expect(receipt![receipt!.findIndex((line) => line.startsWith("Comanda ")) + 1]).toContain(
       "d’oct.",
     );
