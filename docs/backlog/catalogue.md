@@ -792,9 +792,10 @@ focus to the "Scheduled versions" heading, which may no longer be there.
 - **Translate all: a job the box ends itself is marked released without a call to Cloud, and
   Cloud can still hold it.** The box ends a job without asking Cloud when the job's own 24-hour
   clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
-  no longer lists the service `ready`, or the connection is revoked), and when a status or collect
+  no longer lists the service `ready`, or the connection is revoked), when a status or collect
   call is refused as a request Cloud will never accept, and when a job's last page leaves an item
-  unaccounted for (both ended `rejected`). Cloud's 24 hours run
+  unaccounted for or accounts for a number of items other than Cloud's total (both ended
+  `rejected`). Cloud's 24 hours run
   from its own submit, or from when the job finished, so it can still hold the job, and while that
   job is queued or running the contract's `translation_job_running` refuses the venue's next
   submit. A release would not end a queued or running job (Cloud answers 409
@@ -804,7 +805,9 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   id, so it could not release the job even once Cloud finished it. Pinned by "a job Cloud took but
   whose reply was lost…", "a running job 24 hours old ends expired without asking Cloud" and "a
   status Cloud refuses as a request it will never accept…" in
-  `apps/server/src/content-suggestion-runner.test.ts`. What would fix it is open.
+  `apps/server/src/content-suggestion-runner.test.ts`, and "a last page that leaves a sent item
+  unaccounted ends the job without a release" in
+  `packages/catalogue/src/content-suggestion-store.test.ts`. What would fix it is open.
 
 ## Translate all: open points from the review of A689's second PR
 

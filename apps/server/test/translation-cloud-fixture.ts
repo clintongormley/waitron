@@ -245,7 +245,8 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
  *   submit's fingerprint check and the other three's signed-body check;
  * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
  * - a language tag matches `[a-z]{2,3}` with an optional `-` and two capitals;
- * - `expire()` expires a job in any state, a `collected` one included;
+ * - `expire()` expires a job in any state, a `collected` one included.
+ * Where this fake differs from Cloud:
  * - `pageItems(n)` caps a collect page at `n` entries, which Cloud does not; the byte budget
  *   (`pageBytes`) is Cloud's rule;
  * - a signed body must be spelled exactly as `JSON.stringify` writes it, keys in the box's order;
