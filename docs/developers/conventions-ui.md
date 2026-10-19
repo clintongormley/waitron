@@ -81,6 +81,171 @@ inputs for the browser's password manager, in two files, and the print agent's s
 held to the number of LINES it draws a field on, so a field swapped for another, a hidden input
 made visible, or a field added on a line that already has one passes. See design-system.md → Forms.
 
+## The user guides
+
+The user guides are Markdown files in `apps/server/src/guide/<language>/<page>.md`, English in
+`en/` and Spanish twins in `es/`. The box renders them at `GET /help/<language>/<page>`
+(`apps/server/src/guide-pages.ts`). A change to a screen updates its guide in English and, where a
+twin exists, in Spanish too.
+
+### Why they are not under `docs/`
+
+The approved design (`docs/superpowers/specs/2026-10-18-a582-help-mode-design.md`, §4 and §8) put
+the guides in docs/guide/. They live under `apps/server/src/` instead, because three pieces of
+machinery treat any path under `docs/` as documentation that nothing builds:
+
+- `.dockerignore:17` leaves `docs` out of the image's build context, so the build stage's
+  `COPY . .` (`deploy/Dockerfile:25`) would never see a guide.
+- `isInertPath` in `scripts/changed-scope.mjs:126` treats every `docs/` path as inert, so a
+  guide-only change would run no CI code job and no test. Measured 2026-10-18 on this branch with
+  `scopeForPaths` from `scripts/changed-packages.mjs` and a workspace of `@waitron/server` and
+  `@waitron/dashboard`: the path docs/guide/en/products.md gave `kind: "documentation"` with no
+  packages, and `apps/server/src/guide/en/products.md` gave `kind: "packages"` with
+  `@waitron/server`.
+- The root `CLAUDE.md` (§6, Workflow) exempts a `docs/`-only change from the pull-request
+  ceremony, so a guide shipped in the image could be pushed straight to `main` with nothing run.
+
+Under `apps/server/src/` the guides are the server's own files. CI runs `apps/server`'s tests when
+one changes, Prettier formats them (`.prettierignore` names `docs/`, not `apps/`), and they reach the
+image the way `src/assets/` does: `apps/server/scripts/copy-migrations.mjs:25` copies `src/guide` to
+`dist/guide`, `deploy/Dockerfile:196` copies that to `/app/guide/`, and `guideRoot()`
+(`apps/server/src/guide-catalogue.ts:8-10`) finds the folder with
+`new URL("./guide/", import.meta.url)`. The image smoke test fetches `/help/es/products` from a
+blank box and looks for the Spanish page's `id="variants"` and `<html lang="es">` (the step "The
+image serves the Spanish Products guide" in `.github/workflows/image-smoke.yml`).
+
+### What the renderer accepts, and what it refuses
+
+`renderGuide` (`apps/server/src/guide-markdown.ts`) is our own renderer and adds no dependency. It
+renders a page on every request, with no cache, so the dev server shows an edit on reload. The
+guides use this subset:
+
+- one level-1 heading, first, which is the page's title;
+- level-2 headings, each ending `{#id}`, where the id is a lower-case letter followed by lower-case
+  letters, digits and hyphens, is not repeated on the page and does not end `-heading`;
+- paragraphs, and one level of `- ` bullet list whose continuation lines are indented two spaces;
+- `**bold**`, `_emphasis_`, `` `code` ``, and links to another guide, written
+  `[text](modifiers.md)` or `[text](modifiers.md#lists)`.
+
+The characters `<`, `>`, `&` and the quotes are escaped wherever they appear, so a placeholder such
+as `**<department> receipt logo**` reads as text. The renderer also refuses the shapes it checks
+for, each a `fail(…)` or `failAt(…)` call in that file, throwing an error that names the line.
+Measured 2026-10-19 by calling `renderGuide` from `node`: a table row starting with `|`, `1. one`,
+`### Sub`, a link to `https://example.com` and an unclosed `**` were each refused with their line
+number; `<b>hi</b>` rendered as `&lt;b&gt;hi&lt;/b&gt;`; and `[m](modifiers.md#lists)` rendered as
+`<a href="modifiers#lists">m</a>`. A link is written relative, so it stays in the reader's
+language.
+
+`apps/server/src/guide-content.test.ts` renders every page, so a guide edit that uses a refused
+shape fails `apps/server`'s tests in CI. The renderer lets other shapes through. In the same
+measurement, a table written without a leading `|` was joined into one paragraph, and `~~strike~~`
+and `<img src=x>` were shown as written, so no test catches those: someone has to read the page. If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
+the guide's words.
+
+### Section ids and twins
+
+The renderer turns each level-2 section into `<section id="<id>">`, so `/help/es/products#variants`
+and `/help/en/products#variants` open the same section, and the page draws the section a link opened
+(`:target`) on `--wt-color-highlight` with a `--wt-color-primary` bar at its start edge.
+`apps/server/src/guide-content.test.ts` checks that every page renders in English, that every link
+names a page and a section that page has, that a Spanish twin has the English page's section ids in
+the same order, and that no other file sits in the guide folders. It is weaker than its name: it never
+checks that a guide says what its screen does, nor that a twin says what the English page says,
+nor that either was updated with the screen.
+
+A page with no Spanish twin is shown in English to a Spanish reader, under one line saying so
+(`missingTwin` in `guide-pages.ts`; the "serves the English page with one line saying so" case in
+`guide-pages.test.ts`). All three pages have twins today, so a box never shows that line yet. A page
+in the list with no English file is a broken build: the route answers its 500 page and logs
+`guide.page_missing`. A read that fails for any reason other than a missing file gets the same 500
+page and logs `guide.read_failed` with the language of the file it tried, the page and the error's
+code (the "cannot be read" cases in `guide-pages.test.ts` put a directory where the file should be).
+
+### Which addresses answer
+
+The route compares both parts of the address with fixed lists, `GUIDE_LANGUAGES` and `GUIDE_PAGES`
+(`apps/server/src/guide-catalogue.ts`), exactly and case-sensitively, and reads the file named by the
+list's own string, never the request's (`mountGuidePages`'s `/help/:lang/:page` route). That
+matters because Hono hands the route a decoded parameter: measured 2026-10-18 on Hono 4.13.13
+with a throwaway script holding only `app.get("/help/:lang/:page", …)`,
+`/help/en/..%2F..%2Fetc%2Fpasswd` reached the handler as `page: "../../etc/passwd"`. Anything else under `/help`, including `/help`, `/help/en` and a
+trailing slash, answers the guide's own 404 page: from the `/help/:lang/:page` route when its two
+parts are not on the lists, and from `mountGuidePages`'s `/help/*` catch-all for every other address. An
+address whose first part after `/help/` is exactly a language in `GUIDE_LANGUAGES` gets the 404
+page in that language, so `/help/es`, `/help/es/x/y` and `/help/es/products/` answer in Spanish;
+every other address gets it in English.
+Without that catch-all those addresses would fall through to whatever is mounted later: a setup box
+with no built setup app answers every other GET with its 200 placeholder
+(`apps/server/src/setup-api.ts:1412`).
+
+### The page's look, its token copies and its theme
+
+Each answer is one self-contained HTML page with no external file, sent with
+`Cache-Control: no-cache`. The page cannot load the apps' token files (`apps/server` does not
+depend on `@waitron/ui-core`), so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) declares its own copies
+of the `--wt-*` tokens it reads, each colour as `light-dark(<light>, <dark>)`, and every rule reads
+`var(--wt-…)`. Sizes are in px. Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
+reads `packages/ui-core/src/tokens/colors.css` and `structure.css` as text, finds a declaration by
+its exact name only in the default light block, the `prefers-color-scheme: dark` block, the
+`[data-theme="light"]` and `[data-theme="dark"]` blocks a chosen theme uses, and the structure file,
+and never renders the page. The "declares every token it reads" case in
+`apps/server/src/guide-pages.test.ts` checks that each `var(--wt-…)` the page reads is one it
+declares.
+
+The page follows the theme the person chose in the apps. A one-line script in its head reads
+`localStorage` under `waitron-theme` (`GUIDE_THEME_KEY`, which `scripts/guide-page-tokens.test.ts`
+holds equal to `THEME_STORAGE_KEY` in `packages/ui/src/theme-choice.ts`) and sets `data-theme` on
+`<html>` only for `light` or `dark`; anything else leaves the device's own setting. Every answer
+carries this Content-Security-Policy, which lets that one script run by its hash and nothing load:
+
+`default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-<hash>'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`
+
+`frame-ancestors 'self'` lets a page on the box's own origin show a guide in a frame, and nobody
+else. The "sends no-cache and a policy that allows only the page's own script" case in
+`guide-pages.test.ts` hashes the page's script and compares the whole header.
+
+The page's own words (the "Waitron guide" trail, each guide's short name, the missing-twin line, the
+404 and 500 pages) are in `GUIDE_TEXT` in `guide-pages.ts`.
+
+### Which boots serve it
+
+`mountGuidePages` is called in `bootServer` (`apps/server/src/boot.ts:948`), beside `mountDiscovery`
+and before the first branch on the box's mode, so setup mode, the adoption-pending boot and every
+trading boot (primary, read-only mirror, fenced) serve it, ahead of the built apps' catch-alls. The
+cases that fetch a guide are in `apps/server/src/boot.test.ts` (a setup box, a trading box, and a
+trading box whose till catch-all would otherwise answer) and `apps/server/src/boot.mirror.test.ts`.
+Two surfaces do not serve the guides: the failed-start recovery page (`recoveryApp`, started from
+`apps/server/src/node-entry.ts` outside `bootServer`), and the plain-HTTP landing listener
+(`apps/server/src/landing-app.ts`, certificate help only).
+
+### How the dashboard links a guide
+
+A dashboard link to a guide goes through `apps/dashboard/src/help-guide.ts`: `GUIDE_LINKS` names
+each section the dashboard links to, and `guideHref(key)` returns `/help/<en|es>/<page>#<section>`
+in the dashboard's current language (`es` or an `es-` locale gives `es`, anything else `en`). The
+screen hands that address to `wt-help-tooltip`'s `guide-href`, with the "Read more in the guide"
+words as `guide-label` (design-system.md, Help mode). On a box the dashboard is served by the
+server, so `/help/…` is the same origin; in development the dashboard's Vite server sends `/help` to
+the server (`apps/dashboard/vite.config.ts`). Guard: `scripts/guide-links.test.ts`, weaker than its
+name: its first check renders each linked page in each language and finds the section, but its
+second reads the dashboard's source as text for a quoted `/help/`, so a guide path built from parts
+passes it.
+
+### What slice 4 (the tills) can rely on
+
+- `GET /help/<en|es>/<products|modifiers|content-and-images>` answers 200 with one self-contained
+  HTML page, `no-cache` and the policy above, which allows same-origin framing; any other address
+  under `/help` answers the guide's 404 page.
+- Every trading boot and setup mode serve it, before the till's own catch-all, so a till on the
+  box's origin can load a guide in a frame.
+- Section ids are the same in both languages, and `#<id>` opens and highlights that section.
+- Links inside a page go only to other guide pages in the same language, so a frame never leaves
+  `/help/`.
+- The page follows the saved `waitron-theme` choice, which the till writes too.
+- `wt-help-tooltip`'s guide link opens a new tab. A till must open its own sheet instead, and
+  nothing yet lets it: the obvious hook is a cancelable `wt-*` event on the link's click.
+- The till's Vite server does not yet send `/help` to the server.
+
 ## A refusal reaches a field by what the error carries, not by one parameter name
 
 The product editor binds a refused save to an editor field. `product.invalid` carries the `field` it

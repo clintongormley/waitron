@@ -4,7 +4,7 @@ When several dishes offer the same additions, or the same preparation choice, bu
 **Modifiers** and attach it to each product. You edit its names, entries and limits in one place;
 each order keeps its own answers.
 
-## Two kinds of list, one per tab
+## Two kinds of list, one per tab {#kinds}
 
 **Modifiers** has two tabs, **Extras** and **Options**, each with its own table and its own button
 for adding a list. There is no third kind and nothing to choose between: which tab you are on is
@@ -41,7 +41,7 @@ off, a **Default** radio button (an unavailable option cannot take it), and a me
 window over the list, and so does clicking the option's name (or pressing Enter or Space on it); **Add option**, under the rows, opens an empty one. Saving that window changes the list
 you are editing, not what is stored: nothing is sent until you save the list itself.
 
-## Name a list and decide whether it is active
+## Name a list and decide whether it is active {#names}
 
 Give the list a staff name in plain text — what you and your staff call it. A **Kitchen name**,
 directly under it, and a **Customer-facing name**, with one field per content language, are both
@@ -66,15 +66,16 @@ A **Default** seeds a new selection once. Changing it does not change an order y
 Switching the default option off, or deleting it, makes the first available option the default
 instead. An extras entry is either preselected or not — there is no starting quantity to set.
 
-## Attach a list to a product
+## Attach a list to a product {#attach}
 
-Open the product in **Products** and use its **Modifiers** section, which is always on screen rather
-than folded away. One control adds either kind, and the section holds both kinds in a single ordered
-list; each row shows the list's staff name and which kind it is. Drag a row by the handle at its
-start to move it, or focus the handle and use the up and down arrow keys. That same control lists
-extras lists under an **Extras** heading and options lists under **Options**, and each group ends
-with its own choice to make a new one, **Add extras list…** or **Add options list…**, so you can
-build a list without abandoning the product you are editing.
+Open the product in **Products** and use its **Modifiers** section. It starts open when the product
+already has lists attached; while it is folded, it shows the names of the attached lists, or "None".
+One control adds either kind, and the section holds both kinds in a single ordered list; each row
+shows the list's staff name and which kind it is. Drag a row by the handle at its start to move it,
+or focus the handle and use the up and down arrow keys. That same control lists extras lists under
+an **Extras** heading and options lists under **Options**, and each group ends with its own choice
+to make a new one, **Add extras list…** or **Add options list…**, so you can build a list without
+abandoning the product you are editing.
 
 Every menu offer carries the product's extras and options lists in the order you set here.
 An extra uses its list entry's price per portion when you set one. With the price blank, its
@@ -82,38 +83,48 @@ portion multiplied by the product's unit price sets the price per pick, rounded 
 For every unit except Each, enter the amount one pick adds to a dish. An Each extra adds one.
 Publish each menu to make these changes available on the till.
 
-## See what uses a list
+## See what uses a list {#used-by}
 
 Each tab's table has a **Used by** column counting the products carrying the list, for example
 "2 products". A list that nothing uses reads "Not used". Click the count to see those products.
 
-## Deleting a list detaches it, and nothing refuses the delete
+## Deleting a list detaches it, and nothing refuses the delete {#deleting}
 
 Deleting a list removes it from every product carrying it. The confirmation dialog lists those
-products before you confirm. Deleting cannot be undone. Publish a menu again to replace its saved
-choices.
+products before you confirm. Deleting cannot be undone.
 
-**An open order does not block a delete, and you are not told to finish or void one.** It does not
-need to: an open order holds no reference back to the list. An extras pick becomes its own order
-line naming the product that was picked, and an options answer is stored as the wording that was
-chosen. So deleting a list reaches no order that is already open — but it does take the list off
-every product at once. To stop a list being asked without deleting it, turn its **Active** switch
-off, or remove it from that one product's Modifiers section.
+**An open order does not block a delete, and you are not told to finish or void one.** The delete
+changes nothing on an open order by itself: an extras pick is its own order line, and an options
+answer is stored as the wording that was chosen. Each published menu keeps the list until you
+publish that menu again. For an options list this matters, because its options are gone: until you
+publish, the till cannot add a dish that carried the list, and saving changes to a parked order that
+holds such a dish is refused. A table's order can still take a new round without such a dish, and
+you can still change the quantity of one of its lines, but other changes to an order holding such a
+dish can be refused the same way. So publish your menus again straight after deleting an options
+list. After that, the next change saved to a parked order takes off any extra picked from a deleted
+list, and its charge with it, and drops any answer to a deleted options list. On a table's order
+those extras and answers stay, and raising the quantity of a dish that carries such an extra is
+refused.
 
-## Allergens and dietary information
+To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
+that one product's Modifiers section.
+
+## Allergens and dietary information {#allergens}
 
 An extras entry declares its allergens and its dietary suitability through the product it names, so
 you maintain those on that product under **Products**, not here. An option declares neither —
 it is wording, not something eaten.
 
-## What the till does with a list
+## What the till does with a list {#till}
 
-Tapping a dish that carries a list opens the question straight away, one list after another in the
-order you arranged them. An extras list shows each entry's price per portion, with a tick box
-each, or a stepper where you allowed more than one; a list you made required keeps **Add** shut
-until something is picked. An options list shows its options as a set of radio buttons, exactly one
-to choose, with your default already selected (nothing is selected on a list that has no stored
-default).
+Tapping a dish that carries a list opens one window that asks all of its lists, in the order you
+arranged them. A dish sold by weight, or by a unit that allows decimal places, asks how much first,
+and then shows only its options lists: extras cannot be added to it. An extras list shows each
+entry's price per portion, with a tick box each, or a stepper where you allowed more than one; a
+list you made required keeps **Add** shut until something is picked. An options list shows its
+available options as a set of radio buttons, exactly one to choose, with your default already
+selected. While the default is switched off, the first available option is selected instead. If no
+option is available, the window says the dish cannot be added.
 
 The operator reads the staff name throughout. The till is a staff screen: the diner's wording is
 what the receipt prints, and the kitchen's is what the ticket prints.
@@ -134,8 +145,11 @@ order can be sent.
 
 Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but
 it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
-different one, so the next change made to that parked order, even a change of quantity, rebuilds the
-whole order from today's catalogue. Every line on it is then charged at today's prices instead of
-the prices it was parked at. Do your renaming between services rather than while orders are parked.
+different one. So once the menu is published again, the next change made to that parked order, even
+to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
+the prices they were sold at. A line the kitchen already has is recalled and sent to it again as a
+new ticket. The till refuses the change instead if the kitchen has started such a line, or if
+**Allow changes to items already sent to the kitchen** is switched off. Do your renaming between
+services rather than while orders are parked.
 An extras list is the exception, because an extra is matched by its product: renaming an extras
 list, or the product on it, leaves a parked order alone.

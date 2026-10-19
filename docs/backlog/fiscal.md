@@ -936,7 +936,7 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
 ## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
 
 From **The product editor and catalogue (#345, #379, #387) — what is left open.**
-[Operator guide](../products.md); [developer guide](../developers/products.md).
+[Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
   filing.** The selector shows the catalogue's zero-rate class under that name; pricing puts the

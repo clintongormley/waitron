@@ -28,7 +28,7 @@ floor-plan editing remain separate.
 > and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
 
 > Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
-> Products and variants now archive permanently. See [the current product guide](../../products.md)
+> Products and variants now archive permanently. See [the current product guide](../../../apps/server/src/guide/en/products.md)
 > for Archive, View and the editor's staged Archive/Keep actions.
 
 Owner, 2026-10-07 ~12:05: "open a form with the Save button transparent (and disabled?). but as soon

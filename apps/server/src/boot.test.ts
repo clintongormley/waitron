@@ -1340,6 +1340,15 @@ describe("startServer, against a migrated venue directory", () => {
       const trust = await fetch(`https://127.0.0.1:${port}/setup/trust`, via);
       expect(trust.status).toBe(200);
       expect(trust.headers.get("content-type")).toContain("text/html");
+
+      const guide = await fetch(`https://127.0.0.1:${port}/help/en/products`, via);
+      expect(guide.status).toBe(200);
+      expect(guide.headers.get("content-type")).toContain("text/html");
+      expect(await guide.text()).toContain('id="variants"');
+      // The setup surface's own catch-all would answer this with its 200 placeholder.
+      const noGuide = await fetch(`https://127.0.0.1:${port}/help/en`, via);
+      expect(noGuide.status).toBe(404);
+      expect(await noGuide.text()).toContain("Page not found");
     } finally {
       await server.close();
       await close();
@@ -1860,6 +1869,8 @@ describe("startServer, against a migrated venue directory", () => {
       expect(disc.status).toBe(404);
       expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
       expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${port}/help/es/products`)).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${port}/help/es/nada`)).status).toBe(404);
 
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
@@ -1913,6 +1924,19 @@ describe("startServer, against a migrated venue directory", () => {
         expect(page.status).toBe(200);
         expect(await page.text()).toContain(marker);
       }
+
+      // The till's catch-all answers a path outside its navigation with an empty 404, so the body
+      // is what shows the guide answered first.
+      const guide = await fetch(`http://127.0.0.1:${port}/help/en/products`, {
+        headers: { Accept: "text/html" },
+      });
+      expect(guide.status).toBe(200);
+      expect(await guide.text()).toContain('id="variants"');
+      const noGuide = await fetch(`http://127.0.0.1:${port}/help/en`, {
+        headers: { Accept: "text/html" },
+      });
+      expect(noGuide.status).toBe(404);
+      expect(await noGuide.text()).toContain("Page not found");
 
       const asset = await fetch(`http://127.0.0.1:${port}/manage/assets/d-1.js`);
       expect(asset.status).toBe(200);

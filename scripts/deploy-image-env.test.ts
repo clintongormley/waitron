@@ -217,6 +217,13 @@ describe("the container image's environment", () => {
     expect(copied).not.toContain("record-one-sale.js");
   });
 
+  // Weaker than its name: it reads both files as text, so only the image smoke's own run shows the
+  // server finds the copied guides.
+  it("ships the guide pages where the server reads them, and the smoke test opens one", () => {
+    expect(DOCKERFILE).toContain("/src/apps/server/dist/guide/ /app/guide/");
+    expect(IMAGE_SMOKE).toContain("https://127.0.0.1/help/es/products");
+  });
+
   it("ships the sample images at the directory the installed Demo seed reads", () => {
     expect(IMAGE_ENV.WAITRON_DEMO_MEDIA_SOURCE).toBe("/app/demo-media");
     expect(DOCKERFILE).toContain("/src/apps/server/scripts/demo-seed/media/ /app/demo-media/");

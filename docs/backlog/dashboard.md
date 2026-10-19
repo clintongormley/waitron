@@ -490,7 +490,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The
-   owner-requested Products overhaul has landed ([operator guidance](../products.md)). One question
+   owner-requested Products overhaul has landed ([operator guidance](../../apps/server/src/guide/en/products.md)). One question
    hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
    whether any intended case legally needs N1 or N2 instead — to be answered before the first live
    filing (the #345 entry below).
@@ -1076,9 +1076,10 @@ help about anything you want very quickly."
 - **Open points for the plan:** where the help texts live and how they are translated (EN/ES, like
   the screens' strings); how a screen declares which of its parts have help, so a shared `wt-*`
   primitive can carry it rather than every screen drawing its own marker; whether the mode stays on across pages and sessions; keyboard and screen-reader use.
-- **Documentation.** Three user guides exist (`docs/products.md`, `docs/modifiers.md`,
-  `docs/content-and-images.md`, English only); nothing in the apps links to them and the box does
-  not serve them. The design (below) proposes serving them from the box in English and Spanish.
+- **Documentation.** Three user guides, Products, Modifiers and Languages and photos, are in
+  `apps/server/src/guide/en/` with Spanish twins in `apps/server/src/guide/es/`, and the box serves
+  them at `/help/<en|es>/<page>`. Where they live and how they are served:
+  [conventions-ui.md](../developers/conventions-ui.md), "The user guides".
 - **Design (2026-10-18):** [2026-10-18-a582-help-mode-design.md](../superpowers/specs/2026-10-18-a582-help-mode-design.md),
   pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above.
   The owner approved it on 2026-10-18 with one change: on a till or handheld there is no Help row
@@ -1112,8 +1113,33 @@ help about anything you want very quickly."
   Availability column; the account menu's Account settings and a variant's Keep carry a badge.
   The owner's answer to Q41 (B): signed in, the language choices are in the account menu after
   Theme, and the banner's controls add no height to it. Slice 2 is complete: 2a #1848, 2b #1851.
-- **Remaining slices** (design §8): **3** guide pages served by the box (EN and ES; a new unauthenticated
-  route, FULL review); **4** tills and handhelds — the bar switch that never leaves the bar (at phone
+- **Slice 3 landed (#NNNN, NNNN-NN-NN).** The guides moved from `docs/` to
+  `apps/server/src/guide/en/`, with a `{#id}` on every section, and gained Spanish twins of all
+  three in `apps/server/src/guide/es/`. `apps/server/src/guide-markdown.ts` renders the small subset
+  they use, refuses the other shapes it checks for, and lets the rest through unrefused; `apps/server/src/guide-catalogue.ts` lists the
+  languages and pages; the route `apps/server/src/guide-pages.ts` is mounted in every `bootServer`
+  branch. The image carries `dist/guide` as `/app/guide`, and image smoke fetches a Spanish page.
+  Root guards: `scripts/guide-page-tokens.test.ts` (the page's token copies) and
+  `scripts/guide-links.test.ts` (the dashboard's links). `wt-help-tooltip` has `guide-href` and
+  `guide-label` for a "Read more in the guide" link; `apps/dashboard/src/help-guide.ts` builds the
+  dashboard's links; Products' price, default course and Variants badges link to their sections;
+  and the dashboard's Vite server sends `/help` to the server. The guides' move from the design's
+  docs/guide/ is explained in [conventions-ui.md](../developers/conventions-ui.md), "Why they are not
+  under `docs/`". Plan: [2026-10-18-a582-3-guide-pages.md](../superpowers/plans/2026-10-18-a582-3-guide-pages.md).
+- **Left open by 3:**
+  - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
+    guide link.
+  - The till's `/help` proxy and the guide sheet belong to slice 4. A guide link opens a new tab;
+    a till needs a hook to open its sheet instead, such as a cancelable `wt-*` event on the link's
+    click.
+  - Products' VAT and Availability badges have no guide link.
+  - The failed-start recovery page (started from `apps/server/src/node-entry.ts`, outside
+    `bootServer`) does not serve the guides.
+  - The first half of the Languages and photos guide, before "Add a photograph once", has not been
+    checked against the code, because A682 rewrites it. A682 updates
+    `apps/server/src/guide/en/content-and-images.md` and `es/content-and-images.md`, and the lines
+    about translations in `en/modifiers.md` and `es/modifiers.md`.
+- **Remaining slices** (design §8): **4** tills and handhelds — the bar switch that never leaves the bar (at phone
   width the language chooser leaves first), the till's More and person menus, badges on Counter,
   Floor and Order, the guide sheet, off on lock or a change of person; **5** kitchen screens and
   monitors — the corner switch, off after two minutes without a touch.

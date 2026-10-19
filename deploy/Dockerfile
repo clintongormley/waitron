@@ -193,6 +193,7 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
 # walk up the filesystem. deploy-image-env.test.ts pins this list against package.json's
 # `waitron.commands`.
 COPY --from=build --chown=waitron:waitron /src/apps/server/dist/assets/ /app/assets/
+COPY --from=build --chown=waitron:waitron /src/apps/server/dist/guide/ /app/guide/
 COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/server.js \
   /src/apps/server/dist/node-entry.js \

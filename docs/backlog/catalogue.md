@@ -431,7 +431,7 @@ the 2026-09-30 folders design; what remains:
 ## Content languages and the image library (#339, #344) — what is left open
 
 **Content languages and the image library (#339, #344) — what is left open.**
-[Operator guide](../content-and-images.md).
+[Operator guide](../../apps/server/src/guide/en/content-and-images.md).
 
 - **A new picture consumer has to add a real database reference, not just store a filename.**
   Products point at the image table through a foreign key on the picture's filename
@@ -660,7 +660,7 @@ From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open
 ## Smaller things #379 surfaced and did not take
 
 From **The product editor and catalogue (#345, #379, #387) — what is left open.**
-[Operator guide](../products.md); [developer guide](../developers/products.md).
+[Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
 - **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line
@@ -836,6 +836,12 @@ checkpoint below remain as history; their pending unit A/B question is closed.
   a gap. Translate all fills the same dialog; its "Use fix" button waits for this change
   (its own entry in `docs/backlog.md`).
 
+  **The user guides moved (A582 slice 3).** They are in `apps/server/src/guide/en/`, with Spanish
+  twins in `apps/server/src/guide/es/`. A682's guide changes go to both
+  `en/content-and-images.md` and `es/content-and-images.md`, and to the lines about translations in
+  `en/modifiers.md` and `es/modifiers.md`; the first half of Languages and photos, before "Add a
+  photograph once", was left for A682 to correct.
+
   **Historical checkpoint; see the [2026-10-17 closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a).**
   **Design checkpoint, 2026-10-17:** the [proposal](../superpowers/specs/2026-10-17-a682-translations-design.md)
   covers all five points and Use fix in one future PR. Its unit choice is still open: add a required
@@ -850,6 +856,42 @@ checkpoint below remain as history; their pending unit A/B question is closed.
   whether that guard catches a list disappearing between the last read and selection. Check that
   race with a focused test, or remove the guard if the path cannot occur; its reachability remains
   unverified.
+
+## A884. Deleting an options or extras list leaves it on the published menus until they are republished
+
+Found while checking the Modifiers guide for A582 slice 3. Deleting a list does not republish the
+menus: the delete route calls only the list's own remove (`mountListSurface`,
+`apps/server/src/catalogue-api.ts`; `deleteOptionList`, `packages/catalogue/src/options.ts`, has no
+publish), and the till's offers come from the published menu document, where a deleted list's
+options count as unavailable (`labelAvailable`, `packages/catalogue/src/menu-document.ts`). Measured
+with temporary cases in `apps/server/src/working-order.test.ts`, `order-groups.test.ts` and
+`tabs.test.ts`, since reverted:
+
+- With an options list deleted and the menus not republished, the till cannot add a dish that
+  carries it (`options.label_required`), and saving a change to a parked order that keeps such a
+  dish on it is refused the same way. On a table's order, a new round (`submitGroups`) and a
+  quantity change to one line (`updateOrderLine`) still succeed, and another such dish with the
+  old answer is refused. A save of the whole order that kept such a dish, already sent to the
+  kitchen, and added a line was refused `options.label_required`.
+- With an options list and an extras list both deleted and the menus republished, raising the
+  quantity of a table's dish that still carries an extra from the deleted list is refused
+  `extras.invalid`, though a note on it succeeds.
+
+The Modifiers guide tells the reader to republish straight after deleting an options list. Two ways out: the delete
+republishes the menus that carry the list, or the published menu drops a deleted list. Done when a
+test deletes each kind of list and the till can still add the dish and change an open order holding
+it, before and after a republish.
+
+## A885. Say that lines already on an open order keep their VAT class after a republish
+
+Found while checking the Products guide for A582 slice 3. The VAT help (`help.products.vat`,
+`apps/dashboard/src/i18n/strings.ts`, English and Spanish) and the guide's opening
+(`apps/server/src/guide/en/products.md` and its Spanish twin) say a change of VAT class reaches the
+tills when the menu is published again. Neither says that a line already on a held order or a tab
+keeps the class it was added with, and only a line added after the publish takes the new one (the
+"a new version published with the new class" cases in
+`apps/server/src/vat-class-at-line-add.test.ts`). Add that to the help text and the guide, in both
+languages. Done when both say it.
 
 ## Decisions and deliberate limits
 

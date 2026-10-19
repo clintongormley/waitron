@@ -7,7 +7,7 @@ you need them. The image library uses the same choices as your products, section
 in the default-language translation check. An entry on an extras list does not: it has no name of
 its own, and takes the product's.
 
-## Choose your content languages
+## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled
 for its region, plus English. In Spain Waitron keeps Spanish enabled in every region where a venue
@@ -40,7 +40,7 @@ without appearing in the list.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
 empty in every language and Waitron falls back to the staff name, so it never blocks the change.
-Fill it in for Spanish and leave English blank, though, and that *is* a missing translation — you
+Fill it in for Spanish and leave English blank, though, and that _is_ a missing translation — you
 clearly meant to translate it — so it does hold the change up until you finish it or clear it. A
 section's customer-facing names work the same way: none at all never blocks the change, but a
 section with some names and none in the new default language does. Edit a section's customer-facing
@@ -95,7 +95,7 @@ separate interface preference. These content settings
 also provide the language choices for future online content; they do not create an online ordering
 site.
 
-## Add a photograph once
+## Add a photograph once {#upload}
 
 For several photos, open **Image library** and drop them anywhere on the page, or select
 **choose files**. Uploads start immediately. A file named `patatas-bravas.jpg` starts as
@@ -123,7 +123,7 @@ In the upload window, for the bread photograph, you might enter **Pan de verano*
 name blank until you have a translation. Choose **Save** to add the photo to the library; cancelling
 before Save leaves it out of the library.
 
-## Find and reuse an image
+## Find and reuse an image {#find}
 
 **Search images** finds photographs by the words in their names, in any order, and searches as you
 type: the word you are still typing can be any part of a word, so **read** finds **Summer bread**.
@@ -133,14 +133,16 @@ language. Choose **Relevance** to list the closest matches first, **Date** to br
 **Name** to scan names. Date starts with the newest uploads; switch to **Oldest first** when you
 need the earliest ones. Name starts with **A–Z** and also offers **Z–A**. Use the page controls when more photographs match than fit on the current page.
 
-On a product's or a variant's own page, select the photo beside the name to open the same library.
-With no photo it is an empty square; on a variant's page with no photo of its own, it shows the main
-product's photo with a dashed border. In a variant's small window or a section's editor, select
+On a product's or a variant's own page, select the square beside the name, then **Choose image** in
+the panel that opens, to open the same library. With no photo, a product's square shows its colour
+and a pencil; on a variant's page with no photo of its own, it shows the main product's photo with a
+dashed border. In a variant's small window or a section's editor, select
 **Choose image**. Then select **Use image** on the photograph you want, and save to keep the
 association. You can also click the photo to inspect it at full size, then choose **Use image**
 there; **Back** returns to the grid. You can reuse one photograph on several products. Uploading a
 file that a current library photo already uses finds that entry and keeps its names and framing.
-A notice identifies the reused photo and lets you open it for editing. An image-library upgrade
+A notice names the reused photo and says its name is unchanged. After a save in the
+**Upload photos** window, the notice also has **Edit photo** to open it. An image-library upgrade
 can prepare a different copy, which is stored as a new photo. If an original file belongs to an
 entry whose picture you replaced, and no current photo uses that file, Waitron asks you to edit
 that entry or choose another file.
@@ -149,10 +151,10 @@ Open the photograph's **⋮** menu and choose **Edit** to add translations, chan
 the picture or replace it. The window shows its upload file name; an older photo without a recorded
 file name shows its stored name instead.
 
-## Frame or replace a photo
+## Frame or replace a photo {#framing}
 
 If a thumbnail shows mostly table instead of the dish, choose **Adjust framing** in **Edit photo**.
-Drag the photo inside the square and use **Zoom** to move closer. You can also focus the square
+Drag the photo inside the square and use **Zoom (%)** to move closer. You can also focus the square
 and use the arrow keys; hold Shift to move farther. **Lists** shows the square crop and
 **Till buttons** shows the 4:3 crop. They share one focal point and zoom, so you adjust a photo once
 for every place that uses it. The full-photo viewer still shows the complete current picture.
@@ -173,17 +175,19 @@ If someone else saves the photo while you edit, your Save asks you to reload ins
 overwriting their changes. **Discard changes and reload photo** reads their version. Until you
 choose that action, your file, names and framing remain available to review.
 
-## Remove a use before deleting the photograph
+## Remove a use before deleting the photograph {#delete}
 
-**Remove image** clears the association when you save. On a product's or a variant's own page it is
-at the bottom of the library window the photo opens, shown when there is a photo of its own; in a
-variant's small window it sits beside **Choose image** whenever a photo is shown, and is greyed out while that photo is the main product's, because the variant has no photo of its own to remove. The photograph
-stays in the library for your other products.
+**Remove image** clears the association when you save. It sits beside **Choose image**: in the
+panel the square opens on a product's or a variant's own page, and in a variant's small window. It
+is shown whenever a photo is, and is greyed out while that photo is the main product's, because the
+variant has no photo of its own to remove. The photograph stays in the library for your other
+products.
 
 To remove the photograph itself, choose **Delete** in its **⋮** menu and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,
-including archived products, and to those sections, a section shown by its internal name. Remove
-the photograph from each editable record before trying deletion again. An archived product opens
+including archived ones, which the list marks **(Disabled product)**, and to those sections, a
+section shown by its internal name. Remove the photograph from each editable record before trying
+deletion again. An archived product opens
 read-only details and cannot have its picture removed through the product editor, so a picture
 that it still uses remains blocked from deletion. A section's link opens its menu's
 **Structure** tab, in **Products and menus**, **Menus**, where **Remove image** in the section's
@@ -198,7 +202,14 @@ folder** on to see the photo field.
 A published menu also holds every photograph its last publish included, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by
 **(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
-to release it.
+to release it. If the menu also has versions scheduled to go live later, publishing now is
+refused while any of them waits, so cancel them first, as described below.
+
+A menu with a version scheduled to go live later also holds every photograph that version includes.
+The library lists that menu by name, followed by **(Scheduled menu)**, and its link opens the menu.
+To release the photograph, open the menu's **Preview** tab, choose **Cancel this version** in that
+version's ⋮ under **Scheduled versions**, and confirm. Once the version goes live, it holds the
+photograph as the published menu instead.
 
 A saved receipt logo also keeps a photograph in use. The library lists that use as
 **<department> receipt logo**, and its link opens the department's **Receipts** tab:
