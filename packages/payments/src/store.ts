@@ -14,6 +14,7 @@ import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
+import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
 import type { CardDetails, PaymentState } from "./provider.js";
 
@@ -684,6 +685,7 @@ export async function assertReversible(
  * row. `createdAt` is the key `listReconcilable` merges its two queries on.
  */
 export interface ReconcilableRow {
+  paymentId: string;
   paymentRef: string;
   state: PaymentState;
   amount: string;
@@ -698,6 +700,8 @@ export interface ReconcilableRow {
   // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   reconcileRemediatedAt: string | null;
+  /** The payment has a hold with a recorded outcome. */
+  holdResolved: boolean;
 }
 
 /**
@@ -716,6 +720,7 @@ export async function listReconcilable(
   const auditable = () =>
     tx
       .select({
+        paymentId: payments.id,
         paymentRef: payments.paymentRef,
         state: payments.state,
         amount: payments.amount,
@@ -727,9 +732,12 @@ export async function listReconcilable(
         workingOrderId: payments.workingOrderId,
         workingOrderStatus: workingOrders.status,
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
+        holdResolved: sql<boolean>`${paymentHoldOutcomes.id} is not null`.mapWith(Boolean),
       })
       .from(payments)
-      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId));
+      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+      .leftJoin(paymentHolds, eq(paymentHolds.paymentId, payments.id))
+      .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id));
 
   const held = (
     await auditable().where(

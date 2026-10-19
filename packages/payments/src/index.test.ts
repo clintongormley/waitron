@@ -13,6 +13,7 @@ import {
   insertCapturedPayment,
   insertFailedPayment,
   listAttempting,
+  listOpenHolds,
   listReconcilable,
   MANUAL_PROVIDER,
   markReconcileRemediated,
@@ -20,6 +21,8 @@ import {
   reconcilePayments,
   recordManualCardPayment,
   recordManualRefund,
+  recordHold,
+  recordHoldOutcome,
   recordRefund,
   recordResolution,
   recordVoid,
@@ -29,12 +32,14 @@ import type {
   AbandonedAttemptOutcome,
   AsyncPaymentProvider,
   AttemptingPayment,
+  HoldOutcome,
   InboundSettlement,
   InitiateParams,
   InitiateResult,
   ManualCardPaymentParams,
   ManualCardPaymentResult,
   NewPaymentResolution,
+  OpenHold,
   OrphanRemediation,
   PaymentMismatch,
   PaymentProvider,
@@ -165,6 +170,26 @@ describe("the reconcile surface", () => {
     expect(typeof listReconcilable).toBe("function");
     expect(typeof existingReferences).toBe("function");
     expect(typeof markReconcileRemediated).toBe("function");
+  });
+
+  it("re-exports the held-payment store from the package root", () => {
+    expect(typeof recordHold).toBe("function");
+    expect(typeof listOpenHolds).toBe("function");
+    expect(typeof recordHoldOutcome).toBe("function");
+    const outcome: HoldOutcome = "refunded_at_provider";
+    const hold: OpenHold = {
+      holdId: "h",
+      paymentId: "p",
+      paymentRef: "ref-h",
+      provider: "fake",
+      amount: decimal("12.10"),
+      providerAmount: decimal("11.95"),
+      settledAt: null,
+      workingOrderId: "w",
+      foundAt: "2026-10-18T01:00:00.000Z",
+    };
+    expect(outcome).toBe("refunded_at_provider");
+    expect(hold.providerAmount).toBe("11.95");
   });
 
   it("types a PaymentReconciler an adapter can implement against the root barrel", () => {

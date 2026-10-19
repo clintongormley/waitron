@@ -50,6 +50,7 @@ import {
   settleInitiated,
   stampAttemptingRef,
 } from "./store.js";
+import { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
 
@@ -1117,6 +1118,49 @@ describe("listReconcilable", () => {
     await setOrderStatus(seeded, "abandoned");
     const rows = await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     expect(rows[0].workingOrderStatus).toBe("abandoned");
+  });
+
+  it("reports the payment's id, and holdResolved false with no hold", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "never-held");
+    const id = (await getRow(key))!.id;
+    const rows = await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ paymentId: id, holdResolved: false });
+  });
+
+  it("reports holdResolved false for a hold with no outcome and true once one is recorded", async () => {
+    const seeded = await seedTenant();
+    const heldKey = await capture(seeded, "held");
+    await capture(seeded, "neighbour");
+    const heldId = (await getRow(heldKey))!.id;
+    await suite.db.transaction((tx) =>
+      recordHold(tx, {
+        paymentId: heldId,
+        providerAmount: decimal("9.50"),
+        foundAt: new Date("2026-07-23T01:00:00Z"),
+      }),
+    );
+    const resolvedOf = async () =>
+      Object.fromEntries(
+        (await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD))).map((r) => [
+          r.paymentRef,
+          r.holdResolved,
+        ]),
+      );
+    expect(await resolvedOf()).toEqual({ held: false, neighbour: false });
+
+    const [hold] = await suite.db.transaction((tx) => listOpenHolds(tx));
+    await suite.db.transaction((tx) =>
+      recordHoldOutcome(tx, {
+        holdId: hold!.holdId,
+        outcome: "kept",
+        note: null,
+        personId: "22222222-2222-4222-8222-222222222222",
+        at: new Date("2026-07-23T09:00:00Z"),
+      }),
+    );
+    expect(await resolvedOf()).toEqual({ held: true, neighbour: false });
   });
 });
 

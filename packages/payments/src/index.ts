@@ -69,6 +69,8 @@ export {
   recordResolution,
 } from "./resolutions.js";
 export type { NewPaymentResolution } from "./resolutions.js";
+export { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
+export type { HoldOutcome, OpenHold } from "./holds.js";
 export {
   clearUnlistedReaderChoice,
   readProfileReaderList,
