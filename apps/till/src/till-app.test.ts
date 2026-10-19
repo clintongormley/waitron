@@ -21757,6 +21757,181 @@ describe("A737 Find a bill page", () => {
     );
     return { el, counter, view: pageOf(el)! };
   }
+  it("Find gate ignores a second selection while the first fresh read is pending", async () => {
+    let finish!: (row: ReturnType<typeof billRow>) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof billRow>>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({ getFindBill });
+    emit(view, "find-bill-open", { row: billRow() });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "other-bill" }) });
+    await flush(el);
+    expect(getFindBill).toHaveBeenCalledExactlyOnceWith("bill-1", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(view.busy).toBe(true);
+    finish(billRow({ collectionStatus: "waiting_for_payment", invoiceNumber: "F/99" }));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
+    );
+    expect(
+      el.shadowRoot!.querySelector("till-find-bill-dialog")!.shadowRoot!.textContent,
+    ).toContain("F/99");
+  });
+  it("Find gate reports a party absent from the fresh floor without replacing the counter draft", async () => {
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "departed-party" })),
+      getTablesState: vi.fn().mockResolvedValue([]),
+      getPartyBills: vi.fn(),
+    });
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(pageOf(el)).toBe(view);
+    expect(view.busy).toBe(false);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(tableOrder(el)).toBeNull();
+    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
+  });
+  it("Find gate ignores table discovery completed after Back", async () => {
+    let finish!: (tables: TableState[]) => void;
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v-2" })),
+      getPartyBills: vi.fn(),
+    });
+    const getTablesState = vi.fn(
+      () =>
+        new Promise<TableState[]>((done) => {
+          finish = done;
+        }),
+    );
+    el.api.getTablesState = getTablesState;
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getTablesState).toHaveBeenCalledOnce());
+    emit(view, "find-bill-back");
+    await flush(el);
+    finish([openTable]);
+    await flush(el);
+    expect(pageOf(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
+  });
+  it("Find gate keeps the draft when a paid bill's filed receipt read fails and allows retry", async () => {
+    const getFiledTicket = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(saleResult);
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
+      getFiledTicket,
+    });
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(view.busy).toBe(false);
+    expect(ticket(el)).toBeNull();
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
+    expect(currentApi.markCollected).not.toHaveBeenCalled();
+  });
+  it("Find gate cannot show a paid receipt answered after Back", async () => {
+    let finish!: (result: TillSaleResult) => void;
+    const getFiledTicket = vi.fn(
+      () =>
+        new Promise<TillSaleResult>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
+      getFiledTicket,
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getFiledTicket).toHaveBeenCalledOnce());
+    emit(view, "find-bill-back");
+    await flush(el);
+    finish(saleResult);
+    await flush(el);
+    expect(ticket(el)).toBeNull();
+    expect(pageOf(el)).toBeNull();
+    expect(currentApi.markCollected).not.toHaveBeenCalled();
+  });
+  it("Find gate refuses an abandoned counter bill without retrieving or collecting it", async () => {
+    const { el, view, counter } = await open({
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue(billRow({ orderStatus: "abandoned", state: "held", paid: "0.00" })),
+      retrievePlacedOrder: vi.fn(),
+    });
+    const id = counter.store.id;
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(pageOf(el)).toBe(view);
+    expect(counter.store.id).toBe(id);
+    expect(counter.store.lines).toEqual([]);
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+    expect(currentApi.retrievePlacedOrder).not.toHaveBeenCalled();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+  });
+  it("Find gate ignores a held order answered after Back and preserves a newer basket", async () => {
+    let finish!: (value: Awaited<ReturnType<TillApi["retrieveWorkingOrder"]>>) => void;
+    const retrieveWorkingOrder = vi.fn<TillApi["retrieveWorkingOrder"]>(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ state: "held", paid: "0.00" })),
+      retrieveWorkingOrder,
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(retrieveWorkingOrder).toHaveBeenCalledOnce());
+    emit(view, "find-bill-back");
+    await flush(el);
+    counter.store.addProduct(cafe, "2");
+    const id = counter.store.id;
+    finish({
+      kitchenNote: {
+        scope: { workingOrderId: "bill-1" },
+        note: null,
+        revision: 0,
+        ownerRevision: 3,
+      },
+      id: "bill-1",
+      orderNumber: 42,
+      label: "Held",
+      revision: 3,
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "3.000" }],
+    });
+    await flush(el);
+    expect(pageOf(el)).toBeNull();
+    expect(counter.store.id).toBe(id);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
+  });
   it("opens only from More as a page and Back preserves the counter basket", async () => {
     const { el, counter, view } = await open();
     counter.store.addProduct(cafe, "2");
