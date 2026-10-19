@@ -77,6 +77,12 @@ categoría superior. También puedes mover el producto a otra categoría en la p
 activando **Seleccionar** y arrastrándolo, o con **Mover a…**. La categoría principal también influye
 en qué estación de cocina recibe un plato, como se explica más abajo.
 
+Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
+color, o el que hereda de la categoría superior más cercana que tenga color y, después, el
+predeterminado del local. Un borde discontinuo marca un color heredado. Elige el cuadrado para darle
+un color propio; **Sin color** mantiene la herencia, así que cambiar solo el nombre no cambia de
+dónde viene el color.
+
 Dónde se prepara el plato se decide en la cuadrícula de rutas, en la pestaña **Rutas** de **Estaciones
 de preparación**. Decide primero la fila del propio producto, después la fila de su categoría y la de
 cada categoría superior por orden (la fila **Sin categoría** para un producto sin categoría), y después

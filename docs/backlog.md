@@ -1244,11 +1244,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **A refused default colour reuses `category.invalid {field:"color"}`, as the VAT default reuses
   `product.invalid`** — left open by A332 (#1430).
 
-- **A820 — while a category is being added or renamed, its name box square shows the colour it
-  inherits** (owner, 2026-10-17). Today the square shows only a colour chosen for the category, so
-  an inheriting category's square turns into an empty outline while its name is typed. Done when a
-  test renames an inheriting category and finds its square painted in the inherited colour. Left
-  open by A423 (#1443).
+- **A category's naming square does not announce the inherited colour's source.** While you add or
+  rename a category, its square says only "Choose the colour" even when its dashed border marks an
+  inherited colour. The at-rest row names the source. Decide how the naming square should announce
+  that source, including a category whose new name has not been saved, and check the English and
+  Spanish accessible names. Found in A820's run-it review; the label and inherited fill are checked
+  together in `apps/dashboard/src/widgets/product-list.test.ts` ("puts a colour square showing the
+  box's colour").
 
 - **Re-check whether these forms keep an edit’s unsaved state when taken out of the page and
   put back.** Left open after the unit-form fix in A397 part 2 (#1439):

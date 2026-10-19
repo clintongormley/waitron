@@ -3329,7 +3329,8 @@ describe("the product list as a tree", () => {
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
       expect(square().button.getAttribute("aria-label")).toBe(label);
-      expect(square().chip.getAttribute("part")).toBe("color-swatch empty");
+      expect(square().chip.getAttribute("part")).toBe("color-swatch inherited");
+      expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
       el.nameColor = "#256bb1";
       await el.updateComplete;
       await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
