@@ -63,6 +63,8 @@ export interface FiscalCertificateSeat {
       environment: DeploymentEnvironment;
       authorize(tx: Transaction): Promise<{ personId: string }>;
       log?: FiscalDutyLog;
+      /** Read after AEAT answers and again in the write; `now` is when the request began. */
+      clock?: () => Date;
     },
     body: unknown,
     now: Date,

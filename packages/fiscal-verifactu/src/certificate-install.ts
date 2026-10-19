@@ -59,6 +59,8 @@ export interface InstallDeps {
   log?: FiscalDutyLog;
   transport?: CheckTransport;
   checkTimeoutMs?: number;
+  /** Read after AEAT answers and again in the final write; `now` is only when the request began. */
+  clock?: () => Date;
 }
 
 interface InstallBody {
@@ -118,6 +120,16 @@ function refused(
   };
 }
 
+function expiredBy(
+  details: CertificateDetails,
+  timeZone: string,
+  at: Date,
+): { ok: false; answer: InstallAnswer } | null {
+  // The same boundary as `certificateStage`: expired at the exact end instant.
+  if (at.getTime() < details.validUntil.getTime()) return null;
+  return refused("expired", "file", { date: localDate(details.validUntil, timeZone) });
+}
+
 function checkLocally(
   body: InstallBody,
   read: { taxId: string; timeZone: string; installedFingerprint: string | null },
@@ -130,10 +142,8 @@ function checkLocally(
     return refused(opened.reason, opened.reason === "passphrase_wrong" ? "passphrase" : "file");
   }
   const { details } = opened;
-  // The same boundary as `certificateStage`: expired at the exact end instant.
-  if (now.getTime() >= details.validUntil.getTime()) {
-    return refused("expired", "file", { date: localDate(details.validUntil, read.timeZone) });
-  }
+  const expired = expiredBy(details, read.timeZone, now);
+  if (expired !== null) return expired;
   if (now.getTime() < details.validFrom.getTime()) {
     return refused("not_yet_valid", "file", { date: localDate(details.validFrom, read.timeZone) });
   }
@@ -156,6 +166,7 @@ export async function installCertificate(
   now: Date,
 ): Promise<InstallAnswer> {
   const body = parseBody(rawBody);
+  const clock = deps.clock ?? (() => new Date());
   const refuse = (answer: InstallAnswer): InstallAnswer => {
     deps.log?.("info", "fiscal.certificate_refused", {
       reason: answer.reason,
@@ -216,8 +227,13 @@ export async function installCertificate(
     });
   }
 
-  await withTransaction(deps.db, async (tx) => {
+  const checkedAt = clock();
+
+  const expired = await withTransaction(deps.db, async (tx) => {
     const { personId } = await deps.authorize(tx);
+    const writtenAt = clock();
+    const tooLate = expiredBy(details, read.timeZone, writtenAt);
+    if (tooLate !== null) return tooLate.answer;
     const current = await credentialRevision(tx, { purpose: "fiscal.aeat" });
     if (current !== body.expectedRevision) throw new AppError("fiscal.certificate_changed", {});
     await putCredential(tx, deps.ring, {
@@ -227,7 +243,7 @@ export async function installCertificate(
     const latest = await latestInstall(tx, deps.nodeId);
     await recordInstall(tx, {
       nodeId: deps.nodeId,
-      installedAt: nextInstalledAt(latest, now),
+      installedAt: nextInstalledAt(latest, writtenAt),
       source: "dashboard",
       personId,
       kind: body.certKind,
@@ -238,9 +254,11 @@ export async function installCertificate(
       validFrom: details.validFrom,
       validUntil: details.validUntil,
       checkedEndpoint: checked.endpoint,
-      checkedAt: now,
+      checkedAt,
     });
+    return null;
   });
+  if (expired !== null) return refuse(expired);
 
   deps.log?.("info", "fiscal.certificate_installed", {
     fingerprint: details.fingerprint,
@@ -248,5 +266,9 @@ export async function installCertificate(
     validUntil: details.validUntil.toISOString(),
     endpoint: checked.endpoint,
   });
-  return { outcome: "installed", reason: "installed", details: { checkedAt: now.toISOString() } };
+  return {
+    outcome: "installed",
+    reason: "installed",
+    details: { checkedAt: checkedAt.toISOString() },
+  };
 }

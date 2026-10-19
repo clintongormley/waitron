@@ -103,6 +103,7 @@ interface FakeSeat extends Pick<FiscalCertificateSeat, "read" | "install"> {
   calls: string[];
   bodies: unknown[];
   authorizedAs: string[];
+  clockReadings: (Date | undefined)[];
   betweenAuthorizations?: () => Promise<void>;
   installAnswer: () => FiscalCertificateAnswer;
 }
@@ -113,6 +114,7 @@ function fakeSeat(): FakeSeat {
     calls: [],
     bodies: [],
     authorizedAs: [],
+    clockReadings: [],
     installAnswer: () => ({ outcome: "installed", reason: "installed" }),
     async read(deps) {
       seat.calls.push("read");
@@ -132,6 +134,7 @@ function fakeSeat(): FakeSeat {
     async install(deps, body) {
       seat.calls.push("install");
       seat.bodies.push(body);
+      seat.clockReadings.push(deps.clock?.());
       const first = await withTransaction(deps.db, (tx: Transaction) => deps.authorize(tx));
       seat.authorizedAs.push(first.personId);
       seat.calls.push("install.checked");
@@ -251,6 +254,13 @@ describe("POST /management-api/fiscal-certificate", () => {
     expect(await response.json()).toEqual({ outcome: "refused", reason: "expired", field: "file" });
     expect(seat.bodies).toEqual([{ file: FILE, passphrase: PASSPHRASE }]);
     expect(seat.authorizedAs).toEqual([venue.manager.personId, venue.manager.personId]);
+  });
+
+  it("hands the seat the route's clock, to read again after AEAT answers", async () => {
+    const venue = await setupVenue();
+    const seat = fakeSeat();
+    await post(mount(seat), venue.manager.cookie, certificateBody);
+    expect(seat.clockReadings).toEqual([new Date("2026-10-18T10:00:00Z")]);
   });
 
   it("a person without system.manage is refused by the seat's first authorize", async () => {

@@ -120,6 +120,7 @@ function depsFor(
     environment: "preproduction",
     authorize: async () => ({ personId: "p-1" }),
     transport: transportTo(server),
+    clock: () => NOW,
     ...overrides,
   };
 }
@@ -404,6 +405,57 @@ describe("installCertificate's write", () => {
       installedAt: new Date("2026-10-18T12:00:00.001Z"),
       checkedAt: NOW,
     });
+  });
+
+  it("refuses as expired, writing nothing, when the certificate expires while AEAT answers", async () => {
+    const v = await venue();
+    const server = await serve();
+    const before = await state();
+    const started = new Date("2029-12-31T23:59:50Z");
+    const answered = new Date("2030-01-01T00:00:00Z");
+    const clock = () => (server.requests() > 0 ? answered : started);
+
+    const answer = await installCertificate(
+      depsFor(v, server, { clock }),
+      bodyFor(v, candidate),
+      started,
+    );
+
+    expect(answer).toEqual({
+      outcome: "refused",
+      reason: "expired",
+      field: "file",
+      details: { date: "2030-01-01" },
+    });
+    expect(server.requests()).toBe(1);
+    expect(await state()).toEqual(before);
+  });
+
+  it("stamps the install and its check with the time AEAT answered, after a filing accepted meanwhile", async () => {
+    const v = await venue();
+    const server = await serve();
+    const acceptedDuringCheck = new Date(NOW.getTime() + 10_000);
+    const answered = new Date(NOW.getTime() + 20_000);
+    const clock = () => (server.requests() > 0 ? answered : NOW);
+
+    const answer = await installCertificate(
+      depsFor(v, server, { clock }),
+      bodyFor(v, candidate),
+      NOW,
+    );
+
+    expect(answer).toEqual({
+      outcome: "installed",
+      reason: "installed",
+      details: { checkedAt: answered.toISOString() },
+    });
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    expect(latest).toMatchObject({
+      fingerprint: candidate.fingerprint,
+      installedAt: answered,
+      checkedAt: answered,
+    });
+    expect(latest!.installedAt.getTime()).toBeGreaterThan(acceptedDuringCheck.getTime());
   });
 
   it("refuses fiscal.certificate_changed when the vault changed after the card was read", async () => {

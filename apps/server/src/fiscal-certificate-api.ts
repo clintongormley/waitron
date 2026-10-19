@@ -92,6 +92,7 @@ export function mountFiscalCertificateApi(
               return { personId: session.authorizedBy };
             },
             log,
+            clock: deps.now,
           },
           body,
           deps.now(),
