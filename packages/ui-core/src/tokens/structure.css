@@ -69,9 +69,10 @@
      larger than --wt-tap-min either way, which is what structure.test.ts pins.
 
      As a CAP (`max-width`): the modifier form's choices, the variants table, and the product
-     editor's attached-lists table. The name is the one cell that can be long, so capping it makes
-     it wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
-     instead of pushing the row into a sideways scroll.
+     editor's attached-lists table. The name is the one cell that can be long, so capping it, with
+     `overflow-wrap: anywhere` so that a name with no space breaks too, makes it wrap and keeps the
+     controls after it (a switch, a row menu) on screen at phone width instead of pushing the row
+     into a sideways scroll.
 
      As a FLOOR (`min-width`): the single-input cells of the options list form, which have no
      width of their own and would otherwise shrink to the tap-target minimum and cut the value off

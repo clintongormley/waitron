@@ -581,9 +581,9 @@ quoting a list of its consumers — the list here has gone stale once already.
 
 As a **cap** (`max-width`) it is in the variants table (`apps/dashboard/src/widgets/variant-table.ts`)
 and the product editor's attached-lists table (`apps/dashboard/src/widgets/product-editor.ts`). The
-name is the one cell whose text can be long, so capping it makes the text wrap and keeps the
-controls after it (a switch, a row menu) on screen at phone width instead of pushing the row into a
-sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
+name is the one cell whose text can be long, so capping it, with `overflow-wrap: anywhere` so that
+a name with no space breaks too, makes the text wrap and keeps the controls after it (a switch, a
+row menu) on screen at phone width instead of pushing the row into a sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
 the product editor, on the earlier phone layout that still showed a price column, removing it
 changed no column at a 390px-wide frame, while in a 1280px frame it held the name column to 231px
 against 342px without it. It has not been re-measured since the price moved under the name or

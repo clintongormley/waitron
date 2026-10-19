@@ -96,18 +96,6 @@ sessions on their next request); storage (a table in identity's own migration se
 classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
 `roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
 
-## A827. Check that row menus in plain `<table>`s stay on screen at 390 px
-
-- **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner,
-  2026-10-17).** `variant-table.ts` and `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a
-  `wt-row-actions` in a plain table, not `wt-data-table`, so `pinned` does not reach them;
-  `product-editor.ts` also contains both a `<table>` and a row menu (found by grep, not read). At
-  390 px the variant table's menus are held on screen through the product editor
-  (`product-editor.test.ts`, "keeps every variant row's menu on screen at phone width"); the option
-  list form's table and the product editor's attached extras/options table have 390 px cases that
-  check where a row's menu sits, not that it stays on screen. Done when each of those two has a
-  390 px case holding every row menu's right edge to the screen's.
-
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
 - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** On

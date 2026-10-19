@@ -1784,3 +1784,56 @@ it.each([
     }
   },
 );
+
+it.each([
+  { locale: "en", font: "default" },
+  { locale: "es", font: "default" },
+  { locale: "en", font: "Verdana" },
+  { locale: "es", font: "Verdana" },
+])(
+  "keeps every option row's menu on screen at 390 px ($locale, font: $font)",
+  async ({ locale, font }) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      const { el, host } = await mount({
+        value: {
+          ...cooked,
+          labels: [
+            {
+              ...cooked.labels[0]!,
+              name: "Rare, seared hard on the outside and left cool and red in the middle",
+            },
+            { ...cooked.labels[1]!, name: "Alpuntoperoconelcentrotodavíarosadoyjugoso" },
+            wellDone,
+          ],
+        },
+      });
+      if (font === "Verdana") {
+        const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+      }
+      await el.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const menus = [...el.shadowRoot!.querySelectorAll("tbody wt-row-actions")];
+      expect(menus).toHaveLength(3);
+      const wrap = menus[0]!.closest<HTMLElement>(".table-wrap")!;
+      expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+      const edge = wrap.getBoundingClientRect().right;
+      for (const [index, menu] of menus.entries()) {
+        const box = menu.getBoundingClientRect();
+        expect(box.width, `row ${index} is drawn`).toBeGreaterThan(0);
+        expect(box.right, `row ${index}`).toBeLessThanOrEqual(edge);
+        expect(box.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+      }
+    } finally {
+      setLocale(previous);
+      await page.viewport(width, height);
+    }
+  },
+);

@@ -350,11 +350,13 @@ export class ProductEditor extends LitElement {
       tbody td:is(:nth-child(2), :nth-child(3)) {
         padding-block-start: calc(var(--wt-space-2) + (var(--wt-tap-min) - 1lh) / 2);
       }
-      /* The name column is the one that grows; capping it keeps the actions on screen at phone
-         width. The token is used in three different directions across the dashboard, which
+      /* The name column is the one that grows; capping it, and breaking inside a word so that a
+         name with no space breaks too, keep the actions on screen at phone width. The token is
+         used in three different directions across the dashboard, which
          packages/ui-core/src/tokens/structure.css describes. */
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
+        overflow-wrap: anywhere;
       }
       /* The row's button lies over the whole row; the handle and the row menu are lifted above it
          so they keep their own clicks, and a dragged row above them, because the reorder
