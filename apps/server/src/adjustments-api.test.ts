@@ -37,6 +37,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { parkOrder, updateHeldOrder } from "./working-order.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
@@ -744,12 +745,19 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
     expect(await rowsOf(venue, billId)).toEqual([]);
   });
 
-  it("refuses a staff member's PIN as the approver of a fired dish's cancel", async () => {
+  it("refuses another staff member's PIN as the approver of a fired dish's cancel", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const pin = "5151";
+    const [colleague] = await inTx(venue, (tx) =>
+      tx
+        .insert(persons)
+        .values({ displayName: "Pablo", pinHash: fixturePinHash(pin), role: "staff" })
+        .returning({ id: persons.id }),
+    );
 
     const refused = await post(
       billId,
-      { ...(await cancel(billId)), approver: { personId: venue.staffId, pin: PINS.staff } },
+      { ...(await cancel(billId)), approver: { personId: colleague!.id, pin } },
       { cookie: venue.cookie.staff },
     );
 
@@ -760,6 +768,25 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
     });
     expect(await recordedOn(billId)).toEqual([]);
     expect(await rowsOf(venue, billId)).toHaveLength(1);
+  });
+
+  it("applies a staff member's cancel of a fired dish with a supervisor's PIN", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+
+    const applied = await post(
+      billId,
+      {
+        ...(await cancel(billId)),
+        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      },
+      { cookie: venue.cookie.staff },
+    );
+
+    expect(applied.status).toBe(200);
+    expect(await recordedOn(billId)).toMatchObject([
+      { action: "cancel", requestedBy: venue.staffId, approvedBy: venue.supervisorId },
+    ]);
+    expect(await rowsOf(venue, billId)).toEqual([]);
   });
 });
 
