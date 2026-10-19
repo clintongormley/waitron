@@ -17,6 +17,9 @@ import { provisionNode } from "./provision-till.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
 import { registerTill } from "../scripts/register-till.js";
+import { withPromotionModuleOperation } from "./promotion-operation.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { hashPassword, persons } from "@waitron/identity";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
@@ -103,5 +106,48 @@ it.each(["provision-node", "register-till", "restore-runner"])(
         await copy.close();
       }
     }
+  },
+);
+
+const ADMIN = "e1000000-0000-4000-8000-000000000009";
+const PASSWORD = "synthetic-retired-promotion-password";
+const passwordHash = hashPassword(PASSWORD);
+it.each(["recovery key", "administrator"])(
+  "the production promotion adapter refuses a signed paper input authenticated by %s before its activation callback",
+  async (authentication) => {
+    const recoveryKey = authentication === "recovery key";
+    await suite.db
+      .insert(persons)
+      .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash });
+    const fixture = allocationFixture({
+      node,
+      bases,
+      identity: "P000042",
+      recoveryKey,
+      operatorId: ADMIN,
+    });
+    const environment = await writeAllocationInput(root, fixture, "promote");
+    for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+    const { binding, input } = fixture.request("promote");
+    const before = await rows();
+    const activate = vi.fn(async () => "unexpected-series");
+    await expect(
+      withPromotionModuleOperation(
+        {
+          db: suite.db,
+          nodeId: node.nodeId,
+          credentialKeyRing: TOTP_KEY_RING,
+          modules: ALL_MODULES,
+        },
+        { binding, input },
+        recoveryKey ? { breakGlass: secret } : { personId: ADMIN, password: PASSWORD },
+        (runner) => runner({ db: suite.db, node }, activate),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    expect(activate).not.toHaveBeenCalled();
+    expect(await rows()).toEqual(before);
   },
 );

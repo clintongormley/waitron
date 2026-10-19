@@ -279,6 +279,14 @@ Cloud-document route cases to that historical selector, retaining all 22 asserti
 its scope approval remains pending. These checks do not qualify current-hour re-registration
 through the command or complete the other restore and promotion integration.
 
+The production promotion adapter now also refuses signed paper input with either a matching
+recovery key or an administrator login before its activation callback. The two checks retain
+registrations, series and counters; a historical-dispatch substitution fails both refusal assertions.
+Three more exact test-scope proposals retain the older command, live promotion and HTTP restart
+checks with their historical adapter explicitly named. All existing expected expressions remain,
+but the proposals are unapplied pending bundled owner approval. Current-hour success through
+`register-till` and the remaining restore integration are still open.
+
 Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
 reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
 files total520.5seconds, with the largest taking160.9seconds. The dedicated shards retain the

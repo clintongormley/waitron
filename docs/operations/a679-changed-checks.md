@@ -3,6 +3,35 @@
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 
+## Retired promotion inputs and retained command checks, 2026-10-19
+
+`apps/server/src/retired-fiscal-operation-entry.test.ts` adds two production-adapter checks:
+a valid signed paper request authenticated by either the matching recovery key or an administrator
+must raise `sif.allocation_invalid` / `outside_confirmation_missing` before the promotion activation
+callback runs. Both retain the registrations, series and counters. Existing assertion expressions
+remain unchanged. Task 11 retires signed admission; these checks exercise authentication and module
+preparation, not a complete HTTP promotion or current-hour command success.
+
+In an independently installed copy, replacing the public operation export with the historical
+dispatcher makes both promises resolve to the activation callback's sentinel. Restoring the exact
+public export passes both. The restored five-file selection passes 53 cases, including the 36
+current-hour promotion cases and the three earlier production-entry refusal cases. The protected
+huella and immutability pair passes 20 cases unchanged.
+
+Three further proposals remain outside the feature tree pending exact scope approval:
+`apps/server/scripts/register-till.test.ts`, `apps/server/src/boot.promote.test.ts` and
+`apps/server/src/promote-endpoint-e2e.test.ts`. Each explicitly substitutes the named historical
+operation adapter through its existing module boundary and labels its historical suite. All 12
+cases and all 79 existing assertion expressions remain; no expected value changes. The source
+selection reproduces six failures, while the proposed installed selection passes all 12 cases.
+These proposals qualify historical registration, promotion, restart, selling and read-only behavior.
+They do not establish that the production command can complete current-hour re-registration.
+
+You still need the earlier composition, setup-route, signed-host and historical Cloud-route
+approvals, the remaining restore integration and current-head CI before landing. The three new
+patches are bundled in Lane E's local questions file under the watcher's deferred owner review.
+No product dispatcher, writer, SQL, guard, coverage threshold or dependency changes here.
+
 ## Retired first-setup HTTP routes, 2026-10-19
 
 `apps/server/src/retired-first-setup-routes.test.ts` adds two current-production cases. They send
