@@ -801,8 +801,10 @@ export class TillBillPayDialog extends LitElement {
     return readyPayReader(this.equipment, this.fixedReader);
   }
 
+  /** A locked confirmation resends the original request, its reader included, so no equipment
+   * holds it. */
   #heldForEquipment(method: Method): boolean {
-    return this.handheld && heldForEquipment(method === "card", this);
+    return this.handheld && !this.confirmationLocked && heldForEquipment(method === "card", this);
   }
 
   #rowWantsOpen(): boolean {
@@ -890,7 +892,7 @@ export class TillBillPayDialog extends LitElement {
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    if (this.method !== "cash" && this.#cardInProgress()) {
+    if (this.method !== "cash" && !this.confirmationLocked && this.#cardInProgress()) {
       this.askingSecondCard = true;
       await this.#focusButton("[data-pay-card-ask-take]");
       return;
@@ -1091,10 +1093,25 @@ export class TillBillPayDialog extends LitElement {
   /** The form; the server's two ways to pay for items that cost more than is left; or the
    * confirmation of what the server allocated. */
   #step(): TemplateResult {
-    if (this.asked === null || this.preview === null) return this.#form();
-    return this.preview.kind === "allocated"
-      ? this.#confirmStep(this.asked, this.preview)
-      : this.#chooseStep(this.asked, this.preview);
+    const step =
+      this.asked === null || this.preview === null
+        ? this.#form()
+        : this.preview.kind === "allocated"
+          ? this.#confirmStep(this.asked, this.preview)
+          : this.#chooseStep(this.asked, this.preview);
+    return html`${this.#unanswered()}${step}`;
+  }
+
+  /** A locked confirmation's title; its message is the step's own, under the form. */
+  #unanswered(): TemplateResult | typeof nothing {
+    if (!this.confirmationLocked) return nothing;
+    const title =
+      this.refusal?.code === "sending"
+        ? t("bill_pay.sending_title")
+        : t("bill_pay.unanswered_title");
+    return html`<div class="tone" role="status" data-pay-unanswered>
+      <p class="tone-title" data-pay-unanswered-title>${title}</p>
+    </div>`;
   }
 
   #balance(): TemplateResult {
@@ -1466,7 +1483,7 @@ export class TillBillPayDialog extends LitElement {
       .readerReason=${this.readerReason}
       .canScan=${this.canScan}
       .askNfc=${this.askNfc}
-      .disabled=${this.busy}
+      .disabled=${this.busy || this.confirmationLocked}
       .fixedReader=${this.fixedReader}
       @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
         (this.rowOpen = event.detail.open)}
@@ -1632,7 +1649,8 @@ export class TillBillPayDialog extends LitElement {
       }
     }
     this.shownRefusal = null;
-    const reader = this.handheld && onReader ? this.#readyReader() : null;
+    const reader =
+      this.handheld && onReader && !this.confirmationLocked ? this.#readyReader() : null;
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
       ...(reader === null ? {} : { readerId: reader.id }),
@@ -1757,11 +1775,13 @@ export class TillBillPayDialog extends LitElement {
           @click=${() => void this.#take(asked, preview, cash)}
         >
           ${
-            reader === null
-              ? t("bill_pay.take")
-              : t("bill_pay.take_on_reader")
-                  .replace("{amount}", () => this.#money(preview.charged!))
-                  .replace("{reader}", () => reader.name)
+            this.confirmationLocked
+              ? t("bill_pay.recheck")
+              : reader === null
+                ? t("bill_pay.take")
+                : t("bill_pay.take_on_reader")
+                    .replace("{amount}", () => this.#money(preview.charged!))
+                    .replace("{reader}", () => reader.name)
           }
         </wt-button>
       </wt-form-actions>`;

@@ -2051,3 +2051,145 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(confirmed).toEqual([{}]);
   });
 });
+
+describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () => {
+  const box = (el: TillBillPayDialog) => root(el).querySelector("[data-pay-unanswered]");
+  const title = (el: TillBillPayDialog) =>
+    text(root(el).querySelector("[data-pay-unanswered-title]"));
+  const confirm = (el: TillBillPayDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean; loading: boolean }>(
+      "[data-pay-confirm]",
+    )!;
+
+  async function locked(over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount(over);
+    await pick(el, "line", "1");
+    await type(el, "tendered", "40");
+    await previewed(el, cashPreview("35.00", "5.00"));
+    el.confirmationLocked = true;
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+    return el;
+  }
+
+  it("titles a locked confirmation 'No connection to the server' and says the message once, under the form", async () => {
+    const el = await locked();
+
+    expect(box(el)!.getAttribute("role")).toBe("status");
+    expect(title(el)).toBe(t("bill_pay.unanswered_title"));
+    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+    expect(text(box(el))).not.toContain(t("bill_pay.unconfirmed"));
+  });
+
+  for (const locale of ["es", "en"] as const) {
+    it(`labels the locked resend Comprobar de nuevo, and keeps Atrás disabled (${locale})`, async () => {
+      setLocale(locale);
+      const el = await locked();
+
+      expect(text(confirm(el))).toBe(t("bill_pay.recheck"));
+      if (locale === "es") expect(text(confirm(el))).toBe("Comprobar de nuevo");
+      expect(confirm(el).disabled).toBe(false);
+      expect(button(el, "[data-pay-back]").disabled).toBe(true);
+    });
+  }
+
+  it("titles a payment still out 'Waiting for the server' and holds its button", async () => {
+    const el = await locked();
+    el.refusal = { code: "sending" };
+    el.busy = true;
+    await el.updateComplete;
+
+    expect(title(el)).toBe(t("bill_pay.sending_title"));
+    expect(actions(el).error).toBe(t("bill_pay.sending"));
+    expect(text(box(el))).not.toContain(t("bill_pay.sending"));
+    expect(confirm(el).disabled).toBe(true);
+    expect(confirm(el).loading).toBe(true);
+  });
+
+  it("shows no box and today's label when not locked", async () => {
+    const el = await mount();
+    expect(box(el)).toBeNull();
+    await pick(el, "line", "1");
+    await type(el, "tendered", "40");
+    await previewed(el, cashPreview("35.00", "5.00"));
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+
+    expect(box(el)).toBeNull();
+    expect(text(confirm(el))).toBe(t("bill_pay.take"));
+  });
+
+  it("puts the box at the top of a locked form too", async () => {
+    const el = await mount({ confirmationLocked: true, refusal: { code: "network" } });
+    expect(title(el)).toBe(t("bill_pay.unanswered_title"));
+    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+  });
+
+  it("on a handheld, a locked resend names no reader, disables the row, and is not held by the equipment", async () => {
+    setLocale("es");
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
+      equipment: equipmentWith(LECTOR_2),
+    });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    await previewed(el, {
+      kind: "allocated",
+      choice: null,
+      applied: "20.80",
+      tip: "0.00",
+      change: null,
+      charged: "20.80",
+    });
+    el.confirmationLocked = true;
+    el.refusal = { code: "network" };
+    el.equipment = null;
+    await el.updateComplete;
+
+    const row = root(el).querySelector<HTMLElement & { disabled: boolean }>("till-pay-equipment")!;
+    expect(row.disabled).toBe(true);
+    expect(confirm(el).disabled).toBe(false);
+    expect(text(confirm(el))).toBe("Comprobar de nuevo");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{}]);
+
+    el.equipment = equipmentWith(LECTOR_2);
+    el.equipmentBusy = true;
+    await el.updateComplete;
+    expect(confirm(el).disabled).toBe(false);
+    expect(text(confirm(el))).toBe("Comprobar de nuevo");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{}, {}]);
+  });
+
+  it("asks nothing about a card in progress while locked", async () => {
+    const el = await mount({
+      way: "contribution",
+      cardReader: "stripe_terminal",
+      balance: balanceOf({ reserved: "20.00", outstanding: "100.00", payments: [pendingCard] }),
+    });
+    await type(el, "amount", "40");
+    await pick(el, "method", "card");
+    el.confirmationLocked = true;
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+
+    await click(el, "[data-pay-continue]");
+    expect(asked).toHaveLength(1);
+    expect(root(el).querySelector("[data-pay-card-ask]")).toBeNull();
+  });
+
+  it.each(["sending", "not_checked", "payment_failed"] as const)(
+    "says the app's %s refusal in its own words",
+    async (code) => {
+      const el = await mount({ refusal: { code } });
+      expect(actions(el).error).toBe(t(`bill_pay.${code}`));
+    },
+  );
+});

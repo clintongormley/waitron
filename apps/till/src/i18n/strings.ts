@@ -1494,6 +1494,12 @@ export const en = {
     "The server did not answer, so this payment may or may not have been taken. Press Check again: it asks about this same payment, and it will not be recorded twice.",
   "bill_pay.unanswered_title": "No connection to the server",
   "bill_pay.recheck": "Check again",
+  "bill_pay.sending_title": "Waiting for the server",
+  "bill_pay.sending":
+    "A payment on this bill is still waiting for the server. Wait for its answer before taking anything else on this bill.",
+  "bill_pay.not_checked":
+    "The server could not check this payment. Look at the bill's payments before taking it again.",
+  "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
   "bill_pay.choice_legend": "How are these items paid?",
@@ -3142,6 +3148,12 @@ export const es: Record<StringKey, string> = {
     "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Pulsa Comprobar de nuevo: se pregunta por este mismo pago y no se registrará dos veces.",
   "bill_pay.unanswered_title": "Sin conexión con el servidor",
   "bill_pay.recheck": "Comprobar de nuevo",
+  "bill_pay.sending_title": "Esperando al servidor",
+  "bill_pay.sending":
+    "Un cobro de esta cuenta sigue esperando al servidor. Espera su respuesta antes de cobrar nada más en esta cuenta.",
+  "bill_pay.not_checked":
+    "El servidor no ha podido comprobar este cobro. Mira los pagos de la cuenta antes de volver a cobrarlo.",
+  "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",
   "bill_pay.choice_legend": "¿Cómo se pagan estos artículos?",

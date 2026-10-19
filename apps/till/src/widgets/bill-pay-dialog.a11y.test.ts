@@ -61,6 +61,7 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
   await el.updateComplete;
 }
 
+const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
 const handheldBackgrounds = new Map<string, string>();
 const rowBackgrounds = new Map<string, string>();
@@ -309,6 +310,67 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       balance: { ...balance, reserved: "40.00" },
     });
     await expectNoA11yViolations(host);
+  });
+
+  /** A cash confirmation for the paella that got no answer, locked as A773-1's app locks it. */
+  async function lockedConfirmation() {
+    const mounted = await mount();
+    await pressed(mounted.el, 'input[name="line"][value="1"]');
+    await typed(mounted.el, "tendered", "40");
+    await previewed(mounted.el, {
+      kind: "allocated",
+      choice: null,
+      applied: "35.00",
+      tip: "0.00",
+      change: "5.00",
+      charged: null,
+    });
+    mounted.el.confirmationLocked = true;
+    mounted.el.refusal = { code: "network" };
+    await mounted.el.updateComplete;
+    if (!mounted.el.shadowRoot!.querySelector("[data-pay-unanswered]"))
+      throw new Error("not locked");
+    return mounted;
+  }
+
+  it("has no violations on a locked confirmation, and on one still waiting for the server", async () => {
+    const { el, host } = await lockedConfirmation();
+    await expectNoA11yViolations(host);
+    el.refusal = { code: "sending" };
+    el.busy = true;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])("looks right on a locked confirmation at %i px", async (width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await lockedConfirmation();
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      lockBackgrounds.set(`${theme}-${width}`, background);
+      if (theme === "dark") {
+        const light = lockBackgrounds.get(`light-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-locked-confirmation-${theme}-${width}`;
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-locked-confirmation-${theme}-${width}.png`,
+      });
+      const box = panel.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({ innerWidth: window.innerWidth, panelWidth: box.width, background }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 
   /** A card contribution on a bill whose balance holds a card in progress, asked about. */

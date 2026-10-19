@@ -7,8 +7,10 @@ import { isTakePaymentRefusal } from "../state/bill-payment.js";
 
 /** A refusal's code, the request field it names when it names one, for a tip the venue does not
  * take the most the card can be charged, and the permission an `authorization.not_permitted`
- * names. The app's own codes: `network`, a payment that got no answer; `unread`, a balance that
- * could not be read again; `declined` and `card_network`, a card the reader did not charge;
+ * names. The app's own codes: `network`, a payment that got no answer; `sending`, a payment on the
+ * bill still waiting for the server; `not_checked`, a payment the server could not check;
+ * `payment_failed`, a payment recorded as not taken; `unread`, a balance that could not be read
+ * again; `declined` and `card_network`, a card the reader did not charge;
  * `sale.unconfirmed`, `sale.refused` and `bill.pay_with_bill_payments`, a presented bill's payment
  * in the till's own sentences. */
 export interface PayRefusal {
@@ -35,6 +37,12 @@ export function refusalText(refusal: PayRefusal): string {
   switch (refusal.code) {
     case "network":
       return t("bill_pay.unconfirmed");
+    case "sending":
+      return t("bill_pay.sending");
+    case "not_checked":
+      return t("bill_pay.not_checked");
+    case "payment_failed":
+      return t("bill_pay.payment_failed");
     case "unread":
       return t("bill_pay.read_failed");
     case "declined":
