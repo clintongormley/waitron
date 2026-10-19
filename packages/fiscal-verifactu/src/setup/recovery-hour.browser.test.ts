@@ -91,8 +91,7 @@ async function ready(el: Entry, answer = "no") {
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
   await key.updateComplete;
   for (const [name, value] of [
-    ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8"],
-    ["printed-recovery-check", "tkr0 k07w"],
+    ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c"],
   ]) {
     const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
     await field.updateComplete;
@@ -263,7 +262,7 @@ it.each(["key", "answer", "isolation", "clear", "disconnect"])(
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
     if (fault === "key") {
       const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-      const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-check"]')!;
+      const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
       const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
       input.value = "bad";
       input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -419,7 +418,7 @@ it("drops a late selected answer after the matching printed key changes", async 
     }),
   );
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-check"]')!;
+  const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   input.value = "bad";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -596,14 +595,14 @@ it("manual confirmation never enables an ambiguous box-hour interval", async () 
   expect(button(el, "select").disabled).toBe(true);
 });
 
-it("requires codes from the recovery sheet and sends normalised codes to the hour selector", async () => {
+it("requires the one code from the sheet and sends its normalised value to the hour selector", async () => {
   const { el, prepare } = await mount();
   await ready(el);
   const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]');
   expect(field, "public code field from the recovery sheet").not.toBeNull();
   await field!.updateComplete;
   const input = field!.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "06rb, 06rc";
+  input.value = "06rb";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
   await compare(el);
@@ -612,7 +611,7 @@ it("requires codes from the recovery sheet and sends normalised codes to the hou
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
       answer: "no",
-      installationCodes: ["06RB", "06RC"],
+      installationCodes: ["06RB"],
     }),
   );
   expect(input.isConnected, "the edited control stays mounted").toBe(true);
@@ -666,7 +665,7 @@ it("marks a missing code beside its native field and keeps selection disabled", 
   await el.updateComplete;
   await field.updateComplete;
   expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect(field.shadowRoot!.textContent).toContain("four-character codes");
+  expect(field.shadowRoot!.textContent).toContain("four-character code");
   expect(button(el, "select").disabled).toBe(true);
 });
 
@@ -696,4 +695,25 @@ it("opens the installation code field without a validation refusal", async () =>
   await field.updateComplete;
   expect(field.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
   expect(field.shadowRoot!.querySelector("[data-error]")).toBeNull();
+});
+
+it("refuses a list of installation codes in the single-code field", async () => {
+  const { el, prepare } = await mount();
+  await ready(el);
+  await compare(el);
+  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  expect(button(el, "compare").disabled).toBe(false);
+  input.value = "06RB, 06RC";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(button(el, "compare").disabled).toBe(true);
+  expect(button(el, "select").disabled).toBe(true);
+  expect(el.readCredentials()).toBeNull();
+  expect(
+    prepare.mock.calls.every(
+      ([request]) => (request.proposal as { action: string }).action !== "select",
+    ),
+  ).toBe(true);
 });

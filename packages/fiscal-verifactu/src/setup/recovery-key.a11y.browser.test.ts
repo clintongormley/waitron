@@ -55,7 +55,7 @@ for (const theme of ["light", "dark"] as const)
             host.append(el);
             await el.updateComplete;
             if (state === "invalid") {
-              for (const name of ["printed-recovery-key", "printed-recovery-check"]) {
+              for (const name of ["printed-recovery-key"]) {
                 const field = el.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
                 await field.updateComplete;
                 const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;

@@ -3,16 +3,16 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import { MAX_RECOVERY_PDF } from "../recovery-document.js";
-import { decodeNodeKey } from "../paper-register-compact.js";
+import { normaliseTypedCode } from "../paper-register-compact.js";
+import { decodeRecoveryKey } from "../recovery-key-code.js";
 import { WAITRON_ID_SISTEMA } from "../software.js";
 
 import type { RecoveryKeySelection } from "@waitron/module/src/setup-contract.js";
 interface Draft {
   value: string;
-  check: string;
   file?: File;
 }
-const empty = (): Draft => ({ value: "", check: "" });
+const empty = (): Draft => ({ value: "" });
 @customElement("vf-recovery-key")
 export class RecoveryKeyEntry extends LitElement {
   static override styles = [
@@ -59,7 +59,7 @@ export class RecoveryKeyEntry extends LitElement {
         id: this,
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
-        equal: (a, b) => a.value === b.value && a.check === b.check && a.file === b.file,
+        equal: (a, b) => a.value === b.value && a.file === b.file,
         restore: () => this.#clear(),
       }).scope;
       this.#scope.commit(empty());
@@ -94,8 +94,29 @@ export class RecoveryKeyEntry extends LitElement {
     this.#scope?.commit(empty());
     this.#notify();
   }
-  async #edit(key: "value" | "check", value: string): Promise<void> {
-    this.draft = { value: this.draft.value, check: this.draft.check, [key]: value };
+  async #edit(value: string, field: LitElement): Promise<void> {
+    const input = field.shadowRoot?.querySelector<HTMLInputElement>("input");
+    const start = input?.selectionStart,
+      end = input?.selectionEnd;
+    let caret: number[] | null = null;
+    try {
+      const position = (offset: number) => {
+        const length = normaliseTypedCode(value.slice(0, offset)).length;
+        return length + Math.max(0, Math.floor((length - 1) / 4));
+      };
+      caret = start != null && end != null ? [position(start), position(end)] : null;
+      value =
+        normaliseTypedCode(value)
+          .match(/.{1,4}/g)
+          ?.join(" ") ?? "";
+      if (input && caret) {
+        input.value = value;
+        input.setSelectionRange(caret[0]!, caret[1]!);
+      }
+    } catch {
+      // Keep malformed text visible so the field can explain the refusal.
+    }
+    this.draft = { value };
     this.pdfError = undefined;
     this.loaded = false;
     const picker = this.shadowRoot?.querySelector<HTMLInputElement>("input[type=file]");
@@ -105,7 +126,7 @@ export class RecoveryKeyEntry extends LitElement {
     const selection = { ...this.selection };
     this.invalid = false;
     this.#notify();
-    if (!this.draft.value || !this.draft.check) return;
+    if (!this.draft.value) return;
     const current = () =>
       this.isConnected &&
       generation === this.#generation &&
@@ -114,20 +135,14 @@ export class RecoveryKeyEntry extends LitElement {
       selection.nodeId === this.selection.nodeId &&
       selection.keyName === this.selection.keyName;
     try {
-      const secret = await decodeNodeKey(
-        { encoding: "raw192", ...this.draft },
-        {
-          taxpayerNif: this.selection.taxId,
-          softwareId: WAITRON_ID_SISTEMA,
-          environment: this.selection.environment,
-        },
-        this.selection.nodeId,
-        this.selection.keyName,
-      );
+      const secret = decodeRecoveryKey(this.draft.value);
       if (current()) this.#notify(secret);
     } catch {
       if (current()) this.invalid = true;
     }
+    await this.updateComplete;
+    await field.updateComplete;
+    if (current() && input && caret) input.setSelectionRange(caret[0]!, caret[1]!);
   }
   async importFile(file?: File): Promise<void> {
     this.#clear(false);
@@ -174,8 +189,8 @@ export class RecoveryKeyEntry extends LitElement {
     const en = this.locale === "en";
     const error = this.invalid
       ? en
-        ? "Check the key and check code for this backup."
-        : "Revisa la clave y el control de esta copia."
+        ? "Check the key from your recovery sheet."
+        : "Revisa la clave de tu hoja de recuperación."
       : (this.errorMessage ?? "");
     const pdfError =
       this.pdfError === "manual"
@@ -211,28 +226,14 @@ export class RecoveryKeyEntry extends LitElement {
         autocomplete="off"
         ?required=${!this.loaded}
         label=${en ? "Recovery key" : "Clave de recuperación"}
-        placeholder=${en ? "Key from your recovery sheet" : "Clave de tu hoja de recuperación"}
+        placeholder="XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX X"
         .value=${this.draft.value}
         .error=${error}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          void this.#edit("value", event.detail.value);
+          void this.#edit(event.detail.value, event.currentTarget as LitElement);
         }}
-      ></wt-input>
-      <wt-input
-        name="printed-recovery-check"
-        autocomplete="off"
-        ?required=${!this.loaded}
-        label=${en ? "Check" : "Control"}
-        placeholder="XXXX XXXX"
-        .value=${this.draft.check}
-        .error=${error}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          void this.#edit("check", event.detail.value);
-        }}
-      ></wt-input>
-      <p class="error" role="status">${error}</p>`;
+      ></wt-input>`;
   }
 }
 declare global {

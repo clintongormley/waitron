@@ -63,7 +63,7 @@ trading-series chooser. Keep all historical evidence. See the [dated design adde
 - Ordinary reboot/update, exact Finish, download/print and key reissue allocate **zero** identities.
 - Restore preserves historical records and recovered counter values, retires recovered active series and selects a fresh hour before renewed issuance.
 - Standby admission reserves no hour. Promotion selects one when activation occurs.
-- Secrets remain **192 bits**, **47 entered / 57 displayed characters**. Normalise only display entry, never the actual secret or issued names.
+- Secrets remain **192 bits**. The owner's [19 October PDF decisions](../specs/2026-10-16-a679-hour-coded-series-design.md#owner-pdf-decisions-2026-10-19) replace the earlier key/check pair with **41 entered / 51 displayed characters**, including two typo-check characters. The sheet and recovery form carry only this node's current installation code. Normalise only display entry, never the actual secret or issued names.
 - Raw keys and secret PDFs stay transient, outside logs, browser persistence and venue backups. Promise no guaranteed memory erasure.
 - A696’s zone confirmation does not establish that invoice writers use the venue zone. A696 and A731/A732/A733 remain separately scoped.
 - H2 protects hashes, chains, invoice-number allocation, `registros_facturacion`, alta builders, `registerSif`, `restoreFiscal` and existing fiscal assertions.

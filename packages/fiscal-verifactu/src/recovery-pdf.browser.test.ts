@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderRecoveryPdf } from "./recovery-pdf.js";
 import { readRecoveryPdf, openRecoveryPdf } from "./recovery-reader.js";
 import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
-import { decodeNodeKey } from "./paper-register-compact.js";
+import { decodeRecoveryKey } from "./recovery-key-code.js";
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
@@ -64,18 +64,11 @@ describe("key-only recovery PDF", () => {
               "hojas anteriores para copias anteriores",
             ])
           expect(text).toContain(instruction);
-        const value = text.match(/(?:Key|Clave): ([0-9A-Z ]{48})/)![1]!.trim();
-        const check = text.match(/(?:Check|Control): ([0-9A-Z]{4} [0-9A-Z]{4})/)![1]!;
-        expect(value.replaceAll(" ", "")).toHaveLength(39);
-        expect(value.length + check.length).toBe(57);
-        expect(
-          await decodeNodeKey(
-            { encoding: "raw192", value: value.toLowerCase(), check: check.toLowerCase() },
-            document.scope,
-            document.nodeKey.nodeId,
-            document.nodeKey.name,
-          ),
-        ).toBe(document.nodeKey.secret);
+        const value = text.match(/(?:Key|Clave): ([0-9A-Z ]{51})/)![1]!.trim();
+        expect(value.replaceAll(" ", "")).toHaveLength(41);
+        expect(value.length).toBe(51);
+        expect(text).not.toMatch(/(?:Check|Control):/);
+        expect(decodeRecoveryKey(value.toLowerCase())).toBe(document.nodeKey.secret);
         expect(text).not.toMatch(/allocation|register|signing|administrator|TLS|S000001|P000001/i);
       } finally {
         await task.destroy();
@@ -106,8 +99,8 @@ describe("key-only recovery PDF", () => {
           expect(texts.join("").replace(/\s/g, "")).toContain(value);
         const keyPage = texts.find((text) => text.includes(locale === "en" ? "Key:" : "Clave:"));
         expect(keyPage).toContain(locale === "en" ? "Key:" : "Clave:");
-        expect(keyPage).toContain(locale === "en" ? "Check:" : "Control:");
-        expect(keyPage).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8");
+        expect(keyPage).not.toContain(locale === "en" ? "Check:" : "Control:");
+        expect(keyPage).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C");
       } finally {
         await task.destroy();
       }

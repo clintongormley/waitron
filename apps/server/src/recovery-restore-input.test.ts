@@ -521,6 +521,7 @@ it.each(["wrong", "outside-refusal"])(
       recoveryOperation: request,
       nodeRecoverySecret: mode === "wrong" ? "wrong-node-key" : nodeKey,
     });
+    const stagedRequest = await readFile(join(stateDir, "restore-request.json"));
     if (mode === "outside-refusal")
       modules[0] = {
         ...modules[0]!,
@@ -548,9 +549,7 @@ it.each(["wrong", "outside-refusal"])(
     expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(
       mode === "wrong" ? "wrong-node-key" : nodeKey,
     );
-    expect(
-      JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8")),
-    ).toHaveProperty("placementStarted", true);
+    expect(await readFile(join(stateDir, "restore-request.json"))).toEqual(stagedRequest);
   },
 );
 

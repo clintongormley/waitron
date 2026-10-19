@@ -327,12 +327,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and [approved design](superpowers/specs/2026-10-16-a679-hour-coded-series-design.md).
   Keep the completed work and every changed-check inventory in
   [the qualification record](operations/a679-changed-checks.md).
-  Resolve the owner's pending recovery-key check and installation-code decisions, apply the
-  remaining PDF/form revisions, and obtain viewing approval for real EN/ES A4 PDFs through Drive.
+  Obtain viewing approval for the revised real EN/ES A4 PDFs through Drive; the owner's combined
+  key/check and single current installation-code decisions are implemented in the candidate.
   Complete native adoption/promotion and the remaining entry/recovery journeys, including restored
   trading boot and committed browser acceptance tests. Local browser probes remain separate evidence.
-  Reconcile the retained direct, supervised and CLI launch tests with the current interfaces while
-  preserving their behavioral checks and obtaining exact approval for protected fiscal assertions.
+  Reconcile the remaining public-input CLI launch case with the owned command interface; the exact
+  approved direct/supervised patch and fresh refused-restore marker checks are qualified locally.
+  Preserve behavioral checks and obtain exact approval for further protected fiscal assertions.
   Close the provisioning and entry coverage gaps without lowering the gates. Retire active paper
   and Cloud allocation protocols, reconcile current operator/developer prose, and integrate the
   current main branch and any migration collisions. Complete both final installed Claude reviews,

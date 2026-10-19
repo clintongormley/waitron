@@ -94,7 +94,7 @@ async function render(
   );
 }
 it.each(["en", "es"] as const)(
-  "the composed %s document includes current, retired and retained codes without allocating or changing counters",
+  "the composed %s document includes only this node's current code despite retired and retained history without allocating or changing counters",
   async (locale) => {
     const before = await snapshot();
     const bytes = await render(locale);
@@ -112,9 +112,7 @@ it.each(["en", "es"] as const)(
         .join(" ")
         .replace(/\s+/g, " ");
       expect(text).toContain(
-        locale === "en"
-          ? "Installation codes 06RB, 06RC, 06RD"
-          : "Códigos de instalación 06RB, 06RC, 06RD",
+        locale === "en" ? "Installation code 06RB" : "Código de instalación 06RB",
       );
       const attachment = JSON.parse(
         Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(
@@ -128,7 +126,7 @@ it.each(["en", "es"] as const)(
         taxpayerName: "Waitron SL",
         venueName: "Local principal",
         createdAt: "2026-10-18T12:00:00.000Z",
-        installationCodes: ["06RB", "06RC", "06RD"],
+        installationCodes: ["06RB"],
         nodeKey,
       });
       expect(text).not.toContain(nodeKey.secret);
@@ -182,7 +180,7 @@ it("the completed manager sheet uses the saved venue zone rather than the host z
     await task.destroy();
   }
 });
-it("unrelated taxpayer and target-environment codes are excluded, while duplicate known codes are printed once", async () => {
+it("unrelated and duplicate history never replace the current node code", async () => {
   const bytes = await render("en", {
     "hour-history": {
       reference: "prepared-hours",
@@ -209,7 +207,7 @@ it("unrelated taxpayer and target-environment codes are excluded, while duplicat
         "utf8",
       ),
     );
-    expect(attached.installationCodes).toEqual(["06RB", "06RC", "06RD"]);
+    expect(attached.installationCodes).toEqual(["06RB"]);
   } finally {
     await task.destroy();
   }

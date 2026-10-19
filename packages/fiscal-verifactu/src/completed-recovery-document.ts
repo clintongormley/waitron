@@ -39,18 +39,6 @@ export const FISCAL_RECOVERY_DOCUMENT: NonNullable<
     ...(Object.values(context.evidence) as HourHistorySource[]),
   ];
   if (projectHourHistory({ scope, sources }).contradictions.length > 0) return refuse();
-  const rows = sources.flatMap((source) => source.records) as {
-    taxpayerNif: string;
-    environment: string;
-    identity: string;
-  }[];
-  const installationCodes = [
-    ...new Set(
-      rows
-        .filter((row) => row.taxpayerNif === scope.taxpayerNif && row.environment === environment)
-        .map((row) => row.identity),
-    ),
-  ].sort();
   return renderRecoveryPdf(
     {
       kind: "waitron-recovery-document",
@@ -60,7 +48,7 @@ export const FISCAL_RECOVERY_DOCUMENT: NonNullable<
       venueName: venue.name,
       createdAt: context.createdAt,
       nodeKey: context.nodeKey,
-      installationCodes,
+      installationCodes: [sif.numeroInstalacion],
     },
     context.locale,
     venue.timeZone,

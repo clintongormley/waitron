@@ -101,8 +101,7 @@ for (const theme of ["light", "dark"] as const)
               const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
               await key.updateComplete;
               for (const [name, value] of [
-                ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8"],
-                ["printed-recovery-check", "tkr0 k07w"],
+                ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c"],
               ]) {
                 const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
                 await field.updateComplete;

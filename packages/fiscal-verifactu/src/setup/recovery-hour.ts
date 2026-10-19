@@ -180,7 +180,7 @@ export class RecoveryHourEntry extends LitElement {
   }
   #codes(): string[] | undefined {
     try {
-      return reportedHourCodes(this.draft.installationCodes.trim().split(/[\s,;]+/));
+      return reportedHourCodes([this.draft.installationCodes]);
     } catch {
       return undefined;
     }
@@ -334,9 +334,9 @@ export class RecoveryHourEntry extends LitElement {
     const words = en
       ? {
           heading: "Recover this box",
-          codes: "Installation codes",
-          codesHint: "Codes on your recovery sheet, separated by commas",
-          codesInvalid: "Enter the four-character codes from your recovery sheet.",
+          codes: "Installation code",
+          codesHint: "Code on your recovery sheet",
+          codesInvalid: "Enter the four-character code from your recovery sheet.",
           stopped: "The old box is stopped and will stay offline.",
           sole: "I am the only person recovering this taxpayer, across all venues.",
           question: "Has this taxpayer started setup or recovery during this UTC hour? *",
@@ -368,9 +368,9 @@ export class RecoveryHourEntry extends LitElement {
         }
       : {
           heading: "Recuperar esta caja",
-          codes: "Códigos de instalación",
-          codesHint: "Códigos de tu hoja de recuperación, separados por comas",
-          codesInvalid: "Introduce los códigos de cuatro caracteres de tu hoja de recuperación.",
+          codes: "Código de instalación",
+          codesHint: "Código de tu hoja de recuperación",
+          codesInvalid: "Introduce el código de cuatro caracteres de tu hoja de recuperación.",
           stopped: "La caja anterior está apagada y seguirá desconectada.",
           sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
           question:

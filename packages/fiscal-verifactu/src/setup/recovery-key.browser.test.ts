@@ -1,5 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 import { afterEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import "./first-fiscal-screen.js";
@@ -54,10 +55,7 @@ async function printed() {
     const text = (await (await pdf.getPage(1)).getTextContent()).items
       .map((i) => ("str" in i ? i.str : ""))
       .join(" ");
-    return {
-      value: text.match(/Key: ([0-9A-Z ]{48})/)![1]!.trim(),
-      check: text.match(/Check: ([0-9A-Z]{4} [0-9A-Z]{4})/)![1]!,
-    };
+    return { value: text.match(/Key: ([0-9A-Z ]{51})/)![1]!.trim() };
   } finally {
     await task.destroy();
   }
@@ -72,10 +70,10 @@ it("decodes rendered grouped, lowercase and look-alike fields without changing t
     "printed-recovery-key",
     fields.value.toLowerCase().replaceAll("0", "o").replaceAll("1", "l"),
   );
-  type(el, "printed-recovery-check", fields.check.toLowerCase());
   await vi.waitFor(() =>
     expect(events.at(-1)).toEqual({ secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" }),
   );
+  expect(el.shadowRoot!.querySelector('[name="printed-recovery-check"]')).toBeNull();
   expect(native(el, "printed-recovery-key").type).toBe("password");
   expect(el.outerHTML).not.toContain(saved.nodeKey.secret);
   expect(el.shadowRoot!.textContent).not.toContain(saved.nodeKey.secret);
@@ -134,20 +132,19 @@ it("offers manual fields when a printed PDF has no attachment", async () => {
   );
   expect(native(el, "printed-recovery-key").disabled).toBe(false);
 });
-it("clears a decoded key immediately when either printed field changes", async () => {
+it("clears a decoded key immediately when the printed key changes", async () => {
   const el = await mount();
   const fields = await printed();
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
   type(el, "printed-recovery-key", fields.value);
-  type(el, "printed-recovery-check", fields.check);
   await vi.waitFor(() => expect(events.at(-1)?.secret).toBe(saved.nodeKey.secret));
-  type(el, "printed-recovery-check", "BAD");
+  type(el, "printed-recovery-key", "BAD");
   expect(events.at(-1)).toEqual({});
   await vi.waitFor(() =>
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-        '[name="printed-recovery-check"]',
+        '[name="printed-recovery-key"]',
       )!.error,
     ).not.toBe(""),
   );
@@ -158,7 +155,6 @@ it("clears manual entry on selected-backup change and on removal", async () => {
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
   type(el, "printed-recovery-key", fields.value);
-  type(el, "printed-recovery-check", fields.check);
   await vi.waitFor(() => expect(events.at(-1)?.secret).toBe(saved.nodeKey.secret));
   el.selection = { ...selection, keyName: "Earlier key" };
   await el.updateComplete;
@@ -270,4 +266,36 @@ it("tracks the first native edit immediately after the fields are reattached", a
   parent.appendChild(el);
   type(el, "printed-recovery-key", "new-draft");
   expect(shell.leave.coordinator.isDirty([el])).toBe(true);
+});
+
+it("groups pasted and middle-edited key text while preserving the native selection", async () => {
+  const el = await mount();
+  const fields = await printed();
+  type(el, "printed-recovery-key", fields.value.replaceAll(" ", "").toLowerCase());
+  await el.updateComplete;
+  const input = native(el, "printed-recovery-key");
+  expect(input.value).toBe(fields.value);
+  input.focus();
+  input.value = input.value.slice(0, 6) + "x" + input.value.slice(7);
+  input.setSelectionRange(7, 7);
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector<LitElement>("wt-input")!.updateComplete;
+  expect(input.value.slice(5, 9)).toBe("TXFH");
+  expect(input.selectionStart).toBe(7);
+  expect(input.selectionEnd).toBe(7);
+});
+
+it.each([
+  ["en", "Check the key from your recovery sheet."],
+  ["es", "Revisa la clave de tu hoja de recuperación."],
+] as const)("shows a malformed key refusal once beside the %s field", async (locale, error) => {
+  const el = await mount();
+  el.locale = locale;
+  await el.updateComplete;
+  type(el, "printed-recovery-key", "invalid");
+  await vi.waitFor(() =>
+    expect(native(el, "printed-recovery-key").getAttribute("aria-invalid")).toBe("true"),
+  );
+  expect(page.getByText(error, { exact: true }).elements()).toHaveLength(1);
 });

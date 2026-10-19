@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { renderRecoveryPdf } from "./recovery-pdf-node.js";
-import { decodeNodeKey } from "./paper-register-compact.js";
+import { decodeRecoveryKey } from "./recovery-key-code.js";
 import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
 
 const document: RecoveryDocument = {
@@ -61,18 +61,10 @@ async function inspect(bytes: Uint8Array, locale: "en" | "es") {
         ? "older sheets for older backups"
         : "hojas anteriores para copias anteriores",
     );
-    expect(text).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8");
-    expect(text).toContain("TKR0 K07W");
-    const key = text.match(/(?:Key|Clave): ([0-9A-Z ]{48})/)![1]!.trim();
-    const check = text.match(/(?:Check|Control): ([0-9A-Z]{4} [0-9A-Z]{4})/)![1]!;
-    expect(
-      await decodeNodeKey(
-        { encoding: "raw192", value: key, check },
-        document.scope,
-        "node-1",
-        "Caja principal",
-      ),
-    ).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    expect(text).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C");
+    expect(text).not.toMatch(/(?:Check|Control):/);
+    const key = text.match(/(?:Key|Clave): ([0-9A-Z ]{51})/)![1]!.trim();
+    expect(decodeRecoveryKey(key)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
     expect(text).not.toMatch(/allocation|register|signing|administrator|TLS|S000001|P000001/i);
     const attachments = await pdf.getAttachments();
     expect(attachments).toBeInstanceOf(Map);
@@ -152,9 +144,9 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
 });
 
 it.each(["en", "es"] as const)(
-  "prints the prior installation codes beside public identity in %s",
+  "prints this box's current installation code beside public identity in %s",
   async (locale) => {
-    const input = { ...document, installationCodes: ["06RB", "06RC"] };
+    const input = { ...document, installationCodes: ["06RB"] };
     const task = getDocument({
       data: await renderRecoveryPdf(input, locale, "Europe/Madrid"),
       useSystemFonts: false,
@@ -169,14 +161,20 @@ it.each(["en", "es"] as const)(
         .join(" ")
         .replace(/\s+/g, " ");
       expect(text).toContain(
-        locale === "en" ? "Installation codes 06RB, 06RC" : "Códigos de instalación 06RB, 06RC",
+        locale === "en" ? "Installation code 06RB" : "Código de instalación 06RB",
       );
       const attached = JSON.parse(
         new TextDecoder().decode((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!),
       );
-      expect(attached.installationCodes).toEqual(["06RB", "06RC"]);
+      expect(attached.installationCodes).toEqual(["06RB"]);
     } finally {
       await task.destroy();
     }
   },
 );
+
+it("refuses an ambiguous multi-code sheet instead of picking another box's code", async () => {
+  await expect(
+    renderRecoveryPdf({ ...document, installationCodes: ["06RB", "06RC"] }, "en", "Europe/Madrid"),
+  ).rejects.toThrow("Recovery PDF refused");
+});

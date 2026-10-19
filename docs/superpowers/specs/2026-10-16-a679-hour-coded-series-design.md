@@ -384,3 +384,23 @@ questions under “two PDF revision dependencies”. The check and reported list
 at this presentation checkpoint, pending those answers. The sheet still awaits viewing acceptance.
 See the [changed-check inventory](../../operations/a679-changed-checks.md#recovery-pdf-presentation-revision-2026-10-19)
 for the observed checks and their limits.
+
+## Owner PDF decisions, 2026-10-19
+
+This dated addition supersedes the 18 October installation-code list and the pending dependencies
+in the presentation checkpoint above. The owner approved both replacements through the watcher.
+
+Your sheet prints one recovery key with two trailing typo-check characters in the same field:
+41 characters, or 51 with grouping spaces. The underlying secret remains 192 bits. Manual entry
+checks typing errors; it no longer checks the business, node or key name as you type. Opening the
+selected backup still authenticates the full key. Importing a saved PDF still checks its public
+identification against the selected backup. The older register format remains readable separately.
+
+Your sheet prints only this node's current installation code. Enter that one four-character code
+in the recovery form. Completed-box reissue uses the current SIF identity rather than collecting
+other known codes. Backup and surviving-history checks still provide their own hour floors; the
+sheet no longer reports a newer code used by another box. Existing isolation and coordination
+requirements remain.
+
+The generated EN/ES A4 samples still require the owner's viewing approval before product landing.
+See [the qualification record](../../operations/a679-changed-checks.md#approved-pdf-dependencies-and-launch-checks-2026-10-19).

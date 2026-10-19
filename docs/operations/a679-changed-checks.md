@@ -2482,3 +2482,55 @@ proposal is not applied here. The earlier coverage, remaining entry/native
 acceptance, PDF decisions/viewing, protocol-retirement, integration, final-review and current-head
 CI gates remain open. Local receipts:
 `~/waitron-campaign-e/receipts/a679-retained-host-launch-20261019/`.
+
+## Approved PDF dependencies and launch checks, 2026-10-19
+
+The owner's 19 October watcher answers approve the combined key/check field, one current
+installation code, and the exact direct/supervised launch patch. This checkpoint resumes the
+03:26 firing, which stopped on model capacity with uncommitted changes; it does not treat those
+changes as already qualified. Source baseline: `3295698d708a524f4c928c2dcbea5f050ac9e55b`.
+
+| Check or fixture | Before → after; authority |
+| --- | --- |
+| `first-fiscal-launch.test.ts`, direct/supervised | Paper-input arrangement and `S000001` → owned hour/key-only setup and `06RB` at the existing controlled instant. The entire patch matches SHA-256 `7badf9e3c782eeb1daebab9c3dc75f6aaad208e33dda1a8f0207b2703d86443a` using `git diff --abbrev=7`. Exact owner approval, 19 October. Node/environment, successful provision body, restart signal and outside-file digests remain. The CLI declaration retains its original bytes and still fails. |
+| `completed-recovery-document.test.ts` | Printed and attached code list `06RB, 06RC, 06RD` → only current `06RB`; unrelated/duplicate history cannot replace it. Existing before/after counter snapshots, rejection cases, identities and saved-zone check remain. Owner's single-code answer. |
+| `recovery-document.boot.test.ts` | Reissued document's exact code list `06RB, 06RC` → `06RB`; the remaining boot/reissue checks remain. Same single-code authority. |
+| `recovery-pdf-node.test.ts` | Separate eight-symbol check → literal combined key, decoded to the same raw secret. Singular code label and attachment expectation; a new multi-code render case refuses ambiguity. Existing attachment equality, metadata digest, relocated bundle and font-fallback checks remain. Both PDF answers. |
+| `recovery-pdf.browser.test.ts` | Extracted rendered key/check pair and 47/57 lengths → one 41/51 value, no separate check label, same decoded secret. Long-label, attachment and reader assertions remain. Combined-key answer. |
+| `setup/recovery-hour.browser.test.ts` | Two-field key fixture → same secret in the combined field; key-change/race cases edit that field. Code-list fixture/proposal → one normalized code. Missing-code wording becomes singular. A new list-refusal case checks that Compare becomes disabled; checking Select alone did not distinguish the old behavior because editing invalidates its comparison. Both PDF answers; all isolation/late-answer/clock/refusal checks remain. |
+| `setup/recovery-hour.a11y.browser.test.ts` | Same combined-key fixture; existing state/theme/width accessibility and fit assertions remain. |
+| `setup/recovery-key.browser.test.ts` | Rendered combined value replaces rendered value/check pair. Changing that value still clears decoded authority; backup-change, removal, PDF import/refusal and draft checks remain. New cases cover paste/middle-edit selection and a single EN/ES field refusal. The latter failed twice on duplicate messages before removing the repeated component-level message; the parent form's summary remains. |
+| `setup/recovery-key.a11y.browser.test.ts` | Key-error selector moves from the removed check field to the combined field. Its error, accessibility and fit assertions remain. |
+| New `recovery-key-code.test.ts` | Literal encoding/decoding, malformed inputs, one fixture's exhaustive single-symbol substitutions and unequal adjacent swaps, raw-byte round trips, and a valid-checksum value with nonzero spare bits. The last case closes a measured codec coverage gap without changing its implementation or coverage configuration. |
+| `recovery-restore-input.test.ts`, two refused staged cases | Expected `placementStarted: true` → byte-for-byte equality with the staged request captured before execution. `restore-request.ts` restores the original marker on fresh admission refusal; retaining a started marker would request checked replay of an operation that admission refused. Domain errors, no outside collection for a wrong key, no hook, no trading identity and exact retained key assertions remain. This changes operational marker expectations under the 5 October interface-test decision; no fiscal identity/hash/counter/filing expectation changes. |
+
+The combined codec retains the 192-bit secret and adds two base-32 typo-check symbols using a
+modulo-1021 check. Manual entry does not bind a key to public identification; the selected backup
+performs full authentication. The PDF import path retains its public-identification comparison.
+The existing register codec and its consumers are unchanged in this checkpoint.
+
+Receipts: Lane E `receipts/a679-launch-approved-20261019` retains the interrupted firing's RED
+runs; `receipts/a679-resume-pdf-20261019` holds this firing's complete logs and patch inventories.
+The source browser family passes 91 cases, including the unchanged register PDF suite. The
+source recovery-module/staged-restore family passes 24 after its two marker failures. The
+protected/initial-hour/presentation/completed-document run passes 106 cases, including the
+20 unedited golden/immutability cases. Root module/error checks pass 3,168 cases. Codec-only
+coverage was 97.56% statements / 91.66% branches; after the spare-bit case its measured counts
+are 41/41 statements, 12/12 branches, 4/4 functions and 37/37 lines. This is one-file coverage,
+not package coverage.
+
+An independently installed clone catches and restores each serial omission: list splitting,
+checksum validation, selection of a different valid installation code, original staged-marker
+restoration and spare-bit validation. The initial whole-old-composer control reached the new
+multi-code rendering refusal before its identity assertions; the subsequent valid-code replacement
+fails the intended identity assertions instead. The original list-refusal case's passing old-code run is explicitly not a
+RED receipt. Updated tests catch that control at the Compare action. Restoration is checked
+before proceeding; full logs retain unsuccessful preparation runs as well as passing results.
+
+Real-code EN/ES A4 PDFs for Madrid and Canary time zones were rendered, extracted and visually
+inspected. Browser component previews cover both themes and 390/1280 widths, separately from
+native whole-app acceptance. The revised samples use synthetic keys; copying them to the
+owner's Drive is a viewing request, not approval. Whole A679 remains incomplete and unpublished:
+the unchanged CLI launch failure, remaining entry/native acceptance, coverage, protocol/prose
+retirement, current-main integration, both final installed Claude reviews, push hook, current-head
+CI and PDF viewing approval still gate landing.
