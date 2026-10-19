@@ -4053,13 +4053,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   whether the message should get a height cap (so the body keeps room for a field), padding inside
   its focus ring and an accessible name, then check them in a real browser.
 
-- **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner, 2026-10-17).**
-  At 390 px the variant table's menus are held on screen through the product editor
-  (`product-editor.test.ts`, "keeps every variant row's menu on screen at phone width"); the option
-  list form's table and the product editor's attached extras/options table have 390 px cases that
-  check where a row's menu sits, not that it stays on screen. Done when each of those two has a
-  390 px case holding every row menu's right edge to the screen's.
-  [Detail](backlog/dashboard.md#a827-check-that-row-menus-in-plain-tables-stay-on-screen-at-390-px)
+- **A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).**
+  `apps/dashboard/src/widgets/course-list.ts` also puts a `wt-row-actions` in a plain table. Its
+  390 px cases in `course-list.test.ts` check only that a row's menu sits on the first line of a
+  wrapping name, or level with the rename field, never where the menu ends. Done when it has a
+  390 px case holding every row menu's right edge to the screen's and to the box around its
+  table's.
 
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
   displayed name, with a separate seniority order for validation) and of the dashboard's

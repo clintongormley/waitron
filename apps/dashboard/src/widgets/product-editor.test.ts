@@ -3709,6 +3709,70 @@ it.each([
   },
 );
 
+it.each([
+  { locale: "en-GB", font: "default" },
+  { locale: "es-ES", font: "default" },
+  { locale: "en-GB", font: "Verdana" },
+  { locale: "es-ES", font: "Verdana" },
+])(
+  "keeps every attached extras and options row's menu on screen at 390 px ($locale, font: $font)",
+  async ({ locale, font }) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      const { el, host } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: {
+          ...product,
+          modifiers: [
+            { kind: "extras", id: "sauces" },
+            { kind: "options", id: "cooked" },
+            { kind: "extras", id: "shared" },
+          ],
+        },
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+        extraLists: [
+          {
+            ...extraLists[0]!,
+            name: "Sauces, dips and dressings made in the kitchen every morning, served cold",
+          },
+          { ...extraLists[1]!, name: "Panaderíaartesanaldelbarriodesdemilnovecientos" },
+        ],
+        optionLists: [optionLists[0]!],
+      });
+      if (font === "Verdana") {
+        const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+      }
+      await el.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const rows = attachedRows(el);
+      expect(rows).toHaveLength(3);
+      const wrap = rows[0]!.closest<HTMLElement>(".table-wrap")!;
+      expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+      const edge = wrap.getBoundingClientRect().right;
+      for (const [index, row] of rows.entries()) {
+        const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+        expect(menu.width, `row ${index} is drawn`).toBeGreaterThan(0);
+        expect(menu.right, `row ${index}`).toBeLessThanOrEqual(edge);
+        expect(menu.right, `row ${index} against the screen`).toBeLessThanOrEqual(
+          window.innerWidth,
+        );
+      }
+    } finally {
+      setLocale(previous);
+      await page.viewport(width, height);
+    }
+  },
+);
+
 // --- The parent's variants section ---
 
 function tableEvent(el: ProductEditor, name: string, detail: Record<string, unknown>) {
