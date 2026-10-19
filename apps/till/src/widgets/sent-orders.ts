@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, Gestures } from "@waitron/ui";
+import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import { addDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { CurrentOrderRow, CurrentOrders } from "../api/client.js";
@@ -460,11 +460,14 @@ export class TillSentOrders extends LitElement {
   #money(value: string): string {
     return formatMoney(decimal(value), currentLocale());
   }
+  #quantity(value: string): string {
+    return formatDecimalInput(trimQuantity(value), currentLocale());
+  }
   #what(row: CurrentOrderRow, quantity: string): TemplateResult {
     return html`<span class="what"
       >${row.name}${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}
-      ×${quantity}
-      ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${extra.quantity}</span>`)}
+      ×${this.#quantity(quantity)}
+      ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${formatDecimalInput(extra.quantity, currentLocale())}</span>`)}
       ${row.note === null ? nothing : html`<span class="note">${t("line.note.label")}: ${row.note}</span>`}
     </span>`;
   }
@@ -556,7 +559,7 @@ export class TillSentOrders extends LitElement {
       }
     return [...counts]
       .sort(([a], [b]) => this.#courseOrder(a) - this.#courseOrder(b))
-      .map(([id, quantity]) => `${this.#courseName(id)} (${quantity})`)
+      .map(([id, quantity]) => `${this.#courseName(id)} (${this.#quantity(quantity)})`)
       .join(" · ");
   }
   #heldGroup(entry: SentPanel["held"][number]): TemplateResult {
@@ -683,10 +686,10 @@ export class TillSentOrders extends LitElement {
       return nothing;
     const counts = model.counts;
     const summary = t("table.sent_counts")
-      .replace("{ready}", counts.ready)
-      .replace("{firing}", counts.firing)
-      .replace("{held}", counts.held)
-      .replace("{served}", counts.served);
+      .replace("{ready}", this.#quantity(counts.ready))
+      .replace("{firing}", this.#quantity(counts.firing))
+      .replace("{held}", this.#quantity(counts.held))
+      .replace("{served}", this.#quantity(counts.served));
     const fired = model.fired;
     return html`<section
       class="panel${model.attention ? " attention" : ""}${this.expanded ? " expanded" : ""}"
@@ -725,7 +728,7 @@ export class TillSentOrders extends LitElement {
                     this.servedOpen = !this.servedOpen;
                   }}
                 >
-                  ${t("table.served_title")} · ${counts.served} ·
+                  ${t("table.served_title")} · ${this.#quantity(counts.served)} ·
                   ${this.#money(model.subtotals.served)}
                 </button>
                 ${

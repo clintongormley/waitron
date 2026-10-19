@@ -396,6 +396,120 @@ it("shows exact Spanish counts, ready age and charged cancellations without a mi
   expect(find(el, "[data-served-line=Cancelado]").textContent).toContain("Cancelado, cobrado");
 });
 
+it.each([
+  ["en", "0.125 ready · 0.25 firing · 0.375 held · 0.625 served", "0.625"],
+  ["es", "Listos: 0,125 · Marchados: 0,25 · En espera: 0,375 · Servidos: 0,625", "0,625"],
+] as const)("formats fractional Sent counters in %s", async (locale, summary, served) => {
+  setLocale(locale);
+  const el = await mount(
+    current(
+      [
+        row("ready", { quantity: "0.125", unitPrecision: 3, readyAt: at(59) }),
+        row("firing", { quantity: "0.250", unitPrecision: 3 }),
+        row("served", { quantity: "0.500", unitPrecision: 3, servedQuantity: "0.500" }),
+        row("charged", { quantity: "0.125", unitPrecision: 3, cancelledQuantity: "0.125" }),
+      ],
+      [group("g", [row("held", { quantity: "0.375", unitPrecision: 3, released: false })])],
+    ),
+  );
+  expect(find(el, ".summary").textContent).toBe(summary);
+  expect(find(el, "[data-served-toggle]").textContent).toContain(` · ${served} ·`);
+  await click(el, "[data-sent-toggle]");
+  expect(open(el)).toBe("false");
+  expect(find(el, ".summary").textContent).toBe(summary);
+});
+
+it.each([
+  ["en", "Mains (0.375) · Desserts (2)"],
+  ["es", "Mains (0,375) · Desserts (2)"],
+] as const)("formats fractional held-course totals in %s", async (locale, summary) => {
+  setLocale(locale);
+  const data = current(
+    [],
+    [
+      group("g", [
+        row("first", { courseId: "m", quantity: "0.125", unitPrecision: 3, released: false }),
+        row("second", { courseId: "m", quantity: "0.250", unitPrecision: 3, released: false }),
+        row("dessert", { courseId: "d", quantity: "2.000", released: false }),
+        row("companion", {
+          courseId: "m",
+          quantity: "0.625",
+          unitPrecision: 3,
+          released: false,
+          workingOrderId: "b2",
+        }),
+      ]),
+    ],
+  );
+  data.retainedCourses = [
+    { id: "d", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+    { id: "m", name: "Mains", displayOrder: 1, heldUntilFired: true },
+  ];
+  const el = await mount(data);
+  await click(el, "[data-sent-toggle]");
+  expect(find(el, "[data-held-toggle]").textContent).toContain(summary);
+});
+
+it.each([
+  ["en", "0.125", "0.25", "0.5", "0.375", "0.625"],
+  ["es", "0,125", "0,25", "0,5", "0,375", "0,625"],
+] as const)(
+  "formats fractional Sent dishes and extras in %s without changing service quantities",
+  async (locale, ready, firing, served, held, companion) => {
+    setLocale(locale);
+    const el = await mount(
+      current(
+        [
+          row("ready", {
+            name: "Queso 1.5, × maduro",
+            quantity: "0.125",
+            unitPrecision: 3,
+            readyAt: at(59),
+            extras: [
+              {
+                lineId: "extra",
+                name: "Salsa 0.5, × suave",
+                quantity: "0.250",
+                netAmount: "0.50",
+                unitPriceGross: "2.00",
+                priceQuantity: "1.000",
+              },
+            ],
+          }),
+          row("firing", { quantity: "0.250", unitPrecision: 3 }),
+          row("served", { quantity: "0.500", unitPrecision: 3, servedQuantity: "0.500" }),
+          row("charged", { quantity: "0.125", unitPrecision: 3, cancelledQuantity: "0.125" }),
+        ],
+        [
+          group("g", [
+            row("held", { quantity: "0.375", unitPrecision: 3, released: false }),
+            row("companion", {
+              quantity: "0.625",
+              unitPrecision: 3,
+              released: false,
+              workingOrderId: "b2",
+            }),
+          ]),
+        ],
+      ),
+    );
+    const text = (selector: string) => find(el, selector).textContent!.replace(/\s+/g, " ").trim();
+    expect(text("[data-fired-line=ready] .what")).toBe(
+      `Queso 1.5, × maduro ×${ready} Salsa 0.5, × suave ×${locale === "en" ? "0.250" : "0,250"}`,
+    );
+    expect(text("[data-fired-line=firing] .what")).toBe(`firing ×${firing}`);
+    await click(el, "[data-served-toggle]");
+    expect(text("[data-served-line=served] .what")).toBe(`served ×${served}`);
+    expect(text("[data-served-line=charged] .what")).toBe(`charged ×${ready}`);
+    await click(el, "[data-held-toggle]");
+    expect(text("[data-held-line=held] .what")).toBe(`held ×${held}`);
+    expect(text("[data-companion=companion] .what")).toBe(`companion ×${companion}`);
+    const calls = collect(el, "serve-lines");
+    await click(el, "[data-serve-line=ready]");
+    expect(calls).toEqual([{ items: [{ lineId: "ready", quantity: "0.125" }] }]);
+  },
+);
+
 it("keeps a future snooze quiet and offers Clear snooze while collapsed", async () => {
   const data = current(
     [],

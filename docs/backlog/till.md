@@ -1557,6 +1557,11 @@ visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
 
+Sent's counters, Served and Held headings, dish slices, companions and extras use the screen's
+decimal mark. Extras retain their stored decimal places. The fractional native-browser cases in
+`apps/till/src/widgets/sent-orders.test.ts` cover both languages, leave punctuation in names alone
+and check that serving still emits the exact dot-decimal quantity.
+
 The group Fire confirmation formats quantities in the screen's language without rewriting dish
 names. It uses active dish rows from every bill in the group, subtracting cancelled quantities.
 If those rows are incomplete or disagree with the server's summary, it retains the full server
@@ -2183,9 +2188,6 @@ The remaining work includes:
   till trial and final whole-branch validation and review before publication. Read the campaign's
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
   checks as whole-item acceptance.
-- In Spanish, Sent's fractional counters, held-section quantities and dish quantities still show
-  a decimal point. The Fire confirmation's locale formatting does not change those labels;
-  include them in the remaining screen acceptance.
 
 The approved [courses/groups spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
 and [one-editor-per-bill amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
