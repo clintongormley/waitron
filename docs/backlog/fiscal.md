@@ -239,6 +239,29 @@ owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement tha
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
+## Finish first Live setup integration
+
+PR #1752's first complete CI run, [39267628062](https://github.com/clintongormley/waitron/actions/runs/39267628062),
+tests head `9e8cb90e7c1a4e0b74e419b66719b54ca06b95cc` and fails. The normal push
+hook and fiscal package pass; the overall branch is not ready to land.
+
+Complete the remaining test integration before claiming package-wide acceptance. Composition
+and server cases still submit signed allocations or serial candidate proposals to the new hour
+interfaces. Other cases still expect the retired offline tool or the earlier installation names.
+Trace each failing path and preserve its behavioral checks when adapting the inputs. Do not
+restore the retired production dispatcher, bypass a gate, or label every failure as a stale test
+without running it. Existing fiscal expectations need the queue's exact-line approval.
+
+The recovery-form helpers and source PDF check now use the approved single field with its two
+check characters. Their complete suites pass locally, as does setup's full coverage run. These
+corrections do not qualify the remaining server or composition cases.
+
+Provisioning also needs its own bounded CI scheduling. `test-light-a` reaches its ten-minute
+job limit while still reporting advancing provisioning files. The package's one-worker setting
+addresses coverage merging, so do not raise it or the time limit as a shortcut. Divide the work
+and retain the coverage gate. Its earlier local full run took 431 seconds; that does not establish
+that the shared CI job fits its budget.
+
 ## Pin the clock's future-finished sample refusal
 
 A679's first final installed review replaced

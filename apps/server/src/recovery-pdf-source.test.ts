@@ -56,8 +56,8 @@ it.each(["en", "es"] as const)(
         locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
       );
       expect(text).toContain("Olivo Restauración SL");
-      expect(text).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8");
-      expect(text).toContain("TKR0 K07W");
+      expect(text).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C");
+      expect(text).not.toContain("TKR0 K07W");
       const bytes = await pdf.getAttachmentContent("waitron-recovery-key-v1.json");
       expect(JSON.parse(new TextDecoder().decode(bytes!))).toEqual(document);
     } finally {

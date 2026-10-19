@@ -322,6 +322,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   attached, before any build.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
+- **A679. Finish first Live setup integration.** PR #1752 remains a draft after its first
+  complete CI run. Migrate the remaining old protocol test inputs without losing behavioral
+  assertions, obtain exact fiscal-check approvals, and split provisioning's CI work to fit
+  the job budget. [Detail](backlog/fiscal.md#finish-first-live-setup-integration).
+
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal
   and its legitimate-order positive without changing clock policy.

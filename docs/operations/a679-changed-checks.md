@@ -3276,3 +3276,26 @@ The unchanged root consumer suite passes 22; the two real helper suites pass all
 This is a test-harness path correction following Task12's normal hook, not a change to fiscal
 behavior or to the guard. The production tree reviewed by both seats remains unchanged.
 The retry still must pass the complete hook and literal-current-head CI.
+
+## Complete-CI single-field fixture correction, 2026-10-19
+
+The first full CI run reports five recovery-browser failures and two source-PDF failures.
+The two browser helpers still fill the removed separate check field. They now type the full
+literal `06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C` into the single
+field. Every assertion on the decoded secret, clear behavior, refused-field message and bound
+archive/bucket/Cloud credentials remains. The source-PDF check now requires that full literal
+and the absence of the former separate `TKR0 K07W` check. Its exact embedded attachment check
+remains. Authority is the owner's 19 October single-field/two-character decision; no installation,
+series, counter, fiscal record, permission or password-refusal expectation changes.
+
+In a frozen-installed disposable copy, the original browser files report five failures and two
+passes; after the helper correction all seven pass. The original source-PDF file reports two
+failures; the corrected file passes both. Removing the encoder's two check characters fails both
+PDF assertions. Refusing the valid typed key fails five browser behavioral assertions. Restoring
+each fault restores the corresponding complete suite. The source checkout passes seven browser
+and two PDF cases. These checks do not qualify the remaining full-CI failures.
+
+The two separate demo/development installation checks remain unchanged in the feature branch.
+A tested exact patch pins 16 October 2026 11:40 UTC and replaces `S000001` with `06RB` and its
+three corresponding series. It passes all fourteen cases in the disposable copy and is awaiting
+the queue's explicit fiscal-check approval. It is not part of this committed change.
