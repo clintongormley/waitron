@@ -2295,6 +2295,15 @@ The original six-choice mock-up page now points to the owner's
 2026-10-17 answers while preserving the proposal and drawings. These changes close those prose
 findings; they do not complete the whole-branch audit or the remaining work above.
 
+The client-contract audit also covers the older line-Recall route: `recallLines` requires an
+explicit bill editing observation, or `null` for a counter order, and sends it with the line
+numbers. `recallToDraft` exposes the server's returned `edit` alongside its draft and party
+revision. The request-body and compiler checks are in `client.recall-ownership.test.ts`.
+Continue with `TillApi.setMakeAt` and `till-app.ts`'s `#askStoredDeadEnds`: the client still sends
+only the order revision and station choices, while the route checks `expectedEdit` for a table
+bill. Follow all three callers, retain the original observation through the question and retry,
+and test changed ownership before writing. This remains part of T24, not a new queued item.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured

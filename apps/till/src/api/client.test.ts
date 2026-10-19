@@ -2435,10 +2435,12 @@ describe("TillApi", () => {
     });
   });
 
-  it("recallLines POSTs { lineNos } to the tab's /lines/recall route (empty 200 body)", async () => {
+  it("recallLines POSTs line numbers and an explicit counter observation to /lines/recall", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
-    await expect(new TillApi("", fetchStub).recallLines("wo-1", [2, 3])).resolves.toBeUndefined();
+    await expect(
+      new TillApi("", fetchStub).recallLines("wo-1", [2, 3], null),
+    ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo-1/lines/recall",
@@ -2446,7 +2448,7 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lineNos: [2, 3] }),
+        body: JSON.stringify({ lineNos: [2, 3], expectedEdit: null }),
       }),
     );
   });
@@ -2458,9 +2460,9 @@ describe("TillApi", () => {
       }),
     );
 
-    await expect(new TillApi("", fetchStub).recallLines("wo-1", [2, 3])).rejects.toMatchObject({
-      code: "ticket.already_started",
-    });
+    await expect(
+      new TillApi("", fetchStub).recallLines("wo-1", [2, 3], null),
+    ).rejects.toMatchObject({ code: "ticket.already_started" });
   });
 
   describe("adjustments (service plan Task 11)", () => {

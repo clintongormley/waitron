@@ -4189,16 +4189,15 @@ export class TillApi {
     });
   }
 
-  /**
-   * UN-send not-yet-started lines of an open tab → `POST /api/working-orders/:orderId/lines/recall`, the
-   * inverse of {@link sendLines}. NON-FISCAL; a previously-fired line gets a RECALLED correction slip.
-   * Rejects `tab.not_open`, `tab.line_not_found`, `ticket.already_started` (the kitchen has started
-   * it), or `ticket.already_fired` (the venue does not allow changes to sent items and a line with a
-   * ticket item has been sent — a recalled line still counts as sent); a held line never sent changes
-   * nothing but the order's revision.
-   */
-  async recallLines(orderId: string, lineNos: number[]): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
+  async recallLines(
+    orderId: string,
+    lineNos: number[],
+    expectedEdit: BillEditExpected | null,
+  ): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", {
+      lineNos,
+      expectedEdit,
+    });
   }
 
   getCancellation(
@@ -4233,7 +4232,7 @@ export class TillApi {
     lineId: string,
     command: GroupCommand & { expectedEdit: BillEditExpected },
     options: ReadOptions = {},
-  ): Promise<{ revision: number; draft: Draft }> {
+  ): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
     return this.#request(
       `/api/parties/${partyId}/lines/${lineId}/recall`,
       "POST",

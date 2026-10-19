@@ -2223,6 +2223,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   availability from recalled bill rows and points to the modifier-save rules. Recheck subsequent
   main changes before the final whole-branch review, push and CI. The direct group-submission client
   type now requires the bill's editing state, matching the server's existing refusal contract.
+  The line-Recall client also carries that observation, and Recall to New order exposes the
+  returned editing state. Audit the stored-station-choice client and its callers next; that
+  separate request still omits the observation required for a table bill.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
