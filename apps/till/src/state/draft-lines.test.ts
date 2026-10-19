@@ -488,7 +488,7 @@ describe("fromDraftLine", () => {
 
       const rebuilt = fromDraftLine(saved(input, "2.000"), measured);
 
-      expect(toDraftLineInput(rebuilt)).toEqual(input);
+      expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
       expect(rebuilt.extras).toEqual([
         { listId: "toppings", productId: "p-cheese", name: "", price: "0.00", quantity: 2 },
         { listId: "toppings", productId: "p-bacon", name: "", price: "0.00", quantity: 1 },

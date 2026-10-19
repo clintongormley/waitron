@@ -85,9 +85,8 @@ Ranked by the owner on 2026-10-16, for the time they are away (17 October to 2 N
 is its own brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 Everything not listed here needs more spec work first.
 
-1. **A773 — courses, groups and the pass** (_The till, devices and table service_). A773-1, the
-   table screen's unsent list, has a plan; A773-2, firing and the pass, is planned once A773-1
-   lands.
+1. **A773-2 — firing and the pass** (_The till, devices and table service_). Plan the remaining
+   kitchen and pass work from the approved design, following A773-1's Sent and New order panel.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A682 — translations: nothing required, every missing name reported, all languages side by
