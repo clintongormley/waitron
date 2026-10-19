@@ -72,9 +72,8 @@ export class WtDialog extends LitElement {
         background: var(--wt-color-scrim);
       }
 
-      /* Flex shrinking is shared out by factor times height, so only a factor this far above the
-         footer's 1 makes a long body give up its height, down to its padding, before the footer's
-         message gives up any. */
+      /* Flex shrinking is shared out by factor times base size, so this factor makes a long body give
+         up its height, down to its padding, before the footer's message gives up any. */
       .body {
         padding: var(--wt-space-5);
         min-height: 0;

@@ -1368,7 +1368,7 @@ it("sends a null colour when No colour is chosen from a row's square", async () 
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["d", { color: null }]]);
 });
-it("keeps a refused colour in the chooser, under it, with the form's message above the buttons", async () => {
+it("keeps a refused colour in the chooser, under it, with the form's message in the footer", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.updateCategory).mockRejectedValueOnce({
     code: "category.invalid",
@@ -1460,7 +1460,7 @@ it("sends a null default when No colour is chosen from All products' square", as
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(vi.mocked(el.api.saveCatalogueDefaultColor).mock.calls).toStrictEqual([[null]]);
 });
-it("keeps a refused default colour in the chooser, under it, with the form's message above the buttons", async () => {
+it("keeps a refused default colour in the chooser, under it, with the form's message in the footer", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.saveCatalogueDefaultColor).mockRejectedValueOnce({
     code: "category.invalid",
