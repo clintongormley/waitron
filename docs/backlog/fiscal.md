@@ -259,13 +259,17 @@ directory targets plus a valid resume that retains placed rows and counters. No 
 assertion changes. In an independently installed checkout, omitting the early check fails the two
 refusal assertions; the restored cases pass.
 
-The existing crash suite remains red pending exact approval of its 18-case live replacement.
-The replacement uses a real source invoice, selected-hour intent, actual killed subprocesses,
-rollback, wrong-key/source refusals and replay with advanced counters. The proposal is outside
-the feature checkout; its before/after inventory and literal two-file bundle are in Lane E's
-questions. The separate Cloud suite still reports six failures and one pass because its signed
-Cloud/paper restore inputs reach the retired dispatcher. Give those cases their own current-flow
-treatment without restoring that dispatcher or removing their behavioral protection.
+The owner approved the exact 18-case live crash replacement, and it is applied. Its source run
+passes all 18 cases after the rebase. It uses a real source invoice, selected-hour intent,
+actual killed subprocesses, rollback, wrong-key/source refusals and replay with advanced counters.
+Removing committed-result verification in the installed candidate makes both marker-without-commit
+cases resolve incorrectly; restoring it passes both.
+
+The separate Cloud suite still reports six failures and one pass because its signed Cloud/paper
+restore inputs reach the retired dispatcher. Give those cases their own current-flow treatment
+without restoring that dispatcher. The live replacement and exact before/after assertion inventory
+remain outside the feature checkout until approved. Its signed fixtures must pass their real
+protocol readers before their rejection counts as evidence about retirement.
 
 Retained historical checks do not qualify a current production success. Existing source and
 built-command hour qualifications, the 150-case recovery run and completed reviews have separate

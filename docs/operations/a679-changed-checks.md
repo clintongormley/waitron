@@ -3604,3 +3604,33 @@ The 18-case crash replacement remains an unapplied exact proposal; omitting comm
 verification in that candidate makes both marker-without-commit cases resolve incorrectly.
 The Cloud suite still reports six failures and one pass at its retired signed-input boundary.
 These receipts do not establish whole-package coverage, final-head CI or landing readiness.
+
+
+## Exact live crash-recovery approval applied, 2026-10-19
+
+The owner's later approval covers exactly the two-file bundle
+`f32f0350188dde4a0411d2e8088eaba43df75573e96c7fdf7d9478ab2dbfa466`.
+Both applied files match their approved bytes. This closes the crash-proposal status above;
+it does not approve any Cloud-suite rewrite.
+
+`restore-emergency-crash.e2e.test.ts` retains 18 expanded cases across eight families.
+`testing/staged-hour-crash.ts` supplies a real source invoice, actual initial/current hour
+activation and retained backup files for both archive and stream staging. The exact local
+inventory lists 68 old and 71 new assertion expressions and every case-table/loop expansion;
+those syntax counts do not establish equal behavior.
+
+The old outside-result fault now fails the actual restored credentials temporary write before
+trading identity publication. The old outside-consumed crash point now kills after the live
+hour intent has been persisted. The before-commit point still kills the process inside the real
+hook transaction. Missing intent replaces the retired outside-uncertainty declaration; wrong
+node keys and changed sources still refuse without changing committed rows. Replay cases
+advance all counters to 917, retain their complete rows, and issue the next sale under the new
+SIF at that counter. The prior invoice remains exact. The spent-hour cases retain 06RC intent,
+refuse another event in that hour and activate 06RD only after moving to the next hour.
+
+The source run passes all 18 crash cases after rebasing onto `b6db40ce1`. The earlier six-file
+source selection passes 84 cases on that same base; module-contract checks pass 15 and the
+unedited protected pair passes 20. The installed omission controls failed their intended
+assertions and passed after restoration. Synthetic release and HTTPS clock responses qualify
+the bundled subprocess path, not real internet, Cloud or hardware operation. Final-head CI and
+the separate Cloud-suite integration remain open.
