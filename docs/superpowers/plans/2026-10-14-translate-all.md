@@ -13050,6 +13050,10 @@ git commit -s -m "Document Translate all and update the backlog for what it fini
 
 ### Task 21: End-to-end check on the Santet venue against a local Waitron Cloud
 
+> **2026-10-19:** Cloud now answers collect one page at a time, so this check is adapted to paging
+> and run as PR 2 of [the collect-pages plan](2026-10-19-translate-all-collect-pages.md); PR 1
+> there makes the box fetch the pages.
+
 **Needs Waitron Cloud's side to exist.** Do not start this task until the Cloud repository's Translate all work has landed on its `main` (its four routes, the worker, and the `servicesVersion: 2` reply) and its local runner starts. If it has not, stop here and leave the backlog entry from Task 20 in place.
 
 **Files:** none changed unless the check finds a defect (then fix it test-first in the task that owns the code, and re-run this check).

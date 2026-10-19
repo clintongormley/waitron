@@ -684,8 +684,19 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 Waitron's side of Translate all (A689, plan tasks 1 to 20) is on `main`, tested only against the
 fake Cloud in `apps/server/test/translation-cloud-fixture.ts`. Task 21 of
 [the plan](../superpowers/plans/2026-10-14-translate-all.md) runs it on the Santet venue against a
-local Cloud. It needs Cloud's side on Cloud's `main` first: its four translation routes, its worker
-and the `servicesVersion` 2 configuration reply.
+local Cloud. Cloud's side is on Cloud's `main`: its four translation routes, its worker, the
+`servicesVersion` 2 configuration reply, and collect answering one page of at most 16 MiB at a time (Cloud's `packages/translation/src/collect-page.ts`).
+A689-21 made the box fetch and store those pages
+([its plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md), PR 1). What is left
+is that plan's PR 2:
+
+- **2a, the Santet run**, Task 21 adapted to paging, with Cloud's fake provider making the result
+  larger than one page. Its record is a docs-only commit.
+- **2b, the joint fault proof** Cloud's release gate asks for. Its contract's words: "Do not go
+  live until pinned Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss
+  retry, deduplication, bounded decoded reads and release only after durable completion." The plan
+  recommends a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`, built on Cloud's
+  side (open question 4).
 
 - **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
   the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid
@@ -705,6 +716,42 @@ and the `servicesVersion` 2 configuration reply.
   Cloud's spec still says "proposed" until its first implementation change updates it.
 - **When the check passes**, delete this entry (Task 21, Step 7); otherwise each failure becomes
   its own entry.
+
+## Translate all: shared collect-page test vectors
+
+- **Translate all: shared collect-page test vectors.** The fake Cloud's paging
+  (`apps/server/test/translation-cloud-fixture.ts`) follows Cloud's
+  `packages/translation/src/collect-page.ts`, but nothing in either repository compares them; the
+  shared translation vector (`apps/server/test/cloud-translation-vector.json`) covers submit
+  signing only. Vectors Cloud generates from fixed items, outcomes and
+  a byte budget, checked by both Cloud's `collectPage` and Waitron's fake, would catch drift in CI
+  on both sides. One drift they would catch: the fake reads a signed body's job id with a stricter
+  key-order check (`jobIdIn`) than Cloud, which sorts the keys (Cloud's
+  `packages/translation/src/machine.ts`). A contract change for Cloud's side (plan
+  `docs/superpowers/plans/2026-10-19-translate-all-collect-pages.md`, "2b and what can be
+  automated").
+
+## Translate all: a job that ends before any page is stored does not count its items as lost
+
+- **Translate all: a job that ends before any page is stored does not count its items as lost.**
+  When a job ends after at least one page is stored, `recordSuggestionJobEnded`
+  (`packages/catalogue/src/content-suggestion-jobs.ts`) counts every item not yet received as one
+  that could not be done, so the notice says so. A job that ends before any page is stored (Cloud
+  expired it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its
+  last progress reading, usually no failures. Such a job has stored no suggestions, so the notice
+  appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
+  Left out of A689-21 as wider than its plan's Decision 8.
+
+## Translate all: collect's 120-second deadline per page awaits the owner
+
+- **Translate all: collect's 120-second deadline per page awaits the owner.** A689-21 raised
+  collect's read deadline from 30 s to 120 s a page (`LIMITS`, `apps/server/src/cloud-translation.ts`),
+  the default of its plan's open question 1: enough for a 16 MiB page at about 1.1 Mbit/s. The
+  other choices were keeping 30 s, which a 12 MiB page over a 2 Mbit/s link (about 50 s) misses
+  every time, or no fixed deadline, only a stalled-stream timeout. Its other three open questions were built on
+  their defaults too: an interrupted walk's suggestions are kept; the Santet run uses Cloud's fake
+  provider; the joint fault proof is a Cloud script. The owner is away until 2 November; delete
+  this entry when the owner confirms, or change what the owner overrides.
 
 ## A655 — fewer and slimmer columns on Products
 
@@ -753,7 +800,8 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   Cloud can still hold it.** The box ends a job without asking Cloud when the job's own 24-hour
   clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
   no longer lists the service `ready`, or the connection is revoked), and when a status or collect
-  call is refused as a request Cloud will never accept (ended `rejected`). Cloud's 24 hours run
+  call is refused as a request Cloud will never accept, and when a job's last page leaves an item
+  unaccounted for (both ended `rejected`). Cloud's 24 hours run
   from its own submit, or from when the job finished, so it can still hold the job, and while that
   job is queued or running the contract's `translation_job_running` refuses the venue's next
   submit. A release would not end a queued or running job (Cloud answers 409

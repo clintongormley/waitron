@@ -994,11 +994,31 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud once
-  Cloud's side exists** (plan `docs/superpowers/plans/2026-10-14-translate-all.md`, Task 21; left
-  open by A689's fifth PR). Cloud's `servicesVersion` 2 must be deployed before a box built from
-  `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)).
+- **Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud**
+  (plan `docs/superpowers/plans/2026-10-14-translate-all.md`, Task 21, adapted to paging as PR 2 of
+  `docs/superpowers/plans/2026-10-19-translate-all-collect-pages.md`). Cloud's side, paging
+  included, is on Cloud's `main`, and the box now fetches results one page at a time (A689-21).
+  Left: the recorded Santet run, and the joint fault proof Cloud's release gate asks for. Cloud's
+  `servicesVersion` 2 must be deployed before a box built from `main` talks to it
+  ([cloud-connection.md](developers/cloud-connection.md)).
   [Detail](backlog/catalogue.md#translate-all-run-the-end-to-end-check-on-the-santet-venue-against-a-local-waitron-cloud)
+
+- **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
+  (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and
+  both sides check would catch drift in CI. A contract change for Cloud's side.
+  [Detail](backlog/catalogue.md#translate-all-shared-collect-page-test-vectors)
+
+- **Translate all: a job that ends before any page is stored does not count its items as lost.**
+  It keeps the counts of its last progress reading, usually no failures, so the notice for an
+  earlier job's waiting suggestions does not say these items could not be done (A689-21, plan
+  Decision 8's limit).
+  [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-page-is-stored-does-not-count-its-items-as-lost)
+
+- **Translate all: collect's 120-second deadline per page awaits the owner.** A689-21 built the
+  plan's default for its open question 1 (120 s, `LIMITS` in `apps/server/src/cloud-translation.ts`;
+  was 30 s), and its other three open questions on their defaults too; the owner is away until
+  2 November. If the owner chooses otherwise, change the limit and its test.
+  [Detail](backlog/catalogue.md#translate-all-collects-120-second-deadline-per-page-awaits-the-owner)
 
 - **Loose ends left by A689's fifth PR.**
   - Translate all: a "Use fix" button for a spelling fix to a name someone entered; it waits for
