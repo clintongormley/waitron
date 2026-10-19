@@ -7,6 +7,7 @@ import {
   validateMenuTimetables,
   validateRoutingConfiguration,
 } from "./configuration-transfer.js";
+import { MAX_SERVICE_STEPS } from "./service-step-limits.js";
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
@@ -2037,6 +2038,23 @@ describe("validateServiceSteps", () => {
   ])("refuses a position %s", (_label, overrides) => {
     expect(() => validate(bundle([stepRow(overrides)]))).toThrowError(
       refusal("service_steps.position"),
+    );
+  });
+
+  const many = (count: number, department: string): Row[] =>
+    Array.from({ length: count }, (_, position) =>
+      stepRow({ department_id: department, position, name: `Step ${position}` }),
+    );
+
+  it("accepts as many steps for one department as its save does, beside another's", () => {
+    expect(() =>
+      validate(bundle([...many(MAX_SERVICE_STEPS, RESTAURANT), ...many(1, DELI)])),
+    ).not.toThrow();
+  });
+
+  it("refuses more steps for one department than its save accepts", () => {
+    expect(() => validate(bundle(many(MAX_SERVICE_STEPS + 1, RESTAURANT)))).toThrowError(
+      refusal("service_steps"),
     );
   });
 

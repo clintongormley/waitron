@@ -15,6 +15,7 @@ import { layerPaint, type PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
 import { SERVICE_STEP_STARTS } from "./schema/service-steps.js";
+import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { parseSeasonStart, seasonOn } from "./season-rules.js";
 import {
   firstSkippedEnd,
@@ -714,8 +715,12 @@ function validateServiceSteps(tables: Tables): void {
   const courses = ids(tables.kitchen_courses);
   const starts: readonly unknown[] = SERVICE_STEP_STARTS;
   const lowest = new Map<unknown, number>();
+  const counts = new Map<unknown, number>();
   for (const row of tables.service_steps ?? []) {
     if (!departments.has(row.department_id)) refuse("service_steps.department_id");
+    const count = (counts.get(row.department_id) ?? 0) + 1;
+    if (count > MAX_SERVICE_STEPS) refuse("service_steps");
+    counts.set(row.department_id, count);
     if (typeof row.name !== "string" || row.name === "" || row.name.trim() !== row.name)
       refuse("service_steps.name");
     const position = row.position;
@@ -733,7 +738,7 @@ function validateServiceSteps(tables: Tables): void {
       typeof minutes !== "number" ||
       !Number.isInteger(minutes) ||
       minutes < 0 ||
-      minutes > 120 ||
+      minutes > MAX_SERVICE_STEP_MINUTES ||
       (row.start === "since_last_order" && minutes < 1)
     )
       refuse("service_steps.minutes");
