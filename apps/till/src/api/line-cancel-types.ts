@@ -29,6 +29,7 @@ export interface CancelItemRequest {
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
   preparationStarted?: boolean;
+  refundHandoff?: boolean;
   expectedPartyRevision: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;

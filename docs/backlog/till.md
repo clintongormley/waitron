@@ -2276,8 +2276,13 @@ The remaining work includes:
   an old reply cannot replace a reopened dialog's reasons. A server note-required refusal reveals
   the required field, retaining the selected reason. Changed kitchen facts clear the reason and
   note; equivalent reads retain them. The off-bill choice still uses the existing adjustment
-  window. Its integration, revised paid choices and refund-PIN handoff, and paid-table
-  unserved-dish resolution remain open. The new record uses today's adjustment schema; A758 still owns its later report
+  path. Paid cancellation uses one Refund tick and the filed dish value, with Refund initially
+  selected only before preparation. Cancel and refund checks refund permission before any kitchen
+  cancellation and opens the existing approver prompt after a refusal. The PIN is sent with that
+  cancellation request; the later money request keeps its independent public approval and retry
+  flow. Mixed-payment refund choices follow the device's cash, hand-keyed-card and connected-card
+  actions, while pending refunds remain inspectable. Paid-table unserved-dish resolution remains
+  open. The new record uses today's adjustment schema; A758 still owns its later report
   changes, including crediting zero-reduction cancels, and the preparation flag migration.
   The earlier picture-03 implementation is not the completed revised design. A758's later slices
   own the changed reason rules, starter list, reports and filled refund screen.

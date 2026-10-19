@@ -866,7 +866,7 @@ interface CancellingItem {
   refusalField?: "reason" | "note" | null;
   approval?: {
     choice: CancelItemChoice;
-    role: NonNullable<AdjustmentPreview["needsApproval"]>;
+    role: NonNullable<AdjustmentPreview["needsApproval"]> | null;
     authorizers: StaffMember[];
     error: string | null;
   };
@@ -6566,6 +6566,19 @@ export class TillApp extends LitElement {
     });
   }
 
+  #refundMethodAllowed(row: RefundableTender): boolean {
+    return (
+      (row.method === "cash" || row.method === "card") &&
+      this.capabilities.includes(
+        row.method === "cash"
+          ? "take-cash"
+          : row.manual
+            ? "hand-keyed-card-payment"
+            : "integrated-card-payment",
+      )
+    );
+  }
+
   #hasRefundableTenders(): boolean {
     if (this.historicalReceipt?.kind !== "invoice" || this.#tenderRefundSession === undefined)
       return false;
@@ -6578,7 +6591,8 @@ export class TillApp extends LitElement {
       (row) =>
         (row.method === "cash" || row.method === "card") &&
         (row.pendingRefundId !== null ||
-          compareDecimal(moneyPlus(row.appliedRemaining, row.tipRemaining), decimal("0")) > 0),
+          (this.#refundMethodAllowed(row) &&
+            compareDecimal(moneyPlus(row.appliedRemaining, row.tipRemaining), decimal("0")) > 0)),
     );
   }
 
@@ -6672,12 +6686,7 @@ export class TillApp extends LitElement {
     const open = this.tenderRefunding;
     if (!open || open.busy || open.attempt || open.result) return;
     const tender = this.refundableTenders.find((row) => row.tenderId === ask.tenderId);
-    if (
-      !tender ||
-      tender.pendingRefundId !== null ||
-      (tender.method !== "cash" && tender.method !== "card")
-    )
-      return;
+    if (!tender || tender.pendingRefundId !== null || !this.#refundMethodAllowed(tender)) return;
     this.tenderRefunding = { ...open, ask, busy: true, refusal: null };
     if (tender.manual) await this.#askTenderRefundApprover();
     else await this.#runTenderRefund("submit");
@@ -6788,7 +6797,7 @@ export class TillApp extends LitElement {
     const open = this.tenderRefunding;
     if (!open) return nothing;
     return html`<till-tender-refund-dialog
-        .tenders=${this.refundableTenders}
+        .tenders=${this.refundableTenders.filter((row) => row.pendingRefundId !== null || this.#refundMethodAllowed(row))}
         .invoiceNumber=${this.result?.invoiceNumber ?? ""}
         .attempt=${open.attempt}
         .result=${open.result}
@@ -11345,15 +11354,7 @@ export class TillApp extends LitElement {
       open.consent.saleId !== undefined &&
       this.#tenderRefundSession !== undefined &&
       open.refundableTenders.some(
-        (row) =>
-          this.#cancellationPaymentAvailable(row) &&
-          this.capabilities.includes(
-            row.method === "cash"
-              ? "take-cash"
-              : row.manual
-                ? "hand-keyed-card-payment"
-                : "integrated-card-payment",
-          ),
+        (row) => this.#cancellationPaymentAvailable(row) && this.#refundMethodAllowed(row),
       )
     );
   }
@@ -11575,6 +11576,7 @@ export class TillApp extends LitElement {
       expectedEdit: open.bill.expectedEdits[0]!,
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
+      ...(choice.outcome === "refund" ? { refundHandoff: true } : {}),
       ...(choice.preparationStarted === undefined
         ? {}
         : { preparationStarted: choice.preparationStarted }),
@@ -11659,6 +11661,25 @@ export class TillApp extends LitElement {
           this.#closeCancelItem();
           this.errorKey = { code };
         }
+      }
+    } else if (
+      stage === "apply" &&
+      choice.outcome === "refund" &&
+      code === "authorization.not_permitted"
+    ) {
+      this.cancellingItem = { ...open, busy: true, refusal: "" };
+      try {
+        const authorizers = await open.api.listRefundAuthorizers();
+        if (!this.#cancellationReady(open)) return;
+        this.cancellingItem = {
+          ...open,
+          busy: false,
+          refusal: "",
+          approval: { choice: structuredClone(choice), role: null, authorizers, error: null },
+        };
+      } catch {
+        if (this.#itemCancellationShown(open))
+          this.cancellingItem = { ...open, busy: false, refusal: codeMessage("server.internal") };
       }
     } else if (stage === "approved" && APPROVER_REFUSALS.has(code) && open.approval !== undefined) {
       this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };

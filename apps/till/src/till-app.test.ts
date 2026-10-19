@@ -22996,6 +22996,36 @@ describe("A737 post-invoice refund integration", () => {
       expect(basket.store.lines[0]!.quantity).toBe("2");
     },
   );
+  it("can inspect a pending card refund on a device that cannot start a card refund", async () => {
+    const pending = {
+      ...cash,
+      tenderId: "reader-tender",
+      method: "card",
+      pendingRefundId: returned.id,
+    };
+    const getTenderRefund = vi.fn().mockResolvedValue({
+      ...returned,
+      tenderId: pending.tenderId,
+      state: "pending",
+      completedAt: null,
+    });
+    const { el, refundTransaction } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }),
+      getRefundableTenders: vi.fn().mockResolvedValue([pending]),
+      getTenderRefund,
+    });
+    const form = await openRefund(el);
+    expect(form.tenders).toEqual([pending]);
+    expect(form.shadowRoot!.querySelectorAll('input[name="tender"]')).toHaveLength(0);
+    await userEvent.click(
+      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-inspect]")!),
+    );
+    await flush(el);
+    expect(getTenderRefund).toHaveBeenCalledExactlyOnceWith(returned.id, {});
+    expect(dialog(el)!.result?.state).toBe("pending");
+    expect(refundTransaction).not.toHaveBeenCalled();
+  });
+
   it("does not offer a refund for an unsupported-only invoice", async () => {
     const { el } = await open({
       getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method: "voucher" }]),
@@ -23090,6 +23120,10 @@ describe("A737 post-invoice refund integration", () => {
       return returned;
     });
     const { el } = await open({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       getRefundableTenders: vi.fn().mockResolvedValue([manual]),
       refundTransaction,
     });
@@ -23391,6 +23425,10 @@ describe("A737 post-invoice refund integration", () => {
       .mockRejectedValueOnce({ code: "tender.manual_refund_pin_required" })
       .mockResolvedValue(returned);
     const overrides = {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       getRefundableTenders: vi.fn().mockResolvedValue([manual]),
       refundTransaction,
     };
@@ -23534,6 +23572,10 @@ describe("A737 post-invoice refund integration", () => {
   it("keeps an approver-list failure on the refund without sending a manual return", async () => {
     const refundTransaction = vi.fn();
     const { el } = await open({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, manual: true, method: "card" }]),
       listRefundAuthorizers: vi.fn().mockRejectedValue(new TypeError("offline")),
       refundTransaction,

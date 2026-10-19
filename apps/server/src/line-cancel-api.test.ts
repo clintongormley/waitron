@@ -153,6 +153,125 @@ async function managerReason() {
 }
 
 describe("the public cancellation read and command", () => {
+  it("refuses the paid refund handoff without refund permission before cancelling food", async () => {
+    const p = await fixture();
+    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+      id: p.billId,
+      tender: { method: "cash", amount: "26.00" },
+      lines: [],
+    });
+    const body = await bodyFor(p, { outcome: "keep_charge", refundHandoff: true });
+    const before = await frozen();
+    const answer = await post(p, body);
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await frozen()).toEqual(before);
+  });
+
+  it.each(["own-permission", "approved", "wrong-pin"] as const)(
+    "checks paid refund handoff permission (%s) without changing filed money",
+    async (who) => {
+      const p = await fixture();
+      await payWorkingOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        {
+          id: p.billId,
+          tender: { method: "cash", amount: "26.00" },
+          lines: [],
+        },
+      );
+      const body = await bodyFor(p, {
+        outcome: "keep_charge",
+        refundHandoff: true,
+        ...(who === "own-permission"
+          ? {}
+          : {
+              approver: {
+                personId: venue.managerId,
+                pin: who === "approved" ? PINS.manager : "9999",
+              },
+            }),
+      });
+      const before = await frozen();
+      watchDerivationsAndLock(
+        venue.db,
+        who === "approved" ? PINS.manager : "9999",
+        () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
+        () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
+      );
+      const answer = await post(
+        p,
+        body,
+        who === "own-permission" ? venue.cookie.manager : venue.cookie.staff,
+      );
+      if (who === "wrong-pin") {
+        expect(answer.status).toBe(401);
+        expect(answer.json).toMatchObject({ code: "pin.invalid" });
+        expect(await frozen()).toEqual(before);
+      } else {
+        expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+        const after = await frozen();
+        expect(after.cancellations.find((row) => row.lineId === p.parent.id)?.quantity).toBe(2000);
+        for (const key of ["sales", "saleLines", "payments", "tenders"] as const)
+          expect(after[key]).toEqual(before[key]);
+        expect(
+          (
+            await post(
+              p,
+              body,
+              who === "own-permission" ? venue.cookie.manager : venue.cookie.staff,
+            )
+          ).json,
+        ).toEqual(answer.json);
+        expect(await frozen()).toEqual(after);
+        const changed = await post(p, { ...body, refundHandoff: false }, venue.cookie.manager);
+        expect(changed.status).toBe(409);
+        expect(changed.json).toMatchObject({ code: "submission.id_reused" });
+        expect(await frozen()).toEqual(after);
+        expect(JSON.stringify(after.commands)).not.toContain(`"${PINS.manager}"`);
+      }
+      if (who === "approved") {
+        expect(await watchedOrder()).toEqual(["writer", "derived", "writer", "derived"]);
+        expect(watchedDerivationCount()).toBe(2);
+      }
+    },
+  );
+
+  it.each(["remove_charge", "unpaid"] as const)(
+    "refuses a refund handoff for %s without writes",
+    async (kind) => {
+      const p = await startedFixture();
+      const body = await bodyFor(p, {
+        outcome: kind === "remove_charge" ? "remove_charge" : "keep_charge",
+        refundHandoff: true,
+      });
+      const before = await frozen();
+      const answer = await post(p, body, venue.cookie.manager);
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual({
+        code: "management.request_invalid",
+        params: { field: "refundHandoff" },
+      });
+      expect(await frozen()).toEqual(before);
+    },
+  );
+
+  it.each([[null], ["true"], [1], [[]], [{}]])(
+    "refuses a malformed refund handoff %j without writes",
+    async (refundHandoff) => {
+      const p = await startedFixture();
+      const before = await frozen();
+      const answer = await post(p, await bodyFor(p, { outcome: "keep_charge", refundHandoff }));
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual({
+        code: "management.request_invalid",
+        params: { field: "refundHandoff" },
+      });
+      expect(await frozen()).toEqual(before);
+    },
+  );
+
   it.each([
     { reasonId: undefined, code: "management.request_invalid", status: 400 },
     { reasonId: "", code: "management.request_invalid", status: 400 },

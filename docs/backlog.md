@@ -2262,8 +2262,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   contracts against their app callers and server checks.
   Paid Cancel now checks the original payment's remaining principal and this device's payment
   capabilities before showing Refund; a device that cannot return any available method directs
-  staff to the receipt at a till. Refund approval from the main action and paid Finish-table
-  resolution remain open.
+  staff to the receipt at a till. Cancel and refund now checks refund permission before cancelling
+  food and opens the existing approver PIN prompt after a refusal. The refund screen offers only
+  payment methods this device can return; existing pending attempts remain available to inspect.
+  Paid Finish-table resolution remains open.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

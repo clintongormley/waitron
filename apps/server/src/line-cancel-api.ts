@@ -9,7 +9,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
+import { authorize, canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { parseBillEditExpected } from "./bill-editing.js";
@@ -24,7 +24,7 @@ import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
-import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
 import {
   overridePinAttempts,
@@ -96,6 +96,9 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
   const outcome = oneOf(body.outcome, ["remove_charge", "keep_charge"], "outcome");
   if (body.preparationStarted !== undefined && typeof body.preparationStarted !== "boolean")
     throw invalid("preparationStarted");
+  if (body.refundHandoff !== undefined && typeof body.refundHandoff !== "boolean")
+    throw invalid("refundHandoff");
+  if (body.refundHandoff === true && outcome !== "keep_charge") throw invalid("refundHandoff");
   if (typeof body.quantity !== "string") throw invalid("quantity");
   if (body.note !== undefined && (typeof body.note !== "string" || body.note.length > 500))
     throw invalid("note");
@@ -112,6 +115,8 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
       ? undefined
       : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
   const expectedContext = parseContext(body.expectedContext);
+  if (body.refundHandoff === true && expectedContext.billStatus !== "settled")
+    throw invalid("refundHandoff");
   if (
     outcome === "remove_charge" &&
     (expectedContext.stage === "started" || body.preparationStarted === true) &&
@@ -122,6 +127,7 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     quantity: body.quantity,
     expectedEdit: parseBillEditExpected(body.expectedEdit),
     outcome,
+    refundHandoff: body.refundHandoff as boolean | undefined,
     preparationStarted: body.preparationStarted as boolean | undefined,
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
@@ -191,31 +197,47 @@ export function mountLineCancelApi(
         .from(workingOrderLines)
         .where(eq(workingOrderLines.id, lineId));
       const toCheck =
-        ask.outcome !== "remove_charge" ||
-        (ask.expectedContext.stage !== "started" && ask.preparationStarted !== true) ||
-        line === undefined
-          ? undefined
-          : await approverToCheck(
+        ask.refundHandoff === true
+          ? await overrideToCheck(
               deps.db,
-              {
-                orderId: line.billId,
-                expectedEdit: ask.expectedEdit,
-                expectedRevision: ask.expectedBillRevision,
-                lineId,
-                reasonId: ask.reasonId!,
-                action: "cancel",
-                quantity: ask.quantity,
-                note: ask.note ?? null,
-                operatorId: session.personId,
-              },
+              { sessionId: session.sessionId, permission: "sale.refund" },
               ask.approver,
-              deps.venueLocale,
-            );
+            )
+          : ask.outcome !== "remove_charge" ||
+              (ask.expectedContext.stage !== "started" && ask.preparationStarted !== true) ||
+              line === undefined
+            ? undefined
+            : await approverToCheck(
+                deps.db,
+                {
+                  orderId: line.billId,
+                  expectedEdit: ask.expectedEdit,
+                  expectedRevision: ask.expectedBillRevision,
+                  lineId,
+                  reasonId: ask.reasonId!,
+                  action: "cancel",
+                  quantity: ask.quantity,
+                  note: ask.note ?? null,
+                  operatorId: session.personId,
+                },
+                ask.approver,
+                deps.venueLocale,
+              );
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
           const current = await admittedSession(tx, deps, session);
           const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
           await checkZones(tx, deps.cfg, current, [{ partyId }]);
+          if (ask.refundHandoff === true)
+            await authorize(
+              tx,
+              {
+                sessionId: session.sessionId,
+                permission: "sale.refund",
+                override: withCheck(ask.approver, checked),
+              },
+              attempts,
+            );
           const applied = await cancelItem(
             tx,
             cfg,

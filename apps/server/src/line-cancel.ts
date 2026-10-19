@@ -49,6 +49,7 @@ export interface CancelItemAsk {
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
   preparationStarted?: boolean;
+  refundHandoff?: boolean;
   expectedPartyRevision: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;
@@ -95,6 +96,7 @@ export async function cancelItem(
       quantity: ask.quantity,
       outcome: ask.outcome,
       preparationStarted: ask.preparationStarted,
+      refundHandoff: ask.refundHandoff,
       expectedContext,
       expectedEdit,
       operatorId,

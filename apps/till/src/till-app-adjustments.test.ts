@@ -2933,6 +2933,7 @@ describe("till-app: service cancellation consent", () => {
           getTransactionReceipt: vi.fn().mockResolvedValue(paidReceipt),
           getRefundableTenders: vi.fn().mockResolvedValue([cash]),
           refundTransaction: vi.fn().mockResolvedValue(refunded),
+          listRefundAuthorizers: vi.fn().mockResolvedValue([]),
           ...more,
         },
       );
@@ -2968,6 +2969,182 @@ describe("till-app: service cancellation consent", () => {
       for (const key of Object.keys(localStorage))
         if (key.startsWith("waitron.tender-refund:")) localStorage.removeItem(key);
     });
+
+    it("asks a refund authorizer from the main paid action and sends the PIN only with cancellation", async () => {
+      const methods = paidMethods({
+        cancelItem: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+          .mockResolvedValue({ revision: 4 }),
+        listRefundAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
+      expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ refundHandoff: true });
+      expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+      await pinPad(el, "7777");
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+      expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({
+        refundHandoff: true,
+        approver: { personId: "m-1", pin: "7777" },
+      });
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      expect(refundForm(el)!.attempt).toBeNull();
+      for (const storage of [localStorage, sessionStorage])
+        for (const key of Object.keys(storage)) expect(storage.getItem(key)).not.toContain("7777");
+    });
+
+    it("keeps refund PIN refusals on the main action and permits a new PIN", async () => {
+      const methods = paidMethods({
+        cancelItem: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+          .mockRejectedValueOnce({ code: "pin.invalid" })
+          .mockResolvedValue({ revision: 4 }),
+        listRefundAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(approval(el)).not.toBeNull();
+      await pinPad(el, "1111");
+      expect(approval(el)?.error).toBe("pin.invalid");
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+      const prompt = approval(el)!;
+      for (const digit of "7777") {
+        await userEvent.click(
+          prompt
+            .shadowRoot!.querySelector("till-numeric-pad")!
+            .shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!,
+        );
+        await prompt.updateComplete;
+      }
+      await press(el, prompt.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect(methods.cancelItem).toHaveBeenCalledTimes(3);
+      expect(methods.cancelItem.mock.calls[2]![2]).toMatchObject({
+        approver: { personId: "m-1", pin: "7777" },
+      });
+    });
+
+    it("leaves paid cancellation open when refund approvers cannot load and retries the main action", async () => {
+      const methods = paidMethods({
+        cancelItem: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+        listRefundAuthorizers: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("offline"))
+          .mockResolvedValue([]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(cancelDialog(el)?.refusal).toBe(codeMessage("server.internal"));
+      expect(approval(el)).toBeNull();
+      await clickChoice(el, "[data-confirm]");
+      expect(approval(el)?.authorizers).toEqual([]);
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    });
+
+    it("ignores a refund authorizer read after closing and reopening cancellation", async () => {
+      let resolve!: (people: { personId: string; displayName: string }[]) => void;
+      const people = new Promise<{ personId: string; displayName: string }[]>((answer) => {
+        resolve = answer;
+      });
+      const methods = paidMethods({
+        cancelItem: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+        listRefundAuthorizers: vi.fn(() => people),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+      emit(cancelDialog(el)!, "cancel-item-close");
+      await flush(el);
+      await openCancel(el);
+      resolve([{ personId: "m-1", displayName: "Marta" }]);
+      await flush(el);
+      expect(approval(el)).toBeNull();
+      expect(cancelDialog(el)?.busy).toBe(false);
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    });
+
+    it("cancels the approval prompt without cancelling food or opening the refund screen", async () => {
+      const methods = paidMethods({
+        cancelItem: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+        listRefundAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(approval(el)).not.toBeNull();
+      emit(approval(el)!, "override-cancel");
+      await flush(el);
+      expect(approval(el)).toBeNull();
+      expect(cancelDialog(el)?.busy).toBe(false);
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ["en", "light", 390],
+      ["en", "light", 1280],
+      ["en", "dark", 390],
+      ["en", "dark", 1280],
+      ["es", "light", 390],
+      ["es", "light", 1280],
+      ["es", "dark", 390],
+      ["es", "dark", 1280],
+    ] as const)(
+      "shows the main refund PIN prompt within the viewport (%s, %s, %i)",
+      async (locale, theme, width) => {
+        await page.viewport(width, 1100);
+        setLocale(locale);
+        const { el, host } = await mountApp(
+          paidMethods({
+            cancelItem: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+            listRefundAuthorizers: vi
+              .fn()
+              .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+          }),
+        );
+        host.dataset.theme = theme;
+        host.style.width = "100%";
+        await openMesa4(el, locale === "es" ? "es-ES" : "en-GB");
+        await chooseRefund(el);
+        const prompt = approval(el)!;
+        await prompt.updateComplete;
+        await userEvent.click(
+          prompt.shadowRoot!.querySelector<HTMLElement>('[data-person="m-1"]')!,
+        );
+        await prompt.updateComplete;
+        const shell = prompt.shadowRoot!.querySelector("wt-dialog")!;
+        await shell.updateComplete;
+        const native = shell.shadowRoot!.querySelector("dialog")!;
+        expect(native.open).toBe(true);
+        const rect = native.getBoundingClientRect();
+        expect(rect.left).toBeGreaterThanOrEqual(0);
+        expect(rect.right).toBeLessThanOrEqual(width);
+        expect(rect.top).toBeGreaterThanOrEqual(0);
+        expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight);
+        await expectNoA11yViolations(host);
+        await page.screenshot({
+          path: `__screenshots__/a773-refund-approval-${locale}-${theme}-${width}.png`,
+        });
+        expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+        expect(api.refundTransaction).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       { method: "cash", manual: false, capability: "take-cash" },
@@ -3070,6 +3247,44 @@ describe("till-app: service cancellation consent", () => {
         "Give the money back at a till",
       );
     });
+
+    it.each([
+      { capabilities: ["hand-keyed-card-payment"], allowed: "manual-card" },
+      { capabilities: ["integrated-card-payment"], allowed: "reader-card" },
+      { capabilities: ["take-cash"], allowed: cash.tenderId },
+    ])(
+      "offers only this device's payment methods after the mixed refund handoff ($allowed)",
+      async ({ capabilities, allowed }) => {
+        const methods = paidMethods({
+          getTill: vi.fn().mockResolvedValue({ ...till, capabilities }),
+          getRefundableTenders: vi
+            .fn()
+            .mockResolvedValue([
+              cash,
+              { ...cash, tenderId: "manual-card", method: "card", manual: true },
+              { ...cash, tenderId: "reader-card", method: "card", manual: false },
+            ]),
+        });
+        const { el } = await mountApp(methods);
+        await openMesa4(el);
+        await chooseRefund(el);
+        await expect.poll(() => refundForm(el)).not.toBeNull();
+        expect(refundForm(el)!.tenders.map((row) => row.tenderId)).toEqual([allowed]);
+        const disallowed = allowed === cash.tenderId ? "manual-card" : cash.tenderId;
+        emit(refundForm(el)!, "tender-refund-submit", {
+          tenderId: disallowed,
+          appliedAmount: "7.50",
+          tipAmount: "0.00",
+          reason: "Wrong dish",
+          cashConfirmed: true,
+          manualConfirmed: true,
+        });
+        await flush(el);
+        expect(api.refundTransaction).not.toHaveBeenCalled();
+        expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+        expect(methods.cancelItem).toHaveBeenCalledOnce();
+      },
+    );
 
     it("retries the cancellation payment read without guessing its refund choices", async () => {
       const methods = paidMethods({
@@ -3175,6 +3390,7 @@ describe("till-app: service cancellation consent", () => {
       expect(methods.cancelItem.mock.calls[0]![2]).toEqual({
         quantity: "1",
         outcome: "keep_charge",
+        refundHandoff: true,
         reasonId: "r-mistake",
         note: "Wrong dish",
         expectedPartyRevision: 3,
