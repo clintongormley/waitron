@@ -870,7 +870,6 @@ interface CancellingItem {
   refusalField?: "reason" | "note" | null;
   approval?: {
     choice: CancelItemChoice;
-    role: NonNullable<AdjustmentPreview["needsApproval"]> | null;
     authorizers: StaffMember[];
     error: string | null;
   };
@@ -8810,7 +8809,6 @@ export class TillApp extends LitElement {
           ? nothing
           : html` <till-supervisor-override-dialog
               data-cancel-approval
-              .approverRole=${open.approval.role}
               .authorizers=${open.approval.authorizers}
               .error=${open.approval.error}
               @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => void this.#onCancelApprover(event, open)}
@@ -11639,7 +11637,10 @@ export class TillApp extends LitElement {
         await this.#sendItemCancellation(open, choice);
         return;
       }
-      const authorizers = await open.api.listAdjustmentApprovers(preview.needsApproval);
+      const authorizers =
+        preview.needsApproval.by === "refund"
+          ? await open.api.listRefundAuthorizers()
+          : await open.api.listAdjustmentApprovers(preview.needsApproval.roles);
       if (!this.#cancellationReady(open)) return;
       this.cancellingItem = {
         ...open,
@@ -11647,7 +11648,6 @@ export class TillApp extends LitElement {
         refusal: "",
         approval: {
           choice: structuredClone(choice),
-          role: preview.needsApproval,
           authorizers,
           error: null,
         },
@@ -11807,7 +11807,7 @@ export class TillApp extends LitElement {
           ...open,
           busy: false,
           refusal: "",
-          approval: { choice: structuredClone(choice), role: null, authorizers, error: null },
+          approval: { choice: structuredClone(choice), authorizers, error: null },
         };
       } catch {
         if (this.#itemCancellationShown(open))
@@ -12099,13 +12099,10 @@ export class TillApp extends LitElement {
           );
           if (!this.#adjustmentReady(open)) return;
         }
-        const roles = ["admin", "manager", "supervisor", "staff"] as const;
         preview = {
           reduction: sumDecimals(previews.map((row) => decimal(row.reduction))),
           nominalValue: sumDecimals(previews.map((row) => decimal(row.nominalValue))),
-          needsApproval:
-            roles.find((role) => previews.some((row) => row.needsApproval === role)) ?? null,
-          overBillDiscountLimit: previews.some((row) => row.overBillDiscountLimit),
+          needsApproval: previews.find((row) => row.needsApproval !== null)?.needsApproval ?? null,
           lines: previews.flatMap((row) => row.lines),
         };
       }
@@ -12296,20 +12293,18 @@ export class TillApp extends LitElement {
             (typeof outcome === "object" ? { code: outcome.refused } : new Error("No answer")),
           approver === undefined ? "apply" : "approved",
         );
-        const required = refusal as
-          { code?: string; params?: { approverRole?: unknown } } | undefined;
+        const required = refusal as { code?: string; params?: { approval?: unknown } } | undefined;
         const now = this.#adjustingNow(open.id);
-        const role = required?.params?.approverRole;
         if (
           source.discard !== undefined &&
           required?.code === "adjustment.approval_required" &&
-          (role === "staff" || role === "supervisor" || role === "manager" || role === "admin") &&
+          required.params?.approval === "refund" &&
           now?.preview !== undefined &&
           now.preview !== null
         )
           this.adjusting = {
             ...now,
-            preview: { ...now.preview, needsApproval: role },
+            preview: { ...now.preview, needsApproval: { by: "refund" } },
             refusal: null,
           };
         if (this.#adjustingNow(open.id) !== null && !sync.store.editsLocked)

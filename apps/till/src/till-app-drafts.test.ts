@@ -6612,15 +6612,15 @@ describe("recalled draft source splitting", () => {
           noteRequired: true,
           maxPercentBp: null,
           maxAmount: null,
-          applyRole: "staff",
-          approverRole: "manager",
+          kind: "void",
+          applyRoles: [],
+          approverRoles: [],
         },
       ]),
       previewAdjustment: vi.fn().mockResolvedValue({
         reduction: "17.25",
         nominalValue: "17.25",
         needsApproval: null,
-        overBillDiscountLimit: false,
         lines: [],
       }),
       applyAdjustment: vi.fn(async () => {
@@ -6859,7 +6859,7 @@ describe("recalled draft source splitting", () => {
     expect(tableOrder(el)!.groupCommandBusy).toBe(false);
   });
 
-  it("Discard combines the source previews and requires the highest returned approval role", async () => {
+  it("Discard combines the source previews and requires the first approval one returns", async () => {
     const discardDraft = vi.fn(async () => {
       server.drafts.splice(0);
       return {
@@ -6876,8 +6876,7 @@ describe("recalled draft source splitting", () => {
         previewAdjustment: vi.fn(async (_id, ask) => ({
           reduction: ask.lineId === "source-7" ? "17.25" : "8.63",
           nominalValue: ask.lineId === "source-7" ? "17.25" : "8.63",
-          needsApproval: ask.lineId === "source-7" ? "admin" : "manager",
-          overBillDiscountLimit: ask.lineId === "source-9",
+          needsApproval: ask.lineId === "source-7" ? null : { by: "refund" },
           lines: [
             {
               lineId: ask.lineId,
@@ -6887,7 +6886,7 @@ describe("recalled draft source splitting", () => {
             },
           ],
         })),
-        listAdjustmentApprovers: vi
+        listRefundAuthorizers: vi
           .fn()
           .mockResolvedValue([{ personId: "admin-1", displayName: "Marta" }]),
       },
@@ -6897,8 +6896,7 @@ describe("recalled draft source splitting", () => {
     expect(adjustment(el)?.preview).toEqual({
       reduction: "25.88",
       nominalValue: "25.88",
-      needsApproval: "admin",
-      overBillDiscountLimit: true,
+      needsApproval: { by: "refund" },
       lines: [
         { lineId: "source-7", lineNo: 7, reduction: "17.25", rows: [] },
         { lineId: "source-9", lineNo: 9, reduction: "8.63", rows: [] },
@@ -6906,7 +6904,7 @@ describe("recalled draft source splitting", () => {
     });
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el);
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("admin");
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
     expect(discardDraft).not.toHaveBeenCalled();
     const prompt = () =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-supervisor-override-dialog"]>(
@@ -6949,11 +6947,11 @@ describe("recalled draft source splitting", () => {
   it("Discard honours a higher approval requirement returned by its atomic command", async () => {
     const discardDraft = vi.fn().mockRejectedValue({
       code: "adjustment.approval_required",
-      params: { approverRole: "manager" },
+      params: { approval: "refund" },
     });
     const { el, order } = await cancellationOpening({
       discardDraft,
-      listAdjustmentApprovers: vi
+      listRefundAuthorizers: vi
         .fn()
         .mockResolvedValue([{ personId: "manager-1", displayName: "Marta" }]),
     });
@@ -6961,30 +6959,30 @@ describe("recalled draft source splitting", () => {
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el, 6);
     expect(rows(el)).toEqual(["Recorded steak ×2"]);
-    expect(adjustment(el)?.preview?.needsApproval).toBe("manager");
+    expect(adjustment(el)?.preview?.needsApproval).toEqual({ by: "refund" });
     expect(draft(el).editsLocked).toBe(true);
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el);
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
     expect(discardDraft).toHaveBeenCalledOnce();
   });
 
-  it("Discard replaces a lower-role PIN prompt when the command requires a higher approver", async () => {
+  it("Discard replaces its PIN prompt when the command still requires approval", async () => {
     const { el, order } = await cancellationOpening({
       discardDraft: vi.fn().mockRejectedValue({
         code: "adjustment.approval_required",
-        params: { approverRole: "admin" },
+        params: { approval: "refund" },
       }),
       previewAdjustment: vi.fn().mockResolvedValue({
         reduction: "17.25",
         nominalValue: "17.25",
-        needsApproval: "manager",
-        overBillDiscountLimit: false,
+        needsApproval: { by: "refund" },
         lines: [],
       }),
-      listAdjustmentApprovers: vi.fn(async (role) => [
-        { personId: `${role}-1`, displayName: role === "admin" ? "Alba" : "Marta" },
-      ]),
+      listRefundAuthorizers: vi
+        .fn()
+        .mockResolvedValueOnce([{ personId: "manager-1", displayName: "Marta" }])
+        .mockResolvedValue([{ personId: "admin-1", displayName: "Alba" }]),
     });
     const prompt = () =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-supervisor-override-dialog"]>(
@@ -6997,15 +6995,12 @@ describe("recalled draft source splitting", () => {
     emit(prompt()!, "override-confirm", { personId: "manager-1", pin: "7777" });
     await flush(el, 6);
     expect(prompt()).toBeNull();
-    expect(adjustment(el)?.preview?.needsApproval).toBe("admin");
+    expect(adjustment(el)?.preview?.needsApproval).toEqual({ by: "refund" });
     expect(rows(el)).toEqual(["Recorded steak ×2"]);
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el);
     expect(prompt()?.authorizers).toEqual([{ personId: "admin-1", displayName: "Alba" }]);
-    expect(api.listAdjustmentApprovers!.mock.calls.map((call) => call[0])).toEqual([
-      "manager",
-      "admin",
-    ]);
+    expect(api.listRefundAuthorizers).toHaveBeenCalledTimes(2);
   });
 
   it("Discard ends its confirmation after takeover and shows the authoritative owner", async () => {
@@ -7229,11 +7224,10 @@ describe("recalled draft source splitting", () => {
       previewAdjustment: vi.fn().mockResolvedValue({
         reduction: "17.25",
         nominalValue: "17.25",
-        needsApproval: "manager",
-        overBillDiscountLimit: false,
+        needsApproval: { by: "refund" },
         lines: [],
       }),
-      listAdjustmentApprovers: vi
+      listRefundAuthorizers: vi
         .fn()
         .mockResolvedValue([{ personId: "manager-1", displayName: "Marta" }]),
     });
@@ -7302,11 +7296,10 @@ describe("recalled draft source splitting", () => {
           previewAdjustment: vi.fn().mockResolvedValue({
             reduction: "17.25",
             nominalValue: "17.25",
-            needsApproval: stage === "approval" ? "manager" : null,
-            overBillDiscountLimit: false,
+            needsApproval: stage === "approval" ? { by: "refund" } : null,
             lines: [],
           }),
-          listAdjustmentApprovers: vi
+          listRefundAuthorizers: vi
             .fn()
             .mockResolvedValue([{ personId: "manager-1", displayName: "Marta" }]),
         });
@@ -7457,7 +7450,6 @@ describe("recalled draft source splitting", () => {
       reduction: "17.25",
       nominalValue: "17.25",
       needsApproval: null,
-      overBillDiscountLimit: false,
       lines: [],
     } as const;
     const previewAdjustment = vi

@@ -1581,7 +1581,8 @@ describe("till-app: service cancellation consent", () => {
   });
   it("opens approval from the cancellation action and retains its reason through a PIN retry", async () => {
     const methods = apiFor(consent(), {
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
       cancelItem: vi
         .fn()
         .mockRejectedValueOnce({ code: "pin.invalid" })
@@ -1592,7 +1593,7 @@ describe("till-app: service cancellation consent", () => {
     await openCancel(el);
     await submitOffBill(el);
     expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith("manager");
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
     expect(methods.cancelItem).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
     await pinPad(el, "1234");
@@ -1653,7 +1654,8 @@ describe("till-app: service cancellation consent", () => {
   });
   it("returning from cancellation approval keeps the inline draft and does not cancel food", async () => {
     const methods = apiFor(consent(), {
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
     await openMesa4(el);
@@ -1698,8 +1700,8 @@ describe("till-app: service cancellation consent", () => {
   it("does not open old cancellation approval after its authorizer read completes for a new dialog", async () => {
     let answer!: (rows: { personId: string; displayName: string }[]) => void;
     const methods = apiFor(consent(), {
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
-      listAdjustmentApprovers: vi.fn().mockImplementation(
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockImplementation(
         () =>
           new Promise((resolve) => {
             answer = resolve;
@@ -1710,7 +1712,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await submitOffBill(el);
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledOnce();
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
     emit(cancelDialog(el)!, "cancel-item-close");
     await flush(el);
     await openCancel(el);
@@ -1725,7 +1727,8 @@ describe("till-app: service cancellation consent", () => {
 
   it("rejects a detached cancellation PIN prompt after a new approval opens for the same dish", async () => {
     const methods = apiFor(consent(), {
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
     await openMesa4(el);
@@ -2102,7 +2105,8 @@ describe("till-app: service cancellation consent", () => {
 
   it("keeps the cancellation observation through the reason preview and manager approval", async () => {
     const methods = apiFor(consent("open", "not_started"), {
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
     await openMesa4(el);
@@ -2228,7 +2232,8 @@ describe("till-app: service cancellation consent", () => {
     });
     const methods = apiFor(consent("open", "not_started"), {
       listDrafts,
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const { el } = await mountApp(methods);
     await openMesa4(el);
@@ -2470,7 +2475,8 @@ describe("till-app: service cancellation consent", () => {
 
   it("keeps the existing manager PIN retry when off-bill cancellation needs approval", async () => {
     const methods = apiFor(consent("open", "not_started"), {
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
       cancelItem: vi
         .fn()
         .mockRejectedValueOnce({ code: "pin.invalid" })
@@ -3883,7 +3889,8 @@ describe("table adjustment editing recovery", () => {
 
   it("retains the shown observation through manager approval", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);

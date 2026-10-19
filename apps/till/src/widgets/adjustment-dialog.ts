@@ -17,6 +17,7 @@ import type {
   AdjustmentApproval,
   AdjustmentPreview,
   AdjustmentReason,
+  PersonRole,
 } from "../api/client.js";
 
 export type AdjustKind = "cancel" | "comp" | "discount";
@@ -108,6 +109,15 @@ const DO: Record<AdjustKind, StringKey> = {
 };
 
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
+
+const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
+
+function roleList(roles: readonly PersonRole[]): string {
+  if (ROLES.every((role) => roles.includes(role))) return t("comp.role_everyone");
+  return ROLES.filter((role) => roles.includes(role))
+    .map((role) => t(`comp.role_${role}`))
+    .join(", ");
+}
 
 @customElement("till-adjustment-dialog")
 export class TillAdjustmentDialog extends LitElement {
@@ -614,8 +624,8 @@ export class TillAdjustmentDialog extends LitElement {
         ? ""
         : " · " + t("comp.bill_cap").replace("{value}", this.#money(reason.maxAmount));
     return `${reason.name} · ${kinds.join(", ")}${cap} · ${t("comp.policy")
-      .replace("{apply}", t(`comp.role_${reason.applyRole}`))
-      .replace("{approve}", t(`comp.role_${reason.approverRole}`))}`;
+      .replace("{apply}", roleList(reason.applyRoles))
+      .replace("{approve}", roleList(reason.approverRoles))}`;
   }
 
   #compLabel(choice?: AdjustmentChoice): string {

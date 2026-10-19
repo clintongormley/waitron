@@ -45,11 +45,12 @@ describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
                 id: "complaint",
                 name: locale === "en" ? "Complaint" : "Queja",
                 actions: ["comp", "discount_percent", "discount_amount"],
-                maxPercentBp: 1000,
+                maxPercentBp: null,
                 maxAmount: "20.00",
                 noteRequired: true,
-                applyRole: "supervisor",
-                approverRole: "manager",
+                kind: "comp",
+                applyRoles: ["supervisor", "manager", "admin"],
+                approverRoles: ["manager", "admin"],
               },
             ],
           },
@@ -120,8 +121,7 @@ describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
         el.preview = {
           reduction: "0.60",
           nominalValue: "0.60",
-          needsApproval: "manager",
-          overBillDiscountLimit: false,
+          needsApproval: { by: "reason", roles: ["manager", "admin"] },
           lines: [],
         };
         await el.updateComplete;
