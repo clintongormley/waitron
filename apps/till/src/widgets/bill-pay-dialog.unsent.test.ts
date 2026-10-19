@@ -24,7 +24,7 @@ describe.each([
   },
 ])("unsent payment refusal in $locale", ({ locale, label, sentence }) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
-    it.each([390, 1280])("shows the bill and code-only refusal at %i", async (width) => {
+    it.each([360, 390, 1280])("shows the bill and code-only refusal at %i", async (width) => {
       setLocale(locale);
       await page.viewport(width, 900);
       const { el, host } = await mountWidget<TillBillPayDialog>(
