@@ -161,8 +161,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Fiscal: the owner lands it.
 
 - **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2. If it can,
-  art. 7.1.c requires that date on the receipt, and the document builder prints one only on a full
-  invoice (`apps/server/src/receipt-document.ts`). Check, then print it there too if needed.
+  art. 7.1.c requires that date on the receipt. The document builder already prints one on a
+  simplified receipt, in captioned rows, whenever the receipt's data
+  carries one (`apps/server/src/receipt-document.ts`, A754), but no sale has one: the only writer of
+  a sale's operation date writes none without a customer tax identity
+  (`packages/core/src/record-sale.ts:284-286`). Check, then record the date on such a sale if needed.
 
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
   value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
@@ -3209,10 +3212,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
-- **A754. The receipt's date and time on a line of their own (owner, 2026-10-16).** Today they
-  share the order's row and wrap when it overflows; a longer table name or order number will
-  overflow more. A mock-up for the owner first; it changes printed invoices, so the owner lands it.
-  [Detail](backlog/printers.md#a754-the-receipts-date-and-time-on-a-line-of-their-own)
+- **Where should the date go beside a long invoice number on 58 mm paper?** — left open by A754;
+  owner question posted 2026-10-19 in lane B's questions. A number longer than 12 characters (a
+  restored series such as `T-S123456/123`) puts the date on its own line under the number, and an
+  emergency-length number (31 characters) wraps inside the number with the date beside its last
+  digits. [Pictures](backlog/mockups/a754-receipt-date-line/2-long-numbers-58mm.png)
 
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
@@ -4598,9 +4602,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The printed receipt is
   formatted on the server and keeps the language's own pattern. [Detail](backlog/languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
 
-- The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
-  its own line on 58 mm paper; on a simplified receipt it also drops below the order line on 80 mm
-  when that line is long, as «Mesa 6 · Eskaera 41» is.
+- The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
+  paper it drops to its own line wherever it prints in words.
 
 - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
   «Café y tostada») in every language; only its fixed words change.

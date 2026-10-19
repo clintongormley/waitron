@@ -82,7 +82,7 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toBe(want);
   });
   it.each([
-    [60, "1 mar 2026, 0:05"],
+    [60, "1 mar 2026, 00:05"],
     [0, "28 feb 2026, 23:05"],
     [-480, "28 feb 2026, 15:05"],
   ])("shows saved F1 issue offset %s independently of the browser", async (offset, want) => {

@@ -824,7 +824,7 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
         element.kind === "text"
           ? [element.text]
           : element.kind === "amount"
-            ? [element.caption]
+            ? [[element.caption, element.amount].filter(Boolean).join(" ")]
             : element.kind === "table"
               ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
               : [],

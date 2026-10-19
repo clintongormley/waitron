@@ -11,6 +11,7 @@ import {
   resolveSnapshotText,
   subtractDecimal,
   type ReceiptLogoRaster,
+  type ReceiptPaperWidth,
   type ReceiptPresentation,
 } from "@waitron/shared";
 import {
@@ -23,6 +24,7 @@ import {
   type FiledLine,
   type GroupDiscount,
 } from "./receipt-figures.js";
+import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -43,6 +45,8 @@ export interface ReceiptTrim {
 
 export interface ReceiptDocumentInput {
   surface?: "thermal" | "a4";
+  /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
+  paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
   result: Omit<TillSaleResult, keyof ReceiptPresentation>;
   issuer: ReceiptIssuer;
@@ -103,17 +107,6 @@ function adjustmentLabel(
   return `${label.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
 }
 
-function issueDate(iso: string, locale: string, offsetMinutes?: number): string {
-  const instant = new Date(iso);
-  const date =
-    offsetMinutes === undefined ? instant : new Date(instant.getTime() + offsetMinutes * 60_000);
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    ...(offsetMinutes === undefined ? {} : { timeZone: "UTC" }),
-  }).format(date);
-}
-
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
 function sameAddress(lines: readonly string[], domicile: string): boolean {
   const fold = (value: string): string =>
@@ -131,6 +124,7 @@ export function buildReceiptDocument({
   receipt,
   venueAddress = [],
   surface = "thermal",
+  paperWidth,
   invoiceLocale,
   namesLocale = invoiceLocale,
   simulated = false,
@@ -214,24 +208,27 @@ export function buildReceiptDocument({
   rule();
   align("left");
 
-  const orderText = [result.orderLabel, `${label.order} ${result.orderNumber}`]
-    .filter(Boolean)
-    .join(" · ");
-  if (simplified) {
-    // Two spaces at least, or an order number running into the date reads as one figure.
-    row(orderText, issueDate(result.issuedAt, locale), 0, undefined, 2);
-    row(label.simplifiedInvoice, result.invoiceNumber);
+  row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
+  if (simplified && result.operationDate === undefined) {
+    const date =
+      paperWidth === "58mm"
+        ? receiptDateTimeNumeric(result.issuedAt, locale)
+        : receiptDateTime(result.issuedAt, locale);
+    // Two spaces at least, or the invoice number running into the date reads as one figure.
+    row(result.invoiceNumber, date, 0, undefined, 2);
   } else {
-    row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    row(orderText, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes), 0, undefined, 2);
-  }
-  if (!simplified && result.operationDate !== undefined) {
-    row(
-      label.operationDate,
-      new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
-        new Date(`${result.operationDate}T00:00:00Z`),
-      ),
-    );
+    if (simplified) {
+      const heading =
+        paperWidth === "58mm" ? label.simplifiedInvoiceShort : label.simplifiedInvoice;
+      row(heading, result.invoiceNumber);
+    } else {
+      row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
+    }
+    const offset = simplified ? undefined : result.issuedOffsetMinutes;
+    row(label.date, receiptDateTime(result.issuedAt, locale, offset));
+    if (result.operationDate !== undefined) {
+      row(label.operationDate, receiptDay(result.operationDate, locale));
+    }
   }
   rule();
   if (!simplified && result.recipient) {

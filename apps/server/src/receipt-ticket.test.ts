@@ -117,7 +117,7 @@ describe("saved F1 issue offset", () => {
     [PRINTER_58, PRINTER_80].flatMap((printer) =>
       [false, true].flatMap((duplicate) =>
         [
-          { offset: 60, want: "1 mar 2026, 0:05" },
+          { offset: 60, want: "1 mar 2026, 00:05" },
           { offset: 0, want: "28 feb 2026, 23:05" },
           { offset: -480, want: "28 feb 2026, 15:05" },
         ].map((clock) => ({ printer, duplicate, ...clock })),
@@ -141,10 +141,10 @@ describe("saved F1 issue offset", () => {
           duplicate,
         }),
       );
-      const at = lines.findIndex((line) => line.startsWith("Mesa 6 · Pedido 41"));
+      const at = lines.findIndex((line) => /^Mesa 6 +Pedido 41$/u.test(line));
       expect(at).toBeGreaterThanOrEqual(0);
-      expect(lines[at - 1]).toMatch(/^FACTURA +A\/1$/u);
-      expect(lines.slice(at, at + 2).join(" ")).toContain(want);
+      expect(lines[at + 1]).toMatch(/^FACTURA +A\/1$/u);
+      expect(lines[at + 2]).toMatch(new RegExp(`^Fecha +${want}$`, "u"));
     },
   );
 });
@@ -209,14 +209,18 @@ describe("saved F1 operation date", () => {
         }),
       );
       expect(lines.join("\n")).not.toContain("Fecha de operación");
-      // Both documents print the issue date with the order, with no "Fecha" caption.
-      const at = lines.findIndex((line) => line.startsWith("Mesa 6 · Pedido 41"));
+      const at = lines.findIndex((line) => /^Mesa 6 +Pedido 41$/u.test(line));
       expect(at).toBeGreaterThanOrEqual(0);
-      expect(lines.slice(at, at + 2).join(" ")).toContain("17 ago 2026");
+      expect(
+        lines
+          .slice(at + 1, at + 3)
+          .join(" ")
+          .replace(/ +/gu, " "),
+      ).toContain(invoiceType === "F1" ? "Fecha 17 ago 2026" : "17/08/2026");
     },
   );
 
-  it("does not print an operation date on an F2 even if the payload carries one", () => {
+  it("prints an F2's operation date under captioned rows when the payload carries one", () => {
     const lines = drawn(
       formatReceipt({
         result: { ...FILED_SALE, invoiceType: "F2", operationDate: "2026-02-28" },
@@ -226,8 +230,8 @@ describe("saved F1 operation date", () => {
         printer: PRINTER_80,
       }),
     );
-    expect(lines.join("\n")).not.toContain("Fecha de operación");
-    expect(lines.join("\n")).not.toContain("28 feb 2026");
+    expect(lines).toContainEqual(expect.stringMatching(/^Factura simplificada +A\/1$/u));
+    expect(lines).toContainEqual(expect.stringMatching(/^Fecha de operación +28 feb 2026$/u));
   });
 });
 
@@ -950,7 +954,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       for (const line of lines.filter((line) => line !== legend))
         expect(line.length).toBeLessThanOrEqual(columns);
       for (const line of legal(printer)) expect(lines).toContain(line);
-      expect(lines.some((line) => line.startsWith("Mesa 6 · Pedido 41"))).toBe(true);
+      expect(lines.some((line) => /^Mesa 6 +Pedido 41$/u.test(line))).toBe(true);
       expect(lines.at(-1)).toBe(centred(printer, TRIM.footerMessage!));
     },
   );
@@ -974,7 +978,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(s).toContain(FILED_SALE.invoiceNumber);
 
       // Fecha de expedición (7.1.b): no caption on a simplified receipt, so the day itself.
-      expect(s).toContain("17 ago 2026");
+      expect(s).toContain(printer.paperWidth === "58mm" ? "17/08/2026" : "17 ago 2026");
       expect(s).toContain("2026");
 
       // Identification of the goods (7.1.e): one row per filed line, resolved in the invoice locale.
@@ -1038,8 +1042,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       TRIM.headerSubtitle!,
       ISSUER.venueName,
       `NIF: ${ISSUER.nif}`,
-      "17 ago 2026",
       FILED_SALE.invoiceNumber,
+      "17 ago 2026",
       lineName(FILED_SALE.lines[0]!),
       "TOTAL",
       "Base imponible 21%",
@@ -1620,7 +1624,7 @@ it("adds only the duplicate marker and preserves the order grouping and QR bytes
   };
   const original = formatReceipt(input);
   const duplicate = formatReceipt({ ...input, duplicate: true });
-  expect(decodeTicket(original)).toContain("Mesa 6 · Pedido 41");
+  expect(printedLines(original)).toContainEqual(expect.stringMatching(/^Mesa 6 +Pedido 41$/u));
   expect(decodeTicket(original)).not.toContain("DUPLICADO");
   const commands = printedCommands(duplicate);
   const marker = centred(PRINTER_80, "DUPLICADO");
@@ -2261,7 +2265,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
   ] as const)("writes no arrow, and its %s amounts add up to the TOTAL", (_, result) => {
     const lines = printed80(result);
     expect(lines.filter((line) => line.includes("->"))).toEqual([]);
-    const start = lines.findIndex((line) => line.startsWith("Factura simplificada")) + 2;
+    const start = lines.findIndex((line) => line.startsWith(`${result.invoiceNumber} `)) + 2;
     const end = lines.indexOf(rule(PRINTER_80), start);
     const goods = lines.slice(start, end).map((line) => printedCents(line.trimEnd()));
     const total = lines.find((line) => line.startsWith("TOTAL"))!;
@@ -2451,7 +2455,8 @@ describe("the receipt's fixed words follow its language", () => {
         duplicate: "DUPLICAT",
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
-        order: "Mesa 6 · Comanda 41",
+        order: "Mesa 6 Comanda 41",
+        date: "Data",
         day: "17 d’ag. 2026",
         invoice: "Factura simplificada A/1",
         fullBase: "Base imposable 21% 10,00 €",
@@ -2486,7 +2491,8 @@ describe("the receipt's fixed words follow its language", () => {
         duplicate: "DUPLICADO",
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
-        order: "Mesa 6 · Pedido 41",
+        order: "Mesa 6 Pedido 41",
+        date: "Data",
         day: "17 de ago. de 2026",
         invoice: "Factura simplificada A/1",
         fullBase: "Base impoñible 21% 10,00 €",
@@ -2521,7 +2527,8 @@ describe("the receipt's fixed words follow its language", () => {
         duplicate: "BIKOIZKARIA",
         name: "Charcutería La Buena",
         nif: "IFZ: B12345678",
-        order: "Mesa 6 · Eskaera 41",
+        order: "Mesa 6 Eskaera 41",
+        date: "Data",
         day: "2026(e)ko abu. 17(a)",
         invoice: "Faktura erraztua A/1",
         fullBase: "Zerga-oinarria 21% 10,00 €",
@@ -2556,7 +2563,9 @@ describe("the receipt's fixed words follow its language", () => {
     const {
       charged,
       heading,
+      date,
       day,
+      invoice,
       order,
       practice,
       fullBase,
@@ -2567,14 +2576,16 @@ describe("the receipt's fixed words follow its language", () => {
     } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
-    // Both documents print the issue date with the order, uncaptioned.
-    const orderAt = sale.findIndex((line) => line.startsWith(order));
+    const orderAt = sale.indexOf(order);
     expect(orderAt).toBeGreaterThanOrEqual(0);
-    expect(sale.slice(orderAt, orderAt + 2).join(" ")).toContain(day);
+    expect(sale[orderAt + 1]).toContain(`A/1 ${day}`);
+    const captioned = printed({ ...LABELLED_SALE, operationDate: "2026-08-16" }, locale);
+    expect(captioned[captioned.indexOf(order) + 1]).toBe(invoice);
     const full = printed(FULL_SALE, locale, VENUE_ADDRESS);
-    const fullOrderAt = full.findIndex((line) => line.startsWith(order));
-    expect(full[fullOrderAt - 1]).toBe(heading);
-    expect(full.slice(fullOrderAt, fullOrderAt + 2).join(" ")).toContain(day);
+    const fullOrderAt = full.indexOf(order);
+    expect(fullOrderAt).toBeGreaterThanOrEqual(0);
+    expect(full[fullOrderAt + 1]).toBe(heading);
+    expect(full[fullOrderAt + 2]).toContain(`${date} ${day}`);
     expect(full).toContain(fullBase);
     expect(full).toContain(customer);
     expect(full).toContain(header);
@@ -2786,11 +2797,10 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
         centred(printer, "hola@labuena.es"),
         centred(printer, "DUPLICADO"),
         rule(printer),
-        // The issue date shares the order line where it fits, and takes the next line where not.
-        ...(printer === PRINTER_80
-          ? [expect.stringMatching(/^Mesa 6 · Pedido 41 +17 ago 2026, \d+:34$/u)]
-          : ["Mesa 6 · Pedido 41", expect.stringMatching(/^ +17 ago 2026, \d+:34$/u)]),
-        expect.stringMatching(/^Factura simplificada +A\/1$/u),
+        expect.stringMatching(/^Mesa 6 +Pedido 41$/u),
+        printer === PRINTER_80
+          ? expect.stringMatching(/^A\/1 +17 ago 2026, \d{2}:34$/u)
+          : expect.stringMatching(/^A\/1 +17\/08\/2026 \d{2}:34$/u),
       ];
       expect(lines.slice(0, block.length)).toEqual(block);
     },
@@ -2821,7 +2831,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
       expect([...lastAlignBeforeLogo!.bytes]).toEqual([0x1b, 0x61, 1]);
       expect(Buffer.from(commands[logoAt]!.bytes)).toEqual(Buffer.from(esc().bitmap(logo).bytes()));
       const nifAt = commands.findIndex((c) => c.text?.trim().endsWith("NIF: B12345678"));
-      const orderAt = commands.findIndex((c) => c.text?.startsWith("Mesa 6 · Pedido 41"));
+      const orderAt = commands.findIndex((c) => /^Mesa 6 +Pedido 41$/u.test(c.text ?? ""));
       const aligns = commands.slice(nifAt, orderAt).filter((c) => c.name === "ESC a");
       expect(aligns.map((c) => [...c.bytes])).toEqual([[0x1b, 0x61, 0]]);
     },
@@ -2889,7 +2899,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
         rule(PRINTER_80),
         ...block,
         rule(PRINTER_80),
-        expect.stringMatching(/^Mesa 6 · Pedido 41 +17 ago 2026, \d+:34$/u),
+        expect.stringMatching(/^Mesa 6 +Pedido 41$/u),
       ]);
     },
   );
@@ -3177,16 +3187,20 @@ describe("the top block on a narrow roll (A497)", () => {
   it("wraps the order line word by word", () => {
     const lines = printedLines(
       formatReceipt({
-        result: { ...NO_QR_SALE, orderLabel: "Terraza · Mesa del fondo 6" },
+        result: {
+          ...NO_QR_SALE,
+          orderLabel: "Terraza interior · Mesa del fondo junto a la ventana 6",
+        },
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
         printer: PRINTER_58,
       }),
     );
-    const at = lines.indexOf("Terraza · Mesa del fondo 6 ·");
+    const at = lines.indexOf("Terraza interior · Mesa del");
     expect(at).toBeGreaterThan(-1);
-    expect(lines[at + 1]).toMatch(/^Pedido 41 +17 ago 2026, \d+:34$/u);
+    expect(lines[at + 1]).toBe("fondo junto a la ventana 6");
+    expect(lines[at + 2]).toBe(`${" ".repeat(21)}Pedido 41`);
   });
 });
 
@@ -3328,18 +3342,16 @@ describe("the simplified receipt's own layout (A663)", () => {
     (printer) => {
       const lines = squeezed(ONE_RATE, printer);
       const at = (prefix: string) => lines.findIndex((line) => line.startsWith(prefix));
+      const number = at("T-2026/000112");
       if (printer === PRINTER_80) {
-        expect(lines).toContain("Factura simplificada T-2026/000112");
+        expect(lines[number]).toMatch(/^T-2026\/000112 13 oct 2026, \d{2}:53$/u);
       } else {
-        // 34 characters do not fit 30 columns: the number moves to its own right-aligned line.
-        expect(lines[at("Factura simplificada") + 1]).toBe("T-2026/000112");
+        // 13 + 2 + 16 characters do not fit 30 columns: the date moves to its own line.
+        expect(lines[number]).toBe("T-2026/000112");
+        expect(lines[number + 1]).toMatch(/^13\/10\/2026 \d{2}:53$/u);
       }
-      const heading = at("Mesa 12 · Pedido 112");
-      expect(
-        [lines[heading], `${lines[heading]} ${lines[heading + 1]}`].some((line) =>
-          /^Mesa 12 · Pedido 112 13 oct 2026, \d+:53$/.test(line),
-        ),
-      ).toBe(true);
+      const heading = lines.indexOf("Mesa 12 Pedido 112");
+      expect(heading).toBe(number - 1);
       expect(lines).toContain("1 Bloody Mary 15,00");
       expect(lines).toContain("4 Agua, pan y aceite 24,00");
       expect(lines).toContain("TOTAL 39,00 €");
@@ -3347,14 +3359,14 @@ describe("the simplified receipt's own layout (A663)", () => {
       expect(lines).toContain("IVA 10% 3,55 €");
       expect(lines).not.toContain("Factura T-2026/000112");
       expect(lines.some((line) => line.startsWith("Fecha"))).toBe(false);
-      expect(heading).toBeLessThan(at("Factura simplificada"));
-      expect(at("Factura simplificada")).toBeLessThan(at("1 Bloody Mary"));
+      expect(lines.some((line) => line.startsWith("Factura simplificada"))).toBe(false);
+      expect(number).toBeLessThan(at("1 Bloody Mary"));
       expect(at("1 Bloody Mary")).toBeLessThan(at("TOTAL"));
       expect(at("TOTAL")).toBeLessThan(at("Base imponible 10%"));
       expect(at("Base imponible 10%")).toBeLessThan(at("IVA 10%"));
       expect(at("IVA 10%")).toBeLessThan(at("Efectivo"));
       expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
-      expect(at("VERI*FACTU")).toBeLessThan(at("Factura simplificada"));
+      expect(at("VERI*FACTU")).toBeLessThan(heading);
     },
   );
 
@@ -3383,47 +3395,39 @@ describe("the simplified receipt's own layout (A663)", () => {
   );
 
   const headingRow = (
-    orderNumber: number,
+    invoiceNumber: string,
     invoiceType: TillSaleResult["invoiceType"] = ONE_RATE.invoiceType,
   ): [string, string | undefined] => {
     const lines = printedLines(
       formatReceipt({
-        result: { ...ONE_RATE, orderLabel: null, orderNumber, invoiceType },
+        result: { ...ONE_RATE, orderLabel: null, invoiceNumber, invoiceType },
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
         printer: PRINTER_58,
       }),
     );
-    const at = lines.findIndex((line) => line.startsWith(`Pedido ${orderNumber}`));
+    const at = lines.findIndex((line) => /^ +Pedido 112$/u.test(line)) + 1;
+    expect(at, "the order line").toBeGreaterThan(0);
     return [lines[at]!, lines[at + 1]];
   };
 
-  it("puts the date on its own right-aligned line when two spaces would not separate it from the order (58mm)", () => {
-    const [heading, next] = headingRow(1234);
-    const together = /^Pedido 1234 {2,}13 oct 2026, \d{1,2}:53$/u.test(heading);
-    const apart =
-      heading === "Pedido 1234" &&
-      next !== undefined &&
-      next.length === 30 &&
-      /^ +13 oct 2026, \d{1,2}:53$/u.test(next);
-    expect(together || apart, JSON.stringify([heading, next])).toBe(true);
+  it("puts the date on its own right-aligned line when two spaces would not separate it from the number (58mm)", () => {
+    const [heading, next] = headingRow("T-2026/000112");
+    expect(heading).toBe("T-2026/000112");
+    expect(next).toHaveLength(30);
+    expect(next).toMatch(/^ +13\/10\/2026 \d{2}:53$/u);
   });
 
-  it("keeps two spaces between the order and the date on a full invoice, or puts the date on its own line (58mm)", () => {
-    const [heading, next] = headingRow(1234, "F1");
-    const together = /^Pedido 1234 {2,}13 oct 2026, \d{1,2}:53$/u.test(heading);
-    const apart =
-      heading === "Pedido 1234" &&
-      next !== undefined &&
-      next.length === 30 &&
-      /^ +13 oct 2026, \d{1,2}:53$/u.test(next);
-    expect(together || apart, JSON.stringify([heading, next])).toBe(true);
+  it("keeps a full invoice's date on its own captioned line under FACTURA (58mm)", () => {
+    const [heading, next] = headingRow("T/112", "F1");
+    expect(heading).toMatch(/^FACTURA +T\/112$/u);
+    expect(next).toMatch(/^Fecha +13 oct 2026, \d{2}:53$/u);
   });
 
-  it("keeps the order and the date on one line when two spaces fit between them (58mm)", () => {
-    const [heading] = headingRow(123);
-    expect(heading).toMatch(/^Pedido 123 {2,}13 oct 2026, \d{1,2}:53$/u);
+  it("keeps the number and the date on one line when two spaces fit between them (58mm)", () => {
+    const [heading] = headingRow("T-2026/00112");
+    expect(heading).toMatch(/^T-2026\/00112 {2}13\/10\/2026 \d{2}:53$/u);
     expect(heading).toHaveLength(30);
   });
 
@@ -3564,4 +3568,95 @@ describe("guests and the amount per person on roll paper", () => {
       /4 comensales · por persona +4,92 €$/u,
     );
   });
+});
+
+describe("the header rows on paper (A754)", () => {
+  const header = (
+    printer: EscSetting,
+    result: Partial<TillSaleResult>,
+  ): { lines: string[]; at: number } => {
+    const lines = printedLines(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          invoiceType: "F2",
+          orderLabel: "Mesa 12",
+          orderNumber: 123,
+          invoiceNumber: "T/123",
+          ...result,
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer,
+      }),
+    );
+    return { lines, at: lines.findIndex((line) => line.endsWith("Pedido 123")) };
+  };
+  const WORDS = /^1[78] ago 2026, \d{2}:34$/u;
+  const NUMBERS = /^1[78]\/08\/2026 \d{2}:34$/u;
+
+  it.each([
+    { printer: PRINTER_58, columns: 30, date: NUMBERS },
+    { printer: PRINTER_80, columns: 42, date: WORDS },
+  ])(
+    "prints the order, then the number and the date on one line, on $printer.paperWidth",
+    ({ printer, columns, date }) => {
+      const { lines, at } = header(printer, {});
+      expect(lines[at]).toMatch(/^Mesa 12 +Pedido 123$/u);
+      expect(lines[at]).toHaveLength(columns);
+      const [number, ...rest] = lines[at + 1]!.split(/ {2,}/u);
+      expect(number).toBe("T/123");
+      expect(rest.join("  ")).toMatch(date);
+      expect(lines[at + 1]).toHaveLength(columns);
+      expect(lines.some((line) => line.startsWith("Factura simplificada"))).toBe(false);
+    },
+  );
+
+  it("drops the numeric date to its own right-aligned line beside a 13-character number (58mm)", () => {
+    const { lines, at } = header(PRINTER_58, { invoiceNumber: "T-S123456/123" });
+    expect(lines[at + 1]).toBe("T-S123456/123");
+    expect(lines[at + 2]).toHaveLength(30);
+    expect(lines[at + 2]!.trimStart()).toMatch(NUMBERS);
+    expect(lines[at + 2]!.startsWith(" ")).toBe(true);
+  });
+
+  it.each([
+    { printer: PRINTER_58, columns: 30 },
+    { printer: PRINTER_80, columns: 42 },
+  ])("puts a table-less order on the right on $printer.paperWidth", ({ printer, columns }) => {
+    const { lines, at } = header(printer, { orderLabel: null });
+    expect(lines[at]).toMatch(/^ +Pedido 123$/u);
+    expect(lines[at]).toHaveLength(columns);
+  });
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "keeps a full invoice's FACTURA and Fecha on two lines on $paperWidth",
+    (printer) => {
+      const { lines, at } = header(printer, {
+        invoiceType: "F1",
+        invoiceNumber: "FF/1",
+        issuedAt: "2026-08-17T22:34:00.000Z",
+        issuedOffsetMinutes: 120,
+      });
+      expect(lines.slice(at + 1, at + 3).map((line) => line.replace(/ +/gu, " "))).toEqual([
+        "FACTURA FF/1",
+        "Fecha 18 ago 2026, 00:34",
+      ]);
+    },
+  );
+
+  it.each([
+    { printer: PRINTER_58, heading: "Fra. simplificada" },
+    { printer: PRINTER_80, heading: "Factura simplificada" },
+  ])(
+    "captions a simplified receipt's rows when it carries an operation date, on $printer.paperWidth",
+    ({ printer, heading }) => {
+      const { lines, at } = header(printer, { operationDate: "2026-08-16" });
+      const rows = lines.slice(at + 1, at + 4);
+      expect(rows[0]).toMatch(new RegExp(`^${heading} +T/123$`, "u"));
+      expect(rows[1]).toMatch(/^Fecha +1[78] ago 2026, \d{2}:34$/u);
+      expect(rows[2]).toMatch(/^Fecha de operación +16 ago 2026$/u);
+    },
+  );
 });

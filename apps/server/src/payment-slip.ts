@@ -1,5 +1,6 @@
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CardDetails } from "@waitron/payments";
+import { receiptDateTime } from "./receipt-dates.js";
 import { formatMoney } from "./receipt-money.js";
 
 /** Payment facts only: no invoice identifiers or fiscal rendering dependencies. */
@@ -37,12 +38,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   text("JUSTIFICANTE DE PAGO");
   text("Este documento no es una factura");
   text(`${input.issuer.venueName} · ${input.issuer.nif}`);
-  text(
-    new Intl.DateTimeFormat(input.invoiceLocale, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(input.paidAt)),
-  );
+  text(receiptDateTime(input.paidAt, input.invoiceLocale));
   text([input.orderLabel, `Pedido ${input.orderNumber}`].filter(Boolean).join(" · "));
   b.line();
   if (input.card !== null) {

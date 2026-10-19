@@ -357,7 +357,10 @@ just a green typecheck.
   of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
   dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
   into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
-  not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a).
+  not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a), nor
+  paper's header rows (A754): on every sale it shows captioned invoice-number and date rows, the
+  date in words, with the table and order on a line beneath them, and an operation date only on a
+  full invoice; it does pad the hour to two digits as paper does.
 
 ## On an A4 full invoice, a caption and its amount can split across pages
 
@@ -529,47 +532,41 @@ returns `null`. This checks those readers, not every sale path.
   puts each price far from its name (which adds to the "prices are not a column" item in the till
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
-## A754. The receipt's date and time on a line of their own
-
-**A754 (owner, 2026-10-16) — a mock-up for the owner's approval before building; it changes what
-printed invoices look like, so the owner lands it.** Seen on the printer's sample receipt
-(`apps/server/src/sample-receipt.ts`) in Catalan: "Mesa 6 · Comanda 41" and "15 de gen. 2026,
-12:34" did not fit one row, so the date dropped to a line of its own, right-aligned.
-
-Today the simplified invoice puts the order and the date on one row and lets an overflow wrap
-(`buildReceiptDocument`, `apps/server/src/receipt-document.ts:217-221`); the full invoice's
-order-and-date row is built the same way (`:223`). The owner first asked for a numeric date so the
-row fits, then: "we'll soon run out of space eg if the table name is longer or the order number
-gets longer, so we should just make it look good with the date on its own line".
-
-- **The date and time always get their own line**, laid out deliberately, on simplified and full
-  invoices. The layout and the date's format are what the mock-up decides.
-- **The law asks for the date and sets no format** (checked 2026-10-19, provenance below): a full
-  invoice and a simplified one each need «La fecha de su expedición», and Orden HAC/1177/2024 sets
-  no format for a printed invoice's date. Neither RD 1619/2012 art. 6 nor art. 7 asks for the time of day
-  (the one «hora» in them is a vehicle's hours of navigation or flight).
-- **Mock-up (2026-10-19), rendered from the code** with a temporary switch, not drawn:
-  [simplified receipt](mockups/a754-receipt-date-line/1-simplified-receipt.png) and
-  [full invoice](mockups/a754-receipt-date-line/2-full-invoice.png). Three layouts: **A** a «Fecha»
-  row (caption left, value right) under the invoice number, the table on its own line; **B** the same
-  with the date in numbers (`15/01/2026 12:34`); **C** the date alone, uncaptioned, on the line under
-  the table. Owner's choice pending (lane B's questions).
-- On 58 mm paper «Factura simplificada» and its number do not fit one row either, today and in all
-  three layouts, so the number drops to a right-aligned line of its own.
-
-Provenance, downloaded 2026-10-19; every «» quote was found word for word, by script, in the
-downloaded text, and two control phrases («formato de la fecha de expedición», «la fecha se
-expresará en formato») were not:
-
-| Source | Says |
-| --- | --- |
-| RD 1619/2012 art. 6.1.b (full invoice), [BOE-A-2012-14696](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696), last update 31/03/2026 | «b) La fecha de su expedición.» |
-| RD 1619/2012 art. 7.1.b (simplified invoice), same page | «b) La fecha de su expedición.» |
-| Orden HAC/1177/2024, [BOE-A-2024-22138](https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138), last update 28/10/2024 | Every «fecha» in it was read: they concern the records, their generation time, the chain, the QR's contents and the system's declaration. The one date format it states, «La fecha ha de ser completa, es decir, deberá indicar día, mes y año, en ese orden», is art. 15.1.l, the date the producer signs the declaración responsable, not an invoice's. Art. 21 leaves the QR's date encoding to AEAT's technical document («la codificación y formato de la información requerida se especificarán en el correspondiente documento técnico»); that date sits inside the QR, not in the printed text. |
-- The sample's Spanish "Mesa 6" and "Café y tostada" on a Catalan receipt are fine: they are
-  internal sample values (owner).
-
 ## Decisions and deliberate limits
+
+- **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
+  «Pedido N» on the right (the order alone on the right when there is no table). Then:
+  - **A simplified receipt** puts its number on the left and the date and time on the right, with
+    no captions: the date in words on 80 mm paper and on an A4 page (`18 ago 2026, 11:21`), in
+    numbers on 58 mm paper (`18/08/2026 11:21`). When the receipt carries an operation date it
+    prints captioned rows instead — «Factura simplificada» and the number, «Fecha» and the date in
+    words, «Fecha de operación» and the day — with the heading shortened to «Fra. simplificada» on
+    58 mm paper.
+  - **A full invoice**, on every paper, prints «FACTURA» and its number on one row and «Fecha» and
+    the date in words on the next, never merged, then «Fecha de operación» only when it differs
+    from the issue day.
+  - **Every printed receipt date has a two-digit hour** (`00:34`, never `0:34`), in every receipt
+    language, in words and in numbers.
+  - When the right-hand value does not fit beside the end of the left-hand text, it drops to a
+    right-aligned line of its own, as before (`labelAmountLines`, `packages/printing/src/layout.ts`).
+    Pictures, drawn from the code: [simplified receipt](mockups/a754-receipt-date-line/1-simplified-receipt.png),
+    [long numbers on 58 mm paper](mockups/a754-receipt-date-line/2-long-numbers-58mm.png) and
+    [captioned rows and the full invoice](mockups/a754-receipt-date-line/3-captioned-and-full-invoice.png).
+    The printer's sample receipt (`apps/server/src/sample-receipt.ts`) keeps its Spanish «Mesa 6»
+    and «Café y tostada» on a receipt in another language: they are internal sample values (owner).
+
+  The law asks for the date and sets no format (checked 2026-10-19): a full invoice and a simplified
+  one each need «La fecha de su expedición», and Orden HAC/1177/2024 sets no format for a printed
+  invoice's date. Neither RD 1619/2012 art. 6 nor art. 7 asks for the time of day (the one «hora» in
+  them is a vehicle's hours of navigation or flight). Downloaded 2026-10-19; every «» quote was found
+  word for word, by script, in the downloaded text, and two control phrases («formato de la fecha de
+  expedición», «la fecha se expresará en formato») were not:
+
+  | Source | Says |
+  | --- | --- |
+  | RD 1619/2012 art. 6.1.b (full invoice), [BOE-A-2012-14696](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696), last update 31/03/2026 | «b) La fecha de su expedición.» |
+  | RD 1619/2012 art. 7.1.b (simplified invoice), same page | «b) La fecha de su expedición.» |
+  | Orden HAC/1177/2024, [BOE-A-2024-22138](https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138), last update 28/10/2024 | Every «fecha» in it was read: they concern the records, their generation time, the chain, the QR's contents and the system's declaration. The one date format it states, «La fecha ha de ser completa, es decir, deberá indicar día, mes y año, en ese orden», is art. 15.1.l, the date the producer signs the declaración responsable, not an invoice's. Art. 21 leaves the QR's date encoding to AEAT's technical document («la codificación y formato de la información requerida se especificarán en el correspondiente documento técnico»); that date sits inside the QR, not in the printed text. |
 
 - **A card taken on a connected card machine never opens the drawer, even when the machine prints a
   paper merchant slip (owner, 2026-10-17).** B30's drawer covers only a machine Waitron does not

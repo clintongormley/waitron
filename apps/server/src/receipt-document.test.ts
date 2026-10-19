@@ -11,6 +11,15 @@ import {
   FULL_INVOICE_DOCUMENT_FIXTURE,
 } from "./testing/full-invoice-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { receiptDateTime, receiptDateTimeNumeric } from "./receipt-dates.js";
+
+// A simplified sale never carries an operation date today (`record-sale.ts` writes it only with a
+// customer tax identity), so the simplified fixtures drop the full invoice's.
+function withoutOperationDate(): ReceiptDocumentInput["result"] {
+  const result = { ...FULL_INVOICE_DOCUMENT_FIXTURE.result };
+  delete result.operationDate;
+  return result;
+}
 
 describe("format-neutral invoice content", () => {
   it.each(["58mm", "80mm"] as const)("keeps the captured F1 paper bytes on %s", (paperWidth) => {
@@ -60,8 +69,9 @@ describe("format-neutral invoice content", () => {
     expect(text).not.toContain("Current mutable domicile");
     expect(text).not.toContain("Current mutable location address");
     expect(rows).toEqual([
+      ["Mesa 6", "Pedido 41"],
       ["FACTURA", "FF/1"],
-      ["Mesa 6 · Pedido 41", "18 ago 2026, 0:34"],
+      ["Fecha", "18 ago 2026, 00:34"],
       ["Fecha de operación", "17 ago 2026"],
       ["Base imponible 21%", "9,00 €"],
       ["IVA 21%", "1,89 €"],
@@ -372,19 +382,19 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
 describe("the simplified receipt's own layout (A663)", () => {
   const SIMPLIFIED = {
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" as const },
+    result: { ...withoutOperationDate(), invoiceType: "F2" as const },
   };
   const rows = (input: Parameters<typeof buildReceiptDocument>[0]) =>
     buildReceiptDocument(input).elements.flatMap((e): unknown[] =>
       e.kind === "amount" ? [[e.caption, e.amount, e.style]] : e.kind === "rule" ? ["rule"] : [],
     );
 
-  it("heads with the order and date, then the number, and prints TOTAL before each rate's base and VAT", () => {
+  it("heads with the order, then the number and date, and prints TOTAL before each rate's base and VAT", () => {
     expect(rows(SIMPLIFIED)).toEqual([
       "rule",
       "rule",
-      ["Mesa 6 · Pedido 41", expect.stringMatching(/^1[78] ago 2026, \d+:34$/u), undefined],
-      ["Factura simplificada", "FF/1", undefined],
+      ["Mesa 6", "Pedido 41", undefined],
+      ["FF/1", expect.stringMatching(/^1[78] ago 2026, \d{2}:34$/u), undefined],
       "rule",
       ["1  Menú del día con un nombre especialmente largo", "12,10", undefined],
       ["  Descuento 10%", "-1,21", undefined],
@@ -931,4 +941,79 @@ describe("guests and the amount per person", () => {
     expect(elements[at - 1]).toEqual({ kind: "rule" });
     expect(elements[at - 2]).toMatchObject({ kind: "amount", caption: "TOTAL" });
   });
+});
+
+describe("the header rows: order, number and date (A754)", () => {
+  const ISSUED = FULL_INVOICE_DOCUMENT_FIXTURE.result.issuedAt;
+  const SIMPLIFIED: ReceiptDocumentInput = {
+    ...FULL_INVOICE_DOCUMENT_FIXTURE,
+    result: { ...withoutOperationDate(), invoiceType: "F2" },
+  };
+  const header = (input: ReceiptDocumentInput): unknown[] => {
+    const elements = buildReceiptDocument(input).elements;
+    const first = elements.findIndex((e) => e.kind === "amount");
+    const end = elements.findIndex((e, at) => at > first && e.kind === "rule");
+    return elements.slice(first, end);
+  };
+  const amount = (
+    caption: string,
+    value: string,
+    extra: { style?: { bold: true }; gap?: number } = {},
+  ): ReceiptElement => ({ kind: "amount", caption, amount: value, indent: 0, ...extra });
+
+  it.each([
+    { paperWidth: undefined, date: () => receiptDateTime(ISSUED, "es-ES") },
+    { paperWidth: "80mm" as const, date: () => receiptDateTime(ISSUED, "es-ES") },
+    { paperWidth: "58mm" as const, date: () => receiptDateTimeNumeric(ISSUED, "es-ES") },
+  ])("puts the number and the date on one row on paper $paperWidth", ({ paperWidth, date }) => {
+    expect(date()).toMatch(
+      paperWidth === "58mm" ? /^1[78]\/08\/2026 \d{2}:34$/u : /ago 2026, \d{2}:34$/u,
+    );
+    expect(header({ ...SIMPLIFIED, ...(paperWidth ? { paperWidth } : {}) })).toEqual([
+      amount("Mesa 6", "Pedido 41", { gap: 2 }),
+      amount("FF/1", date(), { gap: 2 }),
+    ]);
+  });
+
+  it("puts a table-less order on the right of the first row", () => {
+    expect(
+      header({ ...SIMPLIFIED, result: { ...SIMPLIFIED.result, orderLabel: null } })[0],
+    ).toEqual(amount("", "Pedido 41", { gap: 2 }));
+  });
+
+  it.each([
+    { paperWidth: undefined, heading: "Factura simplificada" },
+    { paperWidth: "80mm" as const, heading: "Factura simplificada" },
+    { paperWidth: "58mm" as const, heading: "Fra. simplificada" },
+  ])(
+    "captions every row when a simplified receipt carries an operation date, on paper $paperWidth",
+    ({ paperWidth, heading }) => {
+      expect(
+        header({
+          ...SIMPLIFIED,
+          ...(paperWidth ? { paperWidth } : {}),
+          result: { ...SIMPLIFIED.result, issuedOffsetMinutes: -480, operationDate: "2026-08-16" },
+        }),
+      ).toEqual([
+        amount("Mesa 6", "Pedido 41", { gap: 2 }),
+        amount(heading, "FF/1"),
+        amount("Fecha", receiptDateTime(ISSUED, "es-ES")),
+        amount("Fecha de operación", "16 ago 2026"),
+      ]);
+    },
+  );
+
+  it.each([undefined, "80mm" as const, "58mm" as const])(
+    "keeps a full invoice's FACTURA and Fecha on rows of their own on paper %s",
+    (paperWidth) => {
+      expect(
+        header({ ...FULL_INVOICE_DOCUMENT_FIXTURE, ...(paperWidth ? { paperWidth } : {}) }),
+      ).toEqual([
+        amount("Mesa 6", "Pedido 41", { gap: 2 }),
+        amount("FACTURA", "FF/1", { style: { bold: true } }),
+        amount("Fecha", "18 ago 2026, 00:34"),
+        amount("Fecha de operación", "17 ago 2026"),
+      ]);
+    },
+  );
 });
