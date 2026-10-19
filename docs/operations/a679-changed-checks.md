@@ -3177,3 +3177,12 @@ to the approved hour design. The provisioning reference now states the existing 
 base bound. A relative-link check resolves 935 local destinations across the changed prose
 paths; it does not check anchors or the meaning of those pages. Final installed reviews,
 current-head CI and authorised landing remain open.
+
+The subsequent complete provisioning coverage run passes all 1,471 cases in 73 files,
+with statements 3,725/3,800 (98.02%), branches 2,789/2,884 (96.70%), functions
+692/701 (98.71%) and lines 3,333/3,367 (98.99%). It exits zero after 431.23 seconds.
+No threshold, exclusion or ignored-code marker changes. This qualifies that integrated
+package tree; it does not replace the final reviews or current-head CI.
+
+Current operator setup/recovery instructions and the provisioning reference omit branch-review
+status. Qualification and its remaining limits stay in this inventory, the backlog and PR.

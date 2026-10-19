@@ -4,10 +4,6 @@ Choose a usable archive, bucket copy or Waitron Cloud backup, then find the reco
 key name matches that copy. A newer sheet may contain a replacement key that an older backup
 does not accept. Keep the archive password or Cloud login separate from the node recovery key.
 
-This is the A679 candidate's hour-based recovery route. Its source-host recovery checks do not
-establish physical replacement, successful venue-copy adoption or a promotion browser journey.
-Final integration, both installed reviews and current-head CI remain open.
-
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node

@@ -92,13 +92,13 @@ refuses with `setup.not_ready` before opening the venue directory. For example:
 WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js venue
 ```
 
-The A679 candidate's interactive Live flow owns its setup attempt, compares clocks and selects
+The interactive Live flow owns its setup attempt, compares clocks and selects
 an eligible hour for its series. Pass an absolute `--recovery-pdf` destination outside both host
 state and the venue. Confirm the password and that you kept the resulting PDF. `--yes` answers
 neither the clock nor retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
-explains the sequence and limits. Final branch integration, reviews and CI remain open.
+explains the sequence and limits.
 
-For an accepted production readiness test on this branch, set `WAITRON_SETUP_SETTINGS_FILE` to
+For an accepted production readiness test, set `WAITRON_SETUP_SETTINGS_FILE` to
 your certificate/email JSON and add `--test-fiscal` to the same `venue` invocation. For the bundled
 command, `WAITRON_MIGRATIONS_DIR` points to the packaged migration sets, as it does in the box
 image. The command asks separately before submitting its preproduction sample, even with `--yes`.

@@ -4,10 +4,6 @@ Set up boxes for the same taxpayer one at a time, including boxes at other venue
 setup selects a four-character code from a UTC hour. Two boxes choosing the same hour can choose
 the same names, so your coordination matters even when both clocks are correct.
 
-This procedure describes the A679 candidate. Final integration, both installed reviews and
-current-head CI remain open. The owner approved the generated recovery sheets on 19 October.
-See the [qualification inventory](a679-changed-checks.md) for the checks and their limits.
-
 ## Review the business and clock
 
 Choose Live in the local setup wizard. Enter the business, location and administrator details.
