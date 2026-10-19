@@ -347,7 +347,12 @@ own process runs with `WAITRON_ENV=production`, whether or not an enabled module
 allocation. With `WAITRON_ENV` unset, empty, `dev` or `preproduction` it goes through the same
 throwaway step and stamps the database preproduction; any other value is refused as
 `server.config_invalid`. `dev-setup.ts` uses it through `applyDeveloperDemoVenue`
-(`apps/server/scripts/demo-seed/allocation.ts`).
+(`apps/server/scripts/demo-seed/allocation.ts`). `apps/server/scripts/cloud-integration-fixture.ts`
+does not: it calls `provisionVenue` with `initialAllocation`, as the setup route does, naming
+preproduction as the host's environment because the server it then starts runs with
+`WAITRON_ENV=dev`. It never reads its own process's `WAITRON_ENV`. What keeps it off a real venue
+is that it refuses any `CLOUD_TEST_ROOT` outside the system's temporary directory, or without
+`cloud-integration-` in its path.
 
 ## Iterating against a local checkout of `@waitron/verifactu`
 

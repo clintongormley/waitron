@@ -1,11 +1,12 @@
 import { createStaffCsr, installStaffCertificate } from "../src/cloud-remote.js";
 import { createCloudConnection } from "../src/cloud-client.js";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
 import { ensureBoxSecrets } from "../src/box-secrets.js";
+import { isUnset } from "../src/env-value.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { writeTradingEnv } from "../src/trading-config.js";
 import { openVenueDatabase } from "@waitron/db";
@@ -51,6 +52,7 @@ if (savedEnv !== undefined) {
       },
       {
         environment: "preproduction",
+        initialAllocation: { kind: "throwaway", hostEnvironment: "preproduction" },
         venue: {
           country: "ES",
           taxId: "73000001K",
@@ -124,13 +126,17 @@ if (savedEnv !== undefined) {
     WAITRON_TILL_LOCATION_ID: result.locationId,
     WAITRON_TILL_NODE_ID: result.nodeId,
     WAITRON_CLOUD_ORIGIN: process.env.CLOUD_TEST_ORIGIN,
-    WAITRON_DASHBOARD_APP_DIR: resolve(import.meta.dirname, "../../dashboard/dist"),
+    WAITRON_DASHBOARD_APP_DIR: isUnset(process.env.WAITRON_DASHBOARD_APP_DIR)
+      ? resolve(import.meta.dirname, "../../dashboard/dist")
+      : process.env.WAITRON_DASHBOARD_APP_DIR,
   };
   await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });
 }
 const server = await startServer(env);
+// Renamed into place so a poller never reads a half-written ready.json.
+const readyPath = join(root, "ready.json");
 await writeFile(
-  join(root, "ready.json"),
+  `${readyPath}.tmp`,
   JSON.stringify({
     origin: env.WAITRON_MANAGEMENT_ORIGIN,
     port: Number(env.WAITRON_HTTP_PORT),
@@ -138,6 +144,7 @@ await writeFile(
   }),
   { mode: 0o600 },
 );
+await rename(`${readyPath}.tmp`, readyPath);
 // Only the parent integration process can submit synthetic adapter observations over IPC.
 const cloud = createCloudConnection({
   stateDir: root,

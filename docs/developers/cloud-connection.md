@@ -76,7 +76,10 @@ checks that its real worker recovers both. Independent service configurations an
 synthetic adapter observations stay with their intended venues; revoking one
 installation leaves the other connected. These observations test the status protocol,
 not an actual tunnel or restorable backup. The fixture uses
-demo mode and does not configure fiscal/payment providers or create invoices.
+demo mode, provisions its venue with a throwaway preproduction allocation, and does not configure
+fiscal/payment providers or create invoices. On a fixture directory's first start, a non-empty
+`WAITRON_DASHBOARD_APP_DIR` in the environment the fixture is launched with replaces the built
+dashboard; later starts reuse the saved value.
 
 The local Cloud write routes accept only the configured management origin. Open the
 screen at `WAITRON_MANAGEMENT_ORIGIN`; remote-access setup must configure its staff hostname consistently. An automatic status read leaves your
