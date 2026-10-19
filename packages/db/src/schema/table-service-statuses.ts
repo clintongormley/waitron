@@ -11,7 +11,6 @@ export const tableServiceStatuses = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     label: label("label").notNull(),
-    // A floor-plan swatch, checked by `isStatusColor` (src/status-color.ts); no DB CHECK.
     color: label("color").notNull(),
     // Author-controlled ordering in the editor + the floor-plan picker.
     displayOrder: count("display_order").notNull().default(0),

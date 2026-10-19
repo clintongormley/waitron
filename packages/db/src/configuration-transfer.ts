@@ -1,13 +1,9 @@
 import { AppError, isStationColour } from "@waitron/shared";
 import "./errors.js";
-import { isStatusColor } from "./status-color.js";
 
 export function validateCoreConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
 ): void {
-  for (const row of tables.table_service_statuses ?? [])
-    if (!isStatusColor(row.color))
-      throw new AppError("setup.request_invalid", { field: "table_service_statuses.color" });
   for (const row of tables.kitchen_stations ?? [])
     if (row.colour !== undefined && !isStationColour(row.colour))
       throw new AppError("setup.request_invalid", { field: "kitchen_stations.colour" });
@@ -44,7 +40,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "recipe_lines" },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
     { name: "floor_zones", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
-    { name: "table_service_statuses" },
     {
       name: "dining_tables",
       locationColumns: ["location_id"],

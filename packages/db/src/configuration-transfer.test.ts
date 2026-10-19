@@ -5,21 +5,10 @@ import {
   validateCoreConfiguration,
 } from "./configuration-transfer.js";
 
-const refusal = expect.objectContaining({
-  code: "setup.request_invalid",
-  params: { field: "table_service_statuses.color" },
-});
-
 const stationRefusal = expect.objectContaining({
   code: "setup.request_invalid",
   params: { field: "kitchen_stations.colour" },
 });
-
-function status(color?: unknown): Record<string, unknown> {
-  const row: Record<string, unknown> = { id: "s1", label: "Bill requested" };
-  if (color !== undefined) row.color = color;
-  return row;
-}
 
 describe("validateCoreConfiguration", () => {
   it.each([
@@ -49,24 +38,6 @@ describe("validateCoreConfiguration", () => {
     },
   );
 
-  it("refuses a status colour a save would refuse", () => {
-    expect(() =>
-      validateCoreConfiguration({ table_service_statuses: [status("red;position:fixed")] }),
-    ).toThrowError(refusal);
-  });
-
-  it("refuses a status with no colour, which the column cannot store", () => {
-    expect(() => validateCoreConfiguration({ table_service_statuses: [status()] })).toThrowError(
-      refusal,
-    );
-  });
-
-  it("accepts a named colour and a hex", () => {
-    expect(() =>
-      validateCoreConfiguration({ table_service_statuses: [status("amber"), status("#ef4444")] }),
-    ).not.toThrow();
-  });
-
   it("refuses a station colour a save would refuse", () => {
     expect(() =>
       validateCoreConfiguration({ kitchen_stations: [{ colour: "invalid-colour" }] }),
@@ -94,7 +65,7 @@ describe("validateCoreConfiguration", () => {
     ).not.toThrow();
   });
 
-  it("accepts a bundle with no statuses", () => {
+  it("accepts an empty bundle", () => {
     expect(() => validateCoreConfiguration({})).not.toThrow();
   });
 
@@ -147,6 +118,12 @@ describe("validateCoreConfiguration", () => {
 });
 
 describe("CORE_CONFIGURATION_TRANSFER", () => {
+  it("carries no venue-made statuses", () => {
+    expect(CORE_CONFIGURATION_TRANSFER.tables.map((t) => t.name)).not.toContain(
+      "table_service_statuses",
+    );
+  });
+
   it("leaves a deleted printer behind and never carries its poll credential", () => {
     expect(CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "printers")).toEqual({
       name: "printers",
