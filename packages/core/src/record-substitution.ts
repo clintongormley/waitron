@@ -17,6 +17,7 @@ import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { checkedCounterparty } from "./counterparty.js";
+import { insertSale } from "./insert-sale.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { deriveVatBreakdown } from "./record-sale.js";
@@ -185,36 +186,24 @@ export async function recordSubstitution(
   // Stored and filed at the cent, so the row and the fiscal record cannot hold different amounts.
   const totalCents = stringToCents(input.total);
 
-  const [inserted] = await tx
-    .insert(sales)
-    .values({
-      source: input.origin.source,
-      deviceId: input.origin.deviceId,
-      nodeId: input.nodeId,
-      seriesId: input.seriesId,
-      vatBreakdown,
-      invoiceNumber,
-      issuedAt: now.instant.toISOString(),
-      issuedOffsetMinutes: now.offsetMinutes,
-      total: totalCents,
-      locale: input.locale,
-      invoiceLocales: input.invoiceLocales,
-      fiscalBackend: backend.id,
-      fiscalState: "recorded",
-      counterpartyTaxId: counterparty.taxId,
-      counterpartyLegalName: counterparty.legalName,
-      counterpartyCountryCode: counterparty.countryCode,
-    })
-    .returning({ id: sales.id });
-
-  /* v8 ignore start */
-  if (inserted === undefined) {
-    // This unconditional INSERT returns its row or throws on a constraint violation.
-    throw new Error("sales: insert returned no row");
-  }
-  /* v8 ignore stop */
-
-  const saleId = inserted.id as SaleId;
+  const saleId = await insertSale(tx, {
+    source: input.origin.source,
+    deviceId: input.origin.deviceId,
+    nodeId: input.nodeId,
+    seriesId: input.seriesId,
+    vatBreakdown,
+    invoiceNumber,
+    issuedAt: now.instant.toISOString(),
+    issuedOffsetMinutes: now.offsetMinutes,
+    total: totalCents,
+    locale: input.locale,
+    invoiceLocales: input.invoiceLocales,
+    fiscalBackend: backend.id,
+    fiscalState: "recorded",
+    counterpartyTaxId: counterparty.taxId,
+    counterpartyLegalName: counterparty.legalName,
+    counterpartyCountryCode: counterparty.countryCode,
+  });
 
   // On this same transaction, attached to the F3.
   for (const incident of pending) {

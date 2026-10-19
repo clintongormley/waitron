@@ -8,7 +8,6 @@ import {
   invoiceSeries,
   locations,
   saleLines,
-  sales,
   tenants,
   workingOrders,
 } from "@waitron/db";
@@ -39,6 +38,7 @@ import type {
   VatBreakdownLine,
 } from "@waitron/fiscal";
 import type { RecordSaleLine } from "./sale-line.js";
+import { insertSale } from "./insert-sale.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { settleSale } from "./settle-sale.js";
@@ -302,41 +302,29 @@ export async function recordSale(
 
   // `vat_breakdown` stores the same breakdown handed to `backend.recordSale` below, as decimal
   // strings, not cent counts.
-  const [inserted] = await tx
-    .insert(sales)
-    .values({
-      source: input.origin.source,
-      deviceId: input.origin.deviceId,
-      nodeId: input.nodeId,
-      seriesId: input.seriesId,
-      vatBreakdown,
-      workingOrderId: input.workingOrderId ?? null,
-      invoiceNumber,
-      issuedAt: now.instant.toISOString(),
-      issuedOffsetMinutes: now.offsetMinutes,
-      operationDate,
-      total: totalCents,
-      locale: input.locale,
-      invoiceLocales: input.invoiceLocales,
-      fiscalBackend: backend.id,
-      fiscalState: "recorded",
-      counterpartyTaxId: counterparty?.taxId ?? null,
-      counterpartyLegalName: counterparty?.legalName ?? null,
-      counterpartyCountryCode: counterparty?.countryCode ?? null,
-      counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
-      taxpayerDomicile: taxpayer?.domicile ?? null,
-      operatorId: input.operatorId ?? null,
-    })
-    .returning({ id: sales.id });
-
-  /* v8 ignore start */
-  if (inserted === undefined) {
-    // This unconditional INSERT returns its row or throws on a constraint violation.
-    throw new Error("sales: insert returned no row");
-  }
-  /* v8 ignore stop */
-
-  const saleId = inserted.id as SaleId;
+  const saleId = await insertSale(tx, {
+    source: input.origin.source,
+    deviceId: input.origin.deviceId,
+    nodeId: input.nodeId,
+    seriesId: input.seriesId,
+    vatBreakdown,
+    workingOrderId: input.workingOrderId ?? null,
+    invoiceNumber,
+    issuedAt: now.instant.toISOString(),
+    issuedOffsetMinutes: now.offsetMinutes,
+    operationDate,
+    total: totalCents,
+    locale: input.locale,
+    invoiceLocales: input.invoiceLocales,
+    fiscalBackend: backend.id,
+    fiscalState: "recorded",
+    counterpartyTaxId: counterparty?.taxId ?? null,
+    counterpartyLegalName: counterparty?.legalName ?? null,
+    counterpartyCountryCode: counterparty?.countryCode ?? null,
+    counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
+    taxpayerDomicile: taxpayer?.domicile ?? null,
+    operatorId: input.operatorId ?? null,
+  });
 
   // On this same transaction, so an incident never commits for a sale that rolls back.
   for (const incident of pending) {

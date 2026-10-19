@@ -87,8 +87,9 @@ declare module "@waitron/shared" {
       lineNo: number | null;
       correctsLineId: string | null;
     };
-    /** Registered, but nothing throws it: no path translates a `sales_series_invoice_number_key`
-     * violation into this code. */
+    /** Thrown by `recordSale`, `recordCorrection` and `recordSubstitution`: the translation of
+     * `sales_series_invoice_number_key`'s unique violation, so the number the series allocated is
+     * already a sale's in that series. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
     /**
      * `saleId` names no row in `sales`. An operational failure: "no fiscal condition blocks a

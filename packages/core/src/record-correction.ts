@@ -23,6 +23,7 @@ import type {
   VatBreakdownLine,
 } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
+import { insertSale } from "./insert-sale.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
@@ -260,36 +261,24 @@ export async function recordCorrection(
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   // No settlement and no tenders: the refund is a separate action.
-  const [inserted] = await tx
-    .insert(sales)
-    .values({
-      source: input.origin.source,
-      deviceId: input.origin.deviceId,
-      nodeId: input.nodeId,
-      seriesId: input.seriesId,
-      vatBreakdown,
-      invoiceNumber,
-      issuedAt: now.instant.toISOString(),
-      issuedOffsetMinutes: now.offsetMinutes,
-      total: totalCents,
-      locale: original.locale,
-      invoiceLocales: original.invoiceLocales,
-      fiscalBackend: backend.id,
-      fiscalState: "recorded",
-      correctsSaleId: input.correctsSaleId,
-      // Written at insert: `sales` is append-only, so the authorizer cannot be added later.
-      authorizedBy: authorization.authorizedBy,
-    })
-    .returning({ id: sales.id });
-
-  /* v8 ignore start */
-  if (inserted === undefined) {
-    // This unconditional INSERT returns its row or throws on a constraint violation.
-    throw new Error("sales: insert returned no row");
-  }
-  /* v8 ignore stop */
-
-  const saleId = inserted.id as SaleId;
+  const saleId = await insertSale(tx, {
+    source: input.origin.source,
+    deviceId: input.origin.deviceId,
+    nodeId: input.nodeId,
+    seriesId: input.seriesId,
+    vatBreakdown,
+    invoiceNumber,
+    issuedAt: now.instant.toISOString(),
+    issuedOffsetMinutes: now.offsetMinutes,
+    total: totalCents,
+    locale: original.locale,
+    invoiceLocales: original.invoiceLocales,
+    fiscalBackend: backend.id,
+    fiscalState: "recorded",
+    correctsSaleId: input.correctsSaleId,
+    // Written at insert: `sales` is append-only, so the authorizer cannot be added later.
+    authorizedBy: authorization.authorizedBy,
+  });
 
   // On this same transaction, attached to the corrective sale.
   for (const incident of pending) {
