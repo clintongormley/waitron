@@ -634,11 +634,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
 
 - **Task 8 (#806, the till works from the server's drafts).** Left open:
   - Saving and sending:
-    - Recheck the retained lines in the two older sign-out cases: an edit after the server
-      session expired, and a second edit while an earlier save still awaits its answer. Normal
-      sign-out and failed-save candidate recovery are covered by the
-      [ownership decision](#one-editor-per-bill-owner-2026-10-17-a773); the existing checks that no
-      second save starts do not assert the retained lines in these two cases.
     - If someone else signs in while a sign-out is still waiting for its save, the till skips
       signing the first person out on the server, so that session lasts until it expires.
     - A send cut off by the 150-second limit is not sent again, and after a reply that never
@@ -1520,13 +1515,15 @@ allows. `till-floor-screen.parties.test.ts` checks the card rows, compact access
 independent pair updates; `table-details-sheet.test.ts` checks the expanded list. These replace
 Task 8's ownerless-floor follow-up, not its other draft or navigation findings.
 
-Unsent local edits remain separate from the saved order as a candidate belonging to that person
-and bill. `till-app-drafts.test.ts` checks an unsaved sign-out and a failed-save candidate across
-sign-out/sign-in: the other person sees neither, and the original person can review it on return.
-`state/draft-sync.test.ts` checks that closing retains the unsaved dish and starts no save. This is
-memory in the current app instance; the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
-section 5 gives no recovery guarantee across reload or close. The more specific expiry and
-in-flight-second-edit observations above remain rechecks.
+Your unsent local edits stay separate from the saved order, kept for your person and bill.
+`till-app-drafts.test.ts` checks the app's idle sign-out callback, a `session.required` save refusal
+followed by that callback, and a second edit while a save awaits its answer. You can review the
+complete local copy after signing back in; another person cannot see it. A late save answer leaves
+that copy intact, and returning starts no save or Send. These app cases use a controlled API,
+not a real server's expiry clock. `state/draft-sync.test.ts` also checks that closing retains the
+unsaved dish and starts no save. Recovery lasts only in the current app instance;
+[ownership design section 5](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+gives no guarantee across reload or close.
 
 While the table is visible, drafts refresh every 15 seconds and on window focus. The app's draft
 suite checks the interval, an unchanged focus refresh preserving selection and its Move window,

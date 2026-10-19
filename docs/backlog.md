@@ -2726,10 +2726,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the branch are for the owner to confirm.
   [Detail](backlog/till.md#task-7-789-each-persons-draft-kept-on-the-server)
 
-- **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** Recheck
-  retained lines after session expiry and a second edit queued behind an unanswered save; the old
-  send-timeout and remaining screen observations are in the detail. Normal sign-out recovery and
-  visible-table draft refresh now follow the
+- **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** The old
+  send-timeout, server logout and remaining screen observations are in the detail. Local draft
+  recovery on sign-out and visible-table refresh follow the
   [per-bill ownership decision](backlog/till.md#one-editor-per-bill-owner-2026-10-17-a773).
   [Detail](backlog/till.md#task-8-806-the-till-works-from-the-servers-drafts)
   - Seating a table whose answer arrives while a newer table is still opening shows the seated

@@ -8468,6 +8468,113 @@ describe("A773 retained bill candidates in the app", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 
+  it.each(["idle callback", "expired-session save refusal"] as const)(
+    "retains the complete local candidate after %s without exposing it to the next person",
+    async (ending) => {
+      const activity = {
+        configure: vi.fn(),
+        noteInteraction: vi.fn(),
+        reacquire: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
+      const { el } = await mountApp({}, activity as never);
+      await openMesa(el);
+      await tap(el, "Beer");
+      await tap(el, "Steak");
+      draft(el).setLineExtras(1, { note: "No salt" });
+      const local = structuredClone([...draft(el).lines]);
+      if (ending === "expired-session save refusal") {
+        api.saveDraft.mockRejectedValueOnce({ code: "session.required", status: 401 });
+        await back(el);
+        expect(api.saveDraft).toHaveBeenCalledOnce();
+      }
+      (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+      await flush(el, 6);
+      expect(lock(el)).not.toBeNull();
+      expect(server.drafts).toEqual([]);
+      const saves = api.saveDraft.mock.calls.length;
+      await reopen(el, "p2", "Luis");
+      expect(retainedCandidate(el)).toBeNull();
+      expect(rows(el)).toEqual([]);
+      emit(tableOrder(el)!, "logout");
+      await flush(el, 6);
+      await reopen(el, "p1", "Ana");
+      expect(retainedCandidate(el)).toMatchObject({
+        personId: "p1",
+        partyId: "v1",
+        billId: "wo-4",
+        base: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      });
+      expect(retainedCandidate(el)?.lines).toEqual(local);
+      expect(
+        retainedCandidate(el)?.lines.map((line) => [line.product.name, line.quantity, line.note]),
+      ).toEqual([
+        ["Beer", "1", undefined],
+        ["Steak", "1", "No salt"],
+      ]);
+      expect(rows(el)).toEqual([]);
+      expect(draft(el).editsLocked).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+      expect(api.saveDraft.mock.calls.length).toBe(saves);
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(server.drafts).toEqual([]);
+    },
+  );
+
+  it("retains edits made after an unanswered save and keeps its late answer out of the candidate", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    const answer = holdNextSave();
+    try {
+      await tap(el, "Beer");
+      await expect.poll(() => api.saveDraft.mock.calls.length).toBe(1);
+      await tap(el, "Beer");
+      await tap(el, "Steak");
+      draft(el).setLineExtras(1, { note: "No salt" });
+      const local = structuredClone([...draft(el).lines]);
+      expect(local.map((line) => [line.product.name, line.quantity, line.note])).toEqual([
+        ["Beer", "2", undefined],
+        ["Steak", "1", "No salt"],
+      ]);
+      emit(tableOrder(el)!, "logout");
+      await flush(el, 6);
+      expect(lock(el)).not.toBeNull();
+      await signIn(el, "p2", "Luis");
+      answer();
+      await flush(el, 8);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el, 6);
+      expect(retainedCandidate(el)).toBeNull();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      emit(tableOrder(el)!, "logout");
+      await flush(el, 6);
+      await reopen(el, "p1", "Ana");
+      expect(retainedCandidate(el)?.lines).toEqual(local);
+      expect(retainedCandidate(el)).toMatchObject({
+        personId: "p1",
+        partyId: "v1",
+        billId: "wo-4",
+        base: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      });
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(draft(el).editsLocked).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(
+        server.drafts.map((saved) => [
+          saved.ownerId,
+          saved.lines.map((line) => [line.menuItemId, line.quantity]),
+        ]),
+      ).toEqual([["p1", [["offer-beer", "1"]]]]);
+    } finally {
+      answer();
+    }
+  });
+
   it("finds the bill's candidate after relocation without applying its old party or expectation", async () => {
     const { el } = await mountApp();
     await openMesa(el);
