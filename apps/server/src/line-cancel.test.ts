@@ -30,7 +30,7 @@ import { listStationNotices, setRoutingCell, writePrintHeldWork } from "@waitron
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem, markServed } from "./working-order.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -81,6 +81,28 @@ async function fixture(release: "fire" | "hold" = "fire", name = "Pizza", quanti
   });
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+async function servePaid(order: Fixture, quantity: string) {
+  await inTx(venue, async (tx) => {
+    const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
+    await markServed(tx, venue.cfg, order.partyId, [{ lineId: order.parent.id, quantity }], {
+      expectedPartyRevision: party!.revision,
+      submissionId: randomUUID(),
+      operatorId: venue.staffId,
+    });
+  });
+}
+
+async function paidWithServing(quantity: string) {
+  const order = await fixture();
+  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+    id: order.billId,
+    tender: { method: "cash", amount: "36.00" },
+    lines: [],
+  });
+  await servePaid(order, quantity);
+  return order;
+}
 
 async function askFor(
   order: Fixture,
@@ -140,6 +162,57 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it.each(["1", "3"])(
+    "refuses cancellation of served paid food with %s portions already served",
+    async (served) => {
+      const order = await paidWithServing(served);
+      const ask = await askFor(order, "keep_charge", "3");
+      const before = await snapshot(order);
+      await expect(cancel(order, ask)).rejects.toMatchObject({
+        code: "adjustment.quantity_invalid",
+        params: { workingOrderId: order.billId, lineNo: order.parent.lineNo, quantity: "3" },
+      });
+      expect(await snapshot(order)).toEqual(before);
+    },
+  );
+
+  it("cancels exactly the unserved paid remainder without consuming served dish or extra quantities", async () => {
+    const order = await paidWithServing("1");
+    const before = await snapshot(order);
+    await cancel(order, await askFor(order, "keep_charge", "2"));
+    const after = await snapshot(order);
+    expect(after.lines).toEqual(
+      before.lines.map((line) => ({ ...line, servedAt: expect.any(String) })),
+    );
+    expect(after.lines.map((line) => line.servedQuantity)).toEqual([1000, 2000]);
+    expect(after.cancellations).toMatchObject([{ lineId: order.parent.id, quantity: 2000 }]);
+    expect(after.tickets.map((item) => item.quantity).sort()).toEqual([1000, 2000]);
+    await expect(cancel(order, await askFor(order, "keep_charge", "1"))).rejects.toMatchObject({
+      code: "adjustment.quantity_invalid",
+    });
+    expect(await snapshot(order)).toEqual(after);
+  });
+
+  it("subtracts prior paid cancellations and replays an accepted cancel after the remaining food is served", async () => {
+    const order = await paidWithServing("1");
+    const ask = await askFor(order, "keep_charge", "1");
+    const answer = await cancel(order, ask);
+    const partial = await snapshot(order);
+    await expect(cancel(order, await askFor(order, "keep_charge", "2"))).rejects.toMatchObject({
+      code: "adjustment.quantity_invalid",
+    });
+    expect(await snapshot(order)).toEqual(partial);
+    await servePaid(order, "1");
+    const served = await snapshot(order);
+    expect(served.lines.map((line) => line.servedQuantity)).toEqual([2000, 4000]);
+    expect(await cancel(order, ask)).toEqual(answer);
+    expect(await snapshot(order)).toEqual(served);
+    await expect(cancel(order, await askFor(order, "keep_charge", "1"))).rejects.toMatchObject({
+      code: "adjustment.quantity_invalid",
+    });
+    expect(await snapshot(order)).toEqual(served);
+  });
+
   it("previews and removes exactly 60.00 when two of three 30.00 dishes are cancelled", async () => {
     const order = await fixture("fire", "Bottle", "3");
     const ask = {

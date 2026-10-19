@@ -134,7 +134,10 @@ export async function cancelItem(
         .select()
         .from(lineServiceCancellations)
         .where(eq(lineServiceCancellations.lineId, lineId));
-      const active = line!.quantity - (prior?.quantity ?? 0);
+      const available =
+        line!.quantity -
+        (prior?.quantity ?? 0) -
+        (bill!.status === "settled" ? line!.servedQuantity : 0);
       const refused = () =>
         new AppError("adjustment.quantity_invalid", {
           workingOrderId: bill!.id,
@@ -143,10 +146,10 @@ export async function cancelItem(
         });
       const removed = quantityOfLine(
         ask.quantity,
-        { quantity: active, unitPrecision: line!.unitPrecision ?? 0 },
+        { quantity: available, unitPrecision: line!.unitPrecision ?? 0 },
         refused,
       );
-      if ((line!.unitPrecision ?? 0) > 0 && removed !== active) throw refused();
+      if ((line!.unitPrecision ?? 0) > 0 && removed !== available) throw refused();
       if (ask.outcome === "keep_charge" && context.billStatus !== "settled" && !started)
         throw invalid("outcome");
       if (ask.outcome === "remove_charge") {

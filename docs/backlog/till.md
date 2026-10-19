@@ -1577,6 +1577,13 @@ visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
 
+On a paid bill, Cancel item can cancel only the unserved remainder after earlier cancellations.
+Served food uses Refund a payment on the receipt, as
+[A758 section 3.3](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#33-cancel-item-by-where-the-dish-is-picture-03)
+specifies. The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` check
+fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
+replay after serving. The unpaid served-food case retains its separate cancellation behavior.
+
 The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open Sent's dish
 window and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
 one request despite repeated confirmation, unchanged service facts until acceptance, and Undo of

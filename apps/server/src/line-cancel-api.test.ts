@@ -35,7 +35,7 @@ import { mountTillApi } from "./till-api.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { createStation } from "./kitchen.js";
 import { storePrepayMadeHere } from "./made-here.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem, markServed } from "./working-order.js";
 import {
   billWith,
   inTx,
@@ -153,6 +153,40 @@ async function managerReason() {
 }
 
 describe("the public cancellation read and command", () => {
+  it.each([
+    ["1", false],
+    ["2", false],
+    ["1", true],
+    ["2", true],
+  ] as const)(
+    "refuses HTTP cancellation beyond the unserved paid remainder (served %s, refund %s)",
+    async (quantity, refundHandoff) => {
+      const p = await fixture("fire");
+      await payWorkingOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        { id: p.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
+      );
+      await inTx(venue, async (tx) => {
+        const [party] = await tx.select().from(parties).where(eq(parties.id, p.partyId));
+        await markServed(tx, venue.cfg, p.partyId, [{ lineId: p.parent.id, quantity }], {
+          expectedPartyRevision: party!.revision,
+          submissionId: randomUUID(),
+          operatorId: venue.staffId,
+        });
+      });
+      const body = await bodyFor(p, { outcome: "keep_charge", refundHandoff });
+      const before = await frozen();
+      const refused = await post(p, body, venue.cookie.manager);
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual({
+        code: "adjustment.quantity_invalid",
+        params: { workingOrderId: p.billId, lineNo: p.parent.lineNo, quantity: "2" },
+      });
+      expect(await frozen()).toEqual(before);
+    },
+  );
+
   it("refuses the paid refund handoff without refund permission before cancelling food", async () => {
     const p = await fixture();
     await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
