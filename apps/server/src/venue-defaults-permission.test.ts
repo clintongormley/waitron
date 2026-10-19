@@ -13,8 +13,8 @@ import { ALL_MODULES } from "./modules.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import "./errors.js";
 
-// No built-in role holds `venue.configure` without `catalogue.manage`, so `authorizeManager` is
-// wrapped to refuse whatever `gate.withheld` names.
+// No built-in role holds the combinations these cases need, so `authorizeManager` refuses whatever
+// `gate.withheld` names.
 const gate = vi.hoisted(() => ({ withheld: null as string | null }));
 vi.mock("@waitron/identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/identity")>();
