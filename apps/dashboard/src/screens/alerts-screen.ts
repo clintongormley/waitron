@@ -45,6 +45,10 @@ export class AlertsScreen extends LitElement {
         display: block;
         max-width: 60ch;
       }
+      wt-data-table::part(alert-actions) {
+        display: flex;
+        gap: var(--wt-space-2);
+      }
     `,
   ];
 
@@ -173,28 +177,30 @@ export class AlertsScreen extends LitElement {
         cell: (a) => {
           const incidentId = incidentIdOf(a);
           const screen = screenTargetOf(a, this.canOpen);
-          return html`${
-            incidentId === null
-              ? nothing
-              : html`<wt-button
-                  size="sm"
-                  variant="secondary"
-                  data-test="alert-handle"
-                  ?loading=${this.busyKey === a.key}
-                  @click=${() => void this.#handle(a, incidentId)}
-                  >${t("alerts.mark_handled")}</wt-button
-                >`
-          }${
-            screen === null
-              ? nothing
-              : html`<wt-button
-                  size="sm"
-                  variant="secondary"
-                  data-test="alert-go-to"
-                  @click=${(e: MouseEvent) => this.#goTo(e, screen)}
-                  >${goToLabel(screen)}</wt-button
-                >`
-          }`;
+          return html`<span part="alert-actions"
+            >${
+              incidentId === null
+                ? nothing
+                : html`<wt-button
+                    size="sm"
+                    variant="secondary"
+                    data-test="alert-handle"
+                    ?loading=${this.busyKey === a.key}
+                    @click=${() => void this.#handle(a, incidentId)}
+                    >${t("alerts.mark_handled")}</wt-button
+                  >`
+            }${
+              screen === null
+                ? nothing
+                : html`<wt-button
+                    size="sm"
+                    variant="secondary"
+                    data-test="alert-go-to"
+                    @click=${(e: MouseEvent) => this.#goTo(e, screen)}
+                    >${goToLabel(screen)}</wt-button
+                  >`
+            }</span
+          >`;
         },
       },
     ];

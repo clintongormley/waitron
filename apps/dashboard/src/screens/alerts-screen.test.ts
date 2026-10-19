@@ -313,6 +313,12 @@ describe("dashboard-alerts-screen", () => {
       expect(heldRow!.querySelector("[data-test=alert-handle]")).not.toBeNull();
       const goTo = heldRow!.querySelector<HTMLElement>("[data-test=alert-go-to]")!;
       expect(goTo.textContent!.trim()).toBe(label);
+      const handleBox = heldRow!
+        .querySelector("[data-test=alert-handle]")!
+        .shadowRoot!.querySelector("button")!
+        .getBoundingClientRect();
+      const goToBox = goTo.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+      expect(goToBox.left - handleBox.right, "the two buttons do not touch").toBeGreaterThan(0);
       // An event that names no screen still offers only Mark handled.
       expect(plainRow!.querySelector("[data-test=alert-handle]")).not.toBeNull();
       expect(plainRow!.querySelector("[data-test=alert-go-to]")).toBeNull();
@@ -505,8 +511,15 @@ describe("the open alerts at phone width", () => {
     },
     area: "fiscal",
   };
-  // This table's actions column holds a plain button rather than a row menu, so each row's
-  // button is checked the way expectRowMenusOnScreen checks a menu's.
+  const held: AlertView = {
+    ...open,
+    key: "incident:i4",
+    code: "payment.reconcile_held",
+    params: { count: 1, payments: [] },
+    screen: "payments",
+  };
+  // This table's actions column holds plain buttons rather than a row menu, so each button is
+  // checked the way expectRowMenusOnScreen checks a menu's.
   it.each(["en-GB", "es-ES"])(
     "keeps every open alert's action button on screen and uncovered while the other columns scroll sideways (390 px, %s)",
     async (locale) => {
@@ -518,7 +531,9 @@ describe("the open alerts at phone width", () => {
         await page.viewport(390, 844);
         expect(window.innerWidth).toBe(390);
         const api = stubApi({
-          listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [long, open, ongoing] }),
+          listAlerts: vi
+            .fn()
+            .mockResolvedValue({ visible: true, alerts: [long, held, open, ongoing] }),
         });
         const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
           api,
@@ -537,7 +552,7 @@ describe("the open alerts at phone width", () => {
             "[data-test=alert-handle], [data-test=alert-go-to]",
           ),
         ];
-        expect(actions).toHaveLength(3);
+        expect(actions).toHaveLength(5);
         for (const [index, action] of actions.entries()) {
           const button = action.shadowRoot!.querySelector("button")!;
           const at = button.getBoundingClientRect();
