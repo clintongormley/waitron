@@ -14,20 +14,13 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import {
-  effectiveNamesLine,
-  optionalTextFields,
-  textField,
-  translations,
-  type FieldContext,
-} from "./form-fields.js";
+import { optionalTextFields, textField, translations, type FieldContext } from "./form-fields.js";
 import "./option-label-form.js";
 import type { DraftLabel } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
@@ -55,6 +48,22 @@ export class OptionListForm extends LitElement {
       .names {
         display: grid;
         gap: var(--wt-space-3);
+      }
+      fieldset.names {
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      legend {
+        margin-bottom: var(--wt-space-2);
+        padding: 0;
+      }
+      .group-label {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
       }
       .error {
         color: var(--wt-color-danger);
@@ -537,36 +546,26 @@ export class OptionListForm extends LitElement {
 
   #namesSection(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const hasError = locales.some((locale) => !!errors[`customer-name-${locale}`]);
-    return html`<wt-disclosure
-      data-test="names-section"
-      heading=${t("options.customer_names")}
-      .summaryFields=${effectiveNamesLine(
-        locales,
+    return html`<fieldset class="names" data-test="names-section">
+      <legend class="group-label" data-test="customer-names-heading">
+        ${t("options.customer_names")}
+      </legend>
+      ${optionalTextFields(
+        this.#fields(errors),
+        "customer-name",
+        t("options.customer_name"),
         this.customerName,
-        this.languages.defaultLanguage,
+        (customerName) =>
+          this.#edit(
+            () => (this.customerName = customerName),
+            ...locales
+              .filter((locale) => customerName[locale] !== this.customerName[locale])
+              .map((locale) => `customer-name-${locale}`),
+          ),
         this.name,
+        this.languages.defaultLanguage,
       )}
-      .hasError=${hasError}
-    >
-      <div class="names">
-        ${optionalTextFields(
-          this.#fields(errors),
-          "customer-name",
-          t("options.customer_name"),
-          this.customerName,
-          (customerName) =>
-            this.#edit(
-              () => (this.customerName = customerName),
-              ...locales
-                .filter((locale) => customerName[locale] !== this.customerName[locale])
-                .map((locale) => `customer-name-${locale}`),
-            ),
-          this.name,
-          this.languages.defaultLanguage,
-        )}
-      </div>
-    </wt-disclosure>`;
+    </fieldset>`;
   }
 
   #labelRow(label: DraftLabel, index: number, rowErrors: Record<string, string>) {

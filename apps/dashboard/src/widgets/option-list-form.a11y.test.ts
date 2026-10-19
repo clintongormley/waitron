@@ -52,7 +52,7 @@ const states = [
   "busy",
   "server-error",
   "many-labels",
-  "names-open",
+  "names-blank",
   "names-error",
   "option-editor",
 ] as const;
@@ -69,7 +69,9 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
             ? many
             : state === "create" || state === "invalid"
               ? null
-              : cooked,
+              : state === "names-blank"
+                ? { ...cooked, customerName: {} }
+                : cooked,
         busy: state === "busy",
         fieldErrors:
           state === "server-error"
@@ -95,15 +97,13 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-label-3"]')!.click();
       await el.updateComplete;
     }
-    const names = el.shadowRoot!.querySelector<
-      HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
-    >('[data-test="names-section"]')!;
-    if (state === "names-open") names.open = true;
-    await names.updateComplete;
     const editor = el.shadowRoot!.querySelector("dashboard-option-label-form")!;
     await editor.updateComplete;
     // Each named state is scanned in the shape it names.
-    expect(names.open).toBe(state === "names-open" || state === "names-error");
+    for (const input of el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+      '[data-test="names-section"] wt-input',
+    ))
+      expect(input.checkVisibility()).toBe(true);
     expect(editor.open).toBe(state === "option-editor");
     await expectNoA11yViolations(host);
   });

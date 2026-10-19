@@ -331,69 +331,60 @@ it("shows each option as text with a Default radio, an Unavailable lozenge only 
   ]);
 });
 
-it("folds the list's customer-facing names into a closed section that lists them", async () => {
-  const { el } = await mount({ value: { ...cooked, customerName: { es: "¿En qué punto?" } } });
-  const section = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-test="names-section"]',
-  )!;
+it.each([null, cooked])(
+  "shows every customer-facing name immediately when opening %j",
+  async (value) => {
+    const { el } = await mount({ value });
+    for (const name of ["customer-name-en", "customer-name-es"]) {
+      const input = field(el, name);
+      await input.updateComplete;
+      expect(input.shadowRoot!.querySelector("input")!.checkVisibility(), name).toBe(true);
+    }
+  },
+);
 
-  expect(section.tagName).toBe("WT-DISCLOSURE");
-  expect(section.open).toBe(false);
-  expect(section.heading).toBe(t("options.customer_names"));
-  for (const name of ["customer-name-en", "customer-name-es"])
-    expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
-  expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summaryFields).toEqual([
-    { label: "EN", value: "Cooked", placeholder: true },
-    { label: "ES", value: "¿En qué punto?" },
+it("shows names in staff, kitchen, then customer-language order", async () => {
+  const { el } = await mount({ value: cooked });
+  const order = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+      '.names [name], [data-test="customer-names-heading"]',
+    ),
+  ].map((node) => node.getAttribute("name") ?? node.dataset.test);
+  expect(order).toEqual([
+    "name",
+    "kitchen-name",
+    "customer-names-heading",
+    "customer-name-en",
+    "customer-name-es",
+    "active",
   ]);
-  await type(el, "customer-name-en", "How would you like it?");
-  expect(section.summaryFields).toEqual([
-    { label: "EN", value: "How would you like it?" },
-    { label: "ES", value: "¿En qué punto?" },
-  ]);
+  expect(field(el, "kitchen-name").value).toBe("COOK");
+  expect(field(el, "kitchen-name").checkVisibility()).toBe(true);
 });
 
 it.each([
-  ["customerName", true],
-  ["kitchenName", false],
-  ["name", false],
-])("opens the list's names section when the server refuses %s: %s", async (path, opened) => {
+  ["customerName", "customer-name-en"],
+  ["kitchenName", "kitchen-name"],
+  ["name", "name"],
+])("shows the server's %s refusal beside its visible field", async (path, name) => {
   const { el } = await mount({ value: cooked, fieldErrors: { [path]: "Refused." } });
-  const section = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-test="names-section"]',
-  )!;
-  await section.updateComplete;
-  expect({ hasError: section.hasError, open: section.open }).toEqual({
-    hasError: opened,
-    open: opened,
-  });
+  const input = field(el, name);
+  await input.updateComplete;
+  expect(input.error).toBe("Refused.");
+  expect(input.shadowRoot!.querySelector("input")!.checkVisibility()).toBe(true);
 });
 
 const namesSection = (el: OptionListForm) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-test="names-section"]',
-  )!;
-
-it("draws the kitchen name as its own field directly under Name, shown while the names section is closed", async () => {
-  const { el } = await mount({ value: cooked });
-  const kitchen = field(el, "kitchen-name");
-
-  expect(namesSection(el).open).toBe(false);
-  expect(kitchen.closest("wt-disclosure")).toBeNull();
-  expect(field(el, "name").nextElementSibling).toBe(kitchen);
-  expect(kitchen.checkVisibility()).toBe(true);
-  expect(kitchen.value).toBe("COOK");
-});
+  el.shadowRoot!.querySelector<HTMLFieldSetElement>('[data-test="names-section"]')!;
 
 it.each([
   ["en", "Customer-facing names"],
   ["es", "Nombres para el cliente"],
-])("heads the folded section with the customer-facing names alone (%s)", async (locale, words) => {
+])("heads the visible customer-facing fields (%s)", async (locale, words) => {
   setLocale(locale);
   try {
     const { el } = await mount({ value: cooked });
-    expect(namesSection(el).heading).toBe(words);
+    expect(namesSection(el).querySelector("legend")!.textContent!.trim()).toBe(words);
   } finally {
     setLocale("en");
   }
@@ -429,42 +420,42 @@ it("never hints a customer-facing name with the kitchen name, which keeps its ow
   expect(hints()).toEqual(["Cooked", "How would you like it?"]);
 });
 
-it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
+it("shows the customer-facing names in their own fields, separate from the kitchen name", async () => {
   const { el } = await mount({ value: cooked });
 
-  expect(namesSection(el).summaryFields).toEqual([
+  expect(namesShown(el).line).toEqual([
     { label: "EN", value: "How would you like it?" },
     { label: "ES", value: "¿En qué punto?" },
   ]);
 });
 
-it("draws each language's code in bold with a colon, before its name, on the closed line", async () => {
+it("labels each customer-facing field with its language code", async () => {
   const { el } = await mount({ value: cooked });
-  const section = namesSection(el);
-  await section.updateComplete;
-  const line = section.shadowRoot!.querySelector(".summary")!;
-  expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "EN: How would you like it? · ES: ¿En qué punto?",
-  );
-  const codes = [...line.querySelectorAll(".summary-label")];
-  expect(codes.map((code) => code.textContent)).toEqual(["EN:", "ES:"]);
-  const bold = Number(getComputedStyle(codes[0]!).fontWeight);
-  expect(bold).toBeGreaterThan(Number(getComputedStyle(line).fontWeight));
-  expect(Number(getComputedStyle(codes[1]!).fontWeight)).toBe(bold);
+  expect(["en", "es"].map((locale) => field(el, `customer-name-${locale}`).label)).toEqual([
+    "Customer-facing name (en)",
+    "Customer-facing name (es)",
+  ]);
 });
 
-/** The closed line beside what each blank field hints: the two must name the same fallback. */
 function namesShown(el: OptionListForm) {
-  const input = (locale: string) => field(el, `customer-name-${locale}`);
+  const inputs = [
+    ...namesSection(el).querySelectorAll<HTMLElementTagNameMap["wt-input"]>("wt-input"),
+  ];
+  for (const input of inputs) expect(input.checkVisibility(), input.name).toBe(true);
   return {
-    line: namesSection(el).summaryFields,
-    hints: el.languages.languages.map((locale) =>
-      input(locale).value ? "" : input(locale).placeholder,
-    ),
+    line: inputs.flatMap((input) => {
+      const label = /\(([^)]+)\)$/.exec(input.label)![1]!.toUpperCase();
+      return input.value
+        ? [{ label, value: input.value }]
+        : input.placeholder
+          ? [{ label, value: input.placeholder, placeholder: true }]
+          : [];
+    }),
+    hints: inputs.map((input) => (input.value ? "" : input.placeholder)),
   };
 }
 
-it("shows the staff name, in italic, for every language on the closed line while each customer-facing name is blank", async () => {
+it("hints the staff name in every visible blank customer-facing field", async () => {
   const { el, host } = await mount({ value: { ...cooked, customerName: null } });
   const submitted = record(host);
 
@@ -475,15 +466,6 @@ it("shows the staff name, in italic, for every language on the closed line while
     ],
     hints: ["Cooked", "Cooked"],
   });
-  const section = namesSection(el);
-  await section.updateComplete;
-  const placeholders = [...section.shadowRoot!.querySelectorAll(".summary-placeholder")];
-  expect(placeholders.map((part) => part.textContent)).toEqual(["Cooked", "Cooked"]);
-  expect(placeholders.map((part) => getComputedStyle(part).fontStyle)).toEqual([
-    "italic",
-    "italic",
-  ]);
-
   await type(el, "name", "Doneness");
   expect(namesShown(el)).toEqual({
     line: [
@@ -498,7 +480,7 @@ it("shows the staff name, in italic, for every language on the closed line while
   expect(submitted[0]!.customerName).toBeNull();
 });
 
-it("falls every blank language back to the default language's name on the closed line, and back to the staff name when it is cleared", async () => {
+it("falls every blank language back to the default language's name in the visible fields, and back to the staff name when it is cleared", async () => {
   const { el, host } = await mount({
     value: { ...cooked, customerName: { en: "How would you like it?" } },
   });
@@ -525,7 +507,7 @@ it("falls every blank language back to the default language's name on the closed
   });
 });
 
-it("reads customer-facing names stored under regional codes into the fields, their hints and the closed line, and saves them back as stored when another field changes", async () => {
+it("reads customer-facing names stored under regional codes into the fields, their hints and the visible fields, and saves them back as stored when another field changes", async () => {
   const stored = { "en-GB": "How would you like it?", "es-ES": "¿En qué punto?" };
   const { el, host } = await mount({ value: { ...cooked, customerName: stored } });
   const submitted = record(host);
@@ -574,7 +556,7 @@ it("saves an edited name under its language's plain code, dropping that language
   expect(submitted[0]!.customerName).toEqual({ en: "How done?", "es-ES": "¿En qué punto?" });
 });
 
-it("never falls a blank default language back to another language's name on the closed line", async () => {
+it("never falls a blank default language back to another language's name in the visible fields", async () => {
   const { el, host } = await mount({
     value: { ...cooked, customerName: { es: "¿En qué punto?" } },
   });
@@ -592,7 +574,7 @@ it("never falls a blank default language back to another language's name on the 
   expect(submitted[0]!.customerName).toEqual({ es: "¿En qué punto?" });
 });
 
-it("follows a change of default or content languages on the closed line, in the languages' order", async () => {
+it("follows a change of default or content languages in the visible fields, in the languages' order", async () => {
   const { el } = await mount({ value: { ...cooked, customerName: { es: "¿En qué punto?" } } });
 
   el.languages = { defaultLanguage: "es", languages: ["es", "en"] };
@@ -616,37 +598,35 @@ it("follows a change of default or content languages on the closed line, in the 
   });
 });
 
-it("leaves a language out of the closed line while nothing at all names the list", async () => {
+it("leaves a language out of the visible fields while nothing at all names the list", async () => {
   const { el } = await mount();
 
-  expect(namesSection(el).summaryFields).toEqual([]);
+  expect(namesShown(el).line).toEqual([]);
   await type(el, "customer-name-es", "¿En qué punto?");
-  expect(namesSection(el).summaryFields).toEqual([{ label: "ES", value: "¿En qué punto?" }]);
+  expect(namesShown(el).line).toEqual([{ label: "ES", value: "¿En qué punto?" }]);
   await type(el, "name", "Cooked");
-  expect(namesSection(el).summaryFields).toEqual([
+  expect(namesShown(el).line).toEqual([
     { label: "EN", value: "Cooked", placeholder: true },
     { label: "ES", value: "¿En qué punto?" },
   ]);
 });
 
-it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {
+it("shows a kitchen-name refusal under the kitchen field without marking customer-facing fields", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { kitchenName: "Too long." } });
-  await namesSection(el).updateComplete;
-
   expect(field(el, "kitchen-name").error).toBe("Too long.");
-  expect({ hasError: namesSection(el).hasError, open: namesSection(el).open }).toEqual({
-    hasError: false,
-    open: false,
-  });
+  for (const locale of ["en", "es"]) {
+    expect(field(el, `customer-name-${locale}`).error).toBe("");
+    expect(field(el, `customer-name-${locale}`).checkVisibility()).toBe(true);
+  }
 });
 
-it("focuses the kitchen field when a refusal naming it arrives, leaving the names section closed", async () => {
+it("focuses the kitchen field when a refusal naming it arrives, keeping customer-facing fields visible", async () => {
   const { el } = await mount({ value: cooked });
   el.fieldErrors = { kitchenName: "Too long." };
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
 
-  expect(namesSection(el).open).toBe(false);
+  expect(field(el, "customer-name-en").checkVisibility()).toBe(true);
   expect(field(el, "kitchen-name").shadowRoot!.activeElement).toBe(
     field(el, "kitchen-name").shadowRoot!.querySelector("input"),
   );
@@ -1685,17 +1665,15 @@ it("clears a refusal about the options as a whole once the options change", asyn
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
+it("focuses the visible field a refusal names when the refusal arrives", async () => {
   const { el } = await mount({ value: cooked });
   el.fieldErrors = { customerName: "Too long." };
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
 
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-      '[data-test="names-section"]',
-    )!.open,
-  ).toBe(true);
+  expect(field(el, "customer-name-en").shadowRoot!.querySelector("input")!.checkVisibility()).toBe(
+    true,
+  );
   expect(field(el, "customer-name-en").shadowRoot!.activeElement).toBe(
     field(el, "customer-name-en").shadowRoot!.querySelector("input"),
   );

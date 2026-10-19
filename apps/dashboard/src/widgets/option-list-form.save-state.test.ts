@@ -93,14 +93,6 @@ async function type(el: OptionListForm | OptionLabelForm, name: string, value: s
   await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
   await el.updateComplete;
 }
-/** Opens the customer names section, which starts closed. */
-async function openNames(el: OptionListForm) {
-  const names = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-test="names-section"]',
-  )!;
-  names.open = true;
-  await names.updateComplete;
-}
 /** A real pointer press on the label around an option's default radio. */
 async function pickDefault(el: OptionListForm, index: number) {
   await userEvent.click(
@@ -159,7 +151,6 @@ it("a new list with nothing typed opens with Save quiet and disabled, and a pres
 
 it("one edit makes Save primary and enabled, and typing the original back makes it quiet again", async () => {
   const { el } = await mount(COOKED);
-  await openNames(el);
   await type(el, "customer-name-es", "¿Cómo lo quiere?");
   expect(await saveState(el)).toEqual(ready);
   await type(el, "customer-name-es", "¿En qué punto?");
