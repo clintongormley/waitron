@@ -442,6 +442,9 @@ importers:
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../../packages/module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
