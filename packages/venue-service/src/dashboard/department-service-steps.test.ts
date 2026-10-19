@@ -319,6 +319,35 @@ it("shows a start's error under the start", async () => {
   expect(startBox(el, 2).error).toBe("That course was deleted. Choose another start.");
 });
 
+const clipped = (box: Element | null | undefined) =>
+  box ? box.scrollWidth > box.clientWidth : true;
+
+it.each([
+  { width: 576, startsInFull: true },
+  { width: 356, startsInFull: false },
+])(
+  "at the $width px the department dialog gives the list, a three-digit minutes value and each name read in full",
+  async ({ width, startsInFull }) => {
+    const el = await mount({
+      steps: copy(STEPS).map((step) => (step.key === "s3" ? { ...step, minutes: "120" } : step)),
+    });
+    el.style.width = `${width}px`;
+    await settle(el);
+    rows(el).forEach((_, index) => {
+      const minutes = minutesInput(el, index).shadowRoot!.querySelector("input");
+      expect(clipped(minutes), `minutes in row ${index + 1}`).toBe(false);
+      const name = nameInput(el, index).shadowRoot!.querySelector("input");
+      expect(clipped(name), `name in row ${index + 1}`).toBe(false);
+      if (startsInFull) {
+        const start = startBox(el, index).shadowRoot!.querySelector(".value");
+        expect(clipped(start), `start in row ${index + 1}`).toBe(false);
+      }
+    });
+    const wrap = q(el, ".table-wrap")!;
+    expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+  },
+);
+
 it("draws one table row and one handle per step, in order", async () => {
   const el = await mount();
   expect(rows(el)).toHaveLength(STEPS.length);
