@@ -569,3 +569,200 @@ it.each(["clock-challenge", "compare-clocks"])(
     );
   },
 );
+
+it.each(["clock-challenge", "compare-clocks"])(
+  "does not publish a late successful %s after disconnection",
+  async (action) => {
+    let release!: (value: unknown) => void, entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<unknown>((resolve) => {
+      release = resolve;
+    });
+    const { el, host, calls } = await mount({
+      prepare: async (proposal) => {
+        if ((proposal as { action: string }).action !== action) return { id: "challenge" };
+        entered();
+        return pending;
+      },
+    });
+    await started;
+    host.remove();
+    release(action === "clock-challenge" ? { id: "challenge" } : { id: "comparison", clock });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(calls.some((call) => call.action === "candidates" || call.action === "input")).toBe(
+      false,
+    );
+    expect(
+      calls.filter((call) => (call.value as { action?: string })?.action === "compare-clocks"),
+    ).toHaveLength(action === "clock-challenge" ? 0 : 1);
+  },
+);
+
+it("does not select after a clock confirmation resolves on a disconnected screen", async () => {
+  let release!: () => void, entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const decision = { ...clock, disagreement: true, requiresConfirmation: true };
+  const { el, host, calls } = await mount({
+    prepare: async (proposal) => {
+      const action = (proposal as { action: string }).action;
+      if (action === "clock-challenge") return { id: "challenge" };
+      if (action === "compare-clocks") return { id: "comparison", clock: decision };
+      entered();
+      await pending;
+      return decision;
+    },
+  });
+  await ready(el);
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLInputElement>('[name="setup-clock-confirmed"]')!,
+  );
+  await userEvent.click(button(el, "select"));
+  await started;
+  host.remove();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(calls.filter((call) => call.action === "candidates" || call.action === "input")).toEqual(
+    [],
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
+});
+
+it("does not publish selected state after its input import finishes on a disconnected screen", async () => {
+  let release!: () => void, entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { el, api, host } = await mount();
+  api.importInput = async () => {
+    entered();
+    await pending;
+  };
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await started;
+  host.remove();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=prepare-pdf]")).toBeNull();
+});
+
+it.each(["stage", "register", "input digest", "PDF ready"])(
+  "discards a recovery delivery when the screen disconnects during %s",
+  async (phase) => {
+    const { el, host, api } = await mount();
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const registrations: unknown[] = [];
+    const staged = {
+      stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
+      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    };
+    api.stageNodeKey = async () => {
+      if (phase === "stage") {
+        entered();
+        await gate;
+      }
+      return staged;
+    };
+    api.registerRecoveryDocument = async (value) => {
+      registrations.push(value);
+      if (phase === "register") {
+        entered();
+        await gate;
+      }
+    };
+    api.confirmRecoveryDocument = async () => {
+      throw new Error("kept without a document");
+    };
+    const realCreate = URL.createObjectURL.bind(URL);
+    const urls: string[] = [];
+    const revoked = vi.spyOn(URL, "revokeObjectURL");
+    vi.spyOn(URL, "createObjectURL").mockImplementation((object) => {
+      const url = realCreate(object);
+      urls.push(url);
+      if (phase === "PDF ready") {
+        host.remove();
+        entered();
+      }
+      return url;
+    });
+    if (phase === "input digest") {
+      const digest = crypto.subtle.digest.bind(crypto.subtle);
+      vi.spyOn(crypto.subtle, "digest").mockImplementation(async (...args) => {
+        const data = args[1];
+        const text = new TextDecoder().decode(data as BufferSource);
+        if (text.startsWith('{"allocation":')) {
+          entered();
+          await gate;
+        }
+        return digest(...args);
+      });
+    }
+    await ready(el);
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
+    await userEvent.click(button(el, "prepare-pdf"));
+    await started;
+    host.remove();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).toBeNull();
+    expect(registrations).toHaveLength(phase === "register" ? 1 : 0);
+    for (const url of urls) expect(revoked).toHaveBeenCalledWith(url);
+  },
+);
+
+it("keeps a failed kept confirmation retryable without granting completion", async () => {
+  const { el, api } = await mount();
+  api.stageNodeKey = async () => ({
+    stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
+    key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+  });
+  api.registerRecoveryDocument = async () => {};
+  let refuse = true;
+  api.confirmRecoveryDocument = async () => {
+    if (refuse) throw new Error("temporary refusal");
+  };
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+  );
+  await userEvent.click(button(el, "prepare-pdf"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
+  );
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLInputElement>('[name="setup-pdf-kept"]')!);
+  await userEvent.click(button(el, "kept"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]")).not.toBeNull(),
+  );
+  expect(button(el, "kept").disabled).toBe(false);
+  expect(el.shadowRoot!.textContent).not.toContain("Recovery PDF confirmed.");
+  refuse = false;
+  await userEvent.click(button(el, "kept"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Recovery PDF confirmed."));
+});

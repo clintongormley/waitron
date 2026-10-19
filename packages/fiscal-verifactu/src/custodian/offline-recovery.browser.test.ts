@@ -352,3 +352,64 @@ it("refuses a forged saved-file receipt even when the paper receipt is genuine",
     resume.close();
   }
 });
+
+it.each(["not a file", "oversized file"])(
+  "refuses %s after dropping the checked signer",
+  async (kind) => {
+    const { resume, fileReceipt, paperReceipt, publicKit } = await reopened();
+    try {
+      await resume.verifyChecks(fileReceipt, paperReceipt);
+      resume.attestCustody(attestation, publicKit.public.fingerprint);
+      resume.reserve(reservation);
+      const file =
+        kind === "not a file"
+          ? (new Blob(["{}"]) as File)
+          : new File([new Uint8Array(16385)], "too-large.json");
+      await expect(resume.reopenFile(file, custodyPassphrase)).rejects.toMatchObject(refused);
+      expect(resume.state).toBe("file-saved-unchecked");
+      await expect(resume.consume("allocation-1", "row 1")).rejects.toMatchObject(refused);
+      expect(resume.signedBlock).toBeNull();
+    } finally {
+      resume.close();
+    }
+  },
+);
+
+it("a failed signature leaves consumption recorded and the signer stopped", async () => {
+  const { resume, fileReceipt, paperReceipt, publicKit } = await reopened();
+  try {
+    await resume.verifyChecks(fileReceipt, paperReceipt);
+    resume.attestCustody(attestation, publicKit.public.fingerprint);
+    resume.reserve(reservation);
+    vi.spyOn(crypto.subtle, "sign").mockRejectedValue(new Error("synthetic signer failure"));
+    await expect(resume.consume("allocation-1", "original row 1")).rejects.toMatchObject(refused);
+    expect(resume.state).toBe("stopped");
+    expect(resume.signedBlock).toBeNull();
+    expect(resume.incidentRecord().incidents).toContainEqual({
+      reason: "consumed",
+      detail: "allocation-1: original row 1",
+    });
+    await expect(resume.consume("allocation-1", "retry row 1")).rejects.toMatchObject(refused);
+  } finally {
+    resume.close();
+  }
+});
+
+it("a blank stop reason or account of the incident does not discard the current kit", async () => {
+  const { session, publicKit } = await kit();
+  try {
+    for (const [reason, detail] of [
+      ["", "incident"],
+      ["keys-lost", " "],
+    ])
+      expect(() => session.stop(reason!, detail!)).toThrow("Custody material refused");
+    expect(session.publicKit).toEqual(publicKit);
+    expect(session.state).toBe("file-saved-unchecked");
+    expect(session.incidentRecord().incidents.map((i) => i.reason)).toEqual([
+      "original-issued-unknown",
+      "original-kept",
+    ]);
+  } finally {
+    session.close();
+  }
+});

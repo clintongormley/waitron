@@ -292,6 +292,30 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const seat = FISCAL_INITIAL_SETUP.configure!(host);
     return { ...f, root, host, current, seat };
   }
+  it.each(["missing fingerprint", "directory", "oversized", "unknown trust field"])(
+    "refuses configured Cloud trust with %s before accepting retained evidence",
+    async (kind) => {
+      const f = await setup();
+      const host = { ...f.host, environment: { ...f.host.environment } };
+      const path = host.environment.WAITRON_FISCAL_CLOUD_TRUST_FILE;
+      if (kind === "missing fingerprint") host.environment.WAITRON_FISCAL_CLOUD_FINGERPRINT = "";
+      if (kind === "directory") host.environment.WAITRON_FISCAL_CLOUD_TRUST_FILE = f.root;
+      if (kind === "oversized")
+        await writeFile(path, (await readFile(path, "utf8")).padEnd(65537, " "));
+      if (kind === "unknown trust field") {
+        const trust = JSON.parse(await readFile(path, "utf8"));
+        await writeFile(path, JSON.stringify({ ...trust, approved: true }));
+      }
+      const seat = FISCAL_INITIAL_SETUP.configure!(host);
+      expect(() => seat.inspect(f.held, f.input)).toThrowError(
+        expect.objectContaining({
+          code: "sif.allocation_invalid",
+          params: { reason: "reservation_untrusted" },
+        }),
+      );
+      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    },
+  );
   it("retired C evidence uses independent configured issuer trust while a fresh paper P allocation remains available", async () => {
     const f = await setup();
     const target = { nodeId: TENANT_A.nodeId2, locationId: locationId(TENANT_A.locationId) };

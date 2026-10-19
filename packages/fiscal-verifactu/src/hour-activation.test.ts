@@ -449,3 +449,61 @@ it("rolls back activation when hour admission expires during the writer's awaite
   expect(await suite.db.select().from(registroSif)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
+
+it.each([
+  ["missing input", null, "malformed_allocation"],
+  [
+    "extra input field",
+    { allocation: {}, approval: {}, secret: "forbidden" },
+    "malformed_allocation",
+  ],
+  ["missing allocation", { allocation: null, approval: {} }, "malformed_allocation"],
+  [
+    "invalid hour identity",
+    {
+      allocation: { ...fixture().input.allocation, installationIdentity: "S000001" },
+      approval: fixture().input.approval,
+    },
+    "malformed_allocation",
+  ],
+  [
+    "missing approval",
+    { allocation: fixture().input.allocation, approval: null },
+    "malformed_approval",
+  ],
+  [
+    "non-null reservation",
+    {
+      allocation: { ...fixture().input.allocation, reservationEvidence: {} },
+      approval: fixture().input.approval,
+    },
+    "reservation_mismatch",
+  ],
+  [
+    "out-of-range timestamp",
+    {
+      allocation: { ...fixture().input.allocation, issuedAt: "1900-01-01T00:00:00.000Z" },
+      approval: fixture().input.approval,
+    },
+    "reservation_mismatch",
+  ],
+])("refuses %s at hour admission without entering the callback", async (_name, input, reason) => {
+  const f = fixture();
+  let entered = false;
+  await expect(
+    withOperationAuthority(f.binding, f.operatorId, (authority) =>
+      withHourAdmission(
+        { binding: f.binding, authority, input },
+        {
+          requiredBases: bases,
+          priorActivation: "none",
+        },
+        async () => {
+          entered = true;
+        },
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason } });
+  expect(entered).toBe(false);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});

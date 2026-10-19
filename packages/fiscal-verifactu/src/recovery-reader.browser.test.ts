@@ -222,3 +222,71 @@ describe("strict recovery PDF attachment reader", () => {
     );
   });
 });
+
+describe("recovery carrier ambiguity and resource bounds", () => {
+  it.each([
+    "empty tree",
+    "non-stream attachment",
+    "unknown stream entry",
+    "declared excessive size",
+    "page association",
+    "excessive depth",
+  ])("refuses %s before granting recovery data", async (kind) => {
+    const pdf = await base();
+    const list = names(pdf);
+    const spec = list.lookup(1, PDFDict);
+    const ef = spec.lookup(PDFName.of("EF"), PDFDict);
+    const root = pdf.catalog
+      .lookup(PDFName.of("Names"), PDFDict)
+      .lookup(PDFName.of("EmbeddedFiles"), PDFDict);
+    if (kind === "empty tree") root.set(PDFName.of("Names"), pdf.context.obj([]));
+    if (kind === "non-stream attachment") ef.set(PDFName.of("F"), pdf.context.obj({}));
+    if (kind === "unknown stream entry") ef.set(PDFName.of("Secret"), ef.get(PDFName.of("F"))!);
+    if (kind === "declared excessive size")
+      ef.set(
+        PDFName.of("F"),
+        pdf.context.register(
+          pdf.context.flateStream(recoveryDocumentBytes(document), {
+            Type: "EmbeddedFile",
+            Params: { Size: MAX_RECOVERY_ATTACHMENT + 1 },
+          }),
+        ),
+      );
+    if (kind === "page association")
+      pdf.getPage(0).node.set(PDFName.of("AF"), pdf.context.obj([spec]));
+    if (kind === "excessive depth") {
+      let current = root;
+      current.delete(PDFName.of("Names"));
+      for (let i = 0; i < 17; i++) {
+        const child = pdf.context.obj({});
+        current.set(PDFName.of("Kids"), pdf.context.obj([pdf.context.register(child)]));
+        current = child;
+      }
+      current.set(PDFName.of("Names"), list);
+    }
+    await expect(readRecoveryPdf(await pdf.save())).rejects.toThrow("Recovery PDF refused");
+  });
+  it("accepts a nested exact key attachment with one matching association", async () => {
+    const pdf = await base();
+    const list = names(pdf);
+    const root = pdf.catalog
+      .lookup(PDFName.of("Names"), PDFDict)
+      .lookup(PDFName.of("EmbeddedFiles"), PDFDict);
+    root.delete(PDFName.of("Names"));
+    root.set(
+      PDFName.of("Kids"),
+      pdf.context.obj([pdf.context.register(pdf.context.obj({ Names: list }))]),
+    );
+    pdf.catalog.set(PDFName.of("AF"), pdf.context.obj([list.get(1)]));
+    expect(await readRecoveryPdf(await pdf.save())).toEqual({
+      document,
+      attachmentBytes: recoveryDocumentBytes(document),
+    });
+  });
+  it.each([new Uint8Array(), new ArrayBuffer(1) as unknown as Uint8Array])(
+    "refuses empty or non-byte input %#",
+    async (input) => {
+      await expect(readRecoveryPdf(input)).rejects.toThrow("Recovery PDF refused");
+    },
+  );
+});

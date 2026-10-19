@@ -3083,3 +3083,48 @@ control observes wrongful selection, and the checkpoint control targets its exac
 Statement coverage, whole-range prose/current-main integration, both installed whole-branch
 reviews, the normal push hook/current-head CI and landing remain open. This test-only extension
 does not repeat the unchanged visual matrix or claim a complete installed wizard journey.
+
+## Carrier validation and late-response qualification, 2026-10-19
+
+This step adds cases without changing an earlier assertion or fixture. The only replacement of an
+old test-file line adds `PDFString` to the existing PDF structure import. All other earlier lines
+remain in order. The protected golden pair, production code, SQL, migrations, guards, dependencies,
+coverage configuration and thresholds are unchanged by this step.
+
+| Added checks | Boundary exercised |
+| --- | --- |
+| `register-pdf.browser.test.ts`, retained register carrier structure | Real nested attachments round-trip exactly; excessive depth, names, annotations, size declarations and noncanonical bytes refuse. Unsupported locale retains the reader's refusal wording. |
+| `recovery-reader.browser.test.ts`, recovery carrier ambiguity and resource bounds | Real recovery PDFs reject conflicting streams, page associations, excessive depth and declared size; a nested single attachment with its matching association remains usable. |
+| `custodian/custody-state.browser.test.ts` and `custodian/offline-recovery.browser.test.ts` | Historical custody refuses actions before their prerequisites, malformed candidate bases, late kit installation, overlapping public imports, unsuitable selected files and blank incident descriptions. Signing failure retains consumption and stops the signer. |
+| `testing/register-compact-cases.ts`, through both existing node/browser suites | Historical compact recovery checks scope, retained positions, old heads, reference formats and generated-key input. Existing independent key/check vectors remain unchanged. |
+| `declared-paper-preparation.test.ts` and `initial-setup.test.ts` | Retained declared delivery requires matching document/history digests and known-history shape. Exact repeated consultation preserves its allocation/installation keys and positions. Missing frozen requests, reservation pairs and malformed proposals keep their domain refusal. |
+| `initial-cloud-setup.test.ts` | Historical receipt inspection refuses a missing fingerprint, a directory, an oversized otherwise valid trust document and an unknown trust field. No allocation is written. |
+| `hour-activation.test.ts` and `hour-recovery-state.test.ts` | Admission refuses malformed input and non-null reservation evidence before its callback; exact committed re-registration reads preserve counters, while another recovery source refuses. |
+| `setup/first-hour.browser.test.ts` | Real factory components ignore late clock/import responses after disconnection, discard late staged/delivered PDFs and permit retry of a refused kept confirmation without granting completion. |
+
+The independent installed candidate first passed 320 cases in eight complete suites, then 475 in
+twelve complete suites after the extension. The last custody concurrency addition passes its complete
+32-case suite in that installed candidate. Twenty-seven fault variants fail their intended
+assertions and every restored selection passes. The PDF publication predicate omission fails
+three of its four selected race cases; the fourth still refuses through a later check. The
+separate omission of the register name-tree shape check does not fail its refusal case and is
+unqualified. Neither result is counted as an independently enforced earlier guard.
+
+Initial new-test mistakes are retained in the receipts: a mutable shared base fixture affected
+the next case until copied, a readonly candidate field needed replacement of its row, and the
+expected allocation id assumed a fixed value although the fixture creates a UUID. The corrected
+expectation uses that fixture id and literal namespaces/positions. The oversized register input
+now exceeds the actual 64 MiB limit; its refusal alone does not establish that parsing was skipped.
+The Cloud size case uses otherwise valid JSON padded beyond its limit. These are test corrections,
+not reproduced product defects.
+
+Receipts are under Lane E's local `receipts/a679-carrier-validation-20261019/`, including the
+installed runs, every fault/restoration log, assertion summaries and preservation inventory.
+Whole-branch integration, broader prose reconciliation, both final installed Claude reviews,
+the push hook and literal-current-head CI remain separate gates.
+
+The final full fiscal run passes 3,552 cases in 155 files, with statements 98.01%, branches 96.57%,
+functions 99.17% and lines 98.98%. These meet the unchanged 98/95/98/98 bars, respectively.
+The earlier complete runs passed 3,531 and 3,551 cases but failed statement coverage at 97.63%
+and 97.99%; neither is reported as a green package run. The final run closes fiscal coverage
+qualification, not the remaining whole-branch gates.

@@ -239,3 +239,26 @@ it.each(["standard", "full", "rectificative"])(
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   },
 );
+
+it("consults an exact committed re-registration without changing counters or evidence", async () => {
+  await seed();
+  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+  const operation = { ...binding, action: "re-register" };
+  await activate(operation, "06RC", "2026-10-16T12:40:00.000Z");
+  const before = {
+    allocations: await suite.db.select().from(fiscalAllocations),
+    series: await suite.db.select().from(invoiceSeries),
+    sifs: await suite.db.select().from(registroSif),
+  };
+  expect((await read(operation)).priorActivation).toBe("committed");
+  expect({
+    allocations: await suite.db.select().from(fiscalAllocations),
+    series: await suite.db.select().from(invoiceSeries),
+    sifs: await suite.db.select().from(registroSif),
+  }).toEqual(before);
+  await expect(read({ ...operation, sourceId: "another-recovery" })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
+});

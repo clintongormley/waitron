@@ -249,11 +249,24 @@ The earlier plan's Tasks 9–12 are superseded; completed components need qualif
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
 rendered keys. Earlier register and physical-check instructions below are historical
 where superseded. Provisioning package coverage is qualified. Production protocol entry points
-are retired and all 3,413 fiscal cases pass, but fiscal statement coverage remains below its
-unchanged bar. Whole-range prose/current-main integration, both installed reviews and
+are retired. Fiscal package coverage is qualified: all 3,552 cases pass and the four unchanged
+bars are met. Whole-range prose/current-main integration, both installed reviews and
 current-head CI remain. The owner approved the generated PDF and exact retained CLI-launch
 patch on 19 October; the byte-identical applied patch passes all three launch cases. Allocated adoption remains pending venue-copy support;
 A679 does not add a promotion browser screen.
+
+**Carrier and late-response qualification, 2026-10-19:** 139 extra executed cases cover malformed
+PDF carriers and compact-key fields, historical custody/refusal boundaries, declared delivery
+bindings, configured Cloud trust, exact re-registration consultation and late wizard responses.
+All earlier assertion and fixture lines remain intact apart from adding one PDF structure import.
+The complete fiscal suite passes 3,552 cases in 155 files: statements 98.01%, branches 96.57%,
+functions 99.17% and lines 98.98%. Fiscal coverage qualification is closed. Twenty-seven
+independently installed faults fail their intended checks and pass after restoration; one
+redundant tree-shape omission is unqualified. The installed twelve-suite run passes 475 cases,
+then the final concurrency extension passes its complete 32-case custody suite. This supersedes
+the open fiscal-coverage status in the earlier checkpoint receipts below. No product, schema,
+migration, guard, exclusion or threshold changes were made in this step. See the
+[check inventory](../operations/a679-changed-checks.md#carrier-validation-and-late-response-qualification-2026-10-19).
 
 **Public-boundary qualification, 2026-10-19:** 97 added cases cover hosted recovery and
 promotion, revoked authority around host/network waits, clock confirmation, retained waits,

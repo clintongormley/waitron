@@ -553,3 +553,51 @@ it("retirement exposes an independent numeric floor for each installation namesp
     { namespace: '["89890001K","W1","production","S"]', position: 43 },
   ]);
 });
+
+it("refuses a missing frozen setup request before importing retained paper evidence", () => {
+  const f = fixture();
+  expect(() => FISCAL_INITIAL_SETUP.inspect({ ...f.held, request: null }, f.input)).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_allocation" },
+    }),
+  );
+});
+it("refuses an allocation whose signed reservation pair is absent", () => {
+  const f = fixture();
+  expect(() =>
+    FISCAL_INITIAL_SETUP.inspect(f.held, {
+      ...f.input,
+      allocation: { ...f.input.allocation, reservationEvidence: {} },
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_mismatch" },
+    }),
+  );
+});
+it("distinguishes missing retained history from a malformed retained-evidence object", () => {
+  expect(FISCAL_INITIAL_SETUP.retainedAssignments!({})).toEqual({ keys: [], positions: [] });
+  expect(() => FISCAL_INITIAL_SETUP.retainedAssignments!(null)).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_allocation" },
+    }),
+  );
+});
+it("refuses malformed Cloud request fields before creating a frozen setup request", () => {
+  expect(() =>
+    FISCAL_INITIAL_SETUP.candidates(context, {
+      route: "cloud",
+      venueId: 42,
+      operationId: "not-an-id",
+      incidentEvidence: "current",
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_allocation" },
+    }),
+  );
+});

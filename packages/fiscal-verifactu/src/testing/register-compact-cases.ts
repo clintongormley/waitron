@@ -31,6 +31,150 @@ export function describeRegisterCompact() {
   const load = () => import("@waitron/fiscal-verifactu/register-compact");
 
   describe("compact paper recovery", () => {
+    it.each([
+      { taxpayerNif: "bad" },
+      { softwareId: "bad" },
+      { environment: "unknown" },
+      { secret: "unexpected" },
+    ])("refuses an invalid compact recovery scope %#", async (patch) => {
+      const api = await load();
+      await expect(
+        api.recoverCompactRegister(fields, {
+          ...context,
+          scope: { ...scope, ...patch } as typeof scope,
+        }),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it.each([-1, 0.5, 1000000, Number.NaN])(
+      "refuses invalid retained position %s instead of weakening the floor",
+      async (position) => {
+        const api = await load();
+        await expect(
+          api.recoverCompactRegister(fields, {
+            ...context,
+            known: { ...known, sHighWater: position },
+          }),
+        ).rejects.toThrow("Custody material refused");
+      },
+    );
+    it("refuses a retained old head when no current head has been established", async () => {
+      const api = await load();
+      await expect(
+        api.recoverCompactRegister(fields, {
+          ...context,
+          known: { ...known, retainedHeads: [head] },
+        }),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it.each([null, 42])("refuses a non-text compact position %#", async (sPosition) => {
+      const api = await load();
+      await expect(
+        api.recoverCompactRegister(
+          {
+            ...fields,
+            sPosition: sPosition as unknown as string,
+          },
+          context,
+        ),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it.each(["", " leading", "trailing ", "line\nbreak", "x".repeat(257)])(
+      "refuses an invalid independently bound custodian id %#",
+      async (boundCustodianId) => {
+        const api = await load();
+        await expect(
+          api.recoverCompactRegister(
+            { ...fields, custodianReference: null },
+            {
+              ...context,
+              boundCustodianId,
+            },
+          ),
+        ).rejects.toThrow("Custody material refused");
+      },
+    );
+    it.each([
+      { secret: "" },
+      { secret: "short" },
+      { secret: " ".repeat(32) },
+      { nodeId: "" },
+      { name: "bad\nname" },
+    ])("does not print an unusable generated recovery key %#", async (patch) => {
+      const api = await load();
+      await expect(
+        api.encodeCompactNodeKey(
+          {
+            nodeId: "node-1",
+            name: "Olivo recovery",
+            secret: "0123456789abcdefghijklmnopqrstuv",
+            ...patch,
+          },
+          scope,
+          "generated",
+        ),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it("refuses unknown compact key formats on both output and input", async () => {
+      const api = await load();
+      const node = {
+        nodeId: "node-1",
+        name: "Olivo recovery",
+        secret: "0123456789abcdefghijklmnopqrstuv",
+      };
+      await expect(api.encodeCompactNodeKey(node, scope, "unknown" as "generated")).rejects.toThrow(
+        "Custody material refused",
+      );
+      await expect(
+        api.recoverCompactNodeKey(
+          { nodeKeyFormat: "unknown" as "generated", value: node.secret, check: "1BGZ6DAE" },
+          {
+            scope,
+            nodeId: node.nodeId,
+            name: node.name,
+          },
+        ),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it("refuses an invalid generated key before checking its checksum", async () => {
+      const api = await load();
+      await expect(
+        api.recoverCompactNodeKey(
+          { nodeKeyFormat: "generated", value: "short", check: "1BGZ6DAE" },
+          {
+            scope,
+            nodeId: "node-1",
+            name: "Olivo recovery",
+          },
+        ),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it("refuses a UUID encoded under the custom-text reference format", async () => {
+      const api = await load();
+      const encoded = btoa(custodianId)
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replace(/=+$/, "");
+      await expect(
+        api.recoverCompactRegister(
+          { ...fields, referenceKind: "text", custodianReference: encoded },
+          context,
+        ),
+      ).rejects.toThrow("Custody material refused");
+    });
+    it.each([-1, 0.5, 1000000])(
+      "does not print an impossible register position %s",
+      async (position) => {
+        const api = await load();
+        const recovered = await api.recoverCompactRegister(fields, context);
+        try {
+          await expect(
+            api.encodeCompactRegister(recovered.key, { sHighWater: position, pHighWater: 7 }, head),
+          ).rejects.toThrow("Custody material refused");
+        } finally {
+          recovered.key.dispose();
+        }
+      },
+    );
     it("recovers the same signing key from fixed three-field hash vectors without currentness authority", async () => {
       const api = await load();
       expect(await api.registerHeadTag(head)).toBe("BWCQKQ9376R274Y3");

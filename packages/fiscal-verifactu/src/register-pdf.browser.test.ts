@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import PDFDocument from "pdfkit";
-import { PDFDocument as Structure, PDFArray, PDFDict, PDFName } from "pdf-lib";
+import { PDFDocument as Structure, PDFArray, PDFDict, PDFName, PDFString } from "pdf-lib";
 import fontUrl from "./assets/register-noto-sans.ttf?url";
 import { renderRegisterPdf } from "./register-pdf.js";
 import { readRegisterPdf, openRegisterPdf } from "./register-reader.js";
@@ -421,4 +421,110 @@ describe("register PDF", () => {
     expect(text).toContain("Recovery 0");
     expect(text).toContain("Recovery 59");
   });
+});
+
+describe("retained register carrier structure", () => {
+  async function carrierTree() {
+    const pdf = await Structure.load(
+      await rawPdf([["waitron-register-v2.json", bytes(complete())]]),
+    );
+    const root = pdf.catalog
+      .lookup(PDFName.of("Names"), PDFDict)
+      .lookup(PDFName.of("EmbeddedFiles"), PDFDict);
+    const list = root.lookup(PDFName.of("Names"), PDFArray);
+    return { pdf, root, list, spec: list.lookup(1, PDFDict) };
+  }
+  it.each([
+    "non-string name",
+    "non-string F",
+    "wrong F",
+    "wrong UF",
+    "odd names",
+    "no names or kids",
+    "both names and kids",
+    "empty tree",
+    "cycle",
+    "excessive depth",
+    "non-stream attachment",
+    "declared excessive size",
+    "file annotation",
+  ])("refuses a retained carrier with %s", async (kind) => {
+    const { pdf, root, list, spec } = await carrierTree();
+    if (kind === "non-string name") list.set(0, pdf.context.obj(42));
+    if (kind === "non-string F") spec.set(PDFName.of("F"), pdf.context.obj(42));
+    if (kind === "wrong F") spec.set(PDFName.of("F"), PDFString.of("other.json"));
+    if (kind === "wrong UF") spec.set(PDFName.of("UF"), PDFString.of("other.json"));
+    if (kind === "odd names") list.push(PDFString.of("dangling"));
+    if (kind === "no names or kids") root.delete(PDFName.of("Names"));
+    if (kind === "both names and kids") root.set(PDFName.of("Kids"), pdf.context.obj([]));
+    if (kind === "empty tree") root.set(PDFName.of("Names"), pdf.context.obj([]));
+    if (kind === "cycle") {
+      root.delete(PDFName.of("Names"));
+      root.set(PDFName.of("Kids"), pdf.context.obj([pdf.context.register(root)]));
+    }
+    if (kind === "excessive depth") {
+      let current = root;
+      current.delete(PDFName.of("Names"));
+      for (let i = 0; i < 17; i++) {
+        const child = pdf.context.obj({});
+        current.set(PDFName.of("Kids"), pdf.context.obj([pdf.context.register(child)]));
+        current = child;
+      }
+      current.set(PDFName.of("Names"), list);
+    }
+    if (kind === "non-stream attachment")
+      spec.lookup(PDFName.of("EF"), PDFDict).set(PDFName.of("F"), pdf.context.obj({}));
+    if (kind === "declared excessive size")
+      spec.lookup(PDFName.of("EF"), PDFDict).set(
+        PDFName.of("F"),
+        pdf.context.register(
+          pdf.context.flateStream(bytes(complete()), {
+            Type: "EmbeddedFile",
+            Params: { Size: 8 * 1024 * 1024 + 1 },
+          }),
+        ),
+      );
+    if (kind === "file annotation")
+      pdf
+        .getPage(0)
+        .node.set(
+          PDFName.of("Annots"),
+          pdf.context.obj([{ Type: "Annot", Subtype: "FileAttachment", FS: spec }]),
+        );
+    await expect(readRegisterPdf(await pdf.save())).rejects.toThrow("Register PDF refused");
+  });
+  it("accepts a nested name tree with the same exact original attachment", async () => {
+    const { pdf, root, list } = await carrierTree();
+    root.delete(PDFName.of("Names"));
+    root.set(
+      PDFName.of("Kids"),
+      pdf.context.obj([pdf.context.register(pdf.context.obj({ Names: list }))]),
+    );
+    expect(await readRegisterPdf(await pdf.save())).toEqual({
+      document: complete(),
+      attachmentBytes: bytes(complete()),
+    });
+  });
+  it.each(["empty", "oversized", "wrong byte type"])("refuses %s PDF input", async (kind) => {
+    const input =
+      kind === "empty"
+        ? new Uint8Array()
+        : kind === "oversized"
+          ? new Uint8Array(64 * 1024 * 1024 + 1)
+          : (new ArrayBuffer(10) as unknown as Uint8Array);
+    await expect(readRegisterPdf(input)).rejects.toThrow("Register PDF refused");
+  });
+  it("refuses an attachment whose JSON is valid but whose bytes are not canonical", async () => {
+    const original = bytes(complete());
+    const changed = new Uint8Array(original.length + 1);
+    changed[0] = 32;
+    changed.set(original, 1);
+    await expect(
+      readRegisterPdf(await rawPdf([["waitron-register-v2.json", changed]])),
+    ).rejects.toThrow("Register PDF refused");
+  });
+});
+
+it("refuses an unsupported locale before rendering a retained register", async () => {
+  await expect(renderRegisterPdf(complete(), "fr" as "en")).rejects.toThrow("Register PDF refused");
 });

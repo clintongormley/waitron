@@ -873,3 +873,81 @@ it("stripping real valid legacy signatures cannot enter either admission branch"
   });
   await noWrites();
 });
+
+it("keeps an exact declared setup delivery when the same retained history is consulted again", () => {
+  const f = fixture();
+  const held = { ...f.context, request: FISCAL_INITIAL_SETUP.request(f.context, f.selected) };
+  const imported = FISCAL_INITIAL_SETUP.inspect(held, f.input);
+  const result = FISCAL_INITIAL_SETUP.documentConfirmation!(held, imported, {
+    statement: f.facts,
+    documentDigest: "a".repeat(64),
+    historyDigest: f.facts.delivery.historyDigest,
+    prior: f.facts,
+  });
+  expect(result).toEqual(f.facts);
+  expect(FISCAL_INITIAL_SETUP.retainedAssignments!(f.facts)).toEqual({
+    keys: [
+      JSON.stringify([
+        "89890001K",
+        "W1",
+        "preproduction",
+        "allocation",
+        f.input.allocation.allocationId,
+      ]),
+      '["89890001K","W1","preproduction","installation","S000043"]',
+    ],
+    positions: [
+      { namespace: '["89890001K","W1","preproduction","S"]', position: 43 },
+      { namespace: '["89890001K","W1","preproduction","P"]', position: 0 },
+    ],
+  });
+});
+
+it.each(["document", "history"])(
+  "refuses a %s digest that differs from the kept declared delivery",
+  (part) => {
+    const f = fixture();
+    const held = { ...f.context, request: FISCAL_INITIAL_SETUP.request(f.context, f.selected) };
+    const imported = FISCAL_INITIAL_SETUP.inspect(held, f.input);
+    expect(() =>
+      FISCAL_INITIAL_SETUP.documentConfirmation!(held, imported, {
+        statement: f.facts,
+        documentDigest: part === "document" ? "b".repeat(64) : "a".repeat(64),
+        historyDigest: part === "history" ? "b".repeat(64) : f.facts.delivery.historyDigest,
+        prior: null,
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "outside_confirmation_missing" },
+      }),
+    );
+  },
+);
+
+it("refuses a declared inspection rebound to a different administrator", () => {
+  const f = fixture();
+  const scope = { ...f.context, administratorId: "another-administrator" };
+  const held = { ...scope, request: FISCAL_INITIAL_SETUP.request(scope, f.selected) };
+  expect(() => FISCAL_INITIAL_SETUP.inspect(held, f.input)).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    }),
+  );
+});
+
+it("does not project retained declared evidence with an unrecognised known-history field", () => {
+  const f = fixture();
+  expect(() =>
+    FISCAL_INITIAL_SETUP.retainedAssignments!({
+      ...f.facts,
+      known: { ...f.facts.known, approved: true },
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_allocation" },
+    }),
+  );
+});
