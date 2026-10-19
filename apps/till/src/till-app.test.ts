@@ -6316,6 +6316,79 @@ describe("till-app", () => {
     });
   });
 
+  // A held line's stored unit has no measure switch; the server judges an edit against the LIVE
+  // offer's unit, so the till offers the lists that unit takes now.
+  const mlUnit = {
+    id: "unit-ml",
+    name: { en: "millilitre", es: "mililitro" },
+    abbreviation: { en: "ml", es: "ml" },
+    precision: 0,
+    hardwareUnit: null,
+  };
+  const vinoHeld: TillProduct = { ...cafe, unit: mlUnit };
+  const vinoLive: TillProduct = {
+    ...cafe,
+    unit: { ...mlUnit, measure: true },
+    offeredModifiers: [milkList],
+  };
+  function heldVino(extras: (typeof heldMilk)[]) {
+    return {
+      kitchenNote: {
+        scope: { workingOrderId: "wo-vino" },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      },
+      id: "wo-vino",
+      orderNumber: 10,
+      label: "Takeaway",
+      lines: [
+        {
+          workingOrderLineId: "line-vino",
+          menuItemId: "menu-item-cafe-0",
+          productId: "cafe",
+          quantity: "250.000",
+          product: vinoHeld,
+          ...(extras.length === 0 ? {} : { extras }),
+        },
+      ],
+    };
+  }
+
+  it("a reopened held line on a dish now sold in a measure offers no extras list", async () => {
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [vinoLive] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldVino([])),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-vino" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.product.offeredModifiers).toEqual([]);
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
+    expect(basket.shadowRoot!.textContent).toContain("Café");
+    expect(basket.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
+  });
+
+  it("a held pick on a dish now sold in a measure is marked not offered", async () => {
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [vinoLive] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldVino([heldMilk])),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-vino" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.extras).toBeUndefined();
+    expect(counter.store.lines[0]!.notOfferedExtras).toEqual([
+      { productId: "p-milk", name: "Leche extra", price: "0.75", quantity: 2 },
+    ]);
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.extra_not_offered"));
+  });
+
   /** A retrieved order whose one café line (×2) carries `heldMilk` (×2 per dish). */
   function milkOrder(product: TillProduct = cafe) {
     return {
