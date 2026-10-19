@@ -1470,3 +1470,166 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
     expect(confirmed).toEqual([{}]);
   });
 });
+
+describe("till-bill-pay-dialog: a payment that got no answer", () => {
+  type Unanswered = NonNullable<TillBillPayDialog["unanswered"]>;
+  type Stepper = HTMLElementTagNameMap["wt-number-stepper"];
+  const unanswered = (over: Partial<Unanswered> = {}): Unanswered => ({
+    applied: "20.00",
+    method: "cash",
+    guests: false,
+    waiting: false,
+    readerRefused: false,
+    noReader: false,
+    ...over,
+  });
+  const guests = (el: TillBillPayDialog) => root(el).querySelector<Stepper>('[name="guests"]');
+
+  it("shows only the lock: its title, the message and one Check again", async () => {
+    const el = await mount({ unanswered: unanswered() });
+
+    expect(text(root(el).querySelector("[data-pay-unanswered]"))).toBe(
+      t("bill_pay.unanswered_title"),
+    );
+    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+    expect(root(el).querySelectorAll("[data-pay-recheck]")).toHaveLength(1);
+    expect(text(button(el, "[data-pay-recheck]"))).toBe(t("bill_pay.recheck"));
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
+    expect(root(el).querySelector("[data-pay-back]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-close]")).toBeNull();
+    expect(guests(el)).toBeNull();
+    expect(root(el).querySelector("wt-dialog")!.dismissible).toBe(true);
+  });
+
+  it("offers no refund while the lock shows", async () => {
+    const payment: BillPaymentView = {
+      id: "pay-1",
+      submissionId: "sub-1",
+      kind: "contribution",
+      shareOf: null,
+      method: "cash",
+      entry: null,
+      applied: "10.00",
+      tip: "0.00",
+      tendered: "10.00",
+      change: "0.00",
+      state: "received",
+      createdAt: "2026-10-19T12:00:00.000Z",
+      receivedAt: "2026-10-19T12:00:00.000Z",
+      lines: [],
+      refunds: [],
+    };
+    const el = await mount({
+      balance: balanceOf({ received: "10.00", outstanding: "110.00", payments: [payment] }),
+      unanswered: unanswered(),
+    });
+
+    expect(root(el).querySelector("[data-pay-payments]")).toBeNull();
+  });
+
+  it("asks for another reader when the reader refused, still letting it be pressed", async () => {
+    const el = await mount({ unanswered: unanswered({ method: "card", readerRefused: true }) });
+
+    expect(actions(el).error).toBe(
+      `${t("bill_pay.unconfirmed")} ${t("bill_pay.recheck_choose_reader")}`,
+    );
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
+  });
+
+  it("asks for a reader and holds Check again while none is chosen", async () => {
+    const el = await mount({ unanswered: unanswered({ method: "card", noReader: true }) });
+
+    expect(actions(el).error).toBe(
+      `${t("bill_pay.unconfirmed")} ${t("bill_pay.recheck_choose_reader")}`,
+    );
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(true);
+  });
+
+  it("adds that the bill could not be read again", async () => {
+    const el = await mount({ unanswered: unanswered(), refusal: { code: "unread" } });
+
+    expect(actions(el).error).toBe(`${t("bill_pay.unconfirmed")} ${t("bill_pay.read_failed")}`);
+  });
+
+  it("says the message once when the refusal is the missing answer itself", async () => {
+    const el = await mount({ unanswered: unanswered(), refusal: { code: "network" } });
+
+    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+  });
+
+  it("holds Check again while a send is still waiting", async () => {
+    const el = await mount({ unanswered: unanswered({ waiting: true }) });
+
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(true);
+  });
+
+  it("holds Check again and shows it loading while busy", async () => {
+    const el = await mount({ unanswered: unanswered(), busy: true });
+    const recheck = button(el, "[data-pay-recheck]") as HTMLElement & {
+      disabled: boolean;
+      loading: boolean;
+    };
+
+    expect(recheck.disabled).toBe(true);
+    expect(recheck.loading).toBe(true);
+  });
+
+  it("emits bill-pay-recheck with no guests when the field does not show", async () => {
+    const el = await mount({ unanswered: unanswered(), asksGuests: true, receiptGuests: 4 });
+    const rechecked = capture(el, "bill-pay-recheck");
+
+    await click(el, "[data-pay-recheck]");
+
+    expect(rechecked).toEqual([{}]);
+  });
+
+  it("shows the guests field when asked, and Check again carries its count", async () => {
+    const el = await mount({
+      unanswered: unanswered({ guests: true }),
+      asksGuests: true,
+      receiptGuests: 4,
+    });
+    const stepper = guests(el)!;
+    expect(stepper.value).toBe("4");
+    await stepper.updateComplete;
+    stepper.shadowRoot!.querySelector<HTMLElement>('button[data-step="1"]')!.click();
+    await el.updateComplete;
+    const rechecked = capture(el, "bill-pay-recheck");
+
+    await click(el, "[data-pay-recheck]");
+
+    expect(rechecked).toEqual([{ guests: 5 }]);
+  });
+
+  it("holds a guests count it cannot take, marking the field", async () => {
+    const el = await mount({
+      unanswered: unanswered({ guests: true }),
+      asksGuests: true,
+      receiptGuests: 4,
+    });
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = "1000";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    const rechecked = capture(el, "bill-pay-recheck");
+
+    await click(el, "[data-pay-recheck]");
+
+    expect(rechecked).toEqual([]);
+    expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+    expect(actions(el).error).toBe(`${t("form.fix_fields")} ${t("bill_pay.unconfirmed")}`);
+  });
+
+  it("goes back to the steps when the lock is lifted", async () => {
+    const el = await mount({ unanswered: unanswered() });
+    el.unanswered = null;
+    await el.updateComplete;
+
+    expect(root(el).querySelector("[data-pay-unanswered]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+  });
+});

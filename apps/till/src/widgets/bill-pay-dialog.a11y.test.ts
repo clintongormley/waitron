@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { commands, page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./bill-pay-dialog.js";
@@ -51,6 +52,8 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
   el.preview = preview;
   await el.updateComplete;
 }
+
+const lockBackgrounds = new Map<string, string>();
 
 describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillBillPayDialog> = {}) =>
@@ -259,6 +262,56 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     });
     await expectNoA11yViolations(host);
   });
+  const unanswered = (over: Partial<NonNullable<TillBillPayDialog["unanswered"]>> = {}) => ({
+    applied: "50.00",
+    method: "card" as const,
+    guests: false,
+    waiting: false,
+    readerRefused: false,
+    noReader: false,
+    ...over,
+  });
+
+  it("has no violations locked on a payment that got no answer", async () => {
+    const { host } = await mount({ unanswered: unanswered() });
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations locked with the guests field, a reader to choose and an unread balance", async () => {
+    const { el, host } = await mount({
+      unanswered: unanswered({ guests: true, noReader: true }),
+      asksGuests: true,
+      receiptGuests: 4,
+      refusal: { code: "unread" },
+    });
+    if (!el.shadowRoot!.querySelector('[name="guests"]')) throw new Error("no guests field");
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])("looks right locked at %i px", async (width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await mount({ unanswered: unanswered() });
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      lockBackgrounds.set(`${theme}-${width}`, background);
+      if (theme === "dark") expect(background).not.toBe(lockBackgrounds.get(`light-${width}`));
+      const shot = `__screenshots__/look/a796-lock-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({ innerWidth: window.innerWidth, panelWidth: box.width, background }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
   it("has no violations listing the bill's payments, one refunded, one at the reader, one declined, after a refund", async () => {
     const payment = (over: Partial<BillPaymentView>): BillPaymentView => ({
       id: "pay-1",

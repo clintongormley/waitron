@@ -1468,7 +1468,11 @@ export const en = {
   "bill_pay.taken": "Payment taken.",
   "bill_pay.taken_change": "Payment taken. Give {amount} in change.",
   "bill_pay.unconfirmed":
-    "No answer from the server, so this payment may or may not have been taken. Check the amounts above, then take it again: it will not be recorded twice.",
+    "The server did not answer, so this payment may or may not have been taken. Press Check again: it asks about this same payment, and it will not be recorded twice.",
+  "bill_pay.unanswered_title": "No connection to the server",
+  "bill_pay.recheck": "Check again",
+  "bill_pay.recheck_choose_reader":
+    "That card reader cannot check it. Choose a reader, then check again.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
   "bill_pay.choice_legend": "How are these items paid?",
@@ -3083,7 +3087,11 @@ export const es: Record<StringKey, string> = {
   "bill_pay.taken": "Pago cobrado.",
   "bill_pay.taken_change": "Pago cobrado. Devuelve {amount} de cambio.",
   "bill_pay.unconfirmed":
-    "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Revisa los importes de arriba y vuelve a cobrarlo: no se registrará dos veces.",
+    "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Pulsa Comprobar de nuevo: se pregunta por este mismo pago y no se registrará dos veces.",
+  "bill_pay.unanswered_title": "Sin conexión con el servidor",
+  "bill_pay.recheck": "Comprobar de nuevo",
+  "bill_pay.recheck_choose_reader":
+    "Ese lector no puede comprobarlo. Elige un lector y vuelve a comprobar.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",
   "bill_pay.choice_legend": "¿Cómo se pagan estos artículos?",

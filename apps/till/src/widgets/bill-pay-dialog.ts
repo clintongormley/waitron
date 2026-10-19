@@ -192,6 +192,22 @@ function refusalText(refusal: PayRefusal): string {
 
 const PEOPLE = /^[1-9]\d{0,2}$/;
 
+/** A send the server never answered. While the dialog has one it offers only Check again, which
+ * resends that same payment, so no other payment can reuse its submission id. */
+export interface UnansweredPayment {
+  applied: string;
+  method: "cash" | "card";
+  /** Whether Check again carries the receipt's guests: the server's replay ignores them, so the
+   * count can still change. */
+  guests: boolean;
+  /** A send of it is still in flight. */
+  waiting: boolean;
+  /** The reader the card was sent to cannot be asked about it. */
+  readerRefused: boolean;
+  /** No reader is chosen to ask. */
+  noReader: boolean;
+}
+
 /**
  * Takes part of a bill: chosen items, an amount, or an equal share among the people still to pay,
  * in cash, or by card on the device's reader or keyed by hand. Each way shows what it covers
@@ -402,6 +418,18 @@ export class TillBillPayDialog extends LitElement {
       .payment-text p {
         font-size: var(--wt-font-size-sm);
       }
+
+      .tone {
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-md);
+      }
+
+      .tone-title {
+        color: var(--wt-color-warning);
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
     `,
   ];
 
@@ -441,6 +469,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) asksGuests = false;
   /** The count the guests field starts on; null starts it empty. */
   @property({ attribute: false }) receiptGuests: number | null = null;
+  @property({ attribute: false }) unanswered: UnansweredPayment | null = null;
 
   @state() private chosenWay: PayWay = "items";
   @state() private picks = new Map<number, number>();
@@ -827,21 +856,73 @@ export class TillBillPayDialog extends LitElement {
     >
       <div class="body">
         ${this.#balance()}
-        ${
-          this.taken === null
-            ? nothing
-            : html`<p class="taken" role="status" data-pay-taken>${this.#takenText(this.taken)}</p>`
-        }
-        ${
-          this.refunded === null
-            ? nothing
-            : html`<p class="taken" role="status" data-pay-refunded>
-                ${this.#refundedText(this.refunded)}
-              </p>`
-        }
-        ${this.#payments()} ${this.#step()}
+        ${this.unanswered === null ? this.#unlocked() : this.#lock(this.unanswered)}
       </div>
     </wt-dialog>`;
+  }
+
+  #unlocked(): TemplateResult {
+    return html`${
+      this.taken === null
+        ? nothing
+        : html`<p class="taken" role="status" data-pay-taken>${this.#takenText(this.taken)}</p>`
+    }
+    ${
+      this.refunded === null
+        ? nothing
+        : html`<p class="taken" role="status" data-pay-refunded>
+            ${this.#refundedText(this.refunded)}
+          </p>`
+    }
+    ${this.#payments()} ${this.#step()}`;
+  }
+
+  #lock(unanswered: UnansweredPayment): TemplateResult {
+    const invalid = unanswered.guests && this.guestsAttempted && this.#guestsInvalid();
+    const parts: string[] = [];
+    if (invalid) parts.push(t("form.fix_fields"));
+    parts.push(t("bill_pay.unconfirmed"));
+    if (unanswered.readerRefused || unanswered.noReader)
+      parts.push(t("bill_pay.recheck_choose_reader"));
+    if (this.refusal?.code === "unread") parts.push(t("bill_pay.read_failed"));
+    return html`<div class="tone" data-pay-unanswered>
+        <p class="tone-title">${t("bill_pay.unanswered_title")}</p>
+      </div>
+      ${
+        unanswered.guests
+          ? this.#guests(invalid ? t("seat.guest_count_invalid") : undefined)
+          : nothing
+      }
+      <wt-form-actions .error=${parts.join(" ")}>
+        <wt-button
+          variant="primary"
+          data-pay-recheck
+          .loading=${this.busy}
+          .disabled=${this.busy || unanswered.waiting || unanswered.noReader}
+          @click=${() => void this.#recheck(unanswered)}
+        >
+          ${t("bill_pay.recheck")}
+        </wt-button>
+      </wt-form-actions>`;
+  }
+
+  async #recheck(unanswered: UnansweredPayment): Promise<void> {
+    if (!this.isConnected || !this.#active || this.busy) return;
+    if (unanswered.waiting || unanswered.noReader) return;
+    if (unanswered.guests) {
+      this.guestsAttempted = true;
+      if (this.#guestsInvalid()) {
+        await this.updateComplete;
+        await focusFirstInvalid(this.shadowRoot!);
+        return;
+      }
+    }
+    this.#emit(
+      "bill-pay-recheck",
+      (unanswered.guests
+        ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null }
+        : {}) satisfies ReceiptGuestsDetail,
+    );
   }
 
   #takenText(taken: PayTaken): string {
