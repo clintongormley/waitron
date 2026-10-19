@@ -2435,3 +2435,50 @@ failures are direct setup, supervised setup and the public-input-file CLI. These
 the route change does not clear them. The earlier coverage, installed-entry, PDF decisions/viewing,
 protocol-retirement, integration, final-review and current-head CI requirements also remain open.
 Local receipts: `~/waitron-campaign-e/receipts/a679-document-route-20261019/`.
+
+## Retained module-host qualification, 2026-10-19
+
+The retained host tests still used custodian enrolment and register delivery. Before this change,
+`pnpm --filter @waitron/server exec vitest run src/module-operation-host.test.ts src/first-fiscal-launch.test.ts --maxWorkers=2`
+reported five failures and seven passes. Two failures came from the host's old preparation fixtures;
+the other three came from the unchanged launch file.
+
+The two host cases now use `hourFirstFiscalFixture`, `useVenueDb` and the real configured module.
+External clock observation, the release timestamp and the public PDF digest are synthetic; this
+fixture downloads no actual PDF. The date is fixed at `2026-10-16T11:40:00Z`; this checkpoint
+changes no fiscal identity or numbering assertion.
+
+| Site in `apps/server/src/module-operation-host.test.ts` | Before | After and authority |
+| --- | --- | --- |
+| Restart case, line 68 | Retained paper trust and a fresh register confirmation allowed preparation; an absent or reused confirmation refused `sif.allocation_invalid`. | The complete public recovery-document reference and staged key survive a runtime restart. An absent or reused kept grant refuses `setup.not_ready` with empty params. Preparation still resolves to the original `prepared` value after fresh confirmation and clock comparison. An added assertion requires `clock_stale` before that comparison. The approved hour design's recovery PDF and restart rules, and plan Tasks 6, 9 and 10, replace the register interface. |
+| Outside-evidence case, line 168 | A paper-history environment path supplied the file; the register-delivery grant refused `sif.allocation_invalid / outside_confirmation_missing` after ownership recovery. | A test descriptor declares the same outside file through `resolutionEvidence`. The file changes from the original `42` to `43`; the original changed-snapshot, `setup.owner_required` password-grant and `setup.attempt_conflict` key-stage assertions remain. The corresponding key-only document grant refuses `setup.not_ready` with empty params. A new positive check requires a usable kept grant before recovery. The hour design retires the paper source; plan Tasks 9 and 10 retain ownership and snapshot checks. |
+
+Both declarations have names that describe the new interface. The other four declaration bodies
+are byte-identical, including the four ordinary-operation expansions. Of the 3,035 tracked test
+paths at the starting head, only this host file changes. The owner's 2026-10-05 interface-test
+decision applies; no fiscal identity, record, hash, filing, money, permission or password-refusal
+expectation changes. The new descriptor qualifies generic module-declared snapshot sources. It
+does not claim that the active fiscal module still reads the retired paper-history environment
+variable. The preparation helper explicitly consumes the grant before calling the real module;
+this checks that service boundary, not the activation caller's orchestration.
+
+Four complete surrounding server files report 70 passes. Server types, scoped lint, code formatting
+and whitespace checks pass. The unedited protected pair reports 20 passes, and the selected helper
+and teardown guards report 33 passes. The independently frozen-installed candidate initially matches
+all 6,887 tracked paths and reports nine host passes. Changing the returned public document digest,
+omitting grant deletion, and omitting descriptor-declared snapshot files each fail their intended
+assertion; each restored selected case passes. These experiments change only the disposable copy.
+
+The first migrated run exposed two additional fixture requirements: a restarted clock comparison
+is intentionally stale, and the active hour descriptor declares no paper-history file. The final
+test explicitly checks the first refusal and declares the second test's synthetic evidence source.
+There is no production, configuration, guard, schema or migration change in this checkpoint.
+
+The direct, supervised and public-input CLI launch tests remain unchanged in the feature branch.
+A proposed direct/supervised fixture and exact identity-check patch is retained locally for the
+owner's separate approval. Its installed selection reports two passes; the CLI case is not selected.
+The final unchanged launch file and updated host file report three failures and nine passes. The
+proposal is not applied here. The earlier coverage, remaining entry/native
+acceptance, PDF decisions/viewing, protocol-retirement, integration, final-review and current-head
+CI gates remain open. Local receipts:
+`~/waitron-campaign-e/receipts/a679-retained-host-launch-20261019/`.

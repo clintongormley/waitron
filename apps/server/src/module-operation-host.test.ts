@@ -1,11 +1,36 @@
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import {
   configureModuleOperations,
   withOperationAuthority,
+  type ModuleOperationHost,
   type ModuleOperationPreparation,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createModuleOperationHost } from "./module-operation-host.js";
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const now = Date.now(),
+      mono = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: now,
+      uncertaintyMs: 500,
+      wallStartedMs: now,
+      wallFinishedMs: now,
+      monotonicStartedMs: mono,
+      monotonicFinishedMs: mono,
+    };
+  },
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
+afterEach(() => vi.useRealTimers());
 it("takes an immutable environment snapshot and configures module copies without changing an already prepared seat", async () => {
   const env = { SENTINEL: "passed" };
   const host = createModuleOperationHost(env);
@@ -40,10 +65,11 @@ it("takes an immutable environment snapshot and configures module copies without
   });
 });
 
-it("the bound runtime retains independent trust after restart and prepares only a fresh owner-confirmed attempt", async () => {
-  const { firstFiscalFixture, MODULE, PASSWORD } = await import("../test/first-fiscal.js");
+it("the bound runtime retains its recovery document after restart and prepares only a fresh owner-confirmed attempt", async () => {
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
-  const f = await firstFiscalFixture();
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime("2026-10-16T11:40:00Z");
+  const f = await hourFirstFiscalFixture({ database: () => venue.db });
   try {
     const make = () =>
       createFirstSetupModuleHost({
@@ -51,26 +77,47 @@ it("the bound runtime retains independent trust after restart and prepares only 
         stateDir: f.stateDir,
         venueDir: f.venueDir,
         modules: f.modules,
+        database: () => venue.db,
       });
-    const first = make();
-    await first.evidence.enrol(f.ownerAttempt, MODULE, f.key, f.key.fingerprint);
-    const token = await first.owner.reconfirm(f.ownerAttempt, PASSWORD, "activation");
-    await first.evidence.confirm(f.ownerAttempt, MODULE, f.current, token);
     const attempt = (runtime: ReturnType<typeof make>) =>
-      withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-        runtime.modules
-          .find((m) => m.name === MODULE)!
-          .operations!.prepare(
-            { binding: f.context.binding, authority, input: f.input },
-            async () => "prepared",
-          ),
-      );
+      runtime.coordinator.run(async (hold) => {
+        await runtime.recoveryDelivery.consume(f.ownerAttempt, f.module, hold);
+        return withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+          runtime.modules
+            .find((m) => m.name === f.module)!
+            .operations!.prepare(
+              { binding: f.context.binding, authority, input: f.input },
+              async () => "prepared",
+            ),
+        );
+      });
     const restarted = make();
-    await expect(attempt(restarted)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-    const fresh = await restarted.owner.reconfirm(f.ownerAttempt, PASSWORD, "activation");
-    await restarted.evidence.confirm(f.ownerAttempt, MODULE, f.current, fresh);
+    expect(await restarted.recoveryDelivery.readRecoveryDocument(f.ownerAttempt, f.module)).toEqual(
+      { ...f.staged.ref, statement: f.staged.statement },
+    );
+    expect(await restarted.keys.readStage(f.ownerAttempt)).toEqual(f.staged.stage);
+    await expect(attempt(restarted)).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
+    const fresh = await restarted.owner.reconfirm(f.ownerAttempt, f.password, "activation");
+    await restarted.recoveryDelivery.confirmRecoveryDocumentKept(
+      f.ownerAttempt,
+      { ...f.staged.ref, kept: true },
+      fresh,
+    );
+    await expect(attempt(restarted)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "clock_stale" },
+    });
+    await restarted.preparation.prepare(f.ownerAttempt, f.module, {
+      action: "compare-clocks",
+      browser: null,
+    });
+    await restarted.recoveryDelivery.confirmRecoveryDocumentKept(
+      f.ownerAttempt,
+      { ...f.staged.ref, kept: true },
+      await restarted.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
+    );
     await expect(attempt(restarted)).resolves.toBe("prepared");
-    await expect(attempt(restarted)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
+    await expect(attempt(restarted)).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
   } finally {
     await f.dispose();
   }
@@ -118,40 +165,46 @@ it("freezes fresh planned identities and selected module versions before any pub
   }
 });
 
-it("binds configured outside evidence and invalidates every live confirmation after snapshot recovery", async () => {
-  const { declaredFirstFiscalFixture, publicDigest } =
-    await import("../test/declared-first-fiscal.js");
+it("binds module-declared outside evidence and rejects prior password and document grants after ownership recovery", async () => {
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
   const { writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const { randomBytes } = await import("node:crypto");
-  const f = await declaredFirstFiscalFixture();
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime("2026-10-16T11:40:00Z");
+  const f = await hourFirstFiscalFixture({ database: () => venue.db });
   try {
     const outside = join(f.root, "retained-history.json");
     await writeFile(outside, '{"retained":42}');
     const host = createFirstSetupModuleHost({
       ...f,
-      environment: { WAITRON_FISCAL_PAPER_HISTORY_FILE: outside },
+      database: () => venue.db,
+      environment: {},
+      modules: f.modules.map((module) => {
+        if (module.name !== f.module) return module;
+        const setup = module.provisioning!.initialSetup!;
+        return {
+          ...module,
+          provisioning: {
+            ...module.provisioning,
+            initialSetup: {
+              ...setup,
+              configure: (bound: ModuleOperationHost) => ({
+                ...setup.configure!(bound),
+                resolutionEvidence: () => ({ files: [outside], directories: [] }),
+              }),
+            },
+          },
+        };
+      }),
     });
-    const staged = await host.keys.stageInitialNodeKey(
+    await host.recoveryDelivery.confirmRecoveryDocumentKept(
       f.ownerAttempt,
-      await host.owner.reconfirm(f.ownerAttempt, f.password, "block-use"),
-    );
-    const input = {
-      module: f.module,
-      stageId: staged.stage.stageId,
-      inputDigest: publicDigest(f.input),
-      historyDigest: f.statement.delivery.historyDigest,
-      documentDigest: f.statement.delivery.documentDigest,
-      statement: f.statement,
-    };
-    await host.delivery.registerFirstFiscalDelivery(f.ownerAttempt, input);
-    const { statement: _statement, ...reference } = input;
-    void _statement;
-    await host.delivery.confirmFirstFiscalDocumentKept(
-      f.ownerAttempt,
-      { ...reference, kept: true },
+      { ...f.staged.ref, kept: true },
       await host.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
+    );
+    await expect(host.recoveryDelivery.checkKept(f.ownerAttempt, f.module)).resolves.toMatch(
+      /^[a-f0-9]{64}$/,
     );
     const grant = await host.owner.reconfirm(f.ownerAttempt, f.password, "activation");
     const inspected = await host.resolution.inspectFirstSetupResolution();
@@ -169,9 +222,9 @@ it("binds configured outside evidence and invalidates every live confirmation af
     await expect(
       host.owner.consumeReconfirmation(owner, grant, "activation"),
     ).rejects.toMatchObject({ code: "setup.owner_required" });
-    await expect(host.delivery.read(f.context.binding)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "outside_confirmation_missing" },
+    await expect(host.recoveryDelivery.consume(owner, f.module)).rejects.toMatchObject({
+      code: "setup.not_ready",
+      params: {},
     });
     await expect(
       host.keys.stageInitialNodeKey(
