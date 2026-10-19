@@ -2940,7 +2940,7 @@ describe("dashboard-app", () => {
     expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
   });
 
-  it("includes venue-service settings panels for a supervisor as read-only", async () => {
+  it("includes the venue-service settings panel for a supervisor as read-only", async () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2957,11 +2957,8 @@ describe("dashboard-app", () => {
     const panels = settings.shadowRoot!.querySelectorAll<HTMLElement & { readOnly: boolean }>(
       "dashboard-venue-service-settings",
     );
-    expect(panels).toHaveLength(2);
-    expect([...panels].map((panel) => [panel.getAttribute("subject"), panel.readOnly])).toEqual([
-      ["tables", true],
-      ["kitchen", true],
-    ]);
+    expect(panels).toHaveLength(1);
+    expect(panels[0]!.readOnly).toBe(true);
   });
 
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {

@@ -410,7 +410,8 @@ go; `routes.test.ts` — `clearingWorkflow: false` leaves the `toMatchObject` at
   `"Venue settings' Tables tab no longer holds the Needs clearing switch (A757 slice 1)"`.
 
 **Assertions changed** (the spec retires the panel): `index.test.ts`'s panel list; the deleted
-cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list.
+cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list, and its supervisor read-only
+case, which now expects one venue-service settings panel instead of two.
 
 ### Task 5: the department dialog's Service tab holds the switch
 
