@@ -757,6 +757,7 @@ describe("unit-form measure switch", () => {
     await toggle.updateComplete;
     await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
     await el.updateComplete;
+    expect(toggle.checked).toBe(true);
     const submitted = new Promise<CustomEvent>((resolve) =>
       el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
     );

@@ -1136,6 +1136,7 @@ describe("units-screen", () => {
     await toggle.updateComplete;
     await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
     await form.updateComplete;
+    expect(toggle.checked).toBe(true);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await vi.waitFor(() => expect(form.open).toBe(false));
     expect(api.updateUnit).toHaveBeenCalledWith("u1", {
