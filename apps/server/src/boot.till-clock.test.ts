@@ -1,8 +1,11 @@
+import { once } from "node:events";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   CORE_MIGRATIONS,
@@ -22,7 +25,6 @@ import type { TillClockState } from "./till-clock-state.js";
 import { timeEntries } from "@waitron/workforce";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
-import { freePorts } from "./testing/free-ports.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { mountTillApi } from "./till-api.js";
@@ -31,18 +33,72 @@ import { serveRecovery } from "./node-entry.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { FRESH } from "./recovery-state.js";
 
+const listener = vi.hoisted(() => ({
+  current: undefined as ReturnType<typeof import("@hono/node-server").serve> | undefined,
+}));
+
+vi.mock("@hono/node-server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@hono/node-server")>();
+  return {
+    ...actual,
+    // Select the port at the real bind, without releasing a probe before boot reaches it.
+    serve: (
+      options: Parameters<typeof actual.serve>[0],
+      onListen: Parameters<typeof actual.serve>[1],
+    ) => {
+      listener.current = actual.serve({ ...options, port: 0 }, onListen);
+      return listener.current;
+    },
+  };
+});
+
+const occupied: Server[] = [];
+afterEach(async () => {
+  await Promise.all(
+    occupied.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        }),
+    ),
+  );
+  listener.current = undefined;
+});
+
+async function occupiedPort(): Promise<number> {
+  const server = createServer((_request, response) => {
+    response.writeHead(503);
+    response.end();
+  });
+  occupied.push(server);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  return (server.address() as AddressInfo).port;
+}
+
+async function listeningPort(): Promise<number> {
+  const server = listener.current!;
+  if (!server.listening) await once(server, "listening");
+  return (server.address() as AddressInfo).port;
+}
+
 const { beforeServerStarts, startServer } = serverFixture();
 
 it("the real recovery listener serves its recovery status and no clock routes", async () => {
   const scratch = await mkdtemp(join(tmpdir(), "waitron-recovery-no-clock-"));
-  const [port] = await freePorts(1);
+  const requestedPort = await occupiedPort();
   const app = recoveryApp({
     state: { ...FRESH, level: "recovery", failures: 3 },
     logDir: scratch,
     onRetry: async () => {},
   });
-  const server = await serveRecovery(app, { stateDir: scratch, port, log: () => {} });
+  const server = await serveRecovery(app, {
+    stateDir: scratch,
+    port: requestedPort,
+    log: () => {},
+  });
   try {
+    const port = await listeningPort();
     const origin = `http://127.0.0.1:${port}`;
     const status = await fetch(`${origin}/recovery-api/status`);
     expect(status.status).toBe(200);
@@ -177,10 +233,10 @@ describe("read-only real boot clocking", () => {
           JSON.stringify({ modules: { "fiscal-none": false } }),
         );
         const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-        const [port] = await freePorts(1);
+        const requestedPort = await occupiedPort();
         server = await startServer({
           WAITRON_HTTP_LANDING_PORT: "0",
-          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_PORT: String(requestedPort),
           WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
           WAITRON_STATE_DIR: scratch,
@@ -190,6 +246,7 @@ describe("read-only real boot clocking", () => {
           WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
           WAITRON_ENV: "preproduction",
         });
+        const port = await listeningPort();
         await awaitListening(port);
         const origin = `http://127.0.0.1:${port}`;
         const boot = await fetch(`${origin}/api/till`, { headers: { cookie: venue.cookie } });
@@ -248,10 +305,10 @@ for (const enabled of [true, false]) {
             }),
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-          const [port] = await freePorts(1);
+          const requestedPort = await occupiedPort();
           server = await startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
-            WAITRON_HTTP_PORT: String(port),
+            WAITRON_HTTP_PORT: String(requestedPort),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
             WAITRON_CREDENTIALS_KEY_VERSION: "1",
             WAITRON_STATE_DIR: scratch,
@@ -261,6 +318,7 @@ for (const enabled of [true, false]) {
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });
+          const port = await listeningPort();
           await awaitListening(port);
           const origin = `http://127.0.0.1:${port}`;
           const deviceCookie = venue.cookie
