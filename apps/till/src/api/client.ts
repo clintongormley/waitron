@@ -338,6 +338,7 @@ export interface TillProduct {
     abbreviation: Record<string, string>;
     precision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
+    measure?: true;
   };
   pricingUnit?: "each" | "weight";
   unitPrice: string;

@@ -60,13 +60,19 @@ export function needsModifierPicker(
   return offeredListsOf(product).length > 0;
 }
 
-/** The lists the till offers on this dish: no extras list unless it is sold by the unit, because
- * the server refuses them (`extras.unsupported_product`). */
+/** Whether the dish takes extras: only when sold in whole portions — not weighed, not in decimals,
+ * not a measure — because the server refuses any other (`extras.unsupported_product`). */
+export function takesExtras(product: Pick<TillProduct, "unit" | "pricingUnit">): boolean {
+  return soldByTheUnit(product) && productUnit(product).measure !== true;
+}
+
+/** The lists the till offers on this dish: no extras list unless it is sold in whole portions — not
+ * weighed, not in decimals, not a measure. */
 export function offeredListsOf(
   product: Pick<TillProduct, "offeredModifiers" | "unit" | "pricingUnit">,
 ): NonNullable<TillProduct["offeredModifiers"]> {
   const offered = product.offeredModifiers ?? [];
-  return soldByTheUnit(product) ? offered : offered.filter((entry) => entry.kind !== "extras");
+  return takesExtras(product) ? offered : offered.filter((entry) => entry.kind !== "extras");
 }
 
 /**

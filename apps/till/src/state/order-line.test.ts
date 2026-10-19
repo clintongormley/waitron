@@ -5,6 +5,7 @@ import {
   extraGross,
   lineGross,
   needsModifierPicker,
+  offeredListsOf,
   quantityLabel,
   quantityPlaces,
   toWireLineExtras,
@@ -255,5 +256,58 @@ describe("needsModifierPicker", () => {
 
   it("is false for a product offering neither a variant nor a list", () => {
     expect(needsModifierPicker({ ...cafe, variants: [], offeredModifiers: [] })).toBe(false);
+  });
+});
+
+describe("offeredListsOf", () => {
+  const extrasList = {
+    kind: "extras" as const,
+    id: "list-milk",
+    name: "Leches",
+    customerName: null,
+    kitchenName: null,
+    minPicks: 0,
+    maxPicks: null,
+    items: [],
+  };
+  const optionsList = {
+    kind: "options" as const,
+    id: "list-size",
+    name: "Tamaño",
+    customerName: null,
+    kitchenName: null,
+    defaultLabelId: null,
+    publishedDefaultLabelId: null,
+    labels: [],
+  };
+  const unit = (measure: boolean): NonNullable<TillProduct["unit"]> => ({
+    id: "unit-ml",
+    name: { en: "millilitre", es: "mililitro" },
+    abbreviation: { en: "ml", es: "ml" },
+    precision: 0,
+    hardwareUnit: null,
+    ...(measure ? { measure: true as const } : {}),
+  });
+
+  it("offers no extras list on a dish sold in a measure, but keeps its options list", () => {
+    const vino = { ...cafe, unit: unit(true), offeredModifiers: [extrasList, optionsList] };
+    expect(offeredListsOf(vino)).toEqual([optionsList]);
+    expect(needsModifierPicker(vino)).toBe(true);
+  });
+
+  it("asks nothing on a dish sold in a measure whose only list is an extras list", () => {
+    expect(needsModifierPicker({ ...cafe, unit: unit(true), offeredModifiers: [extrasList] })).toBe(
+      false,
+    );
+  });
+
+  it("keeps every list on a dish sold in whole portions, a ración or Each", () => {
+    const racion = { ...cafe, unit: unit(false), offeredModifiers: [extrasList, optionsList] };
+    expect(offeredListsOf(racion)).toEqual([extrasList, optionsList]);
+    const { unit: _unit, ...each } = cafe;
+    expect(offeredListsOf({ ...each, offeredModifiers: [extrasList, optionsList] })).toEqual([
+      extrasList,
+      optionsList,
+    ]);
   });
 });
