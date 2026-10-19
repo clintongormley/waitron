@@ -2767,10 +2767,12 @@ export class MenusScreen extends LitElement {
   /** Sends a change confirmed from Select mode's bar. Its answer is shown in the confirm, which
    * `saved` closes, only while the menu it was asked in is still open; once another menu has been
    * opened, a refusal is named with the menu it was for, and a saved change clears nothing and
-   * moves no focus there. `reread` runs after a saved change is read back. */
+   * moves no focus there. `refused` shows a refusal in its confirm and says whether that confirm
+   * was still open; when it was not, the refusal is named with the menu too. `reread` runs after a
+   * saved change is read back. */
   async #sendSelected(change: {
     send: () => Promise<unknown>;
-    refused: (message: string) => void;
+    refused: (message: string) => boolean;
     saved: () => void;
     reread?: () => void;
   }): Promise<void> {
@@ -2781,8 +2783,7 @@ export class MenusScreen extends LitElement {
     try {
       await change.send();
     } catch (error) {
-      if (here()) change.refused(codeMessage(codeOf(error)));
-      else this.#reportRefused(menu, error);
+      if (!(here() && change.refused(codeMessage(codeOf(error))))) this.#reportRefused(menu, error);
       this.busy = false;
       return;
     }
@@ -2811,7 +2812,9 @@ export class MenusScreen extends LitElement {
     await this.#sendSelected({
       send: () => this.api.removeSectionMembers(members),
       refused: (message) => {
+        if (this.removingSelected === null) return false;
         this.removeSelectedError = message;
+        return true;
       },
       saved: () => {
         this.removingSelected = null;
@@ -2848,7 +2851,9 @@ export class MenusScreen extends LitElement {
     await this.#sendSelected({
       send: () => this.api.deleteSections(ids),
       refused: (message) => {
+        if (this.deletingSelected === null) return false;
         this.deleteSelectedError = message;
+        return true;
       },
       saved: () => {
         this.deletingSelected = null;
@@ -2922,7 +2927,9 @@ export class MenusScreen extends LitElement {
     await this.#sendSelected({
       send: () => this.api.moveSectionMembersInto(destination, members),
       refused: (message) => {
+        if (this.movingSelected === null) return false;
         this.moveSelectedError = message;
+        return true;
       },
       saved: () => {
         this.#moveScope?.commit(destination);

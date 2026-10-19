@@ -6320,32 +6320,32 @@ describe("the Structure tree", () => {
       });
     });
 
-    describe("a bulk change answered once another menu is open", () => {
-      const changes = {
-        remove: {
-          method: "removeSectionMembers",
-          row: "m-burger",
-          button: "selection-remove",
-          dialog: "remove-selected",
-          destination: null,
-        },
-        delete: {
-          method: "deleteSections",
-          row: "m-drinks",
-          button: "selection-delete",
-          dialog: "delete-selected",
-          destination: null,
-        },
-        move: {
-          method: "moveSectionMembersInto",
-          row: "m-burger",
-          button: "selection-move",
-          dialog: "move-selected",
-          destination: "s-drinks",
-        },
-      } as const;
-      const names = Object.keys(changes) as (keyof typeof changes)[];
+    const changes = {
+      remove: {
+        method: "removeSectionMembers",
+        row: "m-burger",
+        button: "selection-remove",
+        dialog: "remove-selected",
+        destination: null,
+      },
+      delete: {
+        method: "deleteSections",
+        row: "m-drinks",
+        button: "selection-delete",
+        dialog: "delete-selected",
+        destination: null,
+      },
+      move: {
+        method: "moveSectionMembersInto",
+        row: "m-burger",
+        button: "selection-move",
+        dialog: "move-selected",
+        destination: "s-drinks",
+      },
+    } as const;
+    const names = Object.keys(changes) as (keyof typeof changes)[];
 
+    describe("a bulk change answered once another menu is open", () => {
       /** Confirms the change in Lunch, its request answered by `answer`, then opens Dinner. */
       async function sendFromLunchThenOpenDinner(
         name: keyof typeof changes,
@@ -6431,6 +6431,59 @@ describe("the Structure tree", () => {
           ),
         );
         expect(modal(el, "delete-selected").open).toBe(false);
+      });
+    });
+
+    describe("a bulk change answered after a live update closed its confirm", () => {
+      /** Confirms the change in Lunch with its request held, then delivers a live update that
+       * takes the ticked row away, which closes the confirm while the request is out. */
+      async function sendThenLoseTheRow(
+        name: keyof typeof changes,
+        answer: Promise<unknown>,
+      ): Promise<MenusScreen> {
+        const change = changes[name];
+        const live = new LiveData();
+        const send = vi.fn(() => answer);
+        const client = api({ liveData: live, [change.method]: send });
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, change.row);
+        q(el, `[data-test="${change.button}"]`)!.click();
+        await vi.waitFor(() => expect(modal(el, change.dialog).open).toBe(true));
+        await el.updateComplete;
+        if (change.destination) {
+          await chooseOption(
+            inModal<HTMLElementTagNameMap["wt-combobox"]>(
+              el,
+              change.dialog,
+              'wt-combobox[name="destination"]',
+            ),
+            change.destination,
+          );
+          await el.updateComplete;
+        }
+        inModal(el, change.dialog, `[data-test="${change.dialog}-save"]`).click();
+        await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+        client.getMenuStructure.mockResolvedValue(
+          lunchWith(lunchNodes().filter((node) => node.memberId !== change.row)),
+        );
+        live.invalidate([{ type: "section_members" }]);
+        await vi.waitFor(() => expect(modal(el, change.dialog).open).toBe(false));
+        return el;
+      }
+
+      it.each(names)("%s: a refusal shows on the screen, naming the menu", async (name) => {
+        const answer = deferred<void>();
+        const el = await sendThenLoseTheRow(name, answer.promise);
+        answer.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+        await el.updateComplete;
+        expect(text(q(el, '[data-test="member-error"]'))).toBe(
+          t("menus.change_not_saved")
+            .replace("{name}", "Lunch Menu")
+            .replace("{reason}", codeMessage("menu_section.not_found")),
+        );
+        expect(modal(el, changes[name].dialog).open).toBe(false);
       });
     });
   });
