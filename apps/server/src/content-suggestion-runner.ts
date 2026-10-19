@@ -117,19 +117,22 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
         return "wait";
       }
       if (status.state === "done" || status.state === "partly_done") {
-        const cursor = job.collectCursor ?? 0;
-        const collected = await translation.collect(cloudJobId, cursor, signal);
         // Collect's reply carries no reason; the status that finished the job does.
-        const page: SuggestionPage = { ...collected, cursor };
-        const results: SuggestionPage =
+        const reason =
           status.reason === "limit_reached" || status.reason === "provider_failed"
-            ? { ...page, reason: status.reason }
-            : page;
-        const at = now();
-        await record(async (tx) => {
-          await storeSuggestionPage(tx, job.id, results, deps.context, at);
-        });
-        return "again";
+            ? { reason: status.reason }
+            : {};
+        let cursor = job.collectCursor ?? 0;
+        for (;;) {
+          const collected = await translation.collect(cloudJobId, cursor, signal);
+          const page: SuggestionPage = { ...collected, cursor, ...reason };
+          const at = now();
+          const stored = await withTransaction(deps.db, (tx) =>
+            storeSuggestionPage(tx, job.id, page, deps.context, at),
+          );
+          if (stored !== "stored") return "again";
+          cursor = collected.nextCursor!;
+        }
       }
       if (status.state === "failed") {
         const failure = FAILURE[status.reason!];
