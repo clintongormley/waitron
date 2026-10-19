@@ -46,6 +46,8 @@ export interface AlertEventClaim {
   readonly prefix: string;
   readonly area: string;
   readonly permission: string;
+  /** The screen where the incident is dealt with, offered beside Mark handled. */
+  readonly screen?: string;
 }
 
 export interface ModuleAlerts {

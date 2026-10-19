@@ -172,26 +172,29 @@ export class AlertsScreen extends LitElement {
         pinned: "end",
         cell: (a) => {
           const incidentId = incidentIdOf(a);
-          if (incidentId !== null)
-            return html`<wt-button
-              size="sm"
-              variant="secondary"
-              data-test="alert-handle"
-              ?loading=${this.busyKey === a.key}
-              @click=${() => void this.#handle(a, incidentId)}
-              >${t("alerts.mark_handled")}</wt-button
-            >`;
           const screen = screenTargetOf(a, this.canOpen);
-          if (screen !== null) {
-            return html`<wt-button
-              size="sm"
-              variant="secondary"
-              data-test="alert-go-to"
-              @click=${(e: MouseEvent) => this.#goTo(e, screen)}
-              >${goToLabel(screen)}</wt-button
-            >`;
-          }
-          return nothing;
+          return html`${
+            incidentId === null
+              ? nothing
+              : html`<wt-button
+                  size="sm"
+                  variant="secondary"
+                  data-test="alert-handle"
+                  ?loading=${this.busyKey === a.key}
+                  @click=${() => void this.#handle(a, incidentId)}
+                  >${t("alerts.mark_handled")}</wt-button
+                >`
+          }${
+            screen === null
+              ? nothing
+              : html`<wt-button
+                  size="sm"
+                  variant="secondary"
+                  data-test="alert-go-to"
+                  @click=${(e: MouseEvent) => this.#goTo(e, screen)}
+                  >${goToLabel(screen)}</wt-button
+                >`
+          }`;
         },
       },
     ];

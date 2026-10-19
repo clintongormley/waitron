@@ -286,6 +286,44 @@ describe("dashboard-alerts-screen", () => {
     expect(goTo.mock.calls[0]![0].detail).toEqual({ screen: "backup" });
   });
 
+  it("offers both Mark handled and Go to Card payments for the held-payments alert", async () => {
+    const held: AlertView = {
+      ...open,
+      key: "incident:i9",
+      code: "payment.reconcile_held",
+      params: { count: 1, payments: [] },
+      screen: "payments",
+    };
+    for (const [locale, label] of [
+      ["en-GB", "Go to Card payments"],
+      ["es-ES", "Ir a Pagos con tarjeta"],
+    ] as const) {
+      setLocale(locale);
+      const api = stubApi({
+        listAlerts: vi
+          .fn()
+          .mockResolvedValue({ visible: true, alerts: [held, open] } satisfies AlertsResponse),
+      });
+      const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+        api,
+        canOpen: (screen: string) => screen === "payments",
+      });
+      await flush(el);
+      const [heldRow, plainRow] = [...rows(el, "open-alerts-table")];
+      expect(heldRow!.querySelector("[data-test=alert-handle]")).not.toBeNull();
+      const goTo = heldRow!.querySelector<HTMLElement>("[data-test=alert-go-to]")!;
+      expect(goTo.textContent!.trim()).toBe(label);
+      // An event that names no screen still offers only Mark handled.
+      expect(plainRow!.querySelector("[data-test=alert-handle]")).not.toBeNull();
+      expect(plainRow!.querySelector("[data-test=alert-go-to]")).toBeNull();
+      const emitted = vi.fn();
+      el.addEventListener("wt-alert-go-to", emitted);
+      await userEvent.click(goTo);
+      expect(emitted.mock.calls[0]![0].detail).toEqual({ screen: "payments" });
+      cleanupWidgets();
+    }
+  });
+
   it("offers no Go to for a screen the session may not open", async () => {
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
       api: stubApi(),

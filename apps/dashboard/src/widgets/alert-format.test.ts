@@ -44,13 +44,14 @@ it("names a device alert by its device and a job alert by its source, in the cho
   expect(sourceLabel({})).toBe("");
 });
 
-it("offers an ongoing alert's screen only when the session may open it", () => {
+it("offers an alert's screen only when the session may open it", () => {
   const canOpen = (screen: string) => screen === "backup";
   expect(screenTargetOf({ kind: "ongoing", screen: "backup" }, canOpen)).toBe("backup");
   expect(screenTargetOf({ kind: "ongoing", screen: "printers" }, canOpen)).toBeNull();
   expect(screenTargetOf({ kind: "ongoing" }, canOpen)).toBeNull();
-  // Only an ongoing alert names the screen that fixes it; an event is marked handled instead.
-  expect(screenTargetOf({ kind: "event", screen: "backup" }, canOpen)).toBeNull();
+  expect(screenTargetOf({ kind: "event", screen: "backup" }, canOpen)).toBe("backup");
+  expect(screenTargetOf({ kind: "event", screen: "printers" }, canOpen)).toBeNull();
+  expect(screenTargetOf({ kind: "event" }, canOpen)).toBeNull();
 });
 
 function handleApi(mark: () => Promise<void>) {
