@@ -57,6 +57,9 @@ import {
  * | PUT /api/working-orders/:id/kitchen-note | take-orders | same refusal case |
  * | GET /api/parties/:id/kitchen-note | take-orders | same refusal case |
  * | PUT /api/parties/:id/kitchen-note | take-orders | same refusal case |
+ * | GET /api/parties/:id/allergy | take-orders | till-api.allergy.test.ts: "checks device, profile action and admission for GET" |
+ * | PUT /api/parties/:id/allergy | take-orders | same suite: "checks device, profile action and admission for PUT" |
+ * | POST /api/parties/:id/allergy/send-preview | take-orders | same suite: "checks device, profile action and admission for POST" |
  * | GET /api/clock/state                                    | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on state" |
  * | POST /api/clock/in                                      | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on in" |
  * | POST /api/clock/out                                     | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on out" |

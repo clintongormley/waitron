@@ -24,7 +24,12 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { AllergySendTarget } from "@waitron/module";
-import { readAllergySendView, readPartyAllergyView } from "./party-allergy.js";
+import {
+  allergyTargets,
+  applyPartyAllergyPatch,
+  readAllergySendView,
+  readPartyAllergyView,
+} from "./party-allergy.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -37,6 +42,7 @@ import {
   split,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { FreshDraftLineInput } from "./order-drafts.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -584,5 +590,150 @@ describe("A669 candidate sets", () => {
       .set({ state: "fired", firedAt: new Date().toISOString() })
       .where(and(eq(orderGroups.id, line!.groupId!), eq(orderGroups.partyId, p.partyId)));
     expect((await view(p.partyId, { kind: "group", groupId: line!.groupId! })).dishes).toEqual([]);
+  });
+});
+
+describe("A669 allergy patch boundary", () => {
+  it("retains before-images of deleted guests and reports only changed working assignments", async () => {
+    const p = await party();
+    const [a, b] = await held(p, 2);
+    await inTx(v, (tx) =>
+      VENUE_SERVICE.writePartyAllergy(
+        tx,
+        p.partyId,
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Guest A", allergens: { milk: {} } },
+            { who: "Guest B", allergens: { eggs: {} } },
+          ],
+        },
+        OPERATOR,
+      ),
+    );
+    const before = (await view(p.partyId)).snapshot;
+    await inTx(v, (tx) =>
+      VENUE_SERVICE.setAllergyLineTicks(tx, p.partyId, [
+        { workingLineId: a!.id, guestId: before.guests[0]!.id },
+        { workingLineId: b!.id, guestId: before.guests[1]!.id },
+      ]),
+    );
+    const expected = (await view(p.partyId)).snapshot;
+    const changes = await inTx(v, (tx) =>
+      applyPartyAllergyPatch(
+        tx,
+        p.partyId,
+        {
+          party: { answer: "allergies", guests: [before.guests[1]!] },
+          ticks: [],
+        },
+        OPERATOR,
+        [],
+      ),
+    );
+    expect(changes.before).toEqual(expected);
+    expect(changes.after).toMatchObject({
+      answer: "allergies",
+      guests: [{ id: before.guests[1]!.id }],
+      ticks: [{ guestId: before.guests[1]!.id, workingLineId: b!.id }],
+    });
+    expect(changes.workingLineIds).toEqual([a!.id]);
+    expect(changes.after.revision).toBe(expected.revision);
+    const changedGuest = await inTx(v, (tx) =>
+      applyPartyAllergyPatch(
+        tx,
+        p.partyId,
+        {
+          party: {
+            answer: "allergies",
+            guests: [{ ...before.guests[1]!, note: "Separate utensils" }],
+          },
+          ticks: [],
+        },
+        OPERATOR,
+        [],
+      ),
+    );
+    expect(changedGuest.workingLineIds).toEqual([b!.id]);
+  });
+  it("maps submitted indexes to assigned parent ids and excludes lines outside the action set", async () => {
+    const p = await party();
+    const [a, b] = await held(p, 2);
+    const allowed = [
+      {
+        ref: { kind: "submitted" as const, groupIndex: 1, lineIndex: 0 },
+        workingLineId: a!.id,
+        draftLineId: null,
+      },
+    ];
+    const patch = {
+      party: {
+        answer: "allergies" as const,
+        guests: [{ who: "Guest", allergens: { milk: {} }, note: null }],
+      },
+      ticks: [{ line: { kind: "submitted" as const, groupIndex: 1, lineIndex: 0 }, guestIndex: 0 }],
+    };
+    const changes = await inTx(v, (tx) =>
+      applyPartyAllergyPatch(tx, p.partyId, patch, OPERATOR, allowed),
+    );
+    expect(changes.after.ticks).toEqual([
+      { guestId: changes.after.guests[0]!.id, workingLineId: a!.id, draftLineId: null },
+    ]);
+    expect(changes.workingLineIds).toEqual([a!.id]);
+    await expect(
+      inTx(v, (tx) =>
+        applyPartyAllergyPatch(
+          tx,
+          p.partyId,
+          {
+            ticks: [{ line: { kind: "working", id: b!.id }, guestIndex: null }],
+          },
+          OPERATOR,
+          allowed,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "ticks.0.line" } });
+    expect((await view(p.partyId)).snapshot).toEqual(changes.after);
+  });
+});
+
+describe("A669 allergy patch target identity", () => {
+  it("assigns a draft and a working dish with the same UUID independently", async () => {
+    const p = await party();
+    const [line] = await held(p);
+    const d = await draft(p);
+    await v.db
+      .update(orderDraftLines)
+      .set({ id: line!.id })
+      .where(eq(orderDraftLines.id, d.lines[0]!.id));
+    const current = await view(p.partyId);
+    const result = await inTx(v, (tx) =>
+      applyPartyAllergyPatch(
+        tx,
+        p.partyId,
+        {
+          party: {
+            answer: "allergies",
+            guests: [
+              { who: "Guest A", allergens: { milk: {} }, note: null },
+              { who: "Guest B", allergens: { eggs: {} }, note: null },
+            ],
+          },
+          ticks: [
+            { line: { kind: "draft", id: line!.id }, guestIndex: 0 },
+            { line: { kind: "working", id: line!.id }, guestIndex: 1 },
+          ],
+        },
+        OPERATOR,
+        allergyTargets(current),
+      ),
+    );
+    expect(result.after.ticks).toEqual(
+      expect.arrayContaining([
+        { draftLineId: line!.id, workingLineId: null, guestId: result.after.guests[0]!.id },
+        { draftLineId: null, workingLineId: line!.id, guestId: result.after.guests[1]!.id },
+      ]),
+    );
+    expect(result.after.ticks).toHaveLength(2);
   });
 });

@@ -229,6 +229,7 @@ import { mountDepartmentTransferApi } from "./department-transfer-api.js";
 import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
+import { mountPartyAllergyApi } from "./party-allergy-api.js";
 import { mountOrderKitchenNoteApi } from "./order-kitchen-note-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
@@ -462,6 +463,9 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
   "kitchen_note.out_of_date": 409,
+  "allergy.invalid": 400,
+  "allergy.out_of_date": 409,
+  "allergy.unanswered": 409,
   "order.payment_in_flight": 409,
   "device.profile_changed": 409,
   "working_order.not_placed": 409,
@@ -1285,6 +1289,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
   mountStationTodayApi(app, deps, log, run, pinThrottle);
   mountOrderKitchenNoteApi(app, deps, log, run);
+  mountPartyAllergyApi(app, deps, log, run);
   mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
   mountFloorTodayApi(app, deps, log, run);

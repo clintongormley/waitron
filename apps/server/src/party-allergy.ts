@@ -13,13 +13,28 @@ import {
   parentProducts,
   staffPresentationName,
 } from "@waitron/catalogue";
-import type { AllergyDish, AllergySendTarget, PartyAllergyRead } from "@waitron/module";
-import { AppError, compareDecimal, decimal, QUANTITY_SCALE, toScale } from "@waitron/shared";
+import type {
+  AllergyDish,
+  AllergySendTarget,
+  PartyAllergyRead,
+  AllergyLineRef,
+  AllergyPatch,
+  AllergyChangeSet,
+  PartyAllergySnapshot,
+} from "@waitron/module";
+import {
+  AppError,
+  isUuid,
+  compareDecimal,
+  decimal,
+  QUANTITY_SCALE,
+  toScale,
+} from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readDrafts } from "./order-drafts.js";
 import { readCurrentOrders, requireGroup, type CurrentOrderRow } from "./order-groups.js";
-import { partyFamily, partyZone } from "./parties.js";
+import { fingerprint, partyFamily, partyZone } from "./parties.js";
 import { extraQuantityFor } from "./working-order.js";
 import "./errors.js";
 
@@ -27,7 +42,7 @@ function invalid(field: string): never {
   throw new AppError("allergy.invalid", { field });
 }
 
-async function survivingParty(tx: Transaction, partyId: string): Promise<string> {
+export async function survivingParty(tx: Transaction, partyId: string): Promise<string> {
   const seen = new Set<string>();
   for (;;) {
     if (seen.has(partyId)) invalid("partyId");
@@ -292,4 +307,130 @@ export async function readAllergySendView(
       (d) => d.line.kind !== "submitted" && chosen.has(`${d.line.kind}:${d.line.id}`),
     ),
   };
+}
+
+export interface ResolvedAllergyTarget {
+  ref: AllergyLineRef;
+  draftLineId: string | null;
+  workingLineId: string | null;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function refKey(value: unknown, field: string): string {
+  if (!record(value)) invalid(field);
+  if (value.kind === "draft" || value.kind === "working") {
+    if (typeof value.id !== "string" || !isUuid(value.id)) invalid(field);
+    return `${value.kind}:${value.id.toLowerCase()}`;
+  }
+  if (
+    value.kind === "submitted" &&
+    Number.isSafeInteger(value.groupIndex) &&
+    Number.isSafeInteger(value.lineIndex) &&
+    (value.groupIndex as number) >= 0 &&
+    (value.lineIndex as number) >= 0
+  )
+    return `submitted:${value.groupIndex as number}:${value.lineIndex as number}`;
+  return invalid(field);
+}
+
+export function allergyTargets(view: PartyAllergyRead): ResolvedAllergyTarget[] {
+  return view.dishes.flatMap((dish) =>
+    dish.line.kind === "submitted"
+      ? []
+      : [
+          {
+            ref: dish.line,
+            draftLineId: dish.line.kind === "draft" ? dish.line.id : null,
+            workingLineId: dish.line.kind === "working" ? dish.line.id : null,
+          },
+        ],
+  );
+}
+
+export async function applyPartyAllergyPatch(
+  tx: Transaction,
+  partyId: string,
+  patch: AllergyPatch,
+  operatorId: string,
+  allowedTargets: readonly ResolvedAllergyTarget[],
+): Promise<AllergyChangeSet> {
+  if (!record(patch)) invalid("allergy");
+  if (!Array.isArray(patch.ticks)) invalid("ticks");
+  const before = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  if (patch.party !== undefined)
+    await VENUE_SERVICE.writePartyAllergy(tx, partyId, patch.party, operatorId);
+  const edited = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  const targets = new Map(
+    allowedTargets.map((target) => {
+      if ((target.draftLineId === null) === (target.workingLineId === null)) invalid("line");
+      return [refKey(target.ref, "line"), target] as const;
+    }),
+  );
+  const seen = new Set<string>();
+  const ticks = patch.ticks.map((tick: unknown, index) => {
+    const field = (name: string) => `ticks.${index}.${name}`;
+    if (!record(tick)) invalid(field("line"));
+    const target = targets.get(refKey(tick.line, field("line")));
+    if (target === undefined) invalid(field("line"));
+    const storedKey =
+      target.draftLineId === null
+        ? `working:${target.workingLineId!}`
+        : `draft:${target.draftLineId}`;
+    if (seen.has(storedKey)) invalid(field("line"));
+    seen.add(storedKey);
+    const guestIndex = tick.guestIndex;
+    if (
+      guestIndex !== null &&
+      (typeof guestIndex !== "number" ||
+        !Number.isSafeInteger(guestIndex) ||
+        guestIndex < 0 ||
+        guestIndex >= edited.guests.length)
+    )
+      invalid(field("guestIndex"));
+    return {
+      draftLineId: target.draftLineId,
+      workingLineId: target.workingLineId,
+      guestId: guestIndex === null ? null : edited.guests[guestIndex as number]!.id,
+    };
+  });
+  await VENUE_SERVICE.setAllergyLineTicks(
+    tx,
+    partyId,
+    ticks.filter((tick) => tick.draftLineId !== null),
+  );
+  await VENUE_SERVICE.setAllergyLineTicks(
+    tx,
+    partyId,
+    ticks.filter((tick) => tick.workingLineId !== null),
+  );
+  const after = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  const assignments = (snapshot: PartyAllergySnapshot) =>
+    new Map(
+      snapshot.ticks.flatMap((tick) => {
+        if (tick.workingLineId === null) return [];
+        const guest = snapshot.guests.find((g) => g.id === tick.guestId)!;
+        return [
+          [
+            tick.workingLineId,
+            fingerprint({
+              guest: {
+                id: guest.id,
+                who: guest.who,
+                allergens: guest.allergens,
+                note: guest.note,
+              },
+            }),
+          ] as const,
+        ];
+      }),
+    );
+  const oldAssignments = assignments(before);
+  const newAssignments = assignments(after);
+  const workingLineIds = [...new Set([...oldAssignments.keys(), ...newAssignments.keys()])]
+    .filter((id) => oldAssignments.get(id) !== newAssignments.get(id))
+    .sort();
+  return { partyId, before, after, workingLineIds };
 }
