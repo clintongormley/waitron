@@ -2086,6 +2086,7 @@ export class TillFloorScreen extends LitElement {
           reserved: t("floor.reserved"),
           unsent: t("floor.unsent_mark"),
           fireDue: t("floor.fire_due"),
+          forgotten: t("floor.forgotten"),
         }}
       ></wt-table-token>
     </button>`;
