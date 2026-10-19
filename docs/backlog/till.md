@@ -2267,6 +2267,11 @@ counter slice. The design-system button examples name the direct New order actio
 the removed send-preview confirmation. These prose updates do not complete cancellation/Finish,
 the physical trial or final delivery.
 
+The product guide scopes fresh-dish availability checks separately from recalled bill rows and
+links to their modifier contract. The original six-choice mock-up page now points to the owner's
+2026-10-17 answers while preserving the proposal and drawings. These changes close those prose
+findings; they do not complete the whole-branch audit or the remaining work above.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured

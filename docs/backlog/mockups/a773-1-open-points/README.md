@@ -1,5 +1,11 @@
 # Six choices before A773-1 continues
 
+**Historical proposal, updated pointer 2026-10-19.** The owner answered all six choices on
+2026-10-17 in [the approved design, section 14](../../../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#14-a773-1s-six-open-points--answered-2026-10-17).
+Follow those answers and the [one-editor-per-bill amendment](../../../superpowers/specs/2026-10-17-a773-one-editor-design.md),
+including their replacement panel, selection and payment rules. The original proposals and pictures
+below are retained as the context for those answers.
+
 Written 2026-10-16 after you asked for more context and mock-ups for the plan's six open points.
 **Every option below is a proposal awaiting your answer.** A is the plan's earlier default;
 that does not make it approved. The pictures show worked examples and illustrative wording.
