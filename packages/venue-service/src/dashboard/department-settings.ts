@@ -527,7 +527,8 @@ export class DepartmentSettings extends LitElement {
       ...(Object.keys(this.stepErrors).length ? { serviceSteps: "" } : {}),
     };
   }
-  /** Marks the steps a refusal names, by the draft key of the submitted row it points at. */
+  /** Marks the steps a refusal names: a field by the draft key of the submitted row it points at,
+   * a deleted course on each row that still starts from it now the answer has come. */
   private stepRefusal(error: unknown, steps: ServiceStepDraft[]) {
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
     const named = typeof params?.field === "string" ? params.field : "";
@@ -543,7 +544,7 @@ export class DepartmentSettings extends LitElement {
         list = t("venue.field_refused");
     } else if (code === "service_step.not_found") list = t("venue.service_step_changed_elsewhere");
     else if (code === "course.not_found")
-      for (const step of steps)
+      for (const step of this.draft!.serviceSteps)
         if (step.start === "course_served" && step.courseId === params?.courseId)
           rows[step.key] = { start: t("venue.service_step_course_gone") };
     if (!list && !Object.keys(rows).length) return false;

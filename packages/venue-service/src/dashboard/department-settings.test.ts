@@ -2001,6 +2001,29 @@ it("a course deleted meanwhile is named under every step that starts from it", a
     ["", COURSE_GONE, ""],
   ]);
 });
+it("a course refusal landing after a step's start was changed to Everything served leaves that step unmarked", async () => {
+  const { el } = await mount(stepsView());
+  let refuse!: () => void;
+  const refused = new Promise<void>((resolve) => (refuse = resolve));
+  el.api = new VenueServiceApi((async (_path, method) => {
+    if (method === "GET")
+      return { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: [] };
+    await refused;
+    throw { code: "course.not_found", params: { courseId: "c1" } };
+  }) as DashboardRequest);
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await chooseStart(el, 1, "course_served:c1");
+  save(el).click();
+  await chooseStart(el, 2, "all_served");
+  refuse();
+  await expect.poll(() => stepControl(el, 1, "Start").error).toBe(COURSE_GONE);
+  expect(stepErrors(el)).toEqual([
+    ["", "", ""],
+    ["", COURSE_GONE, ""],
+    ["", "", ""],
+  ]);
+});
 it("a step another manager deleted says so, and Cancel emits cancelled", async () => {
   const { el } = await mount(stepsView(), {
     code: "service_step.not_found",
