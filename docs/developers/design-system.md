@@ -5028,7 +5028,8 @@ closing the editor returns focus to its originating row menu, or Add when that r
 
 Edit department is tabbed. Details holds name and trading name. Service holds two sections, each
 under its own heading: “Orders and payment”, with the service settings and the zones that differ,
-and “Table states”, with the Needs clearing switch. Receipts, between Service and Transfers, holds
+and “Table states”, with the Needs clearing switch and the department's service steps (a list with
+drag handles, a row menu with Delete, and Add step). Receipts, between Service and Transfers, holds
 the department's receipt editor, and is offered only to someone with `layout.configure`. Transfers
 holds the allowed destinations and the receiving desk profile, and is offered only while two or more
 departments are active. The dialog is wide whenever it offers Receipts, and standard otherwise, so

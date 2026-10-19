@@ -2081,8 +2081,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slice 1, Needs clearing per department, landed (plan
-  `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`); slices 2–8 are left
+  2026-10-17.** Slices 1 (Needs clearing per department) and 7 (service steps: the settings) landed
+  (plans `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md` and
+  `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 2–6 and 8 are left
   (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
@@ -2090,8 +2091,18 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for the whole of A757 (slices 2–8 are left).
+  settle the two suggestions in the detail. Waits for the whole of A757 (slices 2–6 and 8 are left).
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
+
+- **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
+  For the owner to confirm or change, each a string or a small behaviour choice: words the pictures
+  do not draw — the fifth start's label ("Repeats after the last order" / "Se repite tras el último
+  pedido"), the Spanish starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish
+  labels, the minutes field's screen-reader label ("Minutes" / "Minutos") and the required stars on
+  the "Step" and "Starts" column heads; starter names in the venue's first receipt language; a
+  department added later getting the starter steps; deleting a course deleting the steps that start
+  from it.
+  [Open questions](superpowers/plans/2026-10-19-a757-7-service-step-settings.md#open-questions-each-with-the-default-this-plan-uses)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
   answered all eight questions on 2026-10-17: two kinds of reason, Void and Comp (a 100% comp is
@@ -3841,6 +3852,16 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
+
+- **A901. The shared reorder announcement misreads an item name holding `$&` or `{index}`.**
+  `ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
+  `{index}` and `{total}` with chained `String.replace`, so on every list that reorders through it
+  a name holding `$&` is read back with the placeholder in its place
+  (`"{item} is now".replace("{item}", "Mains $& x")` prints `Mains {item} x is now`), and a name
+  holding `{index}` takes the position number itself, leaving the announcement's own `{index}`
+  unfilled (`Table 3 is now {index} of 5.`). `git blame` puts these lines in
+  524dbadd5 (2026-09-16) and 5b725d672 (2026-10-01), so I believe it predates A757 slice 7. Fix with
+  a single-pass formatter like `format()` in `packages/venue-service/src/dashboard/hours-view.ts:5`.
 
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
   2026-10-19).** The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)

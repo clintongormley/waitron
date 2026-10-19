@@ -200,6 +200,8 @@ The latest snapshots enumerate **211 application tables and 1654 columns across 
 | `party_allergy` · `packages/venue-service/drizzle/meta/0055_snapshot.json:3700`                          | **D**: —<br>**H**: `answer`<br>**S**: —<br>**L**: `party_id`, `changed_by`<br>**U**: —<br>**R**: `changed_at`                                                                                                                                                                                                                                         |
 | `party_allergy_guests` · `packages/venue-service/drizzle/meta/0055_snapshot.json:3757`                   | **D**: `who`<br>**H**: `allergens`, `note`<br>**S**: —<br>**L**: `id`, `party_id`<br>**U**: —<br>**R**: `position`                                                                                                                                                                                                                                    |
 
+**2026-10-19:** `service_steps`, a venue-service table not in the list above, was added (A757 slice 7, venue-service migration 0062): **L**: `id`, `department_id`, `course_id`; **U**: `name`; **R**: `position`, `start`, `minutes`; retention as `departments` (configuration).
+
 ## media (2 tables)
 
 | Table and source block                                                  | D / H / S / L / U / R: all declared fields                                                                         |
