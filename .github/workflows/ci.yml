@@ -792,6 +792,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Install setup download Chromium
+        timeout-minutes: 7
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120 pnpm --filter @waitron/server exec playwright install chromium; then
+              exit 0
+            fi
+          done
+          exit 1
+
       # `test:shard` emits a blob rather than enforcing thresholds; test-server-merge is where the
       # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
       # (see test-heavy's shard step for why a bare `--` silently drops both flags). The two stream

@@ -348,6 +348,9 @@ importers:
       '@waitron/print-agent-app':
         specifier: workspace:*
         version: link:../print-agent
+      '@waitron/setup':
+        specifier: workspace:*
+        version: link:../setup
       '@waitron/verifactu':
         specifier: ^0.2.1
         version: 0.2.1
@@ -360,9 +363,15 @@ importers:
       otplib:
         specifier: ^13.5.0
         version: 13.5.0
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
       pdfjs-dist:
         specifier: ^6.4.299
         version: 6.4.299
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15

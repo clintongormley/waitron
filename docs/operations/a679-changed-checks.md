@@ -2596,3 +2596,61 @@ this does not qualify real release provenance or AEAT submission. Earlier unsucc
 preparations remain in the receipts and are not counted as passing evidence. The final restored
 candidate matches all 6,889 tracked feature files. No writer, SQL, schema, guard or feature test
 changes were made. The feature CLI failure and the other A679 acceptance gates remain.
+
+## Committed wizard download acceptance, 2026-10-19
+
+The new `apps/server/src/first-fiscal-document-download.e2e.test.ts` keeps every existing test,
+fixture and expected value unchanged. Its two language cases build the actual setup app into a
+fresh temporary directory and boot the real server over HTTPS. Bundled Chromium trusts that
+server's public-key pin and rejects requests to other origins. Internet time, release metadata,
+SMTP and the AEAT readiness response are synthetic. Certificate validation/sealing is substituted
+at the readiness boundary; this does not qualify an actual certificate or external submission.
+
+The cases complete the native wizard, await its download event and save the actual PDF. Its
+SHA-256 must match the public recovery-document request. The saved file goes through the native
+recovery picker. A real pdf-lib annotation/resave must change the PDF's hash while preserving the
+attachment bytes, and that saved copy must recover the same key. PDF.js renders the original page;
+Chromium prints that image to a new PDF without the attachment, and the picker must request manual
+entry and clear the previously recovered secret. The key text extracted from the original PDF is
+entered through the real single field with lowercase and accepted look-alikes. After the server
+closes, its database is archived and reopened. The recovered secret must authorise a read against
+that exact copy, while a wrong secret must refuse `promotion.break_glass_invalid`. The copy holds
+one allocation and zero invoice records.
+
+The picker is mounted as the real shared component after the wizard completes. This is not a
+complete restore-screen, archive, bucket, Cloud or physical-paper journey. It adds no manager-reissue
+qualification and does not replace the existing owner PDF viewing check. The old CLI test's proposed
+patch remains unapplied pending its exact approval.
+
+The server declares its setup-app test/build dependency, Playwright and pdf-lib. Its CI shard job
+installs Chromium with three bounded attempts before the normal coverage command. No existing
+exclude, threshold, shard count or root guard changes. Package selection now follows the declared
+setup dependency. The workflow/dependency/teardown guards and real local install command are checked
+separately; current-head CI remains a later whole-branch gate.
+
+The first local run failed both cases because the new text extractor also captured the initial
+letter of the next paragraph. Restricting the extractor to the printed 41-symbol grouped value
+corrected the harness. Two initial type errors were an unused import and the image's DOM type.
+These were new-test defects, not product failures or evidence of a production fix. The green
+acceptance is qualified by fault controls in an independently installed copy, with all faults
+restored before its final run. Lane E retains the commands and logs in
+`receipts/a679-download-20261019-0620`.
+
+Verification for this checkpoint: the four complete server files report 69 passes; the unchanged
+protected pair reports 20; the three workflow/dependency/teardown suites report 232 after the final
+manifest change. Server types, scoped lint, explicit code/config formatting and whitespace checks
+pass. Prettier reports all three Markdown paths ignored; no whole-document formatting claim is
+made. `pnpm --filter '...@waitron/setup' list --depth -1 --json` lists both setup and server. The
+scoped Chromium installation command exits zero locally against the existing browser cache; no
+cold Linux download-duration claim is made.
+
+The independent frozen-installed baseline and restored tree each pass both new cases. Removing
+the attachment, replacing its public PDF hash, dropping typed-key delivery and accepting a wrong
+backup key each fail both cases at the intended assertions. The first is an explicit missing
+attachment assertion; the second compares the registered digest with the saved download; the
+third reports the absent recovered value; the fourth observes an incorrectly resolved authority
+request. These are four separate faulty variants, not four product fixes. They change only the
+measuring checkout and are restored there. No existing assertion, fiscal writer, migration, schema,
+root guard or production implementation changes in this checkpoint. Full package coverage, CI,
+remaining journeys, protocol retirement, integration, both final installed reviews and the two
+existing owner approvals remain open.

@@ -330,7 +330,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Obtain viewing approval for the revised real EN/ES A4 PDFs through Drive; the owner's combined
   key/check, single current installation-code and short time-zone decisions are implemented in the candidate.
   Complete native adoption/promotion and the remaining entry/recovery journeys, including restored
-  trading boot and committed browser acceptance tests. Local browser probes remain separate evidence.
+  trading boot. The committed Chromium suite covers wizard PDF download/re-upload, annotated and
+  printed copies, typed entry and a matching archived database; other local browser probes remain
+  separate evidence.
   Obtain exact approval for the retained CLI test's migration from JSON input to owned hour/PDF setup;
   its concrete replacement is qualified in a disposable checkout and the original case remains a gate.
   The approved direct/supervised patch and fresh refused-restore marker checks are qualified locally.

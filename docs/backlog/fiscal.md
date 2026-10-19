@@ -375,6 +375,19 @@ cancelled. The design records the missing Waitron Cloud setup integration and se
 Cloud enablement work; no Cloud service is enabled by this publication. Earlier dated directions
 below are historical where superseded, including the now-withdrawn short N proposal.
 
+**Committed download acceptance, 2026-10-19:** the candidate now includes
+`apps/server/src/first-fiscal-document-download.e2e.test.ts`. It builds the actual setup app into
+an isolated temporary directory, uses the booted HTTPS server and bundled Chromium, and checks
+English and Spanish. The downloaded PDF's SHA-256 matches the public delivery reference. The exact
+saved file returns through the native recovery picker; annotation/resave retains its attachment
+bytes, while a Chromium print of the rendered page requests manual entry. Text extracted from the
+PDF is entered through the real grouped-key field, and the recovered secret authenticates a copy
+archived from the completed setup's database. A wrong secret is refused. This is a component-level
+recovery-picker journey after the wizard, not a complete archive/bucket/Cloud restore or a physical
+paper exercise. Internet time, release metadata, email and AEAT readiness are synthetic. The
+existing PDF viewing approval and remaining A679 gates stay open. The server CI shards install
+Chromium for this suite.
+
 **Replacement plan, 2026-10-15:** the [one-PDF implementation
 plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) follows the completed redesign
 checkpoint and preserves the existing product branch. New C-only documents need no fabricated paper
