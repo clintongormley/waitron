@@ -2569,3 +2569,30 @@ authority. Its original test bytes and S000001 expectation remain. The planned c
 document-download acceptance file is absent; naming it beside the existing launch suite did not
 select or qualify a download case. Entry/coverage/retirement/integration/final-review/CI and owner
 PDF acceptance gates remain open.
+
+
+## Retained CLI replacement proposal, 2026-10-19
+
+The unchanged source launch file reports two passing HTTPS cases and one CLI failure,
+`provisioning.initial_input_invalid`. `packages/provisioning/src/bin.ts` configures owned setup;
+`cli.ts:311–312` refuses legacy JSON authority before that setup can proceed. The replacement
+proposal was tested only in a frozen-installed independent checkout. No proposed test change
+has been applied to the feature tree.
+
+The concrete patch in Lane E's `receipts/a679-zone-abbreviations-20261019` is
+`proposed-cli-launch-checks.patch`, SHA-256
+`3b06f60e1c2dc2f46fe16067842238f77360ffcb9710c3004ecc86277891ba3d`. It tests JSON refusal
+then the real built command's owned clock/question/password/PDF path. The old stdout S000001
+check becomes exact saved installation `06RB` and all three configured series at counter one.
+The mismatched state/venue-root call expects exact `setup.attempt_conflict` instead of the
+old generic marker guard's `setup.attempt_uncertain`; it also checks both attempts and marker
+bytes remain unchanged and no refused-target database exists. The direct/supervised case bodies
+are byte-identical. Both expectation changes await exact owner approval in the existing campaign
+question. This is a proposed interface-test migration, not a product refusal change.
+
+The installed complete file passes three cases in 12.54 seconds. Server types, scoped lint, formatting
+and whitespace pass. Its release stamp, offline internet observation and clock are synthetic;
+this does not qualify real release provenance or AEAT submission. Earlier unsuccessful fixture
+preparations remain in the receipts and are not counted as passing evidence. The final restored
+candidate matches all 6,889 tracked feature files. No writer, SQL, schema, guard or feature test
+changes were made. The feature CLI failure and the other A679 acceptance gates remain.

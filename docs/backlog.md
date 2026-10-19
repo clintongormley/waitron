@@ -331,8 +331,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   key/check, single current installation-code and short time-zone decisions are implemented in the candidate.
   Complete native adoption/promotion and the remaining entry/recovery journeys, including restored
   trading boot and committed browser acceptance tests. Local browser probes remain separate evidence.
-  Reconcile the remaining public-input CLI launch case with the owned command interface; the exact
-  approved direct/supervised patch and fresh refused-restore marker checks are qualified locally.
+  Obtain exact approval for the retained CLI test's migration from JSON input to owned hour/PDF setup;
+  its concrete replacement is qualified in a disposable checkout and the original case remains a gate.
+  The approved direct/supervised patch and fresh refused-restore marker checks are qualified locally.
   Preserve behavioral checks and obtain exact approval for further protected fiscal assertions.
   Close the provisioning and entry coverage gaps without lowering the gates. Retire active paper
   and Cloud allocation protocols, reconcile current operator/developer prose, and integrate the
