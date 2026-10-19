@@ -16,6 +16,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import * as provision from "./index.js";
 import * as durable from "./durable-host-json.js";
 import * as filesystem from "node:fs/promises";
+import { assertFirstSetupVenueTarget } from "./first-setup-workspace.js";
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("./durable-host-json.js", { spy: true });
 const dirs: string[] = [];
@@ -746,3 +747,203 @@ it.each(["retirement", "backlink", "state-selection", "venue-selection", "applie
     });
   },
 );
+
+it.each([
+  "wrong-anchor",
+  "conflicting-witness",
+  "same-generation",
+  "wrong-backlink",
+  "wrong-resolution-digest",
+  "extra-field",
+  "unsupported-version",
+])("interrupted selection inspection refuses %s rather than proposing repair", async (fault) => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const retirement = join(f.anchor.venueDir, "first-setup-retirement.json");
+  const backlink = join(f.binding.venueDir, "first-setup-workspace.json");
+  const stateSelection = join(f.anchor.stateDir, "first-setup-selection.json");
+  const original = await readFile(retirement, "utf8");
+  const changed = JSON.parse(original);
+  await unlink(backlink);
+  let path = retirement;
+  if (fault === "wrong-anchor") changed.binding.anchorVenueDir = join(f.root, "other");
+  else if (fault === "conflicting-witness") {
+    path = stateSelection;
+    changed.evidenceDigest = "a".repeat(64);
+  } else if (fault === "same-generation") {
+    path = stateSelection;
+    changed.binding.resolutionId = randomUUID();
+  } else if (fault === "wrong-backlink") {
+    path = backlink;
+    changed.resolutionDigest = "a".repeat(64);
+  } else if (fault === "wrong-resolution-digest") {
+    changed.resolutionDigest = "a".repeat(64);
+    for (const name of ["first-setup-selection.json"]) {
+      await writeFile(join(f.anchor.stateDir, name), JSON.stringify(changed));
+      await writeFile(join(f.anchor.venueDir, name), JSON.stringify(changed));
+    }
+  } else if (fault === "extra-field") changed.extra = true;
+  else if (fault === "unsupported-version") changed.version = 2;
+  await writeFile(path, JSON.stringify(changed));
+  const before = await readFile(retirement);
+  await expect(provision.inspectFirstSetupWorkspaceSelection(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(await readFile(retirement)).toEqual(before);
+  await expect(stat(join(f.binding.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("a selected workspace is not an interrupted repair and its direct roots resolve to the same binding", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  expect(await provision.inspectFirstSetupWorkspaceSelection(f.anchor)).toBeNull();
+  expect(await provision.resolveFirstSetupWorkspace(f.binding)).toEqual({
+    venueDir: f.binding.venueDir,
+    stateDir: f.binding.stateDir,
+    binding: f.binding,
+  });
+  await assertFirstSetupVenueTarget(f.binding.venueDir);
+  await expect(assertFirstSetupVenueTarget(f.anchor.venueDir)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+
+it("damaged discovery without a retirement witness cannot invent an interrupted selection", async () => {
+  const f = await fixture();
+  await writeFile(join(f.anchor.venueDir, "first-setup-workspace.json"), "{}");
+  await expect(provision.inspectFirstSetupWorkspaceSelection(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+
+it("an orphan workspace cannot boot through either root resolver or venue-only admission", async () => {
+  const f = await fixture();
+  await mkdir(f.binding.venueDir, { recursive: true });
+  await mkdir(f.binding.stateDir);
+  await expect(provision.resolveFirstSetupWorkspace(f.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await expect(assertFirstSetupVenueTarget(f.binding.venueDir)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await expect(provision.assertFirstSetupBootTarget(f.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await assertFirstSetupVenueTarget(f.anchor.venueDir);
+});
+
+async function customRetirement(
+  f: Awaited<ReturnType<typeof fixture>>,
+  originals: { name: string; bytes: Uint8Array | null }[],
+) {
+  const resolutionId = randomUUID();
+  const workspaceId = randomUUID();
+  const base = join(f.anchor.stateDir, "first-setup-workspaces", workspaceId);
+  const binding = {
+    ...f.binding,
+    resolutionId,
+    workspaceId,
+    venueDir: join(base, "venue"),
+    stateDir: join(base, "state"),
+  };
+  const prepared = await f.store.prepare(
+    {
+      resolutionId,
+      attemptId: f.prepared.attemptId,
+      observedRevision: f.prepared.observedRevision,
+      observedOwnerGeneration: f.prepared.observedOwnerGeneration,
+      database: f.prepared.database,
+      authority: f.prepared.authority,
+      register: f.prepared.register,
+      action: "retire",
+      nextWorkspace: binding,
+    },
+    originals,
+  );
+  return { binding, applied: await f.store.apply(prepared) };
+}
+
+it.each(["state/first-setup.json", "venue/first-setup-claim.json", "venue/venue.db"])(
+  "cannot select a workspace whose archived evidence omits %s",
+  async (missing) => {
+    const f = await fixture();
+    const originals = await f.store.readOriginals(f.binding.resolutionId);
+    const next = await customRetirement(
+      f,
+      originals.filter((original) => original.name !== missing),
+    );
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, next.applied)).rejects.toMatchObject(
+      {
+        code: "setup.attempt_uncertain",
+      },
+    );
+    await expect(stat(next.binding.venueDir)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it.each([
+  "unscoped-file",
+  "state/../escape",
+  "state//empty",
+  "venue/./file",
+  "venue/back\\slash",
+  "outside-file:relative/file",
+])("cannot select using an unsafe archived path %s", async (name) => {
+  const f = await fixture();
+  const next = await customRetirement(f, [
+    ...(await f.store.readOriginals(f.binding.resolutionId)),
+    { name, bytes: null },
+  ]);
+  await expect(provision.selectFirstSetupWorkspace(f.anchor, next.applied)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await expect(stat(next.binding.venueDir)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each([
+  "changed listing",
+  "missing expected directory",
+  "directory replacing file",
+  "changed size",
+])("refuses %s in retired local evidence before selecting the new workspace", async (fault) => {
+  const f = await fixture();
+  const path = join(f.anchor.stateDir, "retained-evidence");
+  const directory = fault === "changed listing" || fault === "missing expected directory";
+  if (directory) {
+    await mkdir(path);
+    await writeFile(join(path, "one.json"), "original");
+  } else await writeFile(path, "original");
+  const next = await customRetirement(f, [
+    ...(await f.store.readOriginals(f.binding.resolutionId)),
+    {
+      name: `${directory ? "directory:" : ""}state/retained-evidence`,
+      bytes: Buffer.from(directory ? '["one.json"]' : "original"),
+    },
+  ]);
+  if (fault === "changed listing") await writeFile(join(path, "two.json"), "additional");
+  else if (fault === "missing expected directory") await rm(path, { recursive: true });
+  else if (fault === "directory replacing file") {
+    await unlink(path);
+    await mkdir(path);
+  } else await writeFile(path, "changed and longer");
+  await expect(provision.selectFirstSetupWorkspace(f.anchor, next.applied)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await expect(stat(next.binding.venueDir)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("keeps a present archived directory listing when selecting and resolving the new workspace", async () => {
+  const f = await fixture();
+  const path = join(f.anchor.stateDir, "retained-evidence");
+  await mkdir(path);
+  await writeFile(join(path, "one.json"), "unchanged");
+  const next = await customRetirement(f, [
+    ...(await f.store.readOriginals(f.binding.resolutionId)),
+    { name: "directory:state/retained-evidence", bytes: Buffer.from('["one.json"]') },
+  ]);
+  expect(await provision.selectFirstSetupWorkspace(f.anchor, next.applied)).toEqual(next.binding);
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(next.binding);
+  expect(await readFile(join(path, "one.json"), "utf8")).toBe("unchanged");
+});

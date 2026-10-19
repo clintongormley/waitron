@@ -2809,3 +2809,44 @@ largest statement gaps are workspace selection, resolution, configuration transf
 deployment; `coverage-gaps.json` records the individual locations. This is an unresolved package
 coverage gate, not a passing coverage result. Both affected packages' types, scoped lint, code
 formatting and whitespace checks pass. Markdown paths remain ignored by Prettier.
+
+## Archived repair and workspace integrity, 2026-10-19
+
+The repair archive must retain what was observed before selecting another workspace. The new
+`first-setup-resolution.integrity.test.ts` exercises damaged manifests, chunks and repair events,
+interrupted archive collisions, original-evidence sequence bounds, workspace bindings and directory
+components. Additional cases in `first-setup-workspace.test.ts` exercise conflicting discovery
+witnesses, orphan roots, missing required originals, unsafe archived paths and changed local
+files or directory listings. Positive cases select an unchanged directory snapshot and resolve
+the selected roots through both admission paths.
+
+These add 67 cases. Removing the appended cases and their single import reconstructs the previous
+workspace test file byte for byte. No earlier fixture, assertion or production implementation
+changes. The retained server CLI test and the exact proposed approval patch remain unchanged.
+
+In a separate detached checkout with a frozen dependency install, all three complete suites pass
+164 cases. Six serial omissions then fail at assertions: base64 canonical spelling (one case),
+archive collision refusal (one), inspection's resolution digest (one), required originals (three),
+archived path checks (four), and local directory listing comparison (one). Restoring each guard
+passes its selection; the final complete run passes all 164 cases again. The unedited golden
+huella and immutability suites pass 20 cases. Types, scoped lint and code formatting pass.
+
+The first source run contained a wrong helper import and an expectation that a missing selector
+alone must prevent repair inspection. The latter is a permitted interrupted state, so that new
+expectation was removed before qualification. Typechecking also exposed an incorrectly nested
+parameter table; the corrected rows pass the original arrays as intended. These initial failures
+do not establish product defects. A coverage run over only the three suites passes their cases
+but fails the unchanged coverage thresholds; other suites exercise additional paths in these
+source files. Do not treat that file selection as package coverage.
+
+The complete provisioning run passes 1,396 cases in 70 files (396.15 seconds), then fails coverage:
+statements 3,649/3,788 (96.33%), branches 2,722/2,876 (94.64%), functions 682/696 (97.98%) and
+lines 3,288/3,356 (97.97%). No threshold, exclusion or ignore changes. The run retained a worker
+snapshot while it was still advancing through the new repair suite. Its final report and remaining
+uncovered locations are in the same receipt directory. Only the 129-invalid-event case's title
+was narrowed after its installed qualification; its fixture and assertions stay unchanged.
+
+Receipts: Lane E's `receipts/a679-resolution-integrity-20261019`, including the installed omission
+and restoration logs, byte comparisons and temporary-checkout cleanup. Revised PDF viewing,
+the exact CLI-test approval, remaining coverage, protocol retirement, current-main integration,
+both final installed reviews, the push hook and current-head CI remain before landing.
