@@ -34,10 +34,10 @@ const REFUSED = { code: "setup.request_invalid", params: { field: "adjustment_re
 
 describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
   it("transfers the reasons and the venue's discount limit, which are venue policy rather than trading history", () => {
-    const { kind, tables } = ADJUSTMENTS_CONFIGURATION_TRANSFER;
-    expect({ kind, tables }).toEqual({
+    expect(ADJUSTMENTS_CONFIGURATION_TRANSFER).toEqual({
       kind: "tables",
       tables: [{ name: "adjustment_reasons" }, { name: "adjustment_settings" }],
+      validate: expect.any(Function),
     });
   });
 
