@@ -156,6 +156,29 @@ describe("claimReminder", () => {
     expect(row).toMatchObject({ status: "sent", reported_at: "2026-08-26T10:01:00.000Z" });
   });
 
+  it("leaves a reported row as it is when a second report arrives", async () => {
+    await seedTenantTillSif(suite.db);
+    await install(TENANT_A.nodeId);
+    const claimed = await claimAt(WARNING, [ANA]);
+    await reportAt(claimed!.id, "sent", "2026-08-26T10:01:00Z");
+    await reportAt(claimed!.id, "rejected", "2026-08-26T10:02:00Z");
+    const [row] = await rows();
+    expect(row).toMatchObject({ status: "sent", reported_at: "2026-08-26T10:01:00.000Z" });
+    await expect(claimAt("2026-08-27T11:02:00Z", [ANA])).resolves.toBeNull();
+  });
+
+  it("never claims again a row that names another node", async () => {
+    await seedTenantTillSif(suite.db);
+    await install(TENANT_A.nodeId);
+    const claimed = await claimAt(WARNING, [ANA]);
+    await reportAt(claimed!.id, "rejected", "2026-08-26T10:01:00Z");
+    await suite.db.execute(
+      sql`update fiscal_certificate_reminders set node_id = ${TENANT_A.nodeId2}`,
+    );
+    await expect(claimAt("2026-08-27T11:02:00Z", [ANA])).resolves.toBeNull();
+    expect((await rows()).map((row) => row.status)).toEqual(["failed"]);
+  });
+
   it("writes to a Spanish recipient in Spanish", async () => {
     await seedTenantTillSif(suite.db);
     await install(TENANT_A.nodeId);

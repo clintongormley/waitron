@@ -70,6 +70,7 @@ export async function claimReminder(
     .from(fiscalCertificateReminders)
     .where(
       and(
+        eq(fiscalCertificateReminders.nodeId, deps.nodeId),
         eq(fiscalCertificateReminders.installId, install.id),
         eq(fiscalCertificateReminders.stage, stage),
       ),
@@ -110,6 +111,7 @@ export async function claimReminder(
         .set({ status: "claimed", claimedAt: now, reportedAt: null })
         .where(
           and(
+            eq(fiscalCertificateReminders.nodeId, deps.nodeId),
             eq(fiscalCertificateReminders.id, row.id),
             eq(fiscalCertificateReminders.status, "failed"),
           ),

@@ -30,7 +30,8 @@ export async function runCertificateReminderLoop(
 ): Promise<void> {
   const sleep = deps.sleep ?? realSleep;
   while (!deps.signal.aborted) {
-    let processed = true;
+    // A failed pass waits the idle hour, so a lasting fault is not retried twice a second.
+    let processed = false;
     try {
       processed = (await runCertificateReminderPass(deps)).processed;
     } catch (error) {

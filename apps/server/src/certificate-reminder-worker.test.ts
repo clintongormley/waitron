@@ -123,6 +123,22 @@ describe("certificate reminder pass", () => {
     expect(send.mock.calls[0]![0].subject).toBe("El certificado de la AEAT caduca el 25 oct 2026");
   });
 
+  it("writes to an en-GB person in English in a Spanish venue", async () => {
+    await pass({ venueLanguage: "es" });
+    const manager = send.mock.calls.find(([m]) => m.recipient === "manager@example.test");
+    expect(manager![0].subject).toBe("AEAT certificate expires on 25 Oct 2026");
+  });
+
+  it("claims nothing when the node stops being primary just before the claim", async () => {
+    let checks = 0;
+    // The pass checks at its start, before each claim, and again inside the claim's transaction.
+    primary = true;
+    expect(await pass({ isPrimary: () => ++checks < 3 })).toEqual({ processed: false });
+    expect(checks).toBe(3);
+    expect(send).not.toHaveBeenCalled();
+    expect(await reminders()).toEqual([]);
+  });
+
   it("claims and sends nothing without SMTP", async () => {
     const resolveDelivery = async (): Promise<EmailDelivery> => ({ mode: "unconfigured" });
     expect(await pass({ resolveDelivery })).toEqual({ processed: false });
@@ -232,6 +248,35 @@ describe("certificate reminder loop", () => {
     controller.abort();
     await work;
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("waits the idle hour after a pass that throws, and abort still ends that wait", async () => {
+    const failure = new Error("smtp credential unreadable");
+    const errors: unknown[] = [];
+    const sleeps: number[] = [];
+    let entered!: () => void;
+    const sleeping = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const work = runCertificateReminderLoop({
+      ...deps(),
+      resolveDelivery: async () => {
+        throw failure;
+      },
+      onError: (error) => errors.push(error),
+      sleep: async (ms, signal) => {
+        sleeps.push(ms);
+        entered();
+        await realSleep(ms, signal);
+      },
+    });
+    await sleeping;
+    const started = Date.now();
+    controller.abort();
+    await work;
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(errors).toEqual([failure]);
+    expect(sleeps).toEqual([3_600_000]);
   });
 
   it("uses no database, configuration or sender once aborted", async () => {
