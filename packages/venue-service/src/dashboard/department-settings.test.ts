@@ -1886,6 +1886,119 @@ it("a rename saves when another manager put a just-saved step's start back and d
     ["", "", ""],
   ]);
 });
+const laid = (tradingName?: string) => {
+  const view = stepsView();
+  view.serviceSteps[0]!.name = "Lay table";
+  if (tradingName) view.departments[0]!.tradingName = tradingName;
+  return view;
+};
+const COFFEE = { name: "Coffee", start: "after_previous", courseId: null, minutes: 0 };
+const TEA = { name: "Tea", start: "after_previous", courseId: null, minutes: 0 };
+const stepNames = (el: DepartmentSettings) => stepList(el).steps.map((step) => step.name);
+const sentSteps = (body: unknown) => (body as { serviceSteps?: unknown }).serviceSteps;
+function holdSaves(el: DepartmentSettings) {
+  const sent: unknown[] = [];
+  const finishes: (() => void)[] = [];
+  el.api = new VenueServiceApi(((_path, method, body) => {
+    if (method === "GET") return Promise.resolve([]);
+    sent.push(body);
+    return new Promise<void>((resolve) => finishes.push(resolve));
+  }) as DashboardRequest);
+  return { sent, finish: () => finishes.shift()!() };
+}
+const cancelButton = (el: DepartmentSettings) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=cancel-editor]")!;
+for (const other of ["renamed the first step", "renamed the first step and the trading name"]) {
+  it(`a copy in which another manager ${other}, which arrived while a new step was unsaved, is not taken back once the step is saved`, async () => {
+    const { el, writes } = await mount(stepsView());
+    await selectDepartmentTab(el, "service");
+    await settled(el);
+    await addStep(el);
+    await editStep(el, 3, "Name", "Coffee");
+    el.model = laid(other.endsWith("trading name") ? "Casa revised" : undefined);
+    await settled(el);
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect.poll(() => save(el).disabled).toBe(true);
+    await settled(el);
+    expect(stepNames(el)).toEqual(["Set up", "Take order", "Dessert?", "Coffee"]);
+    await addStep(el);
+    await editStep(el, 4, "Name", "Tea");
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(2);
+    expect(sentSteps(writes[1]!.body)).toEqual([...SENT_STEPS, COFFEE, TEA]);
+  });
+}
+it("after a save overrides another manager's older copy, a step added before the refresh lands is sent beside the saved step's id", async () => {
+  const { el, writes } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  el.model = laid();
+  await settled(el);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect.poll(() => save(el).disabled).toBe(true);
+  await addStep(el);
+  await editStep(el, stepRows(el).length - 1, "Name", "Tea");
+  el.model = withCoffee();
+  await settled(el);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(sentSteps(writes[1]!.body)).toEqual([...SENT_STEPS, { id: "s4", ...COFFEE }, TEA]);
+});
+for (const during of ["nothing else is edited", "the department is renamed"]) {
+  it(`a copy in which another manager renamed a step, arriving while a new step's save is sent and ${during}, is not taken after the save answers`, async () => {
+    const { el } = await mount(stepsView());
+    await selectDepartmentTab(el, "service");
+    await settled(el);
+    const { sent, finish } = holdSaves(el);
+    await addStep(el);
+    await editStep(el, 3, "Name", "Coffee");
+    save(el).click();
+    await expect.poll(() => sent.length).toBe(1);
+    el.model = laid();
+    await settled(el);
+    if (during === "the department is renamed") await change(el, "name", "Restaurant revised");
+    finish();
+    await expect.poll(() => cancelButton(el).disabled).toBe(false);
+    await settled(el);
+    expect(stepNames(el)).toEqual(["Set up", "Take order", "Dessert?", "Coffee"]);
+    await addStep(el);
+    await editStep(el, 4, "Name", "Tea");
+    save(el).click();
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sentSteps(sent[1])).toEqual([...SENT_STEPS, COFFEE, TEA]);
+    if (during === "the department is renamed")
+      expect(sent[1]).toMatchObject({ name: "Restaurant revised" });
+    finish();
+  });
+}
+it("a step list another manager changed while a rename's save is sent is shown after the save answers", async () => {
+  const { el } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  const { sent, finish } = holdSaves(el);
+  await change(el, "name", "Restaurant revised");
+  save(el).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).not.toHaveProperty("serviceSteps");
+  const gone = stepsView();
+  gone.serviceSteps = gone.serviceSteps.filter((step) => step.id !== "s3");
+  el.model = gone;
+  await settled(el);
+  finish();
+  await expect.poll(() => cancelButton(el).disabled).toBe(false);
+  await settled(el);
+  expect(stepNames(el)).toEqual(["Set up", "Take order"]);
+  await addStep(el);
+  await editStep(el, 2, "Name", "Tea");
+  save(el).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sentSteps(sent[1])).toEqual([...SENT_STEPS.slice(0, 2), TEA]);
+  finish();
+});
 it("changing a step and changing it back sends no steps", async () => {
   const { el, writes } = await mount(stepsView());
   await selectDepartmentTab(el, "service");

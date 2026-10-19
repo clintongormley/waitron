@@ -282,9 +282,7 @@ export class DepartmentSettings extends LitElement {
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
-      serviceSteps: toStepDrafts(
-        this.model!.serviceSteps.filter((step) => step.departmentId === row.id),
-      ),
+      serviceSteps: this.modelSteps(row.id),
     };
     if (this.opened !== row.id) {
       this.scope?.dispose();
@@ -359,9 +357,13 @@ export class DepartmentSettings extends LitElement {
     if (this.scope && !this.busy) {
       if (this.scope.isDirty()) this.followSteps(source.serviceSteps);
       else if (!equal(this.source!, source)) {
+        const steps = stepsEqual(source.serviceSteps, this.source!.serviceSteps)
+          ? this.draft!.serviceSteps
+          : source.serviceSteps;
         this.source = copy(source);
         this.draft = {
           ...source,
+          serviceSteps: steps,
           ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
         };
         this.baseline = copy(this.draft);
@@ -377,11 +379,12 @@ export class DepartmentSettings extends LitElement {
     )
       void this.loadTransfers(row.id, this.transferGeneration);
   }
-  /** A dirty draft still follows a model whose steps changed since the form last saw them, where
-   * no edit of the user's is at stake: an unchanged list takes the model's, and rows a save added
-   * take the ids the model gave them, so the next save keeps those rows rather than replacing them.
-   * A model the form has already seen is never followed: until the refresh after a save lands it
-   * still lacks the rows that save added. */
+  private modelSteps(id: string) {
+    return toStepDrafts(this.model!.serviceSteps.filter((step) => step.departmentId === id));
+  }
+  /** A dirty draft follows a model whose steps differ from the last steps the form recorded as
+   * seen, where no edit of the user's is at stake: an unchanged list takes the model's, and rows a
+   * save added take the ids the model gave them. */
   private followSteps(steps: ServiceStepDraft[]) {
     const draft = this.draft!,
       baseline = this.baseline!;
@@ -642,6 +645,12 @@ export class DepartmentSettings extends LitElement {
           committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;
+        // A model that is not the saved list with ids filled in is treated as older than this save
+        // and recorded as seen, so neither path takes it back. A later save by another manager
+        // delivered during the send is treated the same way.
+        const steps = this.modelSteps(id);
+        if (submitted.serviceSteps && !withSavedIds(committed.serviceSteps, steps))
+          this.source = { ...this.source!, serviceSteps: steps };
         this.scope?.commit(committed);
         this.emit("saved", { departmentId: id });
       }
