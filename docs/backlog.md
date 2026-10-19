@@ -2216,25 +2216,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
   A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
-  and complete the remaining prose audit, whole-path, native-screen, physical-till and delivery checks.
-  Mixed-dish phone Review and Back have native app checks with controlled API replies.
-  The English and Spanish modifier guides describe Recall into New order for sent table dishes,
-  separately from parked counter orders.
-  The till README separates the current table workflow from its historical counter slice, and
-  design-system button examples now describe direct sending instead of a preview confirmation.
-  The product guide distinguishes fresh draft availability checks from recalled bill rows, and
-  the original six-choice mock-up page points to the owner's approved answers.
-  Separate authenticated route checks retain saved placement and discounted recalled extras
-  through takeover, partial sending and replay. Physical trials remain.
-  Partial serving now has native app checks for quantity selection, repeated confirmation and Undo.
-  Checks before closing replace the old draft-discard note; held-dish resolution still waits for A758.
-  Historical table-actions and kitchen plans point to the replacement bill and Recall contracts;
-  superseded source descriptions of personal drafts, lost local edits and Recall-to-held are removed.
-  The historical Task 7 draft and Task 8 floor-read notes point to the per-bill ownership design,
-  preserving their unresolved observations for reassessment.
-  The current checkpoint includes main's department-specific clearing and installed-module table
-  removal; cancellation and Finish-table integration still wait for the revised design.
-  The remaining prose audit stays open.
+  and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till and
+  delivery checks. Preserve the completed behavioral checks and their receipts; the detail's
+  Decisions section records their scope and limits. Recheck subsequent main changes before the
+  final whole-branch review, push and CI.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

@@ -7,8 +7,8 @@ import "./courses-screen.js";
 afterEach(cleanupWidgets);
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
+  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false, heldUntilFired: true },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true, heldUntilFired: true },
 ];
 
 function api(courses: Course[]): DashboardApi {
