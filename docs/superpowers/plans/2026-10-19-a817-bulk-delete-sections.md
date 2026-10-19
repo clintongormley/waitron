@@ -159,3 +159,7 @@ API, `WRITES` list at `:336`, the Structure selection cases), `menus-screen.a11y
 ## Not in scope
 
 Deleting products, deleting from the Products tab, and any change to the row ⋮'s single delete.
+
+_Dated note, 2026-10-19: the build did change the row ⋮'s single "Delete section" dialog — it now
+closes when another menu is opened, because finish-branch found it deleting the first menu's
+section from the second menu's screen (#1885)._

@@ -905,6 +905,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`deactivateCatalogue` has no other caller); revisit when something does. Left open by A816
   (#1880).
 
+- **The Structure tab's "Edit section" form may stay open when another menu is opened.** Opening
+  another menu (`#select`, `apps/dashboard/src/screens/menus-screen.ts`) closes the bulk dialogs and
+  the single "Delete section" one (A817, #1885 found the delete dialog acting on the first menu's
+  section from the second menu's screen), but does not reset `editingSection`. Not tried: whether
+  the form stays open, and whether saving it then writes the first menu's section. Left open by A817
+  (#1885).
+
 - **Configuration export/import still leaves publications behind.** Reset the venue instead of
   republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
