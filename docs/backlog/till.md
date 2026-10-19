@@ -1574,8 +1574,17 @@ two recalled portions as six dishes. The extras add no items to that count. The 
 and Back checks in `till-table-order-screen.review-acceptance.test.ts` retain the quantities,
 placement and selection without submitting, then show seven after the Beer quantity becomes three.
 They cover English and Spanish, both themes, at 360 and 390 px, with accessibility scans in both
-views. These are component checks; full-app navigation, server persistence and physical trials
-remain separate.
+views. These component checks are complemented by the native app cases below; server persistence
+and physical trials remain separate.
+
+The native mixed-dish cases in `apps/till/src/till-app-drafts.test.ts` open the table through the
+floor's button, then use Review and Back. They retain the four saved dish families, their extras,
+recorded source details, placement and selection through a same-revision focus refresh. Review
+counts six dishes, including the weighed dish once and excluding extras. The checks cover English
+and Spanish in both themes at 360 and 390 px, measure the native Review and Back targets, and scan
+both views for accessibility. Review and Back send no save, submission or takeover request. The
+API replies and sign-in are controlled; these checks do not exercise server persistence or a
+physical till.
 
 The last-added strip follows a saved line's id when that order is refreshed, including weighed
 lines and lines kept separate. It clears when that id disappears or another order is loaded;

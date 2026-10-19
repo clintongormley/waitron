@@ -2217,7 +2217,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
   A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
   and complete the remaining prose audit, whole-path, native-screen, physical-till and delivery checks.
-  Mixed-dish phone Review and Back have component checks; their full-app trial remains.
+  Mixed-dish phone Review and Back have native app checks with controlled API replies;
+  their server-persistence and physical trials remain.
   Partial serving now has native app checks for quantity selection, repeated confirmation and Undo.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 

@@ -9621,3 +9621,244 @@ describe("direct New order actions", () => {
     expect(banner(el)).not.toBeNull();
   });
 });
+
+describe("native app phone Review with mixed dish families", () => {
+  for (const locale of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [360, 390]) {
+        it(`${locale}, ${theme}, ${width}px retains saved sources, placement and selection across Back`, async () => {
+          const oldWidth = innerWidth,
+            oldHeight = innerHeight;
+          await page.viewport(width, 900);
+          const menu = catalogue("v1");
+          menu.offers[0]!.courseId = null;
+          menu.offers[1]!.unit = {
+            ...unit,
+            id: "unit-weight",
+            name: { en: "Kilogram", es: "Kilogramo" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+          };
+          menu.offers[2]!.offeredModifiers = [
+            {
+              kind: "extras",
+              id: "sauces",
+              name: "Sauces",
+              customerName: null,
+              kitchenName: null,
+              minPicks: 0,
+              maxPicks: null,
+              items: [
+                {
+                  productId: "sauce",
+                  name: "Sauce",
+                  image: null,
+                  available: true,
+                  customerName: null,
+                  kitchenName: null,
+                  price: "0.25",
+                  vatClass: "general",
+                  portion: "1",
+                  unit,
+                  maxQuantity: 3,
+                  preselected: false,
+                  addAllergens: null,
+                  suitableFor: [],
+                },
+              ],
+            },
+          ];
+          const fresh = (
+            id: string,
+            menuItemId: string,
+            quantity: string,
+            slot: number,
+          ): import("./api/client.js").FreshDraftLine => ({
+            id,
+            menuItemId,
+            quantity,
+            sourceLineId: null,
+            source: null,
+            variantId: null,
+            menuVersionId: "v1",
+            options: [],
+            extras: [],
+            note: null,
+            courseId: null,
+            makeAt: null,
+            noMerge: false,
+            unavailable: false,
+            slot,
+            joinGroupId: null,
+            afterGroupId: null,
+          });
+          const source: import("./api/client.js").TabLine = {
+            id: "review-source",
+            name: "Recorded dish",
+            lineNo: 1,
+            productId: "retired-product",
+            menuItemId: null,
+            parentProductId: null,
+            quantity: "2.000",
+            unitPrecision: 0,
+            unitPriceGross: "3.25",
+            groupId: null,
+            stationId: null,
+            movable: true,
+            servedAt: null,
+            courseId: null,
+            sentAt: null,
+            firedAt: null,
+            state: null,
+            note: "Recorded note",
+            listId: null,
+          };
+          const extra: import("./api/client.js").TabLine = {
+            ...source,
+            id: "review-source-extra",
+            lineNo: 2,
+            parentLineNo: 1,
+            name: "Recorded cheese",
+            productId: "retired-cheese",
+            unitPriceGross: "0.75",
+            note: null,
+            listId: "toppings",
+          };
+          server.drafts.push({
+            id: "review-draft",
+            partyId: "v1",
+            billId: "wo-4",
+            ownerId: "p1",
+            ownerName: "Ana",
+            revision: 2,
+            takenOverFrom: null,
+            lines: [
+              fresh("review-beer", "offer-beer", "2", 0),
+              {
+                ...fresh("review-flan", "offer-flan", "1", 1),
+                extras: [{ listId: "sauces", picks: [{ productId: "sauce", quantity: 3 }] }],
+              },
+              fresh("review-weight", "offer-steak", "0.375", 1),
+              {
+                id: "review-reference",
+                sourceLineId: source.id,
+                source: { line: source, extras: [extra], netAmount: "8.00" },
+                quantity: "2.000",
+                note: source.note,
+                courseId: null,
+                makeAt: null,
+                noMerge: true,
+                unavailable: false,
+                slot: 0,
+                joinGroupId: null,
+                afterGroupId: null,
+              },
+            ],
+          });
+          const savedBefore = structuredClone(server.drafts);
+          try {
+            const { el, host } = await mountApp(
+              {
+                getTill: vi.fn().mockResolvedValue(till("phone-portrait")),
+                listZoneOffers: vi.fn().mockResolvedValue(menu),
+                getTabLines: vi.fn().mockResolvedValue({
+                  lines: [source, extra],
+                  revision: 0,
+                  editSentLines: true,
+                }),
+              },
+              undefined,
+              theme,
+            );
+            await flush(el);
+            await signIn(el);
+            setLocale(locale);
+            emit(shell(el), "screen-select", { screen: "floor" });
+            await flush(el);
+            await userEvent.click(
+              floor(el)!.shadowRoot!.querySelector<HTMLElement>('[data-table="t4"]')!,
+            );
+            await expect.poll(() => tableOrder(el)?.draftStore?.lines.length).toBe(4);
+            const order = tableOrder(el)!;
+            const q = (selector: string) => order.shadowRoot!.querySelector<HTMLElement>(selector)!;
+            const expectTarget = (selector: string) => {
+              const target = q(selector).shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+              const box = target.getBoundingClientRect();
+              expect(target.checkVisibility()).toBe(true);
+              expect(box.width).toBeGreaterThanOrEqual(44);
+              expect(box.height).toBeGreaterThanOrEqual(44);
+              expect(box.left).toBeGreaterThanOrEqual(0);
+              expect(box.right).toBeLessThanOrEqual(width);
+            };
+            await expect.poll(() => q("[data-review-open]").checkVisibility()).toBe(true);
+            const originalRows = [...draft(el).lines];
+            const before = structuredClone(draft(el).lines);
+            const reviewText = locale === "es" ? "Revisar (6)" : "Review (6)";
+            expect(innerWidth).toBe(width);
+            expect(q("[data-review-open]").textContent!.trim()).toBe(reviewText);
+            expectTarget("[data-review-open]");
+            expect(rows(el)).toEqual(["Beer ×2", "Flan ×1", "Steak ×0.375", "Recorded dish ×2"]);
+            expect(q("[data-browsing]").checkVisibility()).toBe(true);
+            expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
+            await userEvent.click(q("[data-review-open]"));
+            await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
+            expect(order.shadowRoot!.activeElement).toBe(q("[data-review-back]"));
+            expectTarget("[data-review-back]");
+            expect(
+              [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-group]")].map(
+                (group) => group.dataset.draftGroup,
+              ),
+            ).toEqual(["fire", "new:1"]);
+            expect(q('[data-draft-select="2"]').textContent).toContain(
+              locale === "es" ? "0,375" : "0.375",
+            );
+            expect(draft(el).lines[1]!.extras).toEqual([
+              expect.objectContaining({ productId: "sauce", quantity: 3 }),
+            ]);
+            expect(draft(el).lines[3]!.source).toEqual({
+              line: source,
+              extras: [extra],
+              netAmount: "8.00",
+            });
+            await userEvent.click(q('[data-draft-select="0"]'));
+            await flush(el);
+            const reads = api.listDrafts!.mock.calls.length;
+            window.dispatchEvent(new Event("focus"));
+            await expect.poll(() => api.listDrafts!.mock.calls.length).toBeGreaterThan(reads);
+            await flush(el);
+            expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
+            for (let index = 0; index < originalRows.length; index++)
+              expect(draft(el).lines[index]).toBe(originalRows[index]);
+            expect(draft(el).lines).toEqual(before);
+            await expectNoA11yViolations(host);
+            await page.screenshot({
+              path: `__screenshots__/a773-app-review-${locale}-${theme}-${width}.png`,
+            });
+            await userEvent.click(q("[data-review-back]"));
+            await expect.poll(() => q("[data-browsing]").checkVisibility()).toBe(true);
+            expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
+            expect(order.shadowRoot!.activeElement).toBe(q("[data-review-open]"));
+            expect(q("[data-review-open]").textContent!.trim()).toBe(reviewText);
+            expect(draft(el).lines).toEqual(before);
+            expect(server.drafts).toEqual(savedBefore);
+            expect(api.saveDraft).not.toHaveBeenCalled();
+            expect(api.submitDraft).not.toHaveBeenCalled();
+            expect(api.takeOverDraft).not.toHaveBeenCalled();
+            expect(banner(el)).toBeNull();
+            await expectNoA11yViolations(host);
+            await page.screenshot({
+              path: `__screenshots__/a773-app-back-${locale}-${theme}-${width}.png`,
+            });
+            await userEvent.click(q("[data-review-open]"));
+            await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
+            expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
+            expect(draft(el).lines).toEqual(before);
+            expect(api.submitDraft).not.toHaveBeenCalled();
+          } finally {
+            cleanupWidgets();
+            setLocale("en");
+            await page.viewport(oldWidth, oldHeight);
+          }
+        });
+      }
+});
