@@ -172,8 +172,6 @@ export interface Draft {
   readonly tally: { fired: number; held: number; joined: number };
 }
 
-/** Another person's open draft on the party, shown read-only. `takenFromYou`: its latest take-over
- * was from the signed-in person, so it is headed by who holds it now. */
 export interface OtherDraft {
   id: string;
   revision: number;

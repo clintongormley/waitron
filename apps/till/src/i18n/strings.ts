@@ -843,7 +843,6 @@ export const en = {
   "floor.unsent_one": "An unsent order: 1 item",
   "floor.unsent_owner": "{name} has an unsent order: {n} items",
   "floor.unsent_owner_one": "{name} has an unsent order: 1 item",
-  // A map token's mark; its accessible name adds the names: "Unsent: Alex, Sam".
   "floor.unsent_mark": "Unsent",
   // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",

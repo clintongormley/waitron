@@ -2246,6 +2246,8 @@ The remaining work includes:
   The original service spec and plan now carry dated pointers for their superseded draft rules.
   The table-actions spec/plan and the two station/extra plans also point to the replacement
   bill-selection and table Recall contracts, preserving their historical bodies.
+  Superseded source comments describing personal drafts, lost local edits, owner-only floor labels
+  and Recall-to-held have been removed without changing executable code.
   The whole-branch prose audit remains open. Complete the remaining
   ownership/copy/native-screen acceptance, the physical till trial and final whole-branch validation
   and review before publication. Read the campaign's

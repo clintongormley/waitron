@@ -577,8 +577,6 @@ function tableWriteError(error: unknown): CounterError {
     : { code };
 }
 
-/** A refusal of the person's draft save, or with `unsent` of its submission. Taken over, it names
- * who holds the draft now, and says the refused change is lost: the till never sends it again. */
 function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false): CounterError {
   if (refused === "draft.taken_over")
     return unsent ? { takenOver: ownerName ?? "", unsent } : { takenOver: ownerName ?? "" };
@@ -9624,9 +9622,6 @@ export class TillApp extends LitElement {
     else this.#reconcileDraft();
   }
 
-  /** At a sign-in: the server takes the person from the session, so a save sent from now on goes in
-   * as the person signing in: a new draft becomes theirs unless they already hold one there, and one
-   * naming another person's draft is refused. */
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
     for (const sync of [...this.#leavingDrafts.keys()])
@@ -9751,8 +9746,6 @@ export class TillApp extends LitElement {
       void this.#reloadTableOffers(zoneId);
   }
 
-  /** The other people's drafts on the party of the draft shown, `shown` being what
-   * {@link #tableDraft} answered; read-only, built again only when they or the table's offers change. */
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
     const sync = this.#draftSync;
     if (sync === undefined || shown !== sync.store) return [];

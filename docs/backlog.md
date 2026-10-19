@@ -2223,7 +2223,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Partial serving now has native app checks for quantity selection, repeated confirmation and Undo.
   Checks before closing replace the old draft-discard note; held-dish resolution still waits for A758.
   Historical table-actions and kitchen plans point to the replacement bill and Recall contracts;
-  the remaining prose audit stays open.
+  superseded source descriptions of personal drafts, lost local edits and Recall-to-held are removed.
+  The remaining prose audit stays open.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

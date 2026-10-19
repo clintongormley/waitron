@@ -328,17 +328,6 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
   return joined;
 }
 
-/**
- * A slip for one line the kitchen has on paper, telling the cook what changed without reprinting the
- * order. For fired work: `VOID` (cancelled after firing) or `RECALLED` (pulled back to held). For
- * held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
- * from its group) or `HOLD CANCELLED` (taken out of the order); these name the item's group.
- * `TO STATION` names the station now responsible for fired work; the slip stays at the old station.
- * `EXTRA CANCELLED`: an extra taken off a dish the kitchen has, fired or `held` on a HOLD ticket,
- * printing the dish as it now stands and then the extra to take off. Its header word and cancel
- * line follow `locale`'s language (Spanish, else English); the `HOLD` prefix and `GROUP n` stay
- * English.
- */
 export type CorrectionSlip = {
   kitchenNote?: KitchenNoteHeading;
   stationName: string;
