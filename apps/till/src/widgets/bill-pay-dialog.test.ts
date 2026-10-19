@@ -1485,22 +1485,41 @@ describe("till-bill-pay-dialog: a payment that got no answer", () => {
   });
   const guests = (el: TillBillPayDialog) => root(el).querySelector<Stepper>('[name="guests"]');
 
-  it("shows only the lock: its title, the message and one Check again", async () => {
+  const lockTitle = (el: TillBillPayDialog) =>
+    text(root(el).querySelector("[data-pay-unanswered] [data-pay-unanswered-title]"));
+  const lockMessage = (el: TillBillPayDialog) =>
+    text(root(el).querySelector("[data-pay-unanswered] [data-pay-unanswered-message]"));
+
+  it("shows only the lock: one box with its title and message, and one Check again", async () => {
     const el = await mount({ unanswered: unanswered() });
 
-    expect(text(root(el).querySelector("[data-pay-unanswered]"))).toBe(
-      t("bill_pay.unanswered_title"),
-    );
-    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+    expect(lockTitle(el)).toBe(t("bill_pay.unanswered_title"));
+    expect(lockMessage(el)).toBe(t("bill_pay.unconfirmed"));
+    expect(actions(el).error).toBe("");
     expect(root(el).querySelectorAll("[data-pay-recheck]")).toHaveLength(1);
     expect(text(button(el, "[data-pay-recheck]"))).toBe(t("bill_pay.recheck"));
     expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
     expect(root(el).querySelector("[data-pay-back]")).toBeNull();
     expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
     expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
-    expect(root(el).querySelector("[data-pay-close]")).toBeNull();
     expect(guests(el)).toBeNull();
     expect(root(el).querySelector("wt-dialog")!.dismissible).toBe(true);
+  });
+
+  it("closes from its Close button", async () => {
+    const el = await mount({ unanswered: unanswered() });
+    expect(text(button(el, "[data-pay-close]"))).toBe(t("bill_pay.close"));
+    const closed = capture(el, "bill-pay-close");
+
+    await click(el, "[data-pay-close]");
+
+    await expect.poll(() => closed).toHaveLength(1);
+  });
+
+  it("holds its Close button while busy", async () => {
+    const el = await mount({ unanswered: unanswered(), busy: true });
+
+    expect(button(el, "[data-pay-close]").disabled).toBe(true);
   });
 
   it("offers no refund while the lock shows", async () => {
@@ -1532,31 +1551,30 @@ describe("till-bill-pay-dialog: a payment that got no answer", () => {
   it("asks for another reader when the reader refused, still letting it be pressed", async () => {
     const el = await mount({ unanswered: unanswered({ method: "card", readerRefused: true }) });
 
-    expect(actions(el).error).toBe(
-      `${t("bill_pay.unconfirmed")} ${t("bill_pay.recheck_choose_reader")}`,
-    );
+    expect(lockMessage(el)).toBe(t("bill_pay.unconfirmed"));
+    expect(actions(el).error).toBe(t("bill_pay.recheck_choose_reader"));
     expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
   });
 
   it("asks for a reader and holds Check again while none is chosen", async () => {
     const el = await mount({ unanswered: unanswered({ method: "card", noReader: true }) });
 
-    expect(actions(el).error).toBe(
-      `${t("bill_pay.unconfirmed")} ${t("bill_pay.recheck_choose_reader")}`,
-    );
+    expect(lockMessage(el)).toBe(t("bill_pay.unconfirmed"));
+    expect(actions(el).error).toBe(t("bill_pay.recheck_choose_reader"));
     expect(button(el, "[data-pay-recheck]").disabled).toBe(true);
   });
 
   it("adds that the bill could not be read again", async () => {
     const el = await mount({ unanswered: unanswered(), refusal: { code: "unread" } });
 
-    expect(actions(el).error).toBe(`${t("bill_pay.unconfirmed")} ${t("bill_pay.read_failed")}`);
+    expect(actions(el).error).toBe(t("bill_pay.read_failed"));
   });
 
-  it("says the message once when the refusal is the missing answer itself", async () => {
+  it("says the message once, in the box, when the refusal is the missing answer itself", async () => {
     const el = await mount({ unanswered: unanswered(), refusal: { code: "network" } });
 
-    expect(actions(el).error).toBe(t("bill_pay.unconfirmed"));
+    expect(lockMessage(el)).toBe(t("bill_pay.unconfirmed"));
+    expect(actions(el).error).toBe("");
   });
 
   it("holds Check again while a send is still waiting", async () => {
@@ -1621,7 +1639,18 @@ describe("till-bill-pay-dialog: a payment that got no answer", () => {
 
     expect(rechecked).toEqual([]);
     expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
-    expect(actions(el).error).toBe(`${t("form.fix_fields")} ${t("bill_pay.unconfirmed")}`);
+    expect(actions(el).error).toBe(t("form.fix_fields"));
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(guests(el));
+
+    input.value = "3";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(guests(el)!.error).toBe("");
+    expect(actions(el).error).toBe("");
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
+    await click(el, "[data-pay-recheck]");
+    expect(rechecked).toEqual([{ guests: 3 }]);
   });
 
   it("goes back to the steps when the lock is lifted", async () => {

@@ -192,8 +192,8 @@ function refusalText(refusal: PayRefusal): string {
 
 const PEOPLE = /^[1-9]\d{0,2}$/;
 
-/** A send the server never answered. While the dialog has one it offers only Check again, which
- * resends that same payment, so no other payment can reuse its submission id. */
+/** A payment the server never answered. While the dialog has one it shows only the balance, this
+ * lock and Check again, which emits `bill-pay-recheck`. */
 export interface UnansweredPayment {
   applied: string;
   method: "cash" | "card";
@@ -420,6 +420,9 @@ export class TillBillPayDialog extends LitElement {
       }
 
       .tone {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-warning);
         border-radius: var(--wt-radius-md);
@@ -428,6 +431,10 @@ export class TillBillPayDialog extends LitElement {
       .tone-title {
         color: var(--wt-color-warning);
         font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
+
+      .tone-body {
         overflow-wrap: anywhere;
       }
     `,
@@ -881,12 +888,12 @@ export class TillBillPayDialog extends LitElement {
     const invalid = unanswered.guests && this.guestsAttempted && this.#guestsInvalid();
     const parts: string[] = [];
     if (invalid) parts.push(t("form.fix_fields"));
-    parts.push(t("bill_pay.unconfirmed"));
     if (unanswered.readerRefused || unanswered.noReader)
       parts.push(t("bill_pay.recheck_choose_reader"));
     if (this.refusal?.code === "unread") parts.push(t("bill_pay.read_failed"));
-    return html`<div class="tone" data-pay-unanswered>
-        <p class="tone-title">${t("bill_pay.unanswered_title")}</p>
+    return html`<div class="tone" role="status" data-pay-unanswered>
+        <p class="tone-title" data-pay-unanswered-title>${t("bill_pay.unanswered_title")}</p>
+        <p class="tone-body" data-pay-unanswered-message>${t("bill_pay.unconfirmed")}</p>
       </div>
       ${
         unanswered.guests
@@ -895,34 +902,45 @@ export class TillBillPayDialog extends LitElement {
       }
       <wt-form-actions .error=${parts.join(" ")}>
         <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-pay-close
+          .disabled=${this.busy}
+          @click=${() => this.#requestClose()}
+        >
+          ${t("bill_pay.close")}
+        </wt-button>
+        <wt-button
           variant="primary"
           data-pay-recheck
           .loading=${this.busy}
-          .disabled=${this.busy || unanswered.waiting || unanswered.noReader}
-          @click=${() => void this.#recheck(unanswered)}
+          .disabled=${this.busy || unanswered.waiting || unanswered.noReader || invalid}
+          @click=${() => void this.#recheck()}
         >
           ${t("bill_pay.recheck")}
         </wt-button>
       </wt-form-actions>`;
   }
 
-  async #recheck(unanswered: UnansweredPayment): Promise<void> {
-    if (!this.isConnected || !this.#active || this.busy) return;
+  async #recheck(): Promise<void> {
+    const unanswered = this.unanswered;
+    if (!this.isConnected || !this.#active || this.busy || unanswered === null) return;
     if (unanswered.waiting || unanswered.noReader) return;
-    if (unanswered.guests) {
-      this.guestsAttempted = true;
-      if (this.#guestsInvalid()) {
-        await this.updateComplete;
-        await focusFirstInvalid(this.shadowRoot!);
-        return;
-      }
+    if (unanswered.guests) this.guestsAttempted = true;
+    if (unanswered.guests && this.#guestsInvalid()) {
+      await this.#focusInvalid();
+      return;
     }
-    this.#emit(
-      "bill-pay-recheck",
-      (unanswered.guests
-        ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null }
-        : {}) satisfies ReceiptGuestsDetail,
-    );
+    this.#emit("bill-pay-recheck", this.#guestsDetail(unanswered.guests));
+  }
+
+  async #focusInvalid(): Promise<void> {
+    await this.updateComplete;
+    await focusFirstInvalid(this.shadowRoot!);
+  }
+
+  #guestsDetail(shown: boolean): ReceiptGuestsDetail {
+    return shown ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null } : {};
   }
 
   #takenText(taken: PayTaken): string {
@@ -1492,8 +1510,7 @@ export class TillBillPayDialog extends LitElement {
     if (tipChecked) this.tipAttempted = true;
     if (guestsShown) this.guestsAttempted = true;
     if ((tipChecked && this.#tipErrors(cash).size > 0) || (guestsShown && this.#guestsInvalid())) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!);
+      await this.#focusInvalid();
       return;
     }
     if (tipChecked) {
@@ -1504,12 +1521,7 @@ export class TillBillPayDialog extends LitElement {
       }
     }
     this.shownRefusal = null;
-    this.#emit(
-      "bill-pay-confirm",
-      (guestsShown
-        ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null }
-        : {}) satisfies ReceiptGuestsDetail,
-    );
+    this.#emit("bill-pay-confirm", this.#guestsDetail(guestsShown));
   }
 
   /** Only the payment that pays what is left records the sale; `outstanding` leaves out what a

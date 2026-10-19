@@ -299,7 +299,11 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         .shadowRoot!.querySelector<HTMLElement>("dialog")!;
       const background = getComputedStyle(panel).backgroundColor;
       lockBackgrounds.set(`${theme}-${width}`, background);
-      if (theme === "dark") expect(background).not.toBe(lockBackgrounds.get(`light-${width}`));
+      if (theme === "dark") {
+        const light = lockBackgrounds.get(`light-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
       const shot = `__screenshots__/look/a796-lock-${theme}-${width}`;
       await page.screenshot({ element: panel, path: `${shot}.png` });
       const box = panel.getBoundingClientRect();
