@@ -1,3 +1,55 @@
+## 2026-10-19 precedence addendum: C answered with GitHub Releases; D proposed
+
+The owner's A799 C answer at approximately 16:33 selects **SEPARATE STORE + CHECKSUMS**;
+the approximately 16:45 addition selects **GitHub Releases on the Waitron repository**. Each
+fixture's frozen bundle and independent expected facts belong to its own release, outside Git,
+with the checksum index in Git. Design for private repository/releases and downloads through
+existing CI repository access. No AWS bucket, Git LFS, other provider, paid service or additional
+token setup is approved. Only A/B/C's precise scope is approved; full design/plan/build remain
+open. This addendum overrides conflicting text below; all earlier bytes remain historical.
+
+A uses an invented venue written through the frozen older product's normal paths, without private
+venue data. B requires oldest supported R1 and previous retained R4 before imagined R5 publishes,
+deduplicating identical endpoints. Every original release and its expectations stays, including
+R2/R3. R1/R4 results give no R2/R3 pass or support retirement.
+
+**Next question D:** before A799 can be marked complete, should preservation of an issued F1
+(a full customer invoice) with its customer's original recorded name and address be mandatory
+(recommended), or should initial scope accept an unpaid recipient-bearing order plus an issued
+F2 (a simplified receipt), leaving issued-F1 preservation explicitly untested?
+
+Imagine Harbour's older product issued a €13.53 full invoice to **Mara Soler, 18 Market Street**.
+After upgrade, the same invoice must keep those original details even if the live customer details
+later differ. The facts and amount are illustrative; no current or qualifying older issuance path
+is established. Recommend mandatory issued F1 because its recorded recipient snapshot is what
+must survive. The unpaid order and F2 do not cover it; restart, upgrade success and a new sale
+cannot fill the gap. D authorises no F1 enablement or fiscal-core change. If the older qualifying
+product cannot issue it normally, that dependency may need a separate owner-approved item;
+the build remains separately gated.
+
+The **proposed builder contract**, not an observed guarantee, uses a trusted read-only fetch stage
+before untrusted candidate execution: use existing repository access, check committed hashes,
+then remove the download token and credential configuration before execution. Candidate code
+receives no upload/delete credentials. Private-download permissions and CI availability need later
+verification; no access expansion is authorised. Missing/inaccessible/corrupt inputs block the run,
+without skips or current seeds. Keep the proposed originals-retained rule separate from hash
+checking; no enabled immutable Releases setting or platform prevention of administrator changes
+is claimed.
+
+Read the [current design addendum](../../../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md#2026-10-19-precedence-addendum-github-releases-selected-issued-f1-choice-d-proposed).
+Read the [eight static EN/ES light/dark boards at 390/1280 px, PNG with SVG
+sources](revision-c-github-releases-and-f1/README.md). The parent rendered and inspected these drawings; they supply no runtime evidence.
+
+A760's separate execution/reset authority and supported captures within the resulting post-reset
+history remain. Actual upgrade coverage needs a distinct later candidate applying pending migrations
+through normal boot; same-image restart does not qualify. Optional-module-off cases, exact raw
+fiscal bytes and node/SIF/series identity remain, with no new fiscal writer or edits to golden huella
+or `inmutabilidad`. Support/retirement and capture IDs/time remain later boundaries. Original source
+reads stay historical and **UNVERIFIED at runtime**. No capture/boot/upgrade/new-sale result or
+independent size measurement is claimed. Ask only D next, without reopening A/B/C.
+
+---
+
 ## 2026-10-19 precedence addendum: B answered; store choice C proposed
 
 The owner's A799 answer at approximately 16:02 on 2026-10-19 selects **OLDEST + PREVIOUS**:

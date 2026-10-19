@@ -1,3 +1,94 @@
+## 2026-10-19 precedence addendum: GitHub Releases selected; issued-F1 choice D proposed
+
+**Only A/B/C's precise scope is approved.** The owner chose **SEPARATE STORE + CHECKSUMS**
+at approximately 16:33, then specified **GitHub Releases on the Waitron repository** at
+approximately 16:45 in Lane F's `questions.md`. Each fixture's frozen bundle and independently
+frozen expected facts belong to that release's own GitHub release, outside Git; the checksum
+index stays in Git. Design for the repository and releases becoming private, with CI downloading
+through its existing repository access. No AWS bucket, Git LFS, other provider or paid service
+is approved. The complete design, plan and build remain unapproved. This addendum takes
+precedence over conflicting wording below; every earlier byte remains a historical suffix.
+
+A still selects an invented venue written by a frozen older product through normal product paths,
+without private venue data. B still requires the oldest supported and previous retained releases
+before publication. In the imagined R1/R2/R3/R4 to R5 example, require R1 and R4, deduplicating
+identical endpoints. Keep **every original release bundle and its original expectations**, including
+R2/R3. Passing R1/R4 gives no passing result for R2/R3 and retires no support. Exact support and
+retirement rules remain later boundaries.
+
+### Proposed builder contract for private downloads
+
+Use a trusted, read-only fetch stage **before any untrusted candidate code executes**. Download
+the required bundles and expected facts through existing CI repository access, check their bytes
+against the committed checksum index, then remove the download token and any credential-bearing
+configuration before execution. Pass verified inputs to the candidate stage without credentials;
+keep original expected facts outside its writable venue copy. No upload/delete credentials may
+reach candidate code. Missing, inaccessible or corrupt required inputs block the required run;
+never skip them or substitute current seeds or candidate-generated expectations.
+
+This is a proposed contract to build and verify, **not an observed isolation or access guarantee**.
+The builder must verify private-download permissions and ordinary CI availability using existing
+access. No additional service, token setup or permission expansion is authorised. A failure to
+meet that boundary is a blocker to report, not authority to expose credentials. C does not require
+another owner choice about technical permissions.
+
+Keep the proposed originals-retained contract separate from the hash check: published inputs are
+not replaced in place; a reviewed correction gets a new version and keeps the original. A checksum
+is a fingerprint for comparing fetched bytes with the committed original. This text does not claim
+immutable Releases are enabled or that GitHub prevents administrators changing assets. No private-download probe, fixture size or runtime guarantee is established here.
+
+GitHub's release-asset API documents read permission for retrieval. The existing CI declaration
+names `contents: read` (`.github/workflows/ci.yml:62–63`, source read only). That supports a
+read-only-fetch proposal; it does not verify private downloads or candidate isolation.
+
+| Source checked 19 October 2026                                                                          | Source words                               | Design use and limit                                                                                                              |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [GitHub Docs, Get a release asset](https://docs.github.com/en/rest/releases/assets#get-a-release-asset) | “"Contents" repository permissions (read)” | The API names read access. Verify the actual private-repository workflow later; no new token or permission expansion is approved. |
+
+### Next owner question D: must an issued customer's invoice survive?
+
+**Before A799 can be marked complete, should preservation of an issued F1 (a full customer
+invoice) with its customer's original recorded name and address be mandatory (recommended),
+or should the initial scope accept an unpaid order with recipient details plus an issued F2
+(a simplified receipt), leaving issued-F1 preservation explicitly untested?**
+
+Imagine Harbour issued a €13.53 full customer invoice to **Mara Soler, 18 Market Street** through
+the frozen older product's normal path. After upgrade, that same invoice must still carry Mara's
+original recorded name and address, even if the live customer details later differ. These are
+invented example facts and an illustrative amount, not a claim that any selected image or current
+route can issue it. The old product's actual accepted inputs and output would need independent
+capture before the candidate opens a copy.
+
+Recommend mandatory issued F1 because the recorded recipient snapshot is what must survive.
+An unpaid order bearing Mara's details is not an issued F1; an issued F2 supplies no issued-customer
+snapshot coverage. Successful restart, pending-migration upgrade or a separate new sale cannot fill
+that gap. The narrower choice would permit initial completion only within that expressly reduced
+recipient coverage; it must continue to report **issued-F1 preservation untested**.
+
+D chooses coverage only. Neither answer enables F1, changes the fiscal core or authorises the build.
+If the qualifying older product cannot issue F1 through its normal supported path, the mandatory
+choice leaves a completion dependency that may need a **separate owner-approved item** and a
+qualifying later capture. Do not bypass a refusal, fabricate the invoice or add a fiscal writer.
+
+### Preserved boundaries and evidence
+
+A760 retains separate execution/reset authority. Supported baseline captures begin after its
+separately authorised squash/reset, within the same resulting migration history. A same-image
+restart is not an upgrade; actual upgrade coverage needs a distinct later candidate whose normal
+boot applies pending migrations. Keep the optional-module-off cases, original product transcripts,
+exact raw fiscal bytes and node/SIF/series identity. Preservation and a separate new sale stay
+distinct. No new fiscal writer; golden huella and `inmutabilidad` stay unedited.
+
+Ask only D next; A/B/C are not reopened. Capture IDs/time, support/retirement and later builder
+verification remain unresolved boundaries. Original source observations remain historical reads
+at `87f19d4bc98d2fb7925e886228430cabfc490a9b`, **UNVERIFIED at runtime**. This revision supplies
+no capture, boot, upgrade, preservation or new-sale result. The watcher's size context has not
+been independently remeasured here. Read the [eight static EN/ES light/dark boards
+at 390/1280 px, PNG with SVG sources](../../backlog/mockups/a799-real-database-upgrade-testing/revision-c-github-releases-and-f1/README.md);
+the parent rendered and inspected these drawings; they are not runtime evidence.
+
+---
+
 ## 2026-10-19 precedence addendum: oldest plus previous approved; store choice C proposed
 
 **Only A and B's precise scope is approved.** In the A799 owner answer recorded at approximately
