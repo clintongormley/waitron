@@ -212,19 +212,29 @@ export async function updateSection(
 }
 
 export async function deleteSection(tx: Transaction, id: string): Promise<void> {
+  await deleteSections(tx, [id]);
+}
+
+/** Deletes each named owned section and every owned section below it, refusing the whole call
+ * before any write when one id is unknown or not an owned section. */
+export async function deleteSections(tx: Transaction, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
   const graph = await loadSectionGraph(tx);
-  const role = graph.role(id);
-  if (role === undefined) throw new AppError("menu_section.not_found", { sectionId: id });
-  if (role !== "section") throw new AppError("menu_section.wrong_role", { sectionId: id, role });
-  const menus = menusContaining(graph, id);
-  const descendants = new Set<string>();
+  const named = [...new Set(ids)];
+  for (const id of named) {
+    const role = graph.role(id);
+    if (role === undefined) throw new AppError("menu_section.not_found", { sectionId: id });
+    if (role !== "section") throw new AppError("menu_section.wrong_role", { sectionId: id, role });
+  }
+  const deleted = new Set<string>();
   const collect = (current: string): void => {
-    descendants.add(current);
+    if (deleted.has(current)) return;
+    deleted.add(current);
     for (const { ref } of graph.children(current))
       if (ref.kind === "section" && graph.role(ref.sectionId) === "section") collect(ref.sectionId);
   };
-  collect(id);
-  for (const target of descendants)
+  for (const id of named) collect(id);
+  for (const target of deleted)
     for (const parent of graph.parents(target))
       if (graph.role(parent) === "home_layout")
         await tx
@@ -237,16 +247,20 @@ export async function deleteSection(tx: Transaction, id: string): Promise<void> 
           .where(
             and(eq(sectionMembers.sectionId, parent), eq(sectionMembers.childSectionId, target)),
           );
-  await tx.delete(sections).where(inArray(sections.id, [...descendants]));
-  for (const parent of graph.parents(id))
-    if (graph.role(parent) !== "home_layout")
-      await renumber(
-        tx,
-        graph
-          .children(parent)
-          .filter((member) => !(member.ref.kind === "section" && member.ref.sectionId === id)),
-      );
-  await onStructureChanged(tx, menus, graph);
+  for (const batch of batches([...deleted]))
+    await tx.delete(sections).where(inArray(sections.id, batch));
+  const lists = new Set<string>();
+  for (const id of named)
+    for (const parent of graph.parents(id))
+      if (graph.role(parent) !== "home_layout" && !deleted.has(parent)) lists.add(parent);
+  for (const list of lists)
+    await renumber(
+      tx,
+      graph
+        .children(list)
+        .filter((member) => !(member.ref.kind === "section" && deleted.has(member.ref.sectionId))),
+    );
+  await writeStructureChange(tx, graph, named);
 }
 
 /** Appends the member, or puts it at `position` and renumbers the list. */

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
-import { createCatalogue, createCategory, createProduct } from "./operations.js";
+import { createCatalogue, createCategory, createProduct, listMenuOffers } from "./operations.js";
+import { addShortcut, readMenuHome } from "./menu-home.js";
 import { setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
 import * as sectionStructure from "./section-structure.js";
@@ -14,6 +15,7 @@ import {
   addProducts,
   createSectionIn,
   deleteSection,
+  deleteSections,
   listMembers,
   moveMember,
   readSection,
@@ -670,5 +672,153 @@ describe("the structure hook", () => {
     await app((tx) => deleteSection(tx, drinks.id));
     expect(hook).toHaveBeenCalledTimes(1);
     expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu]);
+  });
+});
+
+describe("deleting several sections", () => {
+  const lunchRootOf = (f: Fixture) => menuOwned("menu_root", f.lunchMenu);
+  const rootMembers = async (f: Fixture) =>
+    (await app(async (tx) => readSection(tx, await lunchRootOf(f)))).members;
+  const gone = async (id: string) =>
+    expect(app((tx) => readSection(tx, id))).rejects.toMatchObject({
+      code: "menu_section.not_found",
+    });
+
+  it("deletes two sibling sections in one call and renumbers their list with no gap", async () => {
+    const f = await fixture();
+    const a = await owned("A");
+    const b = await owned("B");
+    const c = await owned("C");
+    const d = await owned("D");
+    await app((tx) => deleteSections(tx, [a.id, c.id]));
+    await gone(a.id);
+    await gone(c.id);
+    const members = await rootMembers(f);
+    expect(refs(members)).toEqual([section(b.id), section(d.id)]);
+    expect(positions(members)).toEqual([0, 1]);
+  });
+
+  it("renumbers a list when two sections side by side in it are deleted", async () => {
+    const f = await fixture();
+    const root = await lunchRootOf(f);
+    const a = await owned("A");
+    const b = await owned("B");
+    const c = await owned("C");
+    await app((tx) => addMember(tx, root, product(f.lemonade)));
+    await app((tx) => deleteSections(tx, [b.id, c.id]));
+    const members = await rootMembers(f);
+    expect(refs(members)).toEqual([section(a.id), product(f.lemonade)]);
+    expect(positions(members)).toEqual([0, 1]);
+  });
+
+  it("deletes a parent and its own child named together, once each", async () => {
+    const f = await fixture();
+    const parent = await owned("Parent");
+    const child = await app((tx) => createSectionIn(tx, parent.id, { internalName: "Child" }));
+    const grandchild = await app((tx) =>
+      createSectionIn(tx, child.id, { internalName: "Grandchild" }),
+    );
+    const kept = await owned("Kept");
+    await app((tx) => deleteSections(tx, [child.id, parent.id, child.id]));
+    await gone(parent.id);
+    await gone(child.id);
+    await gone(grandchild.id);
+    const members = await rootMembers(f);
+    expect(refs(members)).toEqual([section(kept.id)]);
+    expect(positions(members)).toEqual([0]);
+  });
+
+  it("refuses an unknown id among good ones and deletes nothing", async () => {
+    const f = await fixture();
+    const a = await owned("A");
+    const b = await owned("B");
+    const before = await rootMembers(f);
+    const missing = crypto.randomUUID();
+    // Read inside the refused call's own transaction, before its rollback could hide a write.
+    await app(async (tx) => {
+      await expect(deleteSections(tx, [a.id, missing, b.id])).rejects.toMatchObject({
+        code: "menu_section.not_found",
+        params: { sectionId: missing },
+      });
+      expect((await readSection(tx, a.id)).id).toBe(a.id);
+      expect((await readSection(tx, b.id)).id).toBe(b.id);
+      expect((await readSection(tx, await lunchRootOf(f))).members).toEqual(before);
+    });
+  });
+
+  it("refuses a menu root or home section among good ones and deletes nothing", async () => {
+    const f = await fixture();
+    const a = await owned("A");
+    const before = await rootMembers(f);
+    for (const role of ["menu_root", "home_layout"] as const) {
+      const listId = await menuOwned(role, f.dinnerMenu);
+      await app(async (tx) => {
+        await expect(deleteSections(tx, [a.id, listId])).rejects.toMatchObject({
+          code: "menu_section.wrong_role",
+          params: { sectionId: listId },
+        });
+        expect((await readSection(tx, a.id)).id).toBe(a.id);
+        expect((await readSection(tx, await lunchRootOf(f))).members).toEqual(before);
+      });
+    }
+  });
+
+  it("turns a home shortcut to any deleted section into a Missing one with its path name", async () => {
+    const f = await fixture();
+    const drinks = await owned("Drinks");
+    const beer = await app((tx) => createSectionIn(tx, drinks.id, { internalName: "Beer" }));
+    const wine = await owned("Wine");
+    await app(async (tx) => {
+      await addShortcut(tx, f.lunchMenu, section(beer.id));
+      await addShortcut(tx, f.lunchMenu, section(wine.id));
+    });
+    await app((tx) => deleteSections(tx, [drinks.id, wine.id]));
+    const shortcuts = (await app((tx) => readMenuHome(tx, f.lunchMenu))).shortcuts;
+    expect(shortcuts.map((t) => [t.position, t.missingName])).toEqual([
+      [0, "Lunch menu › Drinks › Beer"],
+      [1, "Lunch menu › Wine"],
+    ]);
+  });
+
+  it("tells the structure hook once, with the sorted menus of every deleted section", async () => {
+    const f = await fixture();
+    const dinnerRoot = await menuOwned("menu_root", f.dinnerMenu);
+    const lunchOwn = await owned("Lunch drinks");
+    const dinnerOwn = await app((tx) =>
+      createSectionIn(tx, dinnerRoot, { internalName: "Dinner drinks" }),
+    );
+    hook.mockClear();
+    await app((tx) => deleteSections(tx, [lunchOwn.id, dinnerOwn.id]));
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu, f.dinnerMenu].sort());
+  });
+
+  it("deletes a section of an included menu, and the including menu loses its product", async () => {
+    const f = await fixture();
+    const drinks = await create("Drinks");
+    const juices = await app((tx) => createSectionIn(tx, drinks.id, { internalName: "Juices" }));
+    await app(async (tx) => {
+      await addMember(tx, juices.id, product(f.lemonade));
+      await addMember(tx, drinks.id, product(f.water));
+      await addMember(tx, await menuOwned("menu_root", f.lunchMenu), section(drinks.id));
+    });
+    const offered = async () =>
+      (await app((tx) => listMenuOffers(tx, [f.lunchMenu]))).map((offer) => offer.productId);
+    expect(await offered()).toContain(f.lemonade);
+    hook.mockClear();
+    await app((tx) => deleteSections(tx, [juices.id]));
+    await gone(juices.id);
+    expect(await offered()).toEqual([f.water]);
+    expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu, drinks.ownerMenuId].sort());
+  });
+
+  it("does nothing and tells nobody when no section is named", async () => {
+    const f = await fixture();
+    await owned("A");
+    const before = await rootMembers(f);
+    hook.mockClear();
+    await app((tx) => deleteSections(tx, []));
+    expect(hook).not.toHaveBeenCalled();
+    expect(await rootMembers(f)).toEqual(before);
   });
 });
