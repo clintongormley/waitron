@@ -20,9 +20,6 @@ export type SeedReason<L extends string = string> = Omit<
   names: DemoText<L>;
 };
 
-// A reason sharing a starter reason's English and Spanish names (`ADJUSTMENTS_PROVISIONING`) is
-// skipped on a provisioned venue. Void reasons carry no roles (a cancel's rule is the refund
-// permission); every Comp reason carries a euro cap.
 export const DEMO_ADJUSTMENT_REASONS: readonly SeedReason<CasaDelgadoLanguage>[] = [
   {
     names: {

@@ -625,8 +625,9 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
  * A comp action's verdict (design §3.2). The reason's share of an item is what it took before
  * ({@link readReasonItemShares}: the item's own, and once what it took off the whole bill) plus what
  * this request takes, each at `ceil(reduction × 10000 ÷ list value)`: on a line, the request's
- * reduction over its list value; on the whole bill, each changed row's over that row's. A percentage taken off a dish was spread over its extras too, so an
- * extra also counts its dish's share, and a dish the largest any of its extras took on its own.
+ * reduction over its list value; on the whole bill, each changed row's over that row's. A percentage
+ * taken off a dish was spread over its extras too, so an extra also counts its dish's share, and a
+ * dish the largest any of its extras took on its own.
  */
 async function judgeComp(
   tx: Transaction,
