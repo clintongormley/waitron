@@ -49,7 +49,8 @@ usage: waitron-provision <command> [options]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
            [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
-           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]
+           [--admin-first-names <names>] [--admin-last-names <names>]
+           [--recovery-pdf <absolute external path>] [--yes]
 ```
 
 Most venue options are prompted for when omitted. `--full-series-code` defaults to `FF` without a prompt.
@@ -91,8 +92,11 @@ refuses with `setup.not_ready` before opening the venue directory. For example:
 WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js venue
 ```
 
-The command's interactive first Live setup flow is still unfinished in A679. Supplying an
-initial-input file does not replace the owned setup and its password confirmation.
+The A679 candidate's interactive Live flow owns its setup attempt, compares clocks and selects
+an eligible hour for its series. Pass an absolute `--recovery-pdf` destination outside both host
+state and the venue. Confirm the password and that you kept the resulting PDF. `--yes` answers
+neither the clock nor retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
+explains the sequence and limits. Final branch integration, reviews and CI remain open.
 
 For an accepted production readiness test on this branch, set `WAITRON_SETUP_SETTINGS_FILE` to
 your certificate/email JSON and add `--test-fiscal` to the same `venue` invocation. For the bundled
@@ -206,12 +210,13 @@ would put a secret in argv" and "refuses --admin-url as a flag, in both argv for
 that way, the second of those precisely because an operator reaching for the retired flag must not
 have their old connection string quietly ignored.
 
-Set the environment variables for a non-interactive run:
+Supply login secrets through environment variables or private prompts. The Live flow still
+asks for clock, setup-password and kept-PDF confirmation:
 
 ```bash
 WAITRON_VENUE_DIR=/var/lib/waitron/venue \
   WAITRON_ADMIN_PIN=... WAITRON_ADMIN_PASSWORD=... \
-  node dist/bin.js venue --country ES ... --yes
+  node dist/bin.js venue --recovery-pdf /media/recovery/venue.pdf --country ES ... --yes
 ```
 
 If nothing supplies the venue directory — no flag, no variable, and a prompt that answers nothing,
@@ -295,7 +300,13 @@ pnpm --filter @waitron/provisioning test:coverage
 `cli.ts`, which is injected and fully tested. What remains — a tty, a readline, a process exit
 code — is verified by running the built bundle instead.
 
-## Supplied initial allocation input on the Task 4 branch
+## Historical supplied allocation input on the Task 4 branch
+
+**Superseded on the A679 candidate, 2026-10-19.** The CLI refuses
+`WAITRON_INITIAL_VENUE_INPUT` as Live activation authority with
+`provisioning.initial_input_invalid`. The built owned-CLI check now completes hour setup,
+checks all three new series/counters and refuses mismatched state/venue roots without writes.
+The following records the earlier supplied-allocation interface and its qualification context.
 
 To carry identities chosen before signing, set `WAITRON_INITIAL_VENUE_INPUT` to a JSON file holding
 `nodeId`, `administratorId` and an `inputs` array. Each array entry has `module`, `eventId`,

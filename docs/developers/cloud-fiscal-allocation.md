@@ -1,3 +1,11 @@
+> **Historical protocol, superseded 2026-10-19 on the A679 branch.** The procedures,
+> environment variables and qualification results below describe the earlier register-based
+> implementation. They are retained for original-evidence inspection and historical tests;
+> do not use them to prepare a new setup or recovery. Production composition now selects
+> the hour-based preparation API. Follow [first Live setup](../operations/first-live-fiscal-setup.md)
+> or [recovery with an hour code](../operations/hour-recovery.md). Cloud accounts, backup
+> transport and recovery authentication remain separate from naming authority.
+
 # Pass a Cloud allocation through local recovery
 
 A consumed Cloud receipt records a reserved installation name and its complete invoice-series

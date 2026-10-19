@@ -248,10 +248,11 @@ Four UTC-hour characters replace paper/Cloud name allocation, leaving a recovery
 The earlier plan's Tasks 9–12 are superseded; completed components need qualification against the new policy.
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
 rendered keys. Earlier register and physical-check instructions below are historical
-where superseded. Remaining work includes package coverage, retiring active register/Cloud
-allocation tooling and its operator instructions, current-main integration, both installed
-reviews, current-head CI and generated-PDF viewing approval. The retained CLI-launch test
-replacement awaits exact approval. Allocated adoption remains pending venue-copy support;
+where superseded. Provisioning package coverage is qualified. Production protocol entry points
+are retired and all 3,316 fiscal cases pass, but fiscal package coverage remains below its
+unchanged bars. Whole-range prose/current-main integration, both installed reviews and
+current-head CI remain. The owner approved the generated PDF and exact retained CLI-launch
+patch on 19 October; the byte-identical applied patch passes all three launch cases. Allocated adoption remains pending venue-copy support;
 A679 does not add a promotion browser screen.
 
 **Qualification update, 2026-10-19:** the full provisioning suite passes 1,469 cases in 73 files
@@ -263,6 +264,24 @@ controls fail their intended assertions and pass after restoration; the separate
 stat-size omission is unqualified. Active protocol retirement, current instructions/main
 integration, both final installed reviews, hook/current-head CI and the existing PDF-viewing
 and exact CLI-test approvals remain open. See the [changed-check inventory](../operations/a679-changed-checks.md#ownership-and-workspace-qualification-2026-10-19).
+
+**Retirement update, 2026-10-19:** the production operation export now selects hour-only
+preparation; old file-based paper/Cloud/emergency dispatch remains solely in the historical
+fixture module. Four real signed-Cloud fixtures first reproduced admission through the former
+public export, then refused through the new export without changing the confirmation or
+creating a receipt. Each fixture still passes its historical direct collector as a control.
+Hour suites now import the production exports; their earlier recorded-fact assertions are
+unchanged. One exact contribution-reference check follows the replacement public hour setup
+contribution. The custodian command/build and wizard offline-tool asset wiring are removed from
+production configuration. Full fiscal package behavior passes all 3,316 cases in 154 files;
+coverage fails at statements 95.17%, branches 93.89%, functions 97.23% and lines 96.79%.
+Hosted recovery is the largest uncovered unit. The final five-file server integration passes
+193 cases, the protected pair 20, and the focused root guards 3,206. All four affected package
+type checks, scoped lint/code formatting, the real setup build and eight language/theme/width
+factory previews pass their checks. Preview clocks/context are synthetic; these are not full
+wizard or physical replacement journeys. Current-main and broader prose reconciliation remain open. The current [setup](../operations/first-live-fiscal-setup.md) and
+[recovery](../operations/hour-recovery.md) procedures replace the explicitly historical
+custodian instructions. The original started timestamp and one-PR scope remain unchanged.
 
 **Hour-plan Task 1 checkpoint, 2026-10-16:** module tests exercise four-character hour names,
 the complete configured series set (including multiple standard bases and `FF/full`),

@@ -136,6 +136,12 @@ location, a node, and standard, full and rectificative invoice series — and ru
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
+On the A679 candidate, set `WAITRON_STATE_DIR` and choose an absolute `--recovery-pdf`
+destination outside state and venue storage. The command owns the setup attempt, asks about
+clocks and recent taxpayer-wide setups, and requires password and kept-PDF confirmation.
+`--yes` does not answer those questions, and a supplied JSON allocation is not Live authority.
+Follow the [current setup procedure](../../docs/operations/first-live-fiscal-setup.md).
+
 It runs **against a directory something has already migrated**, and stamps that directory itself
 when it carries no stamp (see "What actually writes the stamp" above). Stop the server first: while
 another process (usually the server) has the folder open, `venue` is refused with `provisioning.database_in_use`. A directory nothing has

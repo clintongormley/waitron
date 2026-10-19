@@ -1,4 +1,4 @@
-import { createHourInitialSetup, readHourSetupInput } from "./initial-hour-setup.js";
+import { readHourSetupInput } from "./initial-hour-setup.js";
 import { projectHourHistory } from "./hour-history.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import "./errors.js";
@@ -38,6 +38,7 @@ import {
   readInitialCloudRequest,
   isInitialCloudRequest,
   prepareInitialCloudSetup,
+  configuredCloudTrust,
   confirmInitialCloudSetup,
   readInitialCloudConfirmation,
 } from "./initial-cloud-setup.js";
@@ -365,7 +366,22 @@ function createInitialSetup(
     },
     ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
     configure(host) {
-      return createHourInitialSetup(host, contribution);
+      const paths = (names: readonly string[]) =>
+        names
+          .map((name) => host.environment[name])
+          .filter((path): path is string => typeof path === "string" && path.trim().length > 0);
+      return createInitialSetup(() => configuredCloudTrust(host.environment), {
+        files: paths([
+          "WAITRON_FISCAL_CUSTODIAN_FILE",
+          "WAITRON_FISCAL_CLOUD_TRUST_FILE",
+          "WAITRON_FISCAL_CONFIRMATION_FILE",
+          "WAITRON_FISCAL_PAPER_HISTORY_FILE",
+        ]),
+        directories: paths([
+          "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
+          "WAITRON_FISCAL_EMERGENCY_DIRECTORY",
+        ]),
+      });
     },
     assignmentPositions(context, input) {
       const { scope, allocations } = assignmentFacts(context, input);

@@ -1,7 +1,4 @@
-import { hostedHourPreparation } from "./hour-preparation.js";
-import { createHourDormantPreparation, isHourDormantInput } from "./hour-dormant-standby.js";
-import { hostedHourRecovery } from "./hosted-hour-recovery.js";
-import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
+// Historical protocol tests retain this dispatcher; production composition uses hour-configuration.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
@@ -52,36 +49,12 @@ function configuredOperations(
 ): ModuleOperationPreparation {
   const setup = host === undefined ? FISCAL_INITIAL_SETUP : FISCAL_INITIAL_SETUP.configure!(host);
   return {
-    readRecoveryHistory: readHourRecoveryHistory,
-    readRecoveryState: readHourRecoveryState,
-    async recovery(operation, proposal) {
-      if (host === undefined)
-        throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
-      return hostedHourRecovery(host).recovery(operation, proposal);
-    },
-    async resumeRecovery(operation) {
-      if (host === undefined)
-        throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
-      await hostedHourRecovery(host).resume(operation);
-    },
     async prepare(supplied, run) {
       const operation = {
         ...supplied,
         binding: Object.freeze({ ...supplied.binding }),
         input: snapshotOperationInput(supplied.input),
       };
-      if (isHourDormantInput(operation.input))
-        return createHourDormantPreparation(host).prepare(operation, run);
-      if (operation.binding.action === "setup") {
-        if (host === undefined)
-          throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
-        return hostedHourPreparation(host).prepare(operation, run);
-      }
-      if (
-        host?.readRecoveryFacts !== undefined &&
-        ["restore", "re-register", "promote"].includes(operation.binding.action)
-      )
-        return hostedHourRecovery(host).prepare(operation, run);
       const retired = (await host?.readRetiredSetup?.("fiscal-verifactu")) ?? [];
       if (
         retired.some(
@@ -265,8 +238,6 @@ function configuredOperations(
   };
 }
 export const FISCAL_OPERATIONS: ModuleOperationPreparation = {
-  readRecoveryHistory: readHourRecoveryHistory,
-  readRecoveryState: readHourRecoveryState,
   configure(host) {
     return configuredOperations(Object.freeze({ ...host.environment }), host);
   },

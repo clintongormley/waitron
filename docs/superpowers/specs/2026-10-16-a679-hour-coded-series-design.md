@@ -413,3 +413,14 @@ CEST for Madrid summer dates, CET in winter, WEST for Canary summer dates and WE
 The language still controls the date wording. This replaces the spelled-out zone name in the
 18 October presentation addition. The key-name identifier stays unchanged. The revised EN/ES
 Madrid/Canary samples still require viewing approval.
+
+
+## Owner viewing approval, 2026-10-19 at 11:55
+
+The owner viewed all four revised English/Spanish Madrid/Canary sheets through Drive and approved
+them. This completes the viewing check referenced earlier. At 11:58, the owner separately
+approved the exact retained CLI-launch migration patch with SHA-256
+`3b06f60e1c2dc2f46fe16067842238f77360ffcb9710c3004ecc86277891ba3d`.
+The applied patch matches those bytes and the three launch cases pass. These decisions do not
+complete remaining protocol, integration, review or CI gates. See the
+[qualification inventory](../../operations/a679-changed-checks.md).

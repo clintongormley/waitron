@@ -166,13 +166,17 @@ CI scope and results; the unfiltered `main` merge checks the combined tree when 
 
 ### First Live setup qualification
 
-For A679's candidate first-Live journey, follow the [operator procedure](../operations/first-live-fiscal-setup.md).
-Use the production-shaped isolated test host for Live ownership and activation when the managed
-development stack sets dev mode. Keep the physical-paper receipt separate from browser automation:
-a saved file, synthetic transcription or print preview does not establish the actual-paper check.
-As of 2026-10-15, the candidate's compiled wizard/local host/saved-tool checks cover both launch
-paths and custody choices with synthetic outside responses. Actual-paper acceptance, whole-branch
-reviews and publication gates remain outstanding.
+For the A679 candidate, follow [first Live setup](../operations/first-live-fiscal-setup.md)
+and [hour-based recovery](../operations/hour-recovery.md). Use an isolated production-shaped
+host when the managed development stack enables dev mode. The owner's 19 October viewing
+approval covers the generated recovery sheet; automated download/entry checks and final branch
+review remain distinct evidence. No physical-paper acceptance exercise remains under the
+approved hour-code design.
+
+Historical qualification, 2026-10-15: the compiled wizard/local host/saved-tool checks covered
+both launch paths and custody choices with synthetic outside responses. Those results describe
+the former signed-custodian route, not hour-based setup. Preserve them without repeating its
+cancelled paper-check requirement.
 
 ## Documentation rules
 
@@ -307,7 +311,21 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
+### Disposable preproduction setup and owned Live setup
+
+On the A679 candidate, Demo, Preparation and isolated readiness use the fiscal module's
+disposable hour preparation (`hour-throwaway-allocation.ts`). Live setup uses the owned hour flow, including
+on a development host. It selects an eligible hour after clock/history checks and the operator's
+recent-setup answer; signed allocation files do not replace that flow.
+
+Production and preproduction remain separate databases. A disposable preproduction allocation
+is not production authority. Follow the [first Live procedure](../operations/first-live-fiscal-setup.md)
+for ownership, readiness and kept-PDF requirements.
+
 ### A Veri\*Factu venue without a signed allocation
+
+**Historical policy, 2026-10-15.** The following describes the earlier implementation and its measurements. Its S/P naming,
+signer and supplied-allocation instructions are superseded by the hour-code design.
 
 A Veri\*Factu venue's setup has to carry a fiscal allocation: the installation number and invoice
 series a custodian (the person or service that hands out installation numbers and keeps the

@@ -8,6 +8,7 @@ import type { InitialSetupContext } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
+import { FISCAL_INITIAL_SETUP as productionInitialSetup } from "./index.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { activateAllocation } from "./allocation.js";
 import {
@@ -158,7 +159,7 @@ beforeEach(async () => {
 
 describe("first fiscal setup public contribution", () => {
   it("is connected to the provisioning descriptor", () => {
-    expect(FISCAL_PROVISIONING.initialSetup).toBe(FISCAL_INITIAL_SETUP);
+    expect(FISCAL_PROVISIONING.initialSetup).toBe(productionInitialSetup);
   });
   it("freezes exact host candidates and public bindings without issuing custody authority", () => {
     const f = fixture();

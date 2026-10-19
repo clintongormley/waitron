@@ -2833,7 +2833,29 @@ venue has ONE node and no failover at all until slice 3 (2026-09-19,
 
 **Provisioning and boot**
 
-## A restore consumes a supplied fiscal identity; the working-time chain continues
+## A restore selects a fresh hour; the working-time chain continues
+
+On the A679 candidate, authenticate with the recovery key matching the selected backup and
+confirm that the former seller is stopped and no parallel recovery is underway. The module
+selects an eligible UTC hour strictly later than its known history. It retains recovered
+invoices and counters, retires recovered active series and activates the fresh complete series
+set. The public production preparation API does not fall back to signed paper, Cloud receipts
+or random emergency identities from environment files. Follow
+[recovery with an hour code](../operations/hour-recovery.md).
+
+Cold restore checks the key saved in the selected backup; live takeover checks the live
+verifier. Keep older named paper keys while their backups remain. The archive password is
+separate. Hour selection does not discover all missing history or stop a returning old seller.
+Archive and bucket input remain mutually exclusive.
+
+The working-time chain continues from the backup's head. Its surviving-fork refusal is checked
+by `packages/workforce/src/restore-continuation.test.ts`; hour naming does not transfer working-
+time rows between nodes.
+
+### Historical signed-allocation restore qualification
+
+The following records the 14 October implementation. A679's hour policy supersedes its naming
+authority and operation-input instructions; preserve these receipts as historical results.
 
 When you restore a filing node from an archive or the bucket, supply its recovery operation and
 node recovery key. The operation carries an outside signed allocation and its matching approval.

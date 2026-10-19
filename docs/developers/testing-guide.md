@@ -1357,6 +1357,18 @@ The station printers check reads the multi-select's rendered `aria-selected` opt
 in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “the station editor retains
 printer memberships independently for each station”, rather than relying on the host values alone.
 
+### Wait for the native picker's PDF import
+
+A PDF mismatch check must wait for `RecoveryKeyEntry.importFile` to finish before reading its
+rendered refusal. Track the promise started by the real file-picker event, keeping the real
+reader. A one-second assertion window is not the import's completion signal.
+
+On 19 October, A679's full fiscal run failed the wrong-key-name case with an empty error while
+its helper did not await the import. In an independently installed candidate, a controlled 1.5-second file
+read reproduced that assertion failure; awaiting the same native import passed with the same
+delay and unchanged refusal assertion. The restored full recovery-key file passed 20 cases.
+This control qualifies waiting for the import, not the cause of every slow PDF read.
+
 ## A reopened polling dialog owns a new in-flight gate.
 
 Reset that gate on close and guard its release with the request's generation as well as guarding

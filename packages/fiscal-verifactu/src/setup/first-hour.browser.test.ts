@@ -4,7 +4,7 @@ import { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
 import { readRecoveryPdf, openRecoveryPdf } from "../recovery-reader.js";
-import { FISCAL_SETUP } from "./first-fiscal-screen.js";
+import { FISCAL_SETUP } from "@waitron/fiscal-verifactu/setup";
 const instant = Date.parse("2026-10-18T12:30:00Z");
 const clock = {
   usable: ["box", "browser", "internet"].map((source) => ({
@@ -53,6 +53,29 @@ const selected = {
   },
 };
 const hosts: HTMLElement[] = [];
+it("the public setup factory refuses a host without hour preparation", () => {
+  const unexpected = async () => {
+    throw new Error("legacy route invoked");
+  };
+  expect(() =>
+    FISCAL_SETUP.create({
+      locale: "en",
+      request: context,
+      api: {
+        candidates: unexpected,
+        request: unexpected,
+        importInput: unexpected,
+        enrol: unexpected,
+        confirm: unexpected,
+      },
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    }),
+  );
+});
 afterEach(() => {
   hosts.splice(0).forEach((host) => host.remove());
   vi.restoreAllMocks();

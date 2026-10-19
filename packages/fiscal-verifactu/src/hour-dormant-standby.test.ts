@@ -12,7 +12,7 @@ import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { FISCAL_OPERATIONS } from "./index.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";

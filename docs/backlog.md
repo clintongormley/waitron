@@ -324,9 +324,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A679. First Live setup: one page and one recovery PDF.** Finish the existing branch through the
   [hour-code plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
-  Finish the remaining entry checks, retire active allocation protocols, reconcile current
-  instructions and integrate main. Provisioning's package coverage now meets its unchanged bars. Revised PDF viewing and the exact retained CLI-test replacement
-  still need approval. Complete both final installed reviews, hook and current-head CI before landing.
+  Complete fiscal package coverage, whole-range prose and current-main integration. Production
+  protocol dispatch and command/tool build entries are retired; all 3,316 fiscal cases pass,
+  but its unchanged coverage gate still fails (95.17% statements). Provisioning coverage is qualified.
+  The revised PDF and exact CLI-test patch are approved and the three launch cases pass.
+  Complete both final installed reviews, hook and current-head CI before landing.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
   [changed-check inventory](operations/a679-changed-checks.md).
 

@@ -9,7 +9,7 @@ import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission, type AllocationContext } from "./allocation-envelope.js";
 import { activateModuleAllocation, withCollectedModuleAllocation } from "./allocation-operation.js";
 import { activateAuthenticatedHourStandbyAllocation } from "./allocation.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { FISCAL_OPERATIONS } from "./index.js";
 import { compareHourClocks } from "./hour-clock.js";
 import { createHourSelection } from "./hour-selection.js";
 import type { HourHistorySource } from "./hour-history.js";

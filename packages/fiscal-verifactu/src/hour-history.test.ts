@@ -178,7 +178,7 @@ it("reports a missing source object instead of assuming completeness", () => {
 });
 
 it("projects an hour retirement floor into the existing generic assignment guard across software IDs", async () => {
-  const { FISCAL_INITIAL_SETUP } = await import("./initial-setup.js");
+  const { FISCAL_INITIAL_SETUP } = await import("./index.js");
   expect(
     FISCAL_INITIAL_SETUP.retainedAssignments!({
       format: "waitron-hour-history",
@@ -197,7 +197,7 @@ it("projects an hour retirement floor into the existing generic assignment guard
   });
 });
 it("a damaged hour retirement projection refuses instead of removing the floor", async () => {
-  const { FISCAL_INITIAL_SETUP } = await import("./initial-setup.js");
+  const { FISCAL_INITIAL_SETUP } = await import("./index.js");
   expect(() =>
     FISCAL_INITIAL_SETUP.retainedAssignments!({
       format: "waitron-hour-history",

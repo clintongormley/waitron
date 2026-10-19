@@ -4,8 +4,8 @@ import {
   type ModuleOperationHost,
   type InitialSetupContext,
 } from "@waitron/module";
-import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { FISCAL_INITIAL_SETUP } from "./index.js";
+import { FISCAL_OPERATIONS } from "./index.js";
 import { readHourSetupInput } from "./initial-hour-setup.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 

@@ -2,11 +2,11 @@ import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, mkdir, cp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
-import { openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { runEntry } from "./node-entry.js";
@@ -74,18 +74,35 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const dirs: string[] = [];
-function runCli(args: string[], env: NodeJS.ProcessEnv) {
+function runCli(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  answers: readonly (readonly [string, string])[] = [],
+) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = execFile(
       process.execPath,
       args,
-      { env, timeout: 60000 },
+      { env, timeout: 20000 },
       (error, stdout, stderr) => {
         if (error) reject(Object.assign(error, { stdout, stderr }));
         else resolve({ stdout, stderr });
       },
     );
-    child.stdin?.end();
+    if (answers.length === 0) child.stdin?.end();
+    else {
+      let output = "";
+      const answered = new Map<string, number>();
+      child.stdout?.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+        for (const [question, answer] of answers) {
+          const count = output.split(question).length - 1;
+          for (let n = answered.get(question) ?? 0; n < count; n++)
+            child.stdin?.write(`${answer}\n`);
+          answered.set(question, count);
+        }
+      });
+    }
   });
 }
 afterEach(async () => {
@@ -310,14 +327,47 @@ it.each(["direct", "supervised"])(
     }
   },
 );
-it("the real CLI public-input-file path works with explicit environment and refuses an outstanding wizard marker", async () => {
+it("the built owned CLI refuses JSON authority, completes preproduction, and refuses an outstanding wizard marker", async () => {
   const f = await launchFixture();
   const path = join(f.root, "initial.json");
   await writeFile(path, JSON.stringify(f.input));
+  const binary = join(f.root, "provision.mjs");
+  await runCli(
+    [
+      "--input-type=module",
+      "--eval",
+      `import { bundle } from "../../scripts/bundle-node.mjs";
+    bundle([{ entry: "../../packages/provisioning/src/bin.ts", outfile: ${JSON.stringify(binary)} }], {
+      release: {
+        sourceCommit: "${"a".repeat(40)}",
+        committedAt: "2026-10-15T00:00:00.000Z",
+        instantMs: Date.parse("2026-10-15T00:00:00Z"),
+        generator: "scripts/generate-hour-release.mjs:v1",
+        generatorSha256: "${"b".repeat(64)}",
+      },
+    });`,
+    ],
+    process.env,
+  );
+  const clock = join(f.root, "clock.mjs");
+  await writeFile(
+    clock,
+    `import https from "node:https";
+import { syncBuiltinESMExports } from "node:module";
+https.request = () => { throw new Error("synthetic offline clock"); };
+syncBuiltinESMExports();
+const RealDate = Date;
+globalThis.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : ["2026-10-16T11:40:00Z"])); }
+  static now() { return RealDate.parse("2026-10-16T11:40:00Z"); }
+};
+Object.defineProperty(performance, "now", { value: () => 0 });
+`,
+  );
   const args = [
     "--import",
-    "tsx",
-    resolve("../../packages/provisioning/src/bin.ts"),
+    clock,
+    binary,
     "venue",
     "--venue-dir",
     f.base.WAITRON_VENUE_DIR,
@@ -359,26 +409,71 @@ it("the real CLI public-input-file path works with explicit environment and refu
     "Elena",
     "--admin-email",
     "elena@example.test",
+    "--recovery-pdf",
+    join(f.root, "kept-recovery.pdf"),
     "--yes",
   ];
   const env = {
     ...process.env,
     ...f.base,
     ...f.evidenceEnv,
-    WAITRON_INITIAL_VENUE_INPUT: path,
+    WAITRON_INITIAL_VENUE_INPUT: "",
+    WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_ADMIN_PASSWORD: "synthetic-password",
     WAITRON_ADMIN_PIN: "4826",
   };
   await applyMigrations(f.base.WAITRON_VENUE_DIR, migrationOptionsFor(manifestSets(), null));
-  const child = await runCli(args, env);
-  expect(child.stdout).toContain("S000001");
+  await expect(runCli(args, { ...env, WAITRON_INITIAL_VENUE_INPUT: path })).rejects.toMatchObject({
+    code: 1,
+    stderr: expect.stringContaining("provisioning.initial_input_invalid"),
+  });
+  const child = await runCli(args, env, [
+    ["address line 2 (blank if none): ", ""],
+    ["The box's displayed date and time are correct? [y/N]: ", "yes"],
+    [
+      "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
+      "no",
+    ],
+    ["Confirm setup password: ", "synthetic-password"],
+    ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+  ]);
+  const stored = await openVenueDatabase(f.base.WAITRON_VENUE_DIR);
+  try {
+    const allocations = await stored.venue.select().from(fiscalAllocations);
+    expect(allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
+    const series = await stored.venue.select().from(invoiceSeries);
+    expect(
+      series
+        .map((row) => ({ code: row.code, next: row.nextNumber }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    ).toEqual([
+      { code: "A-06RB", next: 1 },
+      { code: "FF-06RB", next: 1 },
+      { code: "R-06RB", next: 1 },
+    ]);
+    expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
+    expect(child.stdout).toContain(`node:     ${allocations[0]!.nodeId}`);
+  } finally {
+    await stored.close();
+  }
   const claimed = await firstFiscalFixture();
   try {
     const blocked = [...args];
     blocked[blocked.indexOf("--venue-dir") + 1] = claimed.venueDir;
+    const claimedState = await readFile(join(claimed.stateDir, "first-setup.json"));
+    const marker = await readFile(join(claimed.venueDir, "first-setup-claim.json"));
+    const ownState = await readFile(join(f.stateDir, "first-setup.json"));
     await expect(runCli(blocked, env)).rejects.toMatchObject({
       code: 1,
-      stderr: expect.stringContaining("setup.attempt_uncertain"),
+      stderr: "setup.attempt_conflict {}\n",
+    });
+    expect(await readFile(join(claimed.stateDir, "first-setup.json"))).toEqual(claimedState);
+    expect(await readFile(join(claimed.venueDir, "first-setup-claim.json"))).toEqual(marker);
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(ownState);
+    await expect(readFile(join(claimed.venueDir, "venue.db"))).rejects.toMatchObject({
+      code: "ENOENT",
     });
   } finally {
     await claimed.dispose();

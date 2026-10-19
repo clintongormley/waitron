@@ -4,7 +4,7 @@ export { FISCAL_ALERTS } from "./alerts.js";
 export { FISCAL_MIGRATIONS } from "./migrations.js";
 export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
-export { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+export { FISCAL_OPERATIONS } from "./hour-configuration.js";
 export { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
 export { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
 export { FISCAL_RECOVERY_DOCUMENT } from "./completed-recovery-document.js";
@@ -84,7 +84,7 @@ export {
   readCloudAllocationReport,
 } from "./cloud-preparation.js";
 
-export { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
+export { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
 export { parseRegisterHistory, verifyRegisterHistory } from "./register-history.js";
 export type {
   RegisterHistory,

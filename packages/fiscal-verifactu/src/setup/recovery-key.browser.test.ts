@@ -7,6 +7,7 @@ import "./first-fiscal-screen.js";
 import { renderRecoveryPdf } from "../recovery-pdf.js";
 import { openRecoveryPdf } from "../recovery-reader.js";
 import type { RecoveryDocument } from "../recovery-document.js";
+import type { RecoveryKeyEntry } from "./recovery-key.js";
 
 const saved: RecoveryDocument = {
   kind: "waitron-recovery-document",
@@ -78,19 +79,28 @@ it("decodes rendered grouped, lowercase and look-alike fields without changing t
   expect(el.outerHTML).not.toContain(saved.nodeKey.secret);
   expect(el.shadowRoot!.textContent).not.toContain(saved.nodeKey.secret);
 });
-function upload(el: LitElement, bytes: Uint8Array<ArrayBuffer>) {
+async function upload(el: LitElement, bytes: Uint8Array<ArrayBuffer>) {
   const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]');
   expect(picker, "recovery offers the saved-PDF picker").not.toBeNull();
   const transfer = new DataTransfer();
   transfer.items.add(new File([bytes], "recovery.pdf", { type: "application/pdf" }));
   picker!.files = transfer.files;
-  picker!.dispatchEvent(new Event("change"));
+  const read = vi.spyOn(el as RecoveryKeyEntry, "importFile");
+  try {
+    picker!.dispatchEvent(new Event("change"));
+    const pending = read.mock.results.at(-1)?.value;
+    if (pending === undefined) throw new Error("The picker did not start reading its PDF");
+    await pending;
+    await el.updateComplete;
+  } finally {
+    read.mockRestore();
+  }
 }
 it("imports the saved key-only PDF for the matching selected backup", async () => {
   const el = await mount();
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
-  upload(el, await renderRecoveryPdf(saved, "es", "Europe/Madrid"));
+  await upload(el, await renderRecoveryPdf(saved, "es", "Europe/Madrid"));
   await vi.waitFor(() =>
     expect(events.at(-1)).toEqual({ secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" }),
   );
@@ -111,7 +121,7 @@ it.each(["taxpayer", "environment", "software", "node", "name"])(
     if (fault === "software") wrong.scope = { ...wrong.scope, softwareId: "W2" };
     if (fault === "node") wrong.nodeKey = { ...wrong.nodeKey, nodeId: "node-2" };
     if (fault === "name") wrong.nodeKey = { ...wrong.nodeKey, name: "Earlier key" };
-    upload(el, await renderRecoveryPdf(wrong, "en", "Europe/Madrid"));
+    await upload(el, await renderRecoveryPdf(wrong, "en", "Europe/Madrid"));
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toContain(
         "this backup's named key",
@@ -124,7 +134,7 @@ it("offers manual fields when a printed PDF has no attachment", async () => {
   const el = await mount();
   const stripped = await PDFDocument.create();
   stripped.addPage();
-  upload(el, new Uint8Array(await stripped.save()));
+  await upload(el, new Uint8Array(await stripped.save()));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toBe(
       "Enter the key from the sheet below.",
@@ -209,7 +219,7 @@ it("refuses an oversized PDF before reading its bytes", async () => {
 it("clears the native PDF picker when its backup selection changes", async () => {
   const el = await mount();
   const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
-  upload(el, await renderRecoveryPdf(saved, "en", "Europe/Madrid"));
+  await upload(el, await renderRecoveryPdf(saved, "en", "Europe/Madrid"));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Key loaded"));
   expect(picker.files).toHaveLength(1);
   el.selection = { ...selection, keyName: "Earlier key" };

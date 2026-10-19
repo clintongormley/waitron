@@ -1,4 +1,4 @@
-import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
+import { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
 import type { ModuleProvisioning } from "@waitron/module";
 import { ALLOCATED_FISCAL_SEED } from "./allocated-lifecycle.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";

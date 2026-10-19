@@ -4,21 +4,15 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "waitron": {
-    "commands": {
-      "waitron-paper-custodian": "./dist/paper-custodian.js"
-    }
-  },
   "scripts": {
-    "build": "node ../../scripts/bundle-node.mjs src/paper-custodian-bin.ts=dist/paper-custodian.js && pnpm build:custodian",
-    "test": "pnpm build:custodian && vitest run",
+    "test": "pnpm test:build-custodian && vitest run",
     "test:watch": "vitest",
-    "test:coverage": "pnpm build:custodian && vitest run --coverage",
+    "test:coverage": "pnpm test:build-custodian && vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:generate:custom": "drizzle-kit generate --custom",
-    "build:custodian": "node scripts/build-custodian.mjs"
+    "test:build-custodian": "node scripts/build-custodian.mjs"
   },
   "dependencies": {
     "@waitron/core": "workspace:*",
@@ -73,7 +67,7 @@
     "./src/*": "./src/*",
     "./test/*": "./test/*",
     "./package.json": "./package.json",
-    "./setup": "./src/setup/first-fiscal-screen.ts",
+    "./setup": "./src/setup/hour-setup.ts",
     "./recovery-document": "./src/recovery-document.ts",
     "./recovery-pdf": "./src/recovery-pdf.ts",
     "./recovery-pdf-node": "./src/recovery-pdf-node.ts",

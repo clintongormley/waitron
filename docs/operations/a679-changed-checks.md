@@ -2944,3 +2944,100 @@ not the remaining whole-branch entry/protocol, owner PDF, review or current-head
 Local receipts: Lane E `receipts/a679-ownership-qualification-20261019/`, including
 `final-results.json`, `coverage-gaps-final.json`, `test-preservation-final.json`, both control
 inventories, restored-candidate equality checks, full logs and cleanup records.
+
+
+## Production protocol retirement, 2026-10-19
+
+Authority: the approved hour-code design's keep/change/drop table and replacement plan Task 11
+retire active paper/Cloud/emergency allocation dispatch, while retaining historical source needed
+by unchanged tests and original-evidence inspection. The owner approved PDF viewing at 11:55
+and the exact server CLI migration at 11:58 in Lane E's questions.
+
+- `apps/server/src/first-fiscal-launch.test.ts`: apply exactly the approved patch,
+  SHA-256 `3b06f60e1c2dc2f46fe16067842238f77360ffcb9710c3004ecc86277891ba3d`.
+  The installed owned command replaces the JSON-authority positive path. Its saved installation
+  changes from `S000001` to exact `06RB`, with `A-06RB`, `FF-06RB` and `R-06RB` at one in
+  preproduction. Its root-conflict refusal changes from `setup.attempt_uncertain` to exact
+  `setup.attempt_conflict {}` with the same nonzero exit and byte-preserved records. A new
+  JSON-authority refusal remains. Original source run: two passed, one failed; exact applied
+  patch: all three pass. The new public-dispatch integration is qualified separately below.
+- Five hour-operation suites (`hour-dormant-standby`, `hour-recovery-state`,
+  `hour-standby-activation`, `hour-surviving-history` and `initial-hour-setup`) now import the
+  public production operation export. `initial-hour-setup` and the two dynamic imports in
+  `hour-history` use the public initial-setup export too. Existing assertions and fixture values
+  remain unchanged. Historical source dispatchers retain their tests; their prior hour-selector
+  precedence had routed twelve historical tests to the new policy. An independently installed
+  starting checkpoint reproduces the same twelve failures and one unhandled rejection.
+  Restore only historical dispatch/configuration behavior; the selected five files then pass
+  all 232 cases without changing their assertions.
+- `setup/first-hour.browser.test.ts` imports the production setup subpath and adds a missing-hour-
+  host refusal. Existing checks are unchanged. The initial wrapper copied the entire mutable API
+  object and broke three later-added document callbacks; the three existing assertions caught
+  this new regression. Keep the API object and its callbacks live after checking preparation.
+  Both complete first-hour/recovery-key files pass all 36 cases after correction.
+- `setup/recovery-key.browser.test.ts`: the native upload helper now awaits the promise started
+  by the actual picker event and its final render. Every old matching/mismatching-PDF, key-event,
+  manual-input and refusal assertion remains unchanged. The first full fiscal run failed the
+  wrong-key-name check with an empty error while its helper did not await the import. A controlled 1.5-second file read in an
+  independently installed candidate fails the original helper's unchanged refusal assertion;
+  the awaited helper passes with the same delay. Restoring the file passes all 20 cases.
+- New `hour-configuration.test.ts` uses four valid signed Cloud fixtures across ambient/configured
+  restore/re-registration. Each must refuse through production without writing a receipt or
+  changing current confirmation, while its direct historical collector still accepts it. All
+  four fail before removal of the fallback and pass afterwards. A fifth case first reproduces
+  unhosted paper-serial generation, then requires refusal. Replacing the public exports with the
+  historical dispatchers makes all five assertions fail; restoring them passes all five.
+
+The production setup factory refuses a missing hour-preparation host before returning the
+historical register interface. Reverting only its public subpath makes the new browser refusal
+fail; restoration passes all 16 first-hour cases. The independent candidate has its own frozen
+install; the initial full local clone was stopped after copying part of the repository's 5.4 GB
+object store, then replaced by an independent shallow file-protocol clone for these bounded
+checks. It is not the final whole-branch review candidate.
+
+Production configuration removes the custodian command/build and the wizard's offline-tool
+asset plugin. The HTML builder remains a test-only script for retained historical suites.
+The real setup build contains 13 files and no `custodian-tool` artifact. Its large-chunk warning
+remains. Dashboard-module type checking initially lacked declarations for Vite asset imports;
+adding its existing Vite dependency's client types makes all four affected package type checks
+pass. No protected writer, SQL, schema, migration, golden hash or fiscal-record assertion changes.
+
+The first combined five-file server run exceeded its 300-second outer deadline before a final
+count and reported a manager-promotion failure without the final diagnostic. A focused diagnostic
+passed both authority cases. This does not diagnose or fix the earlier timing failure. The
+subsequent complete run, full fiscal coverage, remaining whole-range prose/current-main
+integration and final installed reviews/CI are recorded separately as they complete.
+
+Local receipts: `~/waitron-campaign-e/receipts/a679-retirement-20261019/`.
+
+The second complete fiscal run passed 3,312 cases and failed only
+`initial-setup.test.ts:162`, its contribution-reference check. This deliberately follows the
+new production contribution: `FISCAL_PROVISIONING.initialSetup` must be the public hour
+`productionInitialSetup`, rather than the historical register fixture singleton. The comparison
+remains exact reference equality. This is module wiring under the approved Task 11 default-
+dispatch replacement, not a fiscal identity, series, money, permission or record expectation.
+The rest of the historical suite continues to inspect its original fixture contribution.
+The focused wiring/public-host pair then passes 51 cases, including three new unsupported-input
+snapshot cases. Preserve all earlier Changed test checks entries.
+
+Final source qualification for this checkpoint: all 3,316 fiscal cases pass in 154 files
+(233.74 seconds), then the unchanged coverage gate fails: statements 6,317/6,637 (95.17%),
+branches 5,996/6,386 (93.89%), functions 1,300/1,337 (97.23%) and lines 5,717/5,906 (96.79%).
+No threshold, exclusion, ignore, SQL, migration or protected writer was changed. The retained
+per-file inventory starts with hosted recovery (71 uncovered statements), followed by first-hour
+UI, historical initial setup and custody state. This remains real qualification work.
+
+The final complete server group passes 193 cases in five files. Final protected checks pass
+20, root guards 3,206, all four affected package types pass and scoped lint/code formatting pass.
+The final setup build contains 13 files without the custodian-tool asset; its chunk warning
+remains. Eight real-production-factory previews were visually inspected in English/Spanish,
+light/dark and at 390/1280 pixels, with no horizontal overflow. These use synthetic clocks and
+venue context, not the entire wizard. The first preview waited for the wrong English string
+(“The clocks agree.” instead of “Clocks agree.”); correcting that fixture selector produced the
+captured matrix, with no product change.
+
+The independent candidate's final wiring/snapshot suites pass 51 cases. Removing only the public
+input snapshot produces three intended malformed-input assertion failures; restoration passes
+all eight public-dispatch cases. The earlier export and native-reader controls remain valid for
+their unchanged assertions. Whole-range prose/current-main reconciliation, fiscal coverage, both
+final installed reviews, normal push hook/current-head CI and authorised landing remain open.
