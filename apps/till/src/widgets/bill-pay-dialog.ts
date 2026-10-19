@@ -86,14 +86,8 @@ export interface PayRequest {
   allocation?: AllocationChoice;
 }
 
-/** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge and, on a
- * practice venue, the outcome chosen. */
-export type BillPayConfirmDetail = ReceiptGuestsDetail & {
-  readerId?: string;
-  simulationOutcome?: "captured" | "declined";
-};
-/** `bill-pay-recheck`'s detail: on a handheld whose kept card needs a reader, the reader picked. */
-export type BillPayRecheckDetail = ReceiptGuestsDetail & { readerId?: string };
+/** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
+export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
 
 /** A refusal's code, the request field it names when it names one, for a tip the venue does not
  * take the most the card can be charged, and the permission an `authorization.not_permitted`
@@ -1120,14 +1114,7 @@ export class TillBillPayDialog extends LitElement {
       await this.#focusInvalid();
       return;
     }
-    const reader =
-      this.handheld && (unanswered.readerRefused || unanswered.noReader)
-        ? this.#readyReader()
-        : null;
-    this.#emit("bill-pay-recheck", {
-      ...this.#guestsDetail(unanswered.guests),
-      ...(reader === null ? {} : { readerId: reader.id }),
-    } satisfies BillPayRecheckDetail);
+    this.#emit("bill-pay-recheck", this.#guestsDetail(unanswered.guests));
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1632,7 +1619,7 @@ export class TillBillPayDialog extends LitElement {
 
   /** The practice simulator's result, or the reader when the venue has more than one. */
   #readerFields(): TemplateResult | typeof nothing {
-    if (this.handheld) return this.cardReader === "simulator" ? this.#simulationFields() : nothing;
+    if (this.handheld) return nothing;
     if (this.cardReader === "simulator") {
       const demoReaders = this.readers.filter((reader) => reader.provider === "simulator");
       return html`${
@@ -1783,9 +1770,6 @@ export class TillBillPayDialog extends LitElement {
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
       ...(reader === null ? {} : { readerId: reader.id }),
-      ...(reader !== null && this.cardReader === "simulator"
-        ? { simulationOutcome: this.simulationOutcome }
-        : {}),
     } satisfies BillPayConfirmDetail);
   }
 
