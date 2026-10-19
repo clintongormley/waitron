@@ -229,7 +229,10 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([
       "take-orders",
+      "take-cash",
+      "integrated-card-payment",
       "hand-keyed-card-payment",
+      "print-receipt",
       "prepare-orders",
       "hand-over-orders",
       "clock-in",

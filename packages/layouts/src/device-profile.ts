@@ -109,7 +109,10 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
   ],
   "phone-portrait": [
     "take-orders",
+    "take-cash",
+    "integrated-card-payment",
     "hand-keyed-card-payment",
+    "print-receipt",
     "prepare-orders",
     "hand-over-orders",
     "clock-in",

@@ -403,7 +403,10 @@ describe("applyVenue", () => {
         name: "Móvil",
         capabilities: [
           "take-orders",
+          "take-cash",
+          "integrated-card-payment",
           "hand-keyed-card-payment",
+          "print-receipt",
           "prepare-orders",
           "hand-over-orders",
           "clock-in",

@@ -42,6 +42,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
@@ -147,6 +148,10 @@ interface Venue {
   handheldDeviceId: string;
   /** The operator's session on a handheld whose profile does not take cash. */
   noCashCookie: string;
+  /** The operator's session on a handheld whose profile carries the seeded handheld actions. */
+  seededHandheldCookie: string;
+  /** The same, on a profile that also carries `open-cash-drawer`. */
+  seededHandheldWithDrawerCookie: string;
   printerId: string;
   /** The session's operator, a member of staff, who does not hold `sale.refund`. */
   staffId: string;
@@ -293,6 +298,22 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         capabilities: [...BASIC_ACTIONS],
       })
       .returning({ id: deviceProfiles.id });
+    const [seededHandheldProfile] = await tx
+      .insert(deviceProfiles)
+      .values({
+        name: "Seeded handheld",
+        formFactor: "phone-portrait",
+        capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]],
+      })
+      .returning({ id: deviceProfiles.id });
+    const [seededHandheldWithDrawerProfile] = await tx
+      .insert(deviceProfiles)
+      .values({
+        name: "Seeded handheld with drawer",
+        formFactor: "phone-portrait",
+        capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"], "open-cash-drawer"],
+      })
+      .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(
       tx,
       { locationId: cfg.locationId },
@@ -310,6 +331,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       profileId: profile!.id,
       handheldProfileId: handheldProfile!.id,
       noCashProfileId: noCashProfile!.id,
+      seededHandheldProfileId: seededHandheldProfile!.id,
+      seededHandheldWithDrawerProfileId: seededHandheldWithDrawerProfile!.id,
       printerId: printer.id,
     };
   });
@@ -329,6 +352,14 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const noCash = await enrolDeviceForTest(db, cfg, {
     name: "Patio",
     profileId: seeded.noCashProfileId,
+  });
+  const seededHandheld = await enrolDeviceForTest(db, cfg, {
+    name: "Móvil",
+    profileId: seeded.seededHandheldProfileId,
+  });
+  const seededHandheldWithDrawer = await enrolDeviceForTest(db, cfg, {
+    name: "Móvil con cajón",
+    profileId: seeded.seededHandheldWithDrawerProfileId,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
   // Every device prints receipts and slips here; its profile decides whether it opens the drawer.
@@ -364,6 +395,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
     handheldDeviceId: handheld.deviceId,
     noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
+    seededHandheldCookie: `${SESSION_COOKIE}=${await sessionOn(seededHandheld.deviceId)}; ${DEVICE_COOKIE}=${seededHandheld.deviceId}.${seededHandheld.token}`,
+    seededHandheldWithDrawerCookie: `${SESSION_COOKIE}=${await sessionOn(seededHandheldWithDrawer.deviceId)}; ${DEVICE_COOKIE}=${seededHandheldWithDrawer.deviceId}.${seededHandheldWithDrawer.token}`,
     printerId: seeded.printerId,
     staffId: seeded.personId,
     adminId: admin!.id,
@@ -824,6 +857,54 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toEqual([]);
+  });
+
+  async function cashTenOn(cookie: string) {
+    const billId = await bill120();
+    return request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+      cookie,
+    );
+  }
+
+  it("a cash bill payment from a device on the seeded handheld profile opens no drawer", async () => {
+    const jobsBefore = drawerJobCount();
+
+    const paid = await cashTenOn(venue.seededHandheldCookie);
+
+    expect(paid.json.code).toBeUndefined();
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const opens = await inTx((tx) =>
+      tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
+    );
+    expect(opens).toEqual([]);
+    expect(drawerJobCount()).toBe(jobsBefore);
+  });
+
+  it("the same cash payment opens the drawer once the profile also allows it", async () => {
+    const jobsBefore = drawerJobCount();
+
+    const paid = await cashTenOn(venue.seededHandheldWithDrawerCookie);
+
+    expect(paid.json.code).toBeUndefined();
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const opens = await inTx((tx) =>
+      tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
+    );
+    expect(opens).toHaveLength(1);
+    expect(drawerJobCount()).toBe(jobsBefore + 1);
   });
 
   it("refuses cash from a device whose profile does not take cash, writing nothing", async () => {
