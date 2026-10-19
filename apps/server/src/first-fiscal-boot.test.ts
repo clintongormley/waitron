@@ -18,12 +18,31 @@ import { parseEnvFile } from "./env-file.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
-import { publicFirstFiscalInput } from "../test/first-fiscal-public.js";
+import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { DatabaseSync } from "node:sqlite";
 
 vi.mock("./trading-config.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("./fiscal-readiness.js", { spy: true });
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const wall = Date.now(),
+      monotonic = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: wall,
+      uncertaintyMs: 500,
+      wallStartedMs: wall,
+      wallFinishedMs: wall,
+      monotonicStartedMs: monotonic,
+      monotonicFinishedMs: monotonic,
+    };
+  },
+}));
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
   return {
@@ -124,6 +143,29 @@ it.each(["trading", "completion-state", "completion-marker"])(
       };
       const readiness = await post("/setup-api/fiscal-test", live);
       expect(readiness).toEqual({ status: 200, body: { status: "uncertain" } });
+      const challenge = await post("/setup-api/first-setup/preparation", {
+        module: MODULE,
+        proposal: { action: "clock-challenge" },
+      });
+      expect(challenge.status).toBe(200);
+      const comparison = await post("/setup-api/first-setup/preparation", {
+        module: MODULE,
+        proposal: {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.body.preparation.id, instantMs: Date.now() },
+        },
+      });
+      expect(comparison.status).toBe(200);
+      if (comparison.body.preparation.clock.requiresConfirmation) {
+        const confirmed = await post("/setup-api/first-setup/preparation", {
+          module: MODULE,
+          proposal: {
+            action: "confirm-clock",
+            comparisonId: comparison.body.preparation.id,
+          },
+        });
+        expect(confirmed.status).toBe(200);
+      }
       const reconfirm = await post("/setup-api/first-setup/reconfirm", {
         password: PASSWORD,
         purpose: "block-use",
@@ -131,29 +173,55 @@ it.each(["trading", "completion-state", "completion-marker"])(
       expect(reconfirm.status).toBe(200);
       const chosen = await post("/setup-api/first-setup/candidates", {
         module: MODULE,
-        proposal: { serials: [1] },
+        proposal: { answer: "no" },
         ...reconfirm.body,
       });
-      expect(chosen.status).toBe(200);
+      expect(chosen.status, JSON.stringify(chosen.body)).toBe(200);
       state = chosen.body.state;
       const response = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/request`, {
         dispatcher: agent,
         headers: headers(),
       } as RequestInit);
       const exported = await response.json();
-      const signed = publicFirstFiscalInput(exported.modules[0].request);
+      const prepared = exported.modules.find((entry: { module: string }) => entry.module === MODULE)
+        .request.input;
       const imported = await post("/setup-api/first-setup/input", {
         module: MODULE,
-        input: signed.input,
+        input: prepared,
       });
       expect(imported.status).toBe(200);
       state = imported.body.state;
+      const staged = await post("/setup-api/first-setup/node-key", {
+        reconfirmation: (
+          await post("/setup-api/first-setup/reconfirm", {
+            password: PASSWORD,
+            purpose: "block-use",
+          })
+        ).body.reconfirmation,
+      });
+      expect(staged.status).toBe(200);
+      const statement = {
+        kind: "waitron-recovery-document",
+        installationCodes: [prepared.allocation.installationIdentity],
+        version: 1,
+        scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "production" },
+        taxpayerName: request.legalName,
+        venueName: request.location.name,
+        createdAt: new Date().toISOString(),
+        nodeKey: { nodeId: staged.body.stage.nodeId, name: staged.body.stage.name },
+      };
+      const document = {
+        module: MODULE,
+        stageId: staged.body.stage.stageId,
+        inputDigest: firstFiscalPublicDigest(prepared),
+        bindingDigest: firstFiscalPublicDigest(statement),
+        documentDigest: firstFiscalPublicDigest({ syntheticPdf: true, statement }),
+      };
       expect(
         (
-          await post("/setup-api/first-setup/enrol", {
-            module: MODULE,
-            publicKey: signed.key,
-            comparison: signed.key.fingerprint,
+          await post("/setup-api/first-setup/recovery-document", {
+            ...document,
+            statement,
           })
         ).status,
       ).toBe(200);
@@ -163,9 +231,9 @@ it.each(["trading", "completion-state", "completion-marker"])(
       });
       expect(
         (
-          await post("/setup-api/first-setup/current-master", {
-            module: MODULE,
-            statement: signed.current,
+          await post("/setup-api/first-setup/recovery-document-kept", {
+            ...document,
+            kept: true,
             ...reconfirmActivation.body,
           })
         ).status,

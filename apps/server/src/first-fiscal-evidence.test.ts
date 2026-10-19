@@ -2,6 +2,7 @@ import { readFile, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
+import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
 
@@ -9,7 +10,11 @@ const fixtures: Awaited<ReturnType<typeof firstFiscalFixture>>[] = [];
 async function fixture() {
   const f = await firstFiscalFixture();
   fixtures.push(f);
-  const options = { ...f, bootId: "boot-1" };
+  const options = {
+    ...f,
+    modules: historicalFirstFiscalDocuments(f.modules),
+    bootId: "boot-1",
+  };
   const evidence = createFirstFiscalEvidence(options);
   const enrol = () => evidence.enrol(f.ownerAttempt, MODULE, f.key, f.key.fingerprint);
   const confirm = async (statement: unknown = f.current) => {

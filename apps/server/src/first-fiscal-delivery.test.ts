@@ -7,6 +7,7 @@ import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
     const now = Date.now(),
@@ -39,7 +40,11 @@ async function fixture() {
     f.ownerAttempt,
     await f.owner.reconfirm(f.ownerAttempt, f.password, "block-use"),
   );
-  const delivery = createFirstFiscalDelivery({ ...f, keys });
+  const delivery = createFirstFiscalDelivery({
+    ...f,
+    keys,
+    modules: historicalFirstFiscalDocuments(f.modules),
+  });
   const input = {
     module: f.module,
     stageId: staged.stage.stageId,

@@ -3346,3 +3346,46 @@ unsharded counts. Each concurrent report directory is outside the package and di
 The first deadline-wrapper invocation omitted its required separator and executed no tests;
 its six immediate usage failures remain unqualified in receipts. The corrected invocation
 supplies the counts and timings above. No current-head CI runtime is claimed for this layout.
+
+## Retained readers and public HTTPS integration, 2026-10-19
+
+`first-fiscal-evidence.test.ts` and `first-fiscal-delivery.test.ts` now supply the historical
+initial-setup parser only to their direct signed-evidence and document-reader instances.
+`test/historical-first-fiscal.ts` preserves each supplied module's operation dispatcher. The
+shared fixtures, actual public routes, current hour-delivery case and production composition
+keep their current modules. Every existing assertion in these two suites stays unchanged.
+This follows replacement-plan Task 11's retention of historical source for unchanged tests
+and original-byte inspection. The pair reproduces 55 failures with production's unconfigured
+parser and then passes all 87 cases with the explicitly scoped historical parser.
+
+`first-fiscal-boot.test.ts` replaces its serial proposal and signed-packet builder with the
+approved clock comparison and current-hour proposal. Its two successful enrol/current-master
+HTTP checks become successful recovery-document/register-kept checks. It stages the node key
+through HTTP and binds a synthetic document statement to that stage and selected input; this
+is not a PDF-rendering test. The release floor and outside clock response are synthetic;
+the production activation, publication interruptions, HTTPS and separate-process restart stay
+real. All existing readiness, owner, interruption, recovery, row-count and counter values stay.
+The final fiscal database assertion block matches its prior source byte for byte. The suite
+reproduces three serial-proposal failures and passes all four cases through current requests.
+The initial migration omitted source-run release metadata and manual clock confirmation,
+producing `clock_unconfirmed`; those fixture omissions and the corrected run are retained.
+
+`setup-tool-download.boot.test.ts` now checks the approved removal of the downloaded tool.
+It requires no built `custodian-tool.html`, a 404 for that URL and no attachment header. The
+claim-free status and readable built wizard assertions stay. The generic attachment-serving
+test stays unchanged. The obsolete built-file read first fails with ENOENT; both final cases
+pass. Authority is the approved hour design's removal of the downloaded tool and Task 11.
+
+The separately frozen-installed candidate passes all 92 cases across those four changed suites.
+Bypassing historical fingerprint comparison makes the existing enrolment refusal fail; removing
+delivery's early grant deletion admits both concurrent readers and fails its existing assertion.
+Each restored focused selection passes. Those filtered controls do not count skipped cases as
+passes. The untouched golden/immutability pair passes 20 cases after the current-main rebase.
+
+The proposed composition patch is separate and remains unapplied. It keeps six signed-file
+checks against an explicitly named historical dispatcher and adds three real production-composition
+cases covering legacy refusal and current-hour activation. All eleven original assertion
+expressions remain syntactically present; that does not make their changed dispatcher the same
+test scope. The queue's exact fiscal-check rule therefore gates that proposed scope change.
+Its literal patch and SHA-256 are in Lane E's local questions. No production source, SQL, migration,
+guard, coverage threshold or exclusion changes in this qualification step.

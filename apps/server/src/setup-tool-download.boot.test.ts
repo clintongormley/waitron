@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
 
-it("downloads the actual built public offline tool through real setup boot without claiming an identity", async () => {
+it("serves the built wizard without the retired offline tool or an identity claim", async () => {
   const root = await mkdtemp(join(tmpdir(), "setup-tool-boot-"));
   let server: StartedServer | undefined;
   let agent: Agent | undefined;
@@ -20,7 +20,9 @@ it("downloads the actual built public offline tool through real setup boot witho
       timeout: 60_000,
     });
     const wizard = join(repository, "apps/setup/dist");
-    const expected = await readFile(join(wizard, "setup-assets/custodian-tool.html"));
+    await expect(readFile(join(wizard, "setup-assets/custodian-tool.html"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     const migrations = join(root, "migrations");
     for (const [index, set] of manifestSets().entries()) {
       await cp(
@@ -44,11 +46,8 @@ it("downloads the actual built public offline tool through real setup boot witho
     agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
     const via = { dispatcher: agent } as RequestInit;
     const response = await fetch(`https://127.0.0.1:${port}/setup-assets/custodian-tool.html`, via);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Disposition")).toBe("attachment");
-    expect(response.headers.get("Content-Type")).toContain("text/html");
-    expect(Buffer.from(await response.arrayBuffer())).toEqual(expected);
-    expect(expected.toString()).toContain("connect-src 'none'");
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Content-Disposition")).toBeNull();
     const status = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, via);
     expect(await status.json()).toEqual({ claimed: false });
     const index = await fetch(`https://127.0.0.1:${port}/`, via);

@@ -247,7 +247,7 @@ hook and fiscal package pass; the overall branch is not ready to land.
 
 Complete the remaining test integration before claiming package-wide acceptance. Composition
 and server cases still submit signed allocations or serial candidate proposals to the new hour
-interfaces. Other cases still expect the retired offline tool or the earlier installation names.
+interfaces. Other recovery cases still expect the earlier installation names.
 Trace each failing path and preserve its behavioral checks when adapting the inputs. Do not
 restore the retired production dispatcher, bypass a gate, or label every failure as a stale test
 without running it. Existing fiscal expectations need the queue's exact-line approval.
@@ -255,6 +255,14 @@ without running it. Existing fiscal expectations need the queue's exact-line app
 The recovery-form helpers and source PDF check now use the approved single field with its two
 check characters. Their complete suites pass locally, as does setup's full coverage run. These
 corrections do not qualify the remaining server or composition cases.
+
+The internal signed-evidence and historical document-reader checks now use their original
+parser explicitly. They retain their behavioral assertions without changing production dispatch.
+The real HTTPS interruption cases use clock comparison, hour selection and kept recovery-document
+requests; their fiscal-row and counter assertions remain unchanged. The built wizard check now
+requires the retired offline-tool URL to return 404. Other setup, retirement, restore and promotion
+cases remain open. A separately tested composition-check patch awaits exact scope approval in
+Lane E's questions; it has not been applied to the feature branch.
 
 Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
 reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
