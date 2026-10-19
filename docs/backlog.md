@@ -995,14 +995,34 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud**
-  (plan `docs/superpowers/plans/2026-10-14-translate-all.md`, Task 21, adapted to paging as PR 2 of
-  `docs/superpowers/plans/2026-10-19-translate-all-collect-pages.md`). Cloud's side, paging
-  included, is on Cloud's `main`, and the box now fetches results one page at a time (A689-21).
-  Left: the recorded Santet run, and the joint fault proof Cloud's release gate asks for. Cloud's
+- **Translate all: the joint fault proof Cloud's release gate asks for.** Cloud's contract: "Do not
+  go live until pinned Cloud and Waitron candidates jointly prove multi-page collection,
+  crash/reply-loss retry, deduplication, bounded decoded reads and release only after durable
+  completion." The Santet run (A689-21, 2026-10-19, recorded under Task 21 of
+  `docs/superpowers/plans/2026-10-14-translate-all.md`) proved multi-page collection and release
+  after the last page by hand, with no faults. Lane D is writing the fault script on Cloud's side
+  (D85); on 2026-10-19 it reported that Waitron's `apps/server/scripts/cloud-integration-fixture.ts`
+  stops at start with `sif.allocation_invalid`, and asked for that fixture to be repaired. Cloud's
   `servicesVersion` 2 must be deployed before a box built from `main` talks to it
   ([cloud-connection.md](developers/cloud-connection.md)).
-  [Detail](backlog/catalogue.md#translate-all-run-the-end-to-end-check-on-the-santet-venue-against-a-local-waitron-cloud)
+  [Detail](backlog/catalogue.md#translate-all-the-joint-fault-proof-clouds-release-gate-asks-for)
+
+- **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
+  notice.** The dialog's live reload reads the suggestions, and that read marks the run opened
+  (`apps/server/src/content-suggestions-api.ts`), so a dialog forgotten on another device means
+  nobody sees the notice. Seen in the Santet run (A689-21). Working as built; the owner decides
+  whether it should change.
+
+- **Cloud services shows Translate all only from the second status check after connecting.** The
+  first Refresh status is a lease renewal, and only a configuration request asks for services
+  version 2 (`apps/server/src/cloud-installation.ts`). Seen in the Santet run (A689-21).
+
+- **Content languages says the default language has nothing missing while Translate all sends a
+  default-language name for every item.** On Santet (default Catalan, no customer-facing names
+  set) the list read "Catalan · Nothing missing" and the job asked for Catalan for all 613 items;
+  each dialog row said the default name "will not be copied from the staff name". The two counts
+  use different rules for the default language; which one is meant was not traced. Seen in the
+  Santet run (A689-21).
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and

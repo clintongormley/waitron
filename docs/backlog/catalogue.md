@@ -679,25 +679,22 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
 
-## Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud
+## Translate all: the joint fault proof Cloud's release gate asks for
 
-Waitron's side of Translate all (A689, plan tasks 1 to 20) is on `main`, tested only against the
-fake Cloud in `apps/server/test/translation-cloud-fixture.ts`. Task 21 of
-[the plan](../superpowers/plans/2026-10-14-translate-all.md) runs it on the Santet venue against a
-local Cloud. Cloud's side is on Cloud's `main`: its four translation routes, its worker, the
-`servicesVersion` 2 configuration reply, and collect answering one page of at most 16 MiB at a time (Cloud's `packages/translation/src/collect-page.ts`).
-A689-21 made the box fetch and store those pages
-([its plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md), PR 1). What is left
-is that plan's PR 2:
+Waitron's side of Translate all (A689) is on `main`, and A689-21 made the box fetch Cloud's results
+one page at a time ([its plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md)). Its
+part 2a, the Santet run against a local Cloud with Cloud's fake provider, ran on 2026-10-19 and
+passed: two pages per job, every item accounted for, release after the last page, Cloud's copy
+deleted. The record is under Task 21 of [the plan](../superpowers/plans/2026-10-14-translate-all.md).
 
-- **2a, the Santet run**, Task 21 adapted to paging, with Cloud's fake provider making the result
-  larger than one page (the owner chose the fake provider on 2026-10-19, open question 3). Its
-  record is a docs-only commit.
-- **2b, the joint fault proof** Cloud's release gate asks for. Its contract's words: "Do not go
-  live until pinned Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss
-  retry, deduplication, bounded decoded reads and release only after durable completion." The plan
-  recommends a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`, built by lane D on
-  Cloud's side; the owner chose that on 2026-10-19 (open question 4).
+What is left is part 2b, the joint fault proof. The contract's words: "Do not go live until pinned
+Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss retry,
+deduplication, bounded decoded reads and release only after durable completion." The owner chose
+on 2026-10-19 (open question 4) a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`,
+built by lane D (D85): a lost page reply, a box restart between pages, a lost release reply, and
+expiry between pages. Lane D reported on 2026-10-19 that the Waitron process its script starts,
+`apps/server/scripts/cloud-integration-fixture.ts`, stops at start with `sif.allocation_invalid`
+(reason `reauthentication_required`), and asked for that fixture to be repaired on Waitron's side.
 
 - **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
   the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid
@@ -715,10 +712,6 @@ is that plan's PR 2:
   now it is free for connected venues, capped per venue. The owner's approval covers the proposed
   $5 per venue per month cap and Cloud's submit allowance (4 jobs in flight, 1 per address).
   Cloud's spec still says "proposed" until its first implementation change updates it.
-- **When the check passes**, delete this entry (Step 8 of part 2a in
-  [the collect-pages plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md));
-  otherwise each failure becomes its own entry. Part 2b, lane D's script, is not done by that run:
-  if it is still open then, it gets an entry of its own before this one is deleted.
 
 ## Translate all: shared collect-page test vectors
 

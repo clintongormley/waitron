@@ -309,6 +309,10 @@ Order: 1 and 2 are independent; 3 needs 2; 4 needs 3; 5 needs 1 and 3; 6 needs 4
 
 # PR 2 — Task 21's end-to-end check against a local Waitron Cloud
 
+> **2026-10-19:** part 2a ran and passed; its record is under Task 21 of
+> [the Translate all plan](2026-10-14-translate-all.md). Step 5's origin had to be
+> `http://localhost:3000`, not `127.0.0.1`. Part 2b is lane D's Cloud script.
+
 **What it is.** It cannot be a committed Waitron test: it needs a running Cloud (its account server, its worker and PostgreSQL) from another, closed repository, and Waitron's CI has none. It is two things:
 
 - **2a, a recorded manual run on the Santet venue** — the original Task 21, adapted to paging. Its only commit is docs-only (the run record and the backlog), pushed direct under the docs-only rule; a defect it finds is fixed test-first in its own PR against the task that owns the code, and the run repeated.

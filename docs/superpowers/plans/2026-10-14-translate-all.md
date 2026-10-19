@@ -13066,6 +13066,63 @@ git commit -s -m "Document Translate all and update the backlog for what it fini
 - [ ] **Step 6: Check what Cloud kept.** In Cloud's database, the job's body and results are gone after release (the contract's release behaviour); only counts remain.
 - [ ] **Step 7: Report** what was measured, in the form "pressed X, saw Y" (CLAUDE.md §1), including timings and the counts of suggestions, failures and drops. Delete the backlog entry from Task 20 Step 3 in a docs-only commit if everything passed; otherwise turn each failure into a backlog entry.
 
+#### Run record, 2026-10-19 (part 2a of the collect-pages plan)
+
+Run unattended by campaign lane A between 22:24 and 22:41 CEST, with no code changed. Waitron
+`93de9902c` (#1901, the paging change) on the Santet worktree after `local/square/reset.sh`; Cloud
+`09056eba6` from a throwaway worktree, its local Compose stack started with
+`CLOUD_TRANSLATION=1`, its translation worker on the host, and a scratch fake provider built on
+Cloud's `packages/translation/test/fake-openai.ts` (`echoFirstPass`, `emptyReview`) that added ten
+500-character `internal` spelling fixes of `€` to every item so the result needed more than one
+page. The browsers were headless Chromium driven by Playwright.
+
+- **Step 1, vectors.** `apps/server/test/cloud-translation-vector.json` and the contract's
+  "Shared test vectors" block were identical except Waitron's `source`. With
+  `src/cloud-translation.test.ts` pointed at the contract's copy in a throwaway worktree:
+  `Tests 7 passed (7)`. Control, one signature character changed: `Tests 1 failed | 6 passed (7)`.
+- **Before pressing.** Counted with the box's own `readSuggestionGaps`, `collectSuggestionItems`
+  and `buildSuggestionJob` on a copy of the venue: 613 items (406 products, 159 variants, 29
+  sections, 15 option labels, 3 option lists, 1 menu), each missing Catalan, Spanish and English;
+  one job of 133,388 bytes. Predicted: 2 pages; `dropped` 9 × 613 = 5,517, because the store keeps
+  the first valid fix per item and drops the other nine
+  (`packages/catalogue/src/content-suggestion-store.ts:155-168`).
+- **Pairing.** Created a Cloud account, connected Santet from Cloud services with the code, approved
+  it in Cloud, allowed menu translation on Cloud's account page. The box had to use
+  `WAITRON_CLOUD_ORIGIN=http://localhost:3000`: the local stack answers `127.0.0.1:3000` with 403,
+  because its portal origin is `http://localhost:3000`. The first Refresh status after connecting
+  showed three services and no Translate all; the second showed "Translate all · Configured". The
+  first refresh is a lease renewal, and only a configuration request asks for services version 2
+  (`apps/server/src/cloud-installation.ts:359-360`).
+- **Run 1, Spanish dialog → Translate all.** About 5.4 s from pressing to stored, one Cloud job.
+  Box job: `collected_refs` 613 = `total` 613, failed 0, `dropped` 5,517, released. 2,452
+  suggestion rows (1,839 names and 613 fixes).
+- **Runs 2 to 5** (French, German, Italian and Portuguese enabled one at a time, 618 items each). A
+  read-only poller every 10 ms on `content_suggestion_jobs` saw, in each run, `collect_cursor` null
+  → 549 → null: 2 pages, 549 and 69 items; `dropped` 4,941 after page 1 and 5,562 at the end
+  (predicted 9 × 618); `released` set after the job was `done`. Cloud's `collected_at`, which only
+  its release sets (`packages/translation/src/job-store.ts`), fell between the box's `done` and its
+  `released` in every run (run 2: 56.896 < 56.933 < 56.953 s). Run 1 finished between two readings
+  of a 1-second poller, so its two pages were not seen. Neither Cloud's account server nor the box
+  logs these requests, so the number of release requests was not counted.
+- **Cloud's database afterwards.** All five `translation_jobs` rows `collected`, done = total,
+  failed 0; `translation_job_bodies`, which also holds the results, had 0 rows.
+- **Task 21 Step 5's list, all seen:** the bar read "Translating… 0 of 618" and then "618 of 618"
+  (no counts between: Cloud finished in about 2 s and the box polls every 5 s); one job per press;
+  the bell showed "Translations ready: 4111 suggestions are waiting for review." and cleared once the
+  dialog was opened; rows showed "Suggested" with "Possible spelling fix"; saving a page took
+  Spanish from 613 missing to 513; discarding one in the Spanish dialog removed that item's Spanish and Catalan suggestions and its fix, leaving its English one; closing and
+  reopening kept the rest; a second browser showed the same suggestions; Refresh status during a
+  running job answered "Cloud access active", not busy.
+- **Observed, not judged a defect here** (each is a backlog entry): an Edit translations dialog left
+  open in another browser marked the run opened, so the bell notice never appeared (runs 3 and 4);
+  Translate all is missing from Cloud services until the second status check after connecting;
+  Content languages says "Catalan · Nothing missing" while Translate all sends a Catalan name for all
+  613 items, every product's customer-facing name being empty.
+
+Santet was reset with `local/square/reset.sh` afterwards, and the local Cloud stack, worker and fake
+provider were removed. Part 2b, the joint fault proof Cloud's release gate asks for, is not done by
+this run.
+
 ---
 
 ## Self-review
