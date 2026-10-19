@@ -2308,6 +2308,15 @@ The request/compiler cases in `client.station-ownership.test.ts` and the app pay
 serialization, changed identity/ownership, stale choices and retry. These checks close that T24
 client finding; the remaining whole-path audit and delivery work above stay open.
 
+Recalled-dish removal captures its bill context after flushing the draft and before reading the
+stored lines and reasons. The existing adjustment checks then refuse a preview, confirmation or
+manager PIN after that bill's draft revision changes. A check inside the delayed source command
+also compares that original context before sending, and Discard stops its remaining source
+previews after a changed observation. Seven added cases in `till-app-drafts.test.ts` cover those
+stages, a late reasons answer, the delayed command, a paused Discard preview and an unrelated
+bill's changed version. These checks concern the confirmation's editing state; the revised cancellation and
+Finish-table policies still wait for A758 above.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured

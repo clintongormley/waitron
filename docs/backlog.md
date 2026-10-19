@@ -2226,8 +2226,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The line-Recall client also carries that observation, and Recall to New order exposes the
   returned editing state. Stored station choices now carry the original bill observation through
   the question and an inactive-station retry; a changed app identity or bill observation stops
-  the waiting path before another request. Continue auditing the remaining public ownership
-  contracts against their app callers and server checks.
+  the waiting path before another request. Recalled-dish removal now retains its opening bill
+  context while reading reasons and checking a preview, confirmation or manager PIN; a newer
+  draft revision refuses the old action, including a command delayed after confirmation. Continue
+  auditing the remaining public ownership contracts against their app callers and server checks.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

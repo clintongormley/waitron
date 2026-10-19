@@ -11630,16 +11630,19 @@ export class TillApp extends LitElement {
         return;
       }
       if (!live()) return;
+      const bill = this.#billComposition([sync.billId]);
+      if (bill === null) return;
       await this.#loadTabLines();
-      if (!live()) return;
+      if (!live() || !this.#billCompositionUnchanged(bill)) return;
       const source = store.lines.find((row) => row.source?.line.id === sourceId)?.source;
       if (source === undefined) return;
       const sources = store.lines.flatMap((row) => (row.source === undefined ? [] : [row.source]));
-      const reasons = await this.api.listAdjustmentReasons();
-      if (!live()) return;
+      const reasons = await bill.api.listAdjustmentReasons();
+      if (!live() || !this.#billCompositionUnchanged(bill)) return;
       unlock = store.lockEdits();
       this.adjusting = {
         id: ++this.#adjustments,
+        bill,
         surface: "table",
         orderId: sync.billId,
         revision: this.tabRevision,
@@ -11791,7 +11794,7 @@ export class TillApp extends LitElement {
               sourceDraftId: open.source.sync.expectedEdit!.draftId!,
             }),
           );
-          if (this.#adjustingNow(open.id) === null) return;
+          if (!this.#adjustmentReady(open)) return;
         }
         const roles = ["admin", "manager", "supervisor", "staff"] as const;
         preview = {
@@ -11931,7 +11934,11 @@ export class TillApp extends LitElement {
     let refusal: unknown;
     try {
       const outcome = await sync.runCommand(async (state, options) => {
-        if (!live() || !sync.store.lines.some((line) => line.source?.line.id === source.lineId))
+        if (
+          !live() ||
+          !this.#billCompositionUnchanged(open.bill!) ||
+          !sync.store.lines.some((line) => line.source?.line.id === source.lineId)
+        )
           throw { code: "draft.out_of_date" };
         try {
           if (source.discard !== undefined) {

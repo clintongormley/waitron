@@ -21,7 +21,12 @@ import {
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
+import {
+  DRAFT_SAVE_DELAY_MS,
+  DraftSync,
+  type DraftCommandState,
+  type DraftCommandOutcome,
+} from "./state/draft-sync.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -7031,6 +7036,201 @@ describe("recalled draft source splitting", () => {
     expect(draft(el).editsLocked).toBe(true);
     expect(banner(el)?.textContent).toContain("Luis");
     expect(api.applyAdjustment).toHaveBeenCalledOnce();
+  });
+
+  describe("recalled removal confirmation ownership", () => {
+    async function refreshSource(el: TillApp): Promise<void> {
+      const revision = ++server.drafts[0]!.revision;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => tableOrder(el)?.billEdit?.draftRevision).toBe(revision);
+      await flush(el);
+    }
+
+    it.each(["preview", "confirm", "approval"])(
+      "does not refresh a recalled removal's authority at %s",
+      async (stage) => {
+        const { el } = await cancellationOpening({
+          previewAdjustment: vi.fn().mockResolvedValue({
+            reduction: "17.25",
+            nominalValue: "17.25",
+            needsApproval: stage === "approval" ? "manager" : null,
+            overBillDiscountLimit: false,
+            lines: [],
+          }),
+          listAdjustmentApprovers: vi
+            .fn()
+            .mockResolvedValue([{ personId: "manager-1", displayName: "Marta" }]),
+        });
+        if (stage === "preview") {
+          draft(el).removeLine(0);
+          await flush(el);
+        } else await cancellationPreview(el);
+        if (stage === "approval") {
+          emit(adjustment(el)!, "adjust-confirm");
+          await flush(el);
+        }
+        await refreshSource(el);
+        if (stage === "preview")
+          emit(adjustment(el)!, "adjust-preview", {
+            action: "cancel",
+            reasonId: "mistake",
+            note: "Wrong dish",
+          });
+        else if (stage === "confirm") emit(adjustment(el)!, "adjust-confirm");
+        else
+          emit(el.shadowRoot!.querySelector("[data-adjust-approval]")!, "override-confirm", {
+            personId: "manager-1",
+            pin: "7777",
+          });
+        await flush(el, 6);
+        if (stage === "preview") expect(api.previewAdjustment).not.toHaveBeenCalled();
+        expect(api.applyAdjustment).not.toHaveBeenCalled();
+        expect(server.drafts[0]!.lines).toEqual([reference()]);
+        expect(adjustment(el)?.refusal).toBe("draft.out_of_date");
+      },
+    );
+
+    it("does not open recalled removal after its reasons read outlives the bill observation", async () => {
+      let resolve!: (reasons: []) => void;
+      const { el } = await cancellationOpening({
+        listAdjustmentReasons: vi.fn(
+          () =>
+            new Promise<[]>((answer) => {
+              resolve = answer;
+            }),
+        ),
+      });
+      draft(el).removeLine(0);
+      await expect.poll(() => api.listAdjustmentReasons!.mock.calls.length).toBe(1);
+      await refreshSource(el);
+      resolve([]);
+      await flush(el, 6);
+      expect(adjustment(el)).toBeNull();
+      expect(api.previewAdjustment).not.toHaveBeenCalled();
+      expect(api.applyAdjustment).not.toHaveBeenCalled();
+      expect(server.drafts[0]!.lines).toEqual([reference()]);
+      expect(draft(el).sending).toBe(false);
+      expect(draft(el).editsLocked).toBe(false);
+    });
+  });
+
+  it("recalled removal keeps its confirmation state while the source command waits", async () => {
+    const { el } = await cancellationOpening();
+    await cancellationPreview(el);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runCommand = DraftSync.prototype.runCommand;
+    const command = vi.spyOn(DraftSync.prototype, "runCommand").mockImplementation(async function <
+      T,
+    >(
+      this: DraftSync,
+      send: (state: DraftCommandState, options: { signal: AbortSignal }) => Promise<T>,
+    ): Promise<DraftCommandOutcome<T>> {
+      await held;
+      return (runCommand<T>).call(this, send);
+    });
+    try {
+      emit(adjustment(el)!, "adjust-confirm");
+      await expect.poll(() => command.mock.calls.length).toBe(1);
+      const revision = ++server.drafts[0]!.revision;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => tableOrder(el)?.billEdit?.draftRevision).toBe(revision);
+      release();
+      await flush(el, 8);
+      expect(api.applyAdjustment).not.toHaveBeenCalled();
+      expect(server.drafts[0]!.lines).toEqual([reference()]);
+      expect(adjustment(el)).toBeNull();
+      expect(banner(el)?.textContent).toContain(t("table.draft_changed_elsewhere"));
+    } finally {
+      release();
+      command.mockRestore();
+    }
+  });
+
+  it("recalled Discard stops its preview list when the bill observation changes", async () => {
+    let release!: (value: import("./api/client.js").AdjustmentPreview) => void;
+    const preview = {
+      reduction: "17.25",
+      nominalValue: "17.25",
+      needsApproval: null,
+      overBillDiscountLimit: false,
+      lines: [],
+    } as const;
+    const previewAdjustment = vi
+      .fn()
+      .mockResolvedValue(preview)
+      .mockImplementationOnce(
+        () =>
+          new Promise<import("./api/client.js").AdjustmentPreview>((resolve) => {
+            release = resolve;
+          }),
+      );
+    const { el, order } = await cancellationOpening({ previewAdjustment, discardDraft: vi.fn() }, [
+      reference("source-9", "8.63", "1"),
+    ]);
+    try {
+      await discardPreview(el, order);
+      await expect.poll(() => previewAdjustment.mock.calls.length).toBe(1);
+      const revision = ++server.drafts[0]!.revision;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => tableOrder(el)?.billEdit?.draftRevision).toBe(revision);
+      release({ ...preview, lines: [] });
+      await flush(el, 6);
+      expect(previewAdjustment).toHaveBeenCalledOnce();
+      expect(adjustment(el)?.refusal).toBe("draft.out_of_date");
+      expect(adjustment(el)?.preview).toBeNull();
+      expect(server.drafts[0]!.lines).toEqual([reference(), reference("source-9", "8.63", "1")]);
+      expect(api.applyAdjustment).not.toHaveBeenCalled();
+      expect(api.discardDraft).not.toHaveBeenCalled();
+    } finally {
+      release({ ...preview, lines: [] });
+    }
+  });
+
+  it("recalled removal retains its shown observation when another bill changes", async () => {
+    let otherVersion = 0;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await server.listDrafts(partyId);
+      return {
+        ...snapshot,
+        billEdits: snapshot.billEdits.map((edit) =>
+          edit.billId === "wo-check" ? { ...edit, editorVersion: otherVersion } : edit,
+        ),
+      };
+    });
+    const { el } = await cancellationOpening({ listDrafts });
+    await cancellationPreview(el);
+    const read = listDrafts.mock.calls.length;
+    otherVersion = 9;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(read);
+    await flush(el);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(api.applyAdjustment).toHaveBeenCalledExactlyOnceWith(
+      "wo-4",
+      {
+        action: "cancel",
+        reasonId: "mistake",
+        note: "Wrong dish",
+        quantity: "2",
+        lineId: "source-7",
+        expectedRevision: 0,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 2,
+        },
+        sourceDraftId: "draft-recalled",
+        submissionId: expect.any(String),
+      },
+      expect.any(Object),
+    );
+    expect(adjustment(el)).toBeNull();
+    expect(server.drafts[0]!.lines).toEqual([]);
   });
 
   it("source cancellation locks a stale draft after a successful write whose recovery read fails", async () => {
