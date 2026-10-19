@@ -637,6 +637,46 @@ describe("a basket that spans a publish", () => {
     expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
     expect(payButton(el).disabled).toBe(false);
   });
+
+  it("blocks a line whose dish v2 sells in a measure, for its extra, until it is replaced", async () => {
+    const measured = { ...burgerOffer("1.20"), unit: { ...unit, measure: true as const } };
+    const { el } = await mountApp({
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValue(
+          catalogue("v2", [offer("offer-lemonade", "Lemonade", "3.00"), measured]),
+        ),
+    });
+    await toCounter(el);
+    add(el, "Burger", {
+      extras: [
+        {
+          listId: "list-extras",
+          productId: "cheese",
+          name: "Extra cheese",
+          price: "1.00",
+          quantity: 1,
+        },
+      ],
+    });
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+
+    expect(dialogText(el)).toContain("Extra cheese is no longer offered with this dish");
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(counter(el).store.lines[0]!.blocked).toBe("extra_removed");
+    expect(counter(el).store.lines[0]!.extras).toEqual([
+      expect.objectContaining({ productId: "cheese", price: "1.00" }),
+    ]);
+    expect(payButton(el).disabled).toBe(true);
+
+    counter(el).store.removeLine(0);
+    add(el, "Burger");
+    await flush(el);
+    expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
+    expect(payButton(el).disabled).toBe(false);
+  });
 });
 
 describe("a pay refused because the menu changed", () => {

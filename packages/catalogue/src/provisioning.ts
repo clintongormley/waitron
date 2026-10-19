@@ -100,6 +100,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
             abbreviation: UNIT_ABBR.g,
             precision: 0,
             hardwareUnit: "g",
+            measure: true,
           },
           {
             seedKey: "kg",
@@ -107,6 +108,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
             abbreviation: UNIT_ABBR.kg,
             precision: 3,
             hardwareUnit: "kg",
+            measure: true,
           },
           {
             seedKey: "mg",
@@ -114,6 +116,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
             abbreviation: UNIT_ABBR.mg,
             precision: 0,
             hardwareUnit: "mg",
+            measure: true,
           },
           {
             seedKey: "ml",
@@ -121,6 +124,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
             abbreviation: UNIT_ABBR.ml,
             precision: 0,
             hardwareUnit: null,
+            measure: true,
           },
           {
             seedKey: "l",
@@ -128,6 +132,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
             abbreviation: UNIT_ABBR.l,
             precision: 3,
             hardwareUnit: null,
+            measure: true,
           },
         ]);
       }

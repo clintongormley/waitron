@@ -126,6 +126,68 @@ describe("unit management routes", () => {
     expect((await send("DELETE", `/management-api/units/${unit.id}`)).status).toBe(204);
   });
 
+  it("reads and writes a unit's measure switch", async () => {
+    const created = await send("POST", "/management-api/units", {
+      name: { en: "millilitre" },
+      precision: 0,
+      abbreviation: { en: "ml" },
+      measure: true,
+    });
+    expect(created.status).toBe(201);
+    const unit = (await created.json()) as { id: string; measure?: true };
+    expect(unit.measure).toBe(true);
+    expect(await (await send("GET", "/management-api/units")).json()).toEqual([unit]);
+
+    const off = await send("PATCH", `/management-api/units/${unit.id}`, { measure: false });
+    expect(off.status).toBe(200);
+    expect(await off.json()).not.toHaveProperty("measure");
+
+    const on = await send("PATCH", `/management-api/units/${unit.id}`, { measure: true });
+    expect(on.status).toBe(200);
+    expect(await on.json()).toEqual(unit);
+  });
+
+  it.each([
+    ["a string", "yes"],
+    ["null", null],
+  ])("rejects a measure switch given as %s", async (_label, measure) => {
+    const response = await send("POST", "/management-api/units", {
+      name: { en: "millilitre" },
+      precision: 0,
+      abbreviation: { en: "ml" },
+      measure,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "measure" } },
+    });
+    expect(await (await send("GET", "/management-api/units")).json()).toEqual([]);
+  });
+
+  it.each([
+    ["a string", "yes"],
+    ["null", null],
+  ])("rejects a measure switch change given as %s", async (_label, measure) => {
+    const created = (await (
+      await send("POST", "/management-api/units", {
+        name: { en: "millilitre" },
+        precision: 0,
+        abbreviation: { en: "ml" },
+        measure: true,
+      })
+    ).json()) as { id: string };
+    const before = await (await send("GET", "/management-api/units")).json();
+    const response = await send("PATCH", `/management-api/units/${created.id}`, {
+      measure,
+      precision: 2,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "measure" } },
+    });
+    expect(await (await send("GET", "/management-api/units")).json()).toEqual(before);
+  });
+
   it("rejects a create with no abbreviation object", async () => {
     const response = await send("POST", "/management-api/units", {
       name: { en: "Litre" },

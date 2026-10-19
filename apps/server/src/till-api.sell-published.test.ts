@@ -24,6 +24,7 @@ import {
   addShortcut,
   addProducts,
   assignCatalogueToLocation,
+  assignProductUnit,
   buildMenuDocument,
   createCatalogue,
   createCategory,
@@ -31,6 +32,7 @@ import {
   createOptionList,
   createProduct,
   createSectionIn,
+  createUnit,
   deactivateCatalogue,
   menuDocumentHash,
   menuStatus,
@@ -44,6 +46,7 @@ import {
   updateMenuItem,
   updateProduct,
   updateSection,
+  updateUnit,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -644,6 +647,68 @@ describe("the extras a line picks are priced from the published version", () => 
     expect(soldOut.status).toBe(400);
     expect(await soldOut.json()).toMatchObject({
       error: { code: "extras.invalid", params: { field: "productId" } },
+    });
+    expect(await written()).toEqual(before);
+  });
+});
+
+describe("a unit's measure switch reaches the till at the next publish", () => {
+  it("serves and judges the published switch until the menu is republished", async () => {
+    const v = await setupLunch();
+    const unit = await withTransaction(suite.db, async (tx) => {
+      const ml = await createUnit(
+        tx,
+        { name: { es: "Mililitro" }, abbreviation: { es: "ml" }, precision: 0 },
+        LOCALE,
+      );
+      await assignProductUnit(tx, v.lemonade.productId, ml.id);
+      return ml;
+    });
+    await publish(v.menuId);
+    await withTransaction(suite.db, (tx) => updateUnit(tx, unit.id, { measure: true }, LOCALE));
+
+    const lemonadeUnit = async () => {
+      const { offers } = (await (
+        await send(v, "GET", `/api/service-zones/${v.zoneId}/offers`)
+      ).json()) as { offers: { id: string; unit: { id: string; measure?: true } }[] };
+      return offers.find((offer) => offer.id === v.lemonade.offerId)!.unit;
+    };
+    const sell = () =>
+      send(v, "POST", "/api/sales", {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.lemonade.offerId,
+            quantity: "250",
+            extras: [
+              {
+                listId: v.extraLemon.listId,
+                picks: [{ productId: v.extraLemon.productId, quantity: 1 }],
+              },
+            ],
+          },
+        ],
+        tender: { method: "cash", amount: "1000.00" },
+      });
+
+    const unpublished = await lemonadeUnit();
+    expect(unpublished.id).toBe(unit.id);
+    expect(unpublished).not.toHaveProperty("measure");
+    const accepted = await sell();
+    expect(accepted.status).toBe(200);
+    // 250 × 3.00 + 250 × 0.50.
+    expect(((await accepted.json()) as { total: string }).total).toBe("875.00");
+
+    await publish(v.menuId);
+    expect((await lemonadeUnit()).measure).toBe(true);
+    const before = await written();
+    const refused = await sell();
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: {
+        code: "extras.unsupported_product",
+        params: { productId: v.lemonade.productId, soldBy: "measure" },
+      },
     });
     expect(await written()).toEqual(before);
   });

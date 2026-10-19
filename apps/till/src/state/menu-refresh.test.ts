@@ -368,6 +368,60 @@ describe("lineBlock", () => {
     });
   });
 
+  describe("a pick on a dish whose unit no longer takes extras", () => {
+    const line = lineOf(burger, "v1", {
+      extras: [pick("bacon", "1.50")],
+      options: [{ listId: "list-cooked", labelId: "rare" }],
+    });
+    const soldBy = (changes: Partial<typeof unit> & { measure?: true }) => ({
+      ...burger,
+      unit: { ...unit, ...changes },
+    });
+
+    it("names the extra once the dish is sold in a measure", () => {
+      expect(lineBlock(line, soldBy({ measure: true }))).toEqual({
+        reason: "extra_removed",
+        name: "bacon",
+      });
+    });
+
+    it("finds nothing wrong while the dish's unit is not a measure", () => {
+      expect(lineBlock(line, soldBy({}))).toBeUndefined();
+    });
+
+    it("names the extra once the dish's unit takes decimal places, though the quantity still fits", () => {
+      expect(lineBlock(line, soldBy({ precision: 2 }))).toEqual({
+        reason: "extra_removed",
+        name: "bacon",
+      });
+    });
+
+    it("keeps an options answer on a dish sold in a measure", () => {
+      expect(lineBlock({ ...line, extras: [] }, soldBy({ measure: true }))).toBeUndefined();
+    });
+
+    it("reads a variant line's unit from the variant, not the dish", () => {
+      const measured = { ...unit, id: "unit-ml", measure: true as const };
+      const pints = offer({
+        id: "offer-cider",
+        productId: "cider",
+        offeredModifiers: [extrasList("list-extras", [extraItem("bacon", "1.50")])],
+        variants: [variant("pint", "5.00"), variant("by-ml", "0.01", { unit: measured })],
+      });
+      const variantLine = (variantId: string): OrderLine => ({
+        product: { ...menuOfferToTillProduct(pints, "v1"), variantId },
+        quantity: "1",
+        extras: [pick("bacon", "1.50")],
+      });
+
+      expect(lineBlock(variantLine("by-ml"), pints)).toEqual({
+        reason: "extra_removed",
+        name: "bacon",
+      });
+      expect(lineBlock(variantLine("pint"), { ...pints, unit: measured })).toBeUndefined();
+    });
+  });
+
   it("names the option label when its list no longer holds it, or it cannot be chosen", () => {
     const line = lineOf(burger, "v1", { options: [{ listId: "list-cooked", labelId: "rare" }] });
     const withLabels = (labels: ReturnType<typeof label>[]) => ({
@@ -432,6 +486,13 @@ describe("refreshBasket", () => {
     abbreviation: { es: "kg" },
     precision: 3,
     hardwareUnit: "kg" as const,
+  };
+  const portion = {
+    id: "unit-portion",
+    name: { es: "ración" },
+    abbreviation: { es: "rac" },
+    precision: 0,
+    hardwareUnit: null,
   };
 
   it("adopts a line silently when nothing it holds changed, asserting the new version", () => {
@@ -521,16 +582,16 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(0)!.product.unitPrice).toBe("17.00");
   });
 
-  it("gives a weighed line's dish and extra rows the dish's unit, which its extras are billed by too", () => {
+  it("gives a line's dish and extra rows the dish's unit, which its extras are billed by too", () => {
     const ham = offer({
       id: "offer-ham",
       productId: "ham",
       unitPrice: "20.00",
-      unit: kg,
+      unit: portion,
       offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "2.00")])],
     });
     const line = lineOf(ham, "v1", {
-      quantity: "0.500",
+      quantity: "2",
       extras: [
         { listId: "list-extras", productId: "cheese", name: "cheese", price: "2.00", quantity: 1 },
       ],
@@ -542,8 +603,14 @@ describe("refreshBasket", () => {
     };
     const outcome = refreshBasket([line], [offsetting], live);
     expect(outcome.changed).toEqual([
-      { lineNo: 1, name: "ham", from: "20.00", to: "18.00", units: { from: kg, to: kg } },
-      { lineNo: 1, name: "cheese", from: "2.00", to: "4.00", units: { from: kg, to: kg } },
+      { lineNo: 1, name: "ham", from: "20.00", to: "18.00", units: { from: portion, to: portion } },
+      {
+        lineNo: 1,
+        name: "cheese",
+        from: "2.00",
+        to: "4.00",
+        units: { from: portion, to: portion },
+      },
     ]);
   });
 
@@ -554,6 +621,28 @@ describe("refreshBasket", () => {
         { listId: "list-extras", productId: "cheese", name: "cheese", price: "1.00", quantity: 1 },
       ],
     });
+    const byPortion = {
+      ...burger,
+      unit: portion,
+      unitPrice: "8.00",
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "2.00")])],
+    };
+    const outcome = refreshBasket([line], [byPortion], live);
+    expect(outcome.changed).toEqual([
+      { lineNo: 1, name: "burger", from: "9.00", to: "8.00", units: { from: unit, to: portion } },
+      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", units: { from: unit, to: portion } },
+    ]);
+  });
+
+  it("names a dish the live version weighs at its new unit, and blocks it for a pick it keeps as it was", () => {
+    const cheese = {
+      listId: "list-extras",
+      productId: "cheese",
+      name: "cheese",
+      price: "1.00",
+      quantity: 1,
+    };
+    const line = lineOf(burger, "v1", { quantity: "2", extras: [cheese] });
     const byWeight = {
       ...burger,
       unit: kg,
@@ -563,8 +652,9 @@ describe("refreshBasket", () => {
     const outcome = refreshBasket([line], [byWeight], live);
     expect(outcome.changed).toEqual([
       { lineNo: 1, name: "burger", from: "9.00", to: "8.00", units: { from: unit, to: kg } },
-      { lineNo: 1, name: "cheese", from: "1.00", to: "2.00", units: { from: unit, to: kg } },
     ]);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "cheese", reason: "extra_removed" }]);
+    expect(outcome.adopted.get(0)!.extras).toEqual([cheese]);
   });
 
   it("names a dish whose unit changed while every price stayed the same", () => {
@@ -675,6 +765,41 @@ describe("refreshBasket", () => {
     const outcome = refreshBasket([line], [withoutBacon], live);
     expect(outcome.blocked).toEqual([{ lineNo: 1, name: "bacon", reason: "extra_removed" }]);
     expect(outcome.adopted.get(0)!.extras).toEqual([bacon]);
+  });
+
+  describe("a line whose dish the live version sells by a unit that takes no extras", () => {
+    const bacon = {
+      listId: "list-extras",
+      productId: "bacon",
+      name: "bacon",
+      price: "1.50",
+      quantity: 1,
+    };
+    const line = lineOf(burger, "v1", { extras: [bacon] });
+    /** The live burger, with bacon dearer so a pick re-priced from it shows. */
+    const liveBurger = (changes: Partial<typeof unit> & { measure?: true }) => ({
+      ...burger,
+      unit: { ...unit, ...changes },
+      offeredModifiers: [extrasList("list-extras", [extraItem("bacon", "2.00")])],
+    });
+
+    it("blocks it for the pick once the dish is a measure, keeping the pick as it was", () => {
+      const outcome = refreshBasket([line], [liveBurger({ measure: true })], live);
+      expect(outcome.blocked).toEqual([{ lineNo: 1, name: "bacon", reason: "extra_removed" }]);
+      expect(outcome.adopted.get(0)!.extras).toEqual([bacon]);
+    });
+
+    it("adopts the pick at its live price while the dish's unit is not a measure", () => {
+      const outcome = refreshBasket([line], [liveBurger({})], live);
+      expect(outcome.blocked).toEqual([]);
+      expect(outcome.adopted.get(0)!.extras).toEqual([{ ...bacon, price: "2.00" }]);
+    });
+
+    it("blocks it for the pick once the dish's unit takes decimal places, keeping the pick as it was", () => {
+      const outcome = refreshBasket([line], [liveBurger({ precision: 2 })], live);
+      expect(outcome.blocked).toEqual([{ lineNo: 1, name: "bacon", reason: "extra_removed" }]);
+      expect(outcome.adopted.get(0)!.extras).toEqual([bacon]);
+    });
   });
 
   it("keeps a line whose quantity the live unit cannot hold out of adoption, so the preview still reads it", () => {

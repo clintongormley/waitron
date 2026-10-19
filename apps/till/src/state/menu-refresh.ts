@@ -7,7 +7,7 @@ import {
   type TillProduct,
 } from "../api/client.js";
 import { lineProductName, productUnit } from "../widgets/product-name.js";
-import { lineGross, productAsVariant, quantityPlaces } from "./order-line.js";
+import { lineGross, productAsVariant, quantityPlaces, takesExtras } from "./order-line.js";
 import type { OrderLine } from "./working-order.js";
 
 /** Why a basket line cannot be paid as it stands (D9). */
@@ -107,10 +107,9 @@ export function lineBlock(
   }
   const { precision } = productUnit(variant ?? offer);
   if (quantityPlaces(line.quantity) > precision) return { reason: "unit_changed", name };
+  const extrasLists = takesExtras(variant ?? offer) ? offer.offeredModifiers : [];
   for (const pick of line.extras ?? []) {
-    const list = offer.offeredModifiers.find(
-      (entry) => entry.kind === "extras" && entry.id === pick.listId,
-    );
+    const list = extrasLists.find((entry) => entry.kind === "extras" && entry.id === pick.listId);
     const item =
       list?.kind === "extras"
         ? list.items.find((candidate) => candidate.productId === pick.productId)
@@ -145,8 +144,10 @@ function answeredLabelName(line: OrderLine, labelId: string): string {
 function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string): OrderLine {
   const dish = menuOfferToTillProduct(offer, menuVersionId);
   const variant = dish.variants?.find((candidate) => candidate.id === line.product.variantId);
+  const product = variant === undefined ? dish : productAsVariant(dish, variant);
+  const extrasLists = takesExtras(product) ? offer.offeredModifiers : [];
   const extras = line.extras?.map((pick) => {
-    for (const entry of offer.offeredModifiers)
+    for (const entry of extrasLists)
       if (entry.kind === "extras" && entry.id === pick.listId)
         for (const item of entry.items)
           if (item.productId === pick.productId)
@@ -155,7 +156,7 @@ function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string)
   });
   const adopted: OrderLine = {
     ...line,
-    product: variant === undefined ? dish : productAsVariant(dish, variant),
+    product,
     ...(extras === undefined ? {} : { extras }),
   };
   delete adopted.blocked;

@@ -33,6 +33,8 @@ export interface Unit {
   name: Record<string, string>;
   precision: number;
   abbreviation: Record<string, string>;
+  /** Present only on a unit that measures an amount (ml, g…), whose dishes take no extras. */
+  measure?: true;
 }
 
 /** A {@link Unit} plus the scale integration the till reads: `hardwareUnit` names the mass unit a

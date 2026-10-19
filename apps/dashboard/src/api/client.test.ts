@@ -729,7 +729,12 @@ describe("DashboardApi", () => {
     const api = new DashboardApi("", fetchImpl);
     await expect(api.listUnits()).resolves.toEqual([unit]);
     await expect(
-      api.createUnit({ name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 }),
+      api.createUnit({
+        name: { en: "portion" },
+        abbreviation: { en: "pt" },
+        precision: 2,
+        measure: false,
+      }),
     ).resolves.toEqual(unit);
     await expect(api.updateUnit("u1", { precision: 1 })).resolves.toEqual({
       ...unit,
@@ -741,7 +746,12 @@ describe("DashboardApi", () => {
       [
         "/management-api/units",
         "POST",
-        JSON.stringify({ name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 }),
+        JSON.stringify({
+          name: { en: "portion" },
+          abbreviation: { en: "pt" },
+          precision: 2,
+          measure: false,
+        }),
       ],
       ["/management-api/units/u1", "PATCH", JSON.stringify({ precision: 1 })],
       ["/management-api/units/u1", "DELETE", undefined],

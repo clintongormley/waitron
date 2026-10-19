@@ -354,6 +354,40 @@ describe("fromDraftLine", () => {
     expect(rebuilt.optionSnapshots).toBeUndefined();
   });
 
+  describe("a pick on a variant whose unit no longer takes extras", () => {
+    /** The live burger, whose Double is sold by `unit`. */
+    const soldBy = (unit: typeof each & { measure?: true }) => {
+      const live = offer({
+        ...burger,
+        variants: [{ ...variant("v-double", "15.00"), unit }],
+      });
+      return { live, offers: new Map([[live.id, live]]) };
+    };
+    const input = toDraftLineInput(burgerLine());
+
+    it("comes back as a pick the offer no longer holds, which stops the line, once it is a measure", () => {
+      const { live, offers: measured } = soldBy({ ...each, measure: true });
+
+      const rebuilt = fromDraftLine(saved(input, "2.000"), measured);
+
+      expect(toDraftLineInput(rebuilt)).toEqual(input);
+      expect(rebuilt.extras).toEqual([
+        { listId: "toppings", productId: "p-cheese", name: "", price: "0.00", quantity: 2 },
+        { listId: "toppings", productId: "p-bacon", name: "", price: "0.00", quantity: 1 },
+      ]);
+      expect(lineBlock(rebuilt, live)?.reason).toBe("extra_removed");
+    });
+
+    it("comes back named and priced, stopping nothing, while it is not a measure", () => {
+      const { live, offers: counted } = soldBy(each);
+
+      const rebuilt = fromDraftLine(saved(input, "2.000"), counted);
+
+      expect(rebuilt.extras).toEqual(burgerLine().extras);
+      expect(lineBlock(rebuilt, live)).toBeUndefined();
+    });
+  });
+
   it("names a pick or an answer the offer holds but cannot sell now", () => {
     const soldOut = offer({
       ...burger,

@@ -704,12 +704,12 @@ it("asks for a manager when a sale has no department, without directing staff to
   );
 });
 
-it("tells staff extras go only on a dish sold by the unit, in both languages, not the generic sentence", () => {
+it("tells staff extras go only on a dish sold in whole portions, in both languages, not the generic sentence", () => {
   expect(codeMessage("extras.unsupported_product", "en")).toBe(
-    "Extras can only be added to a dish sold by the unit.",
+    "Extras can only be added to a dish sold in whole portions.",
   );
   expect(codeMessage("extras.unsupported_product", "es")).toBe(
-    "Solo se pueden añadir extras a un plato que se vende por unidades.",
+    "Solo se pueden añadir extras a un plato que se vende en porciones enteras.",
   );
   expect(codeMessage("extras.unsupported_product", "en")).not.toBe(
     codeMessage("server.internal", "en"),

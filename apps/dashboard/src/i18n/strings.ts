@@ -1172,6 +1172,7 @@ export const en = {
     "Changing precision affects portions in these extras lists and menus:",
   "units.precision_usage_unavailable":
     "Could not check which extras lists and menus use this unit.",
+  "units.measure": "Measures a quantity (ml, g…) — no extras",
   "units.filter_precision_all": "All precisions",
   "units.filter_precision_count": "{count} precisions",
   "units.actions": "Actions",
@@ -4205,6 +4206,7 @@ export const es: Record<StringKey, string> = {
     "Cambiar la precisión afecta a las porciones de estas listas de extras y cartas:",
   "units.precision_usage_unavailable":
     "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
+  "units.measure": "Mide una cantidad (ml, g…) — sin extras",
   "units.filter_precision_all": "Todas las precisiones",
   "units.filter_precision_count": "{count} precisiones",
   "units.actions": "Acciones",

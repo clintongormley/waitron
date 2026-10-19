@@ -510,18 +510,21 @@ export interface Unit {
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
+  measure?: true;
 }
 
 export interface UnitInput {
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
+  measure: boolean;
 }
 
 export interface UnitPatch {
   name?: Record<string, string>;
   abbreviation?: Record<string, string>;
   precision?: number;
+  measure?: boolean;
 }
 
 export interface ProductUsingUnit {

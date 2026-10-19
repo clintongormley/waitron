@@ -59,6 +59,14 @@ function screenTranslatable(
   if (!isPlainObject(value)) throw new AppError("management.request_invalid", { field });
 }
 
+function screenMeasure(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw new AppError("management.request_invalid", { field: "measure" });
+  }
+  return value;
+}
+
 export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void {
   const gated = <T>(sessionId: string, action: (tx: Transaction) => Promise<T>) =>
     withTransaction(deps.db, async (tx) => {
@@ -143,12 +151,14 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         name?: unknown;
         precision?: unknown;
         abbreviation?: unknown;
+        measure?: unknown;
       }>(c);
       screenTranslatable(body.name, "name");
       screenTranslatable(body.abbreviation, "abbreviation");
       if (typeof body.precision !== "number") {
         throw new AppError("management.request_invalid", { field: "precision" });
       }
+      const measure = screenMeasure(body.measure);
       const created = await gated(sessionId, (tx) =>
         createUnit(
           tx,
@@ -156,6 +166,7 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
             name: body.name as Record<string, string>,
             precision: body.precision as number,
             abbreviation: body.abbreviation as Record<string, string>,
+            ...(measure === undefined ? {} : { measure }),
           },
           deps.venueLocale,
         ),
@@ -172,6 +183,7 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         name?: unknown;
         precision?: unknown;
         abbreviation?: unknown;
+        measure?: unknown;
       }>(c);
       const patch: UpdateUnitInput = {};
       if (body.name !== undefined) {
@@ -188,6 +200,8 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         }
         patch.precision = body.precision;
       }
+      const measure = screenMeasure(body.measure);
+      if (measure !== undefined) patch.measure = measure;
       return c.json(await gated(sessionId, (tx) => updateUnit(tx, id, patch, deps.venueLocale)));
     }),
   );

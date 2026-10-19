@@ -1,5 +1,5 @@
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -460,6 +460,7 @@ describe("units-screen", () => {
       name: { es: "caja" },
       abbreviation: { es: "cj" },
       precision: 2,
+      measure: false,
     });
     await form.updateComplete;
     const message = await formMessageOf(form.shadowRoot!.querySelector("wt-form-actions")!);
@@ -1118,6 +1119,32 @@ describe("units-screen", () => {
     expect(api.createUnit).not.toHaveBeenCalled();
     expect(table.rows).toEqual([saved, units[1]]);
     refresh.resolve(units);
+  });
+
+  it("saves an edited unit with the measure switch turned on", async () => {
+    const api = stubApi({ updateUnit: vi.fn().mockResolvedValue({ ...units[0]!, measure: true }) });
+    const el = await mount(api);
+    const table = unitsTable(el);
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-u1]")!.click();
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    await form.updateComplete;
+    const toggle = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      'wt-switch[name="measure"]',
+    )!;
+    await toggle.updateComplete;
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    await form.updateComplete;
+    expect(toggle.checked).toBe(true);
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    expect(api.updateUnit).toHaveBeenCalledWith("u1", {
+      name: units[0]!.name,
+      abbreviation: units[0]!.abbreviation,
+      precision: units[0]!.precision,
+      measure: true,
+    });
   });
 
   it("opens the in-use dialog with its empty state when a refusal lists no products", async () => {

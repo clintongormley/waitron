@@ -61,6 +61,7 @@ import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/orde
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
   displayQuantity,
+  offeredListsOf,
   toWireLineExtras,
   toWireModifiers,
   toWireProductIdentity,
@@ -7048,8 +7049,8 @@ export class TillApp extends LitElement {
         liveByMenuItem.set(candidate.menuItemId, candidate);
     }
     for (const line of order.lines) {
-      // The snapshot keeps the order's names and price; the offered lists come from today's live
-      // offer, which is what an edit has to answer against.
+      // The snapshot keeps the order's names and price; the offered lists are today's live offer's,
+      // as the till would offer them on that dish now, which is what an edit has to answer against.
       const live =
         line.menuItemId === undefined
           ? line.productId === undefined
@@ -7062,7 +7063,7 @@ export class TillApp extends LitElement {
           ? live
           : {
               ...stored,
-              ...(live === undefined ? {} : { offeredModifiers: live.offeredModifiers }),
+              ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
             };
       if (product === undefined) {
         // A legacy product-only line no longer resolves; contextual lines carry their own snapshot.

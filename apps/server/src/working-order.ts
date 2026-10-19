@@ -410,19 +410,25 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
   return { extras, options, extraProducts };
 }
 
-/** Whole units with no scale: the one kind of dish an extras pick may go on. */
-function soldByTheUnit(unit: { hardwareUnit: string | null; precision: number }): boolean {
-  return unit.hardwareUnit === null && unit.precision === 0;
+interface ExtrasUnit {
+  hardwareUnit: string | null;
+  precision: number;
+  measure?: true;
+}
+
+/** Whole portions: no scale, no decimal places, and not a measure (ml, g…). */
+function takesExtras(unit: ExtrasUnit): boolean {
+  return unit.hardwareUnit === null && unit.precision === 0 && unit.measure !== true;
 }
 
 /** The extras lists a line of a dish in `unit` is checked against. The till draws no extras list on
- * a dish not sold by the unit, so none may demand a pick here; a pick the lists accept is refused as
- * `extras.unsupported_product` once it is priced. */
+ * a dish that does not take extras, so none may demand a pick here; a pick the lists accept is
+ * refused as `extras.unsupported_product` once it is priced. */
 function extrasListsFor(
   lists: ResolvedExtraList[],
-  unit: { hardwareUnit: string | null; precision: number } | undefined,
+  unit: ExtrasUnit | undefined,
 ): ResolvedExtraList[] {
-  return unit === undefined || soldByTheUnit(unit)
+  return unit === undefined || takesExtras(unit)
     ? lists
     : lists.map((list) => ({ ...list, minPicks: 0 }));
 }
@@ -751,12 +757,18 @@ export async function priceOrderLines(
     const extraChildren = line[FROZEN_EXTRAS] ?? built.extraChildren;
     const optionSnapshots = line[FROZEN_OPTIONS] ?? built.optionSnapshots;
 
-    // A child is priced at dish quantity × pick quantity, so on a dish sold by weight or in decimals
-    // an extra's quantity would be a weight or a fraction, not a number of extras.
-    if (extraChildren.length > 0 && !soldByTheUnit(selection.unit)) {
+    // A child is priced at dish quantity × pick quantity, so on a dish sold by weight, in decimals or
+    // in a measure an extra's quantity would be a weight, a fraction or a measure, not a number of
+    // extras.
+    if (extraChildren.length > 0 && !takesExtras(selection.unit)) {
       throw new AppError("extras.unsupported_product", {
         productId: offer.productId,
-        soldBy: selection.unit.hardwareUnit !== null ? "weight" : "fraction",
+        soldBy:
+          selection.unit.hardwareUnit !== null
+            ? "weight"
+            : selection.unit.precision > 0
+              ? "fraction"
+              : "measure",
       });
     }
 

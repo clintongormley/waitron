@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
 
 afterEach(cleanupWidgets);
@@ -198,6 +198,7 @@ describe("unit-form", () => {
         name: { es: "caja nueva", en: "box", fr: "boîte" },
         abbreviation: { es: "cj", en: "bx", fr: "bt" },
         precision: 2,
+        measure: false,
       },
     });
     expect(event.bubbles).toBe(true);
@@ -459,7 +460,7 @@ describe("unit-form", () => {
     el.addEventListener("wt-submit", submit);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     expect(submit.mock.calls[0]![0].detail).toStrictEqual({
-      value: { name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+      value: { name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0, measure: false },
     });
   });
 
@@ -484,6 +485,7 @@ describe("unit-form", () => {
       name: { en: "box" },
       abbreviation: { en: "bx" },
       precision: 0,
+      measure: false,
     });
   });
 
@@ -695,5 +697,80 @@ describe("unitRefusalErrors", () => {
       refusal("server.internal"),
     ])
       expect(unitRefusalErrors(error)).toEqual({ _form: codeMessage(error.code) });
+  });
+});
+
+describe("unit-form measure switch", () => {
+  type MeasureSwitch = HTMLElementTagNameMap["wt-switch"];
+  const measureSwitch = (el: UnitForm): MeasureSwitch | null =>
+    el.shadowRoot!.querySelector<MeasureSwitch>('wt-switch[name="measure"]');
+  const locale = currentLocale();
+  afterEach(() => setLocale(locale));
+
+  it("opens unchecked on a new unit and checked on a stored measure unit", async () => {
+    const { el: fresh } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: null,
+    });
+    expect(measureSwitch(fresh)).not.toBeNull();
+    expect(measureSwitch(fresh)!.checked).toBe(false);
+    cleanupWidgets();
+    const { el: stored } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: {
+        id: "ml",
+        name: { en: "millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+        measure: true,
+      },
+    });
+    expect(measureSwitch(stored)!.checked).toBe(true);
+    expect(measureSwitch(stored)!.getAttribute("data-test")).toBe("measure");
+  });
+
+  it("labels the switch in the owner's words in Spanish and in English", async () => {
+    setLocale("es-ES");
+    const { el: spanish } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+    });
+    expect(measureSwitch(spanish)!.label).toBe("Mide una cantidad (ml, g…) — sin extras");
+    cleanupWidgets();
+    setLocale("en-GB");
+    const { el: english } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+    });
+    expect(measureSwitch(english)!.label).toBe("Measures a quantity (ml, g…) — no extras");
+  });
+
+  it("sends measure: true after the switch is turned on and Save pressed", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: { id: "u1", name: { en: "millilitre" }, abbreviation: { en: "ml" }, precision: 0 },
+    });
+    const toggle = measureSwitch(el)!;
+    await toggle.updateComplete;
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    await el.updateComplete;
+    expect(toggle.checked).toBe(true);
+    const submitted = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+    );
+    saveOf(el).click();
+    expect((await submitted).detail.value.measure).toBe(true);
+  });
+
+  it("is disabled while busy", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      busy: true,
+      locales: ["en"],
+    });
+    expect(measureSwitch(el)!.disabled).toBe(true);
   });
 });

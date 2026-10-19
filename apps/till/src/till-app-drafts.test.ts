@@ -4486,6 +4486,99 @@ describe("till-app: a draft line that cannot be sold now", () => {
     expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
   });
 
+  describe("a draft line with an extra, read from the server", () => {
+    function savedBeerWithLemon(): void {
+      server.save("v1", {
+        draftId: null,
+        revision: 0,
+        lines: [
+          {
+            menuItemId: "offer-beer",
+            variantId: null,
+            menuVersionId: "v1",
+            options: [],
+            extras: [{ listId: "beer-extras", picks: [{ productId: "p-lemon", quantity: 1 }] }],
+            note: null,
+            quantity: "1",
+            courseId: null,
+            noMerge: false,
+          },
+        ],
+      });
+    }
+
+    /** Beer offers a lemon extra, and is sold in a measure when `measured`. */
+    function beerWithLemon(measured: boolean): ZoneOfferCatalogue {
+      const offers = catalogue("v1");
+      return {
+        ...offers,
+        offers: offers.offers.map((each) =>
+          each.id !== "offer-beer"
+            ? each
+            : {
+                ...each,
+                unit: measured ? { ...unit, measure: true as const } : unit,
+                offeredModifiers: [
+                  {
+                    kind: "extras" as const,
+                    id: "beer-extras",
+                    name: "Extras",
+                    customerName: null,
+                    kitchenName: null,
+                    minPicks: 0,
+                    maxPicks: null,
+                    items: [
+                      {
+                        portion: "1",
+                        unit,
+                        productId: "p-lemon",
+                        name: "Lemon",
+                        customerName: null,
+                        kitchenName: null,
+                        price: "0.50",
+                        vatClass: "general" as const,
+                        maxQuantity: 1,
+                        preselected: false,
+                        addAllergens: null,
+                        suitableFor: [],
+                        image: null,
+                        available: true,
+                      },
+                    ],
+                  },
+                ],
+              },
+        ),
+      };
+    }
+
+    it("is flagged, and not sent, once its dish is sold in a measure", async () => {
+      savedBeerWithLemon();
+      const { el } = await mountApp({
+        listZoneOffers: vi.fn().mockResolvedValue(beerWithLemon(true)),
+      });
+
+      await openMesa(el);
+
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
+      expect(await pressAndRead(el, "fire-all")).toContain(t("table.nothing_sent"));
+      expect(api.submitDraft).not.toHaveBeenCalled();
+    });
+
+    it("is not flagged while its dish is not sold in a measure", async () => {
+      savedBeerWithLemon();
+      const { el } = await mountApp({
+        listZoneOffers: vi.fn().mockResolvedValue(beerWithLemon(false)),
+      });
+
+      await openMesa(el);
+
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(flagText(el)).toEqual([]);
+    });
+  });
+
   describe("a line whose dish is now sold only as an extra", () => {
     const onlyFlanAsExtra = (): ZoneOfferCatalogue => {
       const offers = catalogue("v1");

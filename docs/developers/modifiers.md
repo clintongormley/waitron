@@ -200,20 +200,24 @@ the basket resolved, and decides what is stored:
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than a non-null `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
   malformed pick is `extras.invalid` naming the field.
-- A pick on a dish not sold by the unit — its unit has a scale or allows any decimal places — is
-  refused with `extras.unsupported_product`, whose `soldBy` is `weight` or `fraction`: a child
-  priced dish × pick would carry a weight or a fraction of an extra, not a number of them. Its
-  extras lists are checked with no minimum, so a required list does not refuse an order of it with
-  no picks (`extrasListsFor`, `apps/server/src/working-order.ts`). An options answer on such
-  a dish is still allowed.
+- A pick on a dish not sold in whole portions — its unit has a scale, allows any decimal places,
+  or is marked a measure (the `units.measure` column, the Units screen's "Measures a quantity (ml, g…) — no
+  extras") — is refused with `extras.unsupported_product`, whose `soldBy` is `weight` (a scale),
+  else `fraction` (decimal places), else `measure`: a child priced dish × pick would carry a weight,
+  a fraction or a measure of an extra, not a number of them (`takesExtras`,
+  `apps/server/src/working-order.ts`). Its extras lists are checked with no minimum, so a required
+  list does not refuse an order of it with no picks (`extrasListsFor`, same file). An options
+  answer on such a dish is still allowed. The server reads the switch from the unit frozen into the
+  menu's published version, so turning it on or off takes effect when the menus selling that
+  unit's dishes are next published.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
 `StationQueueItem` and `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
 `extras` array holding what each CHILD line froze, with the list each pick was taken from
 (`listId`). The till rebuilds a selection from them against the dish's live offer: a pick goes back
-to its own list while that list still offers the product, and another list offering the same product
-is not used in its place (`deriveExtraSelections` and `deriveOptionSelections`,
+to its own list while that list still offers the product and the dish still takes extras
+(`offeredListsOf`), and another list offering the same product is not used in its place (`deriveExtraSelections` and `deriveOptionSelections`,
 `apps/till/src/state/`) — see the end of this section.
 
 An edit of a saved order sends each line's answers again, and prices only what the edit adds (menus
@@ -303,8 +307,11 @@ marked with whether it can be sold now; nothing in `apps/till` outside its tests
 
 Nothing else on those two payloads describes a modifier. The till's picker
 (`apps/till/src/widgets/modifier-picker.ts`) walks `offeredModifiers` through `offeredListsOf`
-(`apps/till/src/state/order-line.ts`), which drops every extras list on a dish not sold by the unit,
-and the two
+(`apps/till/src/state/order-line.ts`), which drops every extras list on a dish not sold in whole
+portions — weighed, in decimals, or in a unit marked a measure — through `takesExtras` in the same
+file. A reopened held order's line takes its lists through `offeredListsOf` too, from the live offer
+(`#loadIntoBasket`, `apps/till/src/till-app.ts`), so a pick on a dish that does not take extras now is
+marked not offered. The two
 surfaces that ADD a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and
 tender-pay's weighed quantity — decide whether a dish needs a picker from those lists or from an
 available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).

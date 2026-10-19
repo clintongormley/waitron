@@ -40,12 +40,19 @@ export interface CreateUnitInput {
   name: Record<string, string>;
   precision: number;
   abbreviation: Record<string, string>;
+  measure?: boolean;
 }
 
 export interface UpdateUnitInput {
   name?: Record<string, string>;
   precision?: number;
   abbreviation?: Record<string, string>;
+  measure?: boolean;
+}
+
+/** The stored switch as every unit shape carries it: the key is present only when on. */
+export function unitMeasure(measure: boolean): { measure?: true } {
+  return measure ? { measure: true } : {};
 }
 
 const UNIT_COLUMNS = {
@@ -53,7 +60,12 @@ const UNIT_COLUMNS = {
   name: units.name,
   precision: units.precision,
   abbreviation: units.abbreviation,
+  measure: units.measure,
 };
+
+function toUnit({ measure, ...row }: { measure: boolean } & Omit<Unit, "measure">): Unit {
+  return { ...row, ...unitMeasure(measure) };
+}
 const SELLABLE_UNIT_COLUMNS = { ...UNIT_COLUMNS, hardwareUnit: units.hardwareUnit };
 
 function toSellableUnit(row: {
@@ -62,8 +74,9 @@ function toSellableUnit(row: {
   precision: number;
   abbreviation: Record<string, string>;
   hardwareUnit: string | null;
+  measure: boolean;
 }): SellableUnit {
-  return { ...row, hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
+  return { ...toUnit(row), hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
 }
 
 /** Checks the supplied maps in one read of the content languages; a gap names its field. */
@@ -99,19 +112,21 @@ export async function createUnit(
       name: input.name,
       abbreviation: input.abbreviation,
       precision: input.precision,
+      measure: input.measure ?? false,
     })
     .returning(UNIT_COLUMNS);
-  return row!;
+  return toUnit(row!);
 }
 
 export async function listUnits(tx: Transaction): Promise<Unit[]> {
-  return tx.select(UNIT_COLUMNS).from(units).orderBy(asc(units.id));
+  const rows = await tx.select(UNIT_COLUMNS).from(units).orderBy(asc(units.id));
+  return rows.map(toUnit);
 }
 
 export async function getUnit(tx: Transaction, unitId: string): Promise<Unit> {
   const [row] = await tx.select(UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
-  return row;
+  return toUnit(row);
 }
 
 /** Sale-facing read; the scale mapping is stored data and is never inferred from editable text. */
@@ -144,7 +159,8 @@ export async function updateUnit(
   if (
     patch.name === undefined &&
     patch.precision === undefined &&
-    patch.abbreviation === undefined
+    patch.abbreviation === undefined &&
+    patch.measure === undefined
   ) {
     return getUnit(tx, unitId);
   }
@@ -154,7 +170,7 @@ export async function updateUnit(
     .where(eq(units.id, unitId))
     .returning(UNIT_COLUMNS);
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
-  return row;
+  return toUnit(row);
 }
 
 /** Give a product its unit. A variant has none of its own (it always reads its parent's), so its id

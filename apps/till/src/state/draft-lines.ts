@@ -12,6 +12,7 @@ import {
   displayQuantity,
   productAsVariant,
   quantityPlaces,
+  takesExtras,
   toWireModifiers,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
@@ -57,9 +58,10 @@ export function orderLineMergeKey(line: OrderLine): string | null {
  * newer than the offers the till holds.
  *
  * Nothing the offer no longer holds is dropped: the ids go back on the next save as they came. A
- * dish no longer offered at all is marked, and has no name, because the server sends none. A saved
- * quantity finer than the offered unit now allows is kept and marked, under a unit widened to the
- * quantity scale, so pricing the preview does not refuse it.
+ * pick on a dish or variant whose unit now takes no extras (`takesExtras`) counts as one the offer
+ * no longer holds. A dish no longer offered at all is marked, and has no name, because the server
+ * sends none. A saved quantity finer than the offered unit now allows is kept and marked, under a
+ * unit widened to the quantity scale, so pricing the preview does not refuse it.
  */
 export function fromDraftLine(
   line: Omit<DraftLine, "id">,
@@ -79,8 +81,9 @@ export function fromDraftLine(
   const unit = productUnit(offered);
   const fits = quantityPlaces(line.quantity) <= unit.precision;
   const product = fits ? offered : { ...offered, unit: { ...unit, precision: QUANTITY_SCALE } };
+  const extrasLists = offer !== undefined && takesExtras(offered) ? offer.offeredModifiers : [];
   const extras = line.extras.flatMap(({ listId, picks }) =>
-    picks.map((pick) => extraOf(offer, listId, pick)),
+    picks.map((pick) => extraOf(extrasLists, listId, pick)),
   );
   const snapshots = line.options.flatMap((answer) => snapshotOf(offer, answer));
   return {
@@ -162,15 +165,13 @@ const UNKNOWN_UNIT: NonNullable<TillProduct["unit"]> = {
   hardwareUnit: null,
 };
 
-/** A pick the offer no longer holds keeps its ids, with no name and a placeholder price. */
+/** A pick `lists` no longer holds keeps its ids, with no name and a placeholder price. */
 function extraOf(
-  offer: TillMenuOffer | undefined,
+  lists: TillMenuOffer["offeredModifiers"],
   listId: string,
   pick: { productId: string; quantity: number },
 ): SelectedExtra {
-  const list = offer?.offeredModifiers.find(
-    (entry) => entry.kind === "extras" && entry.id === listId,
-  );
+  const list = lists.find((entry) => entry.kind === "extras" && entry.id === listId);
   const item =
     list?.kind === "extras"
       ? list.items.find((candidate) => candidate.productId === pick.productId)

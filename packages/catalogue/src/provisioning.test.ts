@@ -60,6 +60,7 @@ async function storedUnits() {
       abbreviation: units.abbreviation,
       precision: units.precision,
       hardware_unit: units.hardwareUnit,
+      measure: units.measure,
     })
     .from(units)
     .orderBy(asc(units.seedKey));
@@ -191,6 +192,7 @@ describe("catalogue provisioning", () => {
         abbreviation: { en: "g", es: "g", ca: "g", "ca-ES-valencia": "g", gl: "g", eu: "g" },
         precision: 0,
         hardware_unit: "g",
+        measure: true,
       },
       {
         seed_key: "kg",
@@ -205,6 +207,7 @@ describe("catalogue provisioning", () => {
         abbreviation: { en: "kg", es: "kg", ca: "kg", "ca-ES-valencia": "kg", gl: "kg", eu: "kg" },
         precision: 3,
         hardware_unit: "kg",
+        measure: true,
       },
       {
         seed_key: "l",
@@ -219,6 +222,7 @@ describe("catalogue provisioning", () => {
         abbreviation: { en: "l", es: "l", ca: "l", "ca-ES-valencia": "l", gl: "l", eu: "l" },
         precision: 3,
         hardware_unit: null,
+        measure: true,
       },
       {
         seed_key: "mg",
@@ -233,6 +237,7 @@ describe("catalogue provisioning", () => {
         abbreviation: { en: "mg", es: "mg", ca: "mg", "ca-ES-valencia": "mg", gl: "mg", eu: "mg" },
         precision: 0,
         hardware_unit: "mg",
+        measure: true,
       },
       {
         seed_key: "ml",
@@ -247,6 +252,7 @@ describe("catalogue provisioning", () => {
         abbreviation: { en: "ml", es: "ml", ca: "ml", "ca-ES-valencia": "ml", gl: "ml", eu: "ml" },
         precision: 0,
         hardware_unit: null,
+        measure: true,
       },
     ]);
     await suite.db

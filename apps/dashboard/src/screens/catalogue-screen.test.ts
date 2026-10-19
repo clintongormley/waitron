@@ -1500,6 +1500,7 @@ describe("catalogue-screen", () => {
       name: { es: "ración" },
       abbreviation: { es: "ra" },
       precision: 2,
+      measure: false,
     });
     expect(errorBeside(form, "wt-combobox[name=precision]")).not.toBe("");
     expect(save.disabled).toBe(false);
