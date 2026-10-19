@@ -6,9 +6,11 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, MenuReadPart, MenuStructureNode } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import {
   cleanupWidgets,
   documentProduct,
+  expectMessageAboveButtons,
   menuDocument,
   mountWidget,
   reattachAfterDetachedUpdate,
@@ -185,7 +187,7 @@ it("commits the move before closing, so nothing is left to ask about", async () 
   expect((await question(app)).open).toBe(false);
 });
 
-it("keeps a refused choice, and Cancel then asks", async () => {
+it("keeps a refused choice with its message in the footer above the buttons, and Cancel then asks", async () => {
   const api = client(async () => {
     throw { code: "menu_section.member_duplicate" };
   });
@@ -201,6 +203,11 @@ it("keeps a refused choice, and Cancel then asks", async () => {
     ).toBe(false),
   );
   expect(destination().value).toBe("s-drinks");
+  await expectMessageAboveButtons(
+    window(),
+    window().querySelector('[data-test="move-selected-save"]')!,
+    codeMessage("menu_section.member_duplicate"),
+  );
   cancel(window());
   await vi.waitFor(async () => expect((await question(app)).open).toBe(true));
   expect(window().open).toBe(true);

@@ -1,5 +1,5 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -31,7 +31,7 @@ export class CategoryColorForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property() heading = "";
   @property({ attribute: false }) color: string | null = null;
-  /** Refusals keyed `color`, or any other key for one shown at the end of the body. */
+  /** Refusals keyed `color`, or any other key for one shown above the buttons. */
   @property({ attribute: false }) errors: Record<string, string> = {};
   /** What the person last chose, shown while it saves and after a refusal. */
   @state() private chosen: string | null = null;
@@ -86,10 +86,7 @@ export class CategoryColorForm extends LitElement {
           },
         })}
       </div>
-      <p class="field-error" role="alert" data-test="form-error">
-        ${this.open ? bottom || nothing : nothing}
-      </p>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${this.open ? bottom : ""}
         ><wt-button
           slot="cancel"
           data-test="cancel"

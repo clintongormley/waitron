@@ -36,7 +36,7 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  test("open, with the footer actions' message at the end of the body", async () => {
+  test("open, with the footer actions' message in the footer, above the buttons", async () => {
     const el = (await mountThemed(
       `<wt-dialog heading="Add passkey">
         <label>Passkey name <input name="passkey-name" /></label>
@@ -52,7 +52,7 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     const actions = el.querySelector("wt-form-actions")!;
     await actions.updateComplete;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".body > [data-error]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".footer > [data-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

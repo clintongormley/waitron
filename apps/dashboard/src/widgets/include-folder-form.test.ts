@@ -1,6 +1,11 @@
 import { t } from "../i18n/t.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogMessageOf,
+  expectMessageAboveButtons,
+  mountWidget,
+} from "./test-helpers.js";
 import type {
   IncludeFolder,
   IncludeFolderInput,
@@ -44,8 +49,7 @@ const uploadOf = (el: Form) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-image-upload"]>(
     "dashboard-image-upload",
   );
-const bottomOf = (el: Form) =>
-  el.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim();
+const bottomOf = (el: Form) => dialogMessageOf(el.shadowRoot!.querySelector("wt-modal")!);
 const emit = (target: Element, name: string, detail: unknown) =>
   target.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 async function type(el: Form, name: string, value: string) {
@@ -226,7 +230,7 @@ it.each(Object.keys(besideField))(
     el.fieldErrors = { [key]: message };
     await el.updateComplete;
     expect(besideField[key]!(el)).toEqual([message, true]);
-    expect(bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     const save =
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
     expect(save.disabled).toBe(false);
@@ -256,13 +260,18 @@ it("clears a field's refusal when that field changes, and every refusal on the n
   );
   submitted(el);
   await el.updateComplete;
-  expect(bottomOf(el)).toBe("");
+  expect(await bottomOf(el)).toBe("");
 });
-it("puts a refusal for a field it does not show in the bottom message", async () => {
+it("puts a refusal for a field it does not show in the bottom message, in the footer above the buttons", async () => {
   const el = await includeForm({ value: { showAsFolder: false, overrides: {} } });
   el.fieldErrors = { "names-en": "Check the English name." };
   await el.updateComplete;
-  expect(bottomOf(el)).toBe("Check the English name.");
+  expect(await bottomOf(el)).toBe("Check the English name.");
+  await expectMessageAboveButtons(
+    el.shadowRoot!.querySelector("wt-modal")!,
+    el.shadowRoot!.querySelector('[data-test="save"]')!,
+    "Check the English name.",
+  );
 });
 it("every input has a semantic name", async () => {
   const el = await includeForm();

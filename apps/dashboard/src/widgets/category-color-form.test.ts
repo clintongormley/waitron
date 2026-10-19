@@ -1,6 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogMessageOf,
+  expectMessageAboveButtons,
+  mountWidget,
+} from "./test-helpers.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { CategoryColorForm } from "./category-color-form.js";
@@ -18,8 +23,7 @@ async function colorForm(props: Partial<CategoryColorForm> = {}) {
   return el;
 }
 const modal = (el: CategoryColorForm) => el.shadowRoot!.querySelector("wt-modal")!;
-const bottomOf = (el: CategoryColorForm) =>
-  el.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim();
+const bottomOf = (el: CategoryColorForm) => dialogMessageOf(modal(el));
 const swatch = (el: CategoryColorForm, color: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-color="${color}"]`)!;
 const colorError = (el: CategoryColorForm) =>
@@ -103,21 +107,21 @@ it("sends nothing, and cannot be dismissed, while a colour is saving", async () 
   expect(modal(el).shadowRoot!.querySelector("dialog")!.open).toBe(true);
 });
 
-it("shows a refused colour under the chooser, focused, and anything else at the end of the body", async () => {
+it("shows a refused colour under the chooser, focused, and anything else in the footer above Cancel", async () => {
   const el = await colorForm({ errors: { color: t("editor.field_rejected") } });
   expect(colorError(el)).toBe(t("editor.field_rejected"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-color"),
   );
-  expect(bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   el.errors = { _form: codeMessage("server.internal") };
   await el.updateComplete;
   expect(colorError(el)).toBe("");
-  const bottom = el.shadowRoot!.querySelector('[data-test="form-error"]')!;
-  expect(bottom.textContent!.trim()).toBe(codeMessage("server.internal"));
-  expect(bottom.closest('[slot="footer"]')).toBeNull();
-  const fields = el.shadowRoot!.querySelector(".fields")!;
-  expect(fields.compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await expectMessageAboveButtons(
+    modal(el),
+    el.shadowRoot!.querySelector('[data-test="cancel"]')!,
+    codeMessage("server.internal"),
+  );
 });
 
 it("keeps showing the colour that was chosen while it saves and once it is refused", async () => {

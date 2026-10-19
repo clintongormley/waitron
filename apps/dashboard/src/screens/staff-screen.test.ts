@@ -299,7 +299,7 @@ describe("staff-screen", () => {
     const actions = dialog.querySelector("wt-form-actions")!;
     const message = await formMessageOf(actions);
     expect(message?.textContent).toBe(codeMessage("server.internal"));
-    expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(dialog.shadowRoot!.querySelector(".footer")!.contains(message)).toBe(true);
     expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
     expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
     confirm.click();

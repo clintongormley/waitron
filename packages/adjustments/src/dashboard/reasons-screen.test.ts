@@ -239,7 +239,7 @@ function alert(el: AdjustmentReasonsScreen): string {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim() ?? "";
 }
 
-/** The open form's one message, shown at the end of the dialog's body. */
+/** The open form's one message, shown in the dialog's footer above the buttons. */
 async function bottom(el: AdjustmentReasonsScreen): Promise<string> {
   const actions = modal(el)!.querySelector("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";

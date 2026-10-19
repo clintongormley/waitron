@@ -1,7 +1,13 @@
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  customSquarePixels,
+  dialogMessageOf,
+  expectMessageAboveButtons,
+  mountWidget,
+} from "./test-helpers.js";
 import "./section-details-form.js";
 import "./option-label-form.js";
 afterEach(cleanupWidgets);
@@ -25,7 +31,7 @@ it("marks the required internal name and refuses a blank submission", async () =
   expect(field!.error).not.toBe("");
   expect(save).not.toHaveBeenCalled();
 });
-it("puts a Spanish translation refusal under the Spanish field and other refusals below the fields", async () => {
+it("puts a Spanish translation refusal under the Spanish field and other refusals in the footer, above the buttons", async () => {
   const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-section-details-form"]>(
     "dashboard-section-details-form",
     {
@@ -42,9 +48,11 @@ it("puts a Spanish translation refusal under the Spanish field and other refusal
   expect(spanish.error).not.toBe("");
   el.refusal = { code: "management.request_invalid" };
   await el.updateComplete;
-  const bottom = el.shadowRoot!.querySelector('[data-test="form-error"]')!;
-  expect(bottom.textContent?.trim()).not.toBe("");
-  expect(bottom.closest('[slot="footer"]')).toBeNull();
+  await expectMessageAboveButtons(
+    el.shadowRoot!.querySelector("wt-modal")!,
+    el.shadowRoot!.querySelector('[data-test="save"]')!,
+    codeMessage("management.request_invalid"),
+  );
 });
 it("preserves the draft across refusals and submits all details on Enter", async () => {
   const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-section-details-form"]>(
@@ -127,7 +135,7 @@ const uploadOf = (el: HTMLElementTagNameMap["dashboard-section-details-form"]) =
     "dashboard-image-upload",
   )!;
 const bottomOf = (el: HTMLElementTagNameMap["dashboard-section-details-form"]) =>
-  el.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim();
+  dialogMessageOf(modalOf(el));
 function changeField(
   el: HTMLElementTagNameMap["dashboard-section-details-form"],
   name: string,
@@ -160,7 +168,7 @@ it("rechecks invalid name submissions, focuses the field, keeps values and reset
   changeField(el, "internalName", " ");
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe("");
-  expect(bottomOf(el)).toBe("");
+  expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).disabled).toBe(false);
   saveButton(el).click();
   await el.updateComplete;
@@ -173,19 +181,19 @@ it("rechecks invalid name submissions, focuses the field, keeps values and reset
   expect(field(el, "names-en").value).toBe("Something to drink");
   changeField(el, "internalName", "Drinks");
   await el.updateComplete;
-  expect(bottomOf(el)).toBe("");
+  expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).disabled).toBe(true);
   changeField(el, "internalName", " ");
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe(t("sections.internal_name_required"));
-  expect(bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveButton(el).disabled).toBe(true);
   el.open = false;
   await el.updateComplete;
   el.open = true;
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe("");
-  expect(bottomOf(el)).toBe("");
+  expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).disabled).toBe(true);
   expect(field(el, "internalName").value).toBe("Drinks");
 });
@@ -206,7 +214,7 @@ it("focuses a refused field, keeps Save retryable and clears only that field on 
   changeField(el, "internalName", "Drinks bar");
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe("");
-  expect(bottomOf(el)).toBe("");
+  expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).disabled).toBe(false);
 });
 it("keeps a non-field refusal retryable until the next submission", async () => {
@@ -214,16 +222,16 @@ it("keeps a non-field refusal retryable until the next submission", async () => 
   changeField(el, "names-es", "Bebidas frías");
   el.refusal = { code: "server.internal" };
   await el.updateComplete;
-  expect(bottomOf(el)).toBe(codeMessage("server.internal"));
+  expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
   expect(saveButton(el).disabled).toBe(false);
   changeField(el, "internalName", "Drinks bar");
   await el.updateComplete;
-  expect(bottomOf(el)).toBe(codeMessage("server.internal"));
+  expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
   changeField(el, "internalName", "");
   await el.updateComplete;
   saveButton(el).click();
   await el.updateComplete;
-  expect(bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 it("clears translation refusals on retry without discarding other language values", async () => {
   const el = await detailsForm();
@@ -235,14 +243,14 @@ it("clears translation refusals on retry without discarding other language value
   expect(field(el, "names-es").invalid).toBe(true);
   expect(field(el, "names-en").invalid).toBe(false);
   expect(field(el, "names-en").value).toBe("Something to drink");
-  expect(bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   changeField(el, "internalName", "Drinks bar");
   await el.updateComplete;
   expect(field(el, "names-es").invalid).toBe(true);
   saveButton(el).click();
   await el.updateComplete;
   expect(field(el, "names-es").error).toBe("");
-  expect(bottomOf(el)).toBe("");
+  expect(await bottomOf(el)).toBe("");
 });
 it("prevents duplicate save and dismissal while a save is in flight", async () => {
   const el = await detailsForm();

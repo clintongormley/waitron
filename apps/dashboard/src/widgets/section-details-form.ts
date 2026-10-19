@@ -334,10 +334,7 @@ export class SectionDetailsForm extends LitElement {
         ></dashboard-image-upload>
         <span class="field-error" id="section-image-error">${errors.image ?? nothing}</span>
       </div>
-      <p class="field-error" role="alert" data-test="form-error">
-        ${this.open ? bottom || nothing : nothing}
-      </p>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${this.open ? bottom : ""}
         ><wt-button
           slot="cancel"
           data-test="cancel"

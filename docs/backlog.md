@@ -3897,13 +3897,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
 
-- **A849. Put a full-height dialog's form message in its footer, on its own line just above the
-  buttons (owner, 2026-10-17).** `wt-dialog` draws it at the end of the body
-  (`packages/ui/src/components/wt-dialog.ts:459`); move it, and change design-system.md → Forms'
-  "in a dialog, at the end of the dialog's body" in the same change. Done when a `wt-dialog` test
-  with a short form in a full-height dialog finds the message in the footer, directly above the
-  buttons.
-
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
   `aria-required` on nothing, while a combobox with a search box set it on its input. Every screen

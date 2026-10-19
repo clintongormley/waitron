@@ -510,7 +510,7 @@ test("shows a message its footer actions already carry in its first render, not 
         <button>Save</button>
       </wt-form-actions>
     </wt-dialog>`);
-    expect(el.shadowRoot!.querySelector(".body > [data-error]")?.textContent).toBe(
+    expect(el.shadowRoot!.querySelector(".footer > [data-error]")?.textContent).toBe(
       "This device already holds a passkey for your account.",
     );
     await new Promise((resolve) => setTimeout(resolve));
@@ -520,7 +520,7 @@ test("shows a message its footer actions already carry in its first render, not 
   }
 });
 
-test("shows its footer actions' message at the end of the body, below the last field", async () => {
+test("shows its footer actions' message in the footer, on its own line above the buttons", async () => {
   const el = (await mount(`<wt-dialog heading="Add passkey">
     <label>Passkey name <input name="passkey-name" /></label>
     <wt-form-actions slot="footer"><button>Save</button></wt-form-actions>
@@ -531,13 +531,16 @@ test("shows its footer actions' message at the end of the body, below the last f
   actions.error = "This device already holds a passkey for your account.";
   const message = (await formMessageOf(actions))!;
 
-  const body = el.shadowRoot!.querySelector(".body")!;
+  const footer = el.shadowRoot!.querySelector(".footer")!;
   expect(message.textContent).toBe("This device already holds a passkey for your account.");
-  expect(message.parentElement).toBe(body);
-  expect(body.lastElementChild).toBe(message);
+  expect(message.parentElement).toBe(footer);
+  expect(footer.firstElementChild).toBe(message);
+  expect(message.nextElementSibling!.querySelector('slot[name="footer"]')).not.toBeNull();
   const field = el.querySelector("input")!.getBoundingClientRect();
-  expect(message.getBoundingClientRect().top).toBeGreaterThanOrEqual(field.bottom);
-  expect(el.shadowRoot!.querySelector(".footer [data-error]")).toBeNull();
+  const box = message.getBoundingClientRect();
+  expect(box.top).toBeGreaterThanOrEqual(field.bottom);
+  expect(box.bottom).toBeLessThanOrEqual(el.querySelector("button")!.getBoundingClientRect().top);
+  expect(el.shadowRoot!.querySelector(".body [data-error]")).toBeNull();
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });
 
@@ -545,7 +548,7 @@ test.each([
   ["a field", '<label>Passkey name <input name="passkey-name" /></label>'],
   ["a wt-input", '<wt-input name="passkey-name" label="Passkey name"></wt-input>'],
 ])(
-  "brings a message it already carries into view when it opens, though %s first in it takes focus",
+  "shows a message it already carries in view when it opens, without scrolling the body, though %s first in it takes focus",
   async (_, field) => {
     await page.viewport(390, 500);
     try {
@@ -561,11 +564,14 @@ test.each([
       await el.updateComplete;
       expect(deepActiveElement()).toBeInstanceOf(HTMLInputElement);
       const body = el.shadowRoot!.querySelector(".body")!;
-      await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
-      const frame = body.getBoundingClientRect();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(body.scrollTop).toBe(0);
+      const frame = el.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
       const box = message.getBoundingClientRect();
-      expect(box.top).toBeGreaterThanOrEqual(frame.top - 1);
-      expect(box.bottom).toBeLessThanOrEqual(frame.bottom + 1);
+      expect(box.height).toBeGreaterThan(0);
+      expect(box.top).toBeGreaterThanOrEqual(body.getBoundingClientRect().bottom);
+      expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+      expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
     } finally {
       await page.viewport(1280, 900);
     }
@@ -1439,7 +1445,7 @@ test("shows in its first render the messages of the action rows in its footer an
       <span slot="footer">Draft</span>
       <wt-form-actions slot="footer" error="Could not save."><button>Save</button></wt-form-actions>
     </wt-dialog>`);
-    expect(el.shadowRoot!.querySelector(".body > [data-error]")?.textContent).toBe(
+    expect(el.shadowRoot!.querySelector(".footer > [data-error]")?.textContent).toBe(
       "Could not save.",
     );
     await new Promise((resolve) => setTimeout(resolve));
@@ -1617,5 +1623,56 @@ test.each(closings)(
       expect(document.activeElement, "focus has fallen to the page body").toBe(document.body);
     });
     expect(deepActiveElement()).toBe(nearby);
+  },
+);
+
+/** A refusal far taller than the room a short window leaves the footer. */
+const LONG_REFUSAL = "The printer at the bar did not answer, so nothing was saved. "
+  .repeat(30)
+  .trim();
+
+test.each([
+  [500, "Printer settings", LONG_REFUSAL],
+  [500, '<div style="height: 2000px">Long settings</div>', LONG_REFUSAL],
+  [200, "Printer settings", LONG_REFUSAL],
+  [500, '<div style="height: 2000px">Long settings</div>', "Enter a name."],
+])(
+  "keeps its buttons in view below its footer actions' message, %ipx tall (%s)",
+  async (height, body, refusal) => {
+    await page.viewport(390, height);
+    try {
+      const el = (await mount(`<wt-dialog heading="Add printer">
+        ${body}
+        ${SAVE_OR_CANCEL}
+      </wt-dialog>`)) as Openable;
+      el.open = true;
+      await el.updateComplete;
+      const actions = el.querySelector("wt-form-actions")!;
+      actions.error = refusal;
+      const message = (await formMessageOf(actions))!;
+      expect(message.textContent).toBe(refusal);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(el.shadowRoot!.querySelector(".footer")!.firstElementChild).toBe(message);
+      const frame = el.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      const box = message.getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      for (const button of el.querySelectorAll("wt-button")) {
+        const name = button.textContent!.trim();
+        const at = button.getBoundingClientRect();
+        expect(at.top, name).toBeGreaterThanOrEqual(box.bottom);
+        expect(at.bottom, name).toBeLessThanOrEqual(Math.min(frame.bottom, window.innerHeight));
+        expect(at.left, name).toBeGreaterThanOrEqual(Math.max(frame.left, 0));
+        expect(at.right, name).toBeLessThanOrEqual(Math.min(frame.right, window.innerWidth));
+      }
+      if (refusal === LONG_REFUSAL) {
+        expect(message.scrollHeight).toBeGreaterThan(message.clientHeight);
+      } else {
+        expect(message.scrollHeight, "a one-line message is shown whole").toBe(
+          message.clientHeight,
+        );
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
   },
 );

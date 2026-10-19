@@ -8,6 +8,7 @@ import {
   cleanupWidgets,
   documentProduct,
   documentSection,
+  expectMessageAboveButtons,
   expectNoA11yViolations,
   menuDocument,
   mountWidget,
@@ -726,8 +727,6 @@ function inModal<T extends Element = HTMLElement>(
 
 /** The one message about a failed submission of `root`'s form. */
 async function bottomIn(root: Element): Promise<string> {
-  const direct = root.querySelector('[data-test="form-error"]');
-  if (direct) return direct.textContent?.trim() ?? "";
   const actions = root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
@@ -5914,7 +5913,7 @@ describe("the Structure tree", () => {
       expect(writeCalls(client)).toEqual(["removeSectionMember"]);
     });
 
-    it("keeps a refused inclusion in the include window", async () => {
+    it("keeps a refused inclusion in the include window, its message in the footer above the buttons", async () => {
       const { client, el } = await mountWithWines({
         addSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.member_cycle" }),
       });
@@ -5924,6 +5923,11 @@ describe("the Structure tree", () => {
         expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
       );
       expect(modal(el, "include").open).toBe(true);
+      await expectMessageAboveButtons(
+        modal(el, "include"),
+        inModal(el, "include", '[data-test="include-cancel"]'),
+        codeMessage("menu_section.member_cycle"),
+      );
       expect(q(el, '[data-test="member-error"]')).toBeNull();
       expect(client.addSectionMember).toHaveBeenCalledOnce();
     });

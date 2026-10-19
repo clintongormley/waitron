@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { commands, page } from "vitest/browser";
 import { beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
@@ -120,6 +121,38 @@ export async function closeReportsDelivered(): Promise<void> {
  */
 export function dialogClosed(dialog: Element): Promise<unknown> {
   return new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
+}
+
+/** The text of the one message of the form whose action row is in `dialog`'s footer, or "". */
+export async function dialogMessageOf(dialog: Element): Promise<string> {
+  const actions = dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    ':scope > wt-form-actions[slot="footer"]',
+  )!;
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
+}
+
+/**
+ * Holds that `dialog` shows its form's message `text` once: on the footer's own line, painted above
+ * `button`, and nowhere among the dialog's own children.
+ */
+export async function expectMessageAboveButtons(
+  dialog: Element,
+  button: Element,
+  text: string,
+): Promise<void> {
+  const actions = dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    ':scope > wt-form-actions[slot="footer"]',
+  )!;
+  const message = await formMessageOf(actions);
+  expect(message?.textContent?.trim()).toBe(text);
+  expect(message!.parentElement).toBe(dialog.shadowRoot!.querySelector(".footer"));
+  expect(message!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    button.getBoundingClientRect().top,
+  );
+  const copies = [...dialog.querySelectorAll('[role="alert"]')].filter(
+    (node) => node.textContent?.trim() === text,
+  );
+  expect(copies).toEqual([]);
 }
 
 /**

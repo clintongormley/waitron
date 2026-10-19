@@ -114,14 +114,14 @@ export async function expectFiltersFirst(
 
 /**
  * The one message shown for a form's action row: in the row itself, or — when the row sits in a
- * dialog's footer — at the end of that dialog's body, where the dialog shows it instead.
+ * dialog's footer — on the footer's own line above the buttons, where the dialog shows it instead.
  */
 export async function formMessageOf(actions: WtFormActions): Promise<Element | null> {
   await actions.updateComplete;
   const dialog = actions.slot === "footer" ? actions.parentElement : null;
   if (dialog?.localName === "wt-dialog" || dialog?.localName === "wt-modal") {
     await (dialog as WtDialog).updateComplete;
-    return dialog.shadowRoot!.querySelector(".body > [data-error]");
+    return dialog.shadowRoot!.querySelector(".footer > [data-error]");
   }
   return actions.shadowRoot!.querySelector("[data-error]");
 }

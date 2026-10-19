@@ -50,7 +50,13 @@ export class WtModal extends WtDialog {
       .body {
         --wt-field-max-width: var(--wt-form-max-width);
         padding-inline: var(--wt-modal-inline-padding);
-        flex: 1;
+        /* Not the flex shorthand, which would also put back the shrink factor wt-dialog gives the
+           body. */
+        flex-grow: 1;
+      }
+
+      .footer {
+        --wt-field-max-width: var(--wt-form-max-width);
       }
 
       .footer.has-content {
