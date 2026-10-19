@@ -3574,3 +3574,33 @@ pending its own exact approval. No production clock comparison or expected resul
 The unchanged golden/immutability command passes 20 cases. These focused results do not establish
 whole-package coverage or current-head CI. The 18 live-restore rewrites requested at 22:05 stay
 outside the feature checkout until their exact before/after assertion bundle is approved.
+
+
+## Live restore approvals and early resume check, 2026-10-19
+
+This checkpoint supersedes the pending live-restore and setup-clock statuses above. The owner's
+22:40 answers approve both exact proposals. Their SHA-256 values were verified before applying;
+no additional test edits are included under either approval.
+
+| Check | Previous scope | Applied scope | Exact authority |
+| --- | --- | --- | --- |
+| `restore-emergency.test.ts` | Three staged emergency cases use outside confirmation and random allocation identities. | Three live archive/bucket cases use the matching selected-copy key, durable hour intent and unchanged destination on changed-event refusal. | Owner 22:40; bundle `526863280aaa56e7a8d584496645073bb04cad1aa6a19a1863a266cb1cdd305b`. |
+| `restore-emergency-attempts.test.ts` | Nine cases inspect external attempt/result files and old placement behavior. | Nine live cases inspect durable selected-hour intent, real hook rollback, identity-last settings failures and exact replay after advancing counters. | Same approved bundle; all old/new expressions are retained in its before/after inventory. |
+| `restore-paper-export.test.ts` | Six cases use the custodian export and retained outside register. | Six live cases use actual hour preparation; missing intent, changed event/source and wrong key refuse before replacing a distinguishable destination. | Same approved bundle; 18 total cases across the three files, 82 old/83 new assertion expressions. |
+| `testing/staged-hour-restore.ts` | No shared live fixture in these suites. | Supplies real initial activation, selected-copy key, current-hour preparation, staging, distinguishable destination and advanced-counter replay. | New helper included verbatim in that approved bundle. |
+| `setup-first-fiscal.route.test.ts` | Date-only fake clock can reach `clock_corrected` while real elapsed time advances. | Its existing fixture freezes `Date` and `performance`; all 31 cases and assertions remain. | Owner 22:40; one-line patch `79b7c8ed2a4bbc76651463594a82ed263662f8e31b0fb4fe8ca13dde93f601aa`. |
+
+The generic resume investigation adds three cases to `restore-operation-placement.test.ts`.
+A missing or directory `venue.db` previously reached SQLite during admission before the existing
+resume check. Both new refusal cases failed with SQLite errors; moving that same file check to
+`writeValidated` before admission makes them return `module.operation_invalid`. The third case
+admits a real placed database and retains its different venue name and three counters at 777.
+Existing assertions and the fiscal writer stay unchanged. Removing the moved check in the
+installed disposable checkout fails the two domain-code assertions; restoring it passes both.
+
+The complete source selection of live restore, setup route and generic/file placement suites
+passes 84 cases. Source types, scoped lint and the unchanged 20-case protected fiscal pair pass.
+The 18-case crash replacement remains an unapplied exact proposal; omitting committed-result
+verification in that candidate makes both marker-without-commit cases resolve incorrectly.
+The Cloud suite still reports six failures and one pass at its retired signed-input boundary.
+These receipts do not establish whole-package coverage, final-head CI or landing readiness.

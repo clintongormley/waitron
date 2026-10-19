@@ -35,7 +35,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   },
 }));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
 });
 vi.mock("node:fs/promises", { spy: true });

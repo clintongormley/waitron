@@ -243,28 +243,34 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 PR #1752 remains a draft at published head `9e8cb90e7c1a4e0b74e419b66719b54ca06b95cc`.
 Its [first complete CI run](https://github.com/clintongormley/waitron/actions/runs/39267628062)
-failed. Complete the remaining restore, crash and protocol integration, then run the normal
-hook and CI on the final head, including the six provisioning shards and their coverage merge.
-Their CI timing still needs qualification; local results do not establish the four-minute target.
+failed. Complete the remaining Cloud and crash integration, then run the normal hook and CI on
+the final head, including the six provisioning shards and their coverage merge. Their CI timing
+still needs qualification; local results do not establish the four-minute target.
 
-The owner approved eight exact test patches on 19 October. They are applied in the feature
-checkout and recorded in [Changed test checks](../operations/a679-changed-checks.md).
-One setup-route case still fails locally with `clock_corrected`: its fixture freezes wall time
-while elapsed time advances. A separately tested one-line clock proposal needs exact approval;
-keep its production comparison and refusal unchanged.
+The owner's 22:40 answers approve the exact live rewrite of the 18 emergency-attempt and
+paper-export cases and the separate setup-route clock fixture. Both are applied, following the
+eight earlier approved patches, and recorded in [Changed test checks](../operations/a679-changed-checks.md).
+The source selection passes 84 cases, including the live restore, clock route and placement suites;
+the protected golden/immutability pair passes 20 cases unedited.
 
-The owner rejected retaining the 18 emergency-attempt and paper-export cases against the old
-placement-only runner. Rewrite them through the live hour flow with its pre-placement gate.
-Keep real selected-copy key authentication, durable intent, rollback, publication order and
-unchanged registrations, series and counters on refusal. Submit every changed or removed fiscal
-assertion as one exact before/after bundle before applying it. The existing 18-case source
-selection remains red pending that work and its approval. Other Cloud and crash failures still
-need diagnosis; neither these proposals nor focused passes qualify the whole branch.
+The live crash investigation found admission opening a missing resumed database before its
+existence check. The generic check now runs before that open. Three new cases qualify missing and
+directory targets plus a valid resume that retains placed rows and counters. No existing generic
+assertion changes. In an independently installed checkout, omitting the early check fails the two
+refusal assertions; the restored cases pass.
 
-Keep the retired production dispatcher disabled. Retained historical checks do not qualify a
-current production success. Existing source and built-command hour qualifications, the 150-case
-recovery run, unchanged fiscal gates and completed reviews have separate receipts; reuse them
-where the tested code is unchanged. Preserve the independent fiscal follow-ups below.
+The existing crash suite remains red pending exact approval of its 18-case live replacement.
+The replacement uses a real source invoice, selected-hour intent, actual killed subprocesses,
+rollback, wrong-key/source refusals and replay with advanced counters. The proposal is outside
+the feature checkout; its before/after inventory and literal two-file bundle are in Lane E's
+questions. The separate Cloud suite still reports six failures and one pass because its signed
+Cloud/paper restore inputs reach the retired dispatcher. Give those cases their own current-flow
+treatment without restoring that dispatcher or removing their behavioral protection.
+
+Retained historical checks do not qualify a current production success. Existing source and
+built-command hour qualifications, the 150-case recovery run and completed reviews have separate
+receipts; reuse them where the tested code is unchanged. These focused results do not establish
+whole-package coverage or current-head CI. Preserve the independent fiscal follow-ups below.
 
 ## Pin the clock's future-finished sample refusal
 

@@ -1,340 +1,147 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { deployment, invoiceSeries, openVenueDatabase, withTransaction } from "@waitron/db";
+import { afterEach, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu";
-import { buildManifest } from "./backup-manifest.js";
-import { packArchive } from "./backup-archive.js";
-import { encryptArtifact } from "./artifact-cipher.js";
-import { ALL_MODULES } from "./modules.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
-import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
-import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
-
+import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { stagedHourRestore } from "./testing/staged-hour-restore.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
-const encryptionKey = "synthetic archive encryption key";
-let root: string;
-let stateDir: string;
-let outside: string;
-let databasePath: string;
-let nodeKey: string;
-beforeEach(async () => {
-  await seedTenants(suite.db);
-  await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await suite.db
-    .insert(invoiceSeries)
-    .values(bases.map((base) => ({ ...base, nodeId: TENANT_A.nodeId })));
-  await withTransaction(suite.db, (tx) =>
-    seedFixtureSif(tx, {
-      nodeId: TENANT_A.nodeId,
-      nif: "89890001K",
-      idSistemaInformatico: "W1",
-      numeroInstalacion: "P000001",
-    }),
-  );
-  nodeKey = await mintBreakGlassSecret(suite.db, TENANT_A.nodeId);
-  root = await mkdtemp(join(tmpdir(), "emergency-restore-"));
-  stateDir = join(root, "state");
-  outside = join(root, "outside-register");
-  await mkdir(stateDir);
-  await mkdir(outside);
-  databasePath = join(root, "backup.db");
-  await suite.db.archiveTo(databasePath);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", undefined);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", undefined);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", join(root, "current.json"));
-  vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", outside);
-});
+let f: Awaited<ReturnType<typeof stagedHourRestore>> | undefined;
 afterEach(async () => {
-  vi.unstubAllEnvs();
-  if (root) await rm(root, { recursive: true, force: true });
+  await f?.cleanup();
+  f = undefined;
 });
-
-async function stage(kind: "archive" | "stream", changedApproval = {}) {
-  const manifest = await buildManifest({
-    db: suite.db,
-    modules: ALL_MODULES,
-    environment: "preproduction",
-    now: new Date("2026-10-01T08:00:00.000Z"),
-  });
-  const entries = [
-    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
-    {
-      name: "secrets/trading.env",
-      bytes: Buffer.from(
-        `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}\nWAITRON_TILL_LOCATION_ID=${TENANT_A.locationId}\nWAITRON_ENV=preproduction\n`,
-      ),
-    },
-  ];
-  const artifact = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
-    encryptionKey,
-  );
-  const binding = {
-    module: "fiscal-verifactu",
-    action: "restore",
-    eventId: "emergency-offline-restore",
-    sourceId:
-      kind === "archive"
-        ? recoveryArchiveSourceId(artifact)
-        : await recoveryStreamSourceId(databasePath, entries),
-    targetNodeId: TENANT_A.nodeId,
-  };
-  const operatorId = { kind: "recovery-key", nodeId: TENANT_A.nodeId, eventId: binding.eventId };
-  const incidentEvidence = "outside/emergency-offline-restore";
-  const recoveryOperation = {
-    binding,
-    input: {
-      emergency: { version: 1 },
-      approval: {
-        version: 1,
-        eventId: binding.eventId,
-        operatorId,
-        sourceId: binding.sourceId,
-        targetNodeId: TENANT_A.nodeId,
-        oldMachineOffline: true,
-        oldMachineAbsent: false,
-        noParallelRecovery: true,
-        confirmedAt: "2026-10-14T18:25:00.000Z",
-        incidentEvidence,
-        ...changedApproval,
-      },
-    },
-  };
-  const common = {
-    environment: "preproduction" as const,
-    recoveryOperation,
-    nodeRecoverySecret: nodeKey,
-  };
-  await stageRestoreRequest(
-    stateDir,
-    kind === "archive"
-      ? { ...common, artifact, recoveryKey: encryptionKey }
-      : { ...common, kind: "stream", databasePath, entries },
-  );
-  expect(await readdir(outside)).toEqual([]);
-  await writeFile(
-    join(root, "current.json"),
-    JSON.stringify({
-      version: 1,
-      priorActivation: "none",
-      binding,
-      operatorId,
-      taxpayerNif: "89890001K",
-      environment: "preproduction",
-      requiredBases: bases,
-      incidentEvidence,
-      knownIdentities: null,
-      uncertaintyRecorded: true,
-    }),
-  );
-}
 
 it.each(["archive", "stream"] as const)(
-  "retains the %s activation result before publishing trading settings",
+  "retains the %s hour intent before publishing trading settings",
   async (kind) => {
-    await stage(kind);
-    await expect(
-      runStagedRestore({
-        stateDir,
-        venueDir: join(root, "venue"),
-        migrationsRoot: null,
-        log: () => {},
-      }),
-    ).resolves.toBe(true);
-    const path = join(
-      outside,
-      `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
-    );
-    const record = JSON.parse(await readFile(path, "utf8"));
-    expect(record.attempts).toEqual([
-      {
-        id: expect.any(String),
-        startedAt: expect.any(String),
-        finishedAt: expect.any(String),
-        outcome: "returned",
-      },
-    ]);
-    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toContain(
+    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    const retained = f.journal();
+    await expect(f.run()).resolves.toBe(true);
+    expect(JSON.parse(retained).revisions.at(-1).value.entries.at(-1)).toMatchObject({
+      kind: "intent",
+      identity: "06RC",
+      binding: f.binding,
+    });
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
       `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
     );
-    const copy = await openVenueDatabase(join(root, "venue"));
-    try {
-      const rows = await copy.venue.select().from(fiscalAllocations);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.allocation).toEqual(record.allocation);
-    } finally {
-      await copy.close();
-    }
-    expect(await readFile(path, "utf8")).not.toContain(nodeKey);
-    expect(await readFile(path, "utf8")).not.toContain(encryptionKey);
-  },
-);
-
-it.each(["archive", "stream"] as const)(
-  "refuses %s trading settings when the outside result cannot be published after local commit",
-  async (kind) => {
-    await stage(kind);
-    const path = join(
-      outside,
-      `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
-    );
-    await expect(
-      runStagedRestore({
-        stateDir,
-        venueDir: join(root, "venue"),
-        migrationsRoot: null,
-        log: (_level, event, fields) => {
-          if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu")
-            mkdirSync(`${path}.next`);
-        },
-      }),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "outside_confirmation_missing" },
-    });
-    await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    const record = JSON.parse(await readFile(path, "utf8"));
-    expect(record.attempts).toEqual([
-      {
-        id: expect.any(String),
-        startedAt: expect.any(String),
-        finishedAt: null,
-        outcome: "started",
-      },
+    expect((await f.snapshot()).allocations.map((row) => row.installationIdentity)).toEqual([
+      "06RB",
+      "06RC",
     ]);
-    const copy = await openVenueDatabase(join(root, "venue"));
-    try {
-      const rows = await copy.venue.select().from(fiscalAllocations);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.allocation).toEqual(record.allocation);
-    } finally {
-      await copy.close();
-    }
-    expect(await readFile(path, "utf8")).not.toContain(nodeKey);
+    expect(f.journal()).toBe(retained);
+    expect(retained).not.toContain(f.key.secret);
+    expect(retained).not.toContain(f.encryptionKey);
   },
 );
-
-it("retains a thrown archive attempt after the real hook transaction rolls back", async () => {
-  await stage("archive");
-  await expect(
-    runStagedRestore({
-      stateDir,
-      venueDir: join(root, "venue"),
-      migrationsRoot: null,
-      log: (_level, event, fields) => {
+it.each(["archive", "stream"] as const)(
+  "keeps the committed %s activation when trading publication fails and finishes without reallocation",
+  async (kind) => {
+    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    const retained = f.journal();
+    const trading = join(f.stateDir, "trading.env");
+    await expect(
+      f.run((_level, event, fields) => {
         if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu")
-          throw new Error("injected callback interruption");
-      },
+          mkdirSync(trading);
+      }),
+    ).rejects.toMatchObject({ code: "EISDIR" });
+    await expect(readFile(trading)).rejects.toMatchObject({ code: "EISDIR" });
+    await f.advanceCounters();
+    const committed = await f.snapshot();
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RC"]);
+    expect(f.journal()).toBe(retained);
+    await rm(trading, { recursive: true });
+    await expect(f.run()).resolves.toBe(true);
+    expect(await f.snapshot()).toEqual(committed);
+    expect(f.journal()).toBe(retained);
+  },
+);
+it("retains the selected hour after a real hook transaction rolls back", async () => {
+  f = await stagedHourRestore(suite.db, "archive", "emergency-offline-restore");
+  const retained = f.journal();
+  await expect(
+    f.run((_level, event, fields) => {
+      if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu")
+        throw new Error("injected callback interruption");
     }),
   ).rejects.toThrow("injected callback interruption");
-  await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-  const path = join(
-    outside,
-    `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
-  );
-  const record = JSON.parse(await readFile(path, "utf8"));
-  expect(record.attempts).toEqual([
-    {
-      id: expect.any(String),
-      startedAt: expect.any(String),
-      finishedAt: expect.any(String),
-      outcome: "threw",
-    },
+  await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  const rows = await f.snapshot();
+  expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
+  expect(
+    rows.registrations.filter((row) => row.revocadoEn === null).map((row) => row.numeroInstalacion),
+  ).toEqual(["06RB"]);
+  expect(
+    rows.series.map(({ code, nextNumber, retiredAt }) => ({ code, nextNumber, retiredAt })),
+  ).toEqual([
+    { code: "A-06RB", nextNumber: 123, retiredAt: null },
+    { code: "FF-06RB", nextNumber: 123, retiredAt: null },
+    { code: "R-06RB", nextNumber: 123, retiredAt: null },
   ]);
-  expect(await readFile(path, "utf8")).not.toContain("injected callback interruption");
-  const copy = await openVenueDatabase(join(root, "venue"));
-  try {
-    expect(await copy.venue.select().from(fiscalAllocations)).toEqual([]);
-  } finally {
-    await copy.close();
-  }
+  expect(f.journal()).toBe(retained);
+  expect(retained).not.toContain("injected callback interruption");
+  await expect(f.nextEvent()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "hour_not_later" },
+  });
+  expect(f.journal()).toBe(retained);
 });
-
 it.each(["archive", "stream"] as const)(
-  "retains the readable %s incident before activation and its final outcome before trading settings",
+  "retains readable %s intent before activation and commits before trading settings",
   async (kind) => {
-    await stage(kind);
-    const path = join(
-      outside,
-      `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
-    );
-    let seenBeforeCommit = false;
-    await runStagedRestore({
-      stateDir,
-      venueDir: join(root, "venue"),
-      migrationsRoot: null,
-      log: (_level, event, fields) => {
-        if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
-          const text = readFileSync(`${path}.txt`, "utf8");
-          expect(text).toContain('"outcome": "started"');
-          expect(text).toContain('"finishedAt": null');
-          expect(text).toContain('"sourceId":');
-          expect(text).not.toContain(nodeKey);
-          expect(text).not.toContain(encryptionKey);
-          expect(existsSync(join(stateDir, "trading.env"))).toBe(false);
-          seenBeforeCommit = true;
-        }
-      },
+    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    const retained = f.journal();
+    let seen = false;
+    await f.run((_level, event, fields) => {
+      if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
+        const text = readFileSync(f!.journalPath, "utf8");
+        expect(text).toBe(retained);
+        expect(JSON.parse(text).revisions.at(-1).value.entries.at(-1)).toMatchObject({
+          kind: "intent",
+          identity: "06RC",
+          binding: f!.binding,
+        });
+        expect(text).not.toContain(f!.key.secret);
+        expect(text).not.toContain(f!.encryptionKey);
+        expect(existsSync(join(f!.stateDir, "trading.env"))).toBe(false);
+        seen = true;
+      }
     });
-    expect(seenBeforeCommit).toBe(true);
-    const json = await readFile(path, "utf8");
-    const text = await readFile(`${path}.txt`, "utf8");
-    expect(text).toContain(createHash("sha256").update(json).digest("hex"));
-    expect(text).toContain(JSON.stringify(JSON.parse(json), null, 2));
-    expect(text).toContain('"outcome": "returned"');
-    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toContain(
+    expect(seen).toBe(true);
+    expect(f.journal()).toBe(retained);
+    expect((await f.snapshot()).allocations.map((row) => row.installationIdentity)).toEqual([
+      "06RB",
+      "06RC",
+    ]);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
       `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
     );
   },
 );
-
 it.each(["archive", "stream"] as const)(
-  "refuses %s trading publication when the readable result cannot be retained after local activation",
+  "refuses %s trading publication when another restored credential cannot be retained",
   async (kind) => {
-    await stage(kind);
-    const path = join(
-      outside,
-      `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
-    );
+    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    const retained = f.journal();
+    const credential = join(f.stateDir, "credentials.key");
     await expect(
-      runStagedRestore({
-        stateDir,
-        venueDir: join(root, "venue"),
-        migrationsRoot: null,
-        log: (_level, event, fields) => {
-          if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
-            rmSync(`${path}.txt`, { force: true });
-            mkdirSync(`${path}.txt`);
-          }
-        },
+      f.run((_level, event, fields) => {
+        if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu")
+          mkdirSync(credential);
       }),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "outside_confirmation_missing" },
+    ).rejects.toMatchObject({ code: "EISDIR" });
+    await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
+      code: "ENOENT",
     });
-    await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    const record = JSON.parse(await readFile(path, "utf8"));
-    expect(record.attempts[0].outcome).toBe("returned");
-    const copy = await openVenueDatabase(join(root, "venue"));
-    try {
-      const rows = await copy.venue.select().from(fiscalAllocations);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.allocation).toEqual(record.allocation);
-    } finally {
-      await copy.close();
-    }
+    await f.advanceCounters();
+    const committed = await f.snapshot();
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RC"]);
+    expect(f.journal()).toBe(retained);
+    await rm(credential, { recursive: true });
+    await expect(f.run()).resolves.toBe(true);
+    expect(await f.snapshot()).toEqual(committed);
   },
 );
