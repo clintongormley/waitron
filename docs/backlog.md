@@ -322,10 +322,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   attached, before any build.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
-- **A679. Finish first Live setup integration.** PR #1752 remains a draft after its first
-  complete CI run. Finish the Cloud restore checks and their exact assertion approval, then
-  qualify the final head and provisioning's six CI shards. Live restore, crash and clock
-  replacements are approved and applied. [Detail](backlog/fiscal.md#finish-first-live-setup-integration).
+- **A679. Finish first Live setup integration.** The exact Cloud, restore, crash and clock test
+  replacements are approved and applied. Qualify the final head through the normal hook and CI,
+  including provisioning's six shards and coverage merge.
+  [Detail](backlog/fiscal.md#finish-first-live-setup-integration).
 
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal

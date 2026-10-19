@@ -241,48 +241,24 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## Finish first Live setup integration
 
-PR #1752 remains a draft at published head `9e8cb90e7c1a4e0b74e419b66719b54ca06b95cc`.
-Its [first complete CI run](https://github.com/clintongormley/waitron/actions/runs/39267628062)
-failed. Complete the remaining Cloud and crash integration, then run the normal hook and CI on
-the final head, including the six provisioning shards and their coverage merge. Their CI timing
-still needs qualification; local results do not establish the four-minute target.
+PR #1752 needs the normal hook and required CI on its final head, including all six provisioning
+shards and their coverage merge. Their CI timing still needs qualification. The earlier published
+head's failed CI does not qualify the integrated candidate.
 
-The owner's 22:40 answers approve the exact live rewrite of the 18 emergency-attempt and
-paper-export cases and the separate setup-route clock fixture. Both are applied, following the
-eight earlier approved patches, and recorded in [Changed test checks](../operations/a679-changed-checks.md).
-The source selection passes 84 cases, including the live restore, clock route and placement suites;
-the protected golden/immutability pair passes 20 cases unedited.
+All exact owner-approved restore, crash, clock and Cloud test patches are now applied. The Cloud
+patch deliberately removes the retired combined signed-report HTTP assertions. Its current cases
+use surviving local hour evidence rather than an outside-registry guarantee after newer local
+evidence is lost. [Changed test checks](../operations/a679-changed-checks.md) records each boundary.
 
-The live crash investigation found admission opening a missing resumed database before its
-existence check. The generic check now runs before that open. Three new cases qualify missing and
-directory targets plus a valid resume that retains placed rows and counters. No existing generic
-assertion changes. In an independently installed checkout, omitting the early check fails the two
-refusal assertions; the restored cases pass.
+The latest overlapping-main rebase preserves A757's configuration format 5 in the implementation
+A679 moved into provisioning. Focused checks pass: 57 server import/Cloud/clock cases, the full
+117-case transfer suite, 69 provisioning import/transfer/command cases and the unchanged protected
+20-case pair. These are local results, not final-head CI or whole-package coverage.
 
-The owner approved the exact 18-case live crash replacement, and it is applied. Its source run
-passes all 18 cases after the rebase. It uses a real source invoice, selected-hour intent,
-actual killed subprocesses, rollback, wrong-key/source refusals and replay with advanced counters.
-Removing committed-result verification in the installed candidate makes both marker-without-commit
-cases resolve incorrectly; restoring it passes both.
+Keep the two completed installed reviews and earlier source/built-command, PDF viewing and
+rendered-entry receipts. The remaining CI gate must pass before landing. Preserve the independent
+fiscal follow-ups below.
 
-The separate Cloud source suite still reports six failures and one pass because its signed
-Cloud/paper restore inputs reach the retired dispatcher. Its seven-case live replacement is
-qualified outside the feature checkout and awaits one exact approval in Lane E's questions.
-The retained Cloud client/reconciliation suites separately pass 62 source cases. The proposal's
-real readers check its signed fixtures, including the module's actual software ID, before the
-production entry refuses them with the former trust and confirmation files present.
-
-The proposal replaces the older-backup outside-registry claim with surviving local hour evidence.
-It explicitly removes the combined signed-report HTTP roundtrip and once-only checks because that
-production reporting path is retired; the owner may instead retain those assertions in a separate
-historical test. Its literal one-file patch, complete before/after inventory and omission controls
-are retained locally. Do not apply or push it before the exact answer, and do not restore the old
-production dispatcher. Package coverage and current-head CI remain required after integration.
-
-Retained historical checks do not qualify a current production success. Existing source and
-built-command hour qualifications, the 150-case recovery run and completed reviews have separate
-receipts; reuse them where the tested code is unchanged. These focused results do not establish
-whole-package coverage or current-head CI. Preserve the independent fiscal follow-ups below.
 
 ## Pin the clock's future-finished sample refusal
 

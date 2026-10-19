@@ -3634,3 +3634,49 @@ unedited protected pair passes 20. The installed omission controls failed their 
 assertions and passed after restoration. Synthetic release and HTTPS clock responses qualify
 the bundled subprocess path, not real internet, Cloud or hardware operation. Final-head CI and
 the separate Cloud-suite integration remain open.
+
+
+## Exact Cloud live-flow approval applied, 2026-10-20
+
+The owner's 19 October 23:35 answer approves exactly the one-file patch
+`a43385d6ed4138ed740824c4d1958d3f7ffed1c862b9eca13d4921d8f42992dc`.
+Its SHA-256 was checked before application. `cloud-fiscal-allocation.test.ts` retains seven cases
+across six families. The local before/after inventory records 36 old and 42 new expressions;
+those counts do not establish equal scope.
+
+The archive and bucket cases validate real signed C packets and refuse their retired production
+entry without replacing a distinguishable destination. They then restore through selected 06RC
+hour authority, preserving the original invoice, recovery operator and complete series facts.
+The sale case expects A-06RC/1 instead of A-C000042/1 and keeps both external-call protections.
+The wrong-key case still expects `promotion.break_glass_invalid` and unchanged destination rows.
+The initial 06RB activation makes the expected allocation count two. Publication replay advances
+counters to 917 and compares complete committed rows. The older-backup case uses surviving local
+hour evidence; it makes no outside-registry guarantee after all newer local evidence is lost.
+
+The paper case checks a real P packet before its production-entry refusal and restores through
+current hour authority. The former combined signed-report HTTP, body and once-only assertions
+are removed under that exact approval. They are not moved into a historical suite. The previous
+62-case retained client/reconciliation result remains separate evidence.
+
+Before application, the source Cloud suite reports six failures and one pass at the retired
+boundary. After application, the combined Cloud, configuration import, previous export and clock
+selection passes 57 cases. Earlier installed omission controls and restored positives remain in
+Lane E's receipts. These results do not establish final-head CI or whole-package coverage.
+
+## Main format-5 integration after relocation, 2026-10-20
+
+Main's A757 slice 2 removes venue-made table statuses and moves configuration exports to format 5
+in `eb16d3805f857304674dffd4d55e6cc5d96b3fea`. A679 had moved the implementation into provisioning.
+The rebase retains that move and ports main's four version changes to the moved implementation.
+
+Only two new-branch test inputs change: `test/configuration-bundle.ts` uses version 5 for a valid
+current bundle, and `configuration-transfer.boundaries.test.ts` uses version 6 as its future-format
+representative. The expected refusal code and field stay exact. Existing server assertions,
+including both version-4 refusals, are unchanged. Authority is the landed A757 format decision and
+the hour plan's requirement to preserve current-main behavior; no fiscal assertion changes.
+
+The initial combined source run reports 34 failures and 22 passes, including six Cloud failures.
+The configuration failures expose the moved reader accepting format 4 and refusing format 5.
+After the port, the four-file server selection passes 57 cases, the complete configuration-transfer
+file passes 117, and four provisioning transfer/import/command suites pass 69. The protected fiscal
+pair passes 20 cases unedited. All logs are retained under Lane E's `a679-final-cloud-20261020-014223`.
