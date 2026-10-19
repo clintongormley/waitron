@@ -782,15 +782,17 @@ describe("deleting several sections", () => {
 
   it("tells the structure hook once, with the sorted menus of every deleted section", async () => {
     const f = await fixture();
-    const dinnerRoot = await menuOwned("menu_root", f.dinnerMenu);
-    const lunchOwn = await owned("Lunch drinks");
-    const dinnerOwn = await app((tx) =>
-      createSectionIn(tx, dinnerRoot, { internalName: "Dinner drinks" }),
-    );
+    // Named in the reverse of the menus' sorted order, so an unsorted union is always wrong.
+    const [first, second] = [f.lunchMenu, f.dinnerMenu].sort();
+    const ownedIn = async (menuId: string) => {
+      const root = await menuOwned("menu_root", menuId);
+      return (await app((tx) => createSectionIn(tx, root, { internalName: "Drinks" }))).id;
+    };
+    const named = [await ownedIn(second!), await ownedIn(first!)];
     hook.mockClear();
-    await app((tx) => deleteSections(tx, [lunchOwn.id, dinnerOwn.id]));
+    await app((tx) => deleteSections(tx, named));
     expect(hook).toHaveBeenCalledTimes(1);
-    expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu, f.dinnerMenu].sort());
+    expect(hook.mock.calls[0]![1]).toEqual([first, second]);
   });
 
   it("deletes a section of an included menu, and the including menu loses its product", async () => {
