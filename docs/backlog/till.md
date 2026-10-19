@@ -2257,6 +2257,11 @@ The remaining work includes:
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
   checks as whole-item acceptance.
 
+The shipped English and Spanish modifier guides describe editing sent table dishes through Recall
+and New order, with recorded answers and prices retained and new extras checked against the current
+offer. Their parked-counter guidance is scoped separately. This closes that guide-prose subset;
+the remaining whole-branch audit and cancellation/Finish work above stay open.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured

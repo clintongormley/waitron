@@ -2218,6 +2218,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
   and complete the remaining prose audit, whole-path, native-screen, physical-till and delivery checks.
   Mixed-dish phone Review and Back have native app checks with controlled API replies.
+  The English and Spanish modifier guides describe Recall into New order for sent table dishes,
+  separately from parked counter orders.
   Separate authenticated route checks retain saved placement and discounted recalled extras
   through takeover, partial sending and replay. Physical trials remain.
   Partial serving now has native app checks for quantity selection, repeated confirmation and Undo.
