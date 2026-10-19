@@ -8,7 +8,7 @@ import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@wa
 import { workingOrders } from "@waitron/db";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
-import type { ReconcileDeps } from "./reconcile.js";
+import type { ReconcileDeps, SettlementRecord, SettlementReportSource } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { seedWorkingOrder } from "../test/seed.js";
@@ -144,5 +144,124 @@ describe("concurrent reconcile sweeps", () => {
       sql`select provider_amount from payment_holds`,
     );
     expect(rows).toEqual([{ provider_amount: 1250 }]);
+  });
+});
+
+/** A report whose `fetch` waits until released, so a sweep can be held between its T1 and T2. */
+function gatedReport(records: SettlementRecord[]) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let entered!: () => void;
+  const fetching = new Promise<void>((resolve) => (entered = resolve));
+  const source: SettlementReportSource = {
+    async fetch() {
+      entered();
+      await gate;
+      return records;
+    },
+  };
+  return { source, release, fetching };
+}
+
+/**
+ * Sweep X reads its rows, then waits on its report while sweep Y runs to the end; then X finishes
+ * from its earlier read. A payment must end either held and not claimed, or claimed and not held.
+ */
+describe("a sweep overtaken between its read and its writes", () => {
+  const matching = (ref: string) => ({
+    references: [`ext-${ref}`],
+    amount: decimal("10.00"),
+    settledAt: OLD_SETTLED,
+  });
+  const drifted = (ref: string) => ({ ...matching(ref), amount: decimal("12.50") });
+
+  async function orphan(nif: string, ref: string) {
+    const seeded = await seedWorkingOrder(suite.db, nif);
+    await withTransaction(suite.db, (tx) =>
+      insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: ref,
+        externalRef: `ext-${ref}`,
+        amount: decimal("10.00"),
+        settledAt: OLD_SETTLED,
+      }),
+    );
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, seeded.workingOrderId));
+  }
+
+  async function overtake(ref: string, xRecords: SettlementRecord[], yRecords: SettlementRecord[]) {
+    const reversed: string[] = [];
+    const make = (report: SettlementReportSource): ReconcileDeps => ({
+      db: suite.db,
+      provider: "fake",
+      report,
+      reverse: async (ref) => {
+        reversed.push(ref);
+      },
+      incidents: recordIncidentOnce,
+      heldAlerts: {
+        raise: recordIncidentOnce,
+        current: currentIncidentsOf,
+        handle: markIncidentHandled,
+      },
+      settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
+    });
+    const x = gatedReport(xRecords);
+    const sweepX = reconcilePayments(make(x.source), PERIOD, NOW);
+    await x.fetching;
+    await reconcilePayments(make(new FakeSettlementReport(yRecords)), PERIOD, NOW);
+    // So the orphan alert read below is the one X raises, not one Y left open.
+    await suite.db.execute(sql`
+      update incidents set acknowledged_at = ${NOW.toISOString()}
+      where code = 'payment.reconcile_orphan' and acknowledged_at is null`);
+    x.release();
+    await sweepX;
+
+    const holds = await suite.db.execute(sql`
+      select h.id from payment_holds h join payments p on p.id = h.payment_id
+      where p.payment_ref = ${ref}`);
+    const claim = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
+      sql`select reconcile_remediated_at from payments where payment_ref = ${ref}`,
+    );
+    const alerts = await suite.db.execute<{ code: string; params: string }>(
+      sql`select code, params from incidents where acknowledged_at is null`,
+    );
+    const named = (code: string) =>
+      alerts.rows
+        .filter((row) => row.code === code)
+        .flatMap(
+          (row) => (JSON.parse(row.params) as { payments: { paymentRef: string }[] }).payments,
+        )
+        .map((payment) => payment.paymentRef)
+        .filter((named) => named === ref);
+    return {
+      held: holds.rows.length > 0,
+      claimed: claim.rows[0]!.reconcile_remediated_at !== null,
+      reversed,
+      named,
+    };
+  }
+
+  it("leaves the payment held and unclaimed when the overtaking sweep holds it", async () => {
+    const ref = "race-overtaken-hold";
+    await orphan("B88888888", ref);
+    const end = await overtake(ref, [matching(ref)], [drifted(ref)]);
+    expect(end).toMatchObject({ held: true, claimed: false, reversed: [] });
+    expect(end.named("payment.reconcile_held")).toEqual([ref]);
+    expect(end.named("payment.reconcile_orphan")).toEqual([]);
+  });
+
+  it("leaves the payment claimed and unheld when the overtaking sweep claims it", async () => {
+    const ref = "race-overtaken-claim";
+    await orphan("B99999999", ref);
+    const end = await overtake(ref, [drifted(ref)], [matching(ref)]);
+    expect(end).toMatchObject({ held: false, claimed: true, reversed: [ref] });
+    expect(end.named("payment.reconcile_held")).toEqual([]);
+    expect(end.named("payment.reconcile_orphan")).toEqual([ref]);
   });
 });

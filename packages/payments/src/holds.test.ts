@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
-import { getPaymentByRef, insertCapturedPayment } from "./store.js";
+import { getPaymentByRef, insertCapturedPayment, markReconcileRemediated } from "./store.js";
 import { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
@@ -50,7 +50,7 @@ describe("recordHold", () => {
         foundAt: new Date("2026-10-18T01:00:00.000Z"),
       }),
     );
-    expect(wrote).toBe(true);
+    expect(wrote).toBe("written");
     expect(await holdRows(paymentId)).toEqual([
       { provider_amount: 1195, found_at: "2026-10-18T01:00:00.000Z" },
     ]);
@@ -72,10 +72,57 @@ describe("recordHold", () => {
         foundAt: new Date("2026-10-19T01:00:00.000Z"),
       }),
     );
-    expect(second).toBe(false);
+    expect(second).toBe("existing");
     expect(await holdRows(paymentId)).toEqual([
       { provider_amount: 1195, found_at: "2026-10-18T01:00:00.000Z" },
     ]);
+  });
+});
+
+describe("recordHold on a claimed payment", () => {
+  it("refuses, and writes nothing, for a payment claimed for a refund", async () => {
+    const { paymentId, paymentRef } = await aCapturedPayment();
+    await withTransaction(suite.db, (tx) =>
+      markReconcileRemediated(tx, {
+        provider: "stripe",
+        paymentRef,
+        at: new Date("2026-10-18T00:30:00.000Z"),
+      }),
+    );
+    const result = await withTransaction(suite.db, (tx) =>
+      recordHold(tx, {
+        paymentId,
+        providerAmount: decimal("11.95"),
+        foundAt: new Date("2026-10-18T01:00:00.000Z"),
+      }),
+    );
+    expect(result).toBe("refused");
+    expect(await holdRows(paymentId)).toEqual([]);
+  });
+});
+
+describe("markReconcileRemediated on a held payment", () => {
+  it("does not claim a payment that has a hold", async () => {
+    const { paymentId, paymentRef } = await aCapturedPayment();
+    await withTransaction(suite.db, (tx) =>
+      recordHold(tx, {
+        paymentId,
+        providerAmount: decimal("11.95"),
+        foundAt: new Date("2026-10-18T01:00:00.000Z"),
+      }),
+    );
+    const claimed = await withTransaction(suite.db, (tx) =>
+      markReconcileRemediated(tx, {
+        provider: "stripe",
+        paymentRef,
+        at: new Date("2026-10-18T02:00:00.000Z"),
+      }),
+    );
+    expect(claimed).toBe(false);
+    const { rows } = await suite.db.execute(
+      sql`select reconcile_remediated_at from payments where id = ${paymentId}`,
+    );
+    expect(rows).toEqual([{ reconcile_remediated_at: null }]);
   });
 });
 

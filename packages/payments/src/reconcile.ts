@@ -13,7 +13,7 @@ import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
 import { existingReferences, listReconcilable, markReconcileRemediated } from "./store.js";
-import { recordHold } from "./holds.js";
+import { holdExists, recordHold } from "./holds.js";
 import { refreshHeldAlert } from "./held-alert.js";
 import type { HeldAlertSink } from "./held-alert.js";
 
@@ -219,11 +219,12 @@ const SEVERITY = {
  * Audit one period's payments against the processor's settlement report, raise one incident per
  * class (a held payment only in the held alert), and reverse the orphans that pass every gate.
  *
- * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2 writes incidents and markers, and
- * the reversals run outside every transaction (each is a network call). The report is fetched even
- * when T1 read nothing: zero local rows against a non-empty report is the silent-data-loss case.
- * The remediation marker is stamped BEFORE the reversal, so a crash between the processor refunding
- * and us recording it leaves an under-remediated orphan, never a double refund.
+ * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2
+ * writes incidents and markers, and the reversals run outside every transaction (each is a network
+ * call). The report is fetched even when T1 read nothing: zero local rows against a non-empty report
+ * is the silent-data-loss case. The remediation marker is stamped BEFORE the reversal, so a crash
+ * between the processor refunding and us recording it leaves an under-remediated orphan, never a
+ * double refund.
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
@@ -322,8 +323,14 @@ export async function reconcilePayments(
         // `payment_holds` refuses a stored count of whole cents that is not positive, and that
         // refusal would undo all of T2, so no hold is written unless the figure rounds to a cent.
         if (decimalToCents(providerAmount) > 0) {
-          await recordHold(tx, { paymentId: entry.row.paymentId, providerAmount, foundAt: now });
-          held.add(ref);
+          const hold = await recordHold(tx, {
+            paymentId: entry.row.paymentId,
+            providerAmount,
+            foundAt: now,
+          });
+          // Refused: a sweep that overtook this one claimed the payment after this one's T1 read.
+          if (hold === "refused") remediation.set(ref, "alreadyClaimed");
+          else held.add(ref);
         }
         continue;
       }
@@ -332,6 +339,11 @@ export async function reconcilePayments(
         paymentRef: ref,
         at: now,
       });
+      if (!claimed && (await holdExists(tx, entry.row.paymentId))) {
+        // A sweep that overtook this one held the payment after this one's T1 read.
+        held.add(ref);
+        continue;
+      }
       // A lost race is the same fact as an earlier sweep's marker — another sweep owns the reversal
       // — so it reports the same reason.
       remediation.set(ref, claimed ? "claimed" : "alreadyClaimed");

@@ -801,9 +801,10 @@ export async function existingReferences(
 }
 
 /**
- * Stamp the orphan-remediation marker, matching only a row whose marker is still null and returning
- * whether it stamped. That row-or-nothing return is the concurrency guard: two sweeps racing over
- * one orphan produce exactly one reversal, because only one of them sees `true`.
+ * Stamp the orphan-remediation marker, matching only a row whose marker is still null and that has
+ * no hold, and returning whether it stamped. That row-or-nothing return is the concurrency guard:
+ * two sweeps racing over one orphan produce exactly one reversal, because only one of them sees
+ * `true`, and a payment a racing sweep has held is never claimed.
  */
 export async function markReconcileRemediated(
   tx: Transaction,
@@ -812,7 +813,13 @@ export async function markReconcileRemediated(
   const [row] = await tx
     .update(payments)
     .set({ reconcileRemediatedAt: params.at.toISOString(), updatedAt: nowIso() })
-    .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt)))
+    .where(
+      and(
+        keyWhere(params),
+        isNull(payments.reconcileRemediatedAt),
+        sql`not exists (select 1 from ${paymentHolds} where ${paymentHolds.paymentId} = ${payments.id})`,
+      ),
+    )
     .returning({ id: payments.id });
   return row !== undefined;
 }

@@ -1,4 +1,5 @@
-import { asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimalToCents } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -22,21 +23,41 @@ export interface OpenHold {
 
 export type HoldOutcome = "refunded_at_provider" | "kept";
 
-/** True when this call wrote the hold; false when the payment was already held. */
+/** `written` by this call, `existing` from an earlier one, or `refused`: a payment claimed for a
+ * refund is never held, so the two cannot both happen to one payment. */
+export type HoldWrite = "written" | "existing" | "refused";
+
 export async function recordHold(
   tx: Transaction,
   params: { paymentId: string; providerAmount: Decimal; foundAt: Date },
-): Promise<boolean> {
+): Promise<HoldWrite> {
   const written = await tx
     .insert(paymentHolds)
-    .values({
-      paymentId: params.paymentId,
-      providerAmount: decimalToCents(params.providerAmount),
-      foundAt: params.foundAt.toISOString(),
-    })
+    .select(
+      tx
+        .select({
+          id: sql<string>`${newId()}`.as("id"),
+          paymentId: payments.id,
+          providerAmount: sql<number>`${decimalToCents(params.providerAmount)}`.as(
+            "provider_amount",
+          ),
+          foundAt: sql<string>`${params.foundAt.toISOString()}`.as("found_at"),
+        })
+        .from(payments)
+        .where(and(eq(payments.id, params.paymentId), isNull(payments.reconcileRemediatedAt))),
+    )
     .onConflictDoNothing({ target: paymentHolds.paymentId })
     .returning({ id: paymentHolds.id });
-  return written.length > 0;
+  if (written.length > 0) return "written";
+  return (await holdExists(tx, params.paymentId)) ? "existing" : "refused";
+}
+
+export async function holdExists(tx: Transaction, paymentId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: paymentHolds.id })
+    .from(paymentHolds)
+    .where(eq(paymentHolds.paymentId, paymentId));
+  return row !== undefined;
 }
 
 /** Every hold with no recorded outcome, oldest first. */
