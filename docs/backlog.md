@@ -323,31 +323,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
 - **A679. First Live setup: one page and one recovery PDF.** Finish the existing branch through the
-  [hour-code implementation plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md)
-  and [approved design](superpowers/specs/2026-10-16-a679-hour-coded-series-design.md).
-  Keep the completed work and every changed-check inventory in
-  [the qualification record](operations/a679-changed-checks.md).
-  Obtain viewing approval for the revised real EN/ES A4 PDFs through Drive; the owner's combined
-  key/check, single current installation-code and short time-zone decisions are implemented in the candidate.
-  Complete native adoption/promotion and the remaining entry/recovery journeys. Archive and stream
-  recovery now have source-host checks for two trading starts in later hours, with unchanged
-  allocations, counters and recorded invoices. The committed Chromium suite covers wizard PDF download/re-upload, annotated and
-  printed copies, typed entry and a matching archived database; other local browser probes remain
-  separate evidence.
-  Obtain exact approval for the retained CLI test's migration from JSON input to owned hour/PDF setup;
-  its concrete replacement is qualified in a disposable checkout and the original case remains a gate.
-  The approved direct/supervised patch and fresh refused-restore marker checks are qualified locally.
-  Preserve behavioral checks and obtain exact approval for further protected fiscal assertions.
-  Recovery-delivery records and expiring kept confirmations have direct integrity checks and passing
-  file-scoped coverage; close the remaining provisioning and entry coverage gaps without lowering
-  the gates. Archived repair events and workspace evidence now have additional corruption and
-  path checks, including independently installed guard-removal controls; these do not complete
-  package coverage or entry qualification. Retire active paper
-  and Cloud allocation protocols, reconcile current operator/developer prose, and integrate the
-  current main branch and any migration collisions. Complete both final installed Claude reviews,
-  the normal push hook and current-head CI before the authorised, serialised landing.
-  A696, A731–A733 and W41s-7 remain separate work.
-  [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
+  [hour-code plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
+  Close remaining coverage and entry checks, retire active allocation protocols, reconcile current
+  instructions and integrate main. Revised PDF viewing and the exact retained CLI-test replacement
+  still need approval. Complete both final installed reviews, hook and current-head CI before landing.
+  [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
+  [changed-check inventory](operations/a679-changed-checks.md).
 
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.
   Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,

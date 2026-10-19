@@ -1223,6 +1223,124 @@ it("the owned production command runs an explicitly confirmed isolated readiness
   }
 });
 
+it("an unreadable retained vault file refuses before command activation", async () => {
+  const f = await realActivationFixture();
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(join(f.root, "state/secrets.env"), { recursive: true });
+  await expect(runCli(f.args, f.deps)).rejects.toMatchObject({ code: "EISDIR" });
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+  expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+  await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("a missing private node key cannot finish interrupted command publication", async () => {
+  const f = await realActivationFixture();
+  f.interrupt(true);
+  await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic before trading publication");
+  const before = (await f.runtime.store.read())!;
+  const counters = await venue.db.select().from(invoiceSeries);
+  const { deleteCredential } = await import("@waitron/credentials");
+  const { withTransaction, readMembershipTrustSet } = await import("@waitron/db");
+  await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: "membership.node_key" }));
+  const trust = await readMembershipTrustSet(venue.db);
+  expect(trust[before.frozen.nodeId]).toEqual(expect.any(String));
+  f.interrupt(false);
+  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(f.output).toContain("setup.attempt_uncertain {}");
+  expect(await readMembershipTrustSet(venue.db)).toEqual(trust);
+  expect(await venue.db.select().from(invoiceSeries)).toEqual(counters);
+  expect((await f.runtime.store.read())!.status).toBe("committed");
+  await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+async function unpreparedDeploymentFixture(
+  environment: "production" | "preproduction" = "preproduction",
+) {
+  const f = await realActivationFixture();
+  await f.runtime.owner.claimFirstSetup(
+    { environment, request },
+    randomBytes(32).toString("base64url"),
+  );
+  const state = (await f.runtime.store.read())!;
+  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const { firstSetupProvisionRequest } = await import("./first-setup-activation.js");
+  const provision = firstSetupProvisionRequest(state);
+  return { ...f, state, deployment, provision };
+}
+
+it.each([false, true])(
+  "command deployment requires publication and prepared inputs before stamping (published %s)",
+  async (published) => {
+    const f = await unpreparedDeploymentFixture();
+    if (published) await f.deployment.publication(f.state);
+    let began = false;
+    await expect(
+      f.deployment.provision(f.provision, async () => {
+        began = true;
+      }),
+    ).rejects.toMatchObject({ code: published ? "setup.attempt_uncertain" : "setup.not_ready" });
+    expect(began).toBe(false);
+    expect(await f.runtime.store.read()).toEqual(f.state);
+    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+  },
+);
+
+it("command deployment refuses a changed frozen venue before stamping", async () => {
+  const f = await unpreparedDeploymentFixture();
+  await f.deployment.publication(f.state);
+  let began = false;
+  await expect(
+    f.deployment.provision(
+      {
+        ...f.provision,
+        venue: { ...f.provision.venue, legalName: "Different business" },
+      },
+      async () => {
+        began = true;
+      },
+    ),
+  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(began).toBe(false);
+  expect(await f.runtime.store.read()).toEqual(f.state);
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+});
+
+it("production readiness cannot run before publication has loaded its settings", async () => {
+  const f = await unpreparedDeploymentFixture("production");
+  await expect(f.deployment.assertReady(f.state)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(await f.runtime.store.read()).toEqual(f.state);
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+});
+
+it("command deployment refuses to provision over its already completed venue", async () => {
+  const f = await realActivationFixture();
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const state = (await f.runtime.store.read())!;
+  const before = await venue.db.select().from(invoiceSeries);
+  const tenants = await readTenantIdentities(venue.db);
+  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  await deployment.publication(state);
+  const { firstSetupProvisionRequest } = await import("./first-setup-activation.js");
+  await expect(
+    deployment.provision(firstSetupProvisionRequest(state), async () => {
+      throw new Error("must not enter activation");
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(await readTenantIdentities(venue.db)).toEqual(tenants);
+  expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await f.runtime.store.read()).toEqual(state);
+});
+
 it("--yes does not send a fiscal test when its separate confirmation is declined", async () => {
   const f = await commandReadinessFixture("no");
   try {

@@ -2850,3 +2850,54 @@ Receipts: Lane E's `receipts/a679-resolution-integrity-20261019`, including the 
 and restoration logs, byte comparisons and temporary-checkout cleanup. Revised PDF viewing,
 the exact CLI-test approval, remaining coverage, protocol retirement, current-main integration,
 both final installed reviews, the push hook and current-head CI remain before landing.
+
+## Configuration import and command publication, 2026-10-19
+
+New configuration-transfer cases check the current business-day cutover, refusal of future
+cutover changes and missing active series, stored receipt-language types, table/column admission
+before deletion, retained target ownership, disabled imported staff credentials, source-operator
+exclusion, disabled printers and agent credentials, and both sides of the row-count limit.
+The configuration fixtures use the real migrated database and a non-fiscal GB venue; they do
+not qualify an AEAT submission or a credential login journey.
+
+New recovery cases check the stored node, active administrator and complete series set, with
+unchanged counter rows on successful recovery and refusal. Their operation input is a synthetic
+parser fixture; these cases do not establish fiscal-operation authority. Seven additional command
+cases check unreadable retained vault files, lost private keys during interrupted publication,
+missing publication/preparation, changed frozen requests, readiness before settings and repeated
+provisioning of a completed venue. They reuse the existing command fixtures and their synthetic
+clock, release and external-readiness observations.
+
+These add 29 cases. The earlier CLI file is reconstructible byte for byte by removing only the
+inserted block; no existing fixture, assertion or production implementation changes. The retained
+server launch test, pending exact approval patch, protected golden pair and coverage configuration
+remain unchanged. The focused four-file source run passes 123 cases. The complete independent
+checkout, installed with the frozen lockfile, passes the same 123 cases before and after nine
+serial omission/restoration checks. Each omission fails one intended assertion: password clearing,
+source-operator filtering, printer disablement, agent credential replacement, operator-dependent
+filtering, row limit, recovered node, recovered administrator role and recovered series name.
+
+A tenth independent fault permits regeneration when the private key is missing but the public
+key remains. The command still refuses publication, but the assertion that trust stays unchanged catches
+the replaced public key. Restoring the condition passes that case. The unedited golden and
+immutability pair passes all 20 cases. Types, scoped lint and explicit code formatting pass.
+
+The initial command helper used the public claim summary instead of the durable state. The initial
+recovery fixture had an empty operation list, so its negative cases stopped at parsing; the valid
+control failed. Both new fixtures were corrected before installed qualification. The subsequent
+node and administrator omissions then resolve instead of refusing, failing the intended assertions.
+These initial errors are not product defects. One intermediate tree comparison ran during the
+key mutation and reported that changed file; the comparison after restoration finds only the
+later backlog edit. It is the latter comparison that checks restoration.
+
+The complete provisioning run passes all 1,425 cases in 72 files (450.20 seconds), then fails
+only statement coverage: 3,681/3,788 (97.17%), below 98%. Branches are 2,748/2,876 (95.54%),
+functions 684/696 (98.27%) and lines 3,306/3,356 (98.51%), each meeting its unchanged threshold.
+`coverage-gaps.json` retains the remaining locations, led by workspace, resolution inspection and
+ownership handling. This is an unresolved package gate. The root backlog now lists open work
+and links here for qualification receipts. No threshold, exclusion, guard, production source,
+SQL migration or protected fiscal assertion changes in this step.
+
+Receipts: Lane E's `receipts/a679-import-publication-20261019`. The existing PDF-viewing and exact
+CLI-test approval requests remain pending, alongside the remaining A679 implementation,
+integration, reviews and CI gates.
