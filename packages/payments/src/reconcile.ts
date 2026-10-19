@@ -303,6 +303,7 @@ export async function reconcilePayments(
     //     smaller, the refund is refused after the permanent marker is stamped.
     const remediation = new Map<string, OrphanRemediation>();
     const held = new Set<string>();
+    let wroteHold = false;
     for (const entry of findings) {
       if (entry.klass !== "orphan") continue;
       const ref = entry.row.paymentRef;
@@ -337,6 +338,7 @@ export async function reconcilePayments(
           // Refused: a sweep that overtook this one claimed the payment after this one's T1 read.
           if (hold === "refused") remediation.set(ref, "alreadyClaimed");
           else held.add(ref);
+          if (hold === "written") wroteHold = true;
         }
         continue;
       }
@@ -358,7 +360,10 @@ export async function reconcilePayments(
 
     result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
-    if (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null })) result.incidentsRaised += 1;
+    // Every other writer of a hold or an outcome refreshes the alert in its own transaction.
+    if (wroteHold && (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null }))) {
+      result.incidentsRaised += 1;
+    }
   });
 
   // One failure does not abort the pass. See `PaymentReconcileResult.remediationFailures` for why

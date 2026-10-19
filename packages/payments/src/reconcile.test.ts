@@ -928,6 +928,27 @@ describe("orphan remediation", () => {
     ]);
   });
 
+  it("reads the held alert once when its writes record no new hold", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const report = new FakeSettlementReport([settlement({ amount: decimal("12.50") })]);
+    await reconcilePayments(deps(report), PERIOD, NOW);
+
+    const counted = deps(report);
+    let reads = 0;
+    counted.heldAlerts = {
+      ...counted.heldAlerts,
+      current: (tx, input) => {
+        reads += 1;
+        return currentIncidentsOf(tx, input);
+      },
+    };
+    await reconcilePayments(counted, PERIOD, new Date("2026-07-26T12:00:00Z"));
+    expect(reads).toBe(1);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_held"]);
+  });
+
   it("raises the morning alert even when the settlement report cannot be fetched", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
