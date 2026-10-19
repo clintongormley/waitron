@@ -15,7 +15,8 @@ import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { initialSetupInput } from "./testing/allocated-provision.js";
 import { freePorts } from "./testing/free-ports.js";
 import { request, firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
-import { publicFirstFiscalInput } from "../test/first-fiscal-public.js";
+import type { ModuleOperationHost } from "@waitron/module";
+import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -26,6 +27,22 @@ vi.mock("@waitron/composition", async (original) => {
         ? module
         : {
             ...module,
+            provisioning: {
+              ...module.provisioning,
+              initialSetup: {
+                ...module.provisioning!.initialSetup!,
+                configure: (bound: ModuleOperationHost) => ({
+                  ...module.provisioning!.initialSetup!.configure!(bound),
+                  resolutionEvidence: () => ({
+                    files: [
+                      "WAITRON_FISCAL_CUSTODIAN_FILE",
+                      "WAITRON_FISCAL_CONFIRMATION_FILE",
+                    ].map((key) => bound.environment[key]!),
+                    directories: [],
+                  }),
+                }),
+              },
+            },
             fiscal: {
               ...module.fiscal!,
               // Qualify local owner activation and evidence retention without an AEAT submission.
@@ -37,6 +54,25 @@ vi.mock("@waitron/composition", async (original) => {
   };
 });
 
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const now = Date.now(),
+      mono = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: now,
+      uncertaintyMs: 500,
+      wallStartedMs: now,
+      wallFinishedMs: now,
+      monotonicStartedMs: mono,
+      monotonicFinishedMs: mono,
+    };
+  },
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
 const dirs: string[] = [];
 function runCli(args: string[], env: NodeJS.ProcessEnv) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -53,6 +89,7 @@ function runCli(args: string[], env: NodeJS.ProcessEnv) {
   });
 }
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -92,8 +129,10 @@ async function launchFixture(ownerSetup = false) {
   return { root, stateDir, input, evidenceEnv, base, port };
 }
 it.each(["direct", "supervised"])(
-  "%s launch retains its passed/file-merged fiscal evidence and activates owner setup despite conflicting process.env",
+  "%s launch binds its passed/file-merged module evidence and activates owned hour setup despite conflicting process.env",
   async (kind) => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime("2026-10-16T11:40:00Z");
     const f = await launchFixture(true);
     let server: StartedServer | undefined;
     const killed = vi.spyOn(process, "kill").mockReturnValue(true);
@@ -161,9 +200,20 @@ it.each(["direct", "supervised"])(
         venue: request,
       });
       capability = claim.capability;
+      const challenge = await post("preparation", {
+        module: MODULE,
+        proposal: { action: "clock-challenge" },
+      });
+      await post("preparation", {
+        module: MODULE,
+        proposal: {
+          action: "compare-clocks",
+          browser: { challengeId: challenge.preparation.id, instantMs: Date.now() },
+        },
+      });
       await post("candidates", {
         module: MODULE,
-        proposal: { serials: [1] },
+        proposal: { answer: "no" },
         ...(await post("reconfirm", { password: PASSWORD, purpose: "block-use" })),
       });
       const exported = await fetch(`https://127.0.0.1:${f.port}/setup-api/first-setup/request`, {
@@ -171,20 +221,37 @@ it.each(["direct", "supervised"])(
         headers: headers(),
       } as RequestInit);
       expect(exported.status).toBe(200);
-      const signed = publicFirstFiscalInput((await exported.json()).modules[0].request);
+      const input = (await exported.json()).modules[0].request.input;
       f.input.nodeId = claim.state.nodeId;
-      await post("input", { module: MODULE, input: signed.input });
-      await post("enrol", {
+      await post("input", { module: MODULE, input });
+      const staged = await post(
+        "node-key",
+        await post("reconfirm", { password: PASSWORD, purpose: "block-use" }),
+      );
+      const statement = {
+        kind: "waitron-recovery-document",
+        installationCodes: [input.allocation.installationIdentity],
+        version: 1,
+        scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
+        taxpayerName: request.legalName,
+        venueName: request.location.name,
+        createdAt: new Date().toISOString(),
+        nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
+      };
+      const reference = {
         module: MODULE,
-        publicKey: signed.key,
-        comparison: signed.key.fingerprint,
-      });
-      await post("current-master", {
-        module: MODULE,
-        statement: signed.current,
+        stageId: staged.stage.stageId,
+        inputDigest: firstFiscalPublicDigest(input),
+        bindingDigest: firstFiscalPublicDigest(statement),
+        documentDigest: "d".repeat(64),
+      };
+      await post("recovery-document", { ...reference, statement });
+      await post("recovery-document-kept", {
+        ...reference,
+        kept: true,
         ...(await post("reconfirm", { password: PASSWORD, purpose: "activation" })),
       });
-      const outside = [signed.key, signed.current].map((value) => JSON.stringify(value));
+      const outside = ['{"synthetic":"public-source"}', '{"synthetic":"outside-history"}'];
       for (const [index, key] of [
         "WAITRON_FISCAL_CUSTODIAN_FILE",
         "WAITRON_FISCAL_CONFIRMATION_FILE",
@@ -233,7 +300,7 @@ it.each(["direct", "supervised"])(
             environment: row.environment,
             identity: row.installationIdentity,
           })),
-        ).toEqual([{ nodeId: f.input.nodeId, environment: "preproduction", identity: "S000001" }]);
+        ).toEqual([{ nodeId: f.input.nodeId, environment: "preproduction", identity: "06RB" }]);
       } finally {
         await db.close();
       }
