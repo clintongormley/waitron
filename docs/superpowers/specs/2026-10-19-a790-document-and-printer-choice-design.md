@@ -1,3 +1,69 @@
+# A790: D approved; E next, 2026-10-19, after the 13:20 answer
+
+**A+B+C+D are approved only in their precise answered scope. E alone is next;
+the complete design, plan and build remain unapproved.** This addendum takes precedence
+over conflicting text and boards below. Every existing byte follows unchanged as history,
+including D's former no-A4/profile wording and earlier open-question lists.
+
+Authority: the latest owner answer in `/Users/clintongormley/waitron-campaign-f/questions.md`,
+2026-10-19 about 13:20: **“STRAIGHT TO RECEIPT”**. Print/reprint on a simplified sale
+with only Receipt possible opens Receipt directly, skipping the one-document choice.
+For `S/318` (€14.50, Spanish, one guest), keep the inline, foldable printer row and offered
+language choice, then require the named final confirmation, for example **Print a copy
+on Patio receipt** when the server designates a copy. Keep the recorded simplified invoice,
+number, amount and guests. D settles only this document step; it authorizes no automatic
+print, full-invoice issuance/conversion or email, and A4 paper does not turn a sale into F1.
+Wider step, sole-printer/default, zero-printer and fallback proposals remain unapproved.
+
+A retains the same recorded full invoice through Receipt and Invoice. C keeps Invoice's
+printer row inline and foldable with its named final button, matching Receipt/payment.
+B offers **every active printer at the sale's venue** to a dashboard without a device
+profile, including A4 and portable printers for either document choice. Disabled, deleted
+and other-venue printers stay excluded. No profile selection, borrowed till identity or
+dashboard Equipment update. Device paths retain their receipt/invoice lists by role;
+the phone's receipt choice at and after payment remains its **one Equipment setting**,
+without separate receipt memory or new receipt-preference storage.
+
+## E: the sole next owner question
+
+**On the dashboard without a device profile, should this browser remember separate
+last-used Receipt and Invoice printers for each sale venue (recommended), or one last-used
+printer shared by both document choices at each sale venue?**
+
+Recommend remembering the two printers separately for each sale venue so printing an invoice
+does not change where the next receipt goes. Worked proposal: at Harbour, print Receipt for `F/1042` on **Bar
+receipt**, then Invoice on **Office · A4**. Reopening Receipt preselects Bar with separate
+memory, or Office with shared memory, provided that printer remains active at Harbour
+and satisfies the required checks. B admits both paper formats for both choices; Office
+is not an invalid Receipt destination merely because it uses A4. This is routing of the
+same recorded invoice, not document conversion. Hillside would have independent choices
+under either proposal. **Per-sale-venue memory is itself proposed here, not approved B.**
+B settled browser scope and printer eligibility. E does not change phone Equipment or
+approve invoice memory before an answer. The definition of last-used, update trigger,
+storage, expiry, first-use and fallback remain later proposals even after E is answered.
+
+[A796 Revision 4](2026-10-19-a796-handheld-payments-design.md) is now that lane's decided
+design, including Equipment save/concurrency handling (§8, default 22, with overridable
+defaults). Do not ask for those owner answers again. A790 integration and build validation
+remain owed; this supplies no claim that those interactions already work here.
+Portable receipt-holder enforcement and remaining role-memory/persistence details stay open.
+
+Retain authorization and sale-location checks, recomputed when reserving work, and all
+accompanying device restrictions. Freeze sale, document, printer, language and context under
+the request identity; preserve uncertain outcomes, accepted-write/failed-refresh and late
+successes, and reconcile before a fresh request. No silent rerouting or implicit print.
+Keep server-derived original/copy, the shared full-invoice delivery guard and closed public
+F1 gate. No payment, fiscal or drawer change is authorized.
+
+[D-and-browser-memory static illustrations](../../backlog/mockups/a790-document-and-printer-choice/revision-d-and-browser-memory/README.md)
+show approved D and E's separate/shared proposals. Eight PNGs were rendered in headless
+Chromium and visually inspected in EN/ES, light/dark, at 390/1280 px. Native SVG text boxes
+were measured within each drawing.
+Earlier bodies/boards remain history where they conflict; the source map remains historical
+and runtime-unverified. This docs-only update supplies no runtime, test or hardware evidence.
+
+---
+
 # A790: C approved; D next, 2026-10-19
 
 **A+B+C are approved only in their answered scope. D is the sole next owner question;

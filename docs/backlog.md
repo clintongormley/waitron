@@ -3406,33 +3406,40 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
   and latest 2026-10-19 decisions are recorded in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A+B+C approved only in their answered scope:** Receipt and Invoice retain the same
-  recorded full invoice. C's 2026-10-19 ~12:45 **“INLINE AND FOLDABLE”** answer puts
-  Invoice's folded printer row in the same form as its named final print button, matching
-  Receipt/payment, with no separate printer step: `F/1042`, Office · A4 folded, expand to
-  Terrace belt · Receipt paper, then **Print a copy on Terrace belt** when server-designated.
-  No invoice memory or supporting document-step/sole-printer/default/zero-printer approval.
+  **A+B+C+D approved only in their precise answered scope:** Receipt and Invoice retain
+  the same recorded full invoice; C keeps Invoice's printer row inline and foldable with
+  its named final button, matching Receipt/payment. D's 2026-10-19 ~13:20 **“STRAIGHT TO
+  RECEIPT”** skips the one-document choice for simplified-sale Print/reprint: `S/318`,
+  €14.50, Spanish, one guest, then its Receipt form and named final confirmation, for
+  example **Print a copy on Patio receipt** when server-designated. Keep the recorded
+  invoice facts and offered language. No full-invoice issuance/conversion, email or A4-as-F1.
   A dashboard without a device profile offers every active printer at the sale's venue, bypassing
   profile lists, with browser-last-use preselected and collapsible; no Change profile,
   dedicated profile, borrowed till identity or Equipment update. Harbour's sale excludes
-  Hillside and disabled printers. Active portable printers stay listed; receipt-holder
+  Hillside and disabled/deleted printers. A4 and portable printers stay listed for both
+  document choices; Office · A4 is not invalid for Receipt solely because it uses A4. Receipt-holder
   enforcement remains unresolved. The phone's inline receipt selector at/after payment
   is its one Equipment setting: Mesa 4 chooses Terraza, Mesa 9 and Equipment show Terraza;
   no accepted-print-only memory or new receipt-preference storage. Device paths retain
-  their receipt and invoice lists by role. Ask **D only** next: for simplified `S/318`,
-  €14.50, Spanish, one guest, open Receipt directly (recommended), or show a document
-  choice with only Receipt enabled and Invoice unavailable? Both retain an inline,
-  foldable eligible-printer selector and final named confirmation, for example Patio
-  receipt; keep the recorded invoice/number/amount/guests and offered language. Neither
-  issues/converts a full invoice, treats A4 as F1, or adds email. Supporting document-step,
-  sole/zero-printer and fallback proposals, exact browser storage/persistence, Equipment
-  save/rollback/concurrency, portable receipt-holder enforcement and complete design/plan/build
-  agreement remain open. Preserve authorization, sale-location rechecks,
+  their receipt and invoice lists by role. Ask **E only** next: on the dashboard without
+  a device profile, should this browser remember separate last-used Receipt and Invoice
+  printers for each sale venue (recommended), or one printer shared by both choices at
+  each sale venue? Proposed example: Harbour's `F/1042` prints Receipt on Bar receipt,
+  then Invoice on Office · A4; reopening Receipt suggests Bar if separate, Office if
+  shared, provided still active at Harbour and permitted. Recommend separate to keep invoice
+  printing from changing the receipt destination; Hillside would be independent. Per-venue
+  memory is proposed E scope, not approved B. This is routing, not conversion. E changes
+  no phone setting or invoice memory before an answer. Last-used/update trigger/storage/
+  expiry, first-use, role memory, wider step/default/sole/zero/fallback and remaining
+  persistence proposals stay open. A796 Revision 4 now decides Equipment save/concurrency
+  design in that lane, with overridable defaults; do not ask those answers again. A790
+  integration/build validation, portable receipt-holder enforcement and complete design/
+  plan/build agreement remain owed. Preserve authorization, sale-location rechecks,
   request facts, uncertain-outcome reconciliation, server-derived original/copy, shared
   delivery guard and closed public-F1 gate; no silent destination replacement, implicit
-  print, fiscal or drawer change. [C-and-D static illustrations](backlog/mockups/a790-document-and-printer-choice/revision-c-and-d/README.md)
-  include eight inspected EN/ES/theme/width PNGs, with native SVG text boxes measured.
-  Existing design/README bodies and conflicting boards remain history. Docs only, with no
+  print, payment, fiscal or drawer change. [D-and-browser-memory illustrations](backlog/mockups/a790-document-and-printer-choice/revision-d-and-browser-memory/README.md)
+  include eight rendered/inspected EN/ES/theme/390/1280 PNGs, with native SVG text boxes measured.
+  Existing design/README bytes and conflicting boards remain history. Docs only, with no
   runtime/test/hardware evidence; the source map stays historical and runtime-unverified.
 
 - **Loose ends left by A661 (#1745).**

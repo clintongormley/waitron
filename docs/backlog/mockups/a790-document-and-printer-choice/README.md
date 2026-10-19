@@ -1,3 +1,50 @@
+# A790: D approved; E next, 2026-10-19, after the 13:20 answer
+
+**A+B+C+D are approved only in their precise answered scope; E alone is next.
+The complete design, plan and build remain unapproved.** This and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting text/boards. Every earlier README byte remains below
+unchanged as history, including D's former no-A4/profile wording.
+
+D authority: the owner's **“STRAIGHT TO RECEIPT”** answer in lane F's `questions.md`,
+2026-10-19 about 13:20. Simplified-sale Print/reprint opens Receipt directly, skipping
+the one-document choice. Show `S/318`, €14.50, Spanish, one guest, an inline foldable
+printer row and the named final confirmation, such as **Print a copy on Patio receipt**
+when server-designated. Keep the recorded invoice facts and offered language. D settles
+only the document step, with no automatic print, full-invoice issuance/conversion or
+email; A4 paper does not make an F1. Wider step/default/sole/zero/fallback proposals stay open.
+
+**E: On the dashboard without a device profile, should this browser remember separate
+last-used Receipt and Invoice printers for each sale venue (recommended), or one last-used
+printer shared by both document choices at each sale venue?**
+
+Draw Harbour's `F/1042`: Receipt printed on **Bar receipt**, then Invoice on **Office · A4**.
+Reopen Receipt: separate memory suggests Bar; shared memory suggests Office, provided the
+printer remains active at Harbour and meets the required checks. Recommend remembering
+the two printers separately for each sale venue so invoice printing does not change the receipt destination.
+Hillside would be independent in either proposal. Per-venue memory is proposed E scope,
+not approved B. B approves browser scope and every active sale-venue printer, including
+A4/portable for both document choices; Office is not invalid for Receipt solely because
+it uses A4. This is routing, not conversion. No profile selection or borrowed till identity.
+
+C's inline Invoice row, device lists by role and the phone's one Equipment receipt
+setting remain. E approves no invoice memory before an answer and changes no phone setting.
+Last-used's definition/update trigger, storage, expiry, first-use/fallback and remaining
+role memory stay open. [A796 Revision 4](../../../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)
+now decides that lane's Equipment save/concurrency design, including overridable defaults;
+those answers do not need asking again. A790 integration/build validation and portable
+receipt-holder enforcement remain owed.
+
+Retain authorization/sale-location rechecks, fixed request identity and outcome
+reconciliation, server-derived original/copy, shared delivery guard and closed public F1.
+No silent rerouting, implicit print, payment, fiscal or drawer change.
+[Static illustrations](revision-d-and-browser-memory/README.md) show
+approved D and E's two proposals. Eight PNGs were rendered in headless Chromium and
+visually inspected in EN/ES, light/dark, at 390/1280 px; native SVG text boxes were measured
+within each drawing. These static checks supply no runtime, test or hardware evidence.
+
+---
+
 # A790: C approved; D next, 2026-10-19
 
 **A+B+C are approved only in their answered scope; ask D alone next. The complete
