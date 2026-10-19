@@ -1759,12 +1759,18 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Re-check that each Departments screen recovery case fails when its recovery step is deleted.**
   An unresolved assertion finding from A366 slice 6 Part C (#1510); A493 relocated its owner.
 
-- **A825. Check the six Departments and menus (#297) leftovers against today's code, then trim
-  (owner, 2026-10-17).** The leftovers: remove the legacy price and fixed-station compatibility
-  fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
-  reporting; batched readiness and offer queries; a replication smoke test. Drop each one today's
-  code has overtaken, keep any real gap as its own short entry in this area, then delete this one.
-  Same legal seller is the working assumption, to confirm before go-live. Hours moved to A254.
+- **A897. Sales by department** (left open by #297; found by A825). Each sale stores one
+  department, which cannot be changed afterwards (`sale_receipt_headers`,
+  `packages/venue-service/src/schema/service.ts`), but a sold line stores none (`sale_lines`,
+  `packages/db/src/schema/sales.ts`), and no report groups sales by department
+  (`packages/reporting/src`). Decide whether a bill that mixes departments needs a department on
+  each sold line, then add a department breakdown to the sales screen, showing sales with no
+  department as "Unallocated" rather than guessing a split.
+
+- **A898. Confirm before go-live that every department sells under the venue's one legal entity
+  and tax identity** (the working assumption since #297's design). A database holds exactly one
+  taxpayer (the one row in `tenants`), so a department with a different legal seller would need
+  a venue of its own.
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
   reaches an empty till and preserves an existing basket's facts, then carry it through polling.
