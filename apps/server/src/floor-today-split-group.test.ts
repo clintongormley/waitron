@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -827,11 +827,11 @@ describe("Split tables… on a group with nobody seated", () => {
 });
 
 async function withClearing<T>(fn: () => Promise<T>): Promise<T> {
-  await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+  await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
   try {
     return await fn();
   } finally {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
   }
 }
 

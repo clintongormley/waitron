@@ -17,7 +17,7 @@ import {
 import { BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
 import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
@@ -211,11 +211,11 @@ describe("bookings seat route → real seatTable", () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      await writeClearingWorkflow(tx, true);
       const { id } = await createTable(tx, v.tillCfg, {
         label: "8",
         zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
       });
+      await setNeedsClearingInEveryDepartment(tx, true);
       const seated = await seatTable(
         tx,
         { ...v.tillCfg, origin: jobOrigin("dashboard") },

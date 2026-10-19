@@ -653,7 +653,7 @@ export async function readBillsOfParties(
 
 /**
  * The tables' parties have left them: their memberships end, their manual status goes,
- * and, where the venue's clearing setting is on, each needs clearing from `at` until
+ * and each table whose department has Needs clearing on needs clearing from `at` until
  * {@link markTableCleared}.
  */
 export async function leaveForClearing(
@@ -662,11 +662,16 @@ export async function leaveForClearing(
   at: string,
 ): Promise<void> {
   await leaveTables(tx, tableIds, at);
-  const clearing = await VENUE_SERVICE.readClearingWorkflow(tx);
+  const clearing = await VENUE_SERVICE.readTablesNeedingClearing(tx, tableIds);
   await tx
     .update(diningTables)
-    .set({ statusId: null, ...(clearing ? { needsClearingSince: at } : {}) })
+    .set({ statusId: null })
     .where(inArray(diningTables.id, [...tableIds]));
+  if (clearing.size === 0) return;
+  await tx
+    .update(diningTables)
+    .set({ needsClearingSince: at })
+    .where(inArray(diningTables.id, [...clearing]));
 }
 
 /**

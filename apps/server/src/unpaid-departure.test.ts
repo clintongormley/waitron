@@ -22,7 +22,7 @@ import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -320,9 +320,9 @@ describe("recording that a table left without paying", () => {
     expect(await needsClearingSince(party.tableId)).toBeNull();
   });
 
-  it("leaves the table needing clearing when the clearing workflow is on", async () => {
+  it("leaves the table needing clearing when its department has Needs clearing on", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    await inTx(venue, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(venue, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
       const answer = await depart(party.partyId, {
         expectedPartyRevision: party.revision,
@@ -333,7 +333,7 @@ describe("recording that a table left without paying", () => {
       expect(await tableHeldBy(party.tableId)).toBeNull();
       expect(await needsClearingSince(party.tableId)).not.toBeNull();
     } finally {
-      await inTx(venue, (tx) => writeClearingWorkflow(tx, false));
+      await inTx(venue, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     }
   });
 

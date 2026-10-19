@@ -19,7 +19,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { takeBillPayment } from "./bill-payments.js";
@@ -503,7 +503,7 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
   }
 
   it("closes the party at Finish and leaves each of its tables needing clearing, with no party on them", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     const mesa4 = await v.table("Mesa 4c");
     const mesa5 = await v.table("Mesa 5c");
     const { partyId } = await seat(v, mesa4);
@@ -522,7 +522,7 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
   });
 
   it("refuses seating a table that needs clearing until it is cleared, one table at a time", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     const mesa6 = await v.table("Mesa 6c");
     const mesa7 = await v.table("Mesa 7c");
     const { partyId } = await seat(v, mesa6);
@@ -544,7 +544,7 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
   });
 
   it("refuses a tab opened straight onto a table that needs clearing, as the till's free-table route and a booking do", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     const mesa4 = await v.table("Mesa 4c");
     const { partyId } = await seat(v, mesa4);
     await finish(partyId);
@@ -555,8 +555,8 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
     expect(await condition(mesa4)).toBe("needs_clearing");
   });
 
-  it("frees the tables at once when the venue's clearing setting is off (P8)", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+  it("frees the tables at once when their department has Needs clearing off (P8)", async () => {
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const mesa8 = await v.table("Mesa 8c");
     const { partyId } = await seat(v, mesa8);
     expect(await finish(partyId)).toEqual({ state: "closed" });
@@ -564,7 +564,7 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
     expect((await tableRow(v, mesa8)).needsClearingSince).toBeNull();
   });
 
-  it("frees the tables at once in a venue with no service settings row", async () => {
+  it("frees the tables at once in a department that never switched Needs clearing on", async () => {
     const mesa8 = await v.table("Mesa 8c");
     const { partyId } = await seat(v, mesa8);
     await finish(partyId);
@@ -591,7 +591,7 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
   });
 
   it("clears the table's manual status at Finish, as today", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     const mesa10 = await v.table("Mesa 10c");
     const { partyId } = await seat(v, mesa10);
     await giveStatus([mesa10]);

@@ -24,7 +24,7 @@ import { catchUpDue, resetZone } from "./floor-today-store.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { holdersOf, memberTables } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -1108,7 +1108,8 @@ async function readStates() {
   return new Map(tables.map((t) => [t.id, t]));
 }
 
-const clearingWorkflow = (on: boolean) => inTx(v, (tx) => writeClearingWorkflow(tx, on));
+const clearingWorkflow = (on: boolean) =>
+  inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, on));
 
 /**
  * Table 3 stands at 0 in Standard and 40 in Dinner, beside `more`; guests sit at 3 when the zone
@@ -1151,9 +1152,9 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("with clearing on, a table shows Needs clearing first and Needs moving once cleared", async () => {
-    await clearingWorkflow(true);
     try {
       const z = await threeSeatedAcrossDinner();
+      await clearingWorkflow(true);
 
       await finish(z.partyId);
       const first = await readStates();
