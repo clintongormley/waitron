@@ -1347,6 +1347,11 @@ owner, on the running till:
 - the zone tabs carrying a hidden zone's most urgent state, and the toolbar edge's "›" for a tab
   scrolled out of sight (A757 §7);
 - Nothing needed's calm look (A757 §9).
+- two spacing points from A757 slice 2's look (2026-10-20, pictures in
+  `docs/backlog/mockups/a757-table-states/built-2/`): in the table drawer, "Still to pay at this
+  table" sits right against the "Mark bill requested" button; and at 390 px the floor's list cards
+  started flush against the left edge — seen inside a test frame only, so check the running till
+  first.
 
 Two owner suggestions are open; settle them here:
 

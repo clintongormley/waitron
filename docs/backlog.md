@@ -4472,7 +4472,16 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **The dashboard's dark wordmark looked nearly black (A253 observation, 2026-10-09) — UNVERIFIED.**
   **Next action:** measure the browser's media preference and selected `<picture>` source against
   `data-wt-theme` in the live dashboard before deciding a fix.
+  Seen again 2026-10-20 in A757 slice 2's look pictures
+  (`docs/backlog/mockups/a757-table-states/built-2/venue-settings-*-dark.png`).
   [Detail](backlog/dashboard.md#the-dashboards-dark-wordmark-looked-nearly-black-a253-observation-2026-10-09)
+
+- **Venue settings' tab strip cuts off its last tab on a phone (A916, A757 slice 2's look, 2026-10-20) — OPEN.**
+  At 390 px wide the three tabs (Venue details, Adjustment reasons, Kitchen) run about 30 px past
+  the screen, so Kitchen is cut off until the strip is swiped.
+  Picture: `docs/backlog/mockups/a757-table-states/built-2/venue-settings-390-light.png`.
+  **Next action:** decide with A755 (Venue settings' own page) whether the tabs wrap or show a
+  scroll cue; if A755 removes the tabs first, delete this entry.
 
 - **`wt-relative-time` also keeps disclosure state from `toggle` and has document listeners**
   (open, untested; A369 review). Next: reproduce open/remove/reinsert, including removal before the
