@@ -2107,7 +2107,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   "Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
   from it, and that a step left first that started after the step before then starts When seated. Not put to the owner (plan's questions 2 and 3): the starter names are English when the
   venue's first receipt language is English and Spanish otherwise, and a department created later
-  in the dashboard gets the starter steps.
+  in the dashboard gets the starter steps. Also for the owner, from #1891's look and review: the
+  start box cuts labels short — "Repeats after the last order" at every width (Chromium on macOS:
+  the text needs 176 px and the box gives 150 on a desktop), and several more at phone width once
+  the minutes box grew to 120 px — so either a shorter fifth-start wording or the start on its own
+  line on a phone; the minutes field has no visible required mark, since its column heading is
+  hidden; and when only the step list is refused, the form's bottom message stays blank, where the
+  forms contract expects the refusal's own sentence there.
   [Open questions](superpowers/plans/2026-10-19-a757-7-service-step-settings.md#open-questions-each-with-the-default-this-plan-uses)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
