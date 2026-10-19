@@ -115,7 +115,6 @@ export type VenueServiceSettingsView = Pick<
   | "printHeldWork"
   | "printMovedSlips"
   | "releaseReminderMinutes"
-  | "clearingWorkflow"
 >;
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
@@ -298,7 +297,6 @@ export class VenueServiceApi {
       printHeldWork: model.printHeldWork,
       printMovedSlips: model.printMovedSlips,
       releaseReminderMinutes: model.releaseReminderMinutes,
-      clearingWorkflow: model.clearingWorkflow,
     };
   }
 
@@ -418,12 +416,6 @@ export class VenueServiceApi {
   savePrintMovedSlips(printMovedSlips: boolean): Promise<void> {
     return this.request("/management-api/venue-service/settings/print-moved-slips", "PUT", {
       printMovedSlips,
-    });
-  }
-
-  saveClearingWorkflow(clearingWorkflow: boolean): Promise<void> {
-    return this.request("/management-api/venue-service/settings/clearing-workflow", "PUT", {
-      clearingWorkflow,
     });
   }
 

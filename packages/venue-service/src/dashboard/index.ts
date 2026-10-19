@@ -149,26 +149,6 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         return {
           render: (readOnly = false) =>
             html`<dashboard-venue-service-settings
-              subject="kitchen"
-              .api=${api}
-              .readOnly=${readOnly}
-            ></dashboard-venue-service-settings>`,
-        };
-      },
-    },
-    {
-      id: "venue-service-tables",
-      tab: "tables",
-      // Above the core Statuses panel, which counts as 0.
-      order: -10,
-      requiresPermission: "venue_service.manage",
-      readPermission: "venue.view",
-      create(ctx) {
-        const api = new VenueServiceApi(ctx.request, ctx.liveData);
-        return {
-          render: (readOnly = false) =>
-            html`<dashboard-venue-service-settings
-              subject="tables"
               .api=${api}
               .readOnly=${readOnly}
             ></dashboard-venue-service-settings>`,

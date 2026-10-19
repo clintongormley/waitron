@@ -14,8 +14,7 @@ type Field =
   | "kitchenTicketGrouping"
   | "printHeldWork"
   | "printMovedSlips"
-  | "releaseReminderMinutes"
-  | "clearingWorkflow";
+  | "releaseReminderMinutes";
 
 @customElement("dashboard-venue-service-settings")
 export class ServiceSettingsPanel extends LitElement {
@@ -48,7 +47,6 @@ export class ServiceSettingsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: VenueServiceApi;
-  @property() subject: "kitchen" | "tables" = "kitchen";
   @property({ attribute: false }) readOnly = false;
   readonly #queries = new QueryController(
     this,
@@ -175,26 +173,6 @@ export class ServiceSettingsPanel extends LitElement {
     </section>`;
   }
 
-  #tables(model: VenueServiceSettingsView): TemplateResult {
-    return html`<section data-test="clearing-settings">
-      ${this.#switch(
-        "clearingWorkflow",
-        t("venue.clearing_workflow"),
-        model.clearingWorkflow,
-        (clearingWorkflow) =>
-          void this.#save(
-            "clearingWorkflow",
-            () => this.api.saveClearingWorkflow(clearingWorkflow),
-            {
-              clearingWorkflow,
-            },
-          ),
-      )}
-      <p class="hint" data-test="clearing-workflow-hint">${t("venue.clearing_workflow_hint")}</p>
-      ${this.#fieldError("clearingWorkflow")}
-    </section>`;
-  }
-
   /** Blank is off. A stored value the list does not offer, which setup can bring in, is offered
    * too so the dropdown never shows another. */
   #releaseReminder(model: VenueServiceSettingsView) {
@@ -277,13 +255,7 @@ export class ServiceSettingsPanel extends LitElement {
     return html`<div role="alert" data-test="page-alert">
         ${messages.map((message) => html`<p>${message}</p>`)}
       </div>
-      ${
-        this.model === undefined
-          ? nothing
-          : this.subject === "kitchen"
-            ? this.#kitchen(this.model)
-            : this.#tables(this.model)
-      }`;
+      ${this.model === undefined ? nothing : this.#kitchen(this.model)}`;
   }
 }
 

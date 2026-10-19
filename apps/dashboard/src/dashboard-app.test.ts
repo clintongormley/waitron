@@ -1741,7 +1741,7 @@ describe("dashboard-app", () => {
       child.tagName.toLowerCase(),
     );
 
-  it("puts venue service's Needs clearing switch above statuses on Tables and its kitchen panel after the core one", async () => {
+  it("leaves Tables to its core statuses panel and puts venue service's kitchen panel after the core one", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/tables");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -1767,10 +1767,7 @@ describe("dashboard-app", () => {
         : stubRequest(path, method, body, options);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    expect(panelsOn(el, "tables")).toEqual([
-      "dashboard-venue-service-settings",
-      "dashboard-service-status-screen",
-    ]);
+    expect(panelsOn(el, "tables")).toEqual(["dashboard-service-status-screen"]);
     expect(panelsOn(el, "kitchen")).toEqual([
       "dashboard-kitchen-screen",
       "dashboard-venue-service-settings",

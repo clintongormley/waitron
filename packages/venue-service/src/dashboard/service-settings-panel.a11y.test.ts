@@ -13,7 +13,6 @@ const model: VenueServiceSettingsView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: 10,
-  clearingWorkflow: false,
 };
 
 describe.each(["light", "dark"] as const)("kitchen changes setting accessibility (%s)", (theme) => {
@@ -161,18 +160,3 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
-
-describe.each(["light", "dark"] as const)("tables panel accessibility (%s)", (theme) => {
-  test("has no violations", async () => {
-    setLocale("en");
-    await mountThemed("<div></div>", theme);
-    const el = document.createElement("dashboard-venue-service-settings") as ServiceSettingsPanel;
-    el.api = { loadSettings: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi;
-    el.subject = "tables";
-    host.append(el);
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-});

@@ -12,17 +12,14 @@ const initial: VenueServiceSettingsView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: 10,
-  clearingWorkflow: false,
 };
 
 class ImmediateSettingsApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: VenueServiceApi;
-  subject: "kitchen" | "tables" = "kitchen";
   override render() {
     return html`<dashboard-venue-service-settings
         .api=${this.api}
-        .subject=${this.subject}
       ></dashboard-venue-service-settings>
       ${this.leave.render({
         heading: "Unsaved changes",
@@ -49,7 +46,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-async function mount(subject: "kitchen" | "tables") {
+async function mount() {
   setLocale("en");
   let stored = structuredClone(initial);
   const writes: unknown[] = [];
@@ -60,7 +57,6 @@ async function mount(subject: "kitchen" | "tables") {
     stored = { ...stored, ...patch };
   }
   app = document.createElement("immediate-service-settings-test-app") as ImmediateSettingsApp;
-  app.subject = subject;
   app.api = {
     loadSettings: async () => structuredClone(stored),
     saveSettings: async (settings) => write({ settings }, { settings }),
@@ -70,8 +66,6 @@ async function mount(subject: "kitchen" | "tables") {
     savePrintMovedSlips: async (printMovedSlips) => write({ printMovedSlips }, { printMovedSlips }),
     saveReleaseReminderMinutes: async (releaseReminderMinutes) =>
       write({ releaseReminderMinutes }, { releaseReminderMinutes }),
-    saveClearingWorkflow: async (clearingWorkflow) =>
-      write({ clearingWorkflow }, { clearingWorkflow }),
   } as VenueServiceApi;
   applyTokens(app);
   document.body.append(app);
@@ -106,45 +100,33 @@ async function leaveWithoutWarning() {
 const choices = [
   {
     name: "editSentLines",
-    subject: "kitchen",
     value: false,
     original: true,
     body: { settings: { editSentLines: false } },
   },
   {
     name: "kitchenTicketGrouping",
-    subject: "kitchen",
     value: "separate",
     original: "combined",
     body: { kitchenTicketGrouping: "separate" },
   },
   {
     name: "printHeldWork",
-    subject: "kitchen",
     value: true,
     original: false,
     body: { printHeldWork: true },
   },
   {
     name: "printMovedSlips",
-    subject: "kitchen",
     value: false,
     original: true,
     body: { printMovedSlips: false },
   },
   {
     name: "releaseReminderMinutes",
-    subject: "kitchen",
     value: "15",
     original: "10",
     body: { releaseReminderMinutes: 15 },
-  },
-  {
-    name: "clearingWorkflow",
-    subject: "tables",
-    value: true,
-    original: false,
-    body: { clearingWorkflow: true },
   },
 ] as const;
 
@@ -170,7 +152,7 @@ async function change(
 for (const choice of choices) {
   for (const outcome of ["stored", "refused"] as const) {
     it(`${choice.name} stays exempt during its immediate write and after ${outcome}`, async () => {
-      const { panel, writes, pending } = await mount(choice.subject);
+      const { panel, writes, pending } = await mount();
       await leaveWithoutWarning();
       await change(panel, choice);
       expect(writes).toEqual([choice.body]);
@@ -200,7 +182,7 @@ for (const choice of choices) {
 }
 
 it("an immediate setting write cannot clear a different owner's pending draft decision", async () => {
-  const { panel, pending } = await mount("kitchen");
+  const { panel, pending } = await mount();
   const input = document.createElement("wt-input");
   input.name = "separateDraft";
   input.value = "saved";
@@ -244,7 +226,7 @@ it("an immediate setting write cannot clear a different owner's pending draft de
 });
 
 it("immediately saved service controls remain exempt while saving and after a refusal", async () => {
-  const { panel, writes, pending } = await mount("kitchen");
+  const { panel, writes, pending } = await mount();
   const control = panel.shadowRoot!.querySelector("wt-switch")!;
   await control.updateComplete;
   control.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
