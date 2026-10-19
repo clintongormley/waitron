@@ -152,7 +152,9 @@ export class TillPayEquipment extends LitElement {
       ).split("{printer}");
       ticket = html`${before}<b>${printer.name}</b>${after}`;
     } else {
-      ticket = html`${t("pay_equipment.no_ticket")}`;
+      ticket = html`${t(
+        printer.kind === "none_listed" ? "pay_equipment.no_ticket" : "pay_equipment.no_printer",
+      )}`;
     }
     return html`${readerName === null ? t("pay_equipment.no_reader") : html`<b>${readerName}</b>`} ·
     ${ticket}`;

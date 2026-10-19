@@ -126,18 +126,18 @@ describe("till-pay-equipment", () => {
       expect(summary(el)).toBe("sin lector · sin ticket");
     });
 
-    it("says sin lector for a switched-off reader, sin ticket for a switched-off printer", async () => {
+    it("says sin lector for a switched-off reader, sin impresora for a switched-off printer", async () => {
       const off = item("p1", "Barra", { available: false });
       const offReader = item("r2", "Lector 2", { available: false, provider: "sumup" });
       const el = await mount({
         equipment: equipment(chosen(off, [BARRA]), chosen(offReader, [L1])),
       });
-      expect(summary(el)).toBe("sin lector · sin ticket");
+      expect(summary(el)).toBe("sin lector · sin impresora");
     });
 
-    it("says sin ticket when printers are listed but none is set", async () => {
+    it("says sin impresora when printers are listed but none is set", async () => {
       const el = await mount({ equipment: equipment({ choices: [BARRA] }) });
-      expect(summary(el)).toBe("Lector 2 · sin ticket");
+      expect(summary(el)).toBe("Lector 2 · sin impresora");
     });
 
     it("reads Leyendo… before the equipment is read, and draws no drop-downs opened", async () => {
@@ -160,6 +160,8 @@ describe("till-pay-equipment", () => {
       expect(q(el, "[data-pay-equipment-change]")!.textContent!.trim()).toBe("Change");
       const none = await mount({ equipment: equipment({}, {}) });
       expect(summary(none)).toBe("no reader · no ticket");
+      const unset = await mount({ equipment: equipment({ choices: [TERRAZA] }) });
+      expect(summary(unset)).toBe("Lector 2 · no printer");
       const reading = await mount({ equipment: null });
       expect(summary(reading)).toBe("Reading…");
     });

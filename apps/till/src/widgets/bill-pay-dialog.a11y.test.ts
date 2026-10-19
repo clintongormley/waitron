@@ -307,7 +307,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-lock-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-lock-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       await commands.writeFile(
         `src/widgets/${shot}.json`,
@@ -357,7 +360,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       const question = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-card-ask]")!;
       question.scrollIntoView({ block: "center" });
       const shot = `__screenshots__/look/a796-second-card-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-second-card-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const asked = question.getBoundingClientRect();
       await commands.writeFile(
