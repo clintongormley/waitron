@@ -189,6 +189,11 @@ export class AeatCertificateDialog extends LitElement {
       if (!this.isConnected) return;
       this.busy = false;
       const code = codeOf(error);
+      if (code === "fiscal.certificate_changed") {
+        this.dispatchEvent(
+          new CustomEvent("aeat-certificate-changed", { bubbles: true, composed: true }),
+        );
+      }
       this.refusal = {
         ...(code === "fiscal.certificate_too_large" ? { field: "file" as const } : {}),
         message: codeMessage(code),

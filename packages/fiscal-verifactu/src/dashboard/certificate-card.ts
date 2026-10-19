@@ -151,6 +151,8 @@ export class AeatCertificateCard extends LitElement {
   @state() private dialog?: { revision: string | null; kind: CertificateKind };
   /** When AEAT answered the check of a certificate this card just installed. */
   @state() private checkedAt?: string;
+  /** Set when the open dialog learned the vault changed under it; closing it then reads again. */
+  #stale = false;
   #generation = 0;
   #unsubscribeLocale?: () => void;
 
@@ -298,8 +300,15 @@ export class AeatCertificateCard extends LitElement {
                 this.checkedAt = event.detail.checkedAt;
                 void this.#load();
               }}
+              @aeat-certificate-changed=${(event: Event) => {
+                event.stopPropagation();
+                this.#stale = true;
+              }}
               @wt-close=${() => {
                 this.dialog = undefined;
+                if (!this.#stale) return;
+                this.#stale = false;
+                void this.#load();
               }}
             ></dashboard-aeat-certificate-dialog>`
       }

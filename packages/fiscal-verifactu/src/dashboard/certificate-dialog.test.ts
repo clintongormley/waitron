@@ -503,6 +503,72 @@ describe("dashboard-aeat-certificate-dialog", () => {
     },
   );
 
+  it("after someone else installed meanwhile, closing shows their certificate and the next Save sends its revision", async () => {
+    const replaced = view({ revision: "rev-2" });
+    replaced.installed = { ...replaced.installed!, organisation: "OTRO BAR S.L." };
+    let attempts = 0;
+    const { card, dialog, install, reads } = await open({
+      reads: [async () => view(), async () => replaced],
+      install: async () => {
+        attempts += 1;
+        if (attempts === 1) return Promise.reject({ code: "fiscal.certificate_changed" });
+        return { outcome: "refused", reason: "same", field: "file" };
+      },
+    });
+    await filled(dialog);
+    await press(dialog);
+    await vi.waitFor(() =>
+      expect(actions(dialog).error).toBe(
+        "Someone else installed a certificate meanwhile. Close this window to see it.",
+      ),
+    );
+    expect(reads()).toBe(1);
+
+    const close = closed(dialog);
+    await userEvent.click(q(dialog, "[data-test=certificate-cancel]"));
+    await close;
+    await vi.waitFor(() => expect(reads()).toBe(2));
+    await card.updateComplete;
+    expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).toBeNull();
+    expect(text(card.shadowRoot!.querySelector("dd[data-test=issued-to]"))).toBe("OTRO BAR S.L.");
+
+    await userEvent.click(card.shadowRoot!.querySelector("[data-test=certificate-action]")!);
+    await vi.waitFor(() =>
+      expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).not.toBeNull(),
+    );
+    const again = card.shadowRoot!.querySelector(
+      "dashboard-aeat-certificate-dialog",
+    ) as AeatCertificateDialog;
+    await again.updateComplete;
+    await filled(again);
+    await press(again);
+    await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(2));
+    expect(install).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ expectedRevision: "rev-1" }),
+    );
+    expect(install).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ expectedRevision: "rev-2" }),
+    );
+  });
+
+  it("closing after a refusal that is not a conflict reads nothing again", async () => {
+    const { dialog, reads } = await open({
+      install: async () => ({ outcome: "refused", reason: "same", field: "file" }),
+    });
+    await filled(dialog);
+    await press(dialog);
+    await vi.waitFor(() =>
+      expect(fileField(dialog).error).toBe("This certificate is already installed."),
+    );
+    const close = closed(dialog);
+    await userEvent.click(q(dialog, "[data-test=certificate-cancel]"));
+    await close;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(reads()).toBe(1);
+  });
+
   it("says the request errors in Spanish", async () => {
     setLocale("es");
     const { dialog } = await open({
