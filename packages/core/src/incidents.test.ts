@@ -836,11 +836,14 @@ describe("tenant incident reads", () => {
       detectedAt: "2026-03-01T10:00:00.000Z",
       acknowledgedAt: "2026-03-09T10:00:00.000Z",
     });
+    const prefix = crypto.randomUUID().slice(0, -2);
     await insertIncident({
+      id: `${prefix}0b`,
       detectedAt: "2026-03-01T10:00:00.000Z",
       acknowledgedAt: "2026-03-02T10:00:00.000Z",
     });
     const later = await insertIncident({
+      id: `${prefix}0a`,
       detectedAt: "2026-03-01T09:00:00.000Z",
       acknowledgedAt: "2026-03-03T10:00:00.000Z",
     });
@@ -863,6 +866,15 @@ describe("tenant incident reads", () => {
         currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.unused" }),
       ),
     ).toEqual({ open: null, lastHandled: null });
+  });
+
+  it("answers no handled incident when a code's only incident is open", async () => {
+    const open = await insertIncident({ detectedAt: BASE.toISOString(), acknowledgedAt: null });
+    const current = await asApp((tx) =>
+      currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.current" }),
+    );
+    expect(current.open?.id).toBe(open);
+    expect(current.lastHandled).toBeNull();
   });
 
   it("picks the open incident, not a handled one detected at the same instant", async () => {

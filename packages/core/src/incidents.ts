@@ -208,12 +208,7 @@ export async function findIncident(tx: Transaction, id: string): Promise<TenantI
   return row === undefined ? null : toTenantIncident(row);
 }
 
-/**
- * A code's incidents from one origin: the open one (`incidents_open_dedup` allows at most one), and
- * the most recently handled one, newest `acknowledged_at` then highest id. Never chosen by
- * `detected_at`: a replacement recorded in the sweep that handled its predecessor shares its
- * `detected_at`.
- */
+/** The handled incident is never chosen by `detected_at`. */
 export async function currentIncidentsOf(
   tx: Transaction,
   input: { origin: Origin; code: string },
