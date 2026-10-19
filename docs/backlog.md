@@ -391,14 +391,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   zero, file one; whether AEAT accepts it was not tested. Left open by service Task 17 (#991, a
   table that leaves without paying).
 
-- **A845. The cancel of an invoiced bill checks the permission before its payment refusals**
-  (owner decision, 2026-10-17). Like the drawer, refund and unpaid-departure routes, the cancel
-  answers "not permitted", with the PIN checked and counted, before any payment refusal. Move the
-  check, and prove both orders by running them: no permission and a payment held answers "not
-  permitted"; permission and a payment held answers the payment refusal. Then correct the C126
-  detail's "neither checked nor counted" sentence. FULL review (auth and permissions, fiscal path).
-  [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
   - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.** Every

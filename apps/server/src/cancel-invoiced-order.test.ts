@@ -365,6 +365,29 @@ function expectUnwritten(
   expect(observed.credits).toEqual([]);
 }
 
+/**
+ * A received cash payment on a placed bill, written directly: the payment route's one insert into
+ * `bill_payments` (`bill-payments.ts`) first requires an open bill (`requireOpenBill`).
+ */
+function receivePayment(billId: string) {
+  return inTx(venue, (tx) =>
+    tx.insert(billPayments).values({
+      workingOrderId: billId,
+      submissionId: randomUUID(),
+      fingerprint: "test",
+      kind: "contribution",
+      method: "cash",
+      applied: 100,
+      tendered: 100,
+      state: "received",
+      receivedAt: new Date().toISOString(),
+      requestedBy: venue.operatorId,
+      source: venue.cfg.origin.source,
+      deviceId: venue.cfg.origin.deviceId,
+    }),
+  );
+}
+
 const negate = (amount: string) => negateDecimal(decimal(amount));
 
 describe("cancelling a placed order whose invoice was issued", () => {
@@ -684,29 +707,24 @@ describe("cancelling a placed order whose invoice was issued", () => {
 
   it("refuses a bill holding a payment, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
-    // The one insert into `bill_payments` (`bill-payments.ts`) first requires an open bill
-    // (`requireOpenBill`), so a placed bill's payment row is written here.
-    await inTx(venue, (tx) =>
-      tx.insert(billPayments).values({
-        workingOrderId: id,
-        submissionId: randomUUID(),
-        fingerprint: "test",
-        kind: "contribution",
-        method: "cash",
-        applied: 100,
-        tendered: 100,
-        state: "received",
-        receivedAt: new Date().toISOString(),
-        requestedBy: venue.operatorId,
-        source: venue.cfg.origin.source,
-        deviceId: venue.cfg.origin.deviceId,
-      }),
-    );
+    await receivePayment(id);
 
     await expectRefusedUnwritten(id, cancel(id), {
       status: 409,
       code: "bill.payments_received",
     });
+  });
+
+  it("refuses an operator without sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+
+    const answer = cancel(id, venue.cookie);
+    await expectRefusedUnwritten(id, answer, {
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
   it("refuses a second cancel, leaving exactly one credit note", async () => {
@@ -1240,6 +1258,42 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     ]);
   });
 
+  it("refuses the PIN of someone who does not hold sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+    const answer = cancelWith({ personId: venue.operatorId, pin: "5555" })(id);
+
+    await expectRefusedUnwritten(id, answer, { status: 403, code: "authorization.not_permitted" });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+  });
+
+  it("refuses a wrong PIN on a bill holding a payment as pin.invalid, and counts it: after four even the right one is 429", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+    const { app } = throttledApp();
+    const withPin = (pin: string) =>
+      cancelWith({ personId: supervisorId, pin }, venue.cookie, app)(id);
+
+    for (let i = 0; i < 4; i += 1) {
+      await expectRefusedUnwritten(id, withPin("0000"), { status: 401, code: "pin.invalid" });
+    }
+
+    const throttled = withPin(SUPERVISOR_PIN);
+    await expectRefusedUnwritten(id, throttled, { status: 429, code: "pin.throttled" });
+    expect((await throttled).json.params).toEqual({ retryAfterSeconds: 2 });
+  });
+
+  it("refuses a sale.rectify holder's PIN on a bill holding a payment as bill.payments_received, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+
+    await expectRefusedUnwritten(
+      id,
+      cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(id),
+      { status: 409, code: "bill.payments_received" },
+    );
+  });
+
   it("lets a refused cancel that never reaches the PIN check leave the wrong-PIN count to go idle", async () => {
     const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
     expect(
@@ -1518,6 +1572,20 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(await statusOf(venue, id)).toBe("settled");
   });
 
+  it("refuses an operator without sale.rectify as not permitted while a captured card has not settled the invoice, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    venue.card.crashNextCollect("captured");
+    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    expect(lost.status).toBe(500);
+
+    const answer = cancel(id, venue.cookie);
+    await expectRefusedUnwritten(id, answer, {
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+  });
+
   it("refuses while the card is at a reader that has written no payment yet, and the card then settles the invoice", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
@@ -1542,6 +1610,26 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(tendersOf(original.id)).toEqual([{ method: "card", amount: 300 }]);
     expect(paymentsOf(id)).toEqual([{ state: "captured", saleId: original.id }]);
     expect(await creditsOf(original.id)).toEqual([]);
+  });
+
+  it("refuses an operator without sale.rectify as not permitted while the card is at a reader that has written no payment yet, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+    const paymentsWhileHeld = paymentsOf(id);
+
+    const answer = cancel(id, venue.cookie);
+    const refused = await observeRefusal(id, answer);
+    release();
+    const paid = await paying;
+
+    expect(paymentsWhileHeld).toEqual([]);
+    expectUnwritten(refused, { status: 403, code: "authorization.not_permitted" });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+    expect(paid.status).toBe(200);
+    expect(paid.json.outcome).toBe("captured");
   });
 
   it("credits the invoice once a declined card has left the reader", async () => {
