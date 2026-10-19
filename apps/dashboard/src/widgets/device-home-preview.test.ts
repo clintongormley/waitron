@@ -961,7 +961,11 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(missing!.dataset.state).toBe("missing");
     const icon = missing!.querySelector<HTMLElement>('wt-icon[name="warning"]');
     expect(icon).not.toBeNull();
-    expect(getComputedStyle(icon!).color).not.toBe(getComputedStyle(missing!).color);
+    const warning = document.createElement("span");
+    warning.style.color = "var(--wt-color-warning)";
+    missing!.append(warning);
+    expect(getComputedStyle(icon!).color).toBe(getComputedStyle(warning).color);
+    warning.remove();
     expect(hidden!.dataset.state).toBe("hidden");
     expect(hidden!.querySelector("wt-icon")).toBeNull();
   });
