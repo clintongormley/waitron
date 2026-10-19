@@ -470,9 +470,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   way to correct a paid receipt when a customer spots an error afterwards. Build on today's
   filing-by-differences now; asesor Q31 may switch the filing type later without changing the
   screens. Needs a spec first; fiscal, so owner sign-off at land. A758 §3.8 (food cancelled on a
-  paid bill, with a Refund tick per dish) refunds the ticked dishes through the ordinary refund and
-  recommends that A802 issue their partial correction in the same step; its §3.8.1 has a worked
-  example to check against.
+  paid bill, with a Refund tick per dish) refunds the ticked dishes through the ordinary refund; the
+  owner decided (Q43 e, 2026-10-18) that once A802 lands, such a refund files their partial
+  correction in the same step. Its §3.8.1 has a worked example to check against.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
@@ -1863,6 +1863,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - KDS-4 follow-up: device-mode reprint behind `requireDevice`.
 
+- **A908. Dishes left on the pass after Record unpaid departure (left open by A758's Q43 revision,
+  2026-10-19).** Record unpaid departure closes the party without asking about dishes not served
+  (`closeParty`, `apps/server/src/unpaid-departure.ts`); it refuses only dishes not fired, so fired
+  dishes not yet served stay on every pass screen until each screen marks them Done (the mark is per
+  device, `apps/server/src/pass-board.ts`). Finish table no longer leaves any (A758 §3.8), and the
+  paid receipt's "Cancel items…" that used to be the way back was dropped. Decide how the departure
+  clears them — most likely the same per-dish question as Finish table, with nothing to refund —
+  and bring it to the owner with a worked example.
+
 - **A808. A reprinted kitchen ticket shows when it was reprinted (owner, 2026-10-17).** The heading
   reads `*** REPRINT HH:MM ***`, the local time of the reprint, where today it reads
   `*** REPRINT ***` (`apps/server/src/kitchen-ticket.ts`); the original send time stays on the
@@ -1876,9 +1885,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   problems).** [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
   - A party finished while its food is still on the pass keeps its cards there with no group
     button that works (each is refused `party.not_open`). Designed in A758 §3.8 (revised
-    2026-10-18 for the owner's Q40 answer): Finish table asks first, cancelling with a reason and a
-    Refund tick per dish; the paid receipt's Cancel items… opens the same dialog; the card says
-    Table finished. Waits for the owner's Q43 and for A773-1.
+    2026-10-19 for the owner's Q43 notes): Finish table on a paid table cancels every dish not
+    served first, with a reason, a "Has preparation started?" answer and a Refund tick per dish; the
+    card says Table finished. Built with A773-1 and A758's slice after it. What Record unpaid
+    departure leaves on the pass is A908.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English.
   - A switched-off printer's printing problem keeps showing until the printer is switched on and a
@@ -2115,16 +2125,20 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
   answered all eight questions on 2026-10-17: two kinds of reason, Void and Comp (a 100% comp is
-  the give-away, printed "Descuento 100%"); per reason, "Who can apply it" and "Who can approve it"
-  as multi-selects over today's roles, built now (editable roles, A7, has not landed); every limit
-  the venue's own, with an approver's PIN above it; the bill-wide limit a euro amount of comps with
-  its own approver list; a Void switch "Ask for approval only once the kitchen has it", matched to
-  A773-1's Cancel item choices; a seven-reason starter list. Then the page "Voids and comps" under
-  Service, with search, drag handles and Delete. **Design revised 2026-10-17, and on 2026-10-18 for
-  food left on the pass after a table has paid (§3.8), rewritten for the owner's Q40 answer: every
-  cancel on a paid bill takes a Void reason (from the list, or "Other" with a typed note), with a
-  Refund tick per dish — held or not started ticked, being prepared or ready not; unrefunded dishes
-  stay on the bill and the invoice. The build waits for the owner's answer to Q43.**
+  the give-away, printed "Descuento 100%"); per Comp reason, "Who can apply it" and "Who can approve
+  it" as multi-selects over today's roles, built now (editable roles, A7, has not landed); every
+  limit the venue's own, with an approver's PIN above it; the bill-wide limit a euro amount of comps
+  with its own approver list. Then the page "Voids and comps" under Service, with search, drag
+  handles and Delete. **Design revised 2026-10-19 for the owner's Q43 notes (settled and
+  buildable):** what Cancel item… does follows where the dish is — not started: just removed, no
+  reason; fired but not started: the till asks "Has preparation started?"; started: "Cancel, still
+  charge" or "Cancel, don't charge", with a reason; paid: cancelled with a reason, refunded or not.
+  Any money off an unpaid bill or back from a paid one needs the refund permission, which replaces
+  the Void reasons' own rules; no "Ask for approval" button; the reason is a drop-down; nine
+  starter reasons (with Not served and Other). Finish table on a paid table cancels every dish not
+  served, with a Refund tick each, or sends the order to the counter to be collected (its own
+  slice). A773-1 builds the till dialogs (design §10); A758's slices follow it. **One question is
+  open: the Spanish for the new till words and the cash refund's tick (§11).**
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)

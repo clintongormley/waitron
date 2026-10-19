@@ -1382,12 +1382,15 @@ roles are a ranking, and "does the logic work? are we asking the right questions
 
 **Design (2026-10-17, revised the same day with the owner's answers):** [the decisions, the rules, the page and the starter list](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
 with [mock-ups](mockups/a758-adjustment-reasons/). Revised 2026-10-18 for food left on the pass after
-a table has paid (§3.8, pictures 06–09), then rewritten the same day for the owner's Q40 answer:
-the standard cancel with a reason (listed, or "Other" with a typed note) and a Refund tick per dish,
-from Finish table, the table's Cancel item… and the paid receipt; the build waits for the owner's
-Q43. The notes below are the review as written before the answers: where they differ from the
-design's decisions (§1 there) — three kinds, give-away against 100% discount, "Invitación", role
-lists "with or after" editable roles — the design wins.
+a table has paid (§3.8, pictures 06–09), then rewritten the same day for the owner's Q40 answer.
+Revised again on 2026-10-19 for the owner's Q43 notes, and settled: Cancel item… follows where the
+dish is (§3.3, picture 03), the refund permission decides every cancel that takes money off or
+gives it back, a Void reason is a label, and Finish table on a paid table cancels every dish not
+served with a Refund tick each (§3.8, pictures 06–08). What A773-1 builds is in the design's §10;
+one wording question is open (§11). The notes below are the review as written before the
+answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
+100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
+reason or by stage — the design wins.
 
 How a reason works today (`packages/adjustments/src/policy.ts`): it allows one or more of cancel
 (void), give away (comp), a percentage discount and an amount discount; it may cap the percentage
@@ -1883,7 +1886,7 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **A child extras row in the Tab drawer stays on its own indented, muted, smaller line (owner,
   2026-10-17)**, matching A738's approved order layout.
 - **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
-  that a split check gets no Void).** It follows A758's reason rules; the server already allows it.
+  that a split check gets no Void).** It follows A758's cancel rules; the server already allows it.
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice
   (owner, 2026-10-17: accepted).** The till says "Not found" (menus spec §9) only when a newly read
   version drops the section it has open.
