@@ -746,8 +746,7 @@ export async function closeParty(
 
 /**
  * A closing party keeps the names of every table it ever held, in the order it joined them, and lets
- * go of its `party_tables` rows, so a table it held can later be removed. Run after the party's
- * state changes: `parties_clear_table_status` reads the rows then.
+ * go of its `party_tables` rows, so a table it held can later be removed.
  */
 export async function closePartyTables(tx: Transaction, partyId: string): Promise<void> {
   const tableNames = (await readPartyTables(tx, [partyId])).get(partyId) ?? [];

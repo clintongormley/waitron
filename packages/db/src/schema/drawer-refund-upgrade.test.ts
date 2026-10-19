@@ -29,7 +29,7 @@ async function beforeRefundDrawer(db: Database): Promise<void> {
     rmSync(folder, { recursive: true, force: true });
   }
 }
-const suite = useVenueDb({ migrations: [], setup: beforeRefundDrawer });
+const suite = useVenueDb({ migrations: [], setup: beforeRefundDrawer, resetPerTest: false });
 
 it("adds the refund drawer target without changing existing audit facts", async () => {
   const db = suite.db;
