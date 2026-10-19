@@ -510,6 +510,17 @@ already seen: `packages/dashboard-kit/src/table-strings.ts` holds a Spanish `{ e
 outside the translation files the rule names, and `packages/venue-service/src/service-steps.ts`
 seeds Spanish starter steps (A900).
 
+**Audit done 2026-10-20 on main `a3be14ba4`: [english-only-audit.md](english-only-audit.md).** Its
+headline findings: every new venue's kitchen station is named «Cocina» with no English
+(`packages/provisioning/src/venue-apply.ts:308`); `apps/server` has no translation file, and ten of
+its pages, printouts and emails keep inline language tables; the card payment slip, the sample
+receipt, kitchen tickets on an installed box (they follow `WAITRON_TILL_LOCALE`, Spanish when unset)
+and a full invoice's «España» print Spanish whatever the venue's language; Spain-only full-invoice
+checks (address, postcode, tax ID) sit in general code; the comment at
+`packages/reporting/src/dr303-layout.ts:14–16` wrongly says the guard scans `reporting`. The owner's
+question is in the campaign's questions file; the fixes become their own items, split by package,
+once it is answered.
+
 ## Decisions and deliberate limits
 
 **What slice 1 left (#490 and the preparation tasks):**

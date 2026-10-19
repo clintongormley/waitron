@@ -6022,7 +6022,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   General code is English only (CLAUDE.md §3; the owner's decisions are in
   [conventions-data.md](developers/conventions-data.md#general-code-is-english-only)). A docs-only
   audit lists every non-English text in `packages/*` and `apps/*` outside the allowed homes and asks
-  the owner which to fix. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
+  the owner which to fix. **Audit done 2026-10-20** ([the audit](backlog/english-only-audit.md));
+  waiting on the owner's choice of what to fix and the policy for the packages written for Spain.
+  [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
