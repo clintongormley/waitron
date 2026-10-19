@@ -388,6 +388,127 @@ describe("bill merges require both editors and release the consumed bill", () =>
     });
     expect(drafts[0]!.lines).toEqual(saved.draft!.lines);
   });
+  it.each([false, true])(
+    "rejects a pre-merge source save and accepts the refreshed survivor (destination draft: %s)",
+    async (hasDestinationDraft) => {
+      const p = await party();
+      const from = await otherBill(p.partyId);
+      const left = hasDestinationDraft ? await save(p.partyId, p.tabId) : null;
+      const right = await save(p.partyId, from);
+      const original = {
+        billId: from,
+        draftId: right.draft!.id,
+        revision: right.draft!.revision,
+        expectedEdit: right.edit,
+        lines: [
+          { id: right.draft!.lines[0]!.id, menuItemId: venue.offerFor("Tarta"), quantity: "3" },
+        ],
+      };
+      await merge(p.partyId, p.tabId, from, await billEdits(p.tabId, from));
+      const edit = (await billEdits(p.tabId))[0]!;
+      expect(edit).toEqual({
+        ...right.edit,
+        billId: p.tabId,
+        editorVersion: hasDestinationDraft ? 2 : 1,
+        draftId: left?.draft!.id ?? right.draft!.id,
+        draftRevision: 1,
+      });
+      const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+      expect(drafts).toHaveLength(1);
+      expect(drafts[0]!.id).toBe(left?.draft!.id ?? right.draft!.id);
+      const ids = [...(left?.draft!.lines ?? []), ...right.draft!.lines].map((line) => line.id);
+      expect(drafts[0]!.lines.map((line) => ({ id: line.id, quantity: line.quantity }))).toEqual(
+        ids.map((id) => ({ id, quantity: "1.000" })),
+      );
+
+      await refused(
+        () => inTx(venue, (tx) => saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, original)),
+        "management.request_invalid",
+        { field: "billId" },
+      );
+      await refused(
+        () =>
+          inTx(venue, (tx) =>
+            saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+              ...original,
+              billId: p.tabId,
+              expectedEdit: { ...right.edit, billId: p.tabId },
+            }),
+          ),
+        "draft.out_of_date",
+        stale(edit),
+      );
+      if (left !== null) {
+        await refused(
+          () =>
+            inTx(venue, (tx) =>
+              saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+                ...original,
+                billId: p.tabId,
+                draftId: left.draft!.id,
+                revision: left.draft!.revision,
+                expectedEdit: left.edit,
+              }),
+            ),
+          "draft.out_of_date",
+          stale(edit),
+        );
+      }
+
+      expect((await send(venue.app, venue.cookie, "GET", "/api/till")).status).toBe(200);
+      const beforeHttp = await allRows();
+      expect(
+        await send(venue.app, venue.cookie, "PUT", `/api/parties/${p.partyId}/drafts`, original),
+      ).toEqual({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "billId" } },
+      });
+      expect(await allRows()).toEqual(beforeHttp);
+      expect(
+        await send(venue.app, venue.cookie, "PUT", `/api/parties/${p.partyId}/drafts`, {
+          ...original,
+          billId: p.tabId,
+          expectedEdit: { ...right.edit, billId: p.tabId },
+        }),
+      ).toEqual({
+        status: 409,
+        json: { code: "draft.out_of_date", params: stale(edit) },
+      });
+      expect(await allRows()).toEqual(beforeHttp);
+
+      const saved = await inTx(venue, (tx) =>
+        saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+          billId: p.tabId,
+          draftId: edit.draftId,
+          revision: edit.draftRevision!,
+          expectedEdit: edit,
+          lines: ids.map((id) => ({
+            id,
+            menuItemId: venue.offerFor("Tarta"),
+            quantity: id === right.draft!.lines[0]!.id ? "3" : "1",
+            noMerge: true,
+          })),
+        }),
+      );
+      expect(saved.edit).toEqual({ ...edit, draftRevision: edit.draftRevision! + 1 });
+      expect(saved.draft!.id).toBe(drafts[0]!.id);
+      expect(saved.draft!.lines.map((line) => ({ id: line.id, quantity: line.quantity }))).toEqual(
+        ids.map((id) => ({ id, quantity: id === right.draft!.lines[0]!.id ? "3.000" : "1.000" })),
+      );
+      expect((await billEdits(from))[0]).toEqual({
+        ...blank(from),
+        editorId: null,
+        editorName: null,
+        editorVersion: 2,
+      });
+      await refused(
+        () => inTx(venue, (tx) => saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, original)),
+        "management.request_invalid",
+        { field: "billId" },
+      );
+    },
+  );
+
   it("keeps recalled and fresh row identities, slot offsets and both allergy tick kinds", async () => {
     const p = await party(),
       from = await otherBill(p.partyId);

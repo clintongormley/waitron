@@ -617,9 +617,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   - Only the draft routes fold the ids in the path to lower case (`requireDraftPartyParam`,
     `apps/server/src/till-api.ts`, and `submitDraft`'s `joinGroupId`); the other party routes
     only check that the id is an id, and the group submission passes `joinGroupId` on as sent.
-  - Recheck a save naming a draft consumed by a bill merge. The earlier note reported
-    `draft.not_found` instead of `draft.taken_over`; that case needs rechecking under the per-bill
-    version contract.
   - A save must carry `draftId` and `revision` even for a new draft. A chosen option whose label
     id is not a UUID is refused `options.invalid` at save, where pricing answers
     `options.label_required`. An options or extras refusal at save names only the field, not the
@@ -1540,6 +1537,14 @@ suite checks the interval, an unchanged focus refresh preserving selection and i
 and a failed periodic read preserving confirmed editing authority. This replaces the earlier
 manual-next-read observation without adding server push. A failed recovery read and a failed
 periodic read have different rules in ownership design section 5.
+
+The bill-merge cases in `bill-editing.bill-moves.test.ts` check a save after its source draft
+is combined into another draft, and after it moves intact to an empty destination. The original
+request still names the old bill and refuses `management.request_invalid` on `billId`; changing
+only the bill to the survivor refuses `draft.out_of_date`. Both the direct command and the
+`PUT /api/parties/:id/drafts` route leave every database row unchanged. A new save using the
+survivor's current edit state succeeds and retains the separately marked lines. These cases
+replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
 
 ### Permanent group numbers (A773)
 
