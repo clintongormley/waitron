@@ -2189,6 +2189,7 @@ export interface TableState {
   /** `null` when the table has no today's row. */
   today: TableToday | null;
   party: TableParty | null;
+  hasAllergy?: true;
   /** What wants attention at the table; several at once. */
   signals: TableSignal[];
 }

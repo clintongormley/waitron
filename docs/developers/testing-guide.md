@@ -1303,6 +1303,13 @@ dashboard's modifier screens, `window.innerWidth` inside the test read 414 — t
 calling it. `page.viewport(w, h)` is what resizes the iframe; the same measurement read 390 and 1280
 through it.
 
+Restore the width and height observed at the start of a browser case in its `finally`, rather
+than a chosen desktop size. A669-5's review probe ran its first 390 px capture and then compared
+the next case's viewport with the file's initial reading: restoring to 1280×768 changed that
+reading from 414×896. Capturing and restoring the incoming dimensions made that probe pass.
+The new cases preceded older accessibility cases, so their viewport cleanup changed what those
+unchanged assertions exercised.
+
 This is CLAUDE.md §1's "a measurement taken where both answers look alike measures nothing" with a
 helper attached: a phone-width screenshot taken through the wrong helper looks like a phone-width
 screenshot of a layout that copes, and is a desktop-width screenshot of one that may not. It cost two

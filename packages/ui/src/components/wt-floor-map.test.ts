@@ -50,6 +50,44 @@ const button = (el: WtFloorMap, id: string) =>
 const within = (el: WtFloorMap, part: string, id: string) =>
   button(el, id).querySelector<HTMLElement>(`[part="${part}"]`);
 
+it("A669 draws an allergy mark beside the existing dot and removes it on refresh", async () => {
+  const allergic = t("t1", "T1", {}, { allergy: true, fill: "seated", dot: "ready" });
+  const el = await map([allergic, t("t2", "T2", { x: 12 })], {
+    copy: { allergy: "Allergy warning" },
+  });
+  expect(within(el, "allergy", "t1")?.textContent).toBe("!");
+  expect(within(el, "dot", "t1")?.dataset["dot"]).toBe("ready");
+  expect(button(el, "t1").getAttribute("aria-label")).toBe("T1, Free, Allergy warning");
+  expect(within(el, "allergy", "t2")).toBeNull();
+  el.tables = [{ ...allergic, allergy: false }];
+  await settled(el);
+  expect(within(el, "allergy", "t1")).toBeNull();
+  expect(button(el, "t1").getAttribute("aria-label")).toBe("T1, Free");
+});
+
+it("A669 paints the allergy mark with the danger tokens", async () => {
+  const el = await map([t("t1", "T1", {}, { allergy: true })]);
+  host.style.setProperty("--wt-color-danger", "rgb(100, 10, 20)");
+  host.style.setProperty("--wt-color-on-danger", "rgb(240, 230, 220)");
+  host.style.setProperty("--wt-space-5", "24px");
+  const mark = within(el, "allergy", "t1")!;
+  expect(getComputedStyle(mark).backgroundColor).toBe("rgb(100, 10, 20)");
+  expect(getComputedStyle(mark).color).toBe("rgb(240, 230, 220)");
+  expect(getComputedStyle(mark).width).toBe("24px");
+  expect(getComputedStyle(mark).animationName).toBe("none");
+});
+
+it("A669 marks a merge when only the later member has an allergy", async () => {
+  const el = await map([
+    t("a", "A", {}, { joinId: "j" }),
+    t("b", "B", { x: 8 }, { joinId: "j", allergy: true }),
+    t("c", "C", { x: 20 }),
+  ]);
+  expect(within(el, "allergy", "a")?.textContent).toBe("!");
+  expect(button(el, "a").getAttribute("aria-label")).toBe("A+B, Free, Allergy");
+  expect(within(el, "allergy", "c")).toBeNull();
+});
+
 function boxOf(el: WtFloorMap, id: string) {
   const outer = el.getBoundingClientRect();
   const box = button(el, id).getBoundingClientRect();

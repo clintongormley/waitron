@@ -2230,7 +2230,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
 - **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** The send
-  routes, till prompts, kitchen copy/notices and floor signal remain. At the first Send, ask
+  routes, till prompts and kitchen copy/notices remain. At the first Send, ask
   "Any allergies at this table?" on every table send path; the counter has no allergy step.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
@@ -5497,6 +5497,11 @@ the tree. What remains, largest first:
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 ### CI, tests and developer tooling
+
+- **Check the older capture suites' viewport cleanup (A669-5 review).**
+  `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
+  incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
+  their cleanup; preserve their current behavioral assertions.
 
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).

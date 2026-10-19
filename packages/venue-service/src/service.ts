@@ -1,5 +1,6 @@
 import {
   readPartyAllergy,
+  partiesWithAllergicGuests,
   savePartyAllergy,
   setAllergyLineTicks,
   moveAllergyDraftTicks,
@@ -130,6 +131,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readServiceDay,
   readFloorPlanSets,
   readPartyAllergy,
+  partiesWithAllergicGuests,
   savePartyAllergy,
   setAllergyLineTicks,
   moveAllergyDraftTicks,

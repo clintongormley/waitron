@@ -7994,6 +7994,7 @@ export interface TableState {
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
   party: TableParty | null;
+  hasAllergy?: true;
   /** What wants attention at the table: its party's signals, then its own clearing. */
   signals: TableSignal[];
 }
@@ -8125,6 +8126,9 @@ export async function listTablesWithState(
 
   const today = await readTodayTables(tx, loc);
   const { seated, facts } = await readSeatedParties(tx, loc);
+  const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
+    ...new Set([...seated.values()].map((party) => party.id)),
+  ]);
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
   const partySignals = await readPartySignals(tx, [...new Set(seated.values())], facts, nowMs);
@@ -8166,6 +8170,9 @@ export async function listTablesWithState(
       today: today.get(r.id)!,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
+      ...(party !== undefined && allergicParties.has(party.id)
+        ? { hasAllergy: true as const }
+        : {}),
       signals: tableSignals(
         party === undefined ? undefined : partySignals.get(party.id),
         r.needs_clearing_since,

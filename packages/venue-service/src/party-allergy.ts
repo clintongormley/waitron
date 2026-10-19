@@ -30,6 +30,18 @@ function printable(value: unknown, field: string, limit: number, required: boole
   return text || null;
 }
 
+export async function partiesWithAllergicGuests(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<ReadonlySet<string>> {
+  if (partyIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ partyId: partyAllergyGuests.partyId })
+    .from(partyAllergyGuests)
+    .where(inArray(partyAllergyGuests.partyId, partyIds));
+  return new Set(rows.map((row) => row.partyId));
+}
+
 export async function readPartyAllergy(
   tx: Transaction,
   partyId: string,

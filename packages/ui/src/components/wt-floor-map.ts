@@ -34,11 +34,13 @@ export interface FloorMapTable {
   linkId?: string | null;
   /** Read after the name: "Seated, 2 ready". */
   description: string;
+  allergy?: boolean;
 }
 
 export interface FloorMapCopy {
   /** The tables' group name. */
   label: string;
+  allergy: string;
 }
 
 export interface FloorMapTap {
@@ -112,7 +114,7 @@ interface Group {
   fixed: boolean;
 }
 
-const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
+const DEFAULT_COPY: FloorMapCopy = { label: "Tables", allergy: "Allergy" };
 
 const collator = new Intl.Collator(undefined, { numeric: true });
 
@@ -349,6 +351,25 @@ export class WtFloorMap extends LitElement {
         border-radius: 50%;
         transform: translate(50%, -50%);
         animation: dot-flash 1s infinite;
+      }
+
+      [part="allergy"] {
+        position: absolute;
+        z-index: 2;
+        top: 0;
+        left: 0;
+        display: grid;
+        place-items: center;
+        width: var(--wt-space-5);
+        height: var(--wt-space-5);
+        border: calc(var(--wt-space-1) / 2) solid var(--wt-color-surface);
+        border-radius: 50%;
+        background-color: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
       }
 
       [part="dot"][data-dot="ready"] {
@@ -889,6 +910,7 @@ export class WtFloorMap extends LitElement {
     const named = group.drawsName && showsName(merged ? box : first.placement, view.scale);
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const dot = members.find((m) => m.dot !== null)?.dot ?? null;
+    const allergy = members.some((member) => member.allergy);
     return html`<button
       type="button"
       part="table"
@@ -898,7 +920,7 @@ export class WtFloorMap extends LitElement {
       ?data-drop-target=${this.#markedTarget(this.#drag) === group}
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
-      aria-label=${`${label}, ${first.description}`}
+      aria-label=${`${label}, ${first.description}${allergy ? `, ${this.copy.allergy ?? DEFAULT_COPY.allergy}` : ""}`}
       style=${styleMap({
         left: px(view.x + (box.x + (drag?.dx ?? 0)) * view.scale),
         top: px(view.y + (box.y + (drag?.dy ?? 0)) * view.scale),
@@ -907,6 +929,7 @@ export class WtFloorMap extends LitElement {
       })}
     >
       ${members.map((m) => this.#renderShape(m, box, view.scale))}
+      ${allergy ? html`<span part="allergy" aria-hidden="true">!</span>` : nothing}
       ${
         named
           ? html`<span part="name" data-fill=${merged ? first.fill : nothing}>${label}</span>`

@@ -51,6 +51,18 @@ function read(id = partyId) {
 function save(input: unknown, revision = 0, id = partyId) {
   return tx((t) => allergy.savePartyAllergy(t, id, revision, input, actor));
 }
+
+it("A669 reads only the requested parties with guests, including an empty selection", async () => {
+  const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
+  await save({ answer: "allergies", guests: [guest, { who: "Guest B", allergens: { milk: {} } }] });
+  expect(await tx((t) => allergy.partiesWithAllergicGuests(t, []))).toEqual(new Set());
+  expect(await tx((t) => allergy.partiesWithAllergicGuests(t, [other!.id]))).toEqual(new Set());
+  expect(await tx((t) => allergy.partiesWithAllergicGuests(t, [partyId, other!.id]))).toEqual(
+    new Set([partyId]),
+  );
+  await save({ answer: "none", guests: [] }, 1);
+  expect(await tx((t) => allergy.partiesWithAllergicGuests(t, [partyId]))).toEqual(new Set());
+});
 async function draftLine(id = partyId) {
   const [draft] = await suite.db
     .insert(orderDrafts)

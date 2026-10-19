@@ -218,6 +218,20 @@ describe("a table that needs moving", () => {
 });
 
 describe("zones and their tables", () => {
+  it("A669 carries allergy presence across joined tables without replacing their status", () => {
+    const marked = table({ id: "a", today: today({ joinId: "j" }), hasAllergy: true });
+    const joined = table({ id: "b", today: today({ joinId: "j" }), readyToServe: 2 });
+    const other = table({ id: "c", today: today() });
+    const mapped = mapTables([marked, joined, other]);
+    expect(mapped[0]).toMatchObject({ allergy: true, dot: "ready" });
+    expect(mapped[1]).toMatchObject({ allergy: true, dot: "ready" });
+    expect(mapped[2]).not.toHaveProperty("allergy");
+    expect(mapTables([joined, marked]).map((row) => row.allergy)).toEqual([true, true]);
+    expect(mapTables([{ ...marked, hasAllergy: undefined }, joined])[0]).not.toHaveProperty(
+      "allergy",
+    );
+  });
+
   it("maps placed tables, leaving out spares and taken-off ones", () => {
     const t1 = table({ id: "t1", label: "1", today: today() });
     const t2 = table({ id: "t2", label: "2", today: today({ placement: null }) });
