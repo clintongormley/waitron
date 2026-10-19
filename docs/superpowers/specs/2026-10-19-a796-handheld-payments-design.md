@@ -511,6 +511,20 @@ default 20).
   tarjeta en curso en esta cuenta. ¿Cobrar otro?" before another card on the same bill. The server
   is unchanged here: the owner kept W100's sixth-question default (no rule against the holding phone starting
   two).
+  _Built differently, 2026-10-19 (plan Revision 5, after A773-1, #1897, landed its own hold and the
+  campaign watcher ruled that it is the one hold):_ the sheet does not replace the confirmation with
+  a separate lock. It reopens on the payment's original confirmation, locked — Atrás, tip, guests
+  and every field disabled, as A773-1 built it — with a box titled **Sin conexión con el
+  servidor** above it, the explanation ("El servidor no ha respondido … Pulsa Comprobar de nuevo:
+  se pregunta por este mismo pago y no se registrará dos veces.") as the form's bottom message, and
+  the primary button reading **Comprobar de nuevo**, which resends the original complete request,
+  reader and guests included. While a payment is still being sent (no answer and no failure yet), a
+  sheet opened on that bill on this phone shows the same confirmation busy, titled **Esperando al
+  servidor**. A server error that may follow a recorded payment (a 5xx, or no code) is held the same
+  way. A bill read that shows the payment frees the bill and shows what the bill records, except
+  a payment that settled the bill, whose ticket one press of Comprobar de nuevo shows; a read that
+  does not show the payment frees nothing.
+  Picture 7, right, still draws the earlier lock and is to be redrawn.
 - **Changing the reader or printer while a card is at the reader**: not from the sheet, whose
   controls are disabled while the card is asked, as today's dialog's are (§2.2). An NFC tap is still
   picked up and the next payment uses the new reader; what the running card does was not checked
