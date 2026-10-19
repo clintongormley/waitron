@@ -817,7 +817,7 @@ describe("orphan remediation", () => {
     expect(incident.rows[0].params.payments[0].remediation).toBe("alreadyClaimed");
   });
 
-  it("does NOT claim an orphan whose amount has DRIFTED — it reports both instead", async () => {
+  it("does NOT claim an orphan whose amount has DRIFTED — it holds it instead", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -834,7 +834,7 @@ describe("orphan remediation", () => {
     // Not a failed remediation — one correctly never attempted.
     expect(result.remediationFailures).toEqual([]);
     expect(reverse.calls).toEqual([]);
-    // No marker, unlike a claimed-then-failed reversal: a later sweep can still claim this row.
+    // No marker: the payment is held, and a held payment is never claimed.
     const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );

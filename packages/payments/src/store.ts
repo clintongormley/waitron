@@ -742,7 +742,7 @@ export async function listReconcilable(
       .leftJoin(paymentHolds, eq(paymentHolds.paymentId, payments.id))
       .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id));
 
-  const held = (
+  const capturedOrSettled = (
     await auditable().where(
       and(
         eq(payments.provider, provider),
@@ -766,7 +766,7 @@ export async function listReconcilable(
   // Code-unit comparison of `${created_at}|${payment_ref}` — no locale collation, no branch on the
   // three-way result. `payment_ref` is unique per provider, so the key is total.
   const orderKey = (row: ReconcilableRow): string => `${row.createdAt}|${row.paymentRef}`;
-  return [...held, ...pending].sort((a, b) => {
+  return [...capturedOrSettled, ...pending].sort((a, b) => {
     const left = orderKey(a);
     const right = orderKey(b);
     return Number(left > right) - Number(left < right);
