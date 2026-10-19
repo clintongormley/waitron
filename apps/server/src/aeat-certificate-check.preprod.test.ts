@@ -10,9 +10,12 @@
 //   WAITRON_CERT_CHECK_ADDRESS_KIND optional, sello | representante: send to that type's address
 //                                   instead, to see how AEAT answers the wrong type
 //
-//   pnpm --filter @waitron/server test:preprod src/aeat-certificate-check.preprod.test.ts
+//   pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts
 //
-// With any required variable unset the suite is skipped and makes no network call.
+// `--reporter=default` because under an AI agent Vitest hides a passing test's console output,
+// which is all this suite produces.
+//
+// With any required variable unset or empty the suite is skipped and makes no network call.
 import { describe, expect, it } from "vitest";
 import type { DeploymentEnvironment } from "@waitron/db";
 import {
@@ -23,6 +26,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/aeat-transport.js";
 import { openCertificateFile } from "@waitron/fiscal-verifactu/src/certificate-file.js";
 import { checkWithAuthority } from "@waitron/fiscal-verifactu/src/certificate-check.js";
+import { isUnset } from "./env-value.js";
 
 const pfxBase64 = process.env.WAITRON_CERT_CHECK_PFX_BASE64;
 const passphrase = process.env.WAITRON_CERT_CHECK_PASSPHRASE;
@@ -32,13 +36,9 @@ const nif = process.env.WAITRON_CERT_CHECK_NIF;
 const nombre = process.env.WAITRON_CERT_CHECK_NOMBRE;
 const addressKind = process.env.WAITRON_CERT_CHECK_ADDRESS_KIND;
 
-const configured =
-  pfxBase64 !== undefined &&
-  passphrase !== undefined &&
-  kind !== undefined &&
-  environment !== undefined &&
-  nif !== undefined &&
-  nombre !== undefined;
+const configured = [pfxBase64, passphrase, kind, environment, nif, nombre].every(
+  (value) => !isUnset(value),
+);
 
 function certKind(name: string, value: string): CertKind {
   if (!isCertKind(value)) throw new Error(`${name} must be sello or representante, not ${value}`);
@@ -62,10 +62,9 @@ describe.runIf(configured)("a real AEAT certificate, checked with the shipped co
       certKind: certKind("WAITRON_CERT_CHECK_KIND", kind!),
     };
     const env = deploymentEnvironment(environment!);
-    const sendTo =
-      addressKind === undefined || addressKind === ""
-        ? material.certKind
-        : certKind("WAITRON_CERT_CHECK_ADDRESS_KIND", addressKind);
+    const sendTo = isUnset(addressKind)
+      ? material.certKind
+      : certKind("WAITRON_CERT_CHECK_ADDRESS_KIND", addressKind);
 
     const opened = openCertificateFile(material.pfx, material.passphrase);
     if (opened.ok) {
