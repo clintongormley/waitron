@@ -64,6 +64,13 @@
       "when": 1792192571804,
       "tag": "0008_automatic_payment_resolution",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792407680868,
+      "tag": "0009_payment_holds",
+      "breakpoints": true
     }
   ]
 }

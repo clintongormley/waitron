@@ -16,6 +16,8 @@ const OWNED = [
   "payment_resolutions",
   "device_profile_card_readers",
   "card_reader_holders",
+  "payment_holds",
+  "payment_hold_outcomes",
 ];
 
 /**

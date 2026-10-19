@@ -49,6 +49,8 @@ const EXPECTED = [
   "order_draft_events",
   "order_group_events",
   "pay_period_closures",
+  "payment_hold_outcomes",
+  "payment_holds",
   "payment_resolutions",
   "receipt_reprints",
   "registros_facturacion",

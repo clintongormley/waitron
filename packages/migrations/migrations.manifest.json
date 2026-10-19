@@ -63,7 +63,7 @@
     "name": "payments",
     "table": "__drizzle_migrations_payments",
     "from": "../payments/drizzle",
-    "appendOnlyTables": ["payment_resolutions"]
+    "appendOnlyTables": ["payment_resolutions", "payment_holds", "payment_hold_outcomes"]
   },
   {
     "name": "scheduler",
