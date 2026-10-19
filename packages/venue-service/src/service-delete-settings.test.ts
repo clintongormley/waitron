@@ -65,6 +65,7 @@ import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { VENUE_SERVICE } from "./service.js";
 import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import { ensureDefaultSeasons } from "./seasons.js";
+import { serviceSteps } from "./schema/service-steps.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -597,6 +598,35 @@ async function paintSeasons(tx: Transaction) {
 }
 
 const seasonLines = (impact: { key: string }[]) => impact.filter((item) => item.key === "seasons");
+
+it("lists and deletes a deleted department's service steps", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    const step = (departmentId: string, position: number) => ({
+      departmentId,
+      position,
+      name: `Step ${position}`,
+      start: "seated" as const,
+      minutes: 0,
+    });
+    await tx
+      .insert(serviceSteps)
+      .values([
+        step(f.department, 0),
+        step(f.department, 1),
+        step(f.department, 2),
+        step(f.alpha, 0),
+      ]);
+    const kept = await tx.select().from(serviceSteps).where(eq(serviceSteps.departmentId, f.alpha));
+    expect(await readServiceDeleteSettings(tx, f.cfg, [], f.department)).toContainEqual({
+      key: "service_steps",
+      count: 3,
+      targets: [],
+    });
+    await clearServiceDeleteSettings(tx, f.cfg, [], f.department);
+    expect(await tx.select().from(serviceSteps)).toEqual(kept);
+  });
+});
 
 it("the delete impact counts a week saved with no season once per season", async () => {
   await run(async (tx) => {

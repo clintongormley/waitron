@@ -26,6 +26,7 @@ import {
   deviceProfileKitchenScreenZones,
   deviceKitchenScreenRemovals,
 } from "./schema/kitchen-screens.js";
+import { serviceSteps } from "./schema/service-steps.js";
 
 async function settings(
   tx: Transaction,
@@ -206,6 +207,10 @@ async function settings(
     .select()
     .from(departmentSalePolicies)
     .where(eq(departmentSalePolicies.departmentId, departmentId ?? ""));
+  const steps = await tx
+    .select({ id: serviceSteps.id })
+    .from(serviceSteps)
+    .where(eq(serviceSteps.departmentId, departmentId ?? ""));
   const desks = await tx
     .select()
     .from(departmentTransferDesks)
@@ -336,6 +341,7 @@ async function settings(
     },
     { key: "period_extensions", count: periodExtra.length, targets: [] },
     { key: "department_policy", count: departmentPolicy.length, targets: [] },
+    { key: "service_steps", count: steps.length, targets: [] },
     {
       key: "transfer_desks",
       count: desks.length,
@@ -440,6 +446,7 @@ export async function clearServiceDeleteSettings(
     await tx
       .delete(departmentSalePolicies)
       .where(eq(departmentSalePolicies.departmentId, selected.departmentId));
+    await tx.delete(serviceSteps).where(eq(serviceSteps.departmentId, selected.departmentId));
     await tx
       .delete(departmentTransferDesks)
       .where(eq(departmentTransferDesks.departmentId, selected.departmentId));
