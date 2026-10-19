@@ -569,6 +569,26 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(reads()).toBe(1);
   });
 
+  it.each([
+    ["connection.failed", { code: "connection.failed" }],
+    ["server.internal", { code: "server.internal", status: 500 }],
+  ])("closing after a lost reply reads the card again (%s)", async (_code, rejection) => {
+    const { card, dialog, reads } = await open({
+      reads: [async () => view(), async () => view({ revision: "rev-2" })],
+      install: async () => Promise.reject(rejection),
+    });
+    await filled(dialog);
+    await press(dialog);
+    await vi.waitFor(() => expect(actions(dialog).error).not.toBe(""));
+    expect(reads()).toBe(1);
+    const close = closed(dialog);
+    await userEvent.click(q(dialog, "[data-test=certificate-cancel]"));
+    await close;
+    await vi.waitFor(() => expect(reads()).toBe(2));
+    await card.updateComplete;
+    expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).toBeNull();
+  });
+
   it("says the request errors in Spanish", async () => {
     setLocale("es");
     const { dialog } = await open({

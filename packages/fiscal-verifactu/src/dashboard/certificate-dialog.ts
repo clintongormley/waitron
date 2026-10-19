@@ -25,6 +25,14 @@ import { CERTIFICATE_MAX_BYTES } from "../certificate-limits.js";
 
 const KINDS: readonly CertificateKind[] = ["sello", "representante"];
 
+/** The conflict, and the request primitive's codes for a POST whose reply was lost, which may have
+ * committed. */
+const VAULT_MAY_HAVE_CHANGED = new Set([
+  "fiscal.certificate_changed",
+  "connection.failed",
+  "server.internal",
+]);
+
 type Draft = { file: File | null; passphrase: string; certKind: CertificateKind };
 type Field = "file" | "passphrase";
 type Refusal = { field?: Field; message: string };
@@ -189,7 +197,7 @@ export class AeatCertificateDialog extends LitElement {
       if (!this.isConnected) return;
       this.busy = false;
       const code = codeOf(error);
-      if (code === "fiscal.certificate_changed") {
+      if (VAULT_MAY_HAVE_CHANGED.has(code)) {
         this.dispatchEvent(
           new CustomEvent("aeat-certificate-changed", { bubbles: true, composed: true }),
         );
