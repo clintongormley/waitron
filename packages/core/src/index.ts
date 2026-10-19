@@ -12,6 +12,7 @@ export type { RecordSubstitutionInput } from "./record-substitution.js";
 export { listOutstandingSales } from "./list-outstanding-sales.js";
 export type { OutstandingSale } from "./list-outstanding-sales.js";
 export {
+  currentIncidentsOf,
   findIncident,
   listHandledIncidents,
   listOpenIncidents,
