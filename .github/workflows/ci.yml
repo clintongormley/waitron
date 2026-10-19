@@ -922,15 +922,12 @@ jobs:
       - name: Merge the server coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/server" test:merge
 
-  # packages/fiscal-verifactu alone. It is a maxWorkers: 4 suite — thousands of real AEAT fixtures across
-  # 33 files — so, like the other two (packages/db → test-heavy, apps/server → test-server), it wants
-  # all four of a runner's cores and belongs on its own; it was the last maxWorkers: 4 package still
-  # sharing, in the light shards, where it oversubscribed its bin-mates. Measured on the two-shard run
-  # 32425078097 it was 219s inside test-light-a's 270s while the lighter test-light-b packed ten
-  # packages into 127s. A runner of its own lets its maxWorkers: 4 run uncontended AND stops it inflating
-  # its bin-mates. Unlike apps/server this needed no config change: fiscal-verifactu already
-  # multi-forks (packages/fiscal-verifactu/vitest.config.ts). See FISCAL_VERIFACTU_PACKAGE in
-  # scripts/changed-scope.mjs.
+  # packages/fiscal-verifactu alone: a Node project — a maxWorkers: 4 suite of thousands of real AEAT
+  # fixtures — and a Chromium project for its dashboard panel, so this runner installs Chromium as
+  # test-adjustments does. Its maxWorkers: 4 wants all four of a runner's cores; it was the last such
+  # package still sharing, in the light shards, where it oversubscribed its bin-mates. Measured on the
+  # two-shard run 32425078097 it was 219s inside test-light-a's 270s while the lighter test-light-b
+  # packed ten packages into 127s. See FISCAL_VERIFACTU_PACKAGE in scripts/changed-scope.mjs.
   test-fiscal-verifactu:
     timeout-minutes: 10
     needs: changes
@@ -951,6 +948,18 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/fiscal-verifactu exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/fiscal-verifactu exec playwright install chromium
 
       # The guard first, same reason as every shard: pnpm answers "nothing to do" with exit 0 and a
       # line on stdout, so a shard whose filter selects nothing reports success having run no tests.

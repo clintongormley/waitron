@@ -45,6 +45,8 @@ export const envios = table(
   (t) => [
     // The drainer's access path: oldest due first.
     index("envios_drenaje_idx").on(t.estado, t.proximoIntentoEn),
+    // The certificate card's newest-acceptance read, taken under the write lock.
+    index("envios_confirmado_idx").on(t.confirmadoEn),
     check(
       "envios_estado_ck",
       sql`${t.estado} in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')`,

@@ -11,6 +11,8 @@ import {
 import { hasCode, isAppError } from "@waitron/shared";
 import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
 
+const NODE_ID = "node-a";
+
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 120_000,
@@ -37,7 +39,7 @@ describe("sealAeatSecret", () => {
     const ring = testRing();
     const cert = aeatCert({ certKind: "representante" });
 
-    await sealAeatSecret({ db: suite.db, ring }, cert);
+    await sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, cert);
 
     const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
@@ -54,7 +56,9 @@ describe("sealAeatSecret", () => {
     // A non-empty string, so `putCredential`'s own `validatePayload` would accept it.
     const cert = aeatCert({ certKind: "bogus" as AeatCert["certKind"] });
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
+    const error = await sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, cert).catch(
+      (e: unknown) => e,
+    );
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "certKind",
@@ -75,7 +79,9 @@ describe("sealAeatSecret", () => {
     const ring = testRing();
     const cert = aeatCert({ pfxBase64 });
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
+    const error = await sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, cert).catch(
+      (e: unknown) => e,
+    );
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "pfxBase64",
@@ -92,7 +98,7 @@ describe("sealAeatSecret", () => {
     // `Buffer.from("hello").toString("base64")`: a genuine encoding with a padded tail.
     const cert = aeatCert({ pfxBase64: "aGVsbG8=" });
 
-    await sealAeatSecret({ db: suite.db, ring }, cert);
+    await sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, cert);
 
     const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
@@ -103,9 +109,10 @@ describe("sealAeatSecret", () => {
   it("refuses a non-object raw blob naming aeatCert and seals nothing", async () => {
     const ring = testRing();
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, "not-an-object").catch(
-      (e: unknown) => e,
-    );
+    const error = await sealAeatSecret(
+      { db: suite.db, ring, nodeId: NODE_ID },
+      "not-an-object",
+    ).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "aeatCert",
     );

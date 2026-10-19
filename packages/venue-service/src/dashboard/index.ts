@@ -2,7 +2,7 @@ import { createRef, ref } from "lit/directives/ref.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import { html } from "lit";
-import type { DashboardContribution } from "@waitron/dashboard-kit";
+import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 import "./prep-stations-screen.js";
 import { VenueServiceApi } from "./client.js";
@@ -13,7 +13,7 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
 import "./floor-plans-screen.js";
 
-export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
+export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "venue-service",
   screen: {
     id: "venue-operations",

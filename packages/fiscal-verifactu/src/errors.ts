@@ -323,9 +323,28 @@ declare module "@waitron/shared" {
     "fiscal.refusals_repeated": { codigo: string; count: number };
 
     /**
+     * An ongoing-alert code from ./certificate-alerts.ts, never thrown: the node's AEAT certificate
+     * ends on the venue-local day `date`, `days` calendar days away.
+     */
+    "fiscal.certificate_expiring": { days: number; date: string };
+
+    /**
+     * The same ongoing check: the node's AEAT certificate ended on the venue-local day `date`.
+     * Never thrown.
+     */
+    "fiscal.certificate_expired": { date: string };
+
+    /**
      * An ongoing-alert code raised by `apps/server/src/alert-sources.ts`, not by this package; it
      * lives here because it names the fiscal concept. No params: a plain on/off fact.
      */
     "fiscal.awaiting_certificate": Record<string, never>;
+
+    /** `installCertificate` (./certificate-install.ts): another install changed the vault after the
+     * dialog read the card. */
+    "fiscal.certificate_changed": Record<string, never>;
+
+    /** `installCertificate`: a malformed request body. Names the field, never its value. */
+    "fiscal.certificate_request_invalid": { field: string };
   }
 }

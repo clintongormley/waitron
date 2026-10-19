@@ -392,11 +392,13 @@ setting none of its own falls back to.
 This section came from Vitest 3, where moving `maxForks: 4`
 inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
 Sync migration stall; `ps -axo pid,ppid,etime,pcpu,command` counted them, and #291 moved the limit
-back to the outer config. fiscal-verifactu has since dropped its projects.
+back to the outer config. fiscal-verifactu later dropped its projects; since A795 it has two
+again, a Node project and a Chromium project, with the limit of 4 still on the outer config
+(`packages/fiscal-verifactu/vitest.config.ts`).
 
 `scripts/fiscal-test-budget.test.ts` pins these configs and no others: fiscal-verifactu's outer
-limit of 4, and `packages/media/vitest.config.ts`, which still has projects, keeping its limit of 2
-on the outer config with none inside a project. That is a pin on the arrangement those two packages
+limit of 4 with none inside a project, and `packages/media/vitest.config.ts`, which also has
+projects, keeping its limit of 2 on the outer config with none inside a project. That is a pin on the arrangement those two packages
 chose, not on how Vitest resolves the limit.
 
 **The option's NAME changed with Vitest 4** (2026-09-19): `poolOptions.forks.maxForks` became the
@@ -1519,9 +1521,11 @@ has one too, but only in `packages/ui/src/a11y-helpers.ts` — so the `*.a11y.te
 the behavioural suites, which import `packages/ui/src/test-helpers.ts` instead, do not. Two of
 `packages/ui-core/src/components/wt-button.test.ts`'s hover tests end with the cursor still on the button,
 and those suites drive the real cursor a lot, so the same latent failure lives there, unpaid for so
-far. `packages/adjustments`, `packages/media`, `packages/staffing` and `packages/venue-service`
-register `parkPointerCommands` in their vitest configs and DO get the reset, through `packages/ui`:
-their a11y suites (`packages/adjustments/src/dashboard/reasons-screen.a11y.test.ts`,
+far. `packages/adjustments`, `packages/fiscal-verifactu`, `packages/media`, `packages/staffing`
+and `packages/venue-service` register `parkPointerCommands` in their vitest configs and DO get the
+reset, through `packages/ui`: their a11y suites (`packages/adjustments/src/dashboard/reasons-screen.a11y.test.ts`,
+`packages/fiscal-verifactu/src/dashboard/certificate-card.a11y.test.ts` and
+`certificate-dialog.a11y.test.ts`,
 `packages/media/src/dashboard/image-library.a11y.test.ts`,
 `packages/staffing/src/dashboard/staff-roles-screen.a11y.test.ts` and
 `packages/venue-service/src/dashboard/departments-list.a11y.test.ts`) import

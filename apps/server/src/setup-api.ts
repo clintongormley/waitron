@@ -802,7 +802,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       }
 
       if (!setupPhaseReached(operation, "secret_sealed")) {
-        if (expected) await secret!.seal({ db, ring }, rawSecret);
+        if (expected) await secret!.seal({ db, ring, nodeId: result.nodeId }, rawSecret);
         // The fiscal seat owns its transaction; resume repeats idempotent seals until both finish.
         if (email !== undefined) {
           await withTransaction(db, (tx) =>

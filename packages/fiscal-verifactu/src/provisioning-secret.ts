@@ -2,6 +2,8 @@ import { putCredential, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
+import { openCertificateFile } from "./certificate-file.js";
+import { latestInstall, nextInstalledAt, recordInstall } from "./certificate-record.js";
 import "./errors.js";
 
 export interface AeatCert {
@@ -17,7 +19,7 @@ export interface AeatCert {
 // pattern also matches the empty string, hence the length check beside it.
 const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-function isBase64(value: string): boolean {
+export function isBase64(value: string): boolean {
   return value.length > 0 && BASE64_RE.test(value);
 }
 
@@ -71,22 +73,41 @@ export function parseAeatCert(raw: unknown): AeatCert {
 /**
  * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Validated again here
  * because a caller may skip the host's `validate` seat, and `putCredential` accepts any non-empty
- * `certKind` and `pfxBase64`.
+ * `certKind` and `pfxBase64`. A file that opens also gets an install row, unless the node's latest
+ * one is already this certificate; one that does not open is sealed with none.
  */
 export async function sealAeatSecret(
-  deps: { db: Database; ring: KeyRing },
+  deps: { db: Database; ring: KeyRing; nodeId: string; now?: () => Date },
   raw: unknown,
 ): Promise<void> {
   const cert = parseAeatCert(raw);
+  const opened = openCertificateFile(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
 
-  await withTransaction(deps.db, (tx) =>
-    putCredential(tx, deps.ring, {
+  await withTransaction(deps.db, async (tx) => {
+    await putCredential(tx, deps.ring, {
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: cert.pfxBase64,
         passphrase: cert.passphrase,
         certKind: cert.certKind,
       },
-    }),
-  );
+    });
+    if (!opened.ok) return;
+    const { details } = opened;
+    const latest = await latestInstall(tx, deps.nodeId);
+    if (latest?.fingerprint === details.fingerprint) return;
+    await recordInstall(tx, {
+      nodeId: deps.nodeId,
+      installedAt: nextInstalledAt(latest, (deps.now ?? (() => new Date()))()),
+      source: "setup",
+      personId: null,
+      kind: cert.certKind,
+      fingerprint: details.fingerprint,
+      organisation: details.organisation,
+      taxId: details.taxId,
+      issuer: details.issuer,
+      validFrom: details.validFrom,
+      validUntil: details.validUntil,
+    });
+  });
 }

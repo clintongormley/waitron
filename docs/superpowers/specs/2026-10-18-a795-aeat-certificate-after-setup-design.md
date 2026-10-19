@@ -741,6 +741,9 @@ twice (risk-trigger branch). The owner lands it.
    `fiscal.awaiting_certificate`, and the guard list.
 6. **Only if Q3 is A:** the reminder email.
 
+> **Pointer, 2026-10-19:** the owner approved landing A795 before these checks ran; they run after
+> landing (backlog A888).
+
 **Before landing, with real certificates** (the owner's, through the operator-run
 `aeat.preprod.test.ts` pattern). If any of these does not answer as this design expects, the affected
 part is redesigned before landing, not shipped on assumption:

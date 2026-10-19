@@ -22,7 +22,10 @@ const source = join(import.meta.dirname, "../packages/fiscal-verifactu/drizzle")
 const journal = JSON.parse(readFileSync(join(source, "meta/_journal.json"), "utf8")) as {
   entries: { tag: string; when: number }[];
 };
-const latest = journal.entries.at(-1)!;
+const target = journal.entries.findIndex((entry) => entry.tag === "0006_numerous_roughhouse");
+if (target === -1)
+  throw new Error("migration 0006_numerous_roughhouse is not in the fiscal journal");
+const latest = journal.entries[target]!;
 const migration = readFileSync(join(source, `${latest.tag}.sql`), "utf8");
 const options = migrationOptionsFor(manifestSets(), null);
 
@@ -30,17 +33,17 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
   const scratch = mkdtempSync(join(tmpdir(), "waitron-allocation-upgrade-"));
   const old = join(scratch, "old");
   cpSync(source, old, { recursive: true });
-  rmSync(join(old, `${latest.tag}.sql`));
+  for (const { tag } of journal.entries.slice(target)) rmSync(join(old, `${tag}.sql`));
   writeFileSync(
     join(old, "meta/_journal.json"),
     JSON.stringify({
       ...journal,
-      entries: journal.entries.slice(0, -1),
+      entries: journal.entries.slice(0, target),
     }),
   );
   const created = new Set(
     journal.entries
-      .slice(0, -1)
+      .slice(0, target)
       .flatMap(({ tag }) =>
         [...readFileSync(join(old, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE `(\w+)`/g)].map(
           (match) => match[1]!,
@@ -78,6 +81,25 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
     );
     const candidate = join(scratch, "candidate");
     cpSync(source, candidate, { recursive: true });
+    for (const { tag } of journal.entries.slice(target + 1)) rmSync(join(candidate, `${tag}.sql`));
+    writeFileSync(
+      join(candidate, "meta/_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.slice(0, target + 1),
+      }),
+    );
+    const candidateCreated = new Set(
+      journal.entries
+        .slice(0, target + 1)
+        .flatMap(({ tag }) =>
+          [
+            ...readFileSync(join(candidate, `${tag}.sql`), "utf8").matchAll(
+              /CREATE TABLE `(\w+)`/g,
+            ),
+          ].map((match) => match[1]!),
+        ),
+    );
     if (kind === "orphan" || kind === "unchecked-orphan") {
       writeFileSync(
         join(candidate, `${latest.tag}.sql`),
@@ -100,7 +122,13 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
       folder,
       options.map((set) =>
         set.migrationsTable === "__drizzle_migrations_fiscal"
-          ? { ...set, migrationsFolder: candidate }
+          ? {
+              ...set,
+              migrationsFolder: candidate,
+              appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) =>
+                candidateCreated.has(table),
+              ),
+            }
           : set,
       ),
     ).then(

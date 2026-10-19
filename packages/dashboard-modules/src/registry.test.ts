@@ -25,6 +25,18 @@ describe("DASHBOARD_MODULES honesty", () => {
     ).toEqual([["adjustment-reasons", "adjustment.manage"]]);
   });
 
+  it("puts the AEAT certificate on Venue details for system.manage, readable with fiscal.view", () => {
+    const verifactu = DASHBOARD_MODULES.find((c) => c.module === "fiscal-verifactu");
+    expect(
+      verifactu?.settingsPanels?.map((panel) => [
+        panel.tab,
+        panel.requiresPermission,
+        panel.readPermission,
+        panel.order,
+      ]),
+    ).toEqual([["venue-details", "system.manage", "fiscal.view", 1]]);
+  });
+
   it("registers the adjustment report in the reports group for anyone who may view reports", () => {
     const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
     expect(adjustments?.screen).toEqual({

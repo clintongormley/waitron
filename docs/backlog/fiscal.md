@@ -850,32 +850,48 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   no-printer-at-issuance path that queues it later; its F2 control still queues three originals.
   **Remaining:** contain repeated F2 requests per sale, with the invoice number on the slip.
 
-## Installing or renewing the AEAT certificate after setup
+## A888. After A795 lands: the owner's checks with real certificates
 
-- **A795 — installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
-  (`apps/server/src/setup-api.ts`), and nothing watches when it expires: `cert-expiry.ts` reads the
-  box's own HTTPS certificate, not the AEAT one. Separate from getting the certificate onto a promoted
-  standby (_Afterwards_). Fiscal: the owner lands it.
-- **Design (2026-10-18):** [2026-10-18-a795-aeat-certificate-after-setup-design.md](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md),
-  mockups in [mockups/a795-aeat-certificate/](mockups/a795-aeat-certificate/). Measured on the way:
-  setup's check never opens the file (a wrong passphrase, random bytes, a keyless file and an expired
-  certificate were all accepted); the filing pass reads the certificate afresh each pass, so a new one
-  needs no restart; against a test server that refuses during the connection, an expired certificate
-  is backed off like a network failure and raises no "awaiting certificate" alert (that AEAT refuses
-  the same way is assumed). Decided against house precedent: a card on Venue settings → Venue
-  details, contributed by the Veri*Factu module; checks in order (size, opens, details, dates, not the
-  same, tax ID refused on mismatch, a read-only AEAT query with no override) before one short write;
-  the old certificate is not kept; every install recorded in an append-only `local` table that holds
-  no personal name or ID number; alerts `fiscal.certificate_expiring` and `fiscal.certificate_expired`;
-  the box making a seal's key is A853.
-- **Waiting on the owner (§9 of the design):** Q1 who may replace it (recommended: managers, through
-  `system.manage`); Q2 when the warning turns amber and red (recommended: by type — a seal 90 and 30
-  days, a representative certificate 60 and 14); Q3 whether the box emails as expiry nears
-  (recommended: yes).
-- **Before landing, with real certificates (§8 of the design):** consultas to production and with a
-  seal at `www10`; what AEAT does with each type at the other type's address; how AEAT answers an
-  expired certificate; where a seal keeps the tax ID and whether representative certificates carry
-  `organizationIdentifier` and `O`; whether real exports use the old RC2 encryption.
+- **Left open by A795.** These were A795's landing condition until the owner approved landing it on
+  2026-10-19 before they ran; the owner runs them with real certificates afterwards. Each is a question the
+  [design](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md) (§8) and
+  [plan](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md) (§3, decision 11)
+  could not answer from a source or a test server.
+- Run them with the operator harness, which opens the file and asks AEAT a read-only `consultar`
+  with the code an install runs, and files nothing. Its variables are listed in its header and in
+  `apps/server/README.md` ("Installing or replacing the AEAT certificate after setup"):
+  `pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts`
+  (file `apps/server/src/aeat-certificate-check.preprod.test.ts`).
+- The checks:
+  - a consulta to production AEAT, and a consulta with a company seal at `www10`;
+  - each type at the other type's address: a seal sent to `www1` and a representative certificate
+    sent to `www10` (`WAITRON_CERT_CHECK_ADDRESS_KIND`), which says whether the live check catches
+    a wrong type;
+  - how AEAT answers an expired certificate: refused during the connection (and with which error,
+    `other side closed` or `ECONNRESET`), an HTTP error or SOAP fault, or a reply refusing each
+    record;
+  - where a real seal keeps the company's tax ID, and whether real representative certificates all
+    carry `organizationIdentifier` and `O`;
+  - whether files exported by FNMT's own procedure, by the browsers the export guides cover and by
+    the Mac keychain use the old RC2 encryption; if they do, the guides say how to export with AES;
+  - a non-ASCII passphrase: the tests use ASCII passphrases only, because a test file built with
+    one could not be opened by Node (plan §3);
+  - where an AEAT error number arrives in a refused consulta. This decides whether the design's
+    "AEAT refused this certificate for {taxpayerNif} ({codigo})" sentence is built; today a SOAP
+    fault is shown with the code and reason AEAT sent (plan decision 11).
+- If any of them answers differently from the design, the affected part is redesigned in a
+  follow-up.
+
+## A889. A box set up before A795 shows "Installed: not recorded"
+
+- **Left open by A795** (design §3.7). A box set up before A795 has a certificate in the vault and
+  no row in `fiscal_certificate_installs`, so the card shows only "Installed: not recorded" with
+  its button, and the expiry alerts and reminder emails, which read the latest install row, cannot
+  see that certificate's expiry date. Until a venue is live such a box is reset, or its certificate
+  is installed again on the card. There is no migration code (CLAUDE.md §3, "No
+  backwards-compatibility or data-migration code until Waitron is in production"). The same holds
+  for a certificate written with `waitron-credentials set --purpose fiscal.aeat`, which records no
+  install.
 
 ## A853. The box makes a company seal's private key itself
 
@@ -950,6 +966,13 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   every Veri\*Factu sale, correction and substitution path — never a quiet redefinition of `zero`.
 
 ## Decisions and deliberate limits
+
+- **A795, owner decisions 2026-10-18 (design §9, Q1–Q3).** Replacing the AEAT certificate needs the
+  existing `system.manage` (managers and admins); no new permission. Warnings go by type, in
+  calendar days left: a company seal turns amber at 90 and red at 30, a representative certificate
+  at 60 and 14 (`CERTIFICATE_THRESHOLDS`, `packages/fiscal-verifactu/src/certificate-dates.ts`). The
+  box emails every active person holding `system.manage` who has an email address, at most once per
+  person and stage. Receipt: [plan §1](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md).
 
 - **Owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as the
   drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and counted)

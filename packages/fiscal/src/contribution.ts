@@ -1,5 +1,5 @@
 import type { KeyRing } from "@waitron/credentials";
-import type { Database, DeploymentEnvironment } from "@waitron/db";
+import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import type { DrainResult, FiscalBackend } from "./backend.js";
 import type { TrustedClock } from "./clock.js";
 
@@ -31,6 +31,76 @@ export interface FiscalDutyDeps {
     sentAt: Date;
     receivedAt: Date;
   }) => void;
+}
+
+export interface FiscalCertificateAnswer {
+  readonly outcome: "installed" | "refused";
+  readonly reason: string;
+  readonly field?: string;
+  readonly details?: Readonly<Record<string, string | number>>;
+}
+
+export interface FiscalCertificateSeat {
+  /** The card, as JSON the host passes on unread. One transaction; `authorize` runs first in it. */
+  read(
+    deps: {
+      db: Database;
+      nodeId: string;
+      locationId: string;
+      authorize(tx: Transaction): Promise<void>;
+      nameOf(tx: Transaction, personId: string): Promise<string | null>;
+    },
+    now: Date,
+  ): Promise<Readonly<Record<string, unknown>>>;
+  /** Every check, then one write; a refusal is an answer, not a throw. Throws only for the request
+   * itself. `authorize` runs in the read before anything leaves the box, and again in the write. */
+  install(
+    deps: {
+      db: Database;
+      ring: KeyRing;
+      nodeId: string;
+      locationId: string;
+      environment: DeploymentEnvironment;
+      authorize(tx: Transaction): Promise<{ personId: string }>;
+      log?: FiscalDutyLog;
+      /** Read after AEAT answers and again in the write; `now` is when the request began. */
+      clock?: () => Date;
+    },
+    body: unknown,
+    now: Date,
+  ): Promise<FiscalCertificateAnswer>;
+  /** The ongoing expiry alerts for the certificate `nodeId` installed last, read in `tx`. */
+  alerts(
+    tx: Transaction,
+    deps: { nodeId: string; locationId: string },
+    now: Date,
+  ): Promise<
+    readonly {
+      key: string;
+      code: string;
+      params: Readonly<Record<string, unknown>>;
+      severity: "warning" | "error";
+      since: string | null;
+      screen?: string;
+    }[]
+  >;
+  /** Expiry emails for the certificate `nodeId` installed last: at most one per person per stage. */
+  reminders: {
+    /** Claims the next email due, or `null`; the caller sends it, then reports how it ended. */
+    claim(
+      tx: Transaction,
+      deps: { nodeId: string; locationId: string },
+      recipients: readonly { personId: string; email: string; language: "en" | "es" }[],
+      now: Date,
+    ): Promise<{ id: string; recipient: string; subject: string; text: string } | null>;
+    report(
+      tx: Transaction,
+      deps: { nodeId: string },
+      id: string,
+      outcome: "sent" | "rejected" | "unknown",
+      now: Date,
+    ): Promise<void>;
+  };
 }
 
 /**
@@ -68,8 +138,9 @@ export interface FiscalContribution {
      * and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
      * (CLAUDE.md §5). */
     validate(raw: unknown): void;
-    /** Seal the secret into the venue's vault in its own transaction, re-validating it. */
-    seal(deps: { db: Database; ring: KeyRing }, raw: unknown): Promise<void>;
+    /** Seal the secret into the venue's vault in its own transaction, re-validating it. `nodeId`
+     * is the node whose vault holds the secret. */
+    seal(deps: { db: Database; ring: KeyRing; nodeId: string }, raw: unknown): Promise<void>;
   };
   /** The operator-typed venue fields this regime puts on the wire verbatim, reached through this
    * seat because the host does not know the regime's rules. `validate` throws
@@ -87,4 +158,5 @@ export interface FiscalContribution {
       readonly operationDescription: string;
     }): void;
   };
+  readonly certificate?: FiscalCertificateSeat;
 }

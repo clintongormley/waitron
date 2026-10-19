@@ -344,7 +344,8 @@ that slice 3 has to restore:
   [2026-09-07 design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) landed as #279
   and was reverted by #281, and the replication it was rebuilt against was itself removed on
   2026-09-19 — so the design and its plan describe a mechanism that no longer exists. Redesign it with
-  slice 3. Installing or renewing the certificate on the primary does not wait for this (A9).
+  slice 3. Installing or renewing the certificate on the primary, on the dashboard's AEAT certificate
+card (A795), does not wait for this (A9).
 - **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
   promote UI; an a11y test for the break-glass panel.
 - **Carry-ins, accepted or to be stated in a threat model:** the primary burns an installation number

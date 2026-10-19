@@ -200,8 +200,16 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha rechazado {count} registros fiscales seguidos con el código {codigo}. Waitron reintenta cada hora el primer registro detenido que puede enviar. Una aceptación o un rechazo distinto puede reanudar el envío. Contacta con soporte.",
   },
   "fiscal.awaiting_certificate": {
-    en: "Fiscal records are waiting because no valid tax certificate is installed. Upload the certificate to resume submitting.",
-    es: "Hay registros fiscales en espera porque no hay un certificado tributario válido instalado. Sube el certificado para reanudar los envíos.",
+    en: "Fiscal records are waiting because no AEAT certificate is installed. Install it in Venue settings.",
+    es: "Hay registros fiscales en espera porque no hay ningún certificado de la AEAT instalado. Instálalo en Ajustes del local.",
+  },
+  "fiscal.certificate_expiring": {
+    en: "The AEAT certificate expires on {date:date}, in {days} day(s). Install the new one in Venue settings before then, or fiscal records will wait.",
+    es: "El certificado de la AEAT caduca el {date:date}, dentro de {days} día(s). Instala el nuevo en Ajustes del local antes de esa fecha o los registros fiscales quedarán en espera.",
+  },
+  "fiscal.certificate_expired": {
+    en: "The AEAT certificate expired on {date:date}. Sales continue, but fiscal records wait until you install a new one in Venue settings.",
+    es: "El certificado de la AEAT caducó el {date:date}. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo en Ajustes del local.",
   },
   "payment.offline_forward_declined": {
     en: "A card payment of {amount:money} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",

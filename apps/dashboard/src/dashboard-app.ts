@@ -46,6 +46,7 @@ import type { StringKey } from "./i18n/strings.js";
 // kit's untyped resolver: a module's label keys are not in the app's `StringKey` union.
 import {
   CALENDAR_OWN_VIEW_IDS,
+  contributedScreens,
   registerCatalogue,
   t as tKit,
   type CalendarViewEntry,
@@ -1390,7 +1391,7 @@ export class DashboardApp extends LitElement {
     const calendarViews = this.#calendarViews(enabled);
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
-      const screens: readonly DashboardFurtherScreen[] = [c, ...(c.moreScreens ?? [])];
+      const screens: readonly DashboardFurtherScreen[] = contributedScreens(c);
       for (const { screen } of screens) {
         if (!knownGroups.has(screen.group))
           throw new Error(
@@ -1950,7 +1951,7 @@ export class DashboardApp extends LitElement {
     keepUnlisted: [
       ...(dashboardPath.keepUnlisted ?? []),
       ...DASHBOARD_MODULES.flatMap((c) =>
-        [c, ...(c.moreScreens ?? [])].map(({ screen }) => screen.id),
+        contributedScreens(c).map(({ screen }) => screen.id),
       ).filter((id) => dashboardPath.children[id] === undefined),
     ],
     leave: {
@@ -2110,9 +2111,7 @@ export class DashboardApp extends LitElement {
       label: tKit,
       knownScreens: [
         ...CORE_SCREENS,
-        ...DASHBOARD_MODULES.flatMap((c) =>
-          [c, ...(c.moreScreens ?? [])].map(({ screen }) => screen.id),
-        ),
+        ...DASHBOARD_MODULES.flatMap((c) => contributedScreens(c).map(({ screen }) => screen.id)),
       ],
     });
   }

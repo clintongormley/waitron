@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import type { DashboardContribution } from "@waitron/dashboard-kit";
+import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
 import { StaffingApi } from "./client.js";
 import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
@@ -8,7 +8,7 @@ import "./rota-view.js";
 import "./staffing-season-painter.js";
 import "./staffing-special-day-painter.js";
 
-export const STAFFING_DASHBOARD: DashboardContribution = {
+export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "staffing",
   screen: {
     id: "staff-roles",

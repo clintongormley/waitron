@@ -2612,6 +2612,9 @@ and nothing guards it across screens:
 - A585-4: the season and special-day staffing painters
   (`packages/staffing/src/dashboard/staffing-season-painter.ts` and
   `staffing-special-day-painter.ts`). Each has a sibling `*.unsaved.test.ts`;
+- A795: Venue details' AEAT certificate dialog
+  (`packages/fiscal-verifactu/src/dashboard/certificate-dialog.ts`). Its leave cases are in
+  `certificate-dialog.unsaved.test.ts` beside it;
 - A761: the staffing grid's block editor (`packages/staffing/src/dashboard/staffing-grid.ts`).
   Its Save writes its own comparison (`sameBlock` of the draft against the block as it was opened),
   and it takes no draft scope and has no `*.unsaved.test.ts`. The owner asked for "a Save rather than saving
@@ -3656,7 +3659,8 @@ button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab 
 and each size's price in its own row, saving each change as it is made (Forms → "A value saved from
 its own table row"). A fourth exception (owner, 2026-10-16, A755): Venue settings' Venue details
 tab draws four cards — Business, Venue, Business day and Defaults — with
-`apps/dashboard/src/widgets/settings-card.ts`. Each card's heading is inside the card and its
+`apps/dashboard/src/widgets/settings-card.ts`; with the Veri\*Factu module, a fifth, the AEAT
+certificate card, comes from `packages/fiscal-verifactu/src/dashboard/certificate-card.ts`. Each card's heading is inside the card and its
 action sits in the card's header. The Venue and Defaults cards edit in place rather than in a
 modal, each on its own while the others stay in view mode; the Business card's Change legal name
 and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
@@ -4820,8 +4824,10 @@ Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
 `adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
-opens the first visible tab. Venue details holds four cards: Business, Venue, Business day and
-Defaults. It needs `venue.view`, and editing needs `venue.configure`. The Defaults card — the default
+opens the first visible tab. Venue details holds four cards — Business, Venue, Business day and
+Defaults — and, with the Veri\*Factu module, a fifth: the AEAT certificate, which needs
+`fiscal.view` to read and `system.manage` to install or replace. The other four cards need
+`venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
 receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
 editable with `venue.configure` and read-only without it. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before

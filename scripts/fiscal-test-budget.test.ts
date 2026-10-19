@@ -9,6 +9,18 @@ it("caps the shared fiscal worker pool at the outer Vitest configuration", () =>
   expect(fiscalConfig.test?.maxWorkers).toBe(4);
 });
 
+it("sets no maxWorkers inside any fiscal-verifactu project", () => {
+  const projects = fiscalConfig.test?.projects ?? [];
+  expect(
+    projects.length,
+    "fiscal-verifactu must still use projects, or this case pins nothing",
+  ).toBeGreaterThan(0);
+  const projectLimits = projects.map((project) =>
+    typeof project === "object" && "test" in project ? project.test?.maxWorkers : undefined,
+  );
+  expect(projectLimits.filter((limit) => limit !== undefined)).toEqual([]);
+});
+
 it("caps media's worker pool at the outer configuration, not inside one of its projects", () => {
   const projects = mediaConfig.test?.projects ?? [];
   expect(

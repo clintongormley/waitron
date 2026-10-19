@@ -256,7 +256,7 @@ it("names only registered word lists in its word-list slots", () => {
   const unknown = Object.entries(ALERT_MESSAGES).flatMap(([code, { en, es }]) =>
     [en, es].flatMap((text) =>
       [...text.matchAll(/\{[A-Za-z0-9_]+:([a-z_]+)\}/g)]
-        .filter((m) => m[1] !== "money" && !Object.hasOwn(ALERT_WORDS, m[1]!))
+        .filter((m) => m[1] !== "money" && m[1] !== "date" && !Object.hasOwn(ALERT_WORDS, m[1]!))
         .map((m) => `${code}: ${m[0]}`),
     ),
   );

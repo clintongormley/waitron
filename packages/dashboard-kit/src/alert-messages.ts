@@ -2,8 +2,9 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, pickLocale } from "./i18n.js";
 
 /** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
- * euros, the way the alert's language writes them; `{name:list}` writes the words a registered
- * word list gives the param's value. */
+ * euros, the way the alert's language writes them; `{name:date}` writes a `YYYY-MM-DD` param as
+ * that calendar day, the way the alert's language writes it; `{name:list}` writes the words a
+ * registered word list gives the param's value. */
 export type AlertMessageTable = Readonly<
   Record<string, { readonly en: string; readonly es: string }>
 >;
@@ -35,6 +36,23 @@ export function hasAlertMessage(code: string): boolean {
 }
 
 const DECIMAL = /^-?\d+(?:\.\d+)?$/;
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAY_LOCALES = { en: "en-GB", es: "es-ES" };
+
+// `en` alone writes "Oct 25, 2026"; the alert's wording is written for "25 Oct 2026". The day is
+// read and written at UTC so the reader's own zone cannot move it.
+function formatDay(value: unknown, l: string): string {
+  const m = typeof value === "string" ? DAY.exec(value) : null;
+  if (!m) return "—";
+  const at = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (at.toISOString().slice(0, 10) !== value) return "—";
+  return new Intl.DateTimeFormat(pickLocale(DAY_LOCALES, l), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(at);
+}
 
 function formatParam(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -58,6 +76,7 @@ export function alertMessage(
           ? formatMoney(value, l)
           : formatParam(value);
       }
+      if (kind === "date") return formatDay(value, l);
       if (kind === undefined) return formatParam(value);
       if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
       const list = wordLists[kind]!;

@@ -30,6 +30,7 @@ import {
   sales,
   type Transaction,
 } from "@waitron/db";
+import type { FiscalCertificateSeat } from "@waitron/fiscal";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
   type CardProviderContribution,
@@ -317,9 +318,21 @@ export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource
           params: {},
           severity: "error",
           since: null,
+          screen: "venue-settings",
         },
       ];
     },
+  };
+}
+
+export function certificateAlertSource(
+  seat: Pick<FiscalCertificateSeat, "alerts">,
+  deps: { nodeId: string; locationId: string },
+): AlertSource {
+  return {
+    area: "fiscal",
+    permission: "fiscal.view",
+    read: ({ tx, now }) => seat.alerts(tx, deps, now),
   };
 }
 

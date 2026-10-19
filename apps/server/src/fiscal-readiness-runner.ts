@@ -127,7 +127,8 @@ export async function submitFiscalReadiness(args: {
   try {
     const venue = await testVenue(db, request, modules, initial);
     const secret = args.contribution.provisioningSecret;
-    if (secret !== undefined) await secret.seal({ db, ring: args.ring }, args.secret);
+    if (secret !== undefined)
+      await secret.seal({ db, ring: args.ring, nodeId: venue.nodeId }, args.secret);
 
     const existing = await db.execute<{ count: number }>(sql`
       select count(*) as count from sales

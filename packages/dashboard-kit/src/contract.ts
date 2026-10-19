@@ -2,9 +2,9 @@ import type { LiveData } from "./live-data.js";
 import type { TemplateResult } from "lit";
 import type { DashboardRequest } from "./request.js";
 
-// The contract a dashboard module UI fills to contribute its screens. A module hands the app one
-// DashboardContribution; the app validates its nav groups, registers its strings, and mounts its screens.
-// It names no concrete module.
+// The contract a dashboard module UI fills to contribute to the dashboard. A module hands the app
+// one DashboardContribution; the app validates its nav groups, registers its strings, and mounts
+// what it contributes. It names no concrete module.
 
 /** A dashboard nav-group id; the app validates each contributed screen's group against its own
  * known ids. */
@@ -119,9 +119,7 @@ export interface DashboardSettingsPanel {
   create(ctx: DashboardModuleContext): { render(readOnly?: boolean): TemplateResult };
 }
 
-/** One module's dashboard contribution: its identity, its first screen's placement and factory, any
- * further screens, and its localised strings. */
-export interface DashboardContribution extends DashboardFurtherScreen {
+interface DashboardContributionBase {
   module: string; // == the server descriptor name
   strings: { en: Record<string, string>; es: Record<string, string> };
   /** Mounted, listed, searched and permission-gated exactly as `screen` is. */
@@ -129,4 +127,14 @@ export interface DashboardContribution extends DashboardFurtherScreen {
   settingsPanels?: readonly DashboardSettingsPanel[];
   calendarViews?: readonly DashboardCalendarView[];
   searchDestinations?: readonly DashboardSearchDestination[];
+}
+
+/** One module's dashboard contribution. */
+export type DashboardContribution = DashboardContributionBase &
+  (DashboardFurtherScreen | { screen?: undefined; create?: undefined });
+
+/** The contribution's own screen, if it brings one, then its further screens. */
+export function contributedScreens(c: DashboardContribution): readonly DashboardFurtherScreen[] {
+  const own: DashboardFurtherScreen[] = c.screen === undefined ? [] : [c];
+  return [...own, ...(c.moreScreens ?? [])];
 }

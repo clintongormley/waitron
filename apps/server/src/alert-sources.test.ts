@@ -42,6 +42,7 @@ import {
   backupAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
+  certificateAlertSource,
   contentSuggestionsAlertSource,
   BATTERY_ERROR,
   BATTERY_WARN,
@@ -550,6 +551,37 @@ describe("awaitingCertAlertSource", () => {
       code: "fiscal.awaiting_certificate",
       severity: "error",
     });
+  });
+
+  it("fiscal.awaiting_certificate links to Venue settings", async () => {
+    const [a] = await awaitingCertAlertSource({ current: true }).read(ctx);
+    expect(a).toMatchObject({ screen: "venue-settings" });
+  });
+});
+
+describe("certificateAlertSource", () => {
+  it("asks the seat for this node and location, at the read's time, in the read's transaction", async () => {
+    const tx = {} as never;
+    const raised = {
+      key: "fiscal.certificate_expired",
+      code: "fiscal.certificate_expired",
+      params: { date: "2026-10-25" },
+      severity: "error" as const,
+      since: "2026-10-24T22:59:00.000Z",
+      screen: "venue-settings",
+    };
+    const alerts = vi.fn(async () => [raised]);
+    const source = certificateAlertSource({ alerts }, { nodeId: "node-a", locationId: "loc-a" });
+    expect(await source.read({ tx, now: NOW })).toEqual([raised]);
+    expect(alerts).toHaveBeenCalledWith(tx, { nodeId: "node-a", locationId: "loc-a" }, NOW);
+  });
+
+  it("belongs to the fiscal area and needs fiscal.view", () => {
+    const source = certificateAlertSource(
+      { alerts: async () => [] },
+      { nodeId: "node-a", locationId: "loc-a" },
+    );
+    expect(source).toMatchObject({ area: "fiscal", permission: "fiscal.view" });
   });
 });
 

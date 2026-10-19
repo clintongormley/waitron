@@ -15,6 +15,8 @@ const OWNED = [
   "filing_case_events",
   "filing_cases",
   "fiscal_allocations",
+  "fiscal_certificate_installs",
+  "fiscal_certificate_reminders",
   "fiscal_reservations",
   "registro_sif",
   "registros_facturacion",

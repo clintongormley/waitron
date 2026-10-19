@@ -330,7 +330,8 @@ all.
 `packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
 in `packages/shared/src/cause-chain.ts` and again in `packages/db/src/constraint-target.ts`, and
 that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
-local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
+local copy. The shared walker's only product caller is
+`packages/fiscal-verifactu/src/certificate-check.ts`. **Next action:** export
 one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
 which depends on nothing, so that edge closes no loop.
 

@@ -25,7 +25,12 @@ their full text.
   result is uncertain. Wait a moment and retry", which can never succeed.
 - Fix: open the file in the setup route before the test with A795's checks — it opens, the old RC2
   encryption, a private key, its details, and its dates (design §3.5 steps 2–4) — and put each
-  refusal under its field. Whichever of A795 and A852 lands second reuses the other's function.
+  refusal under its field. A795 built the opening as `openCertificateFile`
+  (`packages/fiscal-verifactu/src/certificate-file.ts`), which A852 reuses: it refuses a wrong
+  passphrase, the old RC2 encryption, a file with no private key and one that is not a certificate,
+  and returns the details and dates. It refuses no date; A795's expired and not-yet-valid refusals
+  are in `checkLocally` (`packages/fiscal-verifactu/src/certificate-install.ts`), which is not
+  exported, so A852 either exports it or repeats the two comparisons.
 
 ## `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`
 
