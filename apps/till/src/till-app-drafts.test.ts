@@ -9404,6 +9404,97 @@ describe("automatic saved-draft routing", () => {
 });
 
 describe("direct New order actions", () => {
+  it.each(["send-all", "fire-selected"] as const)(
+    "keeps %s locked through native repeated presses until the submit answers",
+    async (kind) => {
+      let answer!: () => void;
+      const waiting = new Promise<void>((resolve) => (answer = resolve));
+      let started!: () => void;
+      const entered = new Promise<void>((resolve) => (started = resolve));
+      const submitDraft = vi.fn(async (...args: Parameters<TillApi["submitDraft"]>) => {
+        started();
+        await waiting;
+        return server.submitDraft(args[0], args[1], args[2]);
+      });
+      const { el } = await mountApp({ submitDraft });
+      try {
+        await openMesa(el);
+        await tap(el, "Beer");
+        await tap(el, "Steak");
+        await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
+        const order = tableOrder(el)!;
+        const outbox = draft(el);
+        const before = [...outbox.lines];
+        const saved = structuredClone(server.drafts);
+        const root = order.shadowRoot!;
+        await userEvent.click(root.querySelector<HTMLElement>("[data-review-open]")!);
+        await userEvent.click(
+          [...root.querySelectorAll<HTMLElement>("[data-draft-select]")].find((row) =>
+            row.textContent!.includes("Steak"),
+          )!,
+        );
+        const action = root.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!;
+        await userEvent.dblClick(action);
+        await entered;
+        await flush(el);
+
+        expect(submitDraft).toHaveBeenCalledOnce();
+        expect(outbox.sending).toBe(true);
+        expect(outbox.lines).toEqual(before);
+        expect(outbox.lines.every((line, index) => line === before[index])).toBe(true);
+        expect(server.drafts).toEqual(saved);
+        const native = (selector: string) =>
+          root
+            .querySelector<HTMLElement>(selector)!
+            .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+        for (const selector of [
+          '[data-draft-action="send-all"]',
+          '[data-draft-action="fire-selected"]',
+          "[data-draft-move]",
+        ]) {
+          expect(native(selector).disabled).toBe(true);
+        }
+        await userEvent.click(native('[data-draft-action="send-all"]'), { force: true });
+        await userEvent.click(native('[data-draft-action="fire-selected"]'), { force: true });
+        await flush(el);
+        expect(submitDraft).toHaveBeenCalledOnce();
+        expect(outbox.lines).toEqual(before);
+        expect(server.drafts).toEqual(saved);
+
+        answer();
+        await expect.poll(() => outbox.sending).toBe(false);
+        await flush(el);
+        expect(submitDraft).toHaveBeenCalledOnce();
+        expect(banner(el)).toBeNull();
+        expect(outbox.lines.map((line) => `${line.product.name} ×${line.quantity}`)).toEqual(
+          kind === "send-all" ? [] : ["Beer ×1"],
+        );
+        expect(savedLines()).toEqual(kind === "send-all" ? [] : ["offer-beer ×1"]);
+        expect(submitDraft.mock.calls[0]![2].groups).toEqual(
+          kind === "send-all"
+            ? [
+                { release: "hold", lineIds: ["line-2"] },
+                { release: "hold", lineIds: ["line-3"] },
+              ]
+            : [{ release: "fire", lineIds: ["line-3"] }],
+        );
+        if (kind === "fire-selected") {
+          expect(native('[data-draft-action="send-all"]').disabled).toBe(false);
+          await userEvent.click(root.querySelector<HTMLElement>('[data-draft-action="send-all"]')!);
+          await expect.poll(() => outbox.lineCount).toBe(0);
+          expect(submitDraft).toHaveBeenCalledTimes(2);
+          expect(submitDraft.mock.calls[1]![2].groups).toEqual([
+            { release: "hold", lineIds: ["line-2"] },
+          ]);
+          expect(server.drafts).toEqual([]);
+        }
+      } finally {
+        answer();
+        await flush(el);
+      }
+    },
+  );
+
   it("keeps a saved selection and its Move window through an unchanged focus refresh", async () => {
     const { el } = await mountApp();
     await openMesa(el);

@@ -1555,6 +1555,21 @@ again. `apps/server/src/order-group-numbers.test.ts` checks these operations and
 is shown as Group 7. This replaces Task 4's position-derived-number observation; gaps in the
 visible numbers alone do not imply a numbering defect.
 
+### Replacement order controls (A773)
+
+New order keeps its dishes and disables Send all, selected Fire and Move while submission waits
+for an answer. `apps/till/src/till-app-drafts.test.ts`, "locked through native repeated presses",
+checks native double clicks against a held reply: one submission, unchanged saved and local lines,
+then the accepted result. After selected Fire, a new press can send the remaining dish. These
+checks exercise the app with a controlled API reply, not the server's transaction or retry logic.
+
+`apps/till/src/screens/till-table-order-screen.direct-send.a11y.test.ts` measures the native
+Send all, Fire and Move buttons at 390 and 1280 px in both languages and themes: each is at least
+44 px on each axis and stays within the viewport. The main screen suite's "tap target of 44 px"
+case measures the replacement held-group controls, Fire confirmation and Move earlier/later.
+Its twice-pressed Fire/Move cases use scripted clicks; native repeated Sent service presses
+remain an acceptance check. None of these checks replaces the physical-till trial.
+
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 
 From the [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).

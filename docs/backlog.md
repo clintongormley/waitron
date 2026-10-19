@@ -2712,9 +2712,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Loose ends left by service Task 4 (#748, the table screen works with order groups).**
   - Recheck a Spanish fractional quantity in the Group Fire confirmation, which still uses the
     server's summary. The retired Current orders fallback is no longer the place to check it.
-  - Recheck the old small-button and repeated-press observations against the replacement New order
-    and Sent controls. Per-line Send, Change and the send preview are retired; their absence does
-    not verify the replacement actions' tap targets or handling of a second press.
+  - Check native repeated presses on Sent service actions while their replies are pending.
+    New order's native Send all/selected Fire checks and the replacement controls' size checks
+    are recorded in the [detail](backlog/till.md#replacement-order-controls-a773); they do not
+    establish this remaining Sent interaction or a physical-till trial.
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
