@@ -43,8 +43,8 @@ subscription naming a table that no longer exists. Then the docs, then a look in
 - Coverage bars 98/98/98/95 hold in every package touched.
 - **Changing an existing test assertion is a stop** unless this slice's spec retires what it checks.
   Every test file this plan touches is classified below; anything else that turns red is a stop and
-  a report, not an edit. The two open STOP questions (Q1, Q2) are not to be guessed: the tasks that
-  depend on them wait for the controller's answer.
+  a report, not an edit. The two STOP sites the plan first raised as questions were ruled on by the
+  driver on 2026-10-19 (Decisions 13 and 14); apply those rulings exactly, nothing wider.
 - Every task ends with: its focused tests, `pnpm --filter <pkg> typecheck` for each package it
   touched, and `pnpm exec prettier --check <changed files>` (for a file under `docs/`, use
   `pnpm exec prettier --file-info <file>`: `docs/` is ignored whole). An implementer past about 150
@@ -72,10 +72,16 @@ subscription naming a table that no longer exists. Then the docs, then a look in
    `dining_tables_location_label_key`. A rebuild, because SQLite will not drop a column a foreign
    key uses. **Why the trigger goes first, in its own file:** its body updates `dining_tables`
    (`0139:5-9`), and a trigger on another table whose body names the rebuilt table fails the
-   rebuild's rename (`docs/developers/conventions-data.md:1483-1496`, measured 2026-09-23); `0137`
-   dropped the same trigger before `0138` rebuilt `dining_tables` for the same reason (`0137:1-2`).
-   I did not run the generated rebuild without the drop first, so that order rests on that receipt,
-   not on a control of mine. The numbers 0180/0181 are what drizzle-kit gave at `811f53619`; if core
+   rebuild's rename (`docs/developers/conventions-data.md:1483-1496`, measured 2026-09-23). The
+   receipt for this very trigger and this very rebuild is `conventions-data.md:2007-2013`: for
+   `0137`/`0138`, "replacing the trigger drop with `SELECT 1;` made it fail with `error in trigger
+   parties_clear_table_status: no such table: main.dining_tables`" (a disposable checkout;
+   the command that paragraph names is the upgrade walk). The plan review re-measured the shape on 2026-10-19 on `node:sqlite`, Node
+   v26.11.1, inside `begin`: with this trigger's text in place, drizzle's create-copy-drop-rename
+   of `dining_tables` without `status_id` failed with that same message; with
+   `DROP TRIGGER parties_clear_table_status` run first, it committed. That probe was a hand-built
+   three-table schema, not this slice's generated SQL through `applyMigrations`; nobody has run the
+   generated 0181 without the custom 0180 first. The numbers 0180/0181 are what drizzle-kit gave at `811f53619`; if core
    gains a migration before this lands, take the numbers drizzle-kit gives (and regenerate on a
    rebase collision, CLAUDE.md §3).
 
@@ -85,7 +91,11 @@ subscription naming a table that no longer exists. Then the docs, then a look in
    `no action`: `bookings.table_id` (bookings set), `working_orders.delivery_table_id`,
    `floor_reset_tables.table_id`, `floor_today_join_tables.table_id`,
    `floor_today_split_parts.joined_table_id` and `.part_table_id`, `floor_today_tables.table_id`,
-   `party_tables.table_id`. None cascades, so the rebuild's `DROP TABLE dining_tables` deletes
+   `party_tables.table_id`. (Re-run by the plan review on 2026-10-19 with its own script over the
+   latest snapshot of each of the 15 sets under `packages/*/drizzle`: the same nine keys. A text
+   search found no migration file outside core that both creates a trigger and mentions
+   `dining_tables`, and no non-test source under `packages/*/src` or `apps/server/src` that does;
+   the change feed's triggers are removed by `applyMigrations` before it migrates, CLAUDE.md §2.) None cascades, so the rebuild's `DROP TABLE dining_tables` deletes
    nothing silently; with foreign keys on inside the migrator's transaction it **refuses** whenever
    any of those children holds a row (conventions-data.md:1499-1521). Separately, the first
    statement `DROP TABLE table_service_statuses` refuses on a venue where a table still carries a
@@ -159,6 +169,19 @@ subscription naming a table that no longer exists. Then the docs, then a look in
     `modifiers.md` and `products.md`; `git grep -n -i status -- apps/server/src/guide` finds nothing
     about tables (checked 2026-10-19).
 
+13. **The till's two "answer while a free table is being seated" cases keep their subject with a
+    new probe** (driver ruling on Q1, 2026-10-19). `apps/till/src/till-app-parties.test.ts:3069-3123`
+    emitted the retired `set-status` only to see which table the till now treats as current; they
+    swap in another action the till sends with `activeTableId` (the implementer picks it), and the
+    swap is proved by pointing the till at the wrong table and watching both cases fail (Task 3a).
+    The PR's changed-checks list names both cases and the probe used.
+
+14. **The Venue settings tests that used the Tables tab as a tool move to Kitchen and Venue
+    details** (driver ruling on Q2, 2026-10-19), exactly as the mapping under "The two STOP sites"
+    below: Kitchen becomes the default tab; the three status-draft cases with Kitchen twins are
+    deleted as duplicates; the other three move to the Kitchen timing draft, each proven to still
+    catch a broken guard (Task 4).
+
 ## Test files, by class
 
 Classes: **(a)** a file deleted, or cases or assertions removed, because the feature they check is
@@ -166,16 +189,16 @@ retired (the owner's 2026-10-05 decision allows a check to change when the item'
 it checks); **(b)** a stub or fixture loses a retired method, field or seed, no assertion changes;
 **(c)** an assertion pinning a whole shape (a list of tabs, columns, triggers, keys, panels) loses
 the retired entry, or the first entry of such a list it names; **STOP** — an assertion that would
-need re-pointing at something else, put to the controller (Q1, Q2) instead of planned.
+need re-pointing at something else, put to the driver (Q1, Q2) and now ruled on (Decisions 13, 14).
 
-**(a) — 28 files**
+**(a) — 30 files**
 - Deleted whole (8): `apps/server/src/service-statuses.test.ts`, `apps/server/src/set-table-status.test.ts`,
   `packages/db/src/schema/table-service-statuses.test.ts`, `packages/db/src/status-color.test.ts`,
   `apps/dashboard/src/screens/service-status-screen.test.ts`, `….a11y.test.ts`, `….save-state.test.ts`,
   `….unsaved.test.ts`.
 - Cases replaced by a "no longer serves" case (2): `apps/server/src/till-api.status.test.ts` (all
   cases, `:165-266`), `apps/server/src/management-api.status.test.ts` (all cases, `:152-526`).
-- Cases or assertions cut (18):
+- Cases or assertions cut (20):
   - `apps/server/src/parties.test.ts`: `giveStatus` `:91-102`; in "closes the party … clears its status
     once everything is paid" `:352` the `giveStatus` `:360` and `:372`; "frees every table of a joined
     party and clears each one's status" `:464` `:470`, `:477`; `:517` in `:505`; the whole case
@@ -190,6 +213,13 @@ need re-pointing at something else, put to the controller (Q1, Q2) instead of pl
     `:1022-1025`; `:1128`, `:1142`; `:1305`, `:1317` (title loses ", leaving the table's status").
   - `apps/server/src/floor-today-split.test.ts`: the case "leaves the last part's manual status as it
     is" `:578-597`.
+  - `apps/server/src/leave-for-clearing.test.ts` (slice 1's file): in "leaves each table as its own
+    department says when a party spans two" `:69`, the two `statusId` checks `:80-81` (the leave's
+    status clear is retired; `tableRow` returns `dining_tables`' row, so Task 6 would also break the
+    server's typecheck here). Found by the plan review's grep; the plan had missed it.
+  - `apps/server/src/management-api.service-delete.test.ts`: the `it.each` row "table status"
+    `:566` and `setTableStatus` from the import `:53` (Task 1a deletes the function, so the server's
+    typecheck breaks without it). Found by the plan review's grep.
   - `apps/server/src/management-api.test.ts`: in "lets a supervisor read Tables and Kitchen settings
     while refusing edits" `:265-281`, the `/service-statuses` read and write rows and the manager read
     `:280`; title becomes "lets a supervisor read Kitchen settings while refusing edits".
@@ -233,7 +263,7 @@ need re-pointing at something else, put to the controller (Q1, Q2) instead of pl
   `apps/server/src/configuration-import.test.ts` (fixture `version: 4` → `5` `:49`; "future version"
   input `5` → `6` `:130`; two new rows), `apps/server/src/configuration-transfer.test.ts` fixture
   `version: 4` → `5` `:400` (that file is counted under (a)). Three server files counted here.
-- Till, these 65 test files (each named by the till's typecheck or by the stub grep of Task 3) —
+- Till, these 65 test files (each named by the till's typecheck or by the stub grep of Task 3b) —
   each loses `status: null` (or `status: {…}`) from a `TableState` literal, a `listStatuses` /
   `setTableStatus` stub, or a `statuses` mount property: `device-screens.phone-margin`,
   `till-floor-screen.{a11y,details,layout,map,needs-moving,parties,refresh,rename,reset-table,sheet,signals,split,today-joins,today,unsaved,zone-menu}`,
@@ -274,33 +304,37 @@ need re-pointing at something else, put to the controller (Q1, Q2) instead of pl
   panel with no permission of its own) and from the tab lists the same tests pin today; they were
   not run. A run that lands anywhere but `/view/kitchen` is a stop.
 
-**STOP — sites in 5 files, questions Q1 and Q2 below:** `apps/till/src/till-app-parties.test.ts:3069-3123`,
+**STOP — sites in 5 files, ruled on by the driver (Decisions 13, 14; detail below):** `apps/till/src/till-app-parties.test.ts:3069-3123`,
 `apps/dashboard/src/dashboard-app.venue-settings-unsaved.test.ts` (the whole file),
 `apps/dashboard/src/dashboard-app.search-modules.test.ts:455-460`,
 `apps/dashboard/src/dashboard-app.test.ts:2774-2790` and
 `apps/dashboard/src/screens/venue-settings-screen.test.ts:84-96`. The first three are counted here;
 `dashboard-app.test` is counted under (a) and `venue-settings-screen.test` under (c).
 
-Counts, each file once: (a) 28, (b) 71 (3 server, 65 till, 3 dashboard), (c) 5, STOP 3 — 107 test
+Counts, each file once: (a) 30, (b) 71 (3 server, 65 till, 3 dashboard), (c) 5, STOP 3 — 109 test
 files. Plus three till test helpers and `packages/bookings/src/testing/fake-core.ts`, which are not
 test files.
 
-## STOP questions for the controller (not planned; their tasks wait)
+## The two STOP sites, as ruled (driver, 2026-10-19)
 
-**Q1. `apps/till/src/till-app-parties.test.ts:3069-3123`.** Two cases ("Move guests answering while
+The plan first put these to the driver as questions; the driver took the recommended answer to
+each. They are decisions now (13 and 14), and the text below is what the implementers apply.
+
+**Q1 — ruled: a new probe, proved by a mutation. `apps/till/src/till-app-parties.test.ts:3069-3123`.** Two cases ("Move guests answering while
 a free table is being seated leaves that table the one on screen"; "Finish answering …") use the
 retired `set-status` event as a probe: they emit it and expect `api.setTableStatus` called with
 `"t9"`, which proves the till's `activeTableId` is the newly seated table. Their subject is not
-retired; only the probe is. Typecheck forces a change at `:3094`, `:3122`. Options:
-**(A, recommended)** replace the probe with another table-keyed action the till sends with
-`activeTableId`, chosen by the implementer and **proved by a mutation**: set `activeTableId` to the
-old table in `till-app.ts` and watch both cases fail, then restore; **(B)** drop the probe and keep
-`expect(tableOrder(el)!.orderId).toBe("wo-new")`, which is weaker (it reads the order, not the
-table). The controller answers Q1 before Task 3 is dispatched.
+retired; only the probe is. Typecheck forces a change at `:3094`, `:3122`. **Ruling:** replace the
+probe with another table-keyed action the till sends with `activeTableId`, chosen by the
+implementer, keeping `expect(tableOrder(el)!.orderId).toBe("wo-new")` and `expect(…call).toHaveBeenCalledOnce()`
+as they are, and **prove it by a mutation**: make the late answer point the till at the wrong
+table, watch both cases fail on the new probe's table id, restore (Task 3a says where). The
+alternative of dropping the probe and keeping only the order check was not taken: it reads the
+order, not the table. The PR's changed-checks list names both cases and the probe.
 
 **Q2. The dashboard's Venue settings tests that used the Tables tab as a tool.** Their subject (tab
 switching, the leave-with-unsaved-changes guard, search destinations) is not retired; the tab and
-the status screen's draft they used are. Recommended mapping:
+the status screen's draft they used are. **Ruling: this mapping, line by line.**
 - `dashboard-app.venue-settings-unsaved.test.ts`: `mount()`'s default path (`:33`) becomes
   `/manage/venue-settings/view/kitchen` and its ready-poll (`:136-143`) waits for the Kitchen
   screen's `[data-test=edit-timing]`. Where "tables" is only the *other* tab (`:164`, `:171`, `:173`,
@@ -311,7 +345,8 @@ the status screen's draft they used are. Recommended mapping:
   twins already in the file and are deleted as duplicates — "keeps the actual Tables panel visible
   while a tab leave is unanswered or kept" `:280` (twin `:161`), "real Back and Forward retain edited
   Tables …" `:418` (twin `:178`), "sidebar and voluntary sign-out consult the actual retained status
-  draft" `:436` (twin `:194`); three are re-pointed at the Kitchen timing draft through the existing
+  draft" `:436` (twin `:196`, "Kitchen timing protects sidebar, voluntary logout and language
+  replacement before their actions"); three are re-pointed at the Kitchen timing draft through the existing
   `editTiming` helper — "ignores repeated tab targets while deciding …" `:300`, "a reverted status lets
   the real container tab switch without warning" `:311` (revert = fill `5`), "keyboard tab navigation
   holds the edited panel until Discard" `:406` (focus Venue details, `{End}` → Kitchen asks). The
@@ -323,7 +358,7 @@ the status screen's draft they used are. Recommended mapping:
   still tests the no-duplicates rule).
 - `venue-settings-screen.test.ts:84-96` (synthetic panels): `panel("s", "tables")` →
   `panel("r", "venue-details")`, expected tab and path `venue-details`.
-The controller answers Q2 before Task 4 is dispatched. Every re-point except `dashboard-app.test.ts:2774`
+Every re-point except `dashboard-app.test.ts:2774`
 should pass on today's code (expected, not run), so Task 4 makes them while the Tables tab still
 exists and Task 5 then retires the tab, keeping the package's typecheck green at each commit.
 
@@ -335,10 +370,12 @@ exists and Task 5 then retires the tab, keeping the package's typecheck green at
    `setup.configuration_outdated` before staged files are replaced. Task 2's two new rows.
 3. **A till or dashboard tab still running the old bundle during a deploy** calls the retired
    routes — it gets a plain 404, not a 500 or a code with no message. Tasks 1a and 1b's "no longer
-   serves" cases.
+   serves" cases. Read, not run: an old till asks for `/api/statuses` in the same `Promise.all` as
+   its floor read (`apps/till/src/till-app.ts:8928-8936`), so its floor stops refreshing (the
+   last-known floor stays) until the tab reloads. Accepted: not live, no compatibility code.
 4. **A table needing clearing on the map** still shows its Needs clearing chip once `table.status`
    is gone — `apps/till/src/screens/till-floor-screen.needs-moving.test.ts:169-172` already pins
-   the map token's description; Task 3 runs it.
+   the map token's description; Task 3b runs it.
 5. **A bookmarked `/manage/venue-settings/view/tables`** — lands on the first visible tab by
    `replaceState`, not a blank tab. Task 5's new case.
 
@@ -359,6 +396,7 @@ exists and Task 5 then retires the tab, keeping the package's typecheck green at
   (`addTable` loses `options`, `:479-490`; callers `:128-131`, `:193`; comment `:355-356` cut)
 - Test: `apps/server/src/till-api.status.test.ts` (rewritten), and the (a)/(b) edits listed above
   for `set-table-status.test.ts` (delete), `parties.test.ts`, `party-table-actions.test.ts`,
+  `leave-for-clearing.test.ts`, `management-api.service-delete.test.ts`,
   `floor-today-split.test.ts`, `split-bill.test.ts`, `till-api.profile-zones.test.ts`,
   `till-api.profile-actions.test.ts`
 
@@ -381,7 +419,7 @@ until Task 6; nothing in `apps/server/src` reads or writes it after this task.
 - [ ] **Step 3: Implement** the deletions above. Delete `set-table-status.test.ts`. Make the (a)/(b)
   edits in the listed server tests exactly as the classification says; nothing else.
 - [ ] **Step 4: Run.**
-  `pnpm --filter @waitron/server exec vitest run src/till-api.status.test.ts src/parties.test.ts src/party-table-actions.test.ts src/floor-today-split.test.ts src/split-bill.test.ts src/till-api.profile-zones.test.ts src/till-api.profile-actions.test.ts src/tabs.test.ts src/working-order-reads.sqlite.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/till-api.status.test.ts src/parties.test.ts src/party-table-actions.test.ts src/floor-today-split.test.ts src/split-bill.test.ts src/till-api.profile-zones.test.ts src/till-api.profile-actions.test.ts src/tabs.test.ts src/working-order-reads.sqlite.test.ts src/leave-for-clearing.test.ts src/management-api.service-delete.test.ts src/till-api.tables.test.ts`
   — all pass; read the `Tests` count.
 - [ ] **Step 5:** `pnpm --filter @waitron/server typecheck`; prettier; commit —
   `"The till no longer reads, sets or clears a venue-made table status (A757 slice 2)"`.
@@ -412,7 +450,10 @@ until Task 6; nothing in `apps/server/src` reads or writes it after this task.
 - [ ] **Step 4: Run.**
   `pnpm --filter @waitron/server exec vitest run src/management-api.status.test.ts src/management-api.test.ts src/configuration-transfer.test.ts src/chain-height.test.ts`,
   then `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`.
-  `git grep -n -E 'status\.(not_found|inactive|label_taken)' -- apps/server packages` → nothing.
+  `git grep -n -E 'status\.(not_found|inactive|label_taken)' -- apps/server` → nothing. (Not
+  `packages/` yet: the schema comment `packages/db/src/schema/table-service-statuses.ts:22` names
+  `status.label_taken` until Task 6 deletes the file; the dashboard's copies go in Task 5. Task 6
+  Step 8 runs the tree-wide check.)
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit —
   `"Retire the dashboard's status routes and the three status codes (A757 slice 2)"`.
 
@@ -448,7 +489,28 @@ has no `table_service_statuses`.
 - [ ] **Step 5:** typecheck `@waitron/db`, `@waitron/server`; prettier; commit —
   `"Configuration exports move to format 5 and carry no table statuses (A757 slice 2)"`.
 
-### Task 3: the till's Status section and floor chip
+### Task 3a: the two till cases get a new probe (Decision 13), while `set-status` still exists
+
+**Files:** `apps/till/src/till-app-parties.test.ts:3069-3123` only (plus a throwaway mutation in
+`apps/till/src/till-app.ts`, never committed).
+
+- [ ] **Step 1:** In both cases ("Move guests answering while a free table is being seated leaves
+  that table the one on screen"; "Finish answering while a free table is being seated leaves that
+  table the one on screen"), replace the `set-status` emit and the
+  `expect(api.setTableStatus).toHaveBeenCalledWith("t9", "s1")` check with another action the till
+  sends keyed by `activeTableId` (read `till-app.ts` for one; say which in the handover), checked as
+  called with `"t9"`; drop the `setTableStatus` stub from `mountApp`; keep every other line. Run
+  `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts` — both pass.
+- [ ] **Step 2: The mutation (Decision 13).** Make each late answer point the till at the wrong
+  table: for Move guests, assign `this.activeTableId = toTableId` straight after `moveGuests`
+  resolves, before the `live()` checks (`till-app.ts:12703-12714`); for Finish, assign the finished
+  party's own table where the answer lands (`:13461`). Run the file: both cases must fail **on the
+  new probe's table id** (a thrown error or a timeout does not count). Restore `till-app.ts`;
+  `git diff --stat` shows only the test file. Record both failure lines in the handover.
+- [ ] **Step 3:** typecheck `@waitron/till`; prettier; commit —
+  `"Two till cases watch which table is current through another table action (A757 slice 2)"`.
+
+### Task 3b: the till's Status section and floor chip
 
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (`TableState.status` `:2183`; `TableServiceStatus` `:2196-2201`;
@@ -466,15 +528,14 @@ has no `table_service_statuses`.
 - Modify: `apps/till/src/i18n/strings.ts:969-970`, `:2532-2533`
 - Test: the till files of the classification; new cases below
 
-Dispatched only once the controller has answered Q1.
+Dispatched after Task 3a.
 
-- [ ] **Step 0: Apply Q1's answer** to `till-app-parties.test.ts:3069-3123` first, while
-  `set-status` still exists, and run that file: both cases pass. If the answer is (A), make the
-  mutation Q1 names (point `activeTableId` at the old table in `till-app.ts`), watch both cases
-  fail, restore, and record it in the handover.
 - [ ] **Step 1: Write the failing tests.**
-  - `till-table-order-screen.test.ts`: `"has no Status section"` — after `mount({ lines: [pendingLine] })`,
-    `el.shadowRoot!.querySelector("section.status")` and `[data-status-clear]` are `null`.
+  - `till-table-order-screen.test.ts`: `"has no Status section"` — after `mount({ lines: [pendingLine] })`
+    **and `await openDrawer(el)`** (the file's helper, `:181`), `el.shadowRoot!.querySelector("[data-drawer]")`
+    is not `null`, and `section.status` and `[data-status-clear]` are `null`. The drawer is drawn
+    only while open (`till-table-order-screen.ts:2298`), so without opening it the check passes on
+    today's code and measures nothing.
   - `till-floor-screen.test.ts`: `"draws no venue-made status chip, even if a read still carried one"`
     — a table built as the deleted `:313` case built it, its `status` added through
     `as unknown as TableState`; `[data-table="t1"] [data-status]` is `null`.
@@ -484,27 +545,34 @@ Dispatched only once the controller has answered Q1.
   `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.test.ts src/screens/till-floor-screen.test.ts src/api/client.test.ts`
 - [ ] **Step 3: Implement.** Then `pnpm --filter @waitron/till typecheck`: its error list is the
   (b) files above (measured 2026-10-19 by removing only the client's three status members: 90
-  errors in 57 files, three of them source files). Make the (a) and (b) edits; `git grep -n -E 'listStatuses|setTableStatus|TableServiceStatus|set-status|statuses: \[\]' -- apps/till`
-  finds the stubs the compiler does not.
+  errors in 57 files, three of them source files). Make the (a) and (b) edits. **Do the (b) edits
+  by script, not file by file** (75 `status: null` lines in 60 files, `git grep -c 'status: null' -- apps/till`,
+  counted 2026-10-19 by the plan review): take each `file(line,col)` that the typecheck reports as
+  `'status' does not exist in type` and delete that line when it is exactly `status: null,` (or
+  `status: null`), then re-run the typecheck and hand-edit only what is left. The same for stub
+  lines: `git grep -n -E 'listStatuses|setTableStatus|TableServiceStatus|set-status|statuses: \[\]' -- apps/till`
+  finds the stubs the compiler does not. `git diff --stat` afterwards must name only the files of
+  the classification.
 - [ ] **Step 4: Run** the three Step 2 files plus `src/till-app.test.ts src/till-app-table-service.test.ts src/screens/till-floor-screen.needs-moving.test.ts src/screens/till-floor-screen.map.test.ts src/screens/till-table-order-screen.a11y.test.ts src/screens/till-floor-screen.a11y.test.ts`
   (browser; check free memory first, `memory_pressure | grep free`).
 - [ ] **Step 5:** typecheck `@waitron/till`; prettier; commit —
   `"The till drops the table screen's Status section and the floor's status chip (A757 slice 2)"`.
 
-### Task 4: the Venue settings tests that used the Tables tab, moved off it first (Q2)
-
-Dispatched only once the controller has answered Q2.
+### Task 4: the Venue settings tests that used the Tables tab, moved off it first (Decision 14)
 
 **Files:** `apps/dashboard/src/dashboard-app.venue-settings-unsaved.test.ts`,
 `apps/dashboard/src/dashboard-app.search-modules.test.ts:455-460`,
 `apps/dashboard/src/screens/venue-settings-screen.test.ts:84-96`. (`dashboard-app.test.ts:2774-2790`
 moves in Task 5: its new expectation holds only once the tab is gone.)
 
-- [ ] **Step 1:** Apply Q2's answer to these three files, nothing more. The Tables tab still exists,
+- [ ] **Step 1:** Apply Decision 14's mapping (under "The two STOP sites, as ruled") to these three files, nothing more. The Tables tab still exists,
   so each re-pointed case should pass on today's code (expected, not yet run).
 - [ ] **Step 2:** Prove each re-pointed or kept-as-twin unsaved-changes case still bites: in
   `apps/dashboard/src/screens/kitchen-screen.ts:204`, stop the timing editor registering its draft
   scope (skip the `draftScopeFor` call), run the file, watch every Kitchen-draft case fail, restore.
+  Each must fail because the leave went ahead without asking (a tab, path or sign-out assertion),
+  not because the screen threw on the missing scope; if it throws, break the guard another way
+  (for instance, have the scope report an unchanged draft) and say which in the handover.
   For the search case, make `collectSearchDestinations` (`apps/dashboard/src/nav-destinations.ts:91`)
   emit each settings tab twice, watch it fail, restore. Record both controls in the handover.
 - [ ] **Step 3: Run** the three files:
@@ -536,7 +604,7 @@ moves in Task 5: its new expectation holds only once the tab is gone.)
     `createStatus`, `updateStatus`, `deactivateStatus` is `in DashboardApi.prototype`.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/screens/venue-settings-screen.test.ts src/api/client.test.ts`
-- [ ] **Step 3: Implement**, then the (a), (b), (c) edits and Q2's answer for
+- [ ] **Step 3: Implement**, then the (a), (b), (c) edits and Decision 14's mapping for
   `dashboard-app.test.ts:2774-2790`.
 - [ ] **Step 4: Run** `src/dashboard-app.test.ts`, `src/dashboard-app.settings-panels.test.ts`,
   `src/screens/venue-settings-screen.test.ts`, `src/api/client.test.ts`, `src/i18n/codes.test.ts`,
@@ -599,7 +667,11 @@ moves in Task 5: its new expectation holds only once the tab is gone.)
   `pnpm --filter @waitron/bookings exec vitest run`.
 - [ ] **Step 8:** typecheck `@waitron/db`, `@waitron/server`, `@waitron/bookings`; prettier; commit —
   `"Drop table_service_statuses, dining_tables.status_id and the trigger that cleared it (A757 slice 2)"`.
-  Paste the generated SQL's first line and the guard counts into the handover.
+  Paste the generated SQL's first line and the guard counts into the handover. Then
+  `git grep -n -E 'status\.(not_found|inactive|label_taken)|tableServiceStatuses|table_service_statuses|parties_clear_table_status|statusId' -- apps packages scripts ':!packages/db/drizzle'`
+  → only hits that are not about tables (for instance `apps/dashboard/src/screens/payments-screen.ts`'s
+  `#statusIds`), the new "no longer serves"/"carries no" tests, the A757 rows of Task 2 and the
+  format-1 fixture Decision 5 keeps; list them in the handover.
 
 ### Task 7: docs
 
@@ -649,6 +721,10 @@ pointer, not a rewrite.
   `a760-…-inventory.md:89` and `:235`: one dated line after each table, "**2026-10-19 (A757 slice
   2):** dropped by core NNNN/NNNN; a squash leaves it out." `a394-refusal-statuses.md:685`: a dated
   line, "**2026-10-19:** A757 slice 2 removed this route and `status.not_found`."
+  `conventions-data.md:1990` ("The only trigger whose SQL names `dining_tables` is
+  `parties_clear_table_status`", measured 2026-10-11): a dated line after the paragraph,
+  "**2026-10-19:** A757 slice 2 dropped `parties_clear_table_status` (core NNNN)." — no claim about
+  what is left unless the implementer measures it on a migrated database and says how.
 - [ ] **Step 6: The A664 documents** (dated readings of the snapshots, not rewritten).
   `…-personal-data-audit.md`: in `dining_tables` `:48` after `status_id`, "(dropped 2026-10-19, A757
   slice 2)"; in `table_service_statuses` `:102`, "(table dropped 2026-10-19, A757 slice 2)".
@@ -658,8 +734,10 @@ pointer, not a rewrite.
   removes `dining_tables(status_id)` from the table's incoming closure." Fill NNNN from Task 6.
 - [ ] **Step 7: Check for missed claims.**
   `git grep -n -i -E 'table_service_statuses|service.status|venue-made status|table status(es)?\b|Tables tab|status_id|parties_clear_table_status|status\.(not_found|inactive|label_taken)' -- docs CLAUDE.md README.md 'packages/*/README.md' 'apps/*/README.md'`
-  — every remaining hit is a dated plan/spec/handoff, or a line this task dated. List any other hit
-  in the handover rather than editing it.
+  — every remaining hit is a dated plan/spec/handoff, a historical record (an incident, a dated
+  finding), or a line this task dated. A hit that states as present fact something this slice
+  ended gets a dated line beside it too (CLAUDE.md §1: a behaviour change retires every receipt
+  about the old behaviour); list each such line, and any hit left alone with why, in the handover.
 - [ ] **Step 8: Commit** — `"Docs: A757 slice 2, venue-made statuses retired"`.
 
 ### Task 8: LOOK — the till and Venue settings in real Chromium
@@ -691,8 +769,8 @@ on `apps/till/src/widgets/till-shell.device-zones.look.test.ts` and slice 1's lo
 ## PR description must say
 
 - **First line:** "Every venue needs a reset: core `NNNN_retire_table_service_statuses` rebuilds
-  `dining_tables`, and the rebuild is refused on any venue with tables in use (the upgrade walk's
-  new `RESETS` entry)."
+  `dining_tables`, and the rebuild is refused on any venue where another row points at a table — a
+  party, a booking, today's floor (the upgrade walk's new `RESETS` entry)."
 - What goes, in plain words (spec §2), and that nothing replaces it: VIP and Birthday go in the
   party's name; an allergy goes through A669.
 - **Retired error codes:** `status.not_found`, `status.inactive`, `status.label_taken` — every copy
@@ -702,7 +780,9 @@ on `apps/till/src/widgets/till-shell.device-zones.look.test.ts` and slice 1's lo
 - **Configuration export format 5**: format-4 files are refused as outdated (precedent: A182 part 2,
   A725).
 - **Changed test checks, by class**, with the file:line lists from this plan's "Test files, by class"
-  (a: 28 files, b: 71, c: 5 with the lines named, and the STOP sites as Q1 and Q2 were answered).
+  (a: 30 files, b: 71, c: 5 with the lines named, and the STOP sites as Decisions 13 and 14 ruled).
+  Name in it the two `till-app-parties.test.ts` cases whose probe changed (Decision 13), the probe
+  used and the mutation that failed them (Task 3a), and Task 4's two controls.
 - **Owner points:** Santet had no statuses (read 2026-10-17); the demo seed's three labels are gone;
   a session that may see only Kitchen now gets a one-tab Venue settings page (LOOK picture); the
   colour-field clipping note and the A805 `table_service_statuses` restriction entry are deleted
@@ -710,10 +790,12 @@ on `apps/till/src/widgets/till-shell.device-zones.look.test.ts` and slice 1's lo
 
 ## Open points
 
-1. **Q1 and Q2** above — the controller answers Q1 before Task 3 and Q2 before Task 4.
-2. **The order of the two migrations** rests on `0137`/`0138`'s precedent and a 2026-09-23 receipt,
-   not on a control run here (Decision 2). A reviewer who wants it measured can generate without
-   the custom file and run the upgrade walk.
+1. **Q1 and Q2** — ruled by the driver on 2026-10-19 (Decisions 13 and 14); nothing left open.
+2. **The order of the two migrations** rests on `0137`/`0138`'s own control (`conventions-data.md:2007-2013`:
+   with the drop replaced by `SELECT 1;` the upgrade walk failed on this trigger) and on the plan
+   review's hand-built `node:sqlite` probe (Decision 2), not on a run of this slice's generated SQL
+   without the custom file. A reviewer who wants that measured can generate without the custom file
+   and run the upgrade walk.
 3. **`DraftRows`** (`packages/dashboard-kit/src/merge-draft.ts`) has no consumer outside its package
    after this slice. Default: left; not worth a backlog entry unless a reviewer disagrees.
 4. **A one-tab Venue settings page** for a session that sees only Kitchen — A755 plans to give
