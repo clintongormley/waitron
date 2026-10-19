@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -232,6 +232,31 @@ describe("GET /management-api/payments/held", () => {
         amount: "20.00",
         providerAmount: "18.00",
       },
+    ]);
+  });
+
+  it("names the order's label beside its number", async () => {
+    const v = await setup();
+    const held = await aHeldPayment(v, {
+      amount: "12.10",
+      providerAmount: "1.21",
+      settledAt: "2026-10-15T20:30:00.000Z",
+      foundAt: "2026-10-17T03:00:00.000Z",
+    });
+    await suite.db
+      .update(workingOrders)
+      .set({ label: "Terrace 4" })
+      .where(eq(workingOrders.orderNumber, held.orderNumber));
+
+    const res = await list(v);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      expect.objectContaining({
+        holdId: held.holdId,
+        orderNumber: held.orderNumber,
+        label: "Terrace 4",
+      }),
     ]);
   });
 

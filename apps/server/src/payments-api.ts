@@ -29,7 +29,8 @@ import {
   deviceProfileCardReaders,
   findPaymentByBillPayment,
   IN_PROGRESS_PAYMENT_STATES,
-  listOpenHolds,
+  paymentHoldOutcomes,
+  paymentHolds,
   payments,
   recordHoldOutcome,
   refreshHeldAlert,
@@ -1275,33 +1276,33 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/held", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, async (tx) => {
-        const holds = await listOpenHolds(tx);
-        const orders =
-          holds.length === 0
-            ? []
-            : await tx
-                .select({ id: workingOrders.id, orderNumber: workingOrders.orderNumber })
-                .from(workingOrders)
-                .where(
-                  inArray(
-                    workingOrders.id,
-                    holds.map((hold) => hold.workingOrderId),
-                  ),
-                );
-        const orderNumbers = new Map(orders.map((order) => [order.id, order.orderNumber]));
-        return holds.map((hold) => ({
-          holdId: hold.holdId,
-          paymentRef: hold.paymentRef,
-          provider: hold.provider,
-          // `payments_working_order_fk` guarantees the order.
-          orderNumber: orderNumbers.get(hold.workingOrderId)!,
-          settledAt: hold.settledAt,
-          amount: hold.amount,
-          providerAmount: hold.providerAmount,
-        }));
-      });
-      return c.json(rows);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({
+            holdId: paymentHolds.id,
+            paymentRef: payments.paymentRef,
+            provider: payments.provider,
+            orderNumber: workingOrders.orderNumber,
+            label: workingOrders.label,
+            settledAt: payments.settledAt,
+            amount: payments.amount,
+            providerAmount: paymentHolds.providerAmount,
+          })
+          .from(paymentHolds)
+          .innerJoin(payments, eq(payments.id, paymentHolds.paymentId))
+          .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+          .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id))
+          .where(isNull(paymentHoldOutcomes.id))
+          .orderBy(paymentHolds.foundAt, paymentHolds.id),
+      );
+      return c.json(
+        rows.map(({ label, ...row }) => ({
+          ...row,
+          ...(label === null ? {} : { label }),
+          amount: centsToDecimal(row.amount),
+          providerAmount: centsToDecimal(row.providerAmount),
+        })),
+      );
     }),
   );
 

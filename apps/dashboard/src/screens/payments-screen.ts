@@ -1399,7 +1399,7 @@ export class PaymentsScreen extends LitElement {
     const operation = {};
     this.#billOperation = operation;
     this.billBusy = true;
-    const order = fill("payments.stuck.order", { number: String(row.orderNumber) });
+    const order = this.#heldNumber(row);
     try {
       await this.api.recordHeldOutcome(row.holdId, {
         outcome: outcome as HeldOutcome,
@@ -1669,23 +1669,31 @@ export class PaymentsScreen extends LitElement {
     </section>`;
   }
 
-  #heldOrder(row: HeldPaymentRow): string {
+  #heldNumber(row: HeldPaymentRow): string {
     const order = fill("payments.stuck.order", { number: String(row.orderNumber) });
+    return row.label ? `${order} · ${row.label}` : order;
+  }
+
+  #heldOrder(row: HeldPaymentRow): string {
+    const order = this.#heldNumber(row);
     return row.settledAt ? `${order} · ${formatAlertTime(row.settledAt)}` : order;
+  }
+
+  #heldOrderLine(row: HeldPaymentRow): TemplateResult {
+    return html`<p class="stuck-order">
+      ${this.#heldNumber(row)}${
+        row.settledAt
+          ? html` · <time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>`
+          : nothing
+      }
+    </p>`;
   }
 
   #renderHeldRow(row: HeldPaymentRow): TemplateResult {
     const order = this.#heldOrder(row);
-    const number = fill("payments.stuck.order", { number: String(row.orderNumber) });
     return html`<li class="stuck" data-test=${`held-payment-${row.holdId}`}>
       <div class="stuck-body">
-        <p class="stuck-order">
-          ${number}${
-            row.settledAt
-              ? html` · <time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>`
-              : nothing
-          }
-        </p>
+        ${this.#heldOrderLine(row)}
         <p class="held-amounts">
           ${fill("payments.held.amounts", {
             amount: formatMoney(row.amount, currentLocale()),
@@ -1736,7 +1744,7 @@ export class PaymentsScreen extends LitElement {
         if (!this.billBusy && this.heldAction === row) this.#closeHeldAction();
       }}
     >
-      <p class="held-amounts">${this.#heldOrder(row)}</p>
+      ${this.#heldOrderLine(row)}
       <dl class="held-dialog-amounts">
         <dt>${t("payments.held.charged_here")}</dt>
         <dd>${formatMoney(row.amount, currentLocale())}</dd>

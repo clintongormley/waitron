@@ -131,6 +131,21 @@ describe("held card payments on the Payments screen", () => {
     );
   });
 
+  it("names the order's label after its number", async () => {
+    const el = await mount(
+      stubApi({
+        listHeldPayments: vi.fn().mockResolvedValue([{ ...HELD[0]!, label: "Terrace 4" }]),
+      }),
+    );
+    expect(lines(el, "h-1")).toEqual([
+      `Order 57 · Terrace 4 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`,
+      "Charged €10.00 · Stripe paid out €12.50",
+    ]);
+    expect(q(el, "[data-test=record-held-h-1]")!.getAttribute("aria-label")).toBe(
+      `Record outcome: Order 57 · Terrace 4 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`,
+    );
+  });
+
   it("reads the held list in Spanish", async () => {
     setLocale("es");
     const el = await mount();
@@ -274,6 +289,38 @@ describe("the Record what was done dialog", () => {
     record(el).click();
     await flush(el);
   }
+
+  it("marks the dialog's payout time as a time, on the order's line", async () => {
+    const el = await mount();
+    await open(el);
+    const line = dialog(el)!.querySelector<HTMLElement>(".stuck-order")!;
+    expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `Order 57 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`,
+    );
+    const time = line.querySelector("time")!;
+    expect(time.getAttribute("datetime")).toBe("2026-07-01T19:40:00.000Z");
+    expect(time.textContent!.trim()).toBe(formatAlertTime("2026-07-01T19:40:00.000Z"));
+  });
+
+  it("names the order's label in the dialog and in the result", async () => {
+    const labelled = { ...HELD[0]!, label: "Terrace 4" };
+    const listHeldPayments = vi.fn().mockResolvedValueOnce([labelled]).mockResolvedValue([]);
+    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "kept" });
+    const el = await mount(stubApi({ listHeldPayments, recordHeldOutcome }));
+    await open(el);
+    const line = dialog(el)!.querySelector<HTMLElement>(".stuck-order")!;
+    expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `Order 57 · Terrace 4 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`,
+    );
+    await chooseOption(field(el, "outcome"), "kept");
+    change(el, "pin", "1234");
+    await flush(el);
+    await submit(el);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toBe(
+      "Order 57 · Terrace 4: Outcome recorded. That payment is no longer checked.",
+    );
+  });
 
   it("shows the order, both amounts and the fields the picture draws, with Record quiet", async () => {
     const el = await mount();

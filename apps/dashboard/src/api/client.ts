@@ -1878,6 +1878,8 @@ export interface HeldPaymentRow {
   paymentRef: string;
   provider: string;
   orderNumber: number;
+  /** Absent when the order has no label. */
+  label?: string;
   settledAt: string | null;
   amount: string;
   providerAmount: string;
