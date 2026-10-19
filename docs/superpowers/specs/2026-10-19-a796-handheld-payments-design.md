@@ -520,11 +520,12 @@ default 20).
   the primary button reading **Comprobar de nuevo**, which resends the original complete request,
   reader and guests included. While a payment is still being sent (no answer and no failure yet), a
   sheet opened on that bill on this phone shows the same confirmation busy, titled **Esperando al
-  servidor**. A server error that may follow a recorded payment (a 5xx, or no code) is held the same
-  way. A bill read that shows the payment frees the bill and shows what the bill records, except
-  a payment that settled the bill, whose ticket one press of Comprobar de nuevo shows; a read that
-  does not show the payment frees nothing.
-  Picture 7, right, still draws the earlier lock and is to be redrawn.
+  servidor**. A server error (a 5xx, or no code) on a first send does not hold the bill: the
+  submission is kept, as A773-1 does, and the plan records the residual. A bill read sent after
+  the send ended that shows the payment frees the bill and shows what the bill records, except a
+  payment that settled the bill, whose ticket one press of Comprobar de nuevo shows; a read that
+  does not show the payment frees nothing. Picture 7, right, still draws the earlier lock and is
+  to be redrawn.
 - **Changing the reader or printer while a card is at the reader**: not from the sheet, whose
   controls are disabled while the card is asked, as today's dialog's are (§2.2). An NFC tap is still
   picked up and the next payment uses the new reader; what the running card does was not checked

@@ -20,7 +20,10 @@ read that settles a send).
 **Revision 5, 2026-10-19**, after lane G's A773-1 (#1897, `c9ad7a634`) landed its own per-bill
 hold for a bill payment that got no answer, and the watcher ruled that A773-1's hold is the one
 hold. Part 1 is re-planned on top of it: the branch is rebuilt on `origin/main` (Task R), and the
-superseded Tasks 1, 2, 3a and 3b are replaced by Tasks 1R, 2R, 3R, 3S and 3T. Read the section
+superseded Tasks 1, 2, 3a and 3b are replaced by Tasks 1R, 2R-a, 2R-b, 3R, 3S and 3T. A plan
+review the same day (Revision 5's fixes: one Critical, four Important, six Minor) corrected Task R,
+dropped Task 1R's hold after a server error (it could hold a bill for good, and the escape from it
+could not be proved), split Task 2R and widened every task's test run. Read the section
 "Revision 5 — Part 1 on top of A773-1" below before any task; it overrides every earlier text it
 contradicts. Later tasks carry Revision 5 notes where Part 1's change reaches them.
 
@@ -160,15 +163,30 @@ otherwise. Each is restated in its task.
 
 1. Part 1 (Revision 5) is built on A773-1's hold, by the watcher's ruling: A773-1's reopened,
    locked confirmation and its resend of the original complete request stay; A796 adds only (a)
-   its wording inside that form, (b) a hold while a payment is still out, (c) a hold after a
-   server error that may follow a recorded payment, (d) wording for a refusal that cannot speak
-   for an earlier attempt, and (e) a balance read that shows the payment frees the bill. Its
-   outcomes for the rebase report's conflicts: B1, the lock view is gone and A773-1's locked
-   confirmation shows instead; B2, a balance read without the payment no longer lifts the hold;
-   B3, guests stay locked on a retake; B4, `bill.allocation_changed` releases as A773-1 does; B5,
-   a 5xx or code-less error now holds (Task 1R, Task 3S); B6, adopted. Every branch test the
-   rebuild drops or Tasks 1R and 2R rewrite is listed under "Revision 5: tests to name in the PR".
-   The two pre-existing tests Task 3R changes (from B15, #956) are named there too.
+   its wording inside that form, (b) a hold while a payment is still out (Task 3R), (c) wording for
+   a reader refusal that cannot speak for an earlier attempt (Task 3S), and (d) a balance read,
+   sent after the send ended, that shows the payment frees the bill (Task 3T). Outcomes for the
+   rebase report's conflicts: B1, the lock view is gone and A773-1's locked confirmation shows
+   instead; B2, a balance read without the payment no longer lifts the hold; B3, guests stay
+   locked on a retake; B4, `bill.allocation_changed` releases as A773-1 does; B6, adopted.
+   **B5, not built:** a first send answered with a 5xx or a code-less error keeps its submission
+   but does not hold the bill, as A773-1 does today. Holding it was allowed only as an addition;
+   it would hold a bill for good while the server kept failing, because A773-1 resends the original
+   request and only an answer, a release code or a read showing the payment ends the hold; and the
+   escape the review proposed (a later read that does not show the payment frees it) could not be
+   proved — see "Why Task 1R does not hold a bill after a server error". The residual — if the
+   server did record that payment, the next identical payment on that bill from this phone is
+   answered with it — goes to the backlog (Task 27).
+   **Two pre-existing tests rewritten by the design (default 7):** "keeps the next operator's
+   payment that got no answer when an earlier operator's payment is answered late" and "resends
+   the next operator's unanswered payment under its own id when an earlier operator's payment is
+   refused while it is out" (B15, #956, `a426b948b`; not A773-1's). Both start a second payment
+   on a bill while the first is still out, which default 7 forbids ("Until an answer comes … no new
+   payment of any way or method"). What they protected — a late answer never overwrites a newer
+   send — is A773-1's turn check, unchanged; with Task 3R's hold no screen can start the newer
+   send, so the case is now unreachable, not broken (Task 3R covers the check by a unit test).
+   Every branch test the rebuild drops or Tasks 1R, 2R-a and 2R-b rewrite is listed under
+   "Revision 5: tests to name in the PR".
    Superseded text, kept for the record: a send still out counts as unanswered (default 7: "no
    new payment of any way or method"); any network-failed attempt makes a send uncertain; a
    balance read without the payment lifts the lock but keeps the submission id; and the residual
@@ -258,7 +276,9 @@ memory 49–52%. Each probe states first what the failing case prints.
    src/state/bill-payment.test.ts src/widgets/finish-table-dialog.test.ts src/api/client.test.ts`
    in `apps/till` — `Test Files 5 passed (5)`, `Tests 1594 passed (1594)`; the scratch case then
    passed. These five are every till test file that names `takeBillPayment`, `unansweredAfter` or
-   `confirmationLocked` (grep).
+   `confirmationLocked` (grep) — but not every file holding A773-1 tests or reaching the pay-tab
+   and find-bill sites (review, Revision 5's fixes): so this probe says no A773-1 assertion **in
+   those five files** pins the unheld case. The hold it tested is not built (decision 1, B5).
 2. **A second payment while the first is still in flight.** Scratch case: the first send's promise
    never settles; the dialog is closed (`bill-pay-close`) and reopened; asserting the reopened
    dialog is not locked, shows `[data-pay-continue]`, and a second confirm sends a second
@@ -271,8 +291,8 @@ memory 49–52%. Each probe states first what the failing case prints.
    `expect(next).not.toBe(earlier)`). Then a scratch in-flight hold (a map set before the send and
    cleared when its turn ends; a dialog opened on that bill shows the out payment's confirmation
    busy and locked; `#onPayTab` and `#onFindBillPay` refuse) over the same five files: `Tests 2
-   failed | 1592 passed (1594)` — exactly those two — and both scratch cases failed, as they
-   should. `git blame` puts both tests in `a426b948b` (B15, #956, 2026-09-30); A773-1 changed only
+   failed | 1592 passed (1594)` — exactly those two in those five files — and both scratch cases
+   failed, as they should. `git blame` puts both tests in `a426b948b` (B15, #956, 2026-09-30); A773-1 changed only
    their shared helper `payTheRest` (lines 3183–3186 of the test file at `2409326a9`). They are not
    A773-1 tests; Task 3R lists them under "Tests the spec changes".
 3. **A balance read that shows the unanswered payment.** Scratch case: after a contribution got no
@@ -282,7 +302,8 @@ memory 49–52%. Each probe states first what the failing case prints.
    unconfirmed entry when the read shows its id, and put the open dialog back on the form with the
    payment's state), the same five files: `Test Files 5 passed (5)`, `Tests 1594 passed (1594)`;
    the scratch case passed. So freeing the bill on a read that **shows** the payment lifts no
-   A773-1 check (Task 3T).
+   A773-1 check in those five files; Task 3T's "A773-1 run" and whole-package run cover the rest.
+   The scratch change acted on any read; Task 3T acts only on a read sent after the send ended.
 4. **Words and label inside the locked form.** Scratch change: the locked `[data-pay-confirm]`
    reads "Check again" and `bill_pay.unconfirmed`'s English is reworded. Run over
    `till-app-bill-payments`, `bill-pay-dialog` (`.test`, `.unsaved.test`, `.a11y.test`),
@@ -293,44 +314,69 @@ memory 49–52%. Each probe states first what the failing case prints.
    in `till-app-table-service.test.ts`, only a different message about saving a change).
 5. **The rebuild (Task R), as a trial.** In a second throwaway worktree at `origin/main`
    `ead3891b9` (main had gained two docs-only commits since `2409326a9`), the branch's commits were
-   cherry-picked in order with Tasks 3a and 3b's five commits left out. Four commits conflicted;
-   resolved as Task R says, plus the follow-up edit Task R names. Then `tsc --noEmit -p .` in
+   cherry-picked in order with Tasks 3a and 3b's five commits left out. Five commits conflicted
+   (`ac1aa00ff`, `05e906be1`, `6e056f0cb`, `484133075`, `2e0bcce42`). The trial resolved
+   `484133075` wrongly — keeping main's side also dropped Task 9's handheld case in the same hunk
+   (the review found it; Task R's table now says what to keep). Then `tsc --noEmit -p .` in
    `apps/till` printed nothing, and `pnpm exec vitest run src/till-app-bill-payments.test.ts
    src/till-app.test.ts src/state/ src/widgets/bill-pay-dialog.test.ts
    src/widgets/bill-pay-dialog.unsaved.test.ts src/widgets/bill-pay-dialog.a11y.test.ts
    src/widgets/pay-equipment.test.ts src/widgets/presented-pay-dialog.test.ts
    src/widgets/presented-pay-dialog.unsaved.test.ts src/screens/till-paid-view.test.ts
    src/widgets/equipment-dialog.test.ts src/widgets/finish-table-dialog.test.ts`: `Test Files 46
-   passed (46)`, `Tests 2662 passed (2662)` — A773-1's tests unedited. A second trial that also
+   passed (46)`, `Tests 2662 passed (2662)`, on a tree missing that Task 9 case. The plan review
+   re-ran Task R in full at `origin/main` `96f93c52d` with rerere off: the same five commits
+   conflicted, `tsc` was clean, the same 46 files gave 2663 passed, and the whole till package
+   435 files, 12158 passed. A second trial that also
    left out Tasks 1 and 2 stopped at Task 4 (`107ab5b80`) with conflicts in `bill-pay-dialog.ts` and
    its a11y test, because Tasks 4, 9 and 10a are written on top of Task 2's dialog; so Task R keeps
-   Tasks 1 and 2 and Tasks 1R and 2R remove what they built.
+   Tasks 1 and 2 and Tasks 1R and 2R-a remove what they built.
 
-`rerere` is switched on in the shared repository's config (`.git/config`, set during the stopped
-rebase). It recorded the resolutions of the trial's four conflicts and the earlier rebase's Task 1
-resolution, so Task R's cherry-picks may resolve them automatically. Check each one against Task R's
-table; never trust it unread.
+`rerere` (Git's reuse of recorded conflict resolutions) is on in the shared repository's config
+(`/Users/clintongormley/workspace/repos/waitron/.git/config`), with recorded resolutions back to
+2026-08-31; this plan did not set it. The trial added resolutions to its cache, one of them
+(`rr-cache/c071938b…`, Task 9's) the wrong one. So Task R turns it off for each cherry-pick with
+`git -c rerere.enabled=false` and resolves every conflict by hand from its table. The shared
+setting itself is the coordinator's to decide; no task changes it.
+
+### Why Task 1R does not hold a bill after a server error
+
+The review proposed an escape for that hold: a balance read sent after the 5xx answer arrived that
+does not show the payment frees it, because the card's pending row commits before the provider is
+called. Reading `apps/server/src/bill-payments.ts` at `96f93c52d` (`takeReaderBillPayment`): the
+pending row is written in its own transaction before `collect` (`:1341-1360`); a `collect` throw
+outside `REFUSED_START` leaves it pending (`:1378-1385`); the capture transaction runs after. So
+inside the server, a 5xx raised by that handler comes after the row is committed or never wrote
+it. But the till does not only talk to that handler directly: the box also serves requests that
+arrive through a relay it dials out to (`apps/server/src/boot.ts:2227-2232`, `@waitron/tunnel`),
+and the relay belongs to Waitron Cloud, a separate repository. What it answers when the box is
+slow — a 502 or 504 while the box goes on to write the row and charge the card — cannot be read or
+run here. One path that cannot be checked is enough to fail "prove it safe", so no probe was run
+for the escape, and the hold is dropped as the coordinator's instruction says.
 
 ### Task R: rebuild the branch on `origin/main`
 
 **Who:** the controller, or one implementer with this section; no per-task reviewer (no product
-code is written; the run below is the check). **Never loses work silently:** the old history stays
-at `backup/a796-pre-rebase-3be0eb4` (`3be0eb442`, made before the stopped rebase); this step adds
-`backup/a796-rev5-<sha of the Revision 5 plan commit>`.
+code is written; the runs below are the check). **Never loses work silently:** the old history
+stays at `backup/a796-pre-rebase-3be0eb4` (`3be0eb442`, made before the stopped rebase); step 1
+adds a second backup at the branch's tip.
 
 **Steps:**
 
-1. In the worktree, clean tree, on `feat/a796-handheld-payments` at the Revision 5 plan commit
-   (call it `P5`): `git branch backup/a796-rev5-$(git rev-parse --short HEAD)`;
-   `git fetch origin main`; note `origin/main`'s sha in the ledger.
+1. In the worktree, clean tree, on `feat/a796-handheld-payments` at its tip:
+   `B=backup/a796-rev5-$(git rev-parse --short HEAD); git branch $B`; `git fetch origin main`; note
+   `origin/main`'s sha and `$B` in the ledger. `git log --oneline 3be0eb442..$B` lists the plan
+   commits made after the last built task (Revision 5 and every later plan commit); call them the
+   **plan tail**.
 2. `git reset --hard origin/main` (the branch is not pushed; the backup refs hold the old history).
-3. `git cherry-pick` these, in this order, one at a time, reading each result:
+3. Cherry-pick these, in this order, one at a time, each as
+   `git -c rerere.enabled=false cherry-pick <sha>`, reading each result:
 
    | Commit | Task | Expect |
    |---|---|---|
    | `18af38eec` `6e9ff8cca` `e47e32941` `62b3a7a57` | plan revisions 1–4 | clean |
-   | `P5` | this revision (plan and design text) | clean |
-   | `ac1aa00ff` | Task 1 | conflict in `apps/till/src/state/draft-sync.test.ts`: both sides append a `describe` at the end; keep both, main's "A773 drafts on a bill that is no longer open" first (rerere has it) |
+   | the plan tail, oldest first (`git rev-list --reverse 3be0eb442..$B`) | Revision 5 and its fixes (plan and design text) | clean |
+   | `ac1aa00ff` | Task 1 | conflict in `apps/till/src/state/draft-sync.test.ts`: both sides append a `describe` at the end; keep both, main's "A773 drafts on a bill that is no longer open" first |
    | `ccee0c450` | Task 1 fixes | clean |
    | `ba16079c7` `4a3b5f044` | Task 2 | clean (trial) |
    | `107ab5b80` `efd6fbb1e` | Task 4 | clean |
@@ -338,94 +384,106 @@ at `backup/a796-pre-rebase-3be0eb4` (`3be0eb442`, made before the stopped rebase
    | `05e906be1` | Task 7 | conflict in `till-app.ts`, one hunk in `#onBillPayConfirm`: keep main's side whole (A773-1's `#unansweredPayments`/`#paymentSends` code). Then `grep -n 'payReaderOf' apps/till/src/till-app.ts` must print nothing and `activeReaderOf` must be the only name for the private reader function |
    | `6e056f0cb` | Task 7 fixes | conflict in `till-app.ts`'s imports: keep both lines (main's `draft-place.js` import and the commit's `payReaderOf` import) |
    | `99a2d8b3e` `729d03513` | Task 8 | clean |
-   | `484133075` | Task 9 | conflict in `bill-pay-dialog.unsaved.test.ts` at the end: keep main's side (drop the commit's lock cases — they came from the dropped Tasks 3a/3b) |
+   | `484133075` | Task 9 | conflict at the end of `bill-pay-dialog.unsaved.test.ts`: drop the commit's two lock cases ("a payment's lock ${route} asks nothing about the payment typed before it" in its `for` loop, and "a lifted lock asks again about the payment typed before it" — they came from the dropped Tasks 3a/3b) and **keep** the commit's new case "on a handheld opens unchanged on its default method, and a change of method is a change", which sits in the same hunk. The rest of the commit (the fixture's `handheld` switch, `mount(props)`) applies cleanly |
    | `ab58decaf` `1695b3141` `537164860` `f3958715f` `9f107e92b` | Tasks 9 fixes, 10a | clean |
    | `1c3301707` | Task 14 | clean |
-   | `2e0bcce42` | Task 14 fixes | conflict in `bill-pay-dialog.ts`, two hunks (`PayRefusal` and `refusalText`): take the commit's side (both move to `widgets/pay-refusal.ts`). **Before `git cherry-pick --continue`**, in the same commit: in `pay-refusal.ts` add A773-1's `unsent?: BillUnsent` and `billLabel?: string` to `PayRefusal` and its first line of `refusalText`, `if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);` (imports from `../api/client.js` and `../state/bill-unsent.js`), and delete the cases `payment_failed`, `not_recorded` and `reader_gone_retake` (their strings came from the dropped `612ef036c`); in `bill-pay-dialog.ts` delete the two now-unused imports of `BillUnsent` and `billUnsentText`. Say so in the commit message |
+   | `2e0bcce42` | Task 14 fixes | conflict in `bill-pay-dialog.ts`, two hunks (`PayRefusal` and `refusalText`): take the commit's side (both move to `widgets/pay-refusal.ts`). **Before `git cherry-pick --continue`**, in the same commit: in `pay-refusal.ts` add A773-1's `unsent?: BillUnsent` and `billLabel?: string` to `PayRefusal` and its first line of `refusalText`, `if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);` (imports from `../api/client.js` and `../state/bill-unsent.js`); delete the cases `payment_failed`, `not_recorded` and `reader_gone_retake` (their strings came from the dropped `612ef036c`) and their mention in the comment above `PayRefusal`; in `bill-pay-dialog.ts` delete the two now-unused imports of `BillUnsent` and `billUnsentText`. Say so in the commit message |
    | `3be0eb442` | Task 22 | clean |
 
    **Left out, on purpose:** `309169bff` `cb72c0218` (Task 3a), `612ef036c` `03cb7c3fc` `746a67aa4`
    (Task 3b). They stay reachable from both backup refs.
    Any other conflict, or one that does not match the table: STOP, `git cherry-pick --abort`,
-   `git reset --hard backup/a796-rev5-…`, and report.
-4. **Checks, each status read:** `git range-diff 942a0ed64..backup/a796-rev5-… origin/main..HEAD`
-   — every kept commit pairs with its original; only the four conflict commits and `2e0bcce42`'s
-   follow-up may differ in content, and the five left-out commits show as removed;
-   `pnpm --filter @waitron/till typecheck`; the 46-file run of probe 5 (expect `Tests` to pass with
-   no failure; the count moves only by tests main added since `ead3891b9`);
-   `pnpm --filter @waitron/server exec vitest run scripts/dev-setup.test.ts src/bill-payments-api.test.ts -t "seeded handheld|also allows it"`,
-   `pnpm --filter @waitron/server exec vitest run src/payments-api.test.ts -t "adopt|joins"`,
-   `pnpm --filter @waitron/payments exec vitest run src/device-readers.test.ts`,
-   `pnpm --filter @waitron/layouts exec vitest run src/device-profile.test.ts`; root guards
-   `pnpm exec vitest run scripts/screenshot-paths.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/module-seams.test.ts scripts/write-path-tables.test.ts`.
-   Check `memory_pressure | grep free` before the browser run.
+   `git reset --hard $B`, and report.
+4. **Checks, each status read:**
+   - `git range-diff 942a0ed64..$B origin/main..HEAD`: every kept commit pairs with its original,
+     and exactly the five left-out commits show as removed (nothing else unpaired). A pair may
+     differ in content only at the five conflict commits; elsewhere only in surrounding lines
+     (context), as `9ffe94739` does in the review's run.
+   - `pnpm --filter @waitron/till typecheck`.
+   - The 46-file run of probe 5 plus `src/widgets/bill-pay-dialog.unsent.test.ts` (A773-1's, which
+     the moved `refusalText` serves): no failure, and at least 2663 passed in the 46 files.
+   - The whole till package once: `pnpm --filter @waitron/till exec vitest run` — no failure
+     (the review's run: 435 files, 12158 passed). Check `memory_pressure | grep free` first.
+   - `pnpm --filter @waitron/server exec vitest run scripts/dev-setup.test.ts src/bill-payments-api.test.ts -t "seeded handheld|also allows it"`,
+     `pnpm --filter @waitron/server exec vitest run src/payments-api.test.ts -t "adopt|joins"`,
+     `pnpm --filter @waitron/payments exec vitest run src/device-readers.test.ts`,
+     `pnpm --filter @waitron/layouts exec vitest run src/device-profile.test.ts`; root guards
+     `pnpm exec vitest run scripts/screenshot-paths.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/module-seams.test.ts scripts/write-path-tables.test.ts`.
 5. Record in the ledger and `progress.md`: the new head, the old-to-new sha pairs from range-diff,
    the five left-out commits, each conflict as resolved. Do not push until the branch's first
    `/finish-branch`.
 
-### Task 1R: the bill payment rules on top of A773-1
+### The "A773-1 run"
 
-**Goal:** remove Task 1's own model, which A773-1's maps replace, and add the one rule A773-1
-lacks: a bill payment the server answered with an error that may follow a recorded payment is held
-like one that got no answer (B5, allowed by the ruling as an addition; probe 1).
+Tasks 1R to 3T, 11 and 15 name this run. It holds every till test file with A773-1 tests that a
+Part 1 change can reach, and the pay-tab and find-bill sites Task 3R changes (list from the plan
+review): `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts`.
+It is a browser run: check `memory_pressure | grep free` first.
 
-**Risk triggers:** payments. **Per-task review: yes** (high effort). Small: one source file.
+### Task 1R: remove Task 1's model
+
+**Goal:** remove Task 1's own per-bill model, which A773-1's maps replace. No new rule: the hold
+after a server error is not built (decision 1, B5).
+
+**Risk triggers:** payments. **Per-task review: yes.** Small: one source file and its test.
 
 **Files:** `apps/till/src/state/bill-payment.ts`, `apps/till/src/state/bill-payment.test.ts`.
 
-- Delete `PendingSend`, `PendingPayments`, `sendStarted`, `sendUnanswered`, `sendEnded`,
-  `settledByBalance`, `lockFor` and `holdsReload`, which nothing outside their tests uses after
-  Task R (`git grep` each name; a hit outside `bill-payment*.ts` is a STOP). Keep
-  `isUncertainFailure` and `draft-sync.ts`'s `onUnanswered` (Task 3S uses both).
-- `unansweredAfter`: after its `FRESH_ID_AFTER` and `paymentNotRecorded` checks, a bill submission
-  (`"billId" in sent`) whose error `isUncertainFailure` returns `{ ...sent, unconfirmed: true }`.
-  A refund submission is unchanged. Why: the server can record a card's pending row and then
-  return the provider's error (`apps/server/src/bill-payments.ts`, the start's catch that leaves
-  the pending row for anything outside `REFUSED_START`), and the client turns a body with no code
-  into `server.internal` with its status (`apps/till/src/api/client.ts`).
+- Delete `PendingSend`, `PendingPayments`, `isUncertainFailure`, `sendStarted`, `sendUnanswered`,
+  `sendEnded`, `settledByBalance`, `lockFor` and `holdsReload`, which nothing outside their tests
+  uses after Task R (`git grep` each name; a hit outside `bill-payment*.ts` is a STOP). Keep
+  `draft-sync.ts`'s `onUnanswered` (Task 3S uses it).
 
-- [ ] **Step 1: Failing cases** in `bill-payment.test.ts`, describe
-  `"unansweredAfter: a bill payment the server may have recorded (A796 default 7)"`:
-  `it.each` over `{ code: "server.internal", status: 502 }`, `{ status: 500 }` (no code) and
-  `{ code: "reader.provider_disconnected", status: 503 }` → `unconfirmed: true`, same submission;
-  controls that must already pass: `{ code: "bill.line_paid", status: 409 }` → returned unchanged,
-  not unconfirmed; a refund submission with `{ code: "server.internal", status: 502 }` → unchanged.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/state/bill-payment.test.ts -t "may have recorded"` — the three fail, the two controls pass.
-- [ ] **Step 3: Implement**, and delete Task 1's tests of the deleted functions: in the describe
-  `"a bill's payment that got no answer"`, the nested describes "rule 2" to "rule 7"; keep
-  "rule 1: isUncertainFailure"; delete "rule 8: submissionFor takes the bill's own entry" only if
-  it calls a deleted function (say which in the commit). The `draft-sync.test.ts` describe `"resendUnanswered: onUnanswered"` stays.
-- [ ] **Step 4: Run** `pnpm --filter @waitron/till exec vitest run src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/till-app-bill-payments.test.ts src/till-app.test.ts src/widgets/finish-table-dialog.test.ts src/api/client.test.ts`
-  — PASS, every A773-1 test unedited (probe 1 ran this rule over the same files).
-- [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: hold a bill after a server error that may follow a recorded payment (A796 default 7)"`.
+- [ ] **Step 1: Delete** the functions and, in `bill-payment.test.ts`'s describe
+  `"a bill's payment that got no answer"`, the nested describes "rule 1" to "rule 7"; delete
+  "rule 8: submissionFor takes the bill's own entry" only if it calls a deleted function (say which
+  in the commit). The `draft-sync.test.ts` describe `"resendUnanswered: onUnanswered"` stays. No
+  failing-test step: this task removes code and adds no behaviour.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts` — PASS, every A773-1 test unedited.
+- [ ] **Step 3: Typecheck, format, commit** — `"Bill payments: drop the branch's own unanswered-payment model; A773-1's hold replaces it (A796 default 7)"`.
 
-### Task 2R: the dialog — A773-1's locked confirmation, in A796's words
+### Task 2R-a: the dialog draws its steps again
 
-**Goal:** remove Task 2's lock view and its handheld row (Task 10a), and give A773-1's locked
-confirmation picture 7's title and button: while `confirmationLocked`, a status box titled "Sin
-conexión con el servidor" sits above the confirmation, the explanation stays in `wt-form-actions`
-(A773-1's tests read it there), and `[data-pay-confirm]` reads **Comprobar de nuevo**. No till
-wiring.
+**Goal:** remove Task 2's lock view and the handheld row it held (Task 10a), so the dialog always
+draws its own steps, as A773-1's app expects. No new behaviour.
+
+**Risk triggers:** payments (what the waiter can press). **Per-task review: yes.**
+
+**Files:** `apps/till/src/widgets/bill-pay-dialog.ts`, `apps/till/src/i18n/strings.ts`; tests
+`bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`.
+
+**Remove:** `UnansweredPayment`, the `unanswered` property, `#lock`, `#lockWantsReader`,
+`#recheck`, the `bill-pay-recheck` event and its detail type, the lock branch of `#syncDrafts`,
+and `#unlocked`'s split (the body renders the steps again); the string
+`bill_pay.recheck_choose_reader`. Keep `bill_pay.unanswered_title`, `bill_pay.recheck` and Task
+2's rewording of `bill_pay.unconfirmed` for Task 2R-b.
+
+- [ ] **Step 1: Remove** the code and the tests named for Task 2R-a under "Revision 5: tests to name
+  in the PR". No failing-test step: nothing is added.
+- [ ] **Step 2: Run** the dialog's `.test`, `.unsaved.test`, `.unsent.test` and `.a11y.test` files,
+  `src/widgets/presented-pay-dialog.test.ts`, and `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts` — PASS, A773-1's unedited.
+- [ ] **Step 3: Typecheck, format, commit** — `"Bill payment dialog: remove the branch's lock view; A773-1's locked confirmation replaces it (A796 default 7)"`; the commit names every test removed.
+
+### Task 2R-b: A773-1's locked confirmation, in A796's words
+
+**Goal:** give A773-1's locked confirmation picture 7's title and button: while
+`confirmationLocked`, a status box titled "Sin conexión con el servidor" sits above the step, the
+explanation stays in `wt-form-actions` (A773-1's tests read it there), and `[data-pay-confirm]`
+reads **Comprobar de nuevo**. No till wiring.
 
 **Risk triggers:** payments (what the waiter can press). **Per-task review: yes.**
 
 **Files:** `apps/till/src/widgets/bill-pay-dialog.ts`, `apps/till/src/widgets/pay-refusal.ts`,
-`apps/till/src/i18n/strings.ts`; tests `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`,
-`bill-pay-dialog.unsaved.test.ts`.
-
-**Remove:** `UnansweredPayment`, the `unanswered` property, `#lock`, `#lockWantsReader`,
-`#recheck`, the `bill-pay-recheck` event and its detail type, the lock branch of `#syncDrafts`, and
-`#unlocked`'s split (the body renders the steps again); the string
-`bill_pay.recheck_choose_reader`. Keep `bill_pay.unanswered_title`, `bill_pay.recheck` and Task 2's
-rewording of `bill_pay.unconfirmed` ("… Pulsa Comprobar de nuevo: se pregunta por este mismo pago
-y no se registrará dos veces."), which now matches the button.
+`apps/till/src/i18n/strings.ts`; tests `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`.
 
 **Add:**
 - While `confirmationLocked`: a box `div.tone[role=status][data-pay-unanswered]` holding only a
   title, `[data-pay-unanswered-title]` — `t("bill_pay.sending_title")` when `refusal?.code ===
   "sending"`, else `t("bill_pay.unanswered_title")` — at the top of the step (form or
   confirmation), under the balance. The message stays the step's `wt-form-actions` error
-  (`refusalText`), never repeated in the box.
+  (`refusalText`), never repeated in the box. Task 2's rewording of `bill_pay.unconfirmed` ("…
+  Pulsa Comprobar de nuevo: se pregunta por este mismo pago y no se registrará dos veces.") now
+  matches the button.
 - While `confirmationLocked`, `[data-pay-confirm]`'s label is `t("bill_pay.recheck")` on every
   device, in place of `bill_pay.take` and Task 10a's "Cobrar {amount} en {reader}".
 - While `confirmationLocked` on a handheld: the row (`till-pay-equipment`) is drawn `disabled`; the
@@ -435,7 +493,8 @@ y no se registrará dos veces."), which now matches the button.
 - While `confirmationLocked`, Task 4's card question is never asked: Continuar emits
   `bill-pay-preview` at once (A773-1's app answers with the original confirmation).
 - `refusalText` (`pay-refusal.ts`) gains three app codes: `sending` → `t("bill_pay.sending")`;
-  `not_checked` → `t("bill_pay.not_checked")`; `payment_failed` → `t("bill_pay.payment_failed")`.
+  `not_checked` → `t("bill_pay.not_checked")`; `payment_failed` → `t("bill_pay.payment_failed")`,
+  each named in the comment above `PayRefusal`.
 
 **Strings** (new):
 - `bill_pay.sending_title`: en "Waiting for the server" / es "Esperando al servidor"
@@ -465,13 +524,13 @@ y no se registrará dos veces."), which now matches the button.
     locked form → Continuar emits `bill-pay-preview` once, no `[data-pay-card-ask]`;
   - `it.each(["sending", "not_checked", "payment_failed"])` → the message.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.test.ts -t "locked confirmation"` — FAIL.
-- [ ] **Step 3: Implement**; remove the lock view and the tests named under "Revision 5: tests to
-  name in the PR" for Task 2R; rewrite the a11y lock cases on the locked confirmation, in both
-  themes, with the LOOK case at 390 and 1280 in Spanish (Global constraints) — open the PNGs.
-- [ ] **Step 4: Run** the dialog's `.test`, `.unsaved.test` and `.a11y.test` files,
-  `src/till-app-bill-payments.test.ts` (A773-1's, unedited), `src/widgets/presented-pay-dialog.test.ts`,
-  and `pnpm exec vitest run scripts/screenshot-paths.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts` — PASS.
-- [ ] **Step 5: Typecheck, format, commit** — `"Bill payment dialog: A773-1's locked confirmation in A796's words (A796 default 7)"`; the commit names every test removed or rewritten.
+- [ ] **Step 3: Implement**; add the locked confirmation to the a11y two-theme describe in place of
+  the removed lock cases, with the LOOK case at 390 and 1280 in Spanish (Global constraints) —
+  open the PNGs.
+- [ ] **Step 4: Run** the dialog's `.test`, `.unsaved.test`, `.unsent.test` and `.a11y.test` files,
+  `src/widgets/presented-pay-dialog.test.ts`, `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts`, and
+  `pnpm exec vitest run scripts/screenshot-paths.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts` — PASS.
+- [ ] **Step 5: Typecheck, format, commit** — `"Bill payment dialog: A773-1's locked confirmation in A796's words (A796 default 7)"`.
 
 ### Task 3R: a bill is held while its payment is still out
 
@@ -484,12 +543,22 @@ locked confirmation, Comprobar de nuevo enabled; otherwise the form, with the ba
 **Risk triggers:** payments; concurrency. **Per-task review: yes** (high effort).
 
 **Files:** `apps/till/src/till-app.ts` (`#onBillPayConfirm`, `#openBillPaying`, `#renderBillPaying`,
-`#onPayTab`, `#onFindBillPay`, `#onBillPay`); test `apps/till/src/till-app-bill-payments.test.ts`.
+`#onPayTab`, `#onFindBillPay`, `#onBillPay`), `apps/till/src/state/bill-payment.ts`; tests
+`apps/till/src/till-app-bill-payments.test.ts`, `apps/till/src/state/bill-payment.test.ts`.
 
 **Interfaces:**
+- **A773-1's turn check moves into a tested rule** (review, Revision 5's fixes): with the hold, no
+  screen can start a second send on a bill while one is out, so `settle`'s "a newer send has
+  replaced this one" branch (`if (this.#paymentSends.get(key) !== turn) return;`) can no longer be
+  reached from a till test, and an untested branch counts against the till's 95% branch bar. Do not
+  exclude or ignore it. Extract it to `state/bill-payment.ts` as
+  `export function isLatestSend(turns: ReadonlyMap<string, number>, billId: string, turn: number): boolean`
+  (its behaviour unchanged), used by `settle` and by the `finally` below, with unit cases in
+  `bill-payment.test.ts`: the current turn is latest; an older turn is not; another bill's turn
+  does not count.
 - `#paymentsOut: Map<string, { dialogId: number; shown: PendingBillPayment["shown"] }>`, set in
   `#onBillPayConfirm` just before its `#holdingReload` call, and deleted in its `finally` only while
-  `#paymentSends.get(key) === turn`.
+  `isLatestSend(this.#paymentSends, key, turn)`.
 - `#billPaymentHeld(billId)`: A773-1's `#unansweredPayments.get(billId)?.unconfirmed === true`, or
   `#paymentsOut.has(billId)`. It replaces that A773-1 test at each site where it refuses or locks
   (`#onPayTab`, `#onFindBillPay`, `#onBillPay`'s draft flush skip), so A773-1's own condition is
@@ -518,10 +587,14 @@ locked confirmation, Comprobar de nuevo enabled; otherwise the form, with the ba
     `t("bill_pay.recheck")`, and its send carries the first `submissionId`;
   - `it.each(["pay-tab", "find-bill-pay"])("a whole payment through %s is refused while a part payment is out")`
     — `recordSale`/`collectOrder` not called, `t("bill_pay.sending")` shown;
-  - `it("a payment out on one bill holds no other bill")`.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts -t "still out"` — FAIL.
+  - `it("a payment out on one bill holds no other bill")`;
+  - and in `bill-payment.test.ts`, describe `"isLatestSend"`, the three unit cases above.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/state/bill-payment.test.ts -t "still out|isLatestSend"` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the five files of probe 1 — PASS apart from the two tests below.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts` — PASS apart from the two tests below, which the
+  spec changes; then, once those are rewritten, the whole till package once with coverage,
+  `pnpm --filter @waitron/till test:coverage` (check `memory_pressure | grep free` first): no
+  failure, and read `till-app.ts`'s and `bill-payment.ts`'s branch figures in the per-file table.
 
 **Tests the spec changes** (default 7 forbids a second payment on a bill while one is out; both
 are B15's, `a426b948b`, not A773-1's; probe 2):
@@ -537,22 +610,26 @@ are B15's, `a426b948b`, not A773-1's; probe 2):
   refusal: `unansweredAfter` returns it, and `submissionFor` reuses it for the same request).
   Retitled "holds the next operator's payment until an earlier operator's payment is refused".
   The property both protected — a late answer never overwrites a newer send — is A773-1's turn
-  check (`#paymentSends`), unchanged; with the hold a second send on the bill cannot start, so no
-  test can reach it from the screen. Say so in the commit.
+  check (`#paymentSends`), unchanged in behaviour and now pinned by `isLatestSend`'s unit cases;
+  with the hold a second send on the bill cannot start, so no screen test can reach it: unreachable,
+  not broken. Say so in the commit and in the PR (decision 1).
 - The shared helper `payTheRest` (A773-1's edit) is not changed.
 - [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: hold a bill while its payment is still out (A796 default 7)"`.
 
-### Task 3S: a send the server may have recorded
+### Task 3S: a reader refusal that cannot speak for an earlier attempt
 
-**Goal:** (a) a **first** send answered with a 5xx or code-less error (held by Task 1R) shows A773-1's
-locked confirmation, as a network failure does; (b) a refusal raised before the server looks up
-the submission — any `FRESH_ID_AFTER` code — that answers a send which may already have been
-recorded (a Comprobar de nuevo, or a send one of whose attempts got no answer) releases the bill as
-A773-1 does, but says `bill_pay.not_checked` instead of the code's own words (`reader.not_held` and
-`device.profile_changed` say "No card was charged", which the phone does not know here; review 2's
-C1). Why the code says nothing about earlier attempts: the reader and device checks run on the
-route before `beginBillPayment` calls `findSubmission` (`apps/server/src/bill-payments-api.ts`,
-`resolveCardCollector`; `apps/server/src/bill-payments.ts`, `beginBillPayment`).
+**Goal:** when `reader.not_held` or `reader.payment_in_progress` answers a send which may already
+have been recorded — a Comprobar de nuevo, or a send one of whose attempts got no answer — the bill
+is released as A773-1 does (both are in `FRESH_ID_AFTER`), but the dialog says
+`bill_pay.not_checked` instead of the code's own words (`reader.not_held`'s says "No card was
+charged", which the phone does not know here; review 2's C1). Why these two can say nothing about
+an earlier attempt: they are raised on the route by `resolvePayReader` → `assertReaderStartable`
+before `beginBillPayment` calls `findSubmission` (`apps/server/src/bill-payments-api.ts`,
+`resolveCardCollector`; `apps/server/src/bill-payments.ts`, `beginBillPayment`). The other two
+`FRESH_ID_AFTER` codes keep their own words: `device.profile_changed` is raised in
+`insertAttempting` (`packages/payments/src/store.ts:161`) during `collect`, after
+`beginBillPayment` looked the submission up and found none, and `submission.id_reused` also means
+the server looked.
 
 **Risk triggers:** payments; concurrency. **Per-task review: yes** (high effort).
 
@@ -561,29 +638,21 @@ route before `beginBillPayment` calls `findSubmission` (`apps/server/src/bill-pa
 
 **Interfaces:** `#resend` passes an `onUnanswered` callback to `resendUnanswered` (Task 1's
 parameter); `#onBillPayConfirm` notes whether an attempt of this send got no answer, and whether
-the bill's entry was unconfirmed before the send (`previous?.unconfirmed === true`).
-- (a) entry not unconfirmed before, unconfirmed after `settle(error)`, error not a network failure
-  → the dialog is handled as a network failure is: `refusal: { code: "network" }`, `asked` and
-  `preview` kept. An entry already unconfirmed keeps A773-1's path (the existing case "sends a card
-  that got no answer under the same submission id after the reader is refused", whose 503 answers
-  a locked resend and goes back to the form, stays green).
-- (b) as the goal says; a first send refused directly, with no unanswered attempt, keeps the code's
-  own words (A773-1's "tries the card again as a new payment after the reader refused to start it
-  with %s" stays green).
+the bill's entry was unconfirmed before the send (`previous?.unconfirmed === true`). Either, with
+one of the two reader codes as the send's error → `refusal: { code: "not_checked" }`. A first send
+refused directly, with no unanswered attempt, keeps the code's own words (A773-1's "tries the card
+again as a new payment after the reader refused to start it with %s" stays green).
 
-- [ ] **Step 1: Failing cases**, describe `"till-app: a send the server may have recorded (A796 default 7)"`:
-  - `it.each([{ code: "server.internal", status: 502 }, { status: 500 }])("a first contribution answered %o shows the locked confirmation, and Comprobar de nuevo resends it")`
-    — `wt-form-actions` error `t("bill_pay.unconfirmed")`, `[data-pay-continue]` null, the resend's
-    `submissionId` equals the first;
-  - `it("a card whose first attempt got no answer and whose retry was refused for the reader says the server could not check it")`
-    — `takeBillPayment` rejects `new TypeError("Failed to fetch")` then
-    `{ code: "reader.not_held", status: 409 }`; the dialog shows `t("bill_pay.not_checked")`,
-    `codeMessage("reader.not_held")` is nowhere in it, and a new confirm sends a fresh id (A773-1's
-    release);
-  - `it("a locked resend refused device.profile_changed says the server could not check it")`.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts -t "may have recorded"` — FAIL.
-- [ ] **Step 3: Implement.** **Step 4: Run** the five files of probe 1 — PASS, A773-1's unedited.
-- [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: a send the server may have recorded is held, and a refusal that cannot speak for it says so (A796 default 7)"`.
+- [ ] **Step 1: Failing cases**, describe `"till-app: a reader refusal that cannot speak for an earlier attempt (A796 default 7)"`:
+  - `it.each(["reader.not_held", "reader.payment_in_progress"])("a card whose first attempt got no answer and whose retry was refused %s says the server could not check it")`
+    — `takeBillPayment` rejects `new TypeError("Failed to fetch")` then `{ code, status: 409 }`;
+    the dialog shows `t("bill_pay.not_checked")`, `codeMessage(code)` is nowhere in it, and a new
+    confirm sends a fresh id (A773-1's release);
+  - `it("a locked resend refused reader.not_held says the server could not check it")`;
+  - control: `it("a locked resend refused device.profile_changed keeps that code's words")`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts -t "cannot speak for"` — FAIL (the control passes).
+- [ ] **Step 3: Implement.** **Step 4: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts` — PASS, A773-1's unedited.
+- [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: a reader refusal that cannot speak for an earlier attempt says so (A796 default 7)"`.
 
 ### Task 3T: a balance read that shows the payment frees the bill
 
@@ -593,10 +662,19 @@ that does **not** find it changes nothing (B2: A773-1's hold stays). No automati
 
 **Risk triggers:** payments. **Per-task review: yes** (high effort).
 
-**Files:** `apps/till/src/till-app.ts` (`#rereadBillPaying`); test `till-app-bill-payments.test.ts`.
+**Files:** `apps/till/src/till-app.ts` (`#rereadBillPaying`, `#onBillPayConfirm`); test
+`till-app-bill-payments.test.ts`.
 
-**Behaviour:** on an answer, when the bill's entry is unconfirmed, no send is out on the bill
-(`#paymentsOut`), and a payment in `balance.payments` has the entry's `request.submissionId`:
+**Only a read sent after the send ended counts** (review, Revision 5's fixes; Task 1's rule 5 had
+the same rule): a read sent while the send was out can answer after it ended and show the payment
+pending although it has since settled the bill, which would free the bill with no ticket. So
+`#onBillPayConfirm` records, per bill, a tick when each send ends (`#sendEndedAt: Map<string,
+number>`, from one counter `#payTicks`), `#rereadBillPaying` takes `const sentAt = ++this.#payTicks`
+before it sends, and acts below only when `sentAt > (this.#sendEndedAt.get(billId) ?? 0)`.
+
+**Behaviour:** on an answer to such a read, when the bill's entry is unconfirmed, no send is out on
+the bill (`#paymentsOut`), and a payment in `balance.payments` has the entry's
+`request.submissionId`:
 - that payment `received` and `balance.status === "settled"` → nothing changes: the locked
   confirmation stays, and its Comprobar de nuevo replays the payment with the bill's invoice and
   shows the ticket (A773-1's path; the server writes nothing new). This replaces Task 3b's
@@ -610,11 +688,15 @@ that does **not** find it changes nothing (B2: A773-1's hold stays). No automati
 - [ ] **Step 1: Failing cases**, describe `"till-app: a balance read that shows the held payment (A796 default 7)"`:
   `it.each(["received", "pending", "declined", "failed"])("frees the bill and shows the payment %s")`;
   `it("keeps the locked confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket")`;
-  `it("changes nothing while a resend of it is still out")`. The read that does not show the
+  `it("changes nothing while a resend of it is still out")`;
+  `it("a read sent before the send ended changes nothing, even when it answers after and shows the payment")`
+  (hold a read back with a deferred promise, for instance the dialog's opening read, end the send
+  with no answer, then answer the read with the payment `pending` → still locked). The read that does not show the
   payment is already pinned by A773-1's "A773 an unanswered partial payment remains the only
   request across operator changes"; cite it, add nothing.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts -t "shows the held payment"` — FAIL.
-- [ ] **Step 3: Implement.** **Step 4: Run** the five files of probe 1 — PASS.
+- [ ] **Step 3: Implement.** **Step 4: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/till-app.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/till-app-parties.test.ts src/till-app-kitchen-note.test.ts src/till-app-boot-and-counter.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/find-bill-dialog.test.ts src/widgets/find-bill-dialog.unsaved.test.ts src/widgets/find-bill-dialog.a11y.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/api/client.test.ts` — PASS; then, as the last task of
+  Part 1, the whole till package once: `pnpm --filter @waitron/till test:coverage` — no failure.
 - [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: a balance read that shows a held payment frees its bill (A796 default 7)"`.
 
 ### Revision 5: tests to name in the PR
@@ -627,8 +709,11 @@ that does **not** find it changes nothing (B2: A773-1's hold stays). No automati
   `bill-pay-dialog.unsaved.test.ts` lock cases ("a payment's lock Close/Escape asks nothing …",
   "a lifted lock asks again …"); 3b's `refusalText` cases in `bill-pay-dialog.test.ts`.
 - **Removed by Task 1R:** Task 1's cases of the deleted functions in `bill-payment.test.ts`
-  (describe "a bill's payment that got no answer": rules 2–7, and rule 8 if it used them).
-- **Rewritten by Task 2R as a design change** (A796-B's own warning-box tests): the describe
+  (describe "a bill's payment that got no answer": rules 1–7, and rule 8 if it used them).
+- **Kept through the rebuild, by Task R's table:** Task 9's "on a handheld opens unchanged on its
+  default method, and a change of method is a change" (`bill-pay-dialog.unsaved.test.ts`).
+- **Removed by Task 2R-a and replaced by Task 2R-b's, as a design change** (A796-B's own
+  warning-box tests): the describe
   "till-bill-pay-dialog: a payment that got no answer" (14 cases, from "shows only the lock: one
   box with its title and message, and one Check again" to "goes back to the steps when the lock is
   lifted"); in "the reader and printer on a handheld", "puts the row in the lock when the kept card
@@ -638,22 +723,26 @@ that does **not** find it changes nothing (B2: A773-1's hold stays). No automati
   `bill-pay-dialog.a11y.test.ts`, "has no violations locked on a payment that got no answer", "has
   no violations locked with the guests field, a reader to choose and an unread balance" and "looks
   right locked at %i px".
-- **Changed by Task 3R** (pre-existing, B15): the two cases named in its "Tests the spec changes".
-- **A773-1 tests:** none changed. Every task's run includes `till-app-bill-payments.test.ts` whole.
+- **Changed by Task 3R, rewritten by the design (default 7)** (pre-existing, B15, #956): the two
+  cases named in its "Tests the spec changes" and in decision 1 — what they protected is now
+  unreachable from the screen, not broken, and pinned by `isLatestSend`'s unit cases.
+- **A773-1 tests:** none changed. Every task's run is the "A773-1 run" (the files holding A773-1's
+  tests and the pay-tab and find-bill sites), and Tasks R, 3R and 3T run the whole till package.
 
 ### Revision 5: dependency sweep (done tasks and later tasks)
 
 Grepped the branch's code and tests (`git grep` for `data-pay-unanswered`, `data-pay-recheck`,
 `onBillPayRecheck`, `recheckReader`, `pendingPayments`, `holdsReload`, `isUncertainFailure`,
-`bill-pay-recheck`, `unanswered`, `lockFor`, `settledByBalance`) and this plan's text.
+`bill-pay-recheck`, `unanswered`, `lockFor`, `settledByBalance`) and this plan's text. Each later
+task also carries its note in its own text.
 
-- **Task 4 (done):** its question is skipped while `confirmationLocked` (Task 2R). Its tests stand.
+- **Task 4 (done):** its question is skipped while `confirmationLocked` (Task 2R-b). Its tests stand.
 - **Task 7 (done):** "Task 3a's `#onBillPayRecheck` uses it" no longer applies; the rename stands.
 - **Task 9 (done):** no lock reference; stands.
-- **Task 10a (done):** the lock view's row and its three cases go (Task 2R); the handheld locked
-  confirmation names no reader. **Task 10b** (still to do: `#onBillPayConfirm` reads
+- **Task 10a (done):** the lock view's row and its three cases go (Task 2R-a); the handheld locked
+  confirmation names no reader (Task 2R-b). **Task 10b** (still to do: `#onBillPayConfirm` reads
   `detail.readerId`): apply it to `asked.card` before `confirmationOf`, on A773-1's
-  `#onBillPayConfirm`; a locked resend carries no `readerId` (Task 2R) and A773-1's
+  `#onBillPayConfirm`; a locked resend carries no `readerId` (Task 2R-b) and A773-1's
   `submissionFor` returns the unconfirmed submission whatever is passed, so the resend is the
   original request. Add a case: a locked resend after the row's reader changed sends the original
   `readerId`.
@@ -665,7 +754,7 @@ Grepped the branch's code and tests (`git grep` for `data-pay-unanswered`, `data
   that must stay green unedited.
 - **Task 12:** delete "The same `equipmentBusy` also holds Check again in the lock view …" and the
   step's "a reader card's Check again is held while a pick is out"; instead: a locked confirmation's
-  Comprobar de nuevo is **not** held by a pick (Task 2R).
+  Comprobar de nuevo is **not** held by a pick (Task 2R-b).
 - **Task 14 (done):** stands. **Task 15:** the presented path must use A773-1's whole-payment hold:
   an unanswered presented payment (`#unansweredWholePayments`) reopens the presented sheet on the
   original tender, locked, and its button resends the original request (as A773-1's
@@ -676,34 +765,41 @@ Grepped the branch's code and tests (`git grep` for `data-pay-unanswered`, `data
   the locked mode into its own task first.
 - **Task 21:** "the one Task 3b's balance read found for its send" becomes "the one Task 3T's read
   found"; nothing else changes.
-- **Task 26:** "a refusal that answers a Check again never shows it (Task 3a)" becomes "a refusal
-  that answers a send which may already have been recorded shows `bill_pay.not_checked` (Task 3S)".
-  Its C1 step expects: the not-charged wording nowhere, `bill_pay.not_checked` shown, the bill
-  released (A773-1), not "the lock shows instead".
+- **Task 26:** "a refusal that answers a Check again never shows it (Task 3a)" becomes "a
+  `reader.not_held` that answers a send which may already have been recorded shows
+  `bill_pay.not_checked` (Task 3S)". Its C1 step expects: the not-charged wording nowhere,
+  `bill_pay.not_checked` shown, the bill released (A773-1), not "the lock shows instead".
 - **Task 27:** the backlog entry "The next identical bill payment can be answered with an
-  unanswered one" is deleted as fixed by A773-1 with Tasks 1R and 3R. Task 1's "Known limit" entry
-  is replaced by two: "A796 does not hold a bill across phones while a payment is out (default 7
-  reads 'from this phone'; the server is unchanged)", and "a payment whose read shows it settled
-  the bill needs one press of Comprobar de nuevo to show the ticket". The design's picture 7 PNG
-  is redrawn to match (below).
-- **Execution notes** (end of plan): order is Task R, 1R, 2R, 3R, 3S, 3T, then 10b, 11–13, 15–21,
-  23–27.
+  unanswered one" is **narrowed**, not deleted: A773-1 with Task 3R closes it for a payment that got
+  no answer or is still out; what is left is a first send answered with a 5xx or a code-less error,
+  which keeps its submission without holding the bill (decision 1, B5), so if the server did record
+  it, the next identical payment on that bill from this phone is answered with it. Task 1's "Known
+  limit" entry ("A different retake — another amount, way or reader — after a payment the phone
+  read as not on the bill") is deleted, not added: no read frees a bill by not finding its payment
+  any more. Two entries are added: "A796 does not hold a bill across phones while a payment is out
+  (default 7 reads 'from this phone'; the server is unchanged)", and "a payment whose read shows it
+  settled the bill needs one press of Comprobar de nuevo to show the ticket". Picture 7 is redrawn
+  (below).
+- **Execution notes** (end of plan): order is Task R, 1R, 2R-a, 2R-b, 3R, 3S, 3T, then 10b, 11–13,
+  15–21, 23–27.
 
 ### Revision 5: the design's picture 7
 
 The design text for picture 7, right (`docs/superpowers/specs/2026-10-19-a796-handheld-payments-design.md`,
-§4 "The phone loses Wi-Fi mid-payment"), is updated in this revision to what Tasks 2R and 3R build.
-The PNG (`docs/backlog/mockups/a796-handheld-payments/7-uncertain-card.png`) still draws Task 2's
-lock view; Task 27 redraws it (the generator is outside the repository; if it cannot be found,
-Task 27 records the picture as stale in the backlog instead) and the PR names the difference.
+§4 "The phone loses Wi-Fi mid-payment"), is updated in this revision to what Tasks 2R-b and 3R
+build. The PNG (`docs/backlog/mockups/a796-handheld-payments/7-uncertain-card.png`) still draws
+Task 2's lock view; Task 27 redraws it from its generator,
+`/Users/clintongormley/waitron-campaign-b/a796-mockups-src/` (`gen.py`, `shoot.mjs`,
+`7-uncertain-card.html`). Its paths point at a deleted worktree's playwright: repoint them at an
+existing worktree's before use. The PR names the difference.
 
 ---
 
 ## Part 1 — the resend fix, on every device (design slice 1, default 7)
 
-> **Revision 5:** Tasks 1, 2, 3a and 3b below are superseded by Tasks R, 1R, 2R, 3R, 3S and 3T
+> **Revision 5:** Tasks 1, 2, 3a and 3b below are superseded by Tasks R, 1R, 2R-a, 2R-b, 3R, 3S and 3T
 > (section "Revision 5 — Part 1 on top of A773-1"). Their text is kept as the record of what was
-> built and why; Task 4 stands, with Task 2R's note.
+> built and why; Task 4 stands, with Task 2R-b's note.
 
 Fixes the backlog entry "The next identical bill payment can be answered with an unanswered one".
 Five tasks: the rules as pure functions (Task 1), the dialog's lock view (Task 2), the till wired
@@ -1112,7 +1208,7 @@ late result from a closed dialog refreshes the dialog now open on that bill.
 
 ### Task 4: ask before a second card when a card is already in progress
 
-> **Revision 5:** done; stands. Task 2R skips the question while `confirmationLocked` (the locked
+> **Revision 5:** done; stands. Task 2R-b skips the question while `confirmationLocked` (the locked
 > resend repeats the original payment), where this text says "with `unanswered` null".
 
 **Goal:** if the phone has no entry for the bill (the browser was killed and the id lost), the
@@ -1450,6 +1546,12 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.unsaved.test.ts`, `bill-pay-dia
 
 ### Task 10: the row in the sheet; the charge names its reader
 
+> **Revision 5:** 10a (the dialog half) is done. 10b (the till half, `#onBillPayConfirm` reading
+> `detail.readerId`) is built on A773-1's `#onBillPayConfirm`: apply the reader to `asked.card`
+> before `confirmationOf`; a locked resend carries no `readerId` (Task 2R-b), and A773-1's
+> `submissionFor` returns the unconfirmed submission whatever is passed. Add a case: a locked
+> resend after the row's reader changed sends the original `readerId`.
+
 **Goal:** on a handheld the dialog holds `till-pay-equipment` under the methods (picture 2), the
 charge button reads "Cobrar 20,80 € en Lector 2", and the request carries that reader's id
 (default 16). While Tarjeta is the method and the reader is not `ready` — including before the first
@@ -1486,7 +1588,7 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`, `till-app-bill-p
   simulator; this keeps the demo usable (decision 3). On the simulator the fixed reader counts as
   `ready` whether or not the equipment has been read, because it is not an equipment choice; the
   "wait for the first equipment read" hold above applies to a real reader only.
-- **Revision 5:** the next bullet is superseded — the lock view is gone (Task 2R); a locked
+- **Revision 5:** the next bullet is superseded — the lock view is gone (Task 2R-a); a locked
   confirmation on a handheld draws the row disabled and names no reader. 10b (the till half) is
   in Revision 5's dependency sweep.
 - **The lock view on a handheld** (Task 2) gains the row, under the explanation, when the kept send
@@ -1517,6 +1619,13 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`, `till-app-bill-p
 - [ ] **Step 6: Typecheck, format, commit** — `"Bill payment dialog: the folded reader and printer row; Cobrar names its reader (A796)"`.
 
 ### Task 11: open the sheet from a handheld's bill
+
+> **Revision 5:** `#renderBillPaying` keeps A773-1's `.confirmationLocked` and its `.receiptGuests`
+> rule for a held payment (B6), beside the properties this task adds. On a handheld, while the
+> bill has an unanswered **whole** payment (A773-1's `#unansweredWholePayments`, passed to the
+> table screen as `paymentConfirmation`), the pay section keeps A773-1's `till-tender-pay` recovery
+> instead of `[data-pay-sheet]`; A773-1's "A773 retains a %s payment in the handheld's embedded
+> table card" must stay green unedited. Step 5's run adds the Revision 5 "A773-1 run".
 
 **Goal:** on a handheld, a bill that owes and is **open** shows one primary "Cobrar" button in place
 of `till-tender-pay`, the "pay the rest" button and the three part-payment buttons, in both branches
@@ -1597,7 +1706,7 @@ counts in `#equipmentWaiting` (`:2613`) (Review focus 5).
   and `:7937`. Make it one reactive field instead of copying it: `@state() private equipmentWaiting = 0`,
   replacing every use, and pass `.equipmentBusy=${this.equipmentWaiting > 0}`.
 - (Revision 5: superseded — a locked confirmation's Comprobar de nuevo is not held by an
-  equipment change, Task 2R; the step's last case becomes "a locked confirmation's Comprobar de
+  equipment change, Task 2R-b; the step's last case becomes "a locked confirmation's Comprobar de
   nuevo is not held while a pick is out".) ~~The same `equipmentBusy` also holds Check again in the
   lock view when the kept send is a reader card (Task 2's `waiting`), as Cobrar is held.~~
 - `payEquipmentSaving: { role; id } | null` — the sheet's own latest pick, for the field's "saving"
@@ -1686,6 +1795,15 @@ till wiring yet.
 - [ ] **Step 5: Typecheck, format, commit** — `"Till: the presented-bill pay sheet (A796 default 1)"`.
 
 ### Task 15: pay a presented bill from the handheld
+
+> **Revision 5:** the presented path uses A773-1's whole-payment hold. An unanswered presented
+> payment (`#unansweredWholePayments`) reopens the presented sheet on the original tender, locked,
+> and its button resends the original request, as A773-1's `till-tender-pay`
+> (`confirmationTender`, `unconfirmed`) does; a part payment of that bill is refused with
+> `sale.unconfirmed` (A773-1's `#openBillPaying`). The presented sheet (Task 14) gains a locked mode
+> for this; its cases model A773-1's "A773 shows the original %s bill's %s confirmation after
+> reopening a %s bill as another operator". If this takes the task past about 100 tool calls,
+> split the locked mode into its own task first. Step 5's run adds the Revision 5 "A773-1 run".
 
 **Goal:** on a handheld, a presented bill's pay section shows the same Cobrar button, which opens
 Task 14's sheet. A reader card goes to `POST /api/pay` with
@@ -2145,8 +2263,8 @@ under the reader field, "Este teléfono ya no tiene ese lector de tarjetas. Elig
 tienes en la mano. No se ha cobrado ninguna tarjeta.", re-reads the equipment, and the row opens with
 the reader empty (Review focus 1). The claim "nothing was charged" holds there because the server
 refuses before recording (Task 1's reading); a refusal that answers a Check again never shows it
-(Task 3a). (Revision 5: a refusal that answers a send which may already have been recorded shows
-`bill_pay.not_checked` instead, Task 3S; in Step 1's C1 case the bill is released as A773-1 does and
+(Task 3a). (Revision 5: a `reader.not_held` that answers a send which may already have been
+recorded shows `bill_pay.not_checked` instead, Task 3S; in Step 1's C1 case the bill is released as A773-1 does and
 `bill_pay.not_checked` shows, not the lock.) `reader.not_held`'s general message stays for counter tills (decision 8). (b) The printer
 states of picture 5: a switched-off printer (chosen or default) opens the row with the printer field
 empty and "Barra está desactivada: si no eliges otra, no se imprimirá el ticket", Continuar enabled;
@@ -2194,8 +2312,10 @@ and `presented-pay-dialog.ts` (refusal → field), `apps/till/src/till-app.ts` (
 `docs/superpowers/specs/2026-10-19-a796-handheld-payments-design.md` (status line only).
 
 - [ ] **Step 1: `docs/backlog.md`.** Delete the entry "The next identical bill payment can be
-  answered with an unanswered one" (fixed by Tasks 1–3b; Revision 5: by A773-1 with Tasks 1R and
-  3R — and add the two entries and the picture 7 redraw that Revision 5's dependency sweep names). Rewrite "Slice 2 — the handheld NFC/QR link
+  answered with an unanswered one" (fixed by Tasks 1–3b). **Revision 5 replaces this step's
+  backlog changes for Part 1:** narrow that entry instead of deleting it, do not add the "A
+  different retake …" entry named below, and add the two entries Revision 5's dependency sweep
+  names; also redraw picture 7 from its generator (Revision 5, "the design's picture 7"). Rewrite "Slice 2 — the handheld NFC/QR link
   … (A796)" to what is left, each as its own short entry in _Payments and card readers_:
   restoring `stripe_on_device` (Tap-to-Pay), waiting for the native-app decision (N1/N2);
   "Name the printer on the paid screen's ticket line" (default 12: the route would have to return
@@ -2222,7 +2342,7 @@ and `presented-pay-dialog.ts` (refusal → field), `apps/till/src/till-app.ts` (
 
 ## Execution notes
 
-- **Revision 5 order:** Task R, 1R, 2R, 3R, 3S, 3T, then 10b, 11–13, 15–21, 23–27 (Tasks 1–10a, 14
+- **Revision 5 order:** Task R, 1R, 2R-a, 2R-b, 3R, 3S, 3T, then 10b, 11–13, 15–21, 23–27 (Tasks 1–10a, 14
   and 22 are done and replayed by Task R). The rest of this bullet is the original order.
 - Order: Parts 1 → 7, tasks in order. Tasks 2 and 3a depend on Task 1, Task 3a on Task 2, Task 3b
   on Task 3a, and Task 4 on Task 2's dialog; Tasks 5 and 6 stand alone; Tasks 7–26 depend on their predecessors'
