@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, deviceOrigin } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { getPaymentByRef, insertCapturedPayment } from "./store.js";
@@ -264,6 +264,57 @@ describe("refreshHeldAlert", () => {
     expect(rows[1]!.acknowledgedAt).toBeNull();
     expect(rows[1]!.params.count).toBe(1);
     expect(refsOf(rows[1]!)).toEqual([first.paymentRef]);
+  });
+
+  it("does not raise again the same day when a payment the handled alert named is no longer held", async () => {
+    const first = await aHeldPayment("2026-07-01T01:00:00.000Z");
+    await aHeldPayment("2026-07-01T01:01:00.000Z");
+    await refresh("2026-07-01T01:05:00.000Z");
+    await handleOpen("2026-07-01T10:00:00.000Z");
+    await withTransaction(suite.db, async (tx) => {
+      const holds = await listOpenHolds(tx);
+      const second = holds.find((hold) => hold.paymentRef !== first.paymentRef)!;
+      await recordHoldOutcome(tx, {
+        holdId: second.holdId,
+        outcome: "kept",
+        note: null,
+        personId: MANAGER,
+        at: new Date("2026-07-01T11:00:00.000Z"),
+      });
+    });
+    await refresh("2026-07-01T11:05:00.000Z");
+    const rows = await incidentRows();
+    expect(rows).toHaveLength(1);
+    expect(openRows(rows)).toHaveLength(0);
+  });
+
+  it("keeps an open alert that names the held payments in another order", async () => {
+    const first = await aHeldPayment("2026-07-01T01:00:00.000Z");
+    const second = await aHeldPayment("2026-07-01T01:01:00.000Z");
+    await withTransaction(suite.db, (tx) =>
+      recordIncidentOnce(tx, {
+        origin: jobOrigin("payment_check"),
+        error: new AppError("payment.reconcile_held", {
+          count: 2,
+          payments: [second, first].map((held) => ({
+            paymentRef: held.paymentRef,
+            workingOrderId: held.workingOrderId,
+            amount: held.amount,
+            providerAmount: held.providerAmount,
+          })),
+        }),
+        severity: "error",
+        detectedAt: new Date("2026-07-01T01:05:00.000Z"),
+      }),
+    );
+    await refresh("2026-07-01T09:00:00.000Z");
+    const rows = await incidentRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.acknowledgedAt).toBeNull();
+    expect(rows[0]!.params.payments.map((payment) => payment.paymentRef)).toEqual([
+      second.paymentRef,
+      first.paymentRef,
+    ]);
   });
 
   it("raises nothing when no payment is held", async () => {
