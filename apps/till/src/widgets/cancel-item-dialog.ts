@@ -264,7 +264,11 @@ export class TillCancelItemDialog extends LitElement {
       this.#requestReasons();
   }
   #needsReason(): boolean {
-    return this.draft.outcome === "keep_charge" || this.draft.outcome === "refund";
+    return (
+      this.draft.outcome === "keep_charge" ||
+      this.draft.outcome === "refund" ||
+      (this.draft.outcome === "remove_charge" && this.#started())
+    );
   }
   #offeredReasons(): AdjustmentReason[] {
     return (this.reasons ?? []).filter((reason) => reason.actions.includes("cancel"));

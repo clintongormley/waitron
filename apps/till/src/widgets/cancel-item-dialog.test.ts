@@ -224,9 +224,16 @@ it("clears pre-start consent when a refresh reports kitchen advancement", async 
   expect(button(el).disabled).toBe(true);
   expect(choices(el)).toEqual(["keep_charge", "remove_charge"]);
   await click(el, "input[value=remove_charge]");
+  await pickReason(el);
   await click(el);
   expect(calls).toEqual([
-    { lineId: "dish-1", quantity: "3", outcome: "remove_charge", consent: read("open", "started") },
+    {
+      lineId: "dish-1",
+      quantity: "3",
+      outcome: "remove_charge",
+      reasonId: "house",
+      consent: read("open", "started"),
+    },
   ]);
 });
 it("forgets a chosen refund when it becomes unavailable", async () => {
@@ -400,6 +407,7 @@ it.each(["replacement", "in-place"])(
     await el.updateComplete;
     expect(button(el).disabled).toBe(true);
     await click(el, "input[value=remove_charge]");
+    await pickReason(el);
     await click(el);
     expect(calls).toHaveLength(1);
     expect((calls[0] as { consent: CancellationRead }).consent.context.stage).toBe("started");

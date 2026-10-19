@@ -337,7 +337,7 @@ import {
 import type { ShellAffordance } from "./widgets/till-shell.js";
 import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
-import { adjustableListing, lineAdjustTarget } from "./state/adjust-target.js";
+import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type {
   DevDeviceList,
@@ -863,6 +863,12 @@ interface CancellingItem {
   reasons?: AdjustmentReason[];
   reasonsLoading?: boolean;
   refusalField?: "reason" | "note" | null;
+  approval?: {
+    choice: CancelItemChoice;
+    role: NonNullable<AdjustmentPreview["needsApproval"]>;
+    authorizers: StaffMember[];
+    error: string | null;
+  };
 }
 
 interface Adjusting {
@@ -890,7 +896,6 @@ interface Adjusting {
     discard?: string[];
     unlock: () => void;
   };
-  cancellation?: { open: CancellingItem; choice: CancelItemChoice };
 }
 
 /** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
@@ -3065,11 +3070,6 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
-    if (
-      this.adjusting?.cancellation !== undefined &&
-      !this.#cancellationCurrent(this.adjusting.cancellation.open)
-    )
-      this.#closeAdjust();
     if (this.cancellingItem !== null && !this.#cancellationCurrent(this.cancellingItem))
       this.#closeCancelItem();
     if (this.#cancelItemRead !== undefined && !this.#cancellationCurrent(this.#cancelItemRead))
@@ -8685,20 +8685,40 @@ export class TillApp extends LitElement {
     const open = this.cancellingItem;
     if (open === null) return nothing;
     return html`<till-cancel-item-dialog
-      .lineId=${open.lineId}
-      .name=${open.name}
-      .unitPrecision=${open.unitPrecision}
-      .consent=${open.consent}
-      .reasons=${open.reasons ?? null}
-      .reasonsLoading=${open.reasonsLoading === true}
-      .refundAvailable=${open.consent.context.billStatus === "settled" && open.consent.saleId !== undefined && this.#tenderRefundSession !== undefined}
-      .busy=${open.busy}
-      .refusal=${open.refusal}
-      .refusalField=${open.refusalField ?? null}
-      @cancel-item-choice=${(event: CustomEvent<CancelItemChoice>) => void this.#onCancelItemChoice(event)}
-      @cancel-item-reasons=${(event: Event) => void this.#loadCancelReasons(event)}
-      @cancel-item-close=${() => this.#closeCancelItem()}
-    ></till-cancel-item-dialog>`;
+        .lineId=${open.lineId}
+        .name=${open.name}
+        .unitPrecision=${open.unitPrecision}
+        .consent=${open.consent}
+        .reasons=${open.reasons ?? null}
+        .reasonsLoading=${open.reasonsLoading === true}
+        .refundAvailable=${open.consent.context.billStatus === "settled" && open.consent.saleId !== undefined && this.#tenderRefundSession !== undefined}
+        .busy=${open.busy || open.approval !== undefined}
+        .refusal=${open.refusal}
+        .refusalField=${open.refusalField ?? null}
+        @cancel-item-choice=${(event: CustomEvent<CancelItemChoice>) => void this.#onCancelItemChoice(event)}
+        @cancel-item-reasons=${(event: Event) => void this.#loadCancelReasons(event)}
+        @cancel-item-close=${() => this.#closeCancelItem()}
+      ></till-cancel-item-dialog>
+      ${
+        open.approval === undefined
+          ? nothing
+          : html` <till-supervisor-override-dialog
+              data-cancel-approval
+              .approverRole=${open.approval.role}
+              .authorizers=${open.approval.authorizers}
+              .error=${open.approval.error}
+              @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => void this.#onCancelApprover(event, open)}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                if (
+                  this.cancellingItem?.id === open.id &&
+                  this.cancellingItem.approval === open.approval &&
+                  !this.cancellingItem.busy
+                )
+                  this.cancellingItem = { ...this.cancellingItem, approval: undefined };
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
   }
 
   #renderBillPaying(): TemplateResult | typeof nothing {
@@ -11380,6 +11400,7 @@ export class TillApp extends LitElement {
       open === null ||
       open.busy ||
       open.reasonsLoading === true ||
+      open.approval !== undefined ||
       !this.#cancellationCurrent(open) ||
       event.detail.lineId !== open.lineId
     )
@@ -11388,7 +11409,7 @@ export class TillApp extends LitElement {
     const choice = event.detail;
     if (choice.outcome === "remove_charge") {
       if (choice.consent.context.stage === "started" || choice.preparationStarted === true)
-        await this.#openCancelAdjustment(open, choice);
+        await this.#previewItemCancellation(open, choice);
       else await this.#sendItemCancellation(open, choice);
       return;
     }
@@ -11420,66 +11441,84 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #openCancelAdjustment(open: CancellingItem, choice: CancelItemChoice): Promise<void> {
-    const line = this.tabLines.find((row) => row.id === open.lineId && row.parentLineNo == null);
-    if (line === undefined) return;
-    this.cancellingItem = { ...open, busy: true, refusal: "" };
+  async #previewItemCancellation(open: CancellingItem, choice: CancelItemChoice): Promise<void> {
+    this.cancellingItem = { ...open, busy: true, refusal: "", refusalField: null };
     try {
-      const reasons = await open.api.listAdjustmentReasons();
-      if (!this.#itemCancellationShown(open) || !this.#cancellationReady(open)) return;
-      const target = lineAdjustTarget(line, this.tabLines, open.name);
-      this.cancellingItem = null;
-      this.adjusting = {
-        id: ++this.#adjustments,
-        bill: open.bill,
-        surface: "table",
-        orderId: open.billId,
-        revision: choice.consent.billRevision,
-        visit: open.visit,
-        kind: "cancel",
-        target: {
-          ...target,
-          quantity: choice.quantity,
-          unitTotal: null,
-          total: divideDecimal(
-            multiplyDecimal(decimal(target.total), decimal(choice.quantity)),
-            decimal(line.quantity),
-            MONEY_SCALE,
-          ),
-        },
-        reasons,
-        choice: null,
-        preview: null,
-        refusal: null,
+      const preview = await open.api.previewAdjustment(open.billId, {
+        expectedEdit: open.bill.expectedEdits[0]!,
+        expectedRevision: choice.consent.billRevision,
+        lineId: open.lineId,
+        action: "cancel",
+        quantity: choice.quantity,
+        reasonId: choice.reasonId!,
+        note: choice.note ?? null,
+      });
+      if (!this.#cancellationReady(open)) return;
+      if (preview.needsApproval === null) {
+        await this.#sendItemCancellation(open, choice);
+        return;
+      }
+      const authorizers = await open.api.listAdjustmentApprovers(preview.needsApproval);
+      if (!this.#cancellationReady(open)) return;
+      this.cancellingItem = {
+        ...open,
         busy: false,
-        offer: undefined,
-        cancellation: { open, choice: structuredClone(choice) },
+        refusal: "",
+        approval: {
+          choice: structuredClone(choice),
+          role: preview.needsApproval,
+          authorizers,
+          error: null,
+        },
       };
-    } catch {
+    } catch (error) {
       if (this.#itemCancellationShown(open))
-        this.cancellingItem = { ...open, busy: false, refusal: t("adjust.reasons_error") };
+        await this.#refuseItemCancellation(open, choice, error, "preview");
     }
   }
 
-  #itemCancellationShown(open: CancellingItem): boolean {
-    return (
-      this.#cancellationCurrent(open) &&
-      (this.cancellingItem?.id === open.id || this.adjusting?.cancellation?.open.id === open.id)
+  async #onCancelApprover(
+    event: CustomEvent<{ personId: string; pin: string }>,
+    offered: CancellingItem,
+  ): Promise<void> {
+    event.stopPropagation();
+    const open = this.cancellingItem;
+    if (
+      open === null ||
+      open.id !== offered.id ||
+      open.approval !== offered.approval ||
+      open.busy ||
+      open.approval === undefined ||
+      !this.#cancellationReady(open)
+    )
+      return;
+    await this.#sendItemCancellation(
+      { ...open, approval: { ...open.approval, error: null } },
+      open.approval.choice,
+      event.detail,
     );
+  }
+
+  #itemCancellationShown(open: CancellingItem): boolean {
+    return this.#cancellationCurrent(open) && this.cancellingItem?.id === open.id;
   }
 
   #cancellationReady(open: CancellingItem): boolean {
     if (!this.#itemCancellationShown(open)) return false;
     if (this.#billCompositionUnchanged(open.bill)) return true;
     if (this.cancellingItem?.id === open.id)
-      this.cancellingItem = { ...open, busy: false, refusal: codeMessage("draft.out_of_date") };
+      this.cancellingItem = {
+        ...open,
+        busy: false,
+        approval: undefined,
+        refusal: codeMessage("draft.out_of_date"),
+      };
     return false;
   }
 
   async #sendItemCancellation(
     open: CancellingItem,
     choice: CancelItemChoice,
-    adjustment?: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
     if (!this.#cancellationReady(open)) return;
@@ -11501,19 +11540,11 @@ export class TillApp extends LitElement {
       expectedBillRevision: choice.consent.billRevision,
       expectedContext: structuredClone(choice.consent.context),
       submissionId: crypto.randomUUID(),
-      ...(adjustment === undefined
-        ? {
-            ...(choice.reasonId === undefined ? {} : { reasonId: choice.reasonId }),
-            ...(choice.note === undefined ? {} : { note: choice.note }),
-          }
-        : {
-            reasonId: adjustment.choice!.reasonId,
-            ...(adjustment.choice!.note === null ? {} : { note: adjustment.choice!.note }),
-          }),
+      ...(choice.reasonId === undefined ? {} : { reasonId: choice.reasonId }),
+      ...(choice.note === undefined ? {} : { note: choice.note }),
       ...(approver === undefined ? {} : { approver }),
     };
-    if (adjustment === undefined) this.cancellingItem = { ...open, busy: true, refusal: "" };
-    else this.adjusting = { ...adjustment, busy: true, refusal: null };
+    this.cancellingItem = { ...open, busy: true, refusal: "", refusalField: null };
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const answer = await this.#resend(
@@ -11523,12 +11554,6 @@ export class TillApp extends LitElement {
       );
       if (!this.#itemCancellationShown(open)) return;
       this.#notePartyRevision(open.partyId, answer.revision);
-      if (adjustment !== undefined) {
-        this.shadowRoot!.querySelector<TillAdjustmentDialog>(
-          "till-adjustment-dialog",
-        )?.closeSaved();
-        this.#closeAdjust();
-      }
       this.#closeCancelItem();
       await this.#rereadAmounts(open.billId, open.visit);
       if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
@@ -11547,54 +11572,71 @@ export class TillApp extends LitElement {
       }
     } catch (error) {
       if (!this.#itemCancellationShown(open)) return;
-      const code = (error as { code?: string } | undefined)?.code ?? "server.internal";
-      if (code === "tab.cancel_context_changed") {
-        try {
-          const consent = await open.api.getCancellation(open.partyId, open.lineId, {
-            signal: limit.signal,
-          });
-          if (!this.#itemCancellationShown(open)) return;
-          if (adjustment !== undefined) this.#closeAdjust();
-          this.#closeCancelItem();
-          if (consent.billId !== open.billId) return;
-          this.cancellingItem = {
-            ...open,
-            id: ++this.#cancelItems,
-            consent,
-            busy: false,
-            refusal: codeMessage(code),
-          };
-        } catch {
-          if (this.#itemCancellationShown(open)) {
-            if (adjustment !== undefined) this.#closeAdjust();
-            this.#closeCancelItem();
-            this.errorKey = { code };
-          }
-        }
-      } else if (adjustment !== undefined) {
-        await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
-      } else if (isNetworkFailure(error)) {
-        this.#closeCancelItem();
-        await this.#rereadAmounts(open.billId, open.visit);
-        if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
-      } else {
-        const field = refusalField(code, "cancel", false);
-        this.cancellingItem = {
-          ...open,
-          busy: false,
-          refusal: codeMessage(code),
-          refusalField: field === "reason" || field === "note" ? field : null,
-          reasons:
-            code === "adjustment.note_required"
-              ? open.reasons?.map((reason) =>
-                  reason.id === choice.reasonId ? { ...reason, noteRequired: true } : reason,
-                )
-              : open.reasons,
-        };
-        if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
-      }
+      await this.#refuseItemCancellation(
+        open,
+        choice,
+        error,
+        approver === undefined ? "apply" : "approved",
+        limit.signal,
+      );
     } finally {
       limit.done();
+    }
+  }
+
+  async #refuseItemCancellation(
+    open: CancellingItem,
+    choice: CancelItemChoice,
+    error: unknown,
+    stage: "preview" | "apply" | "approved",
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!this.#itemCancellationShown(open)) return;
+    const code = (error as { code?: string } | undefined)?.code ?? "server.internal";
+    if (code === "tab.cancel_context_changed") {
+      try {
+        const consent = await open.api.getCancellation(open.partyId, open.lineId, {
+          signal,
+        });
+        if (!this.#itemCancellationShown(open)) return;
+        this.#closeCancelItem();
+        if (consent.billId !== open.billId) return;
+        this.cancellingItem = {
+          ...open,
+          id: ++this.#cancelItems,
+          consent,
+          approval: undefined,
+          busy: false,
+          refusal: codeMessage(code),
+        };
+      } catch {
+        if (this.#itemCancellationShown(open)) {
+          this.#closeCancelItem();
+          this.errorKey = { code };
+        }
+      }
+    } else if (stage === "approved" && APPROVER_REFUSALS.has(code) && open.approval !== undefined) {
+      this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };
+    } else if (stage !== "preview" && isNetworkFailure(error)) {
+      this.#closeCancelItem();
+      await this.#rereadAmounts(open.billId, open.visit);
+      if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
+    } else {
+      const field = refusalField(code, "cancel", false);
+      this.cancellingItem = {
+        ...open,
+        busy: false,
+        approval: undefined,
+        refusal: codeMessage(code),
+        refusalField: field === "reason" || field === "note" ? field : null,
+        reasons:
+          code === "adjustment.note_required"
+            ? open.reasons?.map((reason) =>
+                reason.id === choice.reasonId ? { ...reason, noteRequired: true } : reason,
+              )
+            : open.reasons,
+      };
+      if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
     }
   }
 
@@ -11801,9 +11843,6 @@ export class TillApp extends LitElement {
             expectedEdit: open.source.sync.expectedEdit!,
             sourceDraftId: open.source.sync.expectedEdit!.draftId!,
           }),
-      ...(open.cancellation === undefined
-        ? {}
-        : { action: "cancel", quantity: open.cancellation.choice.quantity }),
     };
   }
 
@@ -11914,15 +11953,6 @@ export class TillApp extends LitElement {
     open: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
-    if (open.cancellation !== undefined) {
-      await this.#sendItemCancellation(
-        open.cancellation.open,
-        open.cancellation.choice,
-        open,
-        approver,
-      );
-      return;
-    }
     if (open.source !== undefined) {
       await this.#applySourceCancellation(open, approver);
       return;

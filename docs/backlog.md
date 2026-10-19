@@ -2230,8 +2230,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   sales, tenders and payments while adding that adjustment. Recorded reasons use the operator's
   language. The charged choices now collect a cancel reason and required note in the dialog,
   including before the paid refund handoff; a failed reason read can retry, and a server-required
-  note is revealed without discarding the choice. Finish the off-bill dialog integration, revised
-  paid choices and refund-PIN handoff, and resolve every unserved dish before closing a paid table.
+  note is revealed without discarding the choice. Started off-bill cancellation now collects its
+  reason and note in that same dialog. Its main action checks the adjustment preview and either
+  sends the cancellation or opens the existing role-based PIN prompt. Returning from the prompt
+  keeps the draft; a failed preview remains retryable without saying a cancellation was sent.
+  Finish the revised paid choices and refund-PIN handoff, and resolve every unserved dish before
+  closing a paid table.
   Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish

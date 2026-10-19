@@ -288,3 +288,33 @@ it("lets a Spanish waiter search reasons and read the localized empty result", a
   await combo.updateComplete;
   expect(combo.shadowRoot!.textContent).toContain("Sin resultados");
 });
+
+it("requires the inline reason and required note for a started off-bill choice", async () => {
+  const { el, calls } = await mount();
+  const requests: Event[] = [];
+  el.addEventListener("cancel-item-reasons", (event) => requests.push(event));
+  await click(el, "input[value=remove_charge]");
+  expect(requests).toHaveLength(1);
+  expect(confirm(el).disabled).toBe(true);
+  el.reasons = [other];
+  await el.updateComplete;
+  await reason(el, "Other reason");
+  await note(el, "   ");
+  await click(el, "[data-confirm]");
+  expect(calls).toEqual([]);
+  expect(
+    root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=note]")!.error,
+  ).toBe(t("adjust.note_required"));
+  await note(el, "  Wrong dish  ");
+  await click(el, "[data-confirm]");
+  expect(calls).toEqual([
+    {
+      lineId: "dish",
+      quantity: "3",
+      outcome: "remove_charge",
+      consent: read(),
+      reasonId: "other",
+      note: "Wrong dish",
+    },
+  ]);
+});

@@ -8,7 +8,7 @@ import {
   deactivateAdjustmentReason,
 } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
-import { applyAdjustment } from "./adjustments-apply.js";
+import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import {
@@ -140,6 +140,55 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it("previews and removes exactly 60.00 when two of three 30.00 dishes are cancelled", async () => {
+    const order = await fixture("fire", "Bottle", "3");
+    const ask = {
+      ...(await askFor(order, "remove_charge", "2")),
+      preparationStarted: true,
+      reasonId: venue.reasonId.mistake,
+      note: "Wrong dish",
+    };
+    const before = await snapshot(order);
+    const preview = await inTx(venue, (tx) =>
+      previewAdjustment(
+        tx,
+        {
+          orderId: order.billId,
+          expectedRevision: ask.expectedBillRevision,
+          expectedEdit: ask.expectedEdit,
+          lineId: order.parent.id,
+          action: "cancel",
+          quantity: "2",
+          reasonId: ask.reasonId,
+          note: ask.note,
+          operatorId: venue.staffId,
+        },
+        venue.cfg.locale,
+      ),
+    );
+    expect(preview).toMatchObject({
+      reduction: "60.00",
+      nominalValue: "60.00",
+      needsApproval: null,
+    });
+    expect(await snapshot(order)).toEqual(before);
+    await cancel(order, ask);
+    const after = await snapshot(order);
+    expect(after.lines).toMatchObject([{ quantity: 1000, unitPriceGross: 3000 }]);
+    expect(after.adjustments).toMatchObject([
+      {
+        action: "cancel",
+        quantity: 2000,
+        reduction: 6000,
+        nominalValue: 6000,
+        reasonId: ask.reasonId,
+        note: "Wrong dish",
+      },
+    ]);
+    await cancel(order, ask);
+    expect(await snapshot(order)).toEqual(after);
+  });
+
   it.each([undefined, "", " "])(
     "requires a reason for a charged cancellation (%j)",
     async (reasonId) => {
