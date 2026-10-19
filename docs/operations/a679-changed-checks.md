@@ -2379,3 +2379,59 @@ The A679 backlog entry now lists remaining work and points here for completed qu
 instead of repeating checkpoint history. Earlier inventories and historical receipts stay intact.
 Local evidence: `~/waitron-campaign-e/receipts/a679-host-delivery-20261019/`, including raw logs,
 `test-preservation.json` and the installed omission/restoration control.
+
+## Retained document route qualification, 2026-10-19
+
+The retained `first-fiscal-document.route.test.ts` case submitted a register-bearing document
+to the hour contribution. Its complete starting file reported one failure and four passes:
+registration returned 400 where the case required 200. The replacement follows the approved
+hour design's key-only document contract and implementation plan Tasks 6 and 9.
+
+The case keeps its original name and all transient-key response checks. It now uses the existing
+`hourFirstFiscalFixture` with `useVenueDb` and the real configured contribution. The fixture
+selects `06RB` at the controlled instant `2026-10-16T11:40:00Z`. It supplies synthetic internet time,
+a fixed release stamp and a synthetic PDF digest; this is an in-process HTTP route test, not a
+PDF download, rendering or verified HTTPS journey.
+
+Changed checks, for the eventual PR inventory:
+
+- `apps/server/src/first-fiscal-document.route.test.ts:98`: registration and kept confirmation move
+  from `document`/`document-kept` to `recovery-document`/`recovery-document-kept`. Their successful
+  status remains exactly 200. The public reference replaces `historyDigest` with `bindingDigest`
+  for the key-only statement.
+- At line 103, exact public document equality moves from the register evidence response
+  `{ trust: null, current: statement }` to the recovery service's complete public reference and
+  statement. Before keeping the document, grant consumption must still refuse. Its expected code
+  changes from the register-specific `sif.allocation_invalid` to `setup.not_ready` with empty params.
+  After keeping the matching document, consumption must succeed once and refuse a second use.
+- At line 111, a newly added mismatched-PDF reference must refuse with HTTP 503 and exactly
+  `setup.not_ready` with empty params, leaving no usable grant. The first draft of this new check
+  expected 400; the run returned 503, matching `setup-first-fiscal-api.ts:26`. Only that new
+  expectation was corrected. The failed log is retained.
+- At line 138, the existing stranger/foreign-origin table gains both recovery endpoints. Every
+  previous action and the entire case body, including its 403 and `setup.owner_required`
+  expectations, retain their bytes. The existing body-limit case and shared fixture are also
+  byte-identical. No old case is deleted.
+
+The owner's 2026-10-05 test-change decision permits this non-protected interface update. No
+fiscal identity, invoice-number, hash, filing, money, permission or password-refusal expectation
+changes. There is no production, schema, migration, configuration or guard change in this checkpoint.
+The fixture already has a kept grant; re-registering the document must invalidate it before a fresh
+kept confirmation. This tests that boundary as well as the subsequent one-use grant.
+
+The affected four complete server files report 66 passes. Server types, scoped lint, code formatting
+and whitespace checks pass. The unedited protected fiscal pair reports 20 passes, and the focused
+database-helper/teardown guards report 33 passes. A separately frozen-installed candidate matches
+all 6,887 tracked source paths before this documentation addition. Its complete route file reports
+seven passes. Bypassing the matching-reference check makes the mismatch return 200 instead of 503;
+omitting consumption's grant deletion makes the second-use refusal resolve. Each fault fails its
+own assertion, and each restoration passes the selected case. Bypassing the foreign-origin check
+makes both newly covered recovery endpoints return 400 instead of their required 403. Both
+restored cases pass, followed by seven passes for the complete installed file.
+
+The unchanged module-host and launch files still report five failures and seven passes. The two
+module-host failures are independent-trust enrolment and snapshot-recovery delivery. The launch
+failures are direct setup, supervised setup and the public-input-file CLI. These remain gates;
+the route change does not clear them. The earlier coverage, installed-entry, PDF decisions/viewing,
+protocol-retirement, integration, final-review and current-head CI requirements also remain open.
+Local receipts: `~/waitron-campaign-e/receipts/a679-document-route-20261019/`.

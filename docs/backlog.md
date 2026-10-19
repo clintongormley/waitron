@@ -331,8 +331,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   remaining PDF/form revisions, and obtain viewing approval for real EN/ES A4 PDFs through Drive.
   Complete native adoption/promotion and the remaining entry/recovery journeys, including restored
   trading boot and committed browser acceptance tests. Local browser probes remain separate evidence.
-  Reconcile the retained register/signed-allocation server tests with the current interfaces while
-  preserving their behavioral checks and obtaining exact approval for protected fiscal assertions.
+  Reconcile the retained module-host and launch tests with the current interfaces while preserving
+  their behavioral checks and obtaining exact approval for protected fiscal assertions.
   Close the provisioning and entry coverage gaps without lowering the gates. Retire active paper
   and Cloud allocation protocols, reconcile current operator/developer prose, and integrate the
   current main branch and any migration collisions. Complete both final installed Claude reviews,
