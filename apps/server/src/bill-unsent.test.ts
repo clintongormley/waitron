@@ -404,7 +404,7 @@ function ask(kind: BillPaymentAsk["kind"], method: "cash" | "card"): BillPayment
 }
 
 describe("unsent dishes block new payments on their own bill", () => {
-  it("counts each bill's own editor and fresh plus recalled dishes, excluding extras", async () => {
+  it("refuses each bill's own fresh plus recalled dishes without owner details", async () => {
     const billId = await tabWith(venue, "Tarta");
     const ana = await unsent(billId, venue.operatorId, "1.25");
     const [colleague] = await venue.db.insert(persons).values({ displayName: "Zoë" }).returning();
@@ -440,7 +440,6 @@ describe("unsent dishes block new payments on their own bill", () => {
       code: "bill.unsent_dishes",
       params: {
         billId,
-        owners: [{ personId: venue.operatorId, name: "Ana", quantity: "2.250" }],
       },
     });
     await expect(
@@ -449,7 +448,6 @@ describe("unsent dishes block new payments on their own bill", () => {
       code: "bill.unsent_dishes",
       params: {
         billId: otherBillId,
-        owners: [{ personId: colleague!.id, name: "Zoë", quantity: "2.500" }],
       },
     });
   });
@@ -477,7 +475,6 @@ describe("unsent dishes block new payments on their own bill", () => {
             code: "bill.unsent_dishes",
             params: {
               billId,
-              owners: [{ personId: venue.operatorId, name: "Ana", quantity: "2.000" }],
             },
           },
         });

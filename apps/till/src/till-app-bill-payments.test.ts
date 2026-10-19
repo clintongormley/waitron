@@ -5866,7 +5866,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
   });
 });
 
-describe("A773 named unsent-dish payment refusal", () => {
+describe("A773 unsent-dish payment refusal", () => {
   const refused = {
     code: "bill.unsent_dishes",
     status: 409,
@@ -5878,7 +5878,7 @@ describe("A773 named unsent-dish payment refusal", () => {
   };
 
   it.each(["preview", "take"])(
-    "keeps the shown bill and names both owners after %s refuses",
+    "keeps the shown bill and approved simple refusal after %s refuses",
     async (stage) => {
       const { el } = await mountApp(
         stage === "preview"
@@ -5893,9 +5893,7 @@ describe("A773 named unsent-dish payment refusal", () => {
       if (stage === "take") await press(el, "[data-pay-confirm]");
 
       const error = inDialog(el, "wt-form-actions")!.error;
-      expect(error).toContain("Alex: 2.5 unsent dishes");
-      expect(error).toContain("Bea <chef>: 1 unsent dish");
-      expect(error).toContain("4 · Bill 1");
+      expect(error).toBe("4 · Bill 1. Send or remove the unsent dishes before paying.");
       expect(dialog(el)!.shadowRoot!.querySelector("chef")).toBeNull();
       expect(tableOrder(el)).toBe(order);
       expect(order.orderId).toBe("wo-4");
@@ -5906,7 +5904,7 @@ describe("A773 named unsent-dish payment refusal", () => {
   );
 });
 
-it("A773 keeps named owners when the refused payment's follow-up balance read fails", async () => {
+it("A773 keeps the approved refusal when the refused payment's follow-up balance read fails", async () => {
   const { el } = await mountApp({
     getBillBalance: vi
       .fn()
@@ -5924,5 +5922,7 @@ it("A773 keeps named owners when the refused payment's follow-up balance read fa
   await type(el, "amount", "40.00");
   await type(el, "tendered", "40.00");
   await press(el, "[data-pay-continue]");
-  expect(inDialog(el, "wt-form-actions")!.error).toContain("Alex: 2 unsent dishes");
+  expect(inDialog(el, "wt-form-actions")!.error).toBe(
+    "4 · Bill 1. Send or remove the unsent dishes before paying.",
+  );
 });

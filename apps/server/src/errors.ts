@@ -518,10 +518,7 @@ declare module "@waitron/shared" {
     "group.line_held": { tabId: string; lineNo: number };
     /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
     "bill.nothing_outstanding": { workingOrderId: string };
-    "bill.unsent_dishes": {
-      billId: string;
-      owners: { personId: string; name: string; quantity: string }[];
-    };
+    "bill.unsent_dishes": { billId: string };
     /**
      * The venue has tips off and the payment would record a tip. `chargeable` is what can be taken
      * without one.

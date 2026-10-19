@@ -8145,9 +8145,9 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(tableOrder(el)!.orderId).toBe("wo-4");
       expect(el.shadowRoot!.querySelector("till-ticket-screen")).toBeNull();
-      expect(banner(el)!.textContent).toContain("Ana: 1 unsent dish");
-      expect(banner(el)!.textContent).toContain("Alex: 2.5 unsent dishes");
-      expect(banner(el)!.textContent).toContain("4 · Bill 1");
+      expect(banner(el)!.textContent?.trim()).toBe(
+        "4 · Bill 1. Send or remove the unsent dishes before paying.",
+      );
       expect(api.submitDraft).not.toHaveBeenCalled();
     },
   );
@@ -8327,9 +8327,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
     const order = await openMesa(el);
     emit(order, "pay-tab", { method: "cash", tendered: "3.00" });
     await flush(el, 6);
-    expect(banner(el)!.textContent).toContain(
-      "Send or remove the bill's unsent dishes before paying",
-    );
+    expect(banner(el)!.textContent).toContain("Send or remove the unsent dishes before paying.");
     expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
 });

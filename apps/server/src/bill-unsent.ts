@@ -48,5 +48,5 @@ export async function readBillUnsent(tx: Transaction, billId: string) {
 
 export async function assertBillHasNoUnsent(tx: Transaction, billId: string): Promise<void> {
   const owners = await readBillUnsent(tx, billId);
-  if (owners.length > 0) throw new AppError("bill.unsent_dishes", { billId, owners });
+  if (owners.length > 0) throw new AppError("bill.unsent_dishes", { billId });
 }

@@ -313,7 +313,7 @@ export class TillFindBillDialog extends LitElement {
                 ? "code" in this.error
                   ? codeMessage(this.error.code)
                   : "unsentBill" in this.error
-                    ? billUnsentText(this.error.unsentBill, bill.label ?? String(bill.orderNumber))
+                    ? billUnsentText(bill.label ?? String(bill.orderNumber))
                     : overLimitText(this.error.overLimit)
                 : this.cashError
                   ? t("form.fix_fields")

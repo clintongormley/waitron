@@ -171,7 +171,7 @@ function chargeableText(amount: string): string {
  * the venue takes no tips, the till's own sentence for a device not set up for the card reader or
  * for a person who may not take payments, or the server's code in its own words. */
 function refusalText(refusal: PayRefusal): string {
-  if (refusal.unsent !== undefined) return billUnsentText(refusal.unsent, refusal.billLabel);
+  if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);
   if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");
   switch (refusal.code) {
     case "network":

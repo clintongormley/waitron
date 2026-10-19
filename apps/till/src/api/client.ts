@@ -1166,7 +1166,6 @@ export interface BillPaymentView {
 
 export interface BillUnsent {
   billId: string;
-  owners: { personId: string; name: string; quantity: string }[];
 }
 
 export interface BillBalance {

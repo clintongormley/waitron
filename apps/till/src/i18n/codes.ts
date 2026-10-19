@@ -4,8 +4,8 @@ import { currentLocale, pickLocale } from "./t.js";
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "bill.unsent_dishes": {
-    en: "Send or remove the bill's unsent dishes before paying",
-    es: "Envía o quita los platos sin enviar de la cuenta antes de cobrar",
+    en: "Send or remove the unsent dishes before paying.",
+    es: "Envía o quita los platos sin enviar antes de cobrar.",
   },
   "tab.cancel_context_changed": {
     en: "The dish changed. Check its current kitchen state and choose again.",

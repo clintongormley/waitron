@@ -1132,8 +1132,7 @@ function errorText(
   tables: readonly TableState[],
   billLabel?: string,
 ): string | TemplateResult {
-  if (typeof error === "object" && "unsentBill" in error)
-    return billUnsentText(error.unsentBill, billLabel);
+  if (typeof error === "object" && "unsentBill" in error) return billUnsentText(billLabel);
   if (typeof error === "string") return t(error);
   if ("replacedGroups" in error)
     return t("table.draft_replaced_groups").replace("{groups}", () => error.replacedGroups);

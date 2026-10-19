@@ -23662,7 +23662,7 @@ describe("A737 post-invoice refund integration", () => {
   });
 });
 
-it("A773 Find a bill retains the debt and names owners when unsent dishes block collection", async () => {
+it("A773 Find a bill retains the debt and approved refusal when unsent dishes block collection", async () => {
   const { el } = await mountApp({
     collectOrder: vi.fn().mockRejectedValue({
       code: "bill.unsent_dishes",
@@ -23685,7 +23685,7 @@ it("A773 Find a bill retains the debt and names owners when unsent dishes block 
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(collector);
   const actions = collector.shadowRoot!.querySelector("wt-form-actions")!;
-  expect(actions.error).toContain("Ana: 2 unsent dishes");
+  expect(actions.error).toBe("Lucía. Send or remove the unsent dishes before paying.");
   expect(ticket(el)).toBeNull();
   expect(currentApi.collectOrder).toHaveBeenCalledOnce();
 });
