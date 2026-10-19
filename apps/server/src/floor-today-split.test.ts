@@ -8,7 +8,6 @@ import {
   floorTodaySplitParts,
   floorTodayTables,
   joinedTableApart,
-  tableServiceStatuses,
   workingOrders,
 } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
@@ -573,27 +572,6 @@ describe("guests at a joined table that is split", () => {
 
     expect(await partyAt(v, table.c3!)).toBe(guests.partyId);
     expect((await tableRow(v, table.c3!)).needsClearingSince).toBeNull();
-  });
-
-  it("leaves the last part's manual status as it is", async () => {
-    const { table } = await LONG_PLUS_BAR();
-    const statusId = await inTx(v, async (tx) => {
-      const [status] = await tx
-        .insert(tableServiceStatuses)
-        .values({ label: `Postre ${randomUUID()}`, color: "#ef4444" })
-        .returning({ id: tableServiceStatuses.id });
-      await tx
-        .update(diningTables)
-        .set({ statusId: status!.id })
-        .where(eq(diningTables.id, table.c3!));
-      return status!.id;
-    });
-    const guests = await seat(v, table.long!);
-
-    await split(table.long!, [table.c4!, table.c5!], null);
-
-    expect(await partyAt(v, table.c3!)).toBe(guests.partyId);
-    expect((await tableRow(v, table.c3!)).statusId).toBe(statusId);
   });
 
   it("an old read of the guests is refused after the split", async () => {

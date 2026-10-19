@@ -92,7 +92,7 @@ import {
   resolveInvoicePrinter,
   type OriginalReceiptPrint,
 } from "./receipt-print.js";
-import { listServiceStatuses, listTables, listZones, setTableStatus } from "./tables.js";
+import { listTables, listZones } from "./tables.js";
 import {
   abandonHeldOrder,
   advanceTicket,
@@ -611,8 +611,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.refund_in_progress": 409,
   "payment.not_refundable": 409,
   "payment.refund_exceeds_capture": 422,
-  "status.not_found": 404,
-  "status.inactive": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
   "adjustment_reason.not_found": 404,
@@ -2722,16 +2720,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.get("/api/statuses", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const statuses = await withTransaction(deps.db, async (tx) => {
-        return listServiceStatuses(tx);
-      });
-      return c.json(statuses);
-    }),
-  );
-
   app.post("/api/tables/:id/seat", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
@@ -3966,24 +3954,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
         );
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/tables/:id/status", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const cfg = requestCfg(deps.cfg, session);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ statusId: string | null }>(c);
-      const statusId = body.statusId ?? null;
-      if (statusId !== null && !isUuid(statusId))
-        throw new AppError("status.not_found", { statusId });
-      await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
-        await setTableStatus(tx, cfg, id, statusId);
       });
       return c.body(null, 200);
     }),

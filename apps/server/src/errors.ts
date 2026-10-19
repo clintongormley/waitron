@@ -734,8 +734,6 @@ declare module "@waitron/shared" {
     "tab.split_held_line": { tabId: string; lineNo: number };
     /** No service status with this id. */
     "status.not_found": { statusId: string };
-    /** A service status exists but is deactivated, so a table may not be set to it. */
-    "status.inactive": { statusId: string };
     /** A service-status label already exists. `label` is the operator's own text. */
     "status.label_taken": { label: string };
     /** No floor-plan zone with this id. */

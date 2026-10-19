@@ -1584,10 +1584,10 @@ export async function parkOrder(
 }
 
 /**
- * Open the party's first bill at a table, clearing the table's manual status. Refused while the
- * table is out of service because of a joined table, while it needs clearing and while a party holds it (an
- * active `party_tables` row); the caller adds the party's membership afterwards. The check cannot interleave with a second `openTab`, because
- * `withTransaction` IS the venue file's write lock.
+ * Open the party's first bill at a table. Refused while the table is out of service because of a
+ * joined table, while it needs clearing and while a party holds it (an active `party_tables` row);
+ * the caller adds the party's membership afterwards. The check cannot interleave with a second
+ * `openTab`, because `withTransaction` IS the venue file's write lock.
  */
 export async function openTab(
   tx: Transaction,
@@ -1646,7 +1646,6 @@ export async function openTab(
     partyId: req.partyId,
     creditedTo: req.operatorId,
   });
-  await tx.update(diningTables).set({ statusId: null }).where(eq(diningTables.id, req.tableId));
   return { tabId, orderNumber };
 }
 
@@ -7988,8 +7987,6 @@ export interface TableState {
   enRoute: number;
   /** The worst age band over those unserved lines; a counter delivery does not feed it. */
   timingBand: TimingBand;
-  /** The MANUAL service status, independent of occupancy: a `free` table may carry one. */
-  status: { id: string; label: string; color: string } | null;
   today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
@@ -8029,9 +8026,6 @@ export async function listTablesWithState(
     // Classified in JS, never in SQL, so server and client share one classifier.
     tab_unserved_lines: string;
     pending_deliveries: number;
-    status_id: string | null;
-    status_label: string | null;
-    status_color: string | null;
     needs_clearing_since: string | null;
   }>(sql`
     -- Each seated party and every party merged into it: a bill a merged-in party kept still has its
@@ -8050,8 +8044,7 @@ export async function listTablesWithState(
       cast(coalesce(tab.ready_to_serve, 0) as int) as ready_to_serve,
       cast(coalesce(tab.en_route, 0) as int) as en_route,
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
-      cast(coalesce(del.pending, 0) as int) as pending_deliveries,
-      tss.id as status_id, tss.label as status_label, tss.color as status_color
+      cast(coalesce(del.pending, 0) as int) as pending_deliveries
     from dining_tables dt
     -- A GROUPED derived table joined on the table id, not a LEFT JOIN LATERAL ... ON TRUE: this
     -- engine has no LATERAL and refuses it at prepare with near "select": syntax error (measured
@@ -8118,8 +8111,6 @@ export async function listTablesWithState(
       where ${foodOnItsWay()}
       group by delivery_table_id
     ) del on del.delivery_table_id = dt.id
-    left join table_service_statuses tss
-      on tss.id = dt.status_id
     where dt.location_id = ${loc} and ${tableInService(sql`dt.id`)}
     order by dt.label
   `);
@@ -8163,10 +8154,6 @@ export async function listTablesWithState(
       enRoute: Number(r.en_route),
       timingBand,
       pendingDeliveries,
-      status:
-        r.status_id !== null
-          ? { id: r.status_id, label: r.status_label!, color: r.status_color! }
-          : null,
       today: today.get(r.id)!,
       nextReservation: null as { time: string } | null,
       party: party ?? null,

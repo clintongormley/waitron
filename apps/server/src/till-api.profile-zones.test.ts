@@ -133,7 +133,6 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/seat                               | table                  | refuses POST /api/tables/:id/seat                    |
  * | POST /api/tables/:id/seat (withTableIds)                | body tables            | refuses POST /api/tables/:id/seat (other tables)     |
  * | POST /api/tables/:id/cleared                            | table                  | refuses POST /api/tables/:id/cleared                 |
- * | POST /api/tables/:id/status                             | table                  | refuses POST /api/tables/:id/status                  |
  * | POST /api/tables/:id/today/move                         | table                  | refuses POST /api/tables/:id/today/move              |
  * | POST /api/tables/:id/today/rotate                       | table                  | refuses POST /api/tables/:id/today/rotate            |
  * | POST /api/tables/:id/today/take-off                     | table                  | refuses POST /api/tables/:id/today/take-off          |
@@ -222,7 +221,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
  * station the request names;
- * and the drawer, the authorizer and reason lists, `/api/statuses` and
+ * and the drawer, the authorizer and reason lists and
  * `GET/PUT /api/device/equipment`, which name no zone.
  */
 
@@ -770,13 +769,6 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/tables/${x.deliTable}/cleared`,
     () => ({}),
-    deliTableZone,
-  ],
-  [
-    "POST /api/tables/:id/status",
-    "POST",
-    (x) => `/api/tables/${x.deliTable}/status`,
-    () => ({ statusId: null }),
     deliTableZone,
   ],
   [

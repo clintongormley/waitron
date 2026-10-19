@@ -77,8 +77,6 @@ describe("leaveForClearing", () => {
 
     expect((await tableRow(v, a)).needsClearingSince).toBe(at);
     expect((await tableRow(v, b)).needsClearingSince).toBeNull();
-    expect((await tableRow(v, a)).statusId).toBeNull();
-    expect((await tableRow(v, b)).statusId).toBeNull();
   });
 
   it("leaves a table whose zone has no department free, even with every department on", async () => {

@@ -10,7 +10,6 @@ import {
   floorZones,
   orderGroups,
   partyTables,
-  tableServiceStatuses,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
@@ -117,19 +116,6 @@ async function joinFree(partyId: string, tableId: string): Promise<void> {
   await nextMillisecond();
   const joining = await opts(partyId);
   await act((tx) => joinTables(tx, v.cfg, partyId, tableId, joining));
-}
-
-async function giveStatus(tableIds: string[]): Promise<string> {
-  return act(async (tx) => {
-    const [status] = await tx
-      .insert(tableServiceStatuses)
-      .values({ label: `Postre ${randomUUID()}`, color: "#ef4444" })
-      .returning({ id: tableServiceStatuses.id });
-    for (const id of tableIds) {
-      await tx.update(diningTables).set({ statusId: status!.id }).where(eq(diningTables.id, id));
-    }
-    return status!.id;
-  });
 }
 
 async function needsClearing(tableId: string): Promise<void> {
@@ -276,7 +262,6 @@ describe("move guests", () => {
       const [m4, m5, m9] = await tables("Mesa", 4, 5, 9);
       const ana = await seat(v, m4);
       await joinFree(ana.partyId, m5);
-      await giveStatus([m4, m5, m9]);
 
       const moving = await opts(ana.partyId);
       const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m9, moving));
@@ -286,10 +271,8 @@ describe("move guests", () => {
       for (const left of [m4, m5]) {
         const row = await tableRow(v, left);
         expect(row.needsClearingSince).not.toBeNull();
-        expect(row.statusId).toBeNull();
       }
       expect(await tableRow(v, m9)).toMatchObject({
-        statusId: null,
         needsClearingSince: null,
       });
       expect((await billRow(v, ana.tabId)).partyId).toBe(ana.partyId);
@@ -308,7 +291,7 @@ describe("move guests", () => {
     const moving = await opts(ana.partyId);
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m9, moving));
 
-    expect(await tableRow(v, m4)).toMatchObject({ needsClearingSince: null, statusId: null });
+    expect(await tableRow(v, m4)).toMatchObject({ needsClearingSince: null });
     expect(await partyAt(v, m4)).toBeNull();
     expect(await activeTablesOf(v, ana.partyId)).toEqual([m9]);
   });
@@ -342,7 +325,6 @@ describe("move guests", () => {
     );
     await order(v, ana.tabId, "Burger");
     await order(v, luis.tabId, "Agua");
-    await giveStatus([m4, m7]);
 
     const moving = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
@@ -362,8 +344,6 @@ describe("move guests", () => {
     });
     expect(await activeTablesOf(v, luis.partyId)).toEqual([m7]);
     expect(await activeTablesOf(v, ana.partyId)).toEqual([]);
-    expect((await tableRow(v, m4)).statusId).toBeNull();
-    expect((await tableRow(v, m7)).statusId).not.toBeNull();
   });
 
   it("keeps both main bills when asked, and the receiving one stays main", async () => {
@@ -956,10 +936,9 @@ describe("drafts when parties combine", () => {
 });
 
 describe("join tables", () => {
-  it("joins a free table: both tables stay, and neither's status changes", async () => {
+  it("joins a free table: both tables stay", async () => {
     const [m4, m5] = await tables("Junta", 4, 5);
     const ana = await seat(v, m4);
-    const status = await giveStatus([m4, m5]);
     await nextMillisecond();
 
     const joining = await opts(ana.partyId);
@@ -967,8 +946,6 @@ describe("join tables", () => {
 
     expect(result).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
     expect(await activeTablesOf(v, ana.partyId)).toEqual([m4, m5]);
-    expect((await tableRow(v, m4)).statusId).toBe(status);
-    expect((await tableRow(v, m5)).statusId).toBe(status);
     expect((await partyRow(v, ana.partyId)).revision).toBe(joining.expectedPartyRevision + 1);
   });
 
@@ -1004,7 +981,6 @@ describe("join tables", () => {
     await joinFree(luis.partyId, m8);
     await order(v, ana.tabId, "Burger");
     await order(v, luis.tabId, "Agua");
-    const status = await giveStatus([m7, m8]);
 
     const joining = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
@@ -1020,7 +996,6 @@ describe("join tables", () => {
     expect((await billRow(v, luis.tabId)).status).toBe("abandoned");
     for (const joined of [m7, m8]) {
       expect(await tableRow(v, joined)).toMatchObject({
-        statusId: status,
         needsClearingSince: null,
       });
     }
@@ -1125,7 +1100,6 @@ describe("split a table", () => {
 
   it("starts a new unnamed party on the table with the chosen bill as its main", async () => {
     const { ana, m4, m5, b2 } = await anaAtTwo("Separa");
-    const status = await giveStatus([m5]);
 
     const splitting = await cmd(ana.partyId);
     const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
@@ -1139,7 +1113,6 @@ describe("split a table", () => {
     });
     expect(await activeTablesOf(v, result.partyId)).toEqual([m5]);
     expect(await billRow(v, b2)).toMatchObject({ partyId: result.partyId, status: "open" });
-    expect((await tableRow(v, m5)).statusId).toBe(status);
     expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
     expect(await partyRow(v, ana.partyId)).toMatchObject({
       mainBillId: ana.tabId,
@@ -1300,9 +1273,8 @@ describe("split a table", () => {
       expect(absent).toMatchObject({ code: "tab.not_open", params: { tabId: missing } });
     });
 
-    it("refuses a bill holding a dish held for the kitchen, leaving the table's status (Review Focus 4)", async () => {
+    it("refuses a bill holding a dish held for the kitchen (Review Focus 4)", async () => {
       const { ana, m4, m5, b2 } = await anaAtTwo("Retenida");
-      await giveStatus([m5]);
       await sendGroups(ana.partyId, [{ names: ["Flan"], release: "hold" }], b2);
       const splitting = await cmd(ana.partyId);
 
@@ -1314,7 +1286,6 @@ describe("split a table", () => {
         code: "group.held_leaves_party",
         params: { tabId: b2, lineNo: 2 },
       });
-      expect((await tableRow(v, m5)).statusId).not.toBeNull();
     });
   });
 });

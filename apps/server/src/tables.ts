@@ -177,28 +177,6 @@ export async function createStatus(
   }
 }
 
-export interface ServiceStatusOption {
-  id: string;
-  label: string;
-  color: string;
-}
-
-/**
- * Active statuses only, because `setTableStatus` refuses an inactive one. Gated by the till
- * session at the route, not `venue.configure`: an operator holds no management session.
- */
-export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
-  return tx
-    .select({
-      id: tableServiceStatuses.id,
-      label: tableServiceStatuses.label,
-      color: tableServiceStatuses.color,
-    })
-    .from(tableServiceStatuses)
-    .where(eq(tableServiceStatuses.active, true))
-    .orderBy(tableServiceStatuses.displayOrder, tableServiceStatuses.label);
-}
-
 /** Inactive statuses included, so the editor can reactivate one. */
 export async function listStatuses(
   tx: Transaction,
@@ -272,41 +250,4 @@ export async function deactivateStatus(
   if (updated.length === 0) {
     throw new AppError("status.not_found", { statusId: input.id });
   }
-}
-
-/**
- * An operational verb, gated by the operator's session at the route rather than `venue.configure`.
- * The status is independent of occupancy: a free table may carry one.
- */
-export async function setTableStatus(
-  tx: Transaction,
-  _cfg: TillConfig,
-  tableId: string,
-  statusId: string | null,
-): Promise<void> {
-  // Each subquery is NULL when no row matches, so a missing status stays distinct from an inactive
-  // one. `number`, not `boolean`: a raw-SQL read bypasses the `flag` column's boolean mapping.
-  const { rows } = await tx.execute<{
-    table_in_service: number | null;
-    status_active: number | null;
-  }>(
-    statusId === null
-      ? sql`select (select ${tableInService(diningTables.id)} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_in_service`
-      : sql`select (select ${tableInService(diningTables.id)} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_in_service, (select ${tableServiceStatuses.active} from ${tableServiceStatuses} where ${tableServiceStatuses.id} = ${statusId}) as status_active`,
-  );
-  const row = rows[0]!;
-  if (!row.table_in_service) {
-    throw new AppError("table.not_found", { tableId });
-  }
-
-  if (statusId !== null) {
-    if (row.status_active === null) {
-      throw new AppError("status.not_found", { statusId });
-    }
-    if (!row.status_active) {
-      throw new AppError("status.inactive", { statusId });
-    }
-  }
-
-  await tx.update(diningTables).set({ statusId }).where(eq(diningTables.id, tableId));
 }

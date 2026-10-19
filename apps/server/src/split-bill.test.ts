@@ -8,7 +8,6 @@ import {
   locations,
   kitchenTimingDefaults,
   printJobs,
-  tableServiceStatuses,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -78,8 +77,6 @@ interface Seeded {
   jamonId: string;
   tableId: string;
   tableId2: string;
-  /** An ACTIVE `table_service_statuses` row, so a test can give a table a non-null manual status. */
-  activeStatusId: string;
 }
 
 async function setupVenue(): Promise<Seeded> {
@@ -129,18 +126,11 @@ async function setupVenue(): Promise<Seeded> {
     offersByCfg.set(cfg, offers);
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
     const t2 = await createTable(tx, cfg, { label: "T2", zoneId: offers.zoneId });
-    // Through the table definition: `id` and `created_at` are `$defaultFn` generators, which a raw
-    // insert never reaches.
-    const activeStatusId = randomUUID();
-    await tx
-      .insert(tableServiceStatuses)
-      .values({ id: activeStatusId, label: "Bill requested", color: "#ef4444" });
     return {
       aguaId: agua.id,
       jamonId: jamon.id,
       tableId: t1.id,
       tableId2: t2.id,
-      activeStatusId,
     };
   });
   return { cfg, ...seeded };
