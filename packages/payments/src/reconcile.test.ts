@@ -14,6 +14,7 @@ import {
   insertInitiated,
   settleForwarded,
 } from "./store.js";
+import { listOpenHolds, recordHoldOutcome } from "./holds.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
@@ -853,6 +854,84 @@ describe("orphan remediation", () => {
     expect(drift.rows[0].params.payments).toEqual([
       { paymentRef: "p1", captured: "10.00", settled: "12.50" },
     ]);
+  });
+
+  it("records a held payment once, with the provider's figure", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const report = new FakeSettlementReport([settlement({ amount: decimal("12.50") })]);
+    await reconcilePayments(deps(report), PERIOD, NOW);
+    await reconcilePayments(deps(report), PERIOD, new Date("2026-07-26T12:00:00Z"));
+
+    const { rows } = await suite.db.execute<{ provider_amount: number; found_at: string }>(sql`
+      select h.provider_amount, h.found_at from payment_holds h
+      join payments p on p.id = h.payment_id where p.payment_ref = 'p1'`);
+    expect(rows).toEqual([{ provider_amount: 1250, found_at: NOW.toISOString() }]);
+  });
+
+  it("records no hold for an orphan that is claimed for a refund", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    await reconcilePayments(deps(new FakeSettlementReport([settlement()])), PERIOD, NOW);
+    const { rows } = await suite.db.execute(sql`select id from payment_holds`);
+    expect(rows).toEqual([]);
+  });
+
+  it("records no hold when the provider's figure is not positive, and still reports the orphan", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("0.00") })]), reverse.fn),
+      PERIOD,
+      NOW,
+    );
+    expect(result.orphan).toHaveLength(1);
+    expect(result.drift).toHaveLength(1);
+    expect(reverse.calls).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([
+      "payment.reconcile_drift",
+      "payment.reconcile_orphan",
+    ]);
+    const { rows } = await suite.db.execute(sql`select id from payment_holds`);
+    expect(rows).toEqual([]);
+  });
+
+  it("stops checking a held payment once its outcome is recorded", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const report = new FakeSettlementReport([settlement({ amount: decimal("12.50") })]);
+    await reconcilePayments(deps(report), PERIOD, NOW);
+    const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
+    await withTransaction(suite.db, (tx) =>
+      recordHoldOutcome(tx, {
+        holdId: hold!.holdId,
+        outcome: "kept",
+        note: null,
+        personId: "22222222-2222-4222-8222-222222222222",
+        at: NOW,
+      }),
+    );
+    await suite.db.execute(sql`delete from incidents`);
+
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(deps(report, reverse.fn), PERIOD, NOW);
+    expect(result).toMatchObject({
+      checked: 1,
+      unsettled: [],
+      lostSettlement: [],
+      orphan: [],
+      missingLocal: [],
+      drift: [],
+      incidentsRaised: 0,
+      remediated: 0,
+    });
+    expect(reverse.calls).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([]);
   });
 
   it("still claims an orphan whose amount MATCHES — this is a gate, not a disabling", async () => {

@@ -6,6 +6,7 @@ import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
 import { existingReferences, listReconcilable, markReconcileRemediated } from "./store.js";
+import { recordHold } from "./holds.js";
 
 /** Half-open `[from, to)`. */
 export interface ReconcilePeriod {
@@ -144,6 +145,8 @@ export function classify(
   for (const row of rows) {
     const settled = row.externalRef === null ? undefined : index.get(row.externalRef);
     if (settled !== undefined) matched.add(settled);
+    // A person has recorded what became of this held payment: nothing is left to check or raise.
+    if (row.holdResolved) continue;
 
     if (row.state === "initiated") {
       // A minted-but-unpaid hosted payment is ordinary at any age — the abandonment path
@@ -292,6 +295,12 @@ export async function reconcilePayments(
       }
       if (driftedRefs.has(ref)) {
         remediation.set(ref, "amountDrifted");
+        // Non-null: a drifted row matched a settlement, and its orphan entry carries the same one.
+        const providerAmount = entry.settled!.amount;
+        // `payment_holds` refuses a figure that is not positive; that refusal would undo all of T2.
+        if (compareDecimal(providerAmount, decimal("0")) > 0) {
+          await recordHold(tx, { paymentId: entry.row.paymentId, providerAmount, foundAt: now });
+        }
         continue;
       }
       const claimed = await markReconcileRemediated(tx, {

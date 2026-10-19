@@ -91,4 +91,48 @@ describe("concurrent reconcile sweeps", () => {
     expect(params.payments[0]!.remediation).toBe("claimed");
     expect(a.incidentsRaised + b.incidentsRaised).toBe(1);
   });
+
+  it("write one hold for a drifted orphan, however they interleave", async () => {
+    const seeded = await seedWorkingOrder(suite.db, "B77777777");
+    await withTransaction(suite.db, (tx) =>
+      insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "race-held",
+        externalRef: "ext-race-held",
+        amount: decimal("10.00"),
+        settledAt: OLD_SETTLED,
+      }),
+    );
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, seeded.workingOrderId));
+
+    const reversed: string[] = [];
+    const make = (db: Database): ReconcileDeps => ({
+      db,
+      provider: "fake",
+      report: new FakeSettlementReport([
+        { references: ["ext-race-held"], amount: decimal("12.50"), settledAt: OLD_SETTLED },
+      ]),
+      reverse: async (ref) => {
+        reversed.push(ref);
+      },
+      incidents: recordIncidentOnce,
+      settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
+    });
+
+    await Promise.all([
+      reconcilePayments(make(suite.db), PERIOD, NOW),
+      reconcilePayments(make(suite.db), PERIOD, NOW),
+    ]);
+
+    expect(reversed).toEqual([]);
+    const { rows } = await suite.db.execute<{ provider_amount: number }>(
+      sql`select provider_amount from payment_holds`,
+    );
+    expect(rows).toEqual([{ provider_amount: 1250 }]);
+  });
 });
