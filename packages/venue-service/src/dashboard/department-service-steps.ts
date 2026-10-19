@@ -7,11 +7,10 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { ServiceStepStart } from "../schema/service-steps.js";
+import { MAX_SERVICE_STEPS } from "../service-step-limits.js";
 import type { ServiceStepDraft } from "./service-step-draft.js";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
-
-/** The save's own bound on a department's steps. */
-export const MAX_SERVICE_STEPS = 20;
 
 export type ServiceStepField = "name" | "start" | "minutes";
 export type ServiceStepErrors = Record<string, Partial<Record<ServiceStepField, string>>>;
@@ -81,8 +80,12 @@ export class DepartmentServiceSteps extends LitElement {
       .empty {
         color: var(--wt-color-text-muted);
       }
+      .required,
       .error {
         color: var(--wt-color-danger);
+      }
+      .required {
+        margin-inline-start: var(--wt-space-1);
       }
     `,
   ];
@@ -171,7 +174,7 @@ export class DepartmentServiceSteps extends LitElement {
       { value: "after_previous", label: t("venue.service_step_start.after_previous") },
       ...this.courses.map((course) => ({
         value: `${COURSE}${course.id}`,
-        label: t("venue.service_step_start.course_served").replace("{course}", course.name),
+        label: format("venue.service_step_start.course_served", { course: course.name }),
       })),
       { value: "all_served", label: t("venue.service_step_start.all_served") },
       { value: "since_last_order", label: t("venue.service_step_start.since_last_order") },
@@ -243,10 +246,7 @@ export class DepartmentServiceSteps extends LitElement {
         this.disabled
           ? nothing
           : html`<td class="actions-cell">
-              <wt-row-actions
-                align="end"
-                label=${t("prep.row_actions").replace("{name}", step.name)}
-              >
+              <wt-row-actions align="end" label=${format("prep.row_actions", { name: step.name })}>
                 <wt-button
                   align="start"
                   variant="ghost"
@@ -283,8 +283,16 @@ export class DepartmentServiceSteps extends LitElement {
             }
             <th scope="col">
               <div class="fields">
-                <span class="name" data-head>${t("venue.service_step")}</span>
-                <span class="start" data-head>${t("venue.service_step_starts")}</span>
+                <span class="name" data-head
+                  >${t("venue.service_step")}<span class="required" aria-hidden="true"
+                    >*</span
+                  ></span
+                >
+                <span class="start" data-head
+                  >${t("venue.service_step_starts")}<span class="required" aria-hidden="true"
+                    >*</span
+                  ></span
+                >
                 <span class="minutes" data-head>
                   <span class="visually-hidden">${t("venue.service_step_minutes")}</span>
                 </span>

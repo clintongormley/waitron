@@ -80,7 +80,13 @@ async function mount(
 const q = <T extends Element = HTMLElement>(el: DepartmentServiceSteps, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector);
 const heads = (el: DepartmentServiceSteps) =>
-  [...el.shadowRoot!.querySelectorAll("thead [data-head]")].map((head) => head.textContent!.trim());
+  [...el.shadowRoot!.querySelectorAll("thead [data-head]")].map((head) =>
+    [...head.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join("")
+      .trim(),
+  );
 const rows = (el: DepartmentServiceSteps) => [...el.shadowRoot!.querySelectorAll("tbody tr")];
 const nameInput = (el: DepartmentServiceSteps, index: number) =>
   rows(el)[index]!.querySelector<Updatable & { value: string }>(
@@ -354,4 +360,24 @@ it("reads in Spanish", async () => {
   } finally {
     setLocale("en");
   }
+});
+
+it("marks Step and Starts as required", async () => {
+  const el = await mount();
+  const marks = [...el.shadowRoot!.querySelectorAll("thead [data-head]")]
+    .slice(0, 2)
+    .map((head) => head.querySelector(".required"));
+  expect(marks.map((mark) => mark?.textContent)).toEqual(["*", "*"]);
+  expect(marks.map((mark) => mark!.getAttribute("aria-hidden"))).toEqual(["true", "true"]);
+});
+
+it("reads a course or step name holding a replacement pattern literally", async () => {
+  const el = await mount({
+    steps: [{ ...STEPS[2]!, name: "Dessert $& $' $`" }],
+    courses: [{ id: "c-mains", name: "Mains $& $' $`" }],
+  });
+  expect(startBox(el, 0).shadowRoot!.querySelector(".value")!.textContent).toBe(
+    "Mains $& $' $` served",
+  );
+  expect(q(el, "wt-row-actions")!.getAttribute("label")).toBe("Actions: Dessert $& $' $`");
 });

@@ -4,6 +4,7 @@ import { departments } from "./schema/service.js";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
+import { MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
@@ -218,7 +219,6 @@ function requireTransferSettings(value: unknown) {
   return { receivingProfileId, destinationDepartmentIds };
 }
 
-const MAX_SERVICE_STEPS = 20;
 const SERVICE_STEP_KEYS = ["id", "name", "start", "courseId", "minutes"];
 
 function requireServiceSteps(value: unknown): ServiceStepInput[] {
