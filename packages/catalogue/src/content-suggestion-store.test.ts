@@ -14,7 +14,7 @@ import {
 } from "./content-suggestion-jobs.js";
 import { discardContentSuggestion, storeSuggestionPage } from "./content-suggestion-store.js";
 import type { SuggestionPage } from "./content-suggestion-types.js";
-import { contentSuggestions } from "./schema/suggestions.js";
+import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 import {
   addOversizedFamily,
   addPlainProducts,
@@ -367,7 +367,7 @@ it("drops a fix to a missing or unentered language, a fix that changes nothing, 
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 5, failed: 0, done: 3 });
 });
 
-it("counts sent items with nothing usable, or not answered, as failed", async () => {
+it("counts sent items with nothing usable as failed", async () => {
   const venue = await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);
   await store(job.id, {
@@ -376,7 +376,7 @@ it("counts sent items with nothing usable, or not answered, as failed", async ()
     nextCursor: null,
     reason: "provider_failed",
     results: [result(ref(venue.bread), { es: "   " })],
-    failed: [ref(venue.wine), "product:unknown"],
+    failed: [ref(venue.wine), ref(venue.cheese), "product:unknown"],
   });
   const [stored] = await app(allJobs);
   expect(stored).toMatchObject({
@@ -738,11 +738,12 @@ it("a later run replaces more than one batch of an item's rows in one store", as
           },
         ),
       );
+  const seeded = [ref(venue.bread), ref(venue.wine), ref(venue.cheese)];
   const one = await runningJob(suite.db);
-  await store(one.id, done(answer(one.sent, "ONE", false)));
+  await store(one.id, done(answer(one.sent, "ONE", false), seeded));
   await app((tx) => recordSuggestionJobReleased(tx, one.id));
   const two = await runningJob(suite.db);
-  await store(two.id, done(answer(two.sent, "TWO", true)));
+  await store(two.id, done(answer(two.sent, "TWO", true), seeded));
   const rows = await app((tx) =>
     tx.select().from(contentSuggestions).where(inArray(contentSuggestions.itemId, ids)),
   );
@@ -929,4 +930,59 @@ it("a page for a job that is not running, or at another cursor, is stale", async
   ).toBe("stale");
   expect(await app(suggestionRows)).toEqual(rows);
   expect(await app(allJobs)).toEqual(completed);
+});
+
+it("a last page that leaves a sent item unaccounted ends the job without a release", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
+  expect(
+    await store(job.id, page(1, null, [result(ref(venue.wine), { ca: "CLIENT-CA Vi" })])),
+  ).toBe("ended");
+  const jobs = await app(allJobs);
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0]!.state).toBe("failed");
+  expect(jobs[0]).toMatchObject({
+    failure: "rejected",
+    released: true,
+    failedRefs: [ref(venue.cheese)],
+    failed: 1,
+    done: 2,
+  });
+  expect(await app(suggestionRows)).toEqual(
+    inOrder([
+      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "en", "CLIENT-EN Bread"),
+      text(venue.wine, "ca", "CLIENT-CA Vi"),
+    ]),
+  );
+  expect(await app(readSuggestionRun)).toMatchObject({
+    state: "failed",
+    code: "cloud.request_invalid",
+  });
+});
+
+it("a last page whose accounted items fall short of Cloud's total ends the job", async () => {
+  await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) =>
+    tx.update(contentSuggestionJobs).set({ total: 4 }).where(eq(contentSuggestionJobs.id, job.id)),
+  );
+  expect(await store(job.id, page(0, null, translateAll(job.sent)))).toBe("ended");
+  expect(await jobRow(job.id)).toMatchObject({ state: "failed", failure: "rejected" });
+});
+
+it("a result for an item the box did not send does not by itself fail the walk", async () => {
+  await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  expect(
+    await store(
+      job.id,
+      page(0, null, [
+        ...translateAll(job.sent),
+        result("product:unknown", { es: "CLIENT-ES Nada" }),
+      ]),
+    ),
+  ).toBe("complete");
+  expect(await jobRow(job.id)).toMatchObject({ state: "done", dropped: 1 });
 });

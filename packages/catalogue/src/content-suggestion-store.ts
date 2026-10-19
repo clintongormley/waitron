@@ -11,7 +11,11 @@ import {
   readSuggestionGaps,
   suggestionRef,
 } from "./content-suggestion-collect.js";
-import { readSuggestionRun, sentInRun } from "./content-suggestion-jobs.js";
+import {
+  readSuggestionRun,
+  recordSuggestionJobEnded,
+  sentInRun,
+} from "./content-suggestion-jobs.js";
 import type {
   ContentSuggestionPage,
   ContentSuggestionView,
@@ -75,13 +79,14 @@ function validFix(fix: Fix, missing: readonly string[], languages: readonly stri
   );
 }
 
+export type PageStored = "stored" | "complete" | "ended" | "stale";
+
 /**
  * Stores one page of a job's results, only at the job's saved position. The last page also finishes
  * the job and, in the same transaction, inserts the run's next job, so a run never has a moment with
- * no active job between two of its jobs.
+ * no active job between two of its jobs. A last page that leaves an item of the job unaccounted for
+ * ends the job failed instead, and Cloud is not told the walk is complete.
  */
-export type PageStored = "stored" | "complete" | "ended" | "stale";
-
 export async function storeSuggestionPage(
   tx: Transaction,
   jobId: string,
@@ -189,13 +194,11 @@ export async function storeSuggestionPage(
     );
   }
   const collectedRefs = [...new Set([...job.collectedRefs, ...answered.keys(), ...failed])];
-  const allFailed = new Set([...job.failedRefs, ...failed]);
+  const failedRefs = [...new Set([...job.failedRefs, ...failed])].sort();
+  const accounted = new Set(collectedRefs);
+  const complete =
+    Object.keys(job.sent).every((key) => accounted.has(key)) && collectedRefs.length === job.total;
   const last = page.nextCursor === null;
-  if (last) {
-    const accounted = new Set(collectedRefs);
-    for (const key of Object.keys(job.sent)) if (!accounted.has(key)) allFailed.add(key);
-  }
-  const failedRefs = [...allFailed].sort();
   const limitReached = page.reason === "limit_reached";
   await tx
     .update(contentSuggestionJobs)
@@ -204,7 +207,7 @@ export async function storeSuggestionPage(
       collectedRefs,
       failedRefs,
       dropped: job.dropped + dropped,
-      ...(last
+      ...(last && complete
         ? {
             state: page.state,
             ...(limitReached ? { failure: "limit" as const } : {}),
@@ -216,6 +219,10 @@ export async function storeSuggestionPage(
     })
     .where(eq(contentSuggestionJobs.id, jobId));
   if (!last) return "stored";
+  if (!complete) {
+    await recordSuggestionJobEnded(tx, jobId, "failed", "rejected", now);
+    return "ended";
+  }
   const sent = await sentInRun(tx, job.runId);
   // The month's spending cap stopped this job, so Cloud would refuse the next one; a next job with
   // no item would be refused too (see buildSuggestionJob).

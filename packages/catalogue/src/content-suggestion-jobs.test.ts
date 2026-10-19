@@ -24,6 +24,7 @@ import {
   allJobs,
   context,
   ref,
+  result,
   runningJob,
   seedSuggestionVenue,
   sortedSent,
@@ -477,4 +478,40 @@ it("opened is set once, and only after the run has finished", async () => {
   await app((tx) => markSuggestionRunOpened(tx, later));
   expect(await app(readSuggestionRun)).toMatchObject({ opened: true });
   expect((await app(allJobs))[0]!.openedAt).toBe(at.toISOString());
+});
+
+it("a job ended after some pages counts what it never received as failed", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) =>
+    storeSuggestionPage(
+      tx,
+      job.id,
+      {
+        state: "partly_done",
+        cursor: 0,
+        nextCursor: 1,
+        results: [result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" })],
+        failed: [ref(venue.wine)],
+      },
+      context,
+      at,
+    ),
+  );
+  await app((tx) => recordSuggestionJobEnded(tx, job.id, "expired", null, at));
+  const [ended] = await app(allJobs);
+  expect(ended!.failed).toBe(2);
+  expect(ended).toMatchObject({
+    failedRefs: [ref(venue.cheese), ref(venue.wine)].sort(),
+    done: 1,
+  });
+  expect(await app(readSuggestionRun)).toMatchObject({ state: "expired", failed: 2 });
+});
+
+it("a job ended before any page keeps its counts", async () => {
+  await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) => recordSuggestionJobProgress(tx, job.id, { done: 1, failed: 1 }));
+  await app((tx) => recordSuggestionJobEnded(tx, job.id, "expired", null, at));
+  expect((await app(allJobs))[0]).toMatchObject({ done: 1, failed: 1, failedRefs: [] });
 });
