@@ -2245,6 +2245,12 @@ build after A757's board if it has been decided, else name the table alone.
 
 ## A669. An allergy at the table
 
+The [combined send/till plan](../superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
+keeps the server refusal and every till prompt in one working PR. The build remains. Recheck other
+lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
+change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
+with the kitchen. New Spanish copy still requires the owner's answer before feature landing.
+
 - **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** At a table's first Send the waiter answers "Any allergies at this table?"; for
   Allergies, who (free text), what they avoid and a note, then ticks the dishes that guest eats. A
   clash turns red and can still be sent. Kitchen paper prints an allergy block under the guest's
