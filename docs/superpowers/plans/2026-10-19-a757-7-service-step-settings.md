@@ -62,7 +62,7 @@ Decided section's Q29, Q30 and Q31. Picture
     `Whole minutes, 0 to 120.`; the repeating start with 0 → `At least 1 minute.`; first step
     "after the step before" → `The first step has no step before it.`; a course deleted while the
     dialog was open → `That course was deleted. Choose another start.`; a step deleted or replaced
-    on another screen while the dialog was open → `A step was changed elsewhere. Cancel to see the latest.`;
+    on another screen while the dialog was open → `A step was changed elsewhere. Cancel and open it again to see the latest.`;
     the course delete window, for a step that becomes its department's first and started "after
     the step before" (Decision 3) → `1 service step now starts When seated.` /
     `{count} service steps now start When seated.`;
@@ -71,7 +71,7 @@ Decided section's Q29, Q30 and Q31. Picture
     `Se repite tras el último pedido`; button `Añadir paso`; empty `Sin pasos de servicio.`;
     messages `Minutos enteros, de 0 a 120.`, `Al menos 1 minuto.`,
     `El primer paso no tiene paso anterior.`, `Ese curso se ha eliminado. Elige otro inicio.`,
-    `Un paso se ha cambiado en otra pantalla. Cancela para ver lo último.`,
+    `Un paso se ha cambiado en otra pantalla. Cancela y vuelve a abrirlo para ver lo último.`,
     `1 paso de servicio pasa a empezar Al sentarse.` /
     `{count} pasos de servicio pasan a empezar Al sentarse.`
     ("curso" is the dashboard's Spanish word for a course: `"kitchen.delete_course": "Eliminar curso"`,
@@ -378,8 +378,9 @@ Decided section's Q29, Q30 and Q31. Picture
    settings with `department_transfer.settings_invalid` (`packages/venue-service/src/department-transfers.ts:135,149`,
    mapped in the dialog's `fieldRefusal`, `department-settings.ts:459-468`) because
    `setDepartmentTransferSettings` is also called by the transfers route of its own
-   (`routes.ts:1150`), and every one of its refusals is a database fact. The steps have one
-   writer, and the split above gives the dialog what it needs: a shape refusal it cannot fix by
+   (`routes.ts:1150`), and every refusal but a department naming itself as a destination needs the
+   database (`destinationId === departmentId`, `department-transfers.ts:148`, is read from the
+   request). `saveServiceSteps` has one caller, and the split above gives the dialog what it needs: a shape refusal it cannot fix by
    editing (the dialog checks the same rules first), and two facts that each need their own
    message. `scripts/errors-reachable.test.ts` keeps holding (venue-service's `errors.ts` stays
    reachable from its barrel); `scripts/alert-codes.test.ts` is about recorded incident codes, and
@@ -418,14 +419,19 @@ Decided section's Q29, Q30 and Q31. Picture
       component may name its events plainly, CLAUDE.md §3); the dialog holds the steps in its one
       draft, so the existing draft scope (`draftScopeFor`, `:320-334`), Save's quiet state
       (`saveActionState`, `:484`) and the leave guard cover them with no new scope.
-    - **The list is a `<table>` whose `<tbody>` holds one `<tr>` per step, in draft order, keyed by
-      the row's draft key** (a saved step's id, or a key made when the row is added): the controller
-      requires it — "The tbody renders one `<tr>` per id in this order — the invariant the pointer
+    - **The list is a `<table>` whose `<tbody>` holds one `<tr>` per step, in draft order; the
+      model's `order()` returns the rows' draft keys** (a saved step's id, or a key made when the row
+      is added) and each handle is `data-test="drag-<key>"` (the controller finds rows by position
+      and handles by that attribute, `packages/ui/src/reorder-table.ts:253,268,396-397`): the
+      controller requires the one-row-per-id order — "The tbody renders one `<tr>` per id in this order — the invariant the pointer
       geometry relies on" (`ReorderModel.order`, `packages/ui/src/reorder-table.ts:105-108`) — and
       `ReorderController.tableStyles` styles that table (`:199`). Each row has three cells: the
-      handle, one cell holding the name, start and minutes in a wrapping flex box, and the menu. At
-      390 px the box wraps inside its cell — the name on its own line, the start and minutes on the
-      next — so the row stays one `<tr>` and nothing scrolls sideways.
+      handle, one cell holding the name, start and minutes in a wrapping flex box, and the menu.
+      **Required at 390 px, and checked by Task 9:** the box wraps inside its cell — the name on its
+      own line, the start and minutes on the next — so the row stays one `<tr>` and nothing scrolls
+      sideways. `tableStyles` gives a `.table-wrap` `overflow-x: auto` (`reorder-table.ts:197-202`),
+      so an over-wide row would not break the page; it would hide as a quiet sideways scroll inside
+      the list, which is why Task 9 measures the list as well as the page.
     - **Rows, as the Courses page draws them:** a drag handle driven by `ReorderController` from
       `@waitron/ui` (keyboard and pointer; the Courses page wires it at
       `apps/dashboard/src/widgets/course-list.ts:143-157`, and the in-form precedent that reorders a
@@ -459,8 +465,10 @@ Decided section's Q29, Q30 and Q31. Picture
       `serviceSteps.<index>.id` marks the list with the same words. `course.not_found` marks the
       start of every submitted row naming that `courseId` with `That course was deleted. Choose
       another start.` — only this code shows that message. `service_step.not_found` marks the list
-      with `A step was changed elsewhere. Cancel to see the latest.` (Cancel restores the opened
-      copy, and the clean dialog then follows the model). Service is shown and the first marked
+      with `A step was changed elsewhere. Cancel and open it again to see the latest.` (Cancel
+      closes the window: `department-settings`' cancel emits `cancelled`, `department-settings.ts:527`,
+      and its only host, `department-edit-dialog.ts:111`, closes the modal on it, `:132-135`;
+      opening the department again shows the latest steps). Service is shown and the first marked
       field focused, as `fieldRefusal` and `showFirstInvalid` do today (`:437-473`, `:227`). A
       refusal never disables Save by itself.
     - **After a save**, the model's copy (with the new rows' ids) replaces the clean draft through
@@ -597,7 +605,7 @@ unchanged; the list it compares against grows. **Fixtures grown:** none.
 ### Task 2: the server reads and saves a department's steps
 
 **Files:**
-- Create: `packages/venue-service/src/service-steps.ts`, `packages/venue-service/src/service-steps.test.ts`
+- Create: `packages/venue-service/src/service-steps.ts` (it throws codes, so it imports `./errors.js`, as every file that throws a code imports its registry, CLAUDE.md §3), `packages/venue-service/src/service-steps.test.ts`
 - Modify: `packages/venue-service/src/index.ts` (export the new functions and types)
 - Modify: `packages/venue-service/src/operations.ts:746-783` (`DepartmentEditInput.serviceSteps?`;
   `saveDepartmentEditSettings` calls `saveServiceSteps` after `updateDepartment`)
@@ -877,7 +885,11 @@ it): `apps/server/src/management-api.service-delete.test.ts:187` — the departm
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/service-step-draft.test.ts src/dashboard/department-settings.test.ts src/dashboard/client.test.ts`
   (browser runs; check memory first).
-- [ ] **Step 3: Implement**, update the fixtures.
+- [ ] **Step 3: Implement**, update the fixtures. After a successful save the dialog keeps the
+  trimmed **draft** (`DepartmentDraft`, steps as `ServiceStepDraft[]`) as its new baseline and
+  commits that to the scope — not the request body, which may lack `serviceSteps`. Today the
+  baseline is `copy(submitted)`, the body (`department-settings.ts:500-507`); with steps the two
+  differ in shape, so this line changes.
 - [ ] **Step 4: Run the whole venue-service dashboard and the dashboard app.**
   `pnpm --filter @waitron/venue-service exec vitest run --project browser` and
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.receipt-tab.test.ts`.
@@ -938,8 +950,11 @@ implementer continues from it.
   - `"drags a step into place"` — pointer, as `option-list-form`'s tests drive the controller.
   - `"shows each error under its own field"` — `errors` for a name and a minutes field;
     `aria-invalid` on both; `listError` under the list.
-  - `"draws one table row per step, in order, keyed by the step's key"` — the `<tbody>`'s `<tr>`s
-    carry the keys in `steps` order (what the controller reads).
+  - `"draws one table row and one handle per step, in order"` — the `<tbody tr>` count equals
+    `steps.length`, and the handles' `data-test="drag-<key>"` values are in `steps` order. The
+    controller reads rows by position (`querySelectorAll("tbody tr")`, `packages/ui/src/reorder-table.ts:396-397`)
+    and finds a handle again by `drag-<id>` (`:253`, `:268`); it reads no key from a `<tr>`, so
+    `order()` returns the rows' keys and each handle carries its row's key.
   - `"read-only: no handles, no menus, no Add step, fields disabled"`.
   - `"reads in Spanish"` — `Pasos de servicio`, `Paso`, `Empieza`, `Al servir Principales`,
     `Añadir paso`; restore the language after (CLAUDE.md §4).
@@ -951,9 +966,10 @@ implementer continues from it.
   `<tbody>`, in `steps` order — `ReorderController` requires it (`packages/ui/src/reorder-table.ts:105-108`)
   — styled with `ReorderController.styles` and `.tableStyles` as `course-list.ts` is (`:50-53`).
   Three cells per row: handle; one cell whose flex box (`flex-wrap: wrap`) holds the name, start and
-  minutes; the row menu. At 390 px the box wraps inside its cell — the name on its own line, the
-  start and minutes on the next — so the row stays one `<tr>` and nothing scrolls sideways; Task 9
-  looks. A new row's `key` comes from `crypto.randomUUID()`. Use `wt-input`, `wt-combobox`,
+  minutes; the row menu. Required at 390 px: the box wraps inside its cell — the name on its own
+  line, the start and minutes on the next — so the row stays one `<tr>` and nothing scrolls
+  sideways, in the page or inside a `.table-wrap` (whose `overflow-x: auto` would otherwise hide an
+  over-wide row, `reorder-table.ts:197-202`); Task 9 checks it. A new row's `key` comes from `crypto.randomUUID()`. Use `wt-input`, `wt-combobox`,
   `wt-row-actions`, `wt-button` — no native `<select>`/`<input>` (`scripts/native-form-fields.test.ts`);
   every colour and space from a `--wt-*` token.
 - [ ] **Step 4: Run Step 2's command** — PASS; then `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`.
@@ -998,9 +1014,9 @@ implementer continues from it.
   - `"a course deleted meanwhile is named under every step that starts from it"` — PUT 404
     `course.not_found` `{ courseId: c1 }` → `That course was deleted. Choose another start.` under
     each submitted row naming c1, and nowhere else.
-  - `"a step another manager deleted says so, and Cancel brings back the latest"` — PUT 404
-    `service_step.not_found` → `A step was changed elsewhere. Cancel to see the latest.` under the
-    list; Cancel → the model's steps and a quiet Save.
+  - `"a step another manager deleted says so, and Cancel emits cancelled"` — PUT 404
+    `service_step.not_found` → `A step was changed elsewhere. Cancel and open it again to see the latest.`
+    under the list; Cancel → the dialog emits `cancelled` (its host closes the window, Decision 10).
   - `"the read-only dialog shows the steps without handles, menus or Add step"`.
   - `"reads in Spanish"` — `Pasos de servicio` under `Estados de la mesa`.
   In `department-settings.unsaved.test.ts`:
@@ -1073,7 +1089,9 @@ with `git grep -n "Table states" docs/developers/design-system.md`),
   `steps-<width>-<theme>-<state>.png`. Read `window.innerWidth` and record it.
 - [ ] **Step 2:** Look at every picture beside picture 10. Check: "Service steps" sits under the
   Needs clearing block inside Table states; the rows read as picture 10's do; at 390 nothing scrolls
-  sideways (`document.documentElement.scrollWidth` equals the viewport width) and each row's
+  sideways — `document.documentElement.scrollWidth` equals the viewport width, and the list's own
+  scrolling box (its `.table-wrap`, if it has one, else its `<table>`'s parent) has `scrollWidth`
+  no greater than its `clientWidth`, since `overflow-x: auto` there would hide an over-wide row and each row's
   controls stay reachable; handles, menus, the unit and the error text are readable in dark. Write
   per-picture notes and any concern into the report. A defect found is fixed with a failing test
   first, in the component's own test file, and committed.
