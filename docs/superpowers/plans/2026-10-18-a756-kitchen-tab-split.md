@@ -636,7 +636,9 @@ departments' tables — whose reminder applies. No venue reset expected; confirm
 **2026-10-19 (A757 slice 1):** the clearing switch went on `departments` (`needs_clearing`), not
 `department_sale_policies` — see `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`,
 Decision 1. Put `release_reminder_minutes` beside it as an ADD COLUMN with no CHECK (a CHECK makes
-drizzle rebuild `departments`, which other tables' foreign keys point at), range-checked at the
+drizzle rebuild the table, as it rebuilt `service_settings` in
+`packages/venue-service/drizzle/0006_kitchen_ticket_grouping_check.sql`, and other tables' foreign
+keys point at `departments`), range-checked at the
 route, or say why another table.
 
 **PR 5 — Late flags on each station. Waits for A773-1:** `working-order.ts` imports the timing

@@ -2092,7 +2092,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for A757 slices 3–5.
+  settle the two suggestions in the detail. Waits for the whole of A757 (slices 2–8 are left).
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner

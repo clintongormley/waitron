@@ -1156,6 +1156,9 @@ help about anything you want very quickly."
   overflows `wt-modal`'s 12 px side padding at phone width (the body scrolls sideways: the 390 px
   case in `packages/ui/src/components/wt-help-tooltip.slots.test.ts` shows it with the 32 px
   control) and reaches 4 px above `wt-disclosure`'s 12 px top padding.
+- **Slice 4 also carries the help-mode key of table states** (A893): "It feels like we need a key
+  of the different states when we click the ?" (owner, 2026-10-18, Q42 notes). With help on, the
+  till's floor opens a key of every A757 table state, following whatever look A893 settles.
 - **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
   hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
   place for the longer explanation. Decided with the design (owner, 2026-10-18; design §7): the

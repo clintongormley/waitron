@@ -1299,12 +1299,12 @@ steps, and six new owner questions, Q29–Q34](../superpowers/specs/2026-10-17-a
 with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-17; slice 1 is on
 `feat/a757-1-clearing-per-department`.
 
-Today Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) holds two
-things:
+Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
-- **Needs clearing, on or off for the whole venue** (`service_settings.clearing_workflow`,
-  `packages/venue-service/src/schema/settings.ts`). When on, a table a party leaves shows "Needs
-  clearing" on the till's floor until someone taps "Mark cleared".
+- **Needs clearing** — until A757 slice 1 (2026-10-19), on or off for the whole venue
+  (`service_settings.clearing_workflow`). When on, a table a party leaves shows "Needs clearing" on
+  the till's floor until someone taps "Mark cleared". Slice 1 moved the switch to each department,
+  in the department dialog's Service tab under Table states (`departments.needs_clearing`).
 - **Statuses the venue makes up** (`table_service_statuses`,
   `packages/db/src/schema/table-service-statuses.ts`): a label and a colour. A waiter puts one on a
   table from the till's table screen (`apps/till/src/screens/till-table-order-screen.ts:2558`); a
@@ -1312,9 +1312,7 @@ things:
   beside the lifecycle the till works out itself — Free, Reserved, Seated, Needs clearing — and
   change none of it.
 
-Since A757 slice 1 (2026-10-19), Needs clearing is switched per department, in the department
-dialog's Service tab under Table states; the Tables tab holds only the venue's own statuses, which
-slice 2 retires.
+The Tables tab now holds only the venue's own statuses, which slice 2 retires.
 
 Decided (owner, 2026-10-16):
 
@@ -1352,9 +1350,9 @@ seated, joined, paid and taken off. Three additions the owner asked for:
 
 ## A893. Owner review of every table state and its look, after A757 lands
 
-**A893 (owner, 2026-10-18).** Waits for A757 slices 3–5, which draw the states; the service-step
-row needs slice 8, and Waiter called waits for A508. Once they land, show the owner, on the running
-till:
+**A893 (owner, 2026-10-18).** Waits for the whole of A757 (the owner: “after A757 is built”);
+Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the owner, on the
+running till:
 
 - every row of [A757 §4](../superpowers/specs/2026-10-17-a757-table-states-design.md#4-one-order-of-precedence),
   Forgotten through Free, on the floor map and on the list card, in light and dark, at 390 and
