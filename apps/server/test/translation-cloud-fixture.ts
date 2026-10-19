@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import type { SavedCloudState } from "../src/cloud-client.js";
 import { type TranslationAction, translationEnvelope } from "../src/cloud-translation.js";
 import { installationFixture, type ServiceState } from "./cloud-installation-fixture.js";
@@ -40,7 +41,23 @@ export interface FakeJob {
   results: FakeResult[] | null;
   reason?: "limit_reached" | "provider_failed" | "provider_unavailable" | "consent_required";
 }
-type Answer = (status: number, body: unknown) => void;
+export interface FakePage {
+  version: 1;
+  jobId: string;
+  state: "done" | "partly_done";
+  results: FakeResult[];
+  failed: string[];
+  nextCursor: number | null;
+}
+export const PAGE_BYTES = 16_777_216;
+type Answer = (status: number, body: unknown, headers?: Record<string, string>) => void;
+type Call = {
+  action: string;
+  operationId: string;
+  at: number;
+  cursor?: unknown;
+  replyBytes?: number;
+};
 
 const ACTIONS: readonly string[] = [
   "translation-submit",
@@ -109,18 +126,22 @@ function fingerprintOf(signedBody: string): { jobSha256: string; jobBytes: numbe
   return { jobSha256: v.jobSha256, jobBytes: v.jobBytes };
 }
 
-function jobIdIn(signedBody: string): string | null {
+/** Collect alone may sign a `cursor`, of any JSON value: its value is checked after the job lookup. */
+function jobIdIn(signedBody: string, action: string): { jobId: string; cursor: unknown } | null {
   let v: unknown;
   try {
     v = JSON.parse(signedBody);
   } catch {
     return null;
   }
-  return keysAre(v, ["version", "jobId"]) &&
-    typeof v.jobId === "string" &&
-    UUID.test(v.jobId) &&
-    signedBody === JSON.stringify({ version: 1, jobId: v.jobId })
-    ? v.jobId
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const { jobId, cursor } = v as { jobId?: unknown; cursor?: unknown };
+  if (typeof jobId !== "string" || !UUID.test(jobId)) return null;
+  if (signedBody === JSON.stringify({ version: 1, jobId })) return { jobId, cursor: 0 };
+  return action === "translation-collect" &&
+    keysAre(v, ["version", "jobId", "cursor"]) &&
+    signedBody === JSON.stringify({ version: 1, jobId, cursor })
+    ? { jobId, cursor }
     : null;
 }
 
@@ -225,6 +246,11 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
  * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
  * - a language tag matches `[a-z]{2,3}` with an optional `-` and two capitals;
  * - `expire()` expires a job in any state, a `collected` one included.
+ * Where this fake differs from Cloud:
+ * - `pageItems(n)` caps a collect page at `n` entries, which Cloud does not; the byte budget
+ *   (`pageBytes`) is Cloud's rule;
+ * - a signed body must be spelled exactly as `JSON.stringify` writes it, keys in the box's order;
+ *   Cloud parses it and sorts the keys.
  * A `translator` answer is returned as written, not limited to `missing`: the contract says `names`
  * holds only the item's `missing` languages, and the fake lets a test break that so the box's
  * dropping of extra names can be tested.
@@ -232,7 +258,7 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
 export async function translationCloudFixture(options: { cloudBeforeVersion2?: boolean } = {}) {
   const jobs = new Map<string, FakeJob>();
   const byOperation = new Map<string, FakeJob>();
-  const calls: { action: string; operationId: string; at: number }[] = [];
+  const calls: Call[] = [];
   const submissions: { operationId: string; body: string }[] = [];
   const lost = new Set<string>();
   const stalls = new Map<string, { reach: () => void; released: Promise<void> }>();
@@ -248,6 +274,10 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
   let proofRefused = false;
   let override: Record<string, unknown> = {};
   let translate: (item: FakeItem) => Omit<FakeResult, "ref"> = defaultTranslator;
+  let budget = PAGE_BYTES;
+  let itemsPerPage: number | null = null;
+  let rewrite: ((page: FakePage, cursor: number) => FakePage | string) | null = null;
+  let gzipping = false;
 
   function leaseIssued(lease: unknown): boolean {
     for (const reply of base.replies.values()) {
@@ -270,7 +300,8 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
   ): Promise<void> {
     const action = String(values[2]);
     const operationId = String(values[4]);
-    calls.push({ action, operationId, at: Date.now() });
+    const call: Call = { action, operationId, at: Date.now() };
+    calls.push(call);
     const stalled = stalls.get(action);
     if (stalled) {
       stalls.delete(action);
@@ -281,14 +312,21 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
       req.socket.destroy();
       return;
     }
-    const answer: Answer = (status, body) => {
+    const send = (status: number, body: string, headers: Record<string, string> = {}) => {
       if (lost.delete(action)) {
         req.socket.destroy();
         return;
       }
-      res.writeHead(status, { "content-type": "application/json" });
-      res.end(JSON.stringify(body));
+      call.replyBytes = Buffer.byteLength(body);
+      if (gzipping && status === 200) {
+        res.writeHead(status, { "content-type": "application/json", "content-encoding": "gzip" });
+        res.end(gzipSync(body));
+        return;
+      }
+      res.writeHead(status, { "content-type": "application/json", ...headers });
+      res.end(body);
     };
+    const answer: Answer = (status, body, headers) => send(status, JSON.stringify(body), headers);
     const registration = (saved.view as { registration?: { installationId?: unknown } } | undefined)
       ?.registration;
     const issuedAt = values[5];
@@ -312,13 +350,16 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
       return answer(401, { error: "invalid_proof" });
     if (base.isRevoked()) return answer(403, { error: "revoked" });
     if (submitting) return submit(String(sent.body), signedBody, operationId, answer);
-    const jobId = jobIdIn(signedBody);
-    if (!jobId) return answer(400, { error: "invalid_request" });
+    const reference = jobIdIn(signedBody, action);
+    if (!reference) return answer(400, { error: "invalid_request" });
     if (serviceState !== "ready") return answer(403, { error: "permission_denied" });
-    const job = jobs.get(jobId);
+    const job = jobs.get(reference.jobId);
     if (!job) return answer(404, { error: "translation_job_not_found" });
     if (action === "translation-status") return status(job, answer);
-    if (action === "translation-collect") return collect(job, answer);
+    if (action === "translation-collect") {
+      call.cursor = reference.cursor;
+      return collect(job, reference.cursor, answer, send);
+    }
     return release(job, answer);
   }
 
@@ -419,18 +460,66 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
     });
   }
 
-  function collect(j: FakeJob, answer: Answer) {
-    if (j.state === "queued" || j.state === "running" || j.state === "failed")
-      return answer(409, { error: "translation_not_ready" });
+  function collect(
+    j: FakeJob,
+    cursor: unknown,
+    answer: Answer,
+    send: (status: number, body: string) => void,
+  ) {
+    if (
+      typeof cursor !== "number" ||
+      !Number.isSafeInteger(cursor) ||
+      cursor < 0 ||
+      cursor >= j.total
+    )
+      return answer(400, { error: "invalid_request" });
     if (j.state === "collected" || j.state === "expired")
       return answer(410, { error: "translation_expired" });
-    answer(200, {
+    if (j.state !== "done" && j.state !== "partly_done")
+      return answer(409, { error: "translation_not_ready" });
+    const page = pageAt(j, j.state, cursor);
+    // Cloud's plain `Error` when not one item fits becomes this (`publicError`).
+    if (!page) return answer(503, { error: "temporarily_unavailable" }, { "retry-after": "1" });
+    const reply = rewrite ? rewrite(page, cursor) : page;
+    if (typeof reply === "string") return send(200, reply);
+    answer(200, reply);
+  }
+
+  /** As Cloud's `collectPage`: the most items that fit, each measured with its own `nextCursor`. */
+  function pageAt(j: FakeJob, state: FakePage["state"], cursor: number): FakePage | null {
+    const refs = j.job!.items.filter((i) => i.missing.length > 0).map((i) => i.ref);
+    const answered = new Map(j.results!.map((r) => [r.ref, r]));
+    let itemBytes = 0;
+    let results = 0;
+    let failed = 0;
+    let end = cursor;
+    for (let i = cursor; i < refs.length; i++) {
+      if (itemsPerPage !== null && i - cursor >= itemsPerPage) break;
+      const result = answered.get(refs[i]!);
+      itemBytes += result
+        ? Buffer.byteLength(JSON.stringify(result)) + (results++ ? 1 : 0)
+        : Buffer.byteLength(JSON.stringify(refs[i])) + (failed++ ? 1 : 0);
+      if (itemBytes > budget) break;
+      const envelope: FakePage = {
+        version: 1,
+        jobId: j.jobId,
+        state,
+        results: [],
+        failed: [],
+        nextCursor: i + 1 === refs.length ? null : i + 1,
+      };
+      if (Buffer.byteLength(JSON.stringify(envelope)) + itemBytes <= budget) end = i + 1;
+    }
+    if (end === cursor) return null;
+    const page = refs.slice(cursor, end);
+    return {
       version: 1,
       jobId: j.jobId,
-      state: j.state,
-      results: j.results,
-      failed: j.failed,
-    });
+      state,
+      results: page.flatMap((ref) => answered.get(ref) ?? []),
+      failed: page.filter((ref) => !answered.has(ref)),
+      nextCursor: end === refs.length ? null : end,
+    };
   }
 
   function release(j: FakeJob, answer: Answer) {
@@ -468,6 +557,7 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
     action: TranslationAction,
     input: {
       signedBody: string;
+      onResponse?: (response: Response) => void;
       body?: string;
       operationId?: string;
       extra?: Record<string, unknown>;
@@ -495,6 +585,7 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
         ...input.extra,
       }),
     });
+    input.onResponse?.(response);
     const raw = await response.text();
     let json: unknown;
     try {
@@ -561,6 +652,18 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
     },
     translator: (fn: (item: FakeItem) => Omit<FakeResult, "ref">) => {
       translate = fn;
+    },
+    pageBytes: (n: number) => {
+      budget = n;
+    },
+    pageItems: (n: number | null) => {
+      itemsPerPage = n;
+    },
+    collectReply: (fn: ((page: FakePage, cursor: number) => FakePage | string) | null) => {
+      rewrite = fn;
+    },
+    gzipReplies: (on: boolean) => {
+      gzipping = on;
     },
   };
 }

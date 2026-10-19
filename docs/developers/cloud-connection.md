@@ -108,20 +108,38 @@ venue's style, and the venue's languages and country. It sends no prices, no peo
 A runner on the primary (`apps/server/src/content-suggestion-runner.ts`) makes every call to
 Cloud. When someone presses **Translate all**, the server records a job in
 `content_suggestion_jobs` and wakes the runner. The runner submits it, and while Cloud is still working it asks for
-progress again five seconds after each answer. Once Cloud has finished, the runner collects the
-results and stores them as suggestions. Then it releases the job, so Cloud deletes its copy at
-once; it releases a job Cloud reports as failed too. A job holds at most 1,000 items, context
-items included, and 1 MiB, so a venue missing more names than that is sent as several jobs in turn: storing one job's results
-records the next, unless Cloud stopped that job at the venue's monthly spending cap.
+progress again five seconds after each answer. Once Cloud has finished, the runner fetches the
+results one page at a time, each reply at most 16 MiB (`COLLECT_REPLY_BYTES` in
+`apps/server/src/cloud-translation.ts`), asking for each page by its position in the job's list
+of items. It stores each page's suggestions in one transaction with the position of the next
+page (`collect_cursor`) and the updated list of every item the job has accounted for so far
+(`collected_refs`). The last page
+finishes the job only if every item the box sent has come back, as a suggestion or as one Cloud
+could not do, and the number accounted for equals Cloud's own count of the job's items; otherwise the job ends failed, shown as
+`cloud.request_invalid`, and Cloud is never told the walk is complete. A later step of the runner
+releases a finished job, so Cloud deletes its copy at once; it releases a job Cloud reports as
+failed too. A job holds at most 1,000 items, context
+items included, and 1 MiB, so a venue missing more names than that is sent as several jobs in turn: storing one job's last page
+records the next, unless that page left an item unaccounted for, accounted for a number of items
+other than Cloud's total, or Cloud stopped the job at the venue's monthly spending cap; either way
+the run stops there.
 
 A lost reply or a restart resumes from the job's row. The row keeps the job's body until Cloud
 accepts it, and the row's own id is the operation ID, so a retried submit signs the same
-fingerprint with the same operation ID and Cloud answers with the job it already made.
+fingerprint with the same operation ID and Cloud answers with the job it already made. A lost
+page, or a restart part-way through the pages, fetches again from the saved position.
+
+A job that ends after at least one of its items has been accounted for, but before its last page,
+because Cloud answers that it has expired or that it has no such job, because the box's own
+24-hour clock runs out, or because the service is no longer on, keeps the suggestions already
+stored. Every item not yet accounted for is counted as one that could not be done, so when the
+alerts bell's Translate all notice appears, it says how many could not be done. No release is sent for such a job.
 
 The box also ends a job itself, without asking Cloud. It does so when the job is 24 hours old,
 counted from when the box recorded it; when Cloud's last configuration reply no longer lists the
 service as ready, or the connection is revoked; when Cloud refuses a call as a request it will
-never accept; and when Cloud says the job has expired. A job the box ends itself is marked
+never accept; when Cloud says the job has expired; and when its last page leaves an item
+unaccounted for, or accounts for a number of items other than Cloud's total. A job the box ends itself is marked
 released without a call to Cloud. Unless Cloud had already expired it, Cloud may still hold it
 until its own deletion: 24 hours
 after the job finished, or 24 hours after it was submitted if it never finished (the contract's

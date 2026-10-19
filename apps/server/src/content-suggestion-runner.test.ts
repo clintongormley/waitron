@@ -17,8 +17,11 @@ import {
 } from "@waitron/catalogue";
 import { addOversizedFamily } from "@waitron/catalogue/test/suggestion-fixture.js";
 import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { translationCloudFixture, type FakeJobBody } from "../test/translation-cloud-fixture.js";
+import { contentSuggestionsAlertSource } from "./alert-sources.js";
 import { createCloudConnection } from "./cloud-client.js";
+import { refusalOf, type CollectedPage } from "./cloud-translation.js";
 import {
   createContentSuggestionRunner,
   JOB_LIFETIME_MS,
@@ -211,6 +214,388 @@ it("a restarted box resumes polling the job it already submitted", async () => {
     await f.close();
   }
 });
+
+const cursors = (f: Fake) => f.calls.filter((c) => c.action === COLLECT).map((c) => c.cursor);
+const job = () => inTx(async (tx) => (await tx.select().from(contentSuggestionJobs))[0]!);
+
+/** Runner deps whose collect goes through `on`, which decides whether and how the fake is called. */
+function lossy(
+  f: Fake,
+  on: (cursor: number, call: () => Promise<CollectedPage>) => Promise<CollectedPage>,
+): ContentSuggestionRunnerDeps {
+  return deps(f, {
+    connection: {
+      ...f.client,
+      translation: {
+        ...f.client.translation,
+        collect: (id, cursor, signal) =>
+          on(cursor, () => f.client.translation.collect(id, cursor, signal)),
+      },
+    },
+  });
+}
+
+const THREE = ["STAFF Bread", "STAFF Oil", "STAFF Wine"];
+
+it("collects every page, then stores the job as done, then releases it", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    await inTx((tx) => startSuggestionRun(tx, context));
+
+    await runToIdle(createContentSuggestionRunner(deps(f)));
+    expect(actions(f)).toEqual([SUBMIT, STATUS, STATUS, COLLECT, COLLECT, COLLECT, RELEASE]);
+    expect(cursors(f)).toEqual([0, 1, 2]);
+    expect(await suggestions()).toHaveLength(3);
+    expect(await runView()).toMatchObject({ state: "done", done: 3 });
+  } finally {
+    await f.close();
+  }
+});
+
+it("never sends release before the last page is stored", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(
+      lossy(f, (cursor, call) =>
+        cursor === 2 ? Promise.reject(new AppError("cloud.unavailable", {})) : call(),
+      ),
+    );
+
+    expect(await runner.step()).toBe("again");
+    expect(await runner.step()).toBe("wait");
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(actions(f)).not.toContain(RELEASE);
+    expect(await job()).toMatchObject({ state: "running", collectCursor: 2 });
+    expect(await runView()).toMatchObject({ state: "running" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("a lost page reply is fetched again at the same position, and nothing is counted twice", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    let lost = false;
+    const runner = createContentSuggestionRunner(
+      lossy(f, async (cursor, call) => {
+        const page = await call();
+        if (cursor === 1 && !lost) {
+          lost = true;
+          throw new AppError("cloud.unavailable", {});
+        }
+        return page;
+      }),
+    );
+
+    expect(await runner.step()).toBe("again");
+    expect(await runner.step()).toBe("wait");
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    await runToIdle(runner);
+    expect(cursors(f)).toEqual([0, 1, 1, 2]);
+    expect(await job()).toMatchObject({ dropped: 0, done: 3 });
+  } finally {
+    await f.close();
+  }
+});
+
+it("a restarted box resumes from the saved position", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const first = createContentSuggestionRunner(
+      lossy(f, (cursor, call) =>
+        cursor === 1 ? Promise.reject(new TypeError("fetch failed")) : call(),
+      ),
+    );
+    expect(await first.step()).toBe("again");
+    expect(await first.step()).toBe("wait");
+    await expect(first.step()).rejects.toBeInstanceOf(TypeError);
+    const before = cursors(f).length;
+
+    const restarted = createContentSuggestionRunner(
+      deps(f, { connection: createCloudConnection(f.options) }),
+    );
+    await runToIdle(restarted);
+    expect(cursors(f).slice(before)[0]).toBe(1);
+    expect(await suggestions()).toHaveLength(3);
+    expect(actions(f).filter((a) => a === RELEASE)).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+});
+
+it("a refused page (429) resumes at the saved position after back-off", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    let refused = false;
+    const runner = createContentSuggestionRunner(
+      lossy(f, (cursor, call) => {
+        if (cursor === 1 && !refused) {
+          refused = true;
+          return Promise.reject(refusalOf(429, { error: "rate_limited" }));
+        }
+        return call();
+      }),
+    );
+    expect(await runner.step()).toBe("again");
+    expect(await runner.step()).toBe("wait");
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    const before = cursors(f).length;
+
+    await runner.step();
+    expect(cursors(f).slice(before)[0]).toBe(1);
+    await runToIdle(runner);
+    expect(actions(f).filter((a) => a === RELEASE)).toHaveLength(1);
+    expect(actions(f).indexOf(RELEASE)).toBeGreaterThan(actions(f).lastIndexOf(COLLECT));
+  } finally {
+    await f.close();
+  }
+});
+
+it("the status reply's limit reason reaches the last page of a multi-page walk", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    f.capStop(true);
+    await inTx((tx) => startSuggestionRun(tx, context));
+
+    await runToIdle(createContentSuggestionRunner(deps(f)));
+    expect(cursors(f)).toEqual([0, 1, 2]);
+    expect(await job()).toMatchObject({ state: "partly_done", failure: "limit" });
+    expect(await runView()).toMatchObject({
+      state: "partly_done",
+      code: "content.suggestion_limit_reached",
+      fits: 0,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+/**
+ * Stores page 0 of three, then stops the step on a failed collect at cursor 1. `beforeResume` runs
+ * once, just before the next collect at cursor 1 reaches the fake.
+ */
+async function stopBetweenPages(f: Fake, beforeResume?: () => void) {
+  await venue(THREE);
+  f.pageItems(1);
+  await inTx((tx) => startSuggestionRun(tx, context));
+  let failedOnce = false;
+  let resumed = false;
+  const runner = createContentSuggestionRunner(
+    lossy(f, (cursor, call) => {
+      if (cursor === 1 && !failedOnce) {
+        failedOnce = true;
+        return Promise.reject(new AppError("cloud.unavailable", {}));
+      }
+      if (cursor === 1 && beforeResume && !resumed) {
+        resumed = true;
+        beforeResume();
+      }
+      return call();
+    }),
+  );
+  expect(await runner.step()).toBe("again");
+  expect(await runner.step()).toBe("wait");
+  await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect(await job()).toMatchObject({ state: "running", collectCursor: 1 });
+  return runner;
+}
+
+const notices = () => inTx((tx) => contentSuggestionsAlertSource().read({ tx, now: new Date() }));
+
+const endedByCloud: [string, (f: Fake, jobId: string) => void, string][] = [
+  [
+    "expired, so collect answers 410",
+    (f, jobId) => {
+      f.expire(jobId);
+      f.statusOverride({ state: "done" });
+    },
+    COLLECT,
+  ],
+  ["deleted, so Cloud answers 404", (f, jobId) => void f.jobs.delete(jobId), STATUS],
+];
+it.each(endedByCloud)(
+  "a walk Cloud ends between pages (%s) keeps the stored page, sends no release and says what could not be done",
+  async (_name, arrange, refusedAt) => {
+    const f = await connected();
+    try {
+      const runner = await stopBetweenPages(f);
+      arrange(f, [...f.jobs.values()][0]!.jobId);
+
+      await runToIdle(runner);
+      expect(actions(f)).not.toContain(RELEASE);
+      expect(actions(f).at(-1)).toBe(refusedAt);
+      if (refusedAt === COLLECT) expect(cursors(f)).toEqual([0, 1]);
+      const read = await notices();
+      expect(read).toHaveLength(1);
+      expect(read[0]).toMatchObject({
+        code: "content.suggestions_ready_partly",
+        params: { count: 1, failed: 2 },
+      });
+      expect(await runView()).toMatchObject({
+        state: "expired",
+        code: "content.suggestion_expired",
+        waiting: 1,
+        failed: 2,
+      });
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("a job Cloud deletes during a walk is refused at the next collect between pages (404) and ends like an expired one", async () => {
+  const f = await connected();
+  try {
+    let deleted = false;
+    const runner = await stopBetweenPages(f, () => {
+      deleted = f.jobs.delete([...f.jobs.keys()][0]!);
+    });
+
+    await runToIdle(runner);
+    expect(deleted).toBe(true);
+    expect(actions(f).slice(-2)).toEqual([STATUS, COLLECT]);
+    // The fake records a collect's cursor only for a job it finds, so the refused one shows none.
+    expect(cursors(f)).toEqual([0, undefined]);
+    expect(actions(f)).not.toContain(RELEASE);
+    const read = await notices();
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatchObject({
+      code: "content.suggestions_ready_partly",
+      params: { count: 1, failed: 2 },
+    });
+    expect(await runView()).toMatchObject({
+      state: "expired",
+      code: "content.suggestion_expired",
+      waiting: 1,
+      failed: 2,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it("a cursor Cloud refuses as invalid ends the job rejected without a release", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    await inTx((tx) => tx.update(contentSuggestionJobs).set({ collectCursor: 99 }));
+
+    await runToIdle(runner);
+    expect(actions(f).slice(-2)).toEqual([STATUS, COLLECT]);
+    expect(cursors(f)).toEqual([99]);
+    expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("a walk the box ends itself between pages keeps the stored page and sends no release", async () => {
+  const f = await connected();
+  try {
+    const runner = await stopBetweenPages(f);
+    f.service("unconfigured");
+    await f.client.refresh();
+    const before = f.calls.length;
+
+    await runToIdle(runner);
+    expect(f.calls).toHaveLength(before);
+    expect(actions(f)).not.toContain(RELEASE);
+    expect(await runView()).toMatchObject({
+      state: "failed",
+      code: "cloud.not_configured",
+      waiting: 1,
+      failed: 2,
+    });
+    const read = await notices();
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatchObject({
+      code: "content.suggestions_ready_partly",
+      params: { failed: 2 },
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses a page over 16 MiB, stores nothing of it, and resumes at the same position", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    let padded = false;
+    f.collectReply((page, cursor) => {
+      if (cursor !== 1 || padded) return page;
+      padded = true;
+      const body = JSON.stringify(page);
+      return body + " ".repeat(16_777_217 - Buffer.byteLength(body));
+    });
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    expect(await runner.step()).toBe("wait");
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(f.calls.filter((c) => c.action === COLLECT).at(-1)!.replyBytes).toBe(16_777_217);
+    expect(await job()).toMatchObject({ state: "running", collectCursor: 1 });
+    expect(await suggestions()).toHaveLength(1);
+
+    await runToIdle(runner);
+    expect(cursors(f)).toEqual([0, 1, 1, 2]);
+    expect(await suggestions()).toHaveLength(3);
+    expect(actions(f).filter((a) => a === RELEASE)).toHaveLength(1);
+    expect(actions(f).at(-1)).toBe(RELEASE);
+  } finally {
+    await f.close();
+  }
+});
+
+it("walks a result over 16 MiB in pages within 16 MiB", async () => {
+  const f = await connected();
+  try {
+    await venue(Array.from({ length: 300 }, (_, i) => `STAFF Dish ${String(i).padStart(3, "0")}`));
+    f.translator((item) => ({
+      names: { en: `EN ${item.staffName}` },
+      placeholder: false,
+      corrections: Array.from({ length: 10 }, () => ({
+        field: "internal",
+        wrong: "\u0001".repeat(500),
+        right: "\u0002".repeat(500),
+      })),
+    }));
+    await inTx((tx) => startSuggestionRun(tx, context));
+
+    await runToIdle(createContentSuggestionRunner(deps(f)));
+    const collects = f.calls.filter((c) => c.action === COLLECT);
+    expect(collects.length).toBeGreaterThanOrEqual(2);
+    for (const c of collects) expect(c.replyBytes).toBeLessThanOrEqual(16_777_216);
+    expect((await suggestions()).filter((s) => s.language === "en")).toHaveLength(300);
+    expect(actions(f).slice(actions(f).indexOf(COLLECT))).toEqual([
+      ...collects.map(() => COLLECT),
+      RELEASE,
+    ]);
+    expect(new Set(cursors(f)).size).toBe(collects.length);
+  } finally {
+    await f.close();
+  }
+}, 120_000);
 
 const partly: [string, (f: Fake, refs: string[]) => void, string | null, number | null][] = [
   ["some items failed", (f, refs) => f.failRefs([refs[0]!]), null, null],

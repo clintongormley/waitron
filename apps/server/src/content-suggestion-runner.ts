@@ -8,9 +8,9 @@ import {
   recordSuggestionJobRefused,
   recordSuggestionJobReleased,
   recordSuggestionJobSubmitted,
-  storeSuggestionResults,
+  storeSuggestionPage,
   type SuggestionJobRow,
-  type SuggestionResults,
+  type SuggestionPage,
   type TranslationContext,
 } from "@waitron/catalogue";
 import type { CloudConnection } from "./cloud-client.js";
@@ -117,15 +117,22 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
         return "wait";
       }
       if (status.state === "done" || status.state === "partly_done") {
-        const collected = await translation.collect(cloudJobId, signal);
         // Collect's reply carries no reason; the status that finished the job does.
-        const results: SuggestionResults =
+        const reason =
           status.reason === "limit_reached" || status.reason === "provider_failed"
-            ? { ...collected, reason: status.reason }
-            : collected;
-        const at = now();
-        await record((tx) => storeSuggestionResults(tx, job.id, results, deps.context, at));
-        return "again";
+            ? { reason: status.reason }
+            : {};
+        let cursor = job.collectCursor ?? 0;
+        for (;;) {
+          const collected = await translation.collect(cloudJobId, cursor, signal);
+          const page: SuggestionPage = { ...collected, cursor, ...reason };
+          const at = now();
+          const stored = await withTransaction(deps.db, (tx) =>
+            storeSuggestionPage(tx, job.id, page, deps.context, at),
+          );
+          if (stored !== "stored" || collected.nextCursor === null) return "again";
+          cursor = collected.nextCursor;
+        }
       }
       if (status.state === "failed") {
         const failure = FAILURE[status.reason!];

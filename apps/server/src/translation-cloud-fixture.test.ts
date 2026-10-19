@@ -556,6 +556,7 @@ it("runs a job queued, running, done, and collects the default translator's answ
           },
         ],
         failed: [],
+        nextCursor: null,
       },
     });
   }));
@@ -796,3 +797,202 @@ it("a translator's answer reaches collect as written, so a test can make Cloud m
       ],
     });
   }));
+
+const collectAt = (f: TranslationCloud, jobId: string, cursor: unknown, operationId?: string) =>
+  f.signedRequest("translation-collect", {
+    signedBody: JSON.stringify({ version: 1, jobId, cursor }),
+    operationId,
+  });
+const three = job([
+  item("product:1", "PINTA", []),
+  item("variant:2", "PINTA GRAN", ["ca"], "product:1"),
+  item("variant:3", "PINTA PETITA", ["ca"], "product:1"),
+  item("product:4", "CANYA", ["ca"]),
+]);
+const written = ["variant:2", "variant:3", "product:4"];
+async function finished(f: TranslationCloud, body = three) {
+  const id = jobIdOf(await submit(f, body));
+  await ask(f, "translation-status", id);
+  await ask(f, "translation-status", id);
+  expect(f.jobs.get(id)!.state).toBe("done");
+  return id;
+}
+type Page = { results: { ref: string }[]; failed: string[]; nextCursor: number | null };
+
+it("pages a finished job in submit order and walks to a null cursor", () =>
+  withCloud(async (f) => {
+    f.pageItems(1);
+    const id = await finished(f);
+    const pages: Page[] = [];
+    for (const cursor of [0, 1, 2]) {
+      const answer = await collectAt(f, id, cursor);
+      expect(answer.status).toBe(200);
+      pages.push(answer.json as Page);
+    }
+    expect(pages.map((p) => p.nextCursor)).toEqual([1, 2, null]);
+    expect(pages.flatMap((p) => [...p.results.map((r) => r.ref), ...p.failed])).toEqual(written);
+    expect(f.calls.filter((c) => c.action === "translation-collect").map((c) => c.cursor)).toEqual([
+      0, 1, 2,
+    ]);
+  }));
+
+it("measures each page with its own nextCursor and never exceeds the budget", () =>
+  withCloud(async (f) => {
+    // The last page's `null` is three bytes longer than `1` and its answer one byte shorter.
+    f.translator((i) => ({
+      names: { ca: i.ref === "product:4" ? "C" : "CA" },
+      placeholder: false,
+      corrections: [],
+    }));
+    const id = await finished(f);
+    const first = {
+      version: 1,
+      jobId: id,
+      state: "done",
+      results: [{ ref: "variant:2", names: { ca: "CA" }, placeholder: false, corrections: [] }],
+      failed: [],
+      nextCursor: 1,
+    };
+    const n = Buffer.byteLength(JSON.stringify(first));
+    f.pageBytes(n);
+    expect(await collectAt(f, id, 0)).toEqual({ status: 200, json: first });
+    expect((await collectAt(f, id, 1)).json).toMatchObject({
+      results: [{ ref: "variant:3" }],
+      nextCursor: 2,
+    });
+    expect(await collectAt(f, id, 2)).toEqual(refused(503, "temporarily_unavailable"));
+    f.pageBytes(n + 2);
+    expect((await collectAt(f, id, 2)).json).toMatchObject({
+      results: [{ ref: "product:4" }],
+      nextCursor: null,
+    });
+    const sizes = f.calls
+      .filter((c) => c.action === "translation-collect")
+      .map((c) => c.replyBytes!);
+    expect([sizes[0], sizes[1], sizes[3]]).toEqual([n, n, n + 2]);
+    f.pageBytes(n - 1);
+    let retryAfter: string | null = null;
+    expect(
+      await f.signedRequest("translation-collect", {
+        signedBody: JSON.stringify({ version: 1, jobId: id, cursor: 0 }),
+        onResponse: (r) => {
+          retryAfter = r.headers.get("retry-after");
+        },
+      }),
+    ).toEqual(refused(503, "temporarily_unavailable"));
+    expect(retryAfter).toBe("1");
+  }));
+
+it("checks the job before the cursor and the cursor before the state", () =>
+  withCloud(async (f) => {
+    expect(await collectAt(f, randomUUID(), "x")).toEqual(
+      refused(404, "translation_job_not_found"),
+    );
+    const id = await finished(f);
+    for (const cursor of [-1, 1.5, "1", null, true, 2 ** 53, 3])
+      expect(await collectAt(f, id, cursor)).toEqual(refused(400, "invalid_request"));
+    for (const action of ["translation-status", "translation-release"] as const)
+      expect(
+        await f.signedRequest(action, {
+          signedBody: JSON.stringify({ version: 1, jobId: id, cursor: 0 }),
+        }),
+      ).toEqual(refused(400, "invalid_request"));
+    expect(f.jobs.get(id)!.state).toBe("done");
+    f.expire(id);
+    expect(await collectAt(f, id, 3)).toEqual(refused(400, "invalid_request"));
+    expect(await collectAt(f, id, 0)).toEqual(refused(410, "translation_expired"));
+    const running = jobIdOf(await submit(f, three));
+    await ask(f, "translation-status", running);
+    expect(f.jobs.get(running)!.state).toBe("running");
+    expect(await collectAt(f, running, 0)).toEqual(refused(409, "translation_not_ready"));
+  }));
+
+it("answers the same page for a repeated cursor and any in-range cursor", () =>
+  withCloud(async (f) => {
+    f.pageItems(1);
+    const id = await finished(f);
+    const once = await collectAt(f, id, 1, randomUUID());
+    expect(once.status).toBe(200);
+    expect(await collectAt(f, id, 1, randomUUID())).toEqual(once);
+    expect(await collectAt(f, id, 2)).toMatchObject({
+      status: 200,
+      json: { results: [{ ref: "product:4" }], nextCursor: null },
+    });
+  }));
+
+it("collectReply rewrites a page, and gzipReplies compresses collect and status replies", () =>
+  withCloud(async (f) => {
+    const id = await finished(f);
+    const seen: [number, number][] = [];
+    f.collectReply((page, cursor) => {
+      seen.push([cursor, page.results.length]);
+      return '{"version":1,"truncated';
+    });
+    expect(await collectAt(f, id, 0)).toEqual({ status: 200, json: '{"version":1,"truncated' });
+    expect(seen).toEqual([[0, 3]]);
+    f.collectReply((page) => ({ ...page, nextCursor: 7 }));
+    f.gzipReplies(true);
+    let encoding: string | null = null;
+    const answer = await f.signedRequest("translation-collect", {
+      signedBody: JSON.stringify({ version: 1, jobId: id, cursor: 0 }),
+      onResponse: (r) => {
+        encoding = r.headers.get("content-encoding");
+      },
+    });
+    expect(encoding).toBe("gzip");
+    expect(answer).toMatchObject({ status: 200, json: { jobId: id, nextCursor: 7 } });
+    const sent = f.calls.at(-1)!;
+    expect(sent.replyBytes).toBe(Buffer.byteLength(JSON.stringify(answer.json)));
+    f.collectReply(null);
+    expect((await collectAt(f, id, 0)).json).toMatchObject({ nextCursor: null });
+    encoding = null;
+    const status = await f.signedRequest("translation-status", {
+      signedBody: JSON.stringify({ version: 1, jobId: id }),
+      onResponse: (r) => {
+        encoding = r.headers.get("content-encoding");
+      },
+    });
+    expect(encoding).toBe("gzip");
+    expect(status).toMatchObject({ status: 200, json: { jobId: id, state: "done" } });
+  }));
+
+it.each([
+  { name: "a result and a failed item", failing: ["variant:3"], state: "partly_done" },
+  { name: "two results", failing: [], state: "done" },
+])("a two-entry page holding $name fits its exact size and not one byte less", (c) =>
+  withCloud(async (f) => {
+    f.failRefs(c.failing);
+    const id = jobIdOf(await submit(f, three));
+    await ask(f, "translation-status", id);
+    await ask(f, "translation-status", id);
+    expect(f.jobs.get(id)!.state).toBe(c.state);
+    const result = (ref: string) => ({
+      ref,
+      names: { ca: `CA ${ref === "variant:2" ? "PINTA GRAN" : "PINTA PETITA"}` },
+      placeholder: false,
+      corrections: [],
+    });
+    const both = {
+      version: 1,
+      jobId: id,
+      state: c.state,
+      results: c.failing.length
+        ? [result("variant:2")]
+        : [result("variant:2"), result("variant:3")],
+      failed: c.failing,
+      nextCursor: 2,
+    };
+    const size = Buffer.byteLength(JSON.stringify(both));
+    f.pageBytes(size);
+    expect(await collectAt(f, id, 0)).toEqual({ status: 200, json: both });
+    expect(f.calls.at(-1)!.replyBytes).toBe(size);
+    f.pageBytes(size - 1);
+    expect((await collectAt(f, id, 0)).json).toEqual({
+      ...both,
+      results: [result("variant:2")],
+      failed: [],
+      nextCursor: 1,
+    });
+    expect(f.calls.at(-1)!.replyBytes).toBeLessThanOrEqual(size - 1);
+  }),
+);

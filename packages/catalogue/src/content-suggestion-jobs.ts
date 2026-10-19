@@ -116,6 +116,19 @@ export async function recordSuggestionJobRefused(
     .where(and(eq(jobs.id, jobId), eq(jobs.state, "submitting")));
 }
 
+function lostCounted(
+  job: SuggestionJobRow,
+): Pick<SuggestionJobRow, "failedRefs" | "failed" | "done"> {
+  const collected = new Set(job.collectedRefs);
+  const lost = Object.keys(job.sent).filter((key) => !collected.has(key));
+  const failedRefs = [...new Set([...job.failedRefs, ...lost])].sort();
+  return {
+    failedRefs,
+    failed: failedRefs.length,
+    done: Object.keys(job.sent).length - failedRefs.length,
+  };
+}
+
 export async function recordSuggestionJobEnded(
   tx: Transaction,
   jobId: string,
@@ -125,9 +138,13 @@ export async function recordSuggestionJobEnded(
 ): Promise<void> {
   const nothingToRelease =
     state === "expired" || failure === "not_connected" || failure === "rejected";
+  const [job] = await tx.select().from(jobs).where(eq(jobs.id, jobId));
+  // A job with no item accounted for yet keeps the counts of its last status reading.
+  const counts = job && job.collectedRefs.length > 0 ? lostCounted(job) : {};
   await tx
     .update(jobs)
     .set({
+      ...counts,
       state,
       failure,
       body: null,

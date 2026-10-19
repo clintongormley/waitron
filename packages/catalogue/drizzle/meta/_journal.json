@@ -239,6 +239,13 @@
       "when": 1792417462402,
       "tag": "0033_unit_measure",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1792433298185,
+      "tag": "0034_content_suggestion_collect_cursor",
+      "breakpoints": true
     }
   ]
 }

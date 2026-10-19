@@ -684,8 +684,20 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 Waitron's side of Translate all (A689, plan tasks 1 to 20) is on `main`, tested only against the
 fake Cloud in `apps/server/test/translation-cloud-fixture.ts`. Task 21 of
 [the plan](../superpowers/plans/2026-10-14-translate-all.md) runs it on the Santet venue against a
-local Cloud. It needs Cloud's side on Cloud's `main` first: its four translation routes, its worker
-and the `servicesVersion` 2 configuration reply.
+local Cloud. Cloud's side is on Cloud's `main`: its four translation routes, its worker, the
+`servicesVersion` 2 configuration reply, and collect answering one page of at most 16 MiB at a time (Cloud's `packages/translation/src/collect-page.ts`).
+A689-21 made the box fetch and store those pages
+([its plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md), PR 1). What is left
+is that plan's PR 2:
+
+- **2a, the Santet run**, Task 21 adapted to paging, with Cloud's fake provider making the result
+  larger than one page (the owner chose the fake provider on 2026-10-19, open question 3). Its
+  record is a docs-only commit.
+- **2b, the joint fault proof** Cloud's release gate asks for. Its contract's words: "Do not go
+  live until pinned Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss
+  retry, deduplication, bounded decoded reads and release only after durable completion." The plan
+  recommends a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`, built by lane D on
+  Cloud's side; the owner chose that on 2026-10-19 (open question 4).
 
 - **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
   the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid
@@ -703,8 +715,36 @@ and the `servicesVersion` 2 configuration reply.
   now it is free for connected venues, capped per venue. The owner's approval covers the proposed
   $5 per venue per month cap and Cloud's submit allowance (4 jobs in flight, 1 per address).
   Cloud's spec still says "proposed" until its first implementation change updates it.
-- **When the check passes**, delete this entry (Task 21, Step 7); otherwise each failure becomes
-  its own entry.
+- **When the check passes**, delete this entry (Step 8 of part 2a in
+  [the collect-pages plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md));
+  otherwise each failure becomes its own entry. Part 2b, lane D's script, is not done by that run:
+  if it is still open then, it gets an entry of its own before this one is deleted.
+
+## Translate all: shared collect-page test vectors
+
+- **Translate all: shared collect-page test vectors.** The fake Cloud's paging
+  (`apps/server/test/translation-cloud-fixture.ts`) follows Cloud's
+  `packages/translation/src/collect-page.ts`, but nothing in either repository compares them; the
+  shared translation vector (`apps/server/test/cloud-translation-vector.json`) covers submit
+  signing only. Vectors Cloud generates from fixed items, outcomes and
+  a byte budget, checked by both Cloud's `collectPage` and Waitron's fake, would catch drift in CI
+  on both sides. One drift they would catch: the fake reads a signed body's job id with a stricter
+  key-order check (`jobIdIn`) than Cloud, which sorts the keys (Cloud's
+  `packages/translation/src/machine.ts`). A contract change for Cloud's side (plan
+  `docs/superpowers/plans/2026-10-19-translate-all-collect-pages.md`, "2b and what can be
+  automated").
+
+## Translate all: a job that ends before any item is accounted for does not count its items as lost
+
+- **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
+  When a job ends after at least one of its items has been accounted for (`collected_refs` is not
+  empty), `recordSuggestionJobEnded` (`packages/catalogue/src/content-suggestion-jobs.ts`) counts
+  every item not yet accounted for as one that could not be done, so when the notice appears, it
+  says so. A job that ends before any item is accounted for (Cloud expired
+  it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its last
+  progress reading, usually no failures. Such a job has stored no suggestions, so the notice
+  appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
+  Left out of A689-21 as wider than its plan's Decision 8.
 
 ## A655 — fewer and slimmer columns on Products
 
@@ -752,8 +792,10 @@ focus to the "Scheduled versions" heading, which may no longer be there.
 - **Translate all: a job the box ends itself is marked released without a call to Cloud, and
   Cloud can still hold it.** The box ends a job without asking Cloud when the job's own 24-hour
   clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
-  no longer lists the service `ready`, or the connection is revoked), and when a status or collect
-  call is refused as a request Cloud will never accept (ended `rejected`). Cloud's 24 hours run
+  no longer lists the service `ready`, or the connection is revoked), when a status or collect
+  call is refused as a request Cloud will never accept, and when a job's last page leaves an item
+  unaccounted for or accounts for a number of items other than Cloud's total (both ended
+  `rejected`). Cloud's 24 hours run
   from its own submit, or from when the job finished, so it can still hold the job, and while that
   job is queued or running the contract's `translation_job_running` refuses the venue's next
   submit. A release would not end a queued or running job (Cloud answers 409
@@ -763,7 +805,9 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   id, so it could not release the job even once Cloud finished it. Pinned by "a job Cloud took but
   whose reply was lost…", "a running job 24 hours old ends expired without asking Cloud" and "a
   status Cloud refuses as a request it will never accept…" in
-  `apps/server/src/content-suggestion-runner.test.ts`. What would fix it is open.
+  `apps/server/src/content-suggestion-runner.test.ts`, and "a last page that leaves a sent item
+  unaccounted ends the job without a release" in
+  `packages/catalogue/src/content-suggestion-store.test.ts`. What would fix it is open.
 
 ## Translate all: open points from the review of A689's second PR
 

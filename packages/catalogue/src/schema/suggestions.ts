@@ -66,6 +66,9 @@ export const contentSuggestionJobs = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     finishedAt: tsString("finished_at"),
     openedAt: tsString("opened_at"),
+    collectCursor: count("collect_cursor"),
+    // Refs this job sent that a stored page answered or listed as failed, each at most once.
+    collectedRefs: labelList("collected_refs").notNull().default([]),
   },
   (t) => [
     unique("content_suggestion_jobs_run_position_key").on(t.runId, t.position),

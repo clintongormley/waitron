@@ -395,8 +395,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         submitTranslation(await leaseState(signal), operationId, body, signal, recordRefusal),
       status: async (jobId: string, signal?: AbortSignal) =>
         translationStatus(await leaseState(signal), jobId, signal, recordRefusal),
-      collect: async (jobId: string, signal?: AbortSignal) =>
-        collectTranslation(await leaseState(signal), jobId, signal, recordRefusal),
+      collect: async (jobId: string, cursor: number, signal?: AbortSignal) =>
+        collectTranslation(await leaseState(signal), jobId, cursor, signal, recordRefusal),
       release: async (jobId: string, signal?: AbortSignal) =>
         releaseTranslation(await leaseState(signal), jobId, signal, recordRefusal),
     },
