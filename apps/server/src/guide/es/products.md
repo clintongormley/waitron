@@ -99,9 +99,11 @@ Los campos del producto sin guardar siguen ahí si el guardado anidado falla o l
 
 ## Elige el curso {#course}
 
-Usa el campo **Curso predeterminado**, en **Cocina**, para elegir el curso en que sale el plato. Se
-guarda con el producto. En el pedido de una mesa, la caja ordena los platos en una sección por curso,
-en el orden de cursos del local, y el personal puede dar ahí otro curso a un plato.
+Usa el campo **Curso predeterminado**, en **Cocina**, para elegir el curso de los platos nuevos. Se
+guarda con el producto. En una mesa, organiza los platos en **Nuevo pedido**: pueden ir en
+**Marchar ya**, en un grupo nuevo en espera o en un grupo que ya está en espera. Puedes cambiar el
+curso de un plato sin enviar antes de enviarlo. Usa los grupos para elegir qué platos marchas juntos,
+en vez de tratar cada curso como una sección fija para toda la mesa.
 
 **Editar cursos…**, al final de la lista **Curso predeterminado**, abre la lista de cursos en una
 ventana que guarda cada cambio al hacerlo. Al cerrarla, el último curso que añadiste pasa a ser el

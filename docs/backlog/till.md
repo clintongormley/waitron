@@ -2278,7 +2278,9 @@ The remaining work includes:
 The shipped English and Spanish modifier guides describe editing sent table dishes through Recall
 and New order, with recorded answers and prices retained and new extras checked against the current
 offer. Their parked-counter guidance is scoped separately. This closes that guide-prose subset;
-the remaining whole-branch audit and cancellation/Finish work above stay open.
+the remaining whole-branch audit and cancellation/Finish work above stay open. The English and
+Spanish product guides also distinguish a dish's default course from New order's firing and held
+groups, replacing the old whole-table course-section description.
 
 The till README now separates the table's bill-specific Sent/New order workflow from its historical
 counter slice. It distinguishes fresh-dish availability from recalled bill rows, which can be resent

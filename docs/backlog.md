@@ -2220,7 +2220,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   delivery checks. Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish
-  availability from recalled bill rows and points to the modifier-save rules. Recheck subsequent
+  availability from recalled bill rows and points to the modifier-save rules. The product guide's
+  course section now describes New order's firing and held groups. Recheck subsequent
   main changes before the final whole-branch review, push and CI. The direct group-submission client
   type now requires the bill's editing state, matching the server's existing refusal contract.
   The line-Recall client also carries that observation, and Recall to New order exposes the
