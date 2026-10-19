@@ -1,5 +1,7 @@
 # Handheld and till hardware — decisions and findings
 
+> **2026-10-19, A796:** for the handheld payment form the owner replaced §2's "never selected silently": the form preselects the card reader and receipt printer last used on the device ([A796 design](2026-10-19-a796-handheld-payments-design.md) §8, default 4).
+
 **Date:** 2026-09-18
 **Status:** owner decisions from a hardware conversation, recorded (docs-only). **Nothing here is
 committed to build.** It records five owner decisions and the findings behind them, so neither is

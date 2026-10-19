@@ -125,8 +125,8 @@ come after the list above:
   [ui-review.md](ui-review.md), and the first physical print since #327.
 - **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
   enrolled; Logging Slice 2, the one-touch bug report; the first real Bluetooth pairing at the box
-  through the dashboard; paying at the table from a handheld (Slice 2, designed as A796, waiting
-  for the owner's answer).
+  through the dashboard; paying at the table from a handheld (Slice 2, designed as A796, revised
+  to the owner's answer; five small questions open).
 - Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud
   primary, under _Replication, failover and the cloud_.
 
@@ -3381,7 +3381,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   (recommended), all sale-location printers, or a dedicated dashboard profile. No till
   memory is implied there. Remaining C/D choices, exact memory scope, persistence and the
   complete build are unapproved. The owner settled device scope for the handheld form;
-  first-use/unavailable-equipment fallback and finer storage keys remain proposals.
+  first-use/unavailable-equipment fallback and finer storage keys remain proposals. A796's
+  revision (its §9 Q5) recommends that the form's printer be the device's own receipt printer, the
+  one Equipment sets, where A790's design proposes a separate last-used memory; the two designs
+  must agree before either is planned.
   [Revised receipt-flow boards](backlog/mockups/a790-document-and-printer-choice/revision-2026-10-19/README.md)
   accompany the addendum; original boards remain historical where superseded.
   This revision changes docs only; source-map readings are historical and runtime-unverified.
@@ -3692,8 +3695,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 
 - **Slice 2 — the handheld NFC/QR link: paying at the table from a handheld (A796).** Designed
-  2026-10-19, waiting for the owner's answer to one question (ask which reader is in the waiter's
-  hand on the first card of each bill, or before every card):
+  2026-10-19 and revised the same day to the owner's answer: no question about which reader is in
+  the waiter's hand; the payment form carries the phone's card reader and receipt printer, last
+  chosen on that phone and folded away until the waiter changes one. Five owner questions are open
+  (design §9): whether the folded row names the reader; the form on a phone's first payment; when
+  the reader, or the printer, used last can no longer be used; and whether a printer changed in the
+  form becomes the phone's printer for reprints too (A790 proposes otherwise; the two must agree):
   [design](superpowers/specs/2026-10-19-a796-handheld-payments-design.md),
   [mockups](backlog/mockups/a796-handheld-payments/). Restoring `stripe_on_device` (Tap-to-Pay)
   remains open; it waits for the one-time native-app decision

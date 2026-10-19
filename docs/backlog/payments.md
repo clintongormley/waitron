@@ -132,7 +132,9 @@ Picture: `mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-d
 _2026-10-14: the NFC implementation is in place. The box-address checks below remain open,
 along with Tap-to-Pay._
 
-_2026-10-19: the handheld payment flow is designed as A796, waiting for the owner's answer:
+_2026-10-19: the handheld payment flow is designed as A796 and revised to the owner's answer (no
+reader question; the form carries the phone's last-chosen reader and receipt printer, folded away).
+Five smaller questions are open in its §9:
 [2026-10-19-a796-handheld-payments-design.md](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)._
 
 ## Check NFC pick-up on the box's address
