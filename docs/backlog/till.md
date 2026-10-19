@@ -2243,6 +2243,9 @@ The remaining work includes:
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
 - Reconcile the full branch with current main, including migration collisions and prose describing
   changed behavior beyond the documented fresh/recalled modifiers and checks before closing.
+  The current checkpoint includes main's department-specific clearing and installed-module table
+  removal. Recheck later main changes before publication; this integration does not complete the
+  cancellation or Finish-table design.
   The original service spec and plan now carry dated pointers for their superseded draft rules.
   The table-actions spec/plan and the two station/extra plans also point to the replacement
   bill-selection and table Recall contracts, preserving their historical bodies.
