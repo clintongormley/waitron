@@ -3893,6 +3893,22 @@ describe("a row's own Delete section confirm and another menu", () => {
     expect(modal(el, "delete-section").open).toBe(false);
     expect(q(el, '[data-test="member-error"]')).toBeNull();
   });
+
+  it("leaves focus where it is when the delete is refused once the person has gone to Dinner and back", async () => {
+    const answer = deferred<void>();
+    const { el } = await confirmDrinksInLunch(answer.promise);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    await visit(el, LUNCH_PATH, "Lunch Menu");
+    await afterDialogCloses(el);
+    const back = q<HTMLAnchorElement>(el, '[data-test="back"]')!;
+    back.focus();
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() => expect(text(q(el, '[data-test="member-error"]'))).toBe(refusedInLunch));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    await settleStructure(el);
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(back);
+  });
 });
 
 it("keeps a picker whose add is out open when the person goes to another menu, marking nothing from that menu, and closes it quietly when the add is saved", async () => {
