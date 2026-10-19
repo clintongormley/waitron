@@ -31,6 +31,8 @@ const model: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: null,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 class DialogLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);

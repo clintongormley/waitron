@@ -121,6 +121,8 @@ const model: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: null,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 
 const hosts: HTMLElement[] = [];
@@ -248,6 +250,37 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
       },
     },
   ]);
+  await expect.poll(() => save(el).disabled).toBe(true);
+});
+it("a save that does not touch the steps sends none", async () => {
+  const view = structuredClone(model);
+  view.courses = [{ id: "c1", name: "Mains" }];
+  view.serviceSteps = [
+    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
+    {
+      id: "s2",
+      departmentId: "d1",
+      name: "Dessert?",
+      start: "course_served",
+      courseId: "c1",
+      minutes: 10,
+    },
+    {
+      id: "s3",
+      departmentId: "d2",
+      name: "Take order",
+      start: "seated",
+      courseId: null,
+      minutes: 2,
+    },
+  ];
+  const { el, writes } = await mount(view);
+  await change(el, "name", "Restaurant revised");
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({ name: "Restaurant revised" });
+  expect(writes[0]!.body).not.toHaveProperty("serviceSteps");
   await expect.poll(() => save(el).disabled).toBe(true);
 });
 it("lists exactly differing stored overrides as zone links", async () => {

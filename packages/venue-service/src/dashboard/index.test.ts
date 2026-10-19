@@ -63,6 +63,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       readiness: [],
       settings: { editSentLines: true },
       needsClearingDepartmentIds: [],
+      serviceSteps: [],
+      courses: [],
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({
@@ -114,6 +116,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       printMovedSlips: true,
       releaseReminderMinutes: null,
       needsClearingDepartmentIds: [],
+      serviceSteps: [],
+      courses: [],
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({

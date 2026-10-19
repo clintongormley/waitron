@@ -1,6 +1,7 @@
 import type { DeleteImpact } from "@waitron/shared";
 import type { FloorPlanSetDeleteImpact, FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { LocalDate } from "../hours-types.js";
+import type { ServiceStep, ServiceStepInput } from "../service-steps.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
@@ -48,6 +49,7 @@ export interface DepartmentSettingsInput extends Pick<
   tradingName: string;
   needsClearing: boolean;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
+  serviceSteps?: ServiceStepInput[];
 }
 export type DepartmentEditInput = DepartmentSettingsInput;
 export type ZoneServiceSettingsInput = Omit<ZoneSalePolicy, "zoneId" | "effective">;
@@ -106,6 +108,8 @@ export interface VenueServiceModel {
   releaseReminderMinutes: number | null;
   /** The active departments whose tables stay "Needs clearing" after the party leaves. */
   needsClearingDepartmentIds: string[];
+  serviceSteps: ServiceStep[];
+  courses: { id: string; name: string }[];
 }
 export interface VenueServiceSettings {
   editSentLines: boolean;

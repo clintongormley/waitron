@@ -121,6 +121,8 @@ const model: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: null,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 
 class App extends LitElement {

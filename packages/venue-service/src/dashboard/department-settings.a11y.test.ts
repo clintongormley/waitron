@@ -120,6 +120,8 @@ const model: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: null,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 
 afterEach(() => {

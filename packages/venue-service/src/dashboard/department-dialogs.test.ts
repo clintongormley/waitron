@@ -52,6 +52,8 @@ export const view: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: null,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 export const dialogs: DepartmentDialog[] = [
   { kind: "add-department" },

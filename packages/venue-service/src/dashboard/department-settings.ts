@@ -27,6 +27,12 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+import {
+  stepsEqual,
+  toStepDrafts,
+  toStepInputs,
+  type ServiceStepDraft,
+} from "./service-step-draft.js";
 
 export type DepartmentTab = "details" | "service" | "receipt" | "transfers";
 export function offeredDepartmentTabs(model?: VenueServiceView, receipts = false): DepartmentTab[] {
@@ -46,7 +52,10 @@ interface ReceiptEditor {
   saving?: boolean;
   invalid?: boolean;
 }
-type Field = keyof DepartmentSettingsInput | "receivingProfileId" | "destinationDepartmentIds";
+type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
+  serviceSteps: ServiceStepDraft[];
+};
+type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
   tradingName: "details",
@@ -54,12 +63,14 @@ const fieldTab: Record<Field, DepartmentTab> = {
   paidWhen: "service",
   collectionNumber: "service",
   needsClearing: "service",
+  serviceSteps: "service",
   transfers: "transfers",
   receivingProfileId: "transfers",
   destinationDepartmentIds: "transfers",
 };
-const copy = (value: DepartmentSettingsInput): DepartmentSettingsInput => ({
+const copy = (value: DepartmentDraft): DepartmentDraft => ({
   ...value,
+  serviceSteps: value.serviceSteps.map((step) => ({ ...step })),
   ...(value.transfers
     ? {
         transfers: {
@@ -69,13 +80,14 @@ const copy = (value: DepartmentSettingsInput): DepartmentSettingsInput => ({
       }
     : {}),
 });
-const equal = (a: DepartmentSettingsInput, b: DepartmentSettingsInput) =>
+const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.name.trim() === b.name.trim() &&
   a.tradingName.trim() === b.tradingName.trim() &&
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
   a.needsClearing === b.needsClearing &&
+  stepsEqual(a.serviceSteps, b.serviceSteps) &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
     (b.transfers?.destinationDepartmentIds.length ?? 0) &&
@@ -165,7 +177,7 @@ export class DepartmentSettings extends LitElement {
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
   @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
-  @state() private draft?: DepartmentSettingsInput;
+  @state() private draft?: DepartmentDraft;
   @state() private busy = false;
   @state() private attempted = false;
   @state() private refused: Partial<Record<Field, string>> = {};
@@ -173,12 +185,12 @@ export class DepartmentSettings extends LitElement {
   @state() private transferFailure = "";
   @state() private profiles: DepartmentTransfersView["profiles"] = [];
   private opened = "";
-  private baseline?: DepartmentSettingsInput;
-  private scope?: DraftScope<DepartmentSettingsInput>;
+  private baseline?: DepartmentDraft;
+  private scope?: DraftScope<DepartmentDraft>;
   private leave?: LeaveCoordinator;
   private generation = {};
   private transferGeneration = {};
-  private source?: DepartmentSettingsInput;
+  private source?: DepartmentDraft;
   private transferLoading = false;
   private transfersLoaded = false;
   private transfersShown = false;
@@ -258,13 +270,16 @@ export class DepartmentSettings extends LitElement {
       return;
     }
     const policy = this.model!.salePolicies.departments.find((p) => p.departmentId === row.id);
-    const source: DepartmentSettingsInput = {
+    const source: DepartmentDraft = {
       name: row.name,
       tradingName: row.tradingName,
       orderStart: policy?.orderStart ?? "counter",
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
+      serviceSteps: toStepDrafts(
+        this.model!.serviceSteps.filter((step) => step.departmentId === row.id),
+      ),
     };
     if (this.opened !== row.id) {
       this.scope?.dispose();
@@ -492,16 +507,20 @@ export class DepartmentSettings extends LitElement {
       return;
     }
     if (!this.api) return;
-    const submitted = copy(this.draft!);
-    submitted.name = submitted.name.trim();
-    submitted.tradingName = submitted.tradingName.trim();
-    if (!this.showsTransfers) delete submitted.transfers;
+    const kept = copy(this.draft!);
+    kept.name = kept.name.trim();
+    kept.tradingName = kept.tradingName.trim();
+    if (!this.showsTransfers) delete kept.transfers;
+    const { serviceSteps, ...unchanged } = kept;
+    const submitted: DepartmentSettingsInput = stepsEqual(serviceSteps, this.baseline!.serviceSteps)
+      ? unchanged
+      : { ...unchanged, serviceSteps: toStepInputs(serviceSteps) };
     this.busy = true;
     try {
       await this.api.saveDepartmentSettings(id, submitted);
       if (this.current(id, generation)) {
-        const committed = copy(submitted);
-        if (!submitted.transfers && this.showsTransfers)
+        const committed = copy(kept);
+        if (!kept.transfers && this.showsTransfers)
           committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;

@@ -36,6 +36,8 @@ function view(): VenueServiceView {
     printMovedSlips: true,
     releaseReminderMinutes: null,
     needsClearingDepartmentIds: [],
+    serviceSteps: [],
+    courses: [],
   };
 }
 beforeEach(() => setLocale("en"));

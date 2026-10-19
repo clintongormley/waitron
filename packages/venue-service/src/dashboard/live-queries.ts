@@ -258,5 +258,7 @@ export const QUERY_DEPENDENCIES = {
     "zone_day_ranges",
     "special_days",
     "special_day_dates",
+    "service_steps",
+    "kitchen_courses",
   ],
 } as const;
