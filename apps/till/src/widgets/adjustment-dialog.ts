@@ -14,9 +14,9 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
   AdjustmentAction,
+  AdjustmentApproval,
   AdjustmentPreview,
   AdjustmentReason,
-  PersonRole,
 } from "../api/client.js";
 
 export type AdjustKind = "cancel" | "comp" | "discount";
@@ -77,8 +77,6 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment.exceeds_amount":
     case "adjustment.no_reduction":
       return kind === "discount" ? "value" : null;
-    case "adjustment.over_limit":
-      return kind === "discount" ? "value" : "reason";
     case "adjustment.action_not_allowed":
     case "adjustment.reason_inactive":
     case "adjustment_reason.not_found":
@@ -101,13 +99,6 @@ const EXTRA_TITLES: Record<AdjustKind, StringKey> = {
   cancel: "adjust.cancel_extra_title",
   comp: "adjust.comp_extra_title",
   discount: "adjust.discount_extra_title",
-};
-
-const APPROVAL: Record<PersonRole, StringKey> = {
-  staff: "adjust.approval_staff",
-  supervisor: "adjust.approval_supervisor",
-  manager: "adjust.approval_manager",
-  admin: "adjust.approval_admin",
 };
 
 const DO: Record<AdjustKind, StringKey> = {
@@ -397,6 +388,22 @@ export class TillAdjustmentDialog extends LitElement {
 
   #money(amount: string): string {
     return formatMoney(amount, currentLocale());
+  }
+
+  /** Whose PIN the adjustment needs; a reason no longer listed gets the general sentence. */
+  #approvalText(approval: AdjustmentApproval, reason: AdjustmentReason | undefined): string {
+    switch (approval.by) {
+      case "reason":
+        return reason === undefined
+          ? t("adjust.approval_any")
+          : t("adjust.approval_reason").replace("{reason}", () => reason.name);
+      case "bill_limit":
+        return t("adjust.approval_bill_limit").replace("{limit}", () =>
+          this.#money(approval.limit),
+        );
+      case "refund":
+        return t("adjust.approval_refund");
+    }
   }
 
   #typedNumber(): string {
@@ -1004,12 +1011,9 @@ export class TillAdjustmentDialog extends LitElement {
       ${
         preview.needsApproval === null
           ? nothing
-          : html`<p class="approval" data-needs-approval>${t(APPROVAL[preview.needsApproval])}</p>
-              ${
-                preview.overBillDiscountLimit
-                  ? html`<p class="detail" data-over-bill-limit>${t("adjust.over_bill_limit")}</p>`
-                  : nothing
-              }`
+          : html`<p class="approval" data-needs-approval>
+              ${this.#approvalText(preview.needsApproval, reason)}
+            </p>`
       }
       <wt-form-actions .error=${bottom}>
         <wt-button

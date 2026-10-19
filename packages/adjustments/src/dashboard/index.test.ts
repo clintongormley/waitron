@@ -52,11 +52,16 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
   });
 
   it("the reasons panel renders on the context's request and live data", async () => {
-    const fetchImpl = vi.fn(() =>
+    const fetchImpl = vi.fn((url: string) =>
       Promise.resolve({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ reasons: [] }),
+        text: async () =>
+          JSON.stringify(
+            url.endsWith("/settings")
+              ? { maxBillComp: null, billApproverRoles: ["manager", "admin"] }
+              : { reasons: [] },
+          ),
       } as Response),
     );
     const liveData = new LiveData();

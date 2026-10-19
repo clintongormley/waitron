@@ -8775,7 +8775,6 @@ export class TillApp extends LitElement {
           ? nothing
           : html`<till-supervisor-override-dialog
               data-adjust-approval
-              .approverRole=${open.preview?.needsApproval ?? null}
               .authorizers=${this.adjustApprovers}
               .error=${this.adjustApproverError}
               @override-confirm=${(event: Event) => void this.#onAdjustApproverConfirm(event)}
@@ -12120,14 +12119,18 @@ export class TillApp extends LitElement {
   async #onAdjustConfirm(): Promise<void> {
     const open = this.adjusting;
     if (open === null || open.busy || !this.#adjustmentReady(open)) return;
-    const role = open.preview!.needsApproval;
-    if (role === null) {
+    const approval = open.preview!.needsApproval;
+    if (approval === null) {
       await this.#applyAdjustment(open);
       return;
     }
     this.adjusting = { ...open, refusal: null, busy: true };
     try {
-      const approvers = await (open.bill?.api ?? this.api).listAdjustmentApprovers(role);
+      const api = open.bill?.api ?? this.api;
+      const approvers =
+        approval.by === "refund"
+          ? await api.listRefundAuthorizers()
+          : await api.listAdjustmentApprovers(approval.roles);
       const now = this.#adjustingNow(open.id);
       if (now === null) return;
       this.adjusting = { ...now, busy: false };

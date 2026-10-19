@@ -15,14 +15,30 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
+const EXTRAS = ["Friends and family", "Employee discount", "Manager special"];
+
 const ENGLISH = [
   "Entry error",
-  "Changed mind",
-  "Unavailable item",
+  "Item not available",
+  "Customer changed mind",
+  "Not served",
+  "Other",
   "Complaint",
-  "Friends and family",
-  "Employee discount",
-  "Manager special",
+  ...EXTRAS,
+];
+
+/** The nine starter reasons provisioning gives, then the demo's reasons it lacks. */
+const PROVISIONED = [
+  "Entry error",
+  "Item not available",
+  "Customer changed mind",
+  "Not served",
+  "Other",
+  "Complaint",
+  "On the house",
+  "Staff meal",
+  "Discount",
+  ...EXTRAS,
 ];
 
 describe("seedAdjustmentReasons", () => {
@@ -30,7 +46,7 @@ describe("seedAdjustmentReasons", () => {
     ["es", "es-ES"],
     ["en", "en-GB"],
   ] as const)(
-    "does not repeat the cancel reason provisioning gave a %s venue",
+    "does not repeat any reason provisioning gave a %s venue",
     async (locale, invoiceLocale) => {
       await seedTenant(suite.db);
       const [location] = await suite.db
@@ -48,11 +64,12 @@ describe("seedAdjustmentReasons", () => {
         });
         return listAdjustmentReasons(tx, { includeInactive: true });
       });
-      expect(reasons.map((reason) => reason.names.en)).toEqual(ENGLISH);
+      expect(reasons.map((reason) => reason.names.en)).toEqual(PROVISIONED);
+      expect(new Set(reasons.map((reason) => reason.name)).size).toBe(reasons.length);
     },
   );
 
-  it("seeds the owner's seven example reasons, in order, named in the seed's language", async () => {
+  it("seeds the owner's nine example reasons, in order, named in the seed's language", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
       await seedAdjustmentReasons(tx, {
         locale: "es",
@@ -62,17 +79,40 @@ describe("seedAdjustmentReasons", () => {
       return listAdjustmentReasons(tx);
     });
     expect(reasons.map((reason) => reason.names.en)).toEqual(ENGLISH);
-    expect(reasons.map((reason) => reason.position)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(reasons.map((reason) => reason.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     for (const reason of reasons) {
       expect(reason.name).toBe(reason.names.es);
       expect(reason.names.es).not.toBe(reason.names.en);
     }
-    expect(reasons.find((reason) => reason.names.en === "Complaint")).toMatchObject({
+    expect(reasons.map((reason) => reason.kind)).toEqual([
+      "void",
+      "void",
+      "void",
+      "void",
+      "void",
+      "comp",
+      "comp",
+      "comp",
+      "comp",
+    ]);
+    for (const reason of reasons) {
+      if (reason.kind === "void") expect(reason.actions, reason.name).toEqual(["cancel"]);
+      else {
+        expect(reason.actions, reason.name).not.toContain("cancel");
+        expect(reason.applyRoles.length, reason.name).toBeGreaterThan(0);
+        expect(reason.approverRoles.length, reason.name).toBeGreaterThan(0);
+      }
+    }
+    const byEnglish = (english: string) => reasons.find((reason) => reason.names.en === english);
+    expect(byEnglish("Not served")).toMatchObject({ kind: "void", noteRequired: false });
+    expect(byEnglish("Other")).toMatchObject({ kind: "void", noteRequired: true });
+    expect(byEnglish("Complaint")).toMatchObject({
+      kind: "comp",
       actions: ["comp", "discount_percent"],
-      maxPercentBp: 5000,
+      maxPercentBp: null,
       maxAmount: "30.00",
-      applyRole: "supervisor",
-      approverRole: "manager",
+      applyRoles: ["supervisor", "manager", "admin"],
+      approverRoles: ["manager", "admin"],
       noteRequired: true,
     });
   });
@@ -94,7 +134,7 @@ describe("seedAdjustmentReasons", () => {
     expect(reasons.map((reason) => reason.name)).toEqual(ENGLISH);
   });
 
-  it("keeps every cancel-only reason free of approval and every reduction under a limit", async () => {
+  it("keeps every Void reason free of role lists and every Comp reason under a limit", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
       await seedAdjustmentReasons(tx, {
         locale: "en",
@@ -104,8 +144,8 @@ describe("seedAdjustmentReasons", () => {
       return listAdjustmentReasons(tx);
     });
     for (const reason of reasons) {
-      if (reason.actions.every((action) => action === "cancel")) {
-        expect(reason.applyRole, reason.name).toBe("staff");
+      if (reason.kind === "void") {
+        expect([reason.applyRoles, reason.approverRoles], reason.name).toEqual([[], []]);
       } else {
         expect(reason.maxAmount, reason.name).not.toBeNull();
       }

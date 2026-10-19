@@ -620,7 +620,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // stand is 409, like `bill.received_exceeds_total`; one about the request's own fields is 400,
   // like `tab.transfer_quantity_invalid` and `tab.transfer_modifier_line`.
   "adjustment.exceeds_amount": 409,
-  "adjustment.over_limit": 409,
   "adjustment.action_not_allowed": 409,
   "adjustment.reason_inactive": 409,
   "adjustment.weighed_partial": 409,

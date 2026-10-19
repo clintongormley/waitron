@@ -15,12 +15,7 @@ import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
-import {
-  roleAtLeast,
-  roleHasPermission,
-  type Permission,
-  type PersonRoleValue,
-} from "./permissions.js";
+import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
 import {
   PERSONS_EMAIL,
   PERSONS_LIVE_DISPLAY_NAME,
@@ -599,15 +594,12 @@ export async function listActivePersonsWithPermission(
   return listActivePersonsWhose(tx, (role) => roleHasPermission(role, permission));
 }
 
-/**
- * The approver picker a till shows for an action a role must allow, in the same shape as
- * {@link listActivePersonsWithPermission}: the active people at or above `role`.
- */
-export async function listActivePersonsAtOrAboveRole(
+/** The approver picker for a list of roles: the active people whose role is one of `roles`. */
+export async function listActivePersonsWithRoles(
   tx: Transaction,
-  role: PersonRoleValue,
+  roles: readonly PersonRoleValue[],
 ): Promise<StaffListEntry[]> {
-  return listActivePersonsWhose(tx, (held) => roleAtLeast(held, role));
+  return listActivePersonsWhose(tx, (held) => roles.includes(held));
 }
 
 async function listActivePersonsWhose(

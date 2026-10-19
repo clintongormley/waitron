@@ -18,11 +18,12 @@ function emptyResponse(): Response {
 const input: AdjustmentReasonInput = {
   name: "Complaint",
   names: { en: "Complaint", es: "Queja" },
+  kind: "comp",
   actions: ["comp", "discount_percent"],
-  maxPercentBp: 5000,
+  maxPercentBp: null,
   maxAmount: "30.00",
-  applyRole: "supervisor",
-  approverRole: "manager",
+  applyRoles: ["supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
   noteRequired: true,
 };
 const reason: AdjustmentReason = { ...input, id: "r1", active: true, position: 0 };
@@ -108,9 +109,10 @@ describe("AdjustmentsApi", () => {
     });
   });
 
-  it("reads the venue's bill discount limit, passively on the background client", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ maxBillDiscountBp: 1500 }));
-    expect(await api(fetchImpl).getSettings()).toEqual({ maxBillDiscountBp: 1500 });
+  it("reads the venue's bill comp limit, passively on the background client", async () => {
+    const settings = { maxBillComp: "40.00", billApproverRoles: ["manager", "admin"] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
+    expect(await api(fetchImpl).getSettings()).toEqual(settings);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
       method: "GET",
       credentials: "include",
@@ -121,16 +123,15 @@ describe("AdjustmentsApi", () => {
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   });
 
-  it("replaces the venue's bill discount limit with a PUT, a null limit included", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ maxBillDiscountBp: null }));
-    expect(await api(fetchImpl).saveSettings({ maxBillDiscountBp: null })).toEqual({
-      maxBillDiscountBp: null,
-    });
+  it("replaces the venue's bill comp limit with a PUT, a null limit included", async () => {
+    const settings = { maxBillComp: null, billApproverRoles: ["admin" as const] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
+    expect(await api(fetchImpl).saveSettings(settings)).toEqual(settings);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ maxBillDiscountBp: null }),
+      body: JSON.stringify({ maxBillComp: null, billApproverRoles: ["admin"] }),
     });
   });
 

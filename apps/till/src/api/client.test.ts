@@ -2466,12 +2466,13 @@ describe("TillApi", () => {
         {
           id: "reason-1",
           name: "Complaint",
+          kind: "comp",
           actions: ["comp"],
           noteRequired: false,
           maxPercentBp: null,
           maxAmount: "30.00",
-          applyRole: "supervisor",
-          approverRole: "manager",
+          applyRoles: ["supervisor", "manager", "admin"],
+          approverRoles: ["manager", "admin"],
         },
       ];
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse(reasons));
@@ -2483,15 +2484,15 @@ describe("TillApi", () => {
       );
     });
 
-    it("listAdjustmentApprovers GETs the people at or above a role", async () => {
+    it("listAdjustmentApprovers GETs the people holding any of the roles", async () => {
       const roster = [{ personId: "m-1", displayName: "Marta" }];
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
 
-      await expect(new TillApi("", fetchStub).listAdjustmentApprovers("manager")).resolves.toEqual(
-        roster,
-      );
+      await expect(
+        new TillApi("", fetchStub).listAdjustmentApprovers(["manager", "admin"]),
+      ).resolves.toEqual(roster);
       expect(fetchStub).toHaveBeenCalledWith(
-        "/api/adjustment-approvers?role=manager",
+        "/api/adjustment-approvers?roles=manager,admin",
         expect.objectContaining({ method: "GET", credentials: "include" }),
       );
     });
@@ -2522,7 +2523,7 @@ describe("TillApi", () => {
         .mockResolvedValueOnce(
           jsonResponse(
             {
-              error: { code: "adjustment.approval_required", params: { approverRole: "manager" } },
+              error: { code: "adjustment.approval_required", params: { approval: "reason" } },
             },
             403,
           ),
@@ -2537,7 +2538,7 @@ describe("TillApi", () => {
       );
       await expect(api.applyAdjustment("wo-1", command)).rejects.toEqual({
         code: "adjustment.approval_required",
-        approverRole: "manager",
+        approval: "reason",
         status: 403,
       });
     });

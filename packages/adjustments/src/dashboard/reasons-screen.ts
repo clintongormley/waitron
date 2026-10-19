@@ -33,53 +33,87 @@ import type {
   AdjustmentSettings,
   AdjustmentsApi,
   PersonRole,
+  ReasonKind,
 } from "./client.js";
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
-import { actionChoice, actionName, roleName, t, tf, type StringKey } from "./strings.js";
+import { actionChoice, kindName, offerName, roleName, t, tf, type StringKey } from "./strings.js";
 
-const ACTIONS: readonly AdjustmentAction[] = [
-  "cancel",
-  "comp",
-  "discount_percent",
-  "discount_amount",
-];
+/** What a Comp reason may offer, in the order the form and the request list them. */
+const OFFERS: readonly AdjustmentAction[] = ["comp", "discount_percent", "discount_amount"];
+const KINDS: readonly ReasonKind[] = ["void", "comp"];
 const ROLES_BY_SENIORITY: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
+const NEW_REASON_ROLES: readonly PersonRole[] = ["manager", "admin"];
 const PERCENT = /^(\d{1,3})(?:[.,](\d{1,2}))?$/;
 const AMOUNT = /^(\d{1,9})(?:[.,](\d{1,2}))?$/;
 
 type Field =
+  | "kind"
   | "name"
   | "names"
   | "actions"
   | "maxPercent"
   | "maxAmount"
-  | "applyRole"
-  | "approverRole"
+  | "applyRoles"
+  | "approverRoles"
   | "noteRequired";
 /** The field a `management.request_invalid` or `adjustment_reason.invalid` names, onto the editor
  * field that holds it. */
 const SERVER_FIELDS: Record<string, Field> = {
+  kind: "kind",
   name: "name",
   names: "names",
   actions: "actions",
   maxPercentBp: "maxPercent",
   maxAmount: "maxAmount",
-  applyRole: "applyRole",
-  approverRole: "approverRole",
+  applyRoles: "applyRoles",
+  approverRoles: "approverRoles",
   noteRequired: "noteRequired",
 };
 
+/** A Void draft keeps the Comp fields empty, so changing the kind clears them. */
 interface Draft {
+  kind: ReasonKind;
   name: string;
   names: Record<string, string>;
+  /** A Comp reason's offers; a Void reason's one action is implied by its kind. */
   actions: AdjustmentAction[];
   maxPercent: string;
   maxAmount: string;
-  applyRole: PersonRole;
-  approverRole: PersonRole;
+  applyRoles: PersonRole[];
+  approverRoles: PersonRole[];
   noteRequired: boolean;
+}
+
+const COMP_FIELDS_CLEARED = {
+  actions: [],
+  maxPercent: "",
+  maxAmount: "",
+  applyRoles: [],
+  approverRoles: [],
+} satisfies Partial<Draft>;
+
+function bySeniority(roles: readonly PersonRole[]): PersonRole[] {
+  return ROLES_BY_SENIORITY.filter((role) => roles.includes(role));
+}
+
+/** The chosen roles by seniority, or Everyone once all four are chosen. */
+function rolesText(roles: readonly PersonRole[]): string {
+  const chosen = bySeniority(roles);
+  return chosen.length === ROLES_BY_SENIORITY.length
+    ? t("adjustments.everyone")
+    : chosen.map((role) => roleName(role)).join(", ");
+}
+
+function copyDraft(value: Draft): Draft {
+  return {
+    ...value,
+    names: { ...value.names },
+    actions: [...value.actions],
+    applyRoles: [...value.applyRoles],
+    approverRoles: [...value.approverRoles],
+  };
 }
 
 type FieldErrors = Partial<Record<Field, string>>;
@@ -109,6 +143,26 @@ function amount(text: string): string | null | undefined {
   if (whole === "0" && Number(match[2] ?? "0") === 0) return undefined;
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
 }
+
+/** An amount at the route's two decimals; `null` for no limit, `undefined` when it cannot be one. */
+function money(text: string): string | null | undefined {
+  const value = amount(text);
+  if (typeof value !== "string") return value;
+  const [whole, cents = ""] = value.split(".");
+  return `${whole}.${cents.padEnd(2, "0")}`;
+}
+
+/** The bill limit's two fields, as typed. */
+interface LimitDraft {
+  amount: string;
+  roles: PersonRole[];
+}
+type LimitField = "maxBillComp" | "billApproverRoles";
+type LimitErrors = Partial<Record<LimitField, string>>;
+const LIMIT_MESSAGES: Record<LimitField, StringKey> = {
+  maxBillComp: "adjustments.limit.invalid",
+  billApproverRoles: "adjustments.error.approverRoles",
+};
 
 const percentFormat = perLocale(
   (locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
@@ -179,6 +233,16 @@ export class AdjustmentReasonsScreen extends LitElement {
         gap: var(--wt-space-2);
         min-height: var(--wt-tap-min);
       }
+      .offer-choices {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--wt-space-4);
+      }
+      .hint {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .choice input {
         width: var(--wt-space-5);
         height: var(--wt-space-5);
@@ -193,6 +257,15 @@ export class AdjustmentReasonsScreen extends LitElement {
       .limit h2,
       .limit p {
         margin: 0;
+      }
+      .limit-fields {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(min(100%, calc(var(--wt-form-max-width) / 2)), 1fr)
+        );
+        gap: var(--wt-space-4);
+        align-items: start;
       }
       /* Cell markup lives in the table's shadow root, so only a part reaches it. */
       wt-data-table::part(manage) {
@@ -219,12 +292,12 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private busy = false;
   @state() private settings?: AdjustmentSettings;
   @state() private limitLoadError?: string;
-  /** What the operator typed; undefined until they change the field, so a refresh shows the saved
+  /** What the operator chose; undefined until they change a field, so a refresh shows the saved
    * limit without replacing a value being typed. */
-  @state() private limitDraft?: string;
+  @state() private limitDraft?: LimitDraft;
   @state() private limitAttempted = false;
-  /** The server refused the limit itself, until the operator changes it or saves again. */
-  @state() private limitRefused = false;
+  /** The field the server refused, until the operator changes it or saves again. */
+  @state() private limitRefused?: LimitField;
   /** A refusal that names no field, until the operator saves again. */
   @state() private limitError?: string;
   @state() private limitSaving = false;
@@ -233,7 +306,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #settingsLoaded = false;
   #opener?: HTMLElement;
   #reasonScope?: DraftScope<Draft>;
-  #limitScope?: DraftScope<string>;
+  #limitScope?: DraftScope<LimitDraft>;
   #limitGeneration = 0;
   #leave?: LeaveCoordinator;
   /** Restoring a draft rerenders; the pending close still needs this editor's same guard. */
@@ -248,18 +321,19 @@ export class AdjustmentReasonsScreen extends LitElement {
           ? null
           : { invalid: draft.maxAmount };
     return JSON.stringify({
+      kind: draft.kind,
       name: draft.name.trim(),
       names: Object.entries(draft.names)
         .map(([language, text]) => [language, text.trim()])
         .filter(([, text]) => text !== "")
         .sort(([a], [b]) => a!.localeCompare(b!)),
-      actions: ACTIONS.filter((action) => draft.actions.includes(action)),
+      actions: OFFERS.filter((action) => draft.actions.includes(action)),
       maxPercent:
         percentBp(draft.maxPercent) ??
         (draft.maxPercent.trim() === "" ? null : { invalid: draft.maxPercent }),
       maxAmount: normalizedMoney,
-      applyRole: draft.applyRole,
-      approverRole: draft.approverRole,
+      applyRoles: bySeniority(draft.applyRoles),
+      approverRoles: bySeniority(draft.approverRoles),
       noteRequired: draft.noteRequired,
     });
   }
@@ -315,7 +389,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.limitDraft = undefined;
     this.limitSaving = false;
     this.limitAttempted = false;
-    this.limitRefused = false;
+    this.limitRefused = undefined;
     this.limitError = undefined;
     this.limitSaved = false;
     this.#reasonScope?.dispose();
@@ -352,20 +426,20 @@ export class AdjustmentReasonsScreen extends LitElement {
             this.#limitScope = draftScopeFor(this, {
               id: {},
               parent: this,
-              current: () => this.#limitText(),
-              snapshot: (value) => value,
+              current: () => this.#limitValue(),
+              snapshot: (value) => ({ amount: value.amount, roles: [...value.roles] }),
               equal: (a, b) => this.#sameLimit(a, b),
               restore: (value) => {
-                this.limitDraft = value;
+                this.limitDraft = { amount: value.amount, roles: [...value.roles] };
                 this.limitAttempted = false;
-                this.limitRefused = false;
+                this.limitRefused = undefined;
                 this.limitError = undefined;
                 this.limitSaved = false;
               },
             }).scope;
           } else if (!dirty) {
             this.limitDraft = undefined;
-            this.#limitScope.commit(this.#limitText());
+            this.#limitScope.commit(this.#limitValue());
           }
           this.limitLoadError = undefined;
         },
@@ -449,25 +523,27 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.#restart();
     if (editor.kind === "reason") {
       const reason = editor.reason;
+      const kind = reason?.kind ?? "comp";
       this.draft = {
+        kind,
         name: reason?.name ?? "",
         names: { ...reason?.names },
-        actions: [...(reason?.actions ?? [])],
+        actions: kind === "comp" ? [...(reason?.actions ?? [])] : [],
         maxPercent:
           reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
         maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
-        applyRole: reason?.applyRole ?? "manager",
-        approverRole: reason?.approverRole ?? "manager",
+        applyRoles: [...(reason?.applyRoles ?? NEW_REASON_ROLES)],
+        approverRoles: [...(reason?.approverRoles ?? NEW_REASON_ROLES)],
         noteRequired: reason?.noteRequired ?? false,
       };
       const draft = draftScopeFor(this, {
         id: editor,
         parent: this,
         current: () => this.draft!,
-        snapshot: (value) => ({ ...value, names: { ...value.names }, actions: [...value.actions] }),
+        snapshot: copyDraft,
         equal: (a, b) => this.#comparison(a) === this.#comparison(b),
         restore: (value) => {
-          this.draft = { ...value, names: { ...value.names }, actions: [...value.actions] };
+          this.draft = copyDraft(value);
         },
       });
       this.#leave = draft.coordinator;
@@ -508,16 +584,19 @@ export class AdjustmentReasonsScreen extends LitElement {
     const draft = this.draft!;
     const errors: FieldErrors = {};
     if (draft.name.trim() === "") errors.name = t("adjustments.error.name");
+    if (draft.kind === "void") return errors;
+    if (draft.applyRoles.length === 0) errors.applyRoles = t("adjustments.error.applyRoles");
+    if (draft.approverRoles.length === 0) {
+      errors.approverRoles = t("adjustments.error.approverRoles");
+    }
     if (draft.actions.length === 0) errors.actions = t("adjustments.error.actions");
-    if (percentBp(draft.maxPercent) === undefined) {
+    const percent = percentBp(draft.maxPercent);
+    if (percent === undefined) {
       errors.maxPercent = t("adjustments.error.maxPercent");
+    } else if (percent !== null && percent < 10000 && draft.actions.includes("comp")) {
+      errors.maxPercent = t("adjustments.error.free_over_limit");
     }
     if (amount(draft.maxAmount) === undefined) errors.maxAmount = t("adjustments.error.maxAmount");
-    if (
-      ROLES_BY_SENIORITY.indexOf(draft.approverRole) < ROLES_BY_SENIORITY.indexOf(draft.applyRole)
-    ) {
-      errors.approverRole = t("adjustments.error.approverRole");
-    }
     return errors;
   }
 
@@ -529,22 +608,44 @@ export class AdjustmentReasonsScreen extends LitElement {
         .map(([language, text]) => [language, text.trim()] as const)
         .filter(([, text]) => text !== ""),
     );
+    const common = { name: draft.name.trim(), names, noteRequired: draft.noteRequired };
+    if (draft.kind === "void") {
+      return {
+        ...common,
+        kind: "void",
+        actions: ["cancel"],
+        maxPercentBp: null,
+        maxAmount: null,
+        applyRoles: [],
+        approverRoles: [],
+      };
+    }
     return {
-      name: draft.name.trim(),
-      names,
-      actions: ACTIONS.filter((action) => draft.actions.includes(action)),
+      ...common,
+      kind: "comp",
+      actions: OFFERS.filter((action) => draft.actions.includes(action)),
       maxPercentBp: percentBp(draft.maxPercent)!,
       maxAmount: amount(draft.maxAmount)!,
-      applyRole: draft.applyRole,
-      approverRole: draft.approverRole,
-      noteRequired: draft.noteRequired,
+      applyRoles: bySeniority(draft.applyRoles),
+      approverRoles: bySeniority(draft.approverRoles),
     };
   }
 
   #refused(error: unknown): void {
     const code = codeOf(error);
-    const field = (error as { params?: { field?: unknown } }).params?.field;
-    if (
+    const params = (error as { params?: { field?: unknown; withNote?: unknown } }).params;
+    const field = params?.field;
+    if (code === "adjustment_reason.void_required") {
+      const withNote = params?.withNote === true;
+      const message = t(
+        withNote ? "adjustments.error.void_required_note" : "adjustments.error.void_required",
+      );
+      if (this.editor?.kind === "deactivate") {
+        this.editorError = message;
+        return;
+      }
+      this.refusedFields = { [withNote ? "noteRequired" : "kind"]: message };
+    } else if (
       (code === "management.request_invalid" || code === "adjustment_reason.invalid") &&
       typeof field === "string" &&
       Object.hasOwn(SERVER_FIELDS, field)
@@ -657,20 +758,39 @@ export class AdjustmentReasonsScreen extends LitElement {
     );
   }
 
-  #limitText(): string {
+  #limitValue(): LimitDraft {
     if (this.limitDraft !== undefined) return this.limitDraft;
-    const bp = this.settings!.maxBillDiscountBp;
-    return bp === null ? "" : localDecimal(String(bp / 100));
+    const saved = this.settings!.maxBillComp;
+    return {
+      amount: saved === null ? "" : localDecimal(saved),
+      roles: [...this.settings!.billApproverRoles],
+    };
   }
 
-  #sameLimit(a: string, b: string): boolean {
-    const left = percentBp(a);
-    const right = percentBp(b);
-    return left === undefined || right === undefined ? a.trim() === b.trim() : left === right;
+  #sameLimit(a: LimitDraft, b: LimitDraft): boolean {
+    if (bySeniority(a.roles).join() !== bySeniority(b.roles).join()) return false;
+    const left = money(a.amount);
+    const right = money(b.amount);
+    return left === undefined || right === undefined
+      ? a.amount.trim() === b.amount.trim()
+      : left === right;
   }
 
-  #limitCheck(): string | undefined {
-    return percentBp(this.#limitText()) === undefined ? t("adjustments.limit.invalid") : undefined;
+  #limitCheck(): LimitErrors {
+    const value = this.#limitValue();
+    const errors: LimitErrors = {};
+    if (money(value.amount) === undefined) errors.maxBillComp = t(LIMIT_MESSAGES.maxBillComp);
+    if (value.roles.length === 0) {
+      errors.billApproverRoles = t(LIMIT_MESSAGES.billApproverRoles);
+    }
+    return errors;
+  }
+
+  #limitEdit(patch: Partial<LimitDraft>, field: LimitField): void {
+    this.limitDraft = { ...this.#limitValue(), ...patch };
+    this.#limitScope?.changed();
+    if (this.limitRefused === field) this.limitRefused = undefined;
+    this.limitSaved = false;
   }
 
   async #focusLimit(): Promise<void> {
@@ -682,24 +802,31 @@ export class AdjustmentReasonsScreen extends LitElement {
   async #saveLimit(): Promise<void> {
     if (this.limitSaving || saveActionState(this.#limitScope).unchanged) return;
     this.limitAttempted = true;
-    this.limitRefused = false;
+    this.limitRefused = undefined;
     this.limitError = undefined;
     this.limitSaved = false;
-    if (this.#limitCheck() !== undefined) {
+    if (Object.keys(this.#limitCheck()).length > 0) {
       await this.#focusLimit();
       return;
     }
     this.limitSaving = true;
     const generation = this.#limitGeneration;
-    const submitted = this.#limitText();
+    const submitted = this.#limitValue();
     let settings: AdjustmentSettings;
     try {
-      settings = await this.api.saveSettings({ maxBillDiscountBp: percentBp(submitted)! });
+      settings = await this.api.saveSettings({
+        maxBillComp: money(submitted.amount)!,
+        billApproverRoles: bySeniority(submitted.roles),
+      });
     } catch (error) {
       if (generation !== this.#limitGeneration || !this.isConnected) return;
       const field = (error as { params?: { field?: unknown } }).params?.field;
-      if (codeOf(error) === "management.request_invalid" && field === "maxBillDiscountBp") {
-        this.limitRefused = true;
+      if (
+        codeOf(error) === "management.request_invalid" &&
+        typeof field === "string" &&
+        Object.hasOwn(LIMIT_MESSAGES, field)
+      ) {
+        this.limitRefused = field as LimitField;
         void this.#focusLimit();
       } else {
         this.limitError = codeMessage(codeOf(error));
@@ -709,7 +836,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       if (generation === this.#limitGeneration) this.limitSaving = false;
     }
     if (generation !== this.#limitGeneration || !this.isConnected) return;
-    const unchanged = this.#sameLimit(this.#limitText(), submitted);
+    const unchanged = this.#sameLimit(this.#limitValue(), submitted);
     this.settings = settings;
     if (unchanged) this.limitDraft = undefined;
     this.#limitScope?.commit(submitted);
@@ -721,7 +848,6 @@ export class AdjustmentReasonsScreen extends LitElement {
   #limitSection() {
     return html`<section class="limit" data-test="limit" aria-labelledby="limit-heading">
       <h2 id="limit-heading">${t("adjustments.limit.heading")}</h2>
-      <p class="intro" data-test="limit-explained">${t("adjustments.limit.explained")}</p>
       ${
         this.limitLoadError
           ? html`<p class="alert" role="alert" data-test="limit-alert">${this.limitLoadError}</p>`
@@ -732,31 +858,44 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #limitForm() {
-    const own = this.limitAttempted ? this.#limitCheck() : undefined;
-    const error = own ?? (this.limitRefused ? t("adjustments.limit.invalid") : undefined);
+    const own = this.limitAttempted ? this.#limitCheck() : {};
+    const errors: LimitErrors = { ...own };
+    if (this.limitRefused && !errors[this.limitRefused]) {
+      errors[this.limitRefused] = t(LIMIT_MESSAGES[this.limitRefused]);
+    }
+    const value = this.#limitValue();
     const bottom = [
       ...(this.limitError ? [this.limitError] : []),
-      ...(error ? [t("adjustments.fix_fields")] : []),
+      ...(Object.keys(errors).length > 0 ? [t("adjustments.fix_fields")] : []),
     ].join(" ");
-    return html`<wt-price-input
-        name="maxBillDiscount"
-        decimal-locale=${currentLocale()}
-        unit="%"
-        fixed-unit
-        label=${t("adjustments.limit.field")}
-        .value=${this.#limitText()}
-        .error=${error ?? ""}
-        .disabled=${this.limitSaving}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.limitDraft = event.detail.value;
-          this.#limitScope?.changed();
-          this.limitRefused = false;
-          this.limitSaved = false;
-        }}
-        @keydown=${(event: KeyboardEvent) =>
-          submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-limit"]'))}
-      ></wt-price-input>
+    return html`<div class="limit-fields">
+        <wt-price-input
+          name="maxBillComp"
+          fixed-unit
+          locale=${currentLocale()}
+          label=${t("adjustments.limit.field")}
+          placeholder=${t("adjustments.no_limit")}
+          hint=${t("adjustments.limit.hint")}
+          .value=${value.amount}
+          .error=${errors.maxBillComp ?? ""}
+          .disabled=${this.limitSaving}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.#limitEdit({ amount: event.detail.value }, "maxBillComp");
+          }}
+          @keydown=${(event: KeyboardEvent) =>
+            submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-limit"]'))}
+        ></wt-price-input>
+        ${this.#roleList({
+          name: "billApproverRoles",
+          label: t("adjustments.limit.approvers"),
+          values: value.roles,
+          current: () => (this.settings ? this.#limitValue().roles : []),
+          error: errors.billApproverRoles ?? "",
+          disabled: this.limitSaving,
+          change: (roles) => this.#limitEdit({ roles }, "billApproverRoles"),
+        })}
+      </div>
       ${
         this.limitSaved
           ? html`<p role="status" data-test="limit-saved">${t("adjustments.limit.saved")}</p>`
@@ -766,7 +905,11 @@ export class AdjustmentReasonsScreen extends LitElement {
         ><wt-button
           variant=${saveActionState(this.#limitScope).variant}
           data-test="save-limit"
-          ?disabled=${saveActionState(this.#limitScope).unchanged || this.limitSaving || own !== undefined}
+          ?disabled=${
+            saveActionState(this.#limitScope).unchanged ||
+            this.limitSaving ||
+            Object.keys(own).length > 0
+          }
           @click=${() => void this.#saveLimit()}
           >${t("adjustments.limit.save")}</wt-button
         ></wt-form-actions
@@ -850,7 +993,12 @@ export class AdjustmentReasonsScreen extends LitElement {
         key: "allows",
         label: t("adjustments.column.allows"),
         choosable: "shown",
-        cell: (reason) => this.#lines(reason.actions.map((action) => actionName(action))),
+        cell: (reason) =>
+          this.#lines(
+            reason.kind === "void"
+              ? [kindName("void")]
+              : reason.actions.map((action) => offerName(action)),
+          ),
       },
       {
         key: "limits",
@@ -863,10 +1011,12 @@ export class AdjustmentReasonsScreen extends LitElement {
         label: t("adjustments.column.roles"),
         choosable: "shown",
         cell: (reason) =>
-          this.#lines([
-            roleName(reason.applyRole),
-            tf("adjustments.approves", { role: roleName(reason.approverRole) }),
-          ]),
+          reason.kind === "void"
+            ? nothing
+            : this.#lines([
+                rolesText(reason.applyRoles),
+                tf("adjustments.approves", { roles: rolesText(reason.approverRoles) }),
+              ]),
       },
       {
         key: "status",
@@ -900,34 +1050,61 @@ export class AdjustmentReasonsScreen extends LitElement {
       : nothing;
   }
 
-  #roleSelect(errors: FieldErrors, field: "applyRole" | "approverRole", label: string) {
-    const draft = this.draft!;
-    const editor = this.editor!;
+  /** `current` names the chosen roles on the closed field: the combobox hands `countLabel` only the
+   * count, and a closing editor's list still draws after its draft is gone. */
+  #roleList(list: {
+    name: string;
+    label: string;
+    hint?: string;
+    values: readonly PersonRole[];
+    current: () => readonly PersonRole[];
+    error: string;
+    disabled: boolean;
+    change: (roles: PersonRole[]) => void;
+  }) {
     const locale = currentLocale();
     const collator = new Intl.Collator(locale, { sensitivity: "base" });
     const roles = [...ROLES_BY_SENIORITY].sort((a, b) =>
       collator.compare(roleName(a, locale), roleName(b, locale)),
     );
     return html`<wt-combobox
-      name=${field}
-      label=${label}
+      name=${list.name}
+      multiple
+      required
+      label=${list.label}
+      hint=${list.hint ?? ""}
       search="auto"
       .options=${roles.map((role) => ({ value: role, label: roleName(role) }))}
-      .value=${draft[field]}
-      error=${errors[field] ?? ""}
-      .disabled=${this.busy}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+      .values=${list.values}
+      .countLabel=${() => rolesText(list.current())}
+      error=${list.error}
+      .disabled=${list.disabled}
+      @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
         event.stopPropagation();
-        this.#edit({ [field]: event.detail.value as PersonRole }, editor);
+        list.change(event.detail.values as PersonRole[]);
       }}
     ></wt-combobox>`;
   }
 
-  #reasonForm(errors: FieldErrors) {
+  #reasonRoles(errors: FieldErrors, field: "applyRoles" | "approverRoles") {
+    const editor = this.editor!;
+    const words = field === "applyRoles" ? "apply_roles" : "approver_roles";
+    return this.#roleList({
+      name: field,
+      label: t(`adjustments.field.${words}`),
+      hint: t(`adjustments.field.${words}_hint`),
+      values: this.draft![field],
+      current: () => this.draft?.[field] ?? [],
+      error: errors[field] ?? "",
+      disabled: this.busy,
+      change: (roles) => this.#edit({ [field]: roles }, editor),
+    });
+  }
+
+  #compFields(errors: FieldErrors) {
     const draft = this.draft!;
     const editor = this.editor!;
-    const languages = currentContentLanguages().languages;
-    const text = (field: "name" | "maxPercent" | "maxAmount") => ({
+    const text = (field: "maxPercent" | "maxAmount") => ({
       value: draft[field],
       error: errors[field] ?? "",
       change: (event: CustomEvent<{ value: string }>) => {
@@ -935,17 +1112,93 @@ export class AdjustmentReasonsScreen extends LitElement {
         this.#edit({ [field]: event.detail.value }, editor);
       },
     });
-    const name = text("name");
     const percent = text("maxPercent");
     const money = text("maxAmount");
-    return html`<wt-input
+    return html`${this.#reasonRoles(errors, "applyRoles")}
+      ${this.#reasonRoles(errors, "approverRoles")}
+      <fieldset class="offers" aria-describedby=${errors.actions ? "error-actions" : nothing}>
+        <legend>
+          ${t("adjustments.field.actions")}<span class="required" aria-hidden="true">*</span>
+        </legend>
+        <div class="offer-choices">
+          ${OFFERS.map(
+            (action) =>
+              html`<label class="choice"
+                ><input
+                  type="checkbox"
+                  name="actions"
+                  value=${action}
+                  .checked=${live(draft.actions.includes(action))}
+                  aria-invalid=${errors.actions !== undefined}
+                  ?disabled=${this.busy}
+                  @change=${(event: Event) => {
+                    if (this.editor !== editor || !this.isConnected) return;
+                    const checked = (event.target as HTMLInputElement).checked;
+                    const actions = this.draft!.actions.filter((each) => each !== action);
+                    this.#edit({ actions: checked ? [...actions, action] : actions }, editor);
+                  }}
+                />${actionChoice(action)}</label
+              >`,
+          )}
+        </div>
+        ${this.#fieldError(errors, "actions")}
+      </fieldset>
+      <wt-price-input
+        name="maxPercent"
+        decimal-locale=${currentLocale()}
+        unit="%"
+        fixed-unit
+        label=${t("adjustments.field.max_percent")}
+        placeholder=${t("adjustments.no_limit")}
+        hint=${t("adjustments.field.max_percent_hint")}
+        .value=${percent.value}
+        .error=${percent.error}
+        .disabled=${this.busy}
+        @wt-change=${percent.change}
+      ></wt-price-input>
+      <wt-price-input
+        name="maxAmount"
+        fixed-unit
+        locale=${currentLocale()}
+        label=${t("adjustments.field.max_amount")}
+        placeholder=${t("adjustments.no_limit")}
+        hint=${t("adjustments.field.max_amount_hint")}
+        .value=${money.value}
+        .error=${money.error}
+        .disabled=${this.busy}
+        @wt-change=${money.change}
+      ></wt-price-input>`;
+  }
+
+  #reasonForm(errors: FieldErrors) {
+    const draft = this.draft!;
+    const editor = this.editor!;
+    const languages = currentContentLanguages().languages;
+    const isVoid = draft.kind === "void";
+    return html`<wt-segmented-control
+        name="kind"
+        label=${t("adjustments.field.kind")}
+        .options=${KINDS.map((kind) => ({ value: kind, label: kindName(kind) }))}
+        .value=${draft.kind}
+        error=${errors.kind ?? ""}
+        .disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          if (this.editor !== editor || !this.isConnected) return;
+          this.#edit({ kind: event.detail.value as ReasonKind, ...COMP_FIELDS_CLEARED }, editor);
+        }}
+      ></wt-segmented-control>
+      <wt-input
         name="name"
         required
         label=${t("adjustments.field.name")}
-        .value=${name.value}
-        .error=${name.error}
+        .value=${draft.name}
+        .error=${errors.name ?? ""}
         .disabled=${this.busy}
-        @wt-change=${name.change}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.#edit({ name: event.detail.value }, editor);
+        }}
       ></wt-input>
       <fieldset aria-describedby=${errors.names ? "error-names" : nothing}>
         <legend>${t("adjustments.field.names")}</legend>
@@ -969,58 +1222,13 @@ export class AdjustmentReasonsScreen extends LitElement {
         )}
         ${this.#fieldError(errors, "names")}
       </fieldset>
-      <fieldset aria-describedby=${errors.actions ? "error-actions" : nothing}>
-        <legend>
-          ${t("adjustments.field.actions")}<span class="required" aria-hidden="true">*</span>
-        </legend>
-        ${ACTIONS.map(
-          (action) =>
-            html`<label class="choice"
-              ><input
-                type="checkbox"
-                name="actions"
-                value=${action}
-                .checked=${live(draft.actions.includes(action))}
-                aria-invalid=${errors.actions !== undefined}
-                ?disabled=${this.busy}
-                @change=${(event: Event) => {
-                  if (this.editor !== editor || !this.isConnected) return;
-                  const checked = (event.target as HTMLInputElement).checked;
-                  const actions = this.draft!.actions.filter((each) => each !== action);
-                  this.#edit({ actions: checked ? [...actions, action] : actions }, editor);
-                }}
-              />${actionChoice(action)}</label
-            >`,
-        )}
-        ${this.#fieldError(errors, "actions")}
-      </fieldset>
-      <wt-input
-        name="maxPercent"
-        decimal-locale=${currentLocale()}
-        label=${t("adjustments.field.max_percent")}
-        hint=${t("adjustments.field.max_percent_hint")}
-        .value=${percent.value}
-        .error=${percent.error}
-        .disabled=${this.busy}
-        @wt-change=${percent.change}
-      ></wt-input>
-      <wt-price-input
-        name="maxAmount"
-        fixed-unit
-        locale=${currentLocale()}
-        label=${t("adjustments.field.max_amount")}
-        hint=${t("adjustments.field.max_amount_hint")}
-        .value=${money.value}
-        .error=${money.error}
-        .disabled=${this.busy}
-        @wt-change=${money.change}
-      ></wt-price-input>
-      ${this.#roleSelect(errors, "applyRole", t("adjustments.field.apply_role"))}
-      ${this.#roleSelect(errors, "approverRole", t("adjustments.field.approver_role"))}
+      ${isVoid ? nothing : this.#compFields(errors)}
       <div>
         <wt-switch
           name="noteRequired"
           label=${t("adjustments.field.note_required")}
+          description=${isVoid ? t("adjustments.field.note_required_void_hint") : ""}
+          aria-invalid=${errors.noteRequired ? "true" : nothing}
           .checked=${draft.noteRequired}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
@@ -1028,8 +1236,20 @@ export class AdjustmentReasonsScreen extends LitElement {
             this.#edit({ noteRequired: event.detail.checked }, editor);
           }}
         ></wt-switch>
+        ${
+          isVoid
+            ? html`<p class="hint" data-test="note-hint">
+                ${t("adjustments.field.note_required_void_hint")}
+              </p>`
+            : nothing
+        }
         ${this.#fieldError(errors, "noteRequired")}
-      </div>`;
+      </div>
+      ${
+        isVoid
+          ? html`<p class="hint" data-test="void-rule">${t("adjustments.void_rule")}</p>`
+          : nothing
+      }`;
   }
 
   #modal() {

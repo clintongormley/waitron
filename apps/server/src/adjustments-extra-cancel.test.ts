@@ -176,7 +176,8 @@ async function revisionOf(tx: Transaction, billId: string): Promise<number> {
 
 type Command = Parameters<typeof applyAdjustment>[2];
 
-/** Cancelling the gherkins, line 4 of the bill (the dish is 1, its extras 2 to 4 in the order picked). */
+/** Cancelling the gherkins, line 4 of the bill (the dish is 1, its extras 2 to 4 in the order picked),
+ * as a supervisor, who holds the refund permission a sent dish's cancel needs. */
 async function gherkinsCancel(billId: string): Promise<Command> {
   const lineId = await lineIdOf(venue, billId, 4);
   return inTx(venue, async (tx) => ({
@@ -186,9 +187,9 @@ async function gherkinsCancel(billId: string): Promise<Command> {
     expectedRevision: await revisionOf(tx, billId),
     lineId,
     action: "cancel" as const,
-    reasonId: venue.reasonId.house,
+    reasonId: venue.reasonId.houseVoid,
     note: null,
-    operatorId: venue.staffId,
+    operatorId: venue.supervisorId,
   }));
 }
 

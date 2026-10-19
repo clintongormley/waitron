@@ -11,6 +11,7 @@ import {
   listAdjustmentReasons,
 } from "./operations.js";
 import { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
+import { adjustmentSettings } from "./schema/settings.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
 let db: Database;
@@ -33,27 +34,62 @@ function reasons() {
 }
 
 describe("ADJUSTMENTS_PROVISIONING", () => {
-  it("gives a new venue one cancel reason staff use alone, named in the venue's language", async () => {
+  it("gives a new venue the nine starter reasons, in order, named in the venue's language", async () => {
     const node = await provisionedNode(["es-ES", "en-GB"]);
 
     const report = await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
     expect(report).toBe("default cancel reason ready");
-    expect(await reasons()).toEqual([
-      {
-        id: expect.any(String),
-        name: "Error al marcar",
-        names: { en: "Entry error", es: "Error al marcar" },
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-        applyRole: "staff",
-        approverRole: "supervisor",
-        noteRequired: false,
-        active: true,
-        position: 0,
-      },
+    const seeded = await reasons();
+    const every = ["staff", "supervisor", "manager", "admin"];
+    const supervisorUp = ["supervisor", "manager", "admin"];
+    const managerUp = ["manager", "admin"];
+    expect(
+      seeded.map((reason) => [
+        reason.kind,
+        reason.names.en,
+        reason.applyRoles,
+        reason.approverRoles,
+        reason.maxPercentBp,
+        reason.noteRequired,
+      ]),
+    ).toEqual([
+      ["void", "Entry error", [], [], null, false],
+      ["void", "Item not available", [], [], null, false],
+      ["void", "Customer changed mind", [], [], null, false],
+      ["void", "Not served", [], [], null, false],
+      ["void", "Other", [], [], null, true],
+      ["comp", "Complaint", supervisorUp, supervisorUp, null, false],
+      ["comp", "On the house", managerUp, managerUp, null, false],
+      ["comp", "Staff meal", every, managerUp, 5000, false],
+      ["comp", "Discount", managerUp, managerUp, null, false],
     ]);
+    expect(seeded.map((reason) => reason.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(seeded.map((reason) => [reason.name, reason.names])).toEqual([
+      ["Error al marcar", { en: "Entry error", es: "Error al marcar" }],
+      ["Producto agotado", { en: "Item not available", es: "Producto agotado" }],
+      ["Cambio del cliente", { en: "Customer changed mind", es: "Cambio del cliente" }],
+      ["No servido", { en: "Not served", es: "No servido" }],
+      ["Otro motivo", { en: "Other", es: "Otro motivo" }],
+      ["Queja del cliente", { en: "Complaint", es: "Queja del cliente" }],
+      ["Invitación", { en: "On the house", es: "Invitación" }],
+      ["Comida de personal", { en: "Staff meal", es: "Comida de personal" }],
+      ["Descuento", { en: "Discount", es: "Descuento" }],
+    ]);
+    const all = ["comp", "discount_percent", "discount_amount"];
+    expect(seeded.map((reason) => reason.actions)).toEqual([
+      ["cancel"],
+      ["cancel"],
+      ["cancel"],
+      ["cancel"],
+      ["cancel"],
+      all,
+      all,
+      ["discount_percent", "discount_amount"],
+      all,
+    ]);
+    expect(seeded.every((reason) => reason.maxAmount === null && reason.active)).toBe(true);
+    expect(await db.select().from(adjustmentSettings)).toEqual([]);
   });
 
   it("names it in English where the venue's first invoice language is not Spanish", async () => {
@@ -61,7 +97,17 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
 
     await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
-    expect((await reasons()).map((reason) => reason.name)).toEqual(["Entry error"]);
+    expect((await reasons()).map((reason) => reason.name)).toEqual([
+      "Entry error",
+      "Item not available",
+      "Customer changed mind",
+      "Not served",
+      "Other",
+      "Complaint",
+      "On the house",
+      "Staff meal",
+      "Discount",
+    ]);
   });
 
   it("adds nothing on a second run", async () => {
@@ -72,7 +118,7 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node)),
     ).resolves.toBe("reasons already present");
 
-    expect(await reasons()).toHaveLength(1);
+    expect(await reasons()).toHaveLength(9);
   });
 
   it("adds nothing to a venue that already has a reason, even one switched off", async () => {
@@ -81,11 +127,12 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       const reason = await createAdjustmentReason(tx, {
         name: "Complaint",
         names: {},
+        kind: "comp",
         actions: ["comp"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "supervisor",
-        approverRole: "manager",
+        applyRoles: ["supervisor", "manager", "admin"],
+        approverRoles: ["manager", "admin"],
         noteRequired: true,
       });
       await deactivateAdjustmentReason(tx, reason.id);

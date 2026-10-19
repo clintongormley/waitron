@@ -906,14 +906,25 @@ export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 export interface AdjustmentReason {
   id: string;
   name: string;
+  kind: "void" | "comp";
   /** The actions the reason may be used for. */
   actions: AdjustmentAction[];
   noteRequired: boolean;
   maxPercentBp: number | null;
   maxAmount: string | null;
-  applyRole: PersonRole;
-  approverRole: PersonRole;
+  /** Who may apply it alone. */
+  applyRoles: PersonRole[];
+  /** Who may approve it for someone else. */
+  approverRoles: PersonRole[];
 }
+
+/** Whose PIN an adjustment needs: holders of the reason's approver roles, holders of the roles that
+ * may approve past the bill's comp limit (`limit`, a money string), or holders of the refund
+ * permission. */
+export type AdjustmentApproval =
+  | { by: "reason"; roles: PersonRole[] }
+  | { by: "bill_limit"; roles: PersonRole[]; limit: string }
+  | { by: "refund" };
 
 /** An adjustment of one bill, as a preview and an apply share it. `lineId` names the dish or the
  * extra; null is a discount on the whole bill. `quantity` absent covers the whole line; an extra is
@@ -934,9 +945,7 @@ export interface AdjustmentAsk {
 }
 
 /** An adjustment to apply: made once per person's confirmation, and sent again unchanged only when
- * a request got no answer. `approver` is someone at or above the approver role: the higher of the
- * reason's approver role (when the operator is below its apply role) and a manager (when the bill's
- * discount limit asks for one). */
+ * a request got no answer. `approver` is someone the preview's `needsApproval` admits. */
 export interface AdjustmentCommand extends AdjustmentAsk {
   submissionId: string;
   approver?: { personId: string; pin: string };
@@ -948,12 +957,8 @@ export interface AdjustmentCommand extends AdjustmentAsk {
 export interface AdjustmentPreview {
   reduction: string;
   nominalValue: string;
-  /** The role that must approve it, or null when the operator may apply it alone. */
-  needsApproval: PersonRole | null;
-  /** The operator is below a manager, and this discount takes the bill past the venue's limit, or
-   * this cancel leaves it past the limit with a larger share than before; whoever approves is then at
-   * least a manager. */
-  overBillDiscountLimit: boolean;
+  /** Whose PIN it needs, or null when the operator may apply it alone. */
+  needsApproval: AdjustmentApproval | null;
   lines: {
     lineId: string;
     lineNo: number;
@@ -4251,11 +4256,11 @@ export class TillApi {
     return this.#request<AdjustmentReason[]>("/api/adjustment-reasons", "GET");
   }
 
-  /** The active people at or above `role`, who can approve an adjustment with their PIN →
-   * `GET /api/adjustment-approvers?role=`. */
-  listAdjustmentApprovers(role: PersonRole): Promise<StaffMember[]> {
+  /** The active people holding any of `roles`, who can approve an adjustment with their PIN →
+   * `GET /api/adjustment-approvers?roles=`. */
+  listAdjustmentApprovers(roles: PersonRole[]): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(
-      `/api/adjustment-approvers?role=${encodeURIComponent(role)}`,
+      `/api/adjustment-approvers?roles=${roles.map(encodeURIComponent).join(",")}`,
       "GET",
     );
   }
@@ -4270,7 +4275,7 @@ export class TillApi {
   /** Cancels, gives away or discounts → `POST /api/working-orders/:orderId/adjustments`. Answers the
    * bill's new revision and its party. A resend with the same submission id is answered as the
    * first was. Refuses, among others, `working_order.out_of_date`, `adjustment.approval_required`
-   * (naming `approverRole`), `pin.invalid` and the `adjustment.*` codes. */
+   * (naming `approval`), `pin.invalid` and the `adjustment.*` codes. */
   applyAdjustment(
     orderId: string,
     command: AdjustmentCommand,

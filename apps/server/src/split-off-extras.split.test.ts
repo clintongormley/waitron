@@ -72,11 +72,12 @@ async function compOne(venue: Venue) {
     const reason = await createAdjustmentReason(tx, {
       name: "House",
       names: { en: "House", es: "Casa" },
+      kind: "comp",
       actions: ["comp"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRole: "staff",
-      approverRole: "staff",
+      applyRoles: ["staff", "supervisor", "manager", "admin"],
+      approverRoles: ["staff", "supervisor", "manager", "admin"],
       noteRequired: false,
     });
     const [dish] = await tx

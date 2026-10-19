@@ -31,6 +31,7 @@ import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
+  AdjustmentApproval,
   AdjustmentCommand,
   AdjustmentPreview,
   AdjustmentReason,
@@ -132,19 +133,23 @@ const wine: TabLine = {
 const complaint: AdjustmentReason = {
   id: "r-complaint",
   name: "Complaint",
+  kind: "comp",
   actions: ["comp", "discount_percent"],
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "supervisor",
-  approverRole: "manager",
+  applyRoles: ["supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
 };
 const mistake: AdjustmentReason = {
   ...complaint,
   id: "r-mistake",
   name: "Mistake",
+  kind: "void",
   actions: ["cancel"],
   noteRequired: true,
+  applyRoles: [],
+  approverRoles: [],
 };
 
 const formFactor: FormFactor = "till";
@@ -192,10 +197,11 @@ const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
   reduction: "30.00",
   nominalValue: "30.00",
   needsApproval: null,
-  overBillDiscountLimit: false,
   lines: [],
   ...over,
 });
+const byReason: AdjustmentApproval = { by: "reason", roles: ["manager", "admin"] };
+const byRefund: AdjustmentApproval = { by: "refund" };
 
 let drafts: DraftServer;
 let api: TillApi;
@@ -240,6 +246,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     submitDraft: drafts.submitDraft,
     listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake]),
     listAdjustmentApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+    listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "r-1", displayName: "Rosa" }]),
     previewAdjustment: vi.fn().mockResolvedValue(preview()),
     applyAdjustment: vi
       .fn()
@@ -510,16 +517,16 @@ describe("till-app: giving away a dish", () => {
 describe("till-app: an adjustment someone must approve", () => {
   it("asks the approver for their PIN and applies it under the waiter, who stays signed in", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
-      t("adjust.approval_manager"),
+      "Someone who can approve Complaint must enter their PIN.",
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith(["manager", "admin"]);
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
 
@@ -546,7 +553,7 @@ describe("till-app: an adjustment someone must approve", () => {
 
   it("keeps the PIN prompt open after a wrong PIN, saying so", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       applyAdjustment: vi.fn().mockRejectedValue({ code: "pin.invalid", status: 401 }),
     });
     const order = await openMesa4(el);
@@ -563,7 +570,7 @@ describe("till-app: an adjustment someone must approve", () => {
 
   it("keeps the PIN prompt open after too many wrong PINs, saying to wait", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       applyAdjustment: vi.fn().mockRejectedValue({
         code: "pin.throttled",
         params: { retryAfterSeconds: 2 },
@@ -584,7 +591,7 @@ describe("till-app: an adjustment someone must approve", () => {
 
   it("goes back to the confirm step when the approver prompt is cancelled", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
@@ -593,6 +600,35 @@ describe("till-app: an adjustment someone must approve", () => {
     await expect.poll(() => approval(el)).toBeNull();
     expect(inDialog(el, "[data-adjust-confirm]")).not.toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("asks the server for the reason's list, by its roles", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi
+        .fn()
+        .mockResolvedValue(preview({ needsApproval: { by: "reason", roles: ["admin"] } })),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith(["admin"]);
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
+  });
+
+  it("asks the server for the bill limit's list, by its roles", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(
+        preview({
+          needsApproval: { by: "bill_limit", roles: ["supervisor", "admin"], limit: "50.00" },
+        }),
+      ),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith(["supervisor", "admin"]);
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
   });
 });
 
@@ -728,14 +764,16 @@ describe("till-app: a refused adjustment", () => {
 
   it("goes back to the form with a refusal naming a field under that field", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.over_limit", status: 409 }),
+      previewAdjustment: vi
+        .fn()
+        .mockRejectedValue({ code: "adjustment.action_not_allowed", status: 409 }),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
 
     expect(
       dialog(el)!.shadowRoot!.querySelector('[data-error-for="reason"]')!.textContent!.trim(),
-    ).toBe(codeMessage("adjustment.over_limit"));
+    ).toBe(codeMessage("adjustment.action_not_allowed"));
     expect(bottomMessage(el)).toBe(t("form.fix_fields"));
   });
 
@@ -774,7 +812,7 @@ describe("till-app: a refused adjustment", () => {
 
   it("says so above the action when the approvers cannot be read", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       listAdjustmentApprovers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openMesa4(el);
@@ -786,10 +824,10 @@ describe("till-app: a refused adjustment", () => {
 
   it("closes the approver prompt and shows another refusal above the action", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       applyAdjustment: vi
         .fn()
-        .mockRejectedValue({ code: "adjustment.approval_required", approverRole: "manager" }),
+        .mockRejectedValue({ code: "adjustment.approval_required", approval: "reason" }),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
@@ -805,7 +843,7 @@ describe("till-app: a refused adjustment", () => {
     "closes the approver prompt on %s and shows the generic refusal above the action",
     async (code) => {
       const { el } = await mountApp({
-        previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+        previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
         applyAdjustment: vi.fn().mockRejectedValue({ code, personId: "w-1", status: 404 }),
       });
       const order = await openMesa4(el);
@@ -902,7 +940,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("opens no PIN prompt when the approvers arrive after the dialog closed", async () => {
     const approvers = deferred<{ personId: string; displayName: string }[]>();
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       listAdjustmentApprovers: vi.fn(() => approvers.promise),
     });
     const order = await openMesa4(el);
@@ -918,7 +956,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
   it("sends one apply however often the approver authorizes while it is out", async () => {
     const answer = deferred<unknown>();
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
       applyAdjustment: vi.fn(() => answer.promise),
     });
     const order = await openMesa4(el);
@@ -1080,9 +1118,9 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     ]);
   });
 
-  it("names the role that must approve in the PIN prompt", async () => {
+  it("titles the PIN prompt by approval, naming no role", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
@@ -1090,7 +1128,8 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     expect(
       approval(el)!.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-dialog")!
         .heading,
-    ).toBe(t("approval.title_manager"));
+    ).toBe("Approve with PIN");
+    expect(approval(el)!.approverRole).toBeNull();
   });
 });
 
@@ -1190,12 +1229,13 @@ describe("till-app: cancelling a dish", () => {
     const defaultReason: AdjustmentReason = {
       id: "r-default",
       name: "Entry error",
+      kind: "void",
       actions: ["cancel"],
       noteRequired: false,
       maxPercentBp: null,
       maxAmount: null,
-      applyRole: "staff",
-      approverRole: "supervisor",
+      applyRoles: [],
+      approverRoles: [],
     };
     const { el } = await mountApp({
       listAdjustmentReasons: vi.fn().mockResolvedValue([defaultReason]),
@@ -1374,20 +1414,27 @@ describe("till-app: cancelling a dish", () => {
     });
   });
 
-  it("asks the manager for their PIN when the reason needs approval, and cancels under it", async () => {
+  it("asks for the refund authorizers for a cancel, and cancels under one's PIN", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi
+        .fn()
+        .mockResolvedValue([{ personId: "m-1", displayName: "Marta, who refunds" }]),
     });
     const order = await openMesa4(el);
     await requestCancel(el, order, 1);
     await previewCancel(el);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
-      t("adjust.approval_manager"),
+      "Someone who can give refunds must enter their PIN.",
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+    expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(approval(el)!.authorizers).toEqual([
+      { personId: "m-1", displayName: "Marta, who refunds" },
+    ]);
     await pinPad(el, "7777");
 
     expect(applied()).toEqual([

@@ -1,5 +1,5 @@
 import "@waitron/shared";
-import type { PersonRoleValue } from "@waitron/identity";
+import type { Approval } from "./policy.js";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -7,16 +7,17 @@ declare module "@waitron/shared" {
     "adjustment_reason.name_taken": { name: string };
     /** `field` names the input the policy refuses, or `ids` for a reorder list. */
     "adjustment_reason.invalid": { field: string };
-    // The refusals `evaluateAdjustment` returns as a verdict's `code`.
+    /** The change would leave the venue no switched-on Void reason, or, with `withNote`, none that
+     * asks for a note. */
+    "adjustment_reason.void_required": { withNote: boolean };
+    // The refusals `evaluateComp` and `evaluateCancel` return as a verdict's `code`.
     "adjustment.action_not_allowed": Record<string, never>;
-    "adjustment.over_limit": Record<string, never>;
     "adjustment.note_required": Record<string, never>;
     "adjustment.reason_inactive": Record<string, never>;
     /** A discount larger than the line or bill it is taken off; amounts are decimal strings. */
     "adjustment.exceeds_amount": { requested: string; available: string };
-    /** The requester is below the reason's `apply_role`, or the bill's discount limit asks for a
-     * manager, and no approver at or above `approverRole` was given. */
-    "adjustment.approval_required": { approverRole: PersonRoleValue };
+    /** The request needs a PIN from someone `approval` names, and none was given. */
+    "adjustment.approval_required": { approval: Approval["by"] };
     /** A give-away or a discount that would take nothing off: a give-away or a percentage discount
      * of a line, or of a whole bill, that is already free, or a discount that rounds to nothing at
      * the prices it can set. A cancel is never refused this way. */

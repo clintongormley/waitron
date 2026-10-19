@@ -11,8 +11,8 @@ describe("adjustment_reasons declarations", () => {
     ]);
     expect(config.checks.map((check) => check.name).sort()).toEqual([
       "adjustment_reasons_actions_ck",
-      "adjustment_reasons_apply_role_ck",
-      "adjustment_reasons_approver_role_ck",
+      "adjustment_reasons_kind_ck",
+      "adjustment_reasons_kind_fields_ck",
       "adjustment_reasons_max_amount_ck",
       "adjustment_reasons_max_percent_ck",
       "adjustment_reasons_name_ck",

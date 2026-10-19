@@ -20,6 +20,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -42,6 +43,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import { fireLines } from "./working-order.js";
 
 let venue: BillVenue;
@@ -51,6 +54,8 @@ let grillStationId: string;
 let counterOffer: string;
 let counterPaellaOffer: string;
 let cancelReasonId: string;
+/** A supervisor signed in on the first till: a sent drink's cancel needs the refund permission. */
+let supervisorCookie: string;
 let garnishListId: string;
 let garnishProductId: string;
 
@@ -137,14 +142,26 @@ useVenueDb({
         await createAdjustmentReason(tx, {
           name: "Cancel made-here",
           names: { "es-ES": "Cancelar" },
+          kind: "void",
           actions: ["cancel"],
           maxPercentBp: null,
           maxAmount: null,
-          applyRole: "staff",
-          approverRole: "staff",
+          applyRoles: [],
+          approverRoles: [],
           noteRequired: false,
         })
       ).id;
+      const [supervisor] = await tx
+        .insert(persons)
+        .values({ displayName: "Sara", pinHash: hashPin("6666"), role: "supervisor" })
+        .returning({ id: persons.id });
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: supervisor!.id,
+        pin: "6666",
+      });
+      const device = venue.cookie.split("; ").find((part) => part.startsWith(DEVICE_COOKIE))!;
+      supervisorCookie = `${SESSION_COOKIE}=${session.token}; ${device}`;
     });
   },
 });
@@ -781,7 +798,7 @@ describe("made-here route wiring", () => {
       );
       const cancelled = await send(
         venue.app,
-        venue.cookie,
+        supervisorCookie,
         "POST",
         `/api/working-orders/${party.tabId}/adjustments`,
         {
@@ -1014,7 +1031,7 @@ describe("made-here route wiring", () => {
     );
     const cancelled = await send(
       venue.app,
-      venue.cookie,
+      supervisorCookie,
       "POST",
       `/api/working-orders/${party.tabId}/adjustments`,
       {
@@ -1527,11 +1544,12 @@ describe("made-here route wiring", () => {
           await createAdjustmentReason(tx, {
             name: `Finish ${randomUUID()}`,
             names: { "es-ES": "Descuento" },
+            kind: "comp",
             actions: ["discount_amount"],
             maxPercentBp: null,
             maxAmount: decimal("3.00"),
-            applyRole: "staff",
-            approverRole: "staff",
+            applyRoles: ["staff", "supervisor", "manager", "admin"],
+            approverRoles: ["staff", "supervisor", "manager", "admin"],
             noteRequired: false,
           })
         ).id,

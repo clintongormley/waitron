@@ -17,7 +17,7 @@ class AdjustmentLeaveApp extends LitElement {
     return html`<till-adjustment-dialog
         kind="discount"
         .target=${{ lineId: "line-2", name: "Steak", quantity: "2", total: "50.00", unitTotal: "25.00" }}
-        .reasons=${[{ id: "regular", name: "Regular", actions: ["discount_percent", "discount_amount"], noteRequired: false, maxPercentBp: null, maxAmount: null, applyRole: "staff", approverRole: "manager" }]}
+        .reasons=${[{ id: "regular", name: "Regular", kind: "comp", actions: ["discount_percent", "discount_amount"], noteRequired: false, maxPercentBp: null, maxAmount: null, applyRoles: ["staff", "supervisor", "manager", "admin"], approverRoles: ["manager", "admin"] }]}
         @adjust-close=${() => this.closes++}
         @adjust-preview=${(event: CustomEvent<AdjustmentChoice>) => this.previews.push(event.detail)}
         @adjust-confirm=${(event: CustomEvent<AdjustmentChoice>) => this.confirms.push(event.detail)}
@@ -149,10 +149,9 @@ it("preview and refusal retain protection while confirming sends the original ex
     reduction: "5.50",
     nominalValue: "5.50",
     needsApproval: null,
-    overBillDiscountLimit: false,
     lines: [],
   };
-  form.refusal = "adjustment.over_limit";
+  form.refusal = "adjustment.exceeds_amount";
   await form.updateComplete;
   expect(unload()).toBe(true);
   click(form, "[data-adjust-confirm]");

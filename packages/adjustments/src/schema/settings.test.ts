@@ -7,7 +7,8 @@ describe("adjustment_settings declarations", () => {
   it("declares every check by name, so a regeneration carries them", () => {
     const config = getTableConfig(adjustmentSettings);
     expect(config.checks.map((check) => check.name).sort()).toEqual([
-      "adjustment_settings_max_bill_discount_ck",
+      "adjustment_settings_bill_approver_roles_ck",
+      "adjustment_settings_max_bill_comp_ck",
       "adjustment_settings_singleton_ck",
     ]);
   });

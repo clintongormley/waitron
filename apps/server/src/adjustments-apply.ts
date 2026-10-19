@@ -1,26 +1,26 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
-  billCancelNeedsManager,
-  billDiscountNeedsManager,
-  evaluateAdjustment,
+  approves,
+  evaluateCancel,
+  evaluateComp,
   findAdjustmentReason,
   isPercentBp,
   percentReduction,
   policySnapshotOf,
   readAdjustmentSettings,
-  readCompedLines,
-  readLinePercents,
+  readReasonItemShares,
   readReasonTotals,
   recordAdjustment,
+  shareBp,
   spreadBillDiscount,
   type AdjustmentAction,
   type AdjustmentReason,
   type AdjustmentSplit,
   type AdjustmentStage,
-  type BillShare,
-  type CompedLines,
+  type AdjustmentVerdict,
+  type Approval,
+  type CompAction,
   type PricedRow,
-  type ReasonTotals,
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
@@ -37,7 +37,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import {
   persons,
-  roleAtLeast,
   verifyPersonCredential,
   verifyThrottledCredential,
   type PersonRoleValue,
@@ -116,10 +115,7 @@ export interface AdjustmentAsk {
 export interface AdjustmentArgs extends AdjustmentAsk {
   submissionId: string;
   preparationStarted?: boolean;
-  /** Someone at or above the plan's approver role: the higher of the reason's approver role (when
-   * the operator is below its apply role) and a manager (when the bill's discount limit asks for
-   * one). */
-  /** `checked` is `checkPin`'s result on this person and PIN, taken before the transaction opened. */
+  /** Someone the plan's approval admits ({@link approves}). `checked` is `checkPin`'s result on this person and PIN, taken before the transaction opened. */
   approver?: { personId: string; pin: string; checked?: SecretCheck };
 }
 
@@ -128,12 +124,8 @@ export interface AdjustmentPreview {
   /** What the bill actually loses, which can differ from what a discount asked for. */
   reduction: string;
   nominalValue: string;
-  /** The role that must approve, or null when the operator may apply it alone. */
-  needsApproval: PersonRoleValue | null;
-  /** The operator is below a manager, and this discount takes the bill past the venue's limit, or
-   * this cancel leaves it past the limit with a larger share than before; whoever approves is then
-   * at least a manager. */
-  overBillDiscountLimit: boolean;
+  /** Whose PIN it needs, or null when the operator may apply it alone. */
+  needsApproval: WireApproval | null;
   /** Each line the action changes: what it loses, and the rows the changed part becomes. */
   lines: {
     lineId: string;
@@ -142,6 +134,12 @@ export interface AdjustmentPreview {
     rows: { quantity: string; unitGross: string }[];
   }[];
 }
+
+/** {@link Approval} on the wire: the limit as money is written. */
+export type WireApproval =
+  | { by: "reason"; roles: PersonRoleValue[] }
+  | { by: "bill_limit"; roles: PersonRoleValue[]; limit: string }
+  | { by: "refund" };
 
 /** A row of the bill as an adjustment reads it: quantities in thousandths, money in cents. */
 interface Row {
@@ -202,8 +200,7 @@ interface Plan {
   nominal: Decimal;
   before: Decimal;
   stage: AdjustmentStage | null;
-  approverRole: PersonRoleValue | null;
-  overBillDiscountLimit: boolean;
+  approval: Approval | null;
 }
 
 const ZERO = decimal("0");
@@ -439,8 +436,6 @@ export async function planAdjustment(
   let covered: number | null = null;
   let removed: number | null = null;
   let carve: Carve | null = null;
-  /** What a cancel leaves each row of the line's family, in thousandths. */
-  let cancelLeft: Map<string, number> | null = null;
   let changes: Change[] = [];
   let compedExtras: string[] = [];
   let reduction: Decimal;
@@ -489,7 +484,6 @@ export async function planAdjustment(
         });
       removed = partial ? covered : null;
       const left = familyAt(family, target.quantity - covered);
-      cancelLeft = left;
       reduction = sumDecimals(
         family.map((row) =>
           subtractDecimal(gross(row, row.quantity), gross(row, left.get(row.id)!)),
@@ -561,27 +555,23 @@ export async function planAdjustment(
     .from(persons)
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
-  const priors = await priorsOf(tx, orderId, reason.id, line, ask.action, rows);
-  const verdict = evaluateAdjustment(reason, {
-    action: ask.action,
-    reduction,
-    percentBp: ask.action === "discount_percent" ? ask.percentBp! : null,
-    actorRole: actor.role as PersonRoleValue,
-    note: ask.note,
-    ...priors,
-  });
+  const actorRole = actor.role as PersonRoleValue;
+  const stage = line === null ? null : stageOf(dishOf(line, rows));
+  const verdict =
+    ask.action === "cancel"
+      ? evaluateCancel(reason, { actorRole, note: ask.note, stage: stage! })
+      : await judgeComp(tx, reason, {
+          orderId,
+          action: ask.action,
+          line,
+          rows,
+          changes,
+          reduction,
+          nominal,
+          actorRole,
+          note: ask.note,
+        });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
-  const overBillDiscountLimit =
-    ask.action !== "comp" &&
-    (await pastBillDiscountLimit(tx, orderId, rows, {
-      reduction,
-      cancelLeft,
-      actorRole: actor.role as PersonRoleValue,
-    }));
-  let approverRole = verdict.kind === "needs_approval" ? verdict.approverRole : null;
-  if (overBillDiscountLimit && (approverRole === null || !roleAtLeast(approverRole, "manager"))) {
-    approverRole = "manager";
-  }
   const parents = new Set(
     (ask.action === "cancel" ? [line!] : changes.map((change) => change.row)).map(
       (row) => row.parentLineId ?? row.id,
@@ -621,9 +611,8 @@ export async function planAdjustment(
     reduction,
     nominal,
     before,
-    stage: line === null ? null : stageOf(dishOf(line, rows)),
-    approverRole,
-    overBillDiscountLimit,
+    stage,
+    approval: verdict.kind === "needs_approval" ? verdict.approval : null,
   };
 }
 
@@ -633,111 +622,75 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
 }
 
 /**
- * The reason's earlier reductions on the bill and its earlier percentage on the line
- * ({@link readReasonTotals}, {@link readLinePercents}). A percentage taken off a dish was spread
- * over its extras too, so on a percentage discount an extra's line also counts its dish's, and a
- * dish's line the largest any of its extras took on its own.
+ * A comp action's verdict (design §3.2). The reason's share of an item is what it took before
+ * ({@link readReasonItemShares}: the item's own, and once what it took off the whole bill) plus what
+ * this request takes, each at `ceil(reduction × 10000 ÷ list value)`: on a line, the request's
+ * reduction over its list value; on the whole bill, each changed row's over that row's. A percentage taken off a dish was spread over its extras too, so an
+ * extra also counts its dish's share, and a dish the largest any of its extras took on its own.
  */
-async function priorsOf(
+async function judgeComp(
   tx: Transaction,
-  workingOrderId: string,
-  reasonId: string,
-  line: Row | null,
-  action: AdjustmentAction,
-  rows: readonly Row[],
-): Promise<ReasonTotals> {
-  const bill = await readReasonTotals(tx, { workingOrderId, reasonId, lineId: null });
-  if (line === null) return bill;
-  let related: string[] = [];
-  if (action === "discount_percent") {
-    related =
-      line.parentLineId === null
-        ? rows.filter((row) => row.parentLineId === line.id).map((row) => row.id)
-        : [line.parentLineId];
-  }
-  const percents = await readLinePercents(tx, {
-    workingOrderId,
-    reasonId,
-    lineIds: [line.id, ...related],
-  });
-  const most = Math.max(0, ...related.map((id) => percents.get(id)!));
-  return { ...bill, priorPercentOnLineBp: percents.get(line.id)! + most };
-}
-
-/**
- * The bill's discount and its price before adjustments, over its rows at `quantityOf`, each row
- * priced by `priceOf`. The discount is each row's list price less its price, none for a row priced
- * above its list price, and left out for the rows this bill's own records prove comped
- * ({@link readCompedLines}): an extra added to a dish after the dish was comped is not one of them.
- * A comped row that has moved to another bill is not proven comped there, so there it counts as
- * discount, which errs toward asking for a manager. `priceOf` is `gross` for the cents the bill
- * shows, or `exactly` for the unrounded price a cancel's rise is also judged on.
- */
-function shareOf(
-  rows: readonly Row[],
-  comped: CompedLines,
-  quantityOf: (row: Row) => number,
-  priceOf: (row: Row, quantity: number, unitCents: number) => Decimal,
-): BillShare {
-  const rowIds = new Set(comped.rows);
-  const dishIds = new Set(comped.dishes);
-  const wasComped = (row: Row) => rowIds.has(row.id) || dishIds.has(row.id);
-  const listed = (row: Row) => priceOf(row, quantityOf(row), row.list ?? row.unit);
-  const discounts = rows
-    .filter((row) => !wasComped(row))
-    .map((row) => {
-      const off = subtractDecimal(listed(row), priceOf(row, quantityOf(row), row.unit));
-      return compareDecimal(off, ZERO) > 0 ? off : ZERO;
-    });
-  return { discount: sumDecimals(discounts), value: sumDecimals(rows.map(listed)) };
-}
-
-/** The unrounded value at the row's frozen price basis. */
-function exactly(row: Row, quantity: number, unitCents: number): Decimal {
-  return divideDecimal(
-    multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity)),
-    thousandthsToDecimal(row.priceQuantity),
-    6,
-  );
-}
-
-/**
- * Whether a discount takes the bill's discount past the venue's limit, or a cancel (`cancelLeft`
- * set) leaves it past the limit and higher than before, while the operator is below a manager.
- */
-async function pastBillDiscountLimit(
-  tx: Transaction,
-  orderId: string,
-  rows: readonly Row[],
+  reason: AdjustmentReason,
   ask: {
+    orderId: string;
+    action: CompAction;
+    line: Row | null;
+    rows: readonly Row[];
+    changes: readonly Change[];
     reduction: Decimal;
-    cancelLeft: Map<string, number> | null;
+    nominal: Decimal;
     actorRole: PersonRoleValue;
+    note: string | null;
   },
-): Promise<boolean> {
-  const { maxBillDiscountBp } = await readAdjustmentSettings(tx);
-  if (maxBillDiscountBp === null) return false;
-  const comped = await readCompedLines(tx, orderId);
-  const { cancelLeft } = ask;
-  if (cancelLeft === null) {
-    const now = shareOf(rows, comped, (row) => row.quantity, gross);
-    return billDiscountNeedsManager({
-      limitBp: maxBillDiscountBp,
-      priorDiscount: now.discount,
-      reduction: ask.reduction,
-      billValue: now.value,
-      actorRole: ask.actorRole,
-    });
-  }
-  const left = (row: Row) => cancelLeft.get(row.id) ?? row.quantity;
-  const all = (row: Row) => row.quantity;
-  return billCancelNeedsManager({
-    limitBp: maxBillDiscountBp,
-    before: shareOf(rows, comped, all, gross),
-    after: shareOf(rows, comped, left, gross),
-    exactBefore: shareOf(rows, comped, all, exactly),
-    exactAfter: shareOf(rows, comped, left, exactly),
+): Promise<AdjustmentVerdict> {
+  const { orderId, line, rows } = ask;
+  const { priorReductionOnBill } = await readReasonTotals(tx, {
+    workingOrderId: orderId,
+    reasonId: reason.id,
+  });
+  const subjects: { row: Row; reduction: Decimal; nominal: Decimal }[] =
+    line === null
+      ? ask.changes.map(({ row, reduction }) => ({
+          row,
+          reduction,
+          nominal: listValue(row, row.quantity),
+        }))
+      : [{ row: line, reduction: ask.reduction, nominal: ask.nominal }];
+  const relatedOf = (row: Row) =>
+    row.parentLineId === null
+      ? rows.filter((other) => other.parentLineId === row.id).map((other) => other.id)
+      : [row.parentLineId];
+  const { lines: shares, bill: billShare } = await readReasonItemShares(tx, {
+    workingOrderId: orderId,
+    reasonId: reason.id,
+    lineIds: [...new Set(subjects.flatMap(({ row }) => [row.id, ...relatedOf(row)]))],
+  });
+  const itemShareBp = Math.max(
+    0,
+    ...subjects.map(
+      ({ row, reduction, nominal }) =>
+        shares.get(row.id)! +
+        Math.max(0, ...relatedOf(row).map((id) => shares.get(id)!)) +
+        billShare +
+        shareBp(decimalToCents(reduction), decimalToCents(nominal)),
+    ),
+  );
+  const billComped = sumDecimals(
+    rows.map((row) => {
+      const off = subtractDecimal(listValue(row, row.quantity), gross(row, row.quantity));
+      return compareDecimal(off, ZERO) > 0 ? off : ZERO;
+    }),
+  );
+  const { maxBillComp, billApproverRoles } = await readAdjustmentSettings(tx);
+  return evaluateComp(reason, {
+    action: ask.action,
+    reduction: ask.reduction,
     actorRole: ask.actorRole,
+    note: ask.note,
+    priorReductionOnBill,
+    itemShareBp,
+    billComped,
+    billLimit: { maxAmount: maxBillComp, approverRoles: billApproverRoles },
   });
 }
 
@@ -770,27 +723,30 @@ export async function previewAdjustment(
   return {
     reduction: money(plan.reduction),
     nominalValue: money(plan.nominal),
-    needsApproval: plan.approverRole,
-    overBillDiscountLimit: plan.overBillDiscountLimit,
+    needsApproval: plan.approval === null ? null : wireApproval(plan.approval),
     lines,
   };
+}
+
+function wireApproval(approval: Approval): WireApproval {
+  return approval.by === "bill_limit" ? { ...approval, limit: money(approval.limit) } : approval;
 }
 
 /** The approver, verified by PIN, when the plan needs one (plan D6). */
 async function approvedBy(
   tx: Transaction,
-  approverRole: PersonRoleValue | null,
+  approval: Approval | null,
   approver: AdjustmentArgs["approver"],
   attempts: PinAttempts | undefined,
 ): Promise<string | null> {
-  if (approverRole === null) return null;
-  const refused = () => new AppError("adjustment.approval_required", { approverRole });
+  if (approval === null) return null;
+  const refused = () => new AppError("adjustment.approval_required", { approval: approval.by });
   if (approver === undefined) throw refused();
   const { personId, pin, checked } = approver;
   const { role } = await (attempts === undefined
     ? verifyPersonCredential(tx, personId, pin, checked)
     : verifyThrottledCredential(tx, personId, pin, attempts, checked));
-  if (!roleAtLeast(role, approverRole)) throw refused();
+  if (!approves(approval, role)) throw refused();
   return approver.personId;
 }
 
@@ -900,7 +856,7 @@ export async function applyAdjustment(
     { ...command, expectedEdit, sourceDraftId, approverId: approver?.personId },
     async () => {
       const plan = await planAdjustment(tx, args, venueLocale);
-      const approved = await approvedBy(tx, plan.approverRole, approver, attempts);
+      const approved = await approvedBy(tx, plan.approval, approver, attempts);
       const activity =
         attendance === undefined
           ? undefined

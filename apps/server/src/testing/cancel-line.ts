@@ -16,23 +16,30 @@ import { send, type BillVenue } from "./bill-venue.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-0000000000c1";
 
-/** A reason that allows a cancel, applied by anyone with no approval and no note. */
+/** A Void reason with no note. */
 export const CANCEL_REASON: AdjustmentReasonInput = {
   name: "Cancelled in a test",
   names: {},
+  kind: "void",
   actions: ["cancel"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "staff",
-  approverRole: "staff",
+  applyRoles: [],
+  approverRoles: [],
   noteRequired: false,
 };
 
-/** A reason that allows giving a line away, applied by anyone with no approval and no note. */
+/** A Comp reason giving a line away, applied by anyone with no approval and no note. */
 export const GIVE_AWAY_REASON: AdjustmentReasonInput = {
-  ...CANCEL_REASON,
   name: "Given away in a test",
+  names: {},
+  kind: "comp",
   actions: ["comp"],
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRoles: ["staff", "supervisor", "manager", "admin"],
+  approverRoles: ["staff", "supervisor", "manager", "admin"],
+  noteRequired: false,
 };
 
 /** `reason`'s id, created the first time a database is asked for it. */
@@ -49,12 +56,12 @@ export function cancelReasonId(tx: Transaction): Promise<string> {
   return reasonIdOf(tx, CANCEL_REASON);
 }
 
-/** A person with `id`, added (at the default role) when no person has that id: an adjustment is
- * requested by someone. */
+/** A person with `id`, added as a supervisor when no person has that id: an adjustment is
+ * requested by someone, and a supervisor holds the refund permission a sent dish's cancel needs. */
 async function ensureOperator(tx: Transaction, id: string): Promise<string> {
   await tx
     .insert(persons)
-    .values({ id, displayName: `Operator ${id}` })
+    .values({ id, displayName: `Operator ${id}`, role: "supervisor" })
     .onConflictDoNothing({ target: persons.id });
   return id;
 }

@@ -160,19 +160,30 @@ function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): 
 const complaint: AdjustmentReason = {
   id: "r-complaint",
   name: "Complaint",
-  actions: ["comp", "discount_percent", "cancel"],
+  kind: "comp",
+  actions: ["comp", "discount_percent"],
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "supervisor",
-  approverRole: "manager",
+  applyRoles: ["supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
+};
+const mistake: AdjustmentReason = {
+  id: "r-mistake",
+  name: "Mistake",
+  kind: "void",
+  actions: ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRoles: [],
+  approverRoles: [],
 };
 
 const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
   reduction: "2.50",
   nominalValue: "2.50",
   needsApproval: null,
-  overBillDiscountLimit: false,
   lines: [],
   ...over,
 });
@@ -217,7 +228,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .mockResolvedValueOnce(heldOrder(4))
       .mockResolvedValue(heldOrder(5, "0.00")),
     getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(listing(5, "0.00")),
-    listAdjustmentReasons: vi.fn().mockResolvedValue([complaint]),
+    listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake]),
     listAdjustmentApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     previewAdjustment: vi.fn().mockResolvedValue(preview()),
     applyAdjustment: vi
@@ -943,13 +954,13 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     const el = await retrieved();
 
     await press(el, inBasket(el, '[data-cancel-line="0"]')!);
-    await chooseReason(el, "Complaint");
+    await chooseReason(el, "Mistake");
     await press(el, inDialog(el, "[data-adjust-continue]"));
 
     expect(api.previewAdjustment).toHaveBeenCalledWith("wo-9", {
       expectedRevision: 4,
       lineId: "l-1",
-      reasonId: "r-complaint",
+      reasonId: "r-mistake",
       action: "cancel",
       note: null,
       expectedEdit: null,
@@ -958,12 +969,16 @@ describe("till-app: giving away a dish on a stored counter order", () => {
 
   it("asks an approver for their PIN when the reason needs one", async () => {
     const el = await retrieved({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi
+        .fn()
+        .mockResolvedValue(
+          preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }),
+        ),
     });
 
     await previewComp(el);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith(["manager", "admin"]);
     await pinPad(el, "7777");
 
     expect(applied()).toEqual([
@@ -1189,7 +1204,7 @@ describe("till-app: an answer after the basket moved on", () => {
 
     counter(el).store.clear();
     await flush(el);
-    answer.reject({ code: "adjustment.over_limit" });
+    answer.reject({ code: "adjustment.action_not_allowed" });
     await flush(el);
 
     expect(dialog(el)).toBeNull();
@@ -1802,7 +1817,11 @@ describe("till-app: unsaved adjustment inputs", () => {
   });
   it("discarding nested approval leaves the adjustment reason intact and applies nothing", async () => {
     const el = await retrieved({
-      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      previewAdjustment: vi
+        .fn()
+        .mockResolvedValue(
+          preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }),
+        ),
     });
     await previewComp(el);
     await press(el, inDialog(el, "[data-adjust-confirm]"));

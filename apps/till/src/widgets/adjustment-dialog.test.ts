@@ -18,18 +18,25 @@ function reason(id: string, over: Partial<AdjustmentReason> = {}): AdjustmentRea
   return {
     id,
     name: id,
+    kind: "comp",
     actions: ["comp"],
     noteRequired: false,
     maxPercentBp: null,
     maxAmount: null,
-    applyRole: "staff",
-    approverRole: "manager",
+    applyRoles: ["staff", "supervisor", "manager", "admin"],
+    approverRoles: ["manager", "admin"],
     ...over,
   };
 }
 
 const complaint = reason("Complaint", { actions: ["comp", "discount_percent"] });
-const mistake = reason("Mistake", { actions: ["cancel"], noteRequired: true });
+const mistake = reason("Mistake", {
+  kind: "void",
+  actions: ["cancel"],
+  noteRequired: true,
+  applyRoles: [],
+  approverRoles: [],
+});
 const regular = reason("Regular", { actions: ["discount_percent", "discount_amount"] });
 const staffMeal = reason("Staff meal", { actions: ["comp", "discount_amount"] });
 const allReasons = [complaint, mistake, regular, staffMeal];
@@ -452,7 +459,6 @@ describe("till-adjustment-dialog: what a request out holds still", () => {
       reduction: "25.00",
       nominalValue: "25.00",
       needsApproval: null,
-      overBillDiscountLimit: false,
       lines: [],
     };
     await el.updateComplete;
@@ -471,7 +477,6 @@ describe("till-adjustment-dialog: before confirming", () => {
     reduction: "12.00",
     nominalValue: "12.00",
     needsApproval: null,
-    overBillDiscountLimit: false,
     lines: [],
     ...over,
   });
@@ -525,56 +530,107 @@ describe("till-adjustment-dialog: before confirming", () => {
     expect(root(el).querySelector("[data-quantity-shown]")).toBeNull();
   });
 
-  it("asks for approval when the preview says a manager must approve", async () => {
-    const { el } = await atConfirm({ preview: preview({ needsApproval: "manager" }) }, (el) =>
-      chooseReason(el, "Complaint"),
+  it("names the reason's approvers for a comp, and asks for approval", async () => {
+    const { el } = await atConfirm(
+      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      (el) => chooseReason(el, "Complaint"),
     );
-    expect(text(root(el))).toContain(t("adjust.approval_manager"));
-    expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.ask_approval"));
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      "Someone who can approve Complaint must enter their PIN.",
+    );
+    expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
 
-  it("says the bill's discounts end past the venue's limit, beside the approval", async () => {
+  it("names the reason's approvers in Spanish", async () => {
+    setLocale("es");
+    const { el } = await atConfirm(
+      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      (el) => chooseReason(el, "Complaint"),
+    );
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      "Alguien que pueda autorizar «Complaint» debe introducir su PIN.",
+    );
+  });
+
+  it("names the bill's limit past it, and asks for approval", async () => {
     const { el } = await atConfirm(
       {
         kind: "discount",
         reasons: [regular],
-        preview: preview({ needsApproval: "manager", overBillDiscountLimit: true }),
+        preview: preview({
+          needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "50.00" },
+        }),
       },
       async (el) => {
         await chooseReason(el, "Regular");
         await type(el, "percent", "30");
       },
     );
-    const approval = root(el).querySelector("[data-needs-approval]")!;
-    const why = root(el).querySelector("[data-over-bill-limit]")!;
-    expect(text(why)).toBe(t("adjust.over_bill_limit"));
-    expect(approval.nextElementSibling).toBe(why);
-    expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.ask_approval"));
-  });
-
-  it("says nothing of the limit when the preview does not flag it", async () => {
-    const { el } = await atConfirm({ preview: preview({ needsApproval: "manager" }) }, (el) =>
-      chooseReason(el, "Complaint"),
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      `This takes the bill's comps past ${money("50.00")}. Someone who can approve past the bill's limit must enter their PIN.`,
     );
-    expect(root(el).querySelector("[data-needs-approval]")).not.toBeNull();
-    expect(root(el).querySelector("[data-over-bill-limit]")).toBeNull();
-    expect(text(root(el))).not.toContain(t("adjust.over_bill_limit"));
+    expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
 
-  it("says a cancel leaves the bill's discounts past the venue's limit, beside the approval", async () => {
+  it("names the bill's limit past it in Spanish", async () => {
+    setLocale("es");
+    const { el } = await atConfirm(
+      {
+        preview: preview({
+          needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "50.00" },
+        }),
+      },
+      (el) => chooseReason(el, "Complaint"),
+    );
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien que pueda autorizar por encima del límite debe introducir su PIN.`,
+    );
+  });
+
+  it("names refunds for a cancel, and asks for approval", async () => {
     const { el } = await atConfirm(
       {
         kind: "cancel",
-        reasons: [reason("Void", { actions: ["cancel"] })],
-        preview: preview({ needsApproval: "manager", overBillDiscountLimit: true }),
+        reasons: [
+          reason("Void", { kind: "void", actions: ["cancel"], applyRoles: [], approverRoles: [] }),
+        ],
+        preview: preview({ needsApproval: { by: "refund" } }),
       },
       (el) => chooseReason(el, "Void"),
     );
-    const approval = root(el).querySelector("[data-needs-approval]")!;
-    const why = root(el).querySelector("[data-over-bill-limit]")!;
-    expect(text(why)).toBe(t("adjust.over_bill_limit"));
-    expect(approval.nextElementSibling).toBe(why);
-    expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.ask_approval"));
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      "Someone who can give refunds must enter their PIN.",
+    );
+    expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
+  });
+
+  it("names refunds for a cancel in Spanish", async () => {
+    setLocale("es");
+    const { el } = await atConfirm(
+      {
+        kind: "cancel",
+        reasons: [
+          reason("Void", { kind: "void", actions: ["cancel"], applyRoles: [], approverRoles: [] }),
+        ],
+        preview: preview({ needsApproval: { by: "refund" } }),
+      },
+      (el) => chooseReason(el, "Void"),
+    );
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      "Alguien que pueda hacer devoluciones debe introducir su PIN.",
+    );
+  });
+
+  it("names no reason it no longer holds, still asking for a PIN", async () => {
+    const { el } = await atConfirm(
+      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      (el) => chooseReason(el, "Complaint"),
+    );
+    el.reasons = [staffMeal];
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
+      "Someone who can approve this must enter their PIN.",
+    );
   });
 
   it("says when the prices allow a different amount than the one asked for", async () => {
@@ -643,7 +699,6 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
 
   it.each([
     "adjustment.action_not_allowed",
-    "adjustment.over_limit",
     "adjustment.note_required",
     "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
@@ -672,7 +727,6 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
       reduction: "12.00",
       nominalValue: "12.00",
       needsApproval: null,
-      overBillDiscountLimit: false,
       lines: [],
     };
     el.refusal = "order.payment_in_flight";
@@ -684,8 +738,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
   it("names the field each refusal belongs to", () => {
     expect(refusalField("adjustment.note_required", "comp", false)).toBe("note");
     expect(refusalField("adjustment.exceeds_amount", "discount", false)).toBe("value");
-    expect(refusalField("adjustment.over_limit", "discount", false)).toBe("value");
-    expect(refusalField("adjustment.over_limit", "comp", false)).toBe("reason");
+    expect(refusalField("adjustment.over_limit", "comp", false)).toBeNull();
     expect(refusalField("adjustment.reason_inactive", "comp", false)).toBe("reason");
     expect(refusalField("adjustment.action_not_allowed", "comp", false)).toBe("reason");
     expect(refusalField("adjustment_reason.not_found", "comp", false)).toBe("reason");

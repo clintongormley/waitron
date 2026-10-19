@@ -140,11 +140,12 @@ async function cancelLine(billId: string, name: string) {
     const reason = await createAdjustmentReason(tx, {
       name: `Mistake ${randomUUID()}`,
       names: { en: "Mistake", es: "Error" },
+      kind: "void",
       actions: ["cancel"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRole: "staff",
-      approverRole: "staff",
+      applyRoles: [],
+      approverRoles: [],
       noteRequired: false,
     });
     const [line] = await tx

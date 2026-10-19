@@ -1,6 +1,11 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { authorizeManager, personRole, type Permission } from "@waitron/identity";
+import {
+  authorizeManager,
+  personRole,
+  type Permission,
+  type PersonRoleValue,
+} from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
@@ -14,7 +19,7 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import { currentBusinessDay, readLocationClock } from "@waitron/reporting";
-import { AppError, decimal, isUuid } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, isUuid } from "@waitron/shared";
 import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
@@ -25,7 +30,8 @@ import {
   type AdjustmentReasonInput,
 } from "./operations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
-import { ADJUSTMENT_ACTIONS, isPercentBp, type AdjustmentAction } from "./policy.js";
+import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
+import { REASON_KINDS, type ReasonKind } from "./schema/reasons.js";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,
@@ -49,6 +55,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "adjustment_reason.invalid": 400,
   "adjustment_reason.not_found": 404,
   "adjustment_reason.name_taken": 409,
+  "adjustment_reason.void_required": 409,
 };
 const run = createErrorBoundary(STATUS, "adjustment.failed");
 const runReorder = createErrorBoundary(
@@ -81,17 +88,26 @@ function requireMaxPercent(value: unknown): number | null {
   return value;
 }
 
-/** Required: the limit is cleared by an explicit `null`. */
-function requireMaxBillDiscount(value: unknown): number | null {
+function requireAmount(value: unknown, field: string) {
   if (value === null) return null;
-  if (typeof value !== "number" || !isPercentBp(value)) throw invalid("maxBillDiscountBp");
-  return value;
+  if (typeof value !== "string" || !AMOUNT.test(value)) throw invalid(field);
+  return decimal(value);
 }
 
-function requireMaxAmount(value: unknown) {
-  if (value === null) return null;
-  if (typeof value !== "string" || !AMOUNT.test(value)) throw invalid("maxAmount");
-  return decimal(value);
+/** Required: the limit is cleared by an explicit `null`. Zero is refused here, as the setting's
+ * own check would refuse it with no field. */
+function requireMaxBillComp(value: unknown) {
+  const amount = requireAmount(value, "maxBillComp");
+  if (amount !== null && compareDecimal(amount, decimal("0")) <= 0) throw invalid("maxBillComp");
+  return amount;
+}
+
+/** A list of distinct roles, empty only where `allowEmpty`: a Void reason's lists are empty. */
+function requireRoles(value: unknown, field: string, allowEmpty: boolean): PersonRoleValue[] {
+  if (!Array.isArray(value) || (value.length === 0 && !allowEmpty)) throw invalid(field);
+  const roles = value.map((role) => requireEnum(role, field, personRole.enumValues));
+  if (new Set(roles).size !== roles.length) throw invalid(field);
+  return roles;
 }
 
 function requireFlag(value: unknown, field: string): boolean {
@@ -101,14 +117,16 @@ function requireFlag(value: unknown, field: string): boolean {
 
 /** Every field is required; a limit is cleared by an explicit `null`, never by leaving it out. */
 function requireReasonInput(body: Record<string, unknown>): AdjustmentReasonInput {
+  const kind: ReasonKind = requireEnum(body.kind, "kind", REASON_KINDS);
   return {
     name: requireString(body.name, "name"),
     names: requireNames(body.names),
+    kind,
     actions: requireActions(body.actions),
     maxPercentBp: requireMaxPercent(body.maxPercentBp),
-    maxAmount: requireMaxAmount(body.maxAmount),
-    applyRole: requireEnum(body.applyRole, "applyRole", personRole.enumValues),
-    approverRole: requireEnum(body.approverRole, "approverRole", personRole.enumValues),
+    maxAmount: requireAmount(body.maxAmount, "maxAmount"),
+    applyRoles: requireRoles(body.applyRoles, "applyRoles", kind === "void"),
+    approverRoles: requireRoles(body.approverRoles, "approverRoles", kind === "void"),
     noteRequired: requireFlag(body.noteRequired, "noteRequired"),
   };
 }
@@ -285,7 +303,8 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         const settings = await gated(sessionId, (tx) =>
           saveAdjustmentSettings(tx, {
-            maxBillDiscountBp: requireMaxBillDiscount(body.maxBillDiscountBp),
+            maxBillComp: requireMaxBillComp(body.maxBillComp),
+            billApproverRoles: requireRoles(body.billApproverRoles, "billApproverRoles", false),
           }),
         );
         return c.json(settings);

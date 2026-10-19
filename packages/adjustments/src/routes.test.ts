@@ -49,11 +49,24 @@ const noopLog: Logger = () => {};
 const COMPLAINT = {
   name: "Complaint",
   names: { en: "Complaint", es: "Queja" },
+  kind: "comp",
   actions: ["comp", "discount_percent"],
-  maxPercentBp: 5000,
+  maxPercentBp: null,
   maxAmount: "30.00",
-  applyRole: "supervisor",
-  approverRole: "manager",
+  applyRoles: ["supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
+  noteRequired: true,
+};
+
+const OTHER = {
+  name: "Other",
+  names: { en: "Other", es: "Otro" },
+  kind: "void",
+  actions: ["cancel"],
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRoles: [],
+  approverRoles: [],
   noteRequired: true,
 };
 
@@ -122,14 +135,9 @@ describe("adjustment reason management routes", () => {
     expect(complaint).toEqual({ id: expect.any(String), ...COMPLAINT, active: true, position: 0 });
     const second = (await (
       await send(fx.app, "POST", REASONS, manager, {
-        ...COMPLAINT,
+        ...OTHER,
         name: "Entry error",
         names: {},
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-        applyRole: "staff",
-        approverRole: "staff",
         noteRequired: false,
       })
     ).json()) as { id: string };
@@ -152,17 +160,17 @@ describe("adjustment reason management routes", () => {
       [complaint.id, 1],
     ]);
 
-    expect((await send(fx.app, "DELETE", `${REASONS}/${second.id}`, manager)).status).toBe(204);
+    expect((await send(fx.app, "DELETE", `${REASONS}/${complaint.id}`, manager)).status).toBe(204);
     const active = (await (await send(fx.app, "GET", REASONS, manager)).json()) as {
       reasons: { id: string }[];
     };
-    expect(active.reasons.map((r) => r.id)).toEqual([complaint.id]);
+    expect(active.reasons.map((r) => r.id)).toEqual([second.id]);
     const all = (await (
       await send(fx.app, "GET", `${REASONS}?includeInactive=true`, manager)
     ).json()) as { reasons: { id: string; active: boolean }[] };
     expect(all.reasons.map((r) => [r.id, r.active])).toEqual([
-      [second.id, false],
-      [complaint.id, true],
+      [second.id, true],
+      [complaint.id, false],
     ]);
   });
 
@@ -256,8 +264,17 @@ describe("adjustment reason management routes", () => {
     ["maxAmount", { maxAmount: 30 }],
     ["maxAmount", { maxAmount: "30.001" }],
     ["maxAmount", { maxAmount: "1e3" }],
-    ["applyRole", { applyRole: "owner" }],
-    ["approverRole", { approverRole: undefined }],
+    ["kind", { kind: undefined }],
+    ["kind", { kind: "refund" }],
+    ["applyRoles", { applyRoles: "staff" }],
+    ["applyRoles", { applyRoles: undefined }],
+    ["applyRoles", { applyRoles: [] }],
+    ["applyRoles", { applyRoles: ["staff", "staff"] }],
+    ["applyRoles", { applyRoles: ["chef"] }],
+    ["approverRoles", { approverRoles: undefined }],
+    ["approverRoles", { approverRoles: [] }],
+    ["approverRoles", { approverRoles: ["manager", "manager"] }],
+    ["approverRoles", { approverRoles: [7] }],
     ["noteRequired", { noteRequired: "yes" }],
   ])("refuses a body whose %s is malformed (%o), writing nothing", async (field, overrides) => {
     const fx = await fixture();
@@ -284,9 +301,14 @@ describe("adjustment reason management routes", () => {
       { code: "adjustment_reason.invalid", params: { field: "name" } },
     ],
     [
-      "an approver below the applying role",
-      { applyRole: "manager", approverRole: "supervisor" },
-      { code: "adjustment_reason.invalid", params: { field: "approverRole" } },
+      "a Comp reason offering Free under a full item limit",
+      { maxPercentBp: 5000 },
+      { code: "adjustment_reason.invalid", params: { field: "maxPercentBp" } },
+    ],
+    [
+      "a Void reason holding a role",
+      { ...OTHER, applyRoles: ["staff"] },
+      { code: "adjustment_reason.invalid", params: { field: "applyRoles" } },
     ],
   ])("answers %s with 400, writing nothing", async (_case, overrides, error) => {
     const fx = await fixture();
@@ -307,6 +329,81 @@ describe("adjustment reason management routes", () => {
     expect(await response.json()).toEqual({
       error: { code: "adjustment_reason.invalid", params: { field: "ids" } },
     });
+  });
+
+  it("takes a Void reason with no role lists, as the reason screen sends one", async () => {
+    const fx = await fixture();
+    const response = await send(fx.app, "POST", REASONS, fx.cookie.manager, OTHER);
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      id: expect.any(String),
+      ...OTHER,
+      active: true,
+      position: 0,
+    });
+  });
+
+  it("answers switching off the last Void reason, or the last that asks for a note, with 409 and its withNote", async () => {
+    const fx = await fixture();
+    const manager = fx.cookie.manager;
+    const other = (await (await send(fx.app, "POST", REASONS, manager, OTHER)).json()) as {
+      id: string;
+    };
+
+    const last = await send(fx.app, "DELETE", `${REASONS}/${other.id}`, manager);
+    expect(last.status).toBe(409);
+    expect(await last.json()).toEqual({
+      error: { code: "adjustment_reason.void_required", params: { withNote: false } },
+    });
+    const turned = await send(fx.app, "PUT", `${REASONS}/${other.id}`, manager, {
+      ...COMPLAINT,
+      name: "Other",
+    });
+    expect(turned.status).toBe(409);
+    expect(await turned.json()).toEqual({
+      error: { code: "adjustment_reason.void_required", params: { withNote: false } },
+    });
+
+    await send(fx.app, "POST", REASONS, manager, {
+      ...OTHER,
+      name: "Mistake",
+      noteRequired: false,
+    });
+    const lastWithNote = await send(fx.app, "DELETE", `${REASONS}/${other.id}`, manager);
+    expect(lastWithNote.status).toBe(409);
+    expect(await lastWithNote.json()).toEqual({
+      error: { code: "adjustment_reason.void_required", params: { withNote: true } },
+    });
+    const listed = (await (await send(fx.app, "GET", REASONS, manager)).json()) as {
+      reasons: { id: string; kind: string; noteRequired: boolean }[];
+    };
+    expect(listed.reasons.find((r) => r.id === other.id)).toMatchObject({
+      kind: "void",
+      noteRequired: true,
+    });
+
+    await send(fx.app, "POST", REASONS, manager, { ...OTHER, name: "Wrong table" });
+    expect((await send(fx.app, "DELETE", `${REASONS}/${other.id}`, manager)).status).toBe(204);
+  });
+
+  it("keeps one of two Void reasons switched off together, refusing the other with 409", async () => {
+    const fx = await fixture();
+    const manager = fx.cookie.manager;
+    const pair = [
+      (await (await send(fx.app, "POST", REASONS, manager, OTHER)).json()) as { id: string },
+      (await (
+        await send(fx.app, "POST", REASONS, manager, { ...OTHER, name: "Mistake" })
+      ).json()) as { id: string },
+    ];
+
+    const responses = await Promise.all(
+      pair.map((reason) => send(fx.app, "DELETE", `${REASONS}/${reason.id}`, manager)),
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
+    const listed = (await (await send(fx.app, "GET", REASONS, manager)).json()) as {
+      reasons: { id: string }[];
+    };
+    expect(listed.reasons).toHaveLength(1);
   });
 
   describe("reactivating a reason", () => {
@@ -441,9 +538,12 @@ describe("adjustment reason management routes", () => {
 
 describe("adjustment settings routes", () => {
   const SETTINGS = "/management-api/adjustments/settings";
+  const LIMIT = { maxBillComp: "40.00", billApproverRoles: ["supervisor", "manager"] };
 
-  async function storedLimit(): Promise<unknown[]> {
-    return (await db.execute(sql`select max_bill_discount from adjustment_settings`)).rows;
+  async function stored(): Promise<unknown[]> {
+    return (
+      await db.execute(sql`select max_bill_comp, bill_approver_roles from adjustment_settings`)
+    ).rows;
   }
 
   it("lets a manager read no limit, set one, and clear it again", async () => {
@@ -451,17 +551,21 @@ describe("adjustment settings routes", () => {
     const manager = fx.cookie.manager;
     const empty = await send(fx.app, "GET", SETTINGS, manager);
     expect(empty.status).toBe(200);
-    expect(await empty.json()).toEqual({ maxBillDiscountBp: null });
-
-    const saved = await send(fx.app, "PUT", SETTINGS, manager, { maxBillDiscountBp: 4000 });
-    expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual({ maxBillDiscountBp: 4000 });
-    expect(await (await send(fx.app, "GET", SETTINGS, manager)).json()).toEqual({
-      maxBillDiscountBp: 4000,
+    expect(await empty.json()).toEqual({
+      maxBillComp: null,
+      billApproverRoles: ["manager", "admin"],
     });
 
-    await send(fx.app, "PUT", SETTINGS, fx.cookie.admin, { maxBillDiscountBp: null });
-    expect(await storedLimit()).toEqual([{ max_bill_discount: null }]);
+    const saved = await send(fx.app, "PUT", SETTINGS, manager, LIMIT);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual(LIMIT);
+    expect(await (await send(fx.app, "GET", SETTINGS, manager)).json()).toEqual(LIMIT);
+
+    await send(fx.app, "PUT", SETTINGS, fx.cookie.admin, {
+      maxBillComp: null,
+      billApproverRoles: ["admin"],
+    });
+    expect(await stored()).toEqual([{ max_bill_comp: null, bill_approver_roles: '["admin"]' }]);
   });
 
   it("refuses a supervisor or staff member, and writes nothing", async () => {
@@ -469,7 +573,7 @@ describe("adjustment settings routes", () => {
     for (const role of ["staff", "supervisor"] as const) {
       for (const [method, body] of [
         ["GET", undefined],
-        ["PUT", { maxBillDiscountBp: 4000 }],
+        ["PUT", LIMIT],
       ] as const) {
         const response = await send(fx.app, method, SETTINGS, fx.cookie[role], body);
         expect(response.status, `${role} ${method}`).toBe(403);
@@ -481,33 +585,40 @@ describe("adjustment settings routes", () => {
         });
       }
     }
-    expect(await storedLimit()).toEqual([]);
+    expect(await stored()).toEqual([]);
   });
 
   it("refuses a request with no management session", async () => {
     const fx = await fixture();
-    const response = await send(fx.app, "PUT", SETTINGS, undefined, { maxBillDiscountBp: 4000 });
+    const response = await send(fx.app, "PUT", SETTINGS, undefined, LIMIT);
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({
       error: { code: "management_session.required" },
     });
-    expect(await storedLimit()).toEqual([]);
+    expect(await stored()).toEqual([]);
   });
 
-  it.each<[string, Record<string, unknown>]>([
-    ["missing", {}],
-    ["a string", { maxBillDiscountBp: "4000" }],
-    ["zero", { maxBillDiscountBp: 0 }],
-    ["above 100%", { maxBillDiscountBp: 10001 }],
-    ["a fraction of a basis point", { maxBillDiscountBp: 12.5 }],
-  ])("refuses a limit that is %s, writing nothing", async (_case, body) => {
+  it.each<[string, string, Record<string, unknown>]>([
+    ["maxBillComp", "missing", { maxBillComp: undefined }],
+    ["maxBillComp", "a number", { maxBillComp: 40 }],
+    ["maxBillComp", "zero", { maxBillComp: "0.00" }],
+    ["maxBillComp", "a third decimal place", { maxBillComp: "40.001" }],
+    ["billApproverRoles", "missing", { billApproverRoles: undefined }],
+    ["billApproverRoles", "not a list", { billApproverRoles: "manager" }],
+    ["billApproverRoles", "empty", { billApproverRoles: [] }],
+    ["billApproverRoles", "a repeated role", { billApproverRoles: ["admin", "admin"] }],
+    ["billApproverRoles", "an unknown role", { billApproverRoles: ["chef"] }],
+  ])("refuses a %s that is %s, writing nothing", async (field, _case, overrides) => {
     const fx = await fixture();
-    const response = await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, body);
+    const response = await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, {
+      ...LIMIT,
+      ...overrides,
+    });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "maxBillDiscountBp" } },
+      error: { code: "management.request_invalid", params: { field } },
     });
-    expect(await storedLimit()).toEqual([]);
+    expect(await stored()).toEqual([]);
   });
 });
 

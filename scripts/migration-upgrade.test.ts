@@ -359,6 +359,10 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
+  // Reasons change shape; every venue needs a reset (A758).
+  "adjustments/0005_lucky_chamber": {
+    refused: ["NOT NULL constraint failed: __new_adjustment_reasons.kind"],
+  },
   // Rebuilds floor_plan_tables, which live tables point at; every venue needs a reset (A504).
   "core/0169_floor_tables_keep_no_place": {
     refused: ["NOT NULL constraint failed: __new_floor_plan_tables.zone_id"],

@@ -1,11 +1,7 @@
-import { roleAtLeast, type PersonRoleValue } from "@waitron/identity";
-import {
-  addDecimal,
-  compareDecimal,
-  decimal,
-  multiplyDecimal,
-  type Decimal,
-} from "@waitron/shared";
+import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
+import { addDecimal, compareDecimal, decimal, type Decimal } from "@waitron/shared";
+import type { AdjustmentStage } from "./schema/adjustments.js";
+import type { ReasonKind } from "./schema/reasons.js";
 
 export const ADJUSTMENT_ACTIONS = [
   "cancel",
@@ -16,198 +12,162 @@ export const ADJUSTMENT_ACTIONS = [
 
 export type AdjustmentAction = (typeof ADJUSTMENT_ACTIONS)[number];
 
+export const COMP_ACTIONS = ["comp", "discount_percent", "discount_amount"] as const;
+
+export type CompAction = (typeof COMP_ACTIONS)[number];
+
 /** A whole count of basis points from 1 to 10000: a percentage from 0.01% to 100%. */
 export function isPercentBp(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 10000;
+}
+
+/** A role list a reason or the bill limit may hold: not empty, no role twice, every one a role. */
+export function isRoleList(roles: readonly string[]): roles is PersonRoleValue[] {
+  return (
+    roles.length > 0 &&
+    new Set(roles).size === roles.length &&
+    roles.every((role) => (personRole.enumValues as readonly string[]).includes(role))
+  );
 }
 
 export interface AdjustmentReason {
   id: string;
   name: string;
   names: Record<string, string>;
+  kind: ReasonKind;
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: Decimal | null;
-  applyRole: PersonRoleValue;
-  approverRole: PersonRoleValue;
+  applyRoles: PersonRoleValue[];
+  approverRoles: PersonRoleValue[];
   noteRequired: boolean;
   active: boolean;
   position: number;
 }
 
-/** One adjustment asked under a reason. The priors are this reason's own earlier reductions on the
- * same bill, and its earlier percentage on the same line (D6). */
-export interface AdjustmentRequest {
-  action: AdjustmentAction;
-  reduction: Decimal;
-  percentBp: number | null;
-  actorRole: PersonRoleValue;
-  note: string | null;
-  priorReductionOnBill: Decimal;
-  priorPercentOnLineBp: number;
-}
+/** Whose PIN lets a request through: a list of roles, or anyone holding the refund permission. */
+export type Approval =
+  | { by: "reason"; roles: PersonRoleValue[] }
+  | { by: "bill_limit"; roles: PersonRoleValue[]; limit: Decimal }
+  | { by: "refund" };
 
 export type AdjustmentVerdict =
   | { kind: "allowed" }
-  | { kind: "needs_approval"; approverRole: PersonRoleValue }
+  | { kind: "needs_approval"; approval: Approval }
   | {
       kind: "refused";
       code:
-        | "adjustment.action_not_allowed"
-        | "adjustment.over_limit"
-        | "adjustment.note_required"
-        | "adjustment.reason_inactive";
+        "adjustment.action_not_allowed" | "adjustment.note_required" | "adjustment.reason_inactive";
     };
+
+export interface CompRequest {
+  action: CompAction;
+  reduction: Decimal;
+  actorRole: PersonRoleValue;
+  note: string | null;
+  /** This reason's earlier reductions on the bill. */
+  priorReductionOnBill: Decimal;
+  /** The most basis points any item this request changes would then carry from this reason. */
+  itemShareBp: number;
+  /** What comps have taken off the items still on the bill, before this request. */
+  billComped: Decimal;
+  billLimit: { maxAmount: Decimal | null; approverRoles: PersonRoleValue[] };
+}
+
+export interface CancelRequest {
+  actorRole: PersonRoleValue;
+  note: string | null;
+  stage: AdjustmentStage;
+}
 
 const ZERO = decimal("0");
 
 /** A malformed request is the caller's bug, so it throws rather than being answered as a verdict. */
-function assertWellFormed(req: AdjustmentRequest): void {
-  if (compareDecimal(req.reduction, ZERO) < 0) throw new RangeError("reduction is negative");
-  if (compareDecimal(req.priorReductionOnBill, ZERO) < 0) {
-    throw new RangeError("priorReductionOnBill is negative");
+function assertWellFormed(req: CompRequest): void {
+  for (const field of ["reduction", "priorReductionOnBill", "billComped"] as const) {
+    if (compareDecimal(req[field], ZERO) < 0) throw new RangeError(`${field} is negative`);
   }
-  if (!Number.isInteger(req.priorPercentOnLineBp) || req.priorPercentOnLineBp < 0) {
-    throw new RangeError("priorPercentOnLineBp is not a whole count of basis points");
-  }
-  const percent = req.percentBp;
-  if (req.action === "discount_percent" && !isPercentBp(percent)) {
-    throw new RangeError("a percentage discount needs percentBp in 1..10000");
+  if (!Number.isInteger(req.itemShareBp) || req.itemShareBp < 0) {
+    throw new RangeError("itemShareBp is not a whole count of basis points");
   }
 }
 
-/**
- * Whether a reason's policy lets this request through. Limits are cumulative per reason: `maxAmount`
- * caps the total the reason takes off one bill, whatever the action, and `maxPercentBp` caps the
- * combined percentage it takes off one line, for `discount_percent` only. A refusal is decided
- * before approval, so no approver is asked to allow what the policy refuses anyway.
- */
-export function evaluateAdjustment(
-  reason: AdjustmentReason,
-  req: AdjustmentRequest,
-): AdjustmentVerdict {
+function lacksNote(reason: AdjustmentReason, note: string | null): boolean {
+  return reason.noteRequired && (note === null || note.trim() === "");
+}
+
+/** Past the bill's comp limit, that list approves the whole request (design §3.2, step 3). */
+export function evaluateComp(reason: AdjustmentReason, req: CompRequest): AdjustmentVerdict {
   assertWellFormed(req);
   if (!reason.active) return { kind: "refused", code: "adjustment.reason_inactive" };
-  if (!reason.actions.includes(req.action)) {
+  if (reason.kind !== "comp" || !reason.actions.includes(req.action)) {
     return { kind: "refused", code: "adjustment.action_not_allowed" };
   }
-  if (
-    req.action === "discount_percent" &&
-    reason.maxPercentBp !== null &&
-    req.priorPercentOnLineBp + req.percentBp! > reason.maxPercentBp
-  ) {
-    return { kind: "refused", code: "adjustment.over_limit" };
+  if (lacksNote(reason, req.note)) return { kind: "refused", code: "adjustment.note_required" };
+  const { maxAmount: billMax, approverRoles: billRoles } = req.billLimit;
+  if (billMax !== null && compareDecimal(addDecimal(req.billComped, req.reduction), billMax) > 0) {
+    return billRoles.includes(req.actorRole)
+      ? { kind: "allowed" }
+      : {
+          kind: "needs_approval",
+          approval: { by: "bill_limit", roles: [...billRoles], limit: billMax },
+        };
   }
-  if (
+  if (reason.approverRoles.includes(req.actorRole)) return { kind: "allowed" };
+  const pastItem = reason.maxPercentBp !== null && req.itemShareBp > reason.maxPercentBp;
+  const pastBill =
     reason.maxAmount !== null &&
-    compareDecimal(addDecimal(req.priorReductionOnBill, req.reduction), reason.maxAmount) > 0
-  ) {
-    return { kind: "refused", code: "adjustment.over_limit" };
-  }
-  if (reason.noteRequired && (req.note === null || req.note.trim() === "")) {
-    return { kind: "refused", code: "adjustment.note_required" };
-  }
-  if (!roleAtLeast(req.actorRole, reason.applyRole)) {
-    return { kind: "needs_approval", approverRole: reason.approverRole };
+    compareDecimal(addDecimal(req.priorReductionOnBill, req.reduction), reason.maxAmount) > 0;
+  if (!reason.applyRoles.includes(req.actorRole) || pastItem || pastBill) {
+    return {
+      kind: "needs_approval",
+      approval: { by: "reason", roles: [...reason.approverRoles] },
+    };
   }
   return { kind: "allowed" };
 }
 
-/** A discount asked on a bill, measured against the venue's limit on the bill's total discount. */
-export interface BillDiscountRequest {
-  /** The venue's limit in basis points of `billValue`; null sets none. */
-  limitBp: number | null;
-  /** What the bill's rows are already discounted by. */
-  priorDiscount: Decimal;
-  reduction: Decimal;
-  /** The bill's price before any adjustment. */
-  billValue: Decimal;
-  actorRole: PersonRoleValue;
-}
-
-/**
- * Whether this discount takes the bill's discounts past the venue's limit when the operator is
- * below a manager, so someone at or above a manager must approve it. Reaching the limit exactly is
- * allowed; the amounts are in the cents the bill shows, and the share is compared without rounding.
- */
-export function billDiscountNeedsManager(req: BillDiscountRequest): boolean {
-  const { limitBp } = req;
-  if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
-  for (const field of ["priorDiscount", "reduction", "billValue"] as const) {
-    if (compareDecimal(req[field], ZERO) < 0) throw new RangeError(`${field} is negative`);
+export function evaluateCancel(reason: AdjustmentReason, req: CancelRequest): AdjustmentVerdict {
+  if (!reason.active) return { kind: "refused", code: "adjustment.reason_inactive" };
+  if (reason.kind !== "void" || !reason.actions.includes("cancel")) {
+    return { kind: "refused", code: "adjustment.action_not_allowed" };
   }
-  if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
-  const taken = multiplyDecimal(addDecimal(req.priorDiscount, req.reduction), decimal("10000"));
-  return compareDecimal(taken, multiplyDecimal(req.billValue, decimal(String(limitBp)))) > 0;
-}
-
-/** A bill's discount and its price before adjustments, over the same rows. */
-export interface BillShare {
-  discount: Decimal;
-  value: Decimal;
-}
-
-/** A cancel asked on a bill: its share before and after the cancel, priced in the cents the bill
- * shows and priced exactly. */
-export interface BillCancelRequest {
-  limitBp: number | null;
-  before: BillShare;
-  after: BillShare;
-  exactBefore: BillShare;
-  exactAfter: BillShare;
-  actorRole: PersonRoleValue;
-}
-
-/**
- * Whether a cancel by an operator below a manager leaves the bill's discount share past the venue's
- * limit, judged on `after`, and raises the share on both the shown and the exact prices, so a rise
- * that rounding alone makes or hides asks nobody. A cancel that empties the bill leaves no share.
- */
-export function billCancelNeedsManager(req: BillCancelRequest): boolean {
-  const { limitBp, before, after, exactBefore, exactAfter } = req;
-  if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
-  for (const [name, share] of [
-    ["before", before],
-    ["after", after],
-    ["exactBefore", exactBefore],
-    ["exactAfter", exactAfter],
-  ] as const) {
-    if (compareDecimal(share.discount, ZERO) < 0 || compareDecimal(share.value, ZERO) < 0) {
-      throw new RangeError(`${name} is negative`);
-    }
+  if (lacksNote(reason, req.note)) return { kind: "refused", code: "adjustment.note_required" };
+  if (
+    (req.stage === "fired" || req.stage === "served") &&
+    !roleHasPermission(req.actorRole, "sale.refund")
+  ) {
+    return { kind: "needs_approval", approval: { by: "refund" } };
   }
-  if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
-  const past =
-    compareDecimal(
-      multiplyDecimal(after.discount, decimal("10000")),
-      multiplyDecimal(after.value, decimal(String(limitBp))),
-    ) > 0;
-  const rises = (from: BillShare, to: BillShare) =>
-    compareDecimal(
-      multiplyDecimal(to.discount, from.value),
-      multiplyDecimal(from.discount, to.value),
-    ) > 0;
-  return past && rises(before, after) && rises(exactBefore, exactAfter);
+  return { kind: "allowed" };
+}
+
+export function approves(approval: Approval, role: PersonRoleValue): boolean {
+  return approval.by === "refund"
+    ? roleHasPermission(role, "sale.refund")
+    : approval.roles.includes(role);
 }
 
 /** The reason's policy an adjustment was evaluated under, kept on the adjustment so a later edit of the
  * reason never rewrites what was approved. */
 export interface AdjustmentPolicySnapshot {
+  kind: ReasonKind;
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: Decimal | null;
-  applyRole: PersonRoleValue;
-  approverRole: PersonRoleValue;
+  applyRoles: PersonRoleValue[];
+  approverRoles: PersonRoleValue[];
   noteRequired: boolean;
 }
 
 export function policySnapshotOf(reason: AdjustmentReason): AdjustmentPolicySnapshot {
   return {
+    kind: reason.kind,
     actions: [...reason.actions],
     maxPercentBp: reason.maxPercentBp,
     maxAmount: reason.maxAmount,
-    applyRole: reason.applyRole,
-    approverRole: reason.approverRole,
+    applyRoles: [...reason.applyRoles],
+    approverRoles: [...reason.approverRoles],
     noteRequired: reason.noteRequired,
   };
 }
