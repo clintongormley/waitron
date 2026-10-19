@@ -5578,11 +5578,10 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
 
-- **A810. Show that a product given an empty unit id is refused.** Since #611 no case in
-  `packages/venue-service/src/operations.test.ts` shows it: its unit id is a placeholder. Add one
-  case that gives a product an empty unit id and expects the refusal, which should come from the
-  `product_units.unit_id` foreign key (`packages/catalogue/src/schema/units.ts:51`; read, not run).
-  If it is not refused, fix that. Done when the case is in and passes.
+- **Neither `working_line_contexts.unit_id` nor its write refuses an empty unit id.** The column
+  is `text NOT NULL` with no foreign key or CHECK, and `recordWorkingLineContexts`
+  (`packages/venue-service/src/operations.ts`) writes it unchecked. Refuse `""` there, with a case,
+  or record why a sale can never carry one. Left open by A810 (#1886).
 
 - **Loose ends left by the comment-pruning pull requests (#559 to #624).** Each was found while
   pruning comments.
