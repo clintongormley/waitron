@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
-import { kitchenCourses, type Transaction } from "@waitron/db";
+import { kitchenCourses, locations, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import type { VenueScope } from "./operations.js";
@@ -105,4 +105,32 @@ export async function saveServiceSteps(
     if (step.id === undefined) await tx.insert(serviceSteps).values({ departmentId, ...values });
     else await tx.update(serviceSteps).set(values).where(eq(serviceSteps.id, step.id));
   }
+}
+
+const STARTER_STEPS = [
+  { start: "seated", minutes: 0, en: "Set up", es: "Montar mesa" },
+  { start: "after_previous", minutes: 2, en: "Take order", es: "Tomar nota" },
+  { start: "all_served", minutes: 10, en: "Anything else?", es: "¿Algo más?" },
+] as const;
+
+/** Named in the venue's first receipt language: English for `en`, Spanish for any other. */
+export async function addStarterServiceSteps(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+): Promise<void> {
+  const [location] = await tx
+    .select({ invoiceLocales: locations.invoiceLocales })
+    .from(locations)
+    .where(eq(locations.id, cfg.locationId));
+  const language = location?.invoiceLocales[0]?.split("-")[0]?.toLowerCase() === "en" ? "en" : "es";
+  for (const [position, step] of STARTER_STEPS.entries())
+    await tx.insert(serviceSteps).values({
+      departmentId,
+      position,
+      name: step[language],
+      start: step.start,
+      courseId: null,
+      minutes: step.minutes,
+    });
 }

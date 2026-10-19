@@ -17,7 +17,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
-import { createDepartment } from "../operations.js";
+import { departments } from "./service.js";
 import { serviceSteps } from "./service-steps.js";
 
 const suite = useVenueDb({
@@ -36,10 +36,11 @@ beforeAll(async () => {
     .values({ name: "Steps", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
   const cfg = { locationId: brandLocationId(location!.id) };
-  const department = await withTransaction(db, (tx) =>
-    createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" }),
-  );
-  departmentId = department.id;
+  const [department] = await db
+    .insert(departments)
+    .values({ locationId: cfg.locationId, name: "Restaurant", tradingName: "Restaurant" })
+    .returning({ id: departments.id });
+  departmentId = department!.id;
   const [course] = await db
     .insert(kitchenCourses)
     .values({ locationId: cfg.locationId, name: "Mains", displayOrder: 0 })

@@ -12,11 +12,12 @@ import {
 import { serviceSettings } from "./schema/settings.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
+import { addStarterServiceSteps } from "./service-steps.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department, counter zone, service settings and four seasons, and give each profile that takes orders that department",
+      "Create the default department with its starter service steps, counter zone, service settings and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
@@ -48,19 +49,20 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           .where(and(eq(departments.locationId, node.locationId), eq(departments.active, true)))
           .orderBy(asc(departments.name), asc(departments.id))
           .limit(1);
-        departmentId =
-          replacement?.id ??
-          (
-            await tx
-              .insert(departments)
-              .values({
-                locationId: node.locationId,
-                name: location[0]!.name,
-                tradingName: location[0]!.name,
-                isDefault: true,
-              })
-              .returning({ id: departments.id })
-          )[0]!.id;
+        if (replacement !== undefined) departmentId = replacement.id;
+        else {
+          const [inserted] = await tx
+            .insert(departments)
+            .values({
+              locationId: node.locationId,
+              name: location[0]!.name,
+              tradingName: location[0]!.name,
+              isDefault: true,
+            })
+            .returning({ id: departments.id });
+          departmentId = inserted!.id;
+          await addStarterServiceSteps(tx, node, departmentId);
+        }
         await tx
           .update(departments)
           .set({ isDefault: true })

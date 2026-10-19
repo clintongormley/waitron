@@ -32,10 +32,13 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedVenue(name: string): Promise<{ locationId: LocationId }> {
+async function seedVenue(
+  name: string,
+  invoiceLocales: string[] = ["en-GB"],
+): Promise<{ locationId: LocationId }> {
   const [row] = await db
     .insert(locations)
-    .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+    .values({ name, invoiceLocales, operationDescription: "Hospitality" })
     .returning({ id: locations.id });
   return { locationId: brandLocationId(row!.id) };
 }
@@ -60,6 +63,50 @@ async function departmentRows(departmentId: string) {
     .where(eq(serviceSteps.departmentId, departmentId))
     .orderBy(asc(serviceSteps.position), asc(serviceSteps.id));
 }
+
+function starterSteps(departmentId: string, names: [string, string, string]) {
+  return [
+    { start: "seated", minutes: 0 },
+    { start: "after_previous", minutes: 2 },
+    { start: "all_served", minutes: 10 },
+  ].map((step, index) => ({
+    id: expect.any(String),
+    departmentId,
+    name: names[index],
+    courseId: null,
+    ...step,
+  }));
+}
+
+describe("a new department's starter steps", () => {
+  it.each([
+    {
+      title:
+        "a department created in an English venue starts with Set up, Take order and Anything else?",
+      locales: ["en"],
+      names: ["Set up", "Take order", "Anything else?"],
+    },
+    {
+      title:
+        "a department created in a Spanish venue starts with Montar mesa, Tomar nota and ¿Algo más?",
+      locales: ["es-ES", "en-GB"],
+      names: ["Montar mesa", "Tomar nota", "¿Algo más?"],
+    },
+    {
+      title: "a venue whose first receipt language is neither starts with the Spanish names",
+      locales: ["fr"],
+      names: ["Montar mesa", "Tomar nota", "¿Algo más?"],
+    },
+  ] as const)("$title", async ({ locales, names }) => {
+    const cfg = await seedVenue(`Starter ${locales.join(" ")}`, [...locales]);
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+    );
+    expect(await scoped((tx) => listServiceSteps(tx, cfg))).toEqual(
+      starterSteps(department.id, [...names]),
+    );
+  });
+});
 
 describe("service steps", () => {
   it("lists each active department's steps in order, and none of a deleted department", async () => {

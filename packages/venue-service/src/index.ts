@@ -69,6 +69,7 @@ export {
 export * from "./department-receipts.js";
 
 export {
+  addStarterServiceSteps,
   listServiceSteps,
   listStepCourses,
   saveServiceSteps,

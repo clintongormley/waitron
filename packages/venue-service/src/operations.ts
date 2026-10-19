@@ -10,7 +10,11 @@ import {
   type ZoneClosureDays,
 } from "./zone-closed-times.js";
 import { setDepartmentTransferSettings } from "./department-transfers.js";
-import { saveServiceSteps, type ServiceStepInput } from "./service-steps.js";
+import {
+  addStarterServiceSteps,
+  saveServiceSteps,
+  type ServiceStepInput,
+} from "./service-steps.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
@@ -207,6 +211,7 @@ export async function createDepartment(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
+  await addStarterServiceSteps(tx, cfg, row!.id);
   const [location] = await tx
     .select({ menuId: locations.catalogueId })
     .from(locations)
