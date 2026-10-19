@@ -14,6 +14,7 @@ import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   ContentLanguageController,
+  formatDecimalInput,
   Gestures,
   inNumberOrder,
   leaveCoordinatorFor,
@@ -4351,6 +4352,31 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
   }
 
+  #fireGroupSummary(group: OrderGroup): string {
+    const rows = this.currentOrders?.groups.find((current) => current.id === group.id)?.rows;
+    const byId = new Map(rows?.map((row) => [row.lineId, row]));
+    if (group.lineIds.length === 0 || !group.lineIds.every((id) => byId.has(id)))
+      return group.summary;
+    const counts = new Map<string, Decimal>();
+    for (const id of group.lineIds) {
+      const row = byId.get(id)!;
+      const quantity = subtractDecimal(
+        decimal(row.quantity),
+        decimal(row.cancelledQuantity ?? "0"),
+      );
+      counts.set(row.name, addDecimal(counts.get(row.name) ?? decimal("0"), quantity));
+    }
+    const quantities = [...counts].map(
+      ([name, quantity]) => [name, trimQuantity(quantity)] as const,
+    );
+    // The two reads can arrive separately; a stale row must not change what Fire confirms.
+    if (quantities.map(([name, quantity]) => `${quantity} × ${name}`).join(", ") !== group.summary)
+      return group.summary;
+    return quantities
+      .map(([name, quantity]) => `${formatDecimalInput(quantity, currentLocale())} × ${name}`)
+      .join(", ");
+  }
+
   #fireGroupDialog(): TemplateResult {
     const group = this.fireGroupPending;
     return html`<wt-dialog
@@ -4365,7 +4391,7 @@ export class TillTableOrderScreen extends LitElement {
         group === null
           ? nothing
           : html`<p data-fire-summary>
-              ${t("table.fire_group_body").replace("{summary}", () => group.summary)}
+              ${t("table.fire_group_body").replace("{summary}", () => this.#fireGroupSummary(group))}
             </p>`
       }
       <div slot="footer" class="cancel-actions">

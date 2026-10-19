@@ -6,6 +6,7 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   current,
+  currentGroup,
   groups,
   now,
   row,
@@ -134,6 +135,86 @@ it("keeps a due group's Fire behind the same confirmation", async () => {
   expect(find(el, "[data-fire-summary]").textContent).toContain("summary of g3");
   await userEvent.click(find(el, "[data-fire-dismiss]"));
   expect(events).toEqual([]);
+});
+
+it.each([
+  ["en", "held", "It goes to the kitchen now: 0.375 × Fish 1.5, 2 × small, 2 × Bread"],
+  ["es", "held", "Pasa a cocina ahora: 0,375 × Fish 1.5, 2 × small, 2 × Bread"],
+  ["en", "reminder", "It goes to the kitchen now: 0.375 × Fish 1.5, 2 × small, 2 × Bread"],
+  ["es", "reminder", "Pasa a cocina ahora: 0,375 × Fish 1.5, 2 × small, 2 × Bread"],
+] as const)("shows %s quantities before the native %s Fire", async (locale, entry, expected) => {
+  setLocale(locale);
+  const held = {
+    ...groups[2]!,
+    lineIds: ["own-fish", "other-fish", "bread"],
+    summary: "0.375 × Fish 1.5, 2 × small, 2 × Bread",
+  };
+  const { el } = await sent({
+    groups: [held],
+    currentOrders: current({
+      groups: [
+        currentGroup("g3", 3, "held", [
+          row("own-fish", "Fish 1.5, 2 × small", "0.375", {
+            unitPrecision: 3,
+            cancelledQuantity: "0.125",
+            released: false,
+          }),
+          row("other-fish", "Fish 1.5, 2 × small", "0.125", {
+            workingOrderId: "other-bill",
+            unitPrecision: 3,
+            released: false,
+          }),
+          row("bread", "Bread", "2.000", { released: false }),
+          row("cancelled", "Omitted fish", "1.000", {
+            cancelledQuantity: "1.000",
+            released: false,
+          }),
+        ]),
+        currentGroup("g4", 4, "held", [
+          row("elsewhere", "Fish 1.5, 2 × small", "4.000", { released: false }),
+        ]),
+      ],
+      ungrouped: [],
+    }),
+  });
+  const events = collect(el, "fire-group");
+  if (entry === "held") {
+    await click(el, "[data-held-toggle]");
+    await click(el, '[data-group-fire="g3"]');
+  } else await click(el, "[data-reminder-fire]");
+  expect(events).toEqual([]);
+  expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(expected);
+  await userEvent.click(find(el, "[data-fire-confirm]"));
+  await el.updateComplete;
+  expect(events.map((event) => event.detail)).toEqual([{ groupId: "g3" }]);
+});
+
+it("retains every dish in Fire's server summary when the structured read lacks a group line", async () => {
+  const { el } = await sent({
+    groups: [
+      {
+        ...groups[2]!,
+        lineIds: ["l-flan", "missing-other-bill-line"],
+        summary: "2 × Flan, 0.125 × Fish",
+      },
+    ],
+  });
+  await click(el, "[data-held-toggle]");
+  await click(el, '[data-group-fire="g3"]');
+  expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "It goes to the kitchen now: 2 × Flan, 0.125 × Fish",
+  );
+});
+
+it("retains Fire's server quantity when the structured read has the same line with an older quantity", async () => {
+  const { el } = await sent({
+    groups: [{ ...groups[2]!, lineIds: ["l-flan"], summary: "3 × Flan" }],
+  });
+  await click(el, "[data-held-toggle]");
+  await click(el, '[data-group-fire="g3"]');
+  expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "It goes to the kitchen now: 3 × Flan",
+  );
 });
 
 it("forwards due Snooze and Clear snooze once without needing the Sent box opened", async () => {

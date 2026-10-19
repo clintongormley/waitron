@@ -2710,10 +2710,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   settled check's lines naming a group now on the target party; three more points are in the
   detail. [Detail](backlog/till.md#task-3-733-order-groups)
 
-- **Loose ends left by service Task 4 (#748, the table screen works with order groups).**
-  - Recheck a Spanish fractional quantity in the Group Fire confirmation, which still uses the
-    server's summary. The retired Current orders fallback is no longer the place to check it.
-
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
