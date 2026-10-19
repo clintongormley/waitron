@@ -332,7 +332,6 @@ export async function menuVariantsOfItems(
         menuItemId: menuItems.id,
         variantId: products.id,
         price: menuItemVariantOverrides.price,
-        active: products.active,
         available: products.available,
       })
       .from(menuItems)
@@ -350,7 +349,6 @@ export async function menuVariantsOfItems(
       held.push({
         variantId: row.variantId,
         price: priceOrNull(row.price),
-        active: row.active,
         available: row.available,
       });
       grouped.set(row.menuItemId, held);

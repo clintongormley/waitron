@@ -1185,7 +1185,6 @@ describe("a price override row's Edit product link under the app's link router",
     placements: [[]],
     override: null,
     effectivePrice: "12.00",
-    active: true,
     available: true,
     variants: [],
   };
@@ -1205,9 +1204,8 @@ describe("a price override row's Edit product link under the app's link router",
     placements: [[]],
     override: null,
     effectivePrice: "2.50",
-    active: true,
     available: true,
-    variants: [{ variantId: "v-large", price: null, active: true, available: true }],
+    variants: [{ variantId: "v-large", price: null, available: true }],
   };
   const lemonadeProduct = {
     id: "p-lemonade",

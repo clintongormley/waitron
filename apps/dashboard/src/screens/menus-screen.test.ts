@@ -269,7 +269,6 @@ function lunchPrices(): MenuPriceRow[] {
       placements: [[]],
       override: null,
       effectivePrice: "12.00",
-      active: true,
       available: true,
       variants: [],
     },
@@ -292,11 +291,10 @@ function lunchPrices(): MenuPriceRow[] {
       placements: [["s-fav"], ["s-drinks"]],
       override: "2.50",
       effectivePrice: "2.50",
-      active: true,
       available: true,
       variants: [
-        { variantId: "v-small", price: null, active: true, available: true },
-        { variantId: "v-large", price: "3.75", active: true, available: true },
+        { variantId: "v-small", price: null, available: true },
+        { variantId: "v-large", price: "3.75", available: true },
       ],
     },
     {
@@ -308,7 +306,6 @@ function lunchPrices(): MenuPriceRow[] {
       placements: [["s-drinks", "s-beer"]],
       override: null,
       effectivePrice: "2.00",
-      active: true,
       available: true,
       variants: [],
     },
@@ -7375,8 +7372,8 @@ it.each([
         { "v-small": low, "v-large": high },
       ),
       variants: [
-        { variantId: "v-small", price: low, active: true, available: true },
-        { variantId: "v-large", price: high, active: true, available: true },
+        { variantId: "v-small", price: low, available: true },
+        { variantId: "v-large", price: high, available: true },
       ],
     };
     const client = api({

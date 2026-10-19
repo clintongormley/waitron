@@ -879,7 +879,6 @@ interface MenuPriceRow {
   productId: string;
   override: string | null;
   effectivePrice: string;
-  active: boolean;
   available: boolean;
 }
 
@@ -2856,7 +2855,7 @@ describe("mountCatalogueApi — products", () => {
     ]);
   });
 
-  it("keeps an Unavailable product on the menu's price list with its Active state, and takes an Inactive one off it", async () => {
+  it("keeps an Unavailable product on the menu's price list, and takes an Inactive one off it", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Management offers");
     const create = async (name: string): Promise<string> => {
@@ -2872,8 +2871,8 @@ describe("mountCatalogueApi — products", () => {
     const inactiveId = await create("Bravas");
     const unavailableOffer = await offerVia(app, catalogueId, unavailableId, "4.50");
     const inactiveOffer = await offerVia(app, catalogueId, inactiveId, "4.50");
-    const listed = async (): Promise<[string, boolean][]> =>
-      (await menuPricesVia(app, catalogueId)).map(({ menuItemId, active }) => [menuItemId, active]);
+    const listed = async (): Promise<string[]> =>
+      (await menuPricesVia(app, catalogueId)).map(({ menuItemId }) => menuItemId);
     const availability = async (): Promise<[string, boolean][]> =>
       (await menuPricesVia(app, catalogueId)).map(({ menuItemId, available }) => [
         menuItemId,
@@ -2884,10 +2883,7 @@ describe("mountCatalogueApi — products", () => {
       body: await editorBody(app, { name: "Rutas", active: true, available: false }),
     });
     expect(soldOut.status).toBe(200);
-    expect(await listed()).toEqual([
-      [unavailableOffer, true],
-      [inactiveOffer, true],
-    ]);
+    expect(await listed()).toEqual([unavailableOffer, inactiveOffer]);
     expect(await availability()).toEqual([
       [unavailableOffer, false],
       [inactiveOffer, true],
@@ -2897,7 +2893,7 @@ describe("mountCatalogueApi — products", () => {
       body: await editorBody(app, { name: "Bravas", active: false, available: true }),
     });
     expect(deleted.status).toBe(200);
-    expect(await listed()).toEqual([[unavailableOffer, true]]);
+    expect(await listed()).toEqual([unavailableOffer]);
     expect(await availability()).toEqual([[unavailableOffer, false]]);
   });
 
@@ -4369,7 +4365,6 @@ describe("a menu's prices", () => {
         placements: [[]],
         override: "1.40",
         effectivePrice: "1.40",
-        active: true,
         available: true,
         variants: [],
       },
