@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   TillApi,
   isNetworkFailure,
   menuOfferToTillProduct,
   type AllocationPreview,
   type BillBalance,
+  type BillEditExpected,
   type BillPaymentAsk,
   type BillPaymentRequest,
   type BillPaymentResult,
@@ -3925,12 +3926,19 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("requires the observed bill editing state on direct group submissions", () => {
+    type Submission = Parameters<TillApi["submitGroups"]>[1];
+    expectTypeOf<Submission>().toHaveProperty("expectedEdit").toEqualTypeOf<BillEditExpected>();
+    expectTypeOf<Omit<Submission, "expectedEdit">>().not.toMatchTypeOf<Submission>();
+  });
+
   it("submitGroups POSTs the submission, the revision read and each group's lines and release, and returns the tab they landed on", async () => {
     const answer = { tabId: "wo-2", revision: 7, groups };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
     const body = {
       submissionId: "sub-1",
       expectedPartyRevision: 6,
+      expectedEdit: { billId: "wo-2", editorVersion: 2, draftId: null, draftRevision: null },
       groups: [
         { lines: [{ menuItemId: "mi-cana", quantity: "2" }], release: "fire" as const },
         {
@@ -3955,6 +3963,7 @@ describe("TillApi: a seated party", () => {
     const body = {
       submissionId: "sub-2",
       expectedPartyRevision: 7,
+      expectedEdit: { billId: "wo-1", editorVersion: 3, draftId: null, draftRevision: null },
       groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "hold" as const }],
       joinGroupId: "g2",
     };
@@ -3973,6 +3982,7 @@ describe("TillApi: a seated party", () => {
       new TillApi("", fetchStub).submitGroups("v1", {
         submissionId: "sub-3",
         expectedPartyRevision: 1,
+        expectedEdit: { billId: "wo-1", editorVersion: 4, draftId: null, draftRevision: null },
         groups: [{ lines: [{ menuItemId: "mi-tarta", quantity: "1" }], release: "fire" }],
       }),
     ).rejects.toMatchObject({ code: "party.out_of_date", status: 409 });

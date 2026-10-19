@@ -687,6 +687,7 @@ export interface BillRequestCommand extends GroupCommand {
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
  * added to the existing held group `joinGroupId`. */
 export interface GroupSubmission extends GroupCommand {
+  expectedEdit: BillEditExpected;
   groups: {
     lines: GroupLine[];
     release: GroupRelease;
@@ -3840,13 +3841,6 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups`, "GET");
   }
 
-  /**
-   * Put groups of lines on a party's main bill → `POST /api/parties/:partyId/groups`, each released
-   * now or held. A party with no main bill, as after its last one was paid, presented or abandoned,
-   * gets a new one: the answer names the bill the lines landed on. A repeat with the same submission id answers as the first.
-   * Rejects `party.out_of_date`, `party.not_open`, `submission.id_reused`, `group.not_held` and
-   * `group.not_found` as `{ code }`.
-   */
   submitGroups(
     partyId: string,
     submission: GroupSubmission,

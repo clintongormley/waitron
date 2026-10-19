@@ -1507,6 +1507,13 @@ the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md
 local-candidate and refusal contracts. `order-drafts.db.test.ts` checks both bills' identities,
 quantities and previous-editor metadata after takeover, plus the old editor's refused save.
 
+Direct group submissions carry the observed bill editing state too. The till client's
+`GroupSubmission` type requires `expectedEdit`; its compiler checks reject an omitted observation
+and check its exact type. The existing client payload fixtures now include that field.
+`bill-editing.group-submit.test.ts` checks the server's refusal for a missing observation and its
+use of the observed bill when the redundant `billId` is omitted. The client type change completes
+that interface; cancellation and Finish-table integration remain open below.
+
 Closing compares every bill's editing state, including bills retained by a merged party. A
 colleague's outbox refuses `draft.taken_over`; stale editing state refuses `draft.out_of_date`;
 the editor's remaining saved dishes refuse `bill.unsent_dishes` rather than being discarded.
