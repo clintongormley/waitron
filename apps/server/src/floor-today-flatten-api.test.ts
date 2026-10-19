@@ -1,3 +1,4 @@
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { Hono } from "hono";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -140,7 +141,7 @@ async function joinMerging(
   return app.request(`/api/parties/${partyId}/join`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await observedTableActionBody(v.db, `/api/parties/${partyId}/join`, body)),
   });
 }
 
@@ -550,13 +551,15 @@ describe("a till join without a merge", () => {
         app.request(`/api/parties/${atLong.partyId}/join`, {
           method: "POST",
           headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify({
-            tableId: table.bar!,
-            bills: "merge",
-            expectedPartyRevision: await revisionOf(v, atLong.partyId),
-            otherPartyId: atBar.partyId,
-            expectedOtherPartyRevision: await revisionOf(v, atBar.partyId),
-          }),
+          body: JSON.stringify(
+            await observedTableActionBody(v.db, `/api/parties/${atLong.partyId}/join`, {
+              tableId: table.bar!,
+              bills: "merge",
+              expectedPartyRevision: await revisionOf(v, atLong.partyId),
+              otherPartyId: atBar.partyId,
+              expectedOtherPartyRevision: await revisionOf(v, atBar.partyId),
+            }),
+          ),
         }),
       ),
     );

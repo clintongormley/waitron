@@ -1,3 +1,4 @@
+import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
@@ -14,14 +15,13 @@ import { decimal } from "@waitron/shared";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import { payWorkingOrderIntegratedOrchestration as pay } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as pay } from "./testing/whole-payment-fixture.js";
 import * as tillSale from "./till-sale.js";
 import { withAutomaticCardRecovery, withPendingSweep } from "./boot.js";
 import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { provisionBillVenue, statusOf, tabWith, tendersOfBill } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
-import { placeOrder, updateOrderLine } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -162,7 +162,7 @@ describe("automatic card capture recovery", () => {
       errors: [
         {
           paymentId: expect.any(String),
-          error: "Error: automatic recovery must never collect a payment",
+          error: "AppError: management.request_invalid",
         },
       ],
     });

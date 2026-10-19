@@ -1,5 +1,10 @@
 # Several payments against one bill — the payment and billing design
 
+> **2026-10-18, A773:** The later [per-bill ownership design, section 4](2026-10-17-a773-one-editor-design.md#4-transaction-version-and-refusal-contract)
+> requires an unanswered whole or partial payment to retain its complete original request and retry
+> key, including its observed editing state. A refreshed confirmation cannot replace that request.
+> The A773-1 build remains unlanded.
+
 > **2026-10-17, A764:** The earlier Stripe no-op sweep and fail-on-reader-timeout account below is historical.
 > Uncertain reader outcomes now stay `attempting`; guarded automatic checks resolve inactive attempts,
 > record automatic actors without a person, and use the existing sale recovery. Confirmed automatic

@@ -1,4 +1,11 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { recallLines } from "./testing/order-writer-fixture.js";
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { sql } from "drizzle-orm";
+import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
+import { applyAdjustment } from "./adjustments-apply.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
@@ -13,7 +20,9 @@ import {
 } from "@waitron/catalogue";
 import {
   orderGroups,
+  kitchenCourses,
   serviceCommands,
+  ticketItems,
   parties,
   withTransaction,
   workingOrderLines,
@@ -34,13 +43,15 @@ import {
 } from "@waitron/shared";
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
-import { saveDraft, submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
+import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
+import { submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
 import {
   bumpGroupReady,
   fireGroup,
+  fireHeldLine,
   moveLinesToGroup,
   readCurrentOrders,
+  listOrderGroups,
   releaseReminder,
   reorderHeldGroups,
   snoozeReminder,
@@ -48,25 +59,21 @@ import {
   unsnoozeReminder,
   type GroupLine,
   type GroupRelease,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { finishTable, seatTable } from "./parties.js";
-import {
-  addTabRound,
-  listTablesWithState,
-  markGroupServed,
-  markServed,
-  recallLines,
-} from "./working-order.js";
+import { finishTable, seatTable } from "./testing/party-close-fixture.js";
+import { listTablesWithState, markGroupServed, markServed } from "./working-order.js";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
-import { joinTables } from "./table-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
+import { createCourse } from "./kitchen.js";
+import { deleteCourse } from "./course-delete.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -967,10 +974,16 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
 type RowShape = Awaited<ReturnType<typeof currentOrders>>["groups"][number]["rows"][number];
 
 /** A row as Current orders shows it, with the fields a case does not vary filled in. */
-function row(fields: Partial<RowShape> & Pick<RowShape, "lineId" | "name">): RowShape {
+function row(
+  fields: Partial<RowShape> & Pick<RowShape, "lineId" | "name" | "netAmount">,
+): RowShape {
   return {
+    billStatus: "open",
+    readyAt: null,
+    firedAt: expect.any(String) as unknown as string,
     workingOrderId: expect.any(String) as unknown as string,
     lineNo: expect.any(Number) as unknown as number,
+    courseId: null,
     quantity: "1.000",
     unitPrecision: 0,
     servedQuantity: "0.000",
@@ -1010,6 +1023,107 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(read.groups[0]!.rows[0]).toMatchObject({
       nutrition: { allergens: { gluten: { kinds: ["barley"] } }, dietaryDeclarations: ["halal"] },
     });
+  });
+
+  it("distinguishes a first order from a table whose groups have all been removed", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    expect(await currentOrders(s.partyId)).toMatchObject({ hasGroups: false, groups: [] });
+    const sent = await group(v, s.partyId, "hold", [line(v, "steak")]);
+    await suite.db.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, sent.id));
+
+    expect(await currentOrders(s.partyId)).toMatchObject({ hasGroups: true, groups: [] });
+    const other = await seated(v);
+    expect(await currentOrders(other.partyId)).toMatchObject({ hasGroups: false, groups: [] });
+  });
+
+  it("reads a held group's distinct recorded courses across bills, including a deleted course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 }));
+    const desserts = await inTx((tx) =>
+      createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 }),
+    );
+    const held = await group(v, s.partyId, "hold", [
+      { ...line(v, "steak", "2"), courseId: mains.id },
+      { ...line(v, "flan"), courseId: desserts.id },
+      line(v, "water"),
+    ]);
+    const steak = (await linesByName(s.partyId)).find((row) => row.name === "steak")!;
+    await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: steak.lineNo, quantity: "1" }], {
+        expectedPartyRevision: await revisionOf(s.partyId),
+        operatorId: MIA,
+      }),
+    );
+    await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+    const read = await inTx((tx) => listOrderGroups(tx, s.partyId));
+    expect(read.groups).toEqual([
+      expect.objectContaining({
+        id: held.id,
+        courseIds: [mains.id, desserts.id],
+      }),
+    ]);
+  });
+
+  it("carries retained course ordering and held settings even when the course is no longer active", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 }));
+    const starter = await inTx((tx) =>
+      createCourse(tx, v.cfg, { name: "Starter", displayOrder: 1, heldUntilFired: false }),
+    );
+    const unused = await inTx((tx) => createCourse(tx, v.cfg, { name: "Unused", displayOrder: 0 }));
+    await group(v, s.partyId, "hold", [
+      { ...line(v, "steak"), courseId: mains.id },
+      { ...line(v, "water"), courseId: starter.id },
+    ]);
+    await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+    await inTx((tx) => deleteCourse(tx, v.cfg, starter.id));
+    expect(await currentOrders(s.partyId)).toMatchObject({
+      retainedCourses: [
+        { id: starter.id, name: "Starter", displayOrder: 1, heldUntilFired: false },
+        { id: mains.id, name: "Mains", displayOrder: 2, heldUntilFired: true },
+      ],
+    });
+    expect(
+      (await suite.db.select().from(kitchenCourses).where(eq(kitchenCourses.id, unused.id)))[0]!
+        .active,
+    ).toBe(true);
+  });
+
+  it.each([
+    { dish: "steak", deleted: false },
+    { dish: "steak", deleted: true },
+    { dish: "water", deleted: false },
+    { dish: "water", deleted: true },
+  ] as const)(
+    "returns the recorded course of $dish (course deleted afterwards: $deleted)",
+    async ({ dish, deleted }) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains" }));
+      const held = await group(v, s.partyId, "hold", [{ ...line(v, dish), courseId: mains.id }]);
+      if (deleted) await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+
+      const read = await currentOrders(s.partyId);
+
+      expect(read.groups[0]!.rows).toEqual([
+        expect.objectContaining({ lineId: held.lineIds[0], courseId: mains.id }),
+      ]);
+    },
+  );
+
+  it("returns null for a sent line recorded without a course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const sent = await group(v, s.partyId, "fire", [line(v, "water")]);
+
+    const read = await currentOrders(s.partyId);
+
+    expect(read.groups[0]!.rows).toEqual([
+      expect.objectContaining({ lineId: sent.lineIds[0], courseId: null }),
+    ]);
   });
 
   it("reads every group in sequence with each dish row's served count and kitchen state, across a paid bill, a split one and a later one", async () => {
@@ -1058,11 +1172,16 @@ describe("readCurrentOrders (spec §4)", () => {
 
     expect(read).toEqual({
       revision: await revisionOf(s.partyId),
+      hasGroups: true,
+      nextDisplayNumber: 3,
+      retainedCourses: [],
       reminder: { groupId: mains.id, dueAt: null },
       groups: [
         {
           id: starters.id,
           position: 1,
+          displayNumber: 1,
+          numberPartyId: s.partyId,
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
@@ -1070,7 +1189,9 @@ describe("readCurrentOrders (spec §4)", () => {
           sentBy: null,
           rows: [
             row({
+              netAmount: "16.00",
               lineId: croqLine!.id,
+              billStatus: "settled",
               workingOrderId: s.tabId,
               lineNo: croqLine!.lineNo,
               name: "croquetas",
@@ -1085,11 +1206,14 @@ describe("readCurrentOrders (spec §4)", () => {
               },
             }),
             row({
+              netAmount: "2.00",
               lineId: named("water", s.tabId).id,
+              billStatus: "settled",
               workingOrderId: s.tabId,
               name: "water",
             }),
             row({
+              netAmount: "8.00",
               lineId: split.id,
               workingOrderId: checkId,
               name: "croquetas",
@@ -1106,6 +1230,8 @@ describe("readCurrentOrders (spec §4)", () => {
         {
           id: mains.id,
           position: 2,
+          displayNumber: 2,
+          numberPartyId: s.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
@@ -1113,7 +1239,9 @@ describe("readCurrentOrders (spec §4)", () => {
           sentBy: null,
           rows: [
             row({
+              netAmount: "23.50",
               lineId: steak.id,
+              firedAt: null,
               workingOrderId: laterTab,
               name: "steak",
               released: false,
@@ -1124,13 +1252,23 @@ describe("readCurrentOrders (spec §4)", () => {
                 stationId: expect.any(String),
                 movable: true,
               },
-              extras: [{ lineId: sauce.id, name: "sauce", quantity: "1.000" }],
+              extras: [
+                {
+                  lineId: sauce.id,
+                  name: "sauce",
+                  quantity: "1.000",
+                  netAmount: "1.50",
+                  unitPriceGross: "1.50",
+                  priceQuantity: "1.000",
+                },
+              ],
             }),
           ],
         },
       ],
       ungrouped: [
         row({
+          netAmount: "5.00",
           lineId: flan.id,
           workingOrderId: laterTab,
           name: "flan",
@@ -1166,7 +1304,8 @@ describe("readCurrentOrders (spec §4)", () => {
       stationId: expect.any(String),
       movable: true,
     });
-    expect(JSON.stringify(read.groups[0])).not.toContain("ready");
+    expect(JSON.stringify(read.groups[0])).not.toContain('"ready"');
+    expect(croq!.readyAt).toBeNull();
     expect(steak!.kitchen).toEqual({
       state: "ready",
       firedAt: expect.any(String),
@@ -1213,6 +1352,9 @@ describe("readCurrentOrders (spec §4)", () => {
 
     expect(await currentOrders(s.partyId)).toEqual({
       revision: await revisionOf(s.partyId),
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
       reminder: null,
       groups: [],
       ungrouped: [],
@@ -1334,6 +1476,10 @@ describe("a party that has left", () => {
 
 describe("where each submission's groups go (spec §3)", () => {
   const item = (v: Venue, dish: Dish): DraftLineInput => ({
+    sourceLineId: null,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     menuItemId: v.offer(dish),
     variantId: null,
     menuVersionId: null,
@@ -1344,8 +1490,26 @@ describe("where each submission's groups go (spec §3)", () => {
     courseId: null,
     noMerge: false,
   });
-  const save = (v: Venue, partyId: string, operatorId: string, lines: DraftLineInput[]) =>
-    inTx((tx) => saveDraft(tx, v.cfg, partyId, operatorId, { draftId: null, revision: 0, lines }));
+  const save = (
+    v: Venue,
+    partyId: string,
+    operatorId: string,
+    lines: DraftLineInput[],
+    billId?: string,
+  ) =>
+    inTx(async (tx) => {
+      const [bill] = await tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.partyId, partyId))
+        .limit(1);
+      return saveDraft(tx, v.cfg, partyId, operatorId, {
+        billId: billId ?? bill!.id,
+        draftId: null,
+        revision: 0,
+        lines,
+      });
+    });
   const submit = async (
     v: Venue,
     partyId: string,
@@ -1353,10 +1517,11 @@ describe("where each submission's groups go (spec §3)", () => {
     groups: { lineIds: string[]; release: GroupRelease }[],
   ) => {
     const expectedPartyRevision = await revisionOf(partyId);
-    return inTx((tx) =>
+    return inTx(async (tx) =>
       submitDraft(tx, v.cfg, partyId, draft.id, {
         operatorId: draft.ownerId,
         submissionId: randomUUID(),
+        expectedEdit: await expectedDraftEditForTest(tx, draft),
         draftRevision: draft.revision,
         expectedPartyRevision,
         groups,
@@ -1374,7 +1539,20 @@ describe("where each submission's groups go (spec §3)", () => {
     const v = await setupVenue();
     const s = await seated(v);
     const alex = await save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
-    const mia = await save(v, s.partyId, MIA, [item(v, "water")]);
+    const miaBillId = await inTx(async (tx) => {
+      const [bill] = await tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          locationId: v.cfg.locationId,
+          orderNumber: 2,
+          partyId: s.partyId,
+        })
+        .returning();
+      await VENUE_SERVICE.recordOrderContext(tx, v.cfg, bill!.id, v.zoneId);
+      return bill!.id;
+    });
+    const mia = await save(v, s.partyId, MIA, [item(v, "water")], miaBillId);
     const { draft: rest } = await submit(v, s.partyId, alex, [
       { lineIds: [alex.lines[0]!.id], release: "fire" },
     ]);
@@ -1543,5 +1721,223 @@ describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)"
       [starters.id, T(0), null],
       [mains.id, T(1), null],
     ]);
+  });
+});
+
+describe("Sent panel read facts (A773)", () => {
+  it("reads stored family amounts and bill status without changing any bill rows", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [
+      {
+        ...line(v, "steak", "2"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+    ]);
+    const rows = await linesByName(s.partyId);
+    const parent = rows.find((row) => row.parentLineId === null)!;
+    const extra = rows.find((row) => row.parentLineId === parent.id)!;
+    await inTx(async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 1999, lineTotal: 3998 })
+        .where(eq(workingOrderLines.id, parent.id));
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 1, lineTotal: 2 })
+        .where(eq(workingOrderLines.id, extra.id));
+    });
+    const before = await snapshot(s.partyId);
+    const read = await currentOrders(s.partyId);
+    expect(read.groups[0]!.rows[0]).toMatchObject({
+      billStatus: "open",
+      netAmount: "40.00",
+      extras: [
+        {
+          lineId: extra.id,
+          quantity: "2.000",
+          netAmount: "0.02",
+          unitPriceGross: "0.01",
+          priceQuantity: "1.000",
+        },
+      ],
+    });
+    expect(await snapshot(s.partyId)).toEqual(before);
+  });
+
+  it("waits for every kitchen component and uses the last ready time, including a split-off extra", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [
+      {
+        ...line(v, "steak"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+    ]);
+    const rows = await linesByName(s.partyId);
+    const parent = rows.find((row) => row.parentLineId === null)!;
+    const extra = rows.find((row) => row.parentLineId === parent.id)!;
+    await inTx(async (tx) => {
+      const [ticket] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, parent.id));
+      await tx
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: T(5), firedAt: T(0) })
+        .where(eq(ticketItems.id, ticket!.id));
+      await tx.insert(ticketItems).values({
+        ...ticket!,
+        id: randomUUID(),
+        workingOrderLineId: extra.id,
+        state: "preparing",
+        firedAt: T(1),
+        readyAt: null,
+      });
+    });
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      readyAt: null,
+      firedAt: T(0),
+    });
+    await inTx((tx) =>
+      tx
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: T(9) })
+        .where(eq(ticketItems.workingOrderLineId, extra.id)),
+    );
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      readyAt: T(9),
+      firedAt: T(0),
+    });
+  });
+
+  it("uses the sent time of a no-preparation dish without inventing kitchen readiness", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await at(T(2), () => group(v, s.partyId, "fire", [line(v, "water")]));
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      kitchen: null,
+      released: true,
+      readyAt: null,
+      firedAt: T(2),
+      netAmount: "2.00",
+      billStatus: "open",
+    });
+  });
+});
+
+describe("a paid held dish fired on its own", () => {
+  it("preserves the paid charge, adjustment, payment and fiscal snapshots while companions stay held", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const held = await group(v, s.partyId, "hold", [
+      {
+        ...line(v, "steak", "2"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+      line(v, "flan"),
+    ]);
+    await inTx(async (tx) => {
+      await tx
+        .insert(persons)
+        .values({ id: ALEX, displayName: "Alex", role: "admin", status: "active" });
+      const reason = await createAdjustmentReason(tx, {
+        name: "Held dish discount",
+        names: {},
+        actions: ["discount_percent"],
+        maxPercentBp: null,
+        maxAmount: null,
+        applyRole: "staff",
+        approverRole: "staff",
+        noteRequired: false,
+      });
+      const [dish] = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, held.lineIds[0]!));
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, s.tabId));
+      await applyAdjustment(
+        tx,
+        v.cfg,
+        {
+          expectedEdit: await readBillEditState(tx, s.tabId),
+          orderId: s.tabId,
+          expectedRevision: bill!.revision,
+          submissionId: randomUUID(),
+          lineId: dish!.id,
+          reasonId: reason.id,
+          action: "discount_percent",
+          percentBp: 2500,
+          note: null,
+          operatorId: ALEX,
+        },
+        v.cfg.locale,
+      );
+    });
+    await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+      id: s.tabId,
+      lines: [],
+      tender: { method: "cash", amount: "100.00" },
+    });
+    const before = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    const steak = before.find((row) => row.name === "steak")!;
+    const flan = before.find((row) => row.name === "flan")!;
+    async function financial() {
+      return {
+        bill: await suite.db.select().from(workingOrders).where(eq(workingOrders.id, s.tabId)),
+        sales: await suite.db.all(sql`select * from sales order by id`),
+        saleLines: await suite.db.all(sql`select * from sale_lines order by id`),
+        tenders: await suite.db.all(sql`select * from tenders order by id`),
+        invoices: await suite.db.all(sql`select * from registros_facturacion order by id`),
+        numbers: await suite.db.all(sql`select * from invoice_series order by id`),
+        adjustments: await suite.db.select().from(adjustments).orderBy(adjustments.id),
+        payments: await suite.db.all(sql`select * from bill_payments order by id`),
+        refunds: await suite.db.all(sql`select * from bill_payment_refunds order by id`),
+      };
+    }
+    const facts = await financial();
+    expect(facts.bill[0]!.status).toBe("settled");
+    expect(facts.adjustments).toHaveLength(1);
+    expect(facts.adjustments[0]).toMatchObject({ action: "discount_percent", percentBp: 2500 });
+    expect(facts.sales).toHaveLength(1);
+    expect(facts.invoices).toHaveLength(1);
+    const command = await args(s.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+    expect(await financial()).toEqual(facts);
+    const after = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    const fired = after.find((row) => row.id === steak.id)!.groupId;
+    expect(fired).not.toBe(held.id);
+    expect(after).toEqual(
+      before.map((row) => ({
+        ...row,
+        groupId: row.id === flan.id ? row.groupId : fired,
+        sentAt: row.id === flan.id ? row.sentAt : expect.any(String),
+      })),
+    );
+    expect(after.find((row) => row.id === flan.id)).toEqual(flan);
+    expect(
+      after
+        .filter((row) => row.id === steak.id || row.parentLineId === steak.id)
+        .map((row) => row.groupId),
+    ).toEqual([fired, fired]);
+    const read = await currentOrders(s.partyId);
+    expect(read.groups.map((g) => [g.displayNumber, g.state, g.rows.map((r) => r.name)])).toEqual([
+      [1, "held", ["flan"]],
+      [2, "fired", ["steak"]],
+    ]);
+    const afterFirst = await snapshot(s.partyId);
+    expect(await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command))).toEqual({
+      revision: command.expectedPartyRevision + 1,
+    });
+    expect(await snapshot(s.partyId)).toEqual(afterFirst);
+    expect(await financial()).toEqual(facts);
   });
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
+import type { ComboboxOption, WtCombobox } from "@waitron/ui";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -132,6 +133,8 @@ class ModifierLeaveApp extends LitElement {
   product = product;
   initialSelections?: LineSelection;
   withNote = false;
+  initialCourse?: string;
+  courseChoices: readonly ComboboxOption[] = [];
   closes = 0;
   submitted: ModifierConfirmDetail[] = [];
   override render() {
@@ -139,6 +142,8 @@ class ModifierLeaveApp extends LitElement {
         .product=${this.product}
         .initialSelections=${this.initialSelections}
         .withNote=${this.withNote}
+        .initialCourse=${this.initialCourse}
+        .courseChoices=${this.courseChoices}
         @wt-modifier-cancel=${() => this.closes++}
         @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => this.submitted.push(event.detail)}
       ></till-modifier-picker
@@ -596,4 +601,65 @@ it("the basket's reopened picker keeps stored answers on Discard and commits onl
   expect(app.store.lines[0]!.quantity).toBe("2");
   expect(unload()).toBe(false);
   expect((await question(app)).open).toBe(false);
+});
+
+for (const action of ["Close", "Escape"] as const) {
+  it(`a changed Course is protected on ${action}, kept on Keep and restored on Discard`, async () => {
+    const { app, form } = await mount({
+      product: { ...product, variants: [], offeredModifiers: [] },
+      initialSelections: {},
+      initialCourse: "mains",
+      courseChoices: [
+        { value: "mains", label: "Mains" },
+        { value: "dessert", label: "Dessert" },
+      ],
+    });
+    const course = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
+    course.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "dessert" } }));
+    await form.updateComplete;
+    expect(unload()).toBe(true);
+    if (action === "Close") cancel(form);
+    else await userEvent.keyboard("{Escape}");
+    const q = await question(app);
+    expect(q.open).toBe(true);
+    expect(app.submitted).toEqual([]);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(course.value).toBe("dessert");
+    expect(app.closes).toBe(0);
+    cancel(form);
+    await question(app);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => app.closes).toBe(1);
+    await form.updateComplete;
+    expect(course.value).toBe("mains");
+    expect(app.submitted).toEqual([]);
+    expect(unload()).toBe(false);
+  });
+}
+it("saving Course commits its own baseline and a stale discard cannot undo it", async () => {
+  const { app, form } = await mount({
+    product: { ...product, variants: [], offeredModifiers: [] },
+    initialSelections: {},
+    initialCourse: "mains",
+    courseChoices: [
+      { value: "mains", label: "Mains" },
+      { value: "dessert", label: "Dessert" },
+    ],
+  });
+  const course = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
+  course.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "dessert" } }));
+  await form.updateComplete;
+  cancel(form);
+  const q = await question(app);
+  const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+  expect(q.open).toBe(true);
+  submit(form);
+  await expect.poll(() => q.open).toBe(false);
+  expect(app.submitted).toHaveLength(1);
+  expect(app.submitted[0]!.courseId).toBe("dessert");
+  oldDiscard.click();
+  await form.updateComplete;
+  expect(course.value).toBe("dessert");
+  expect(unload()).toBe(false);
 });

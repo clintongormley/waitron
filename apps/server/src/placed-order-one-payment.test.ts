@@ -10,7 +10,10 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, statusOf, type BillVenue } from "./testing/bill-venue.js";
-import { paymentAttemptIsLive, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
+import {
+  paymentAttemptIsLive,
+  payWorkingOrderIntegratedOrchestration,
+} from "./testing/whole-payment-fixture.js";
 import "./errors.js";
 
 let venue: BillVenue;

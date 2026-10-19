@@ -275,8 +275,8 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
             party: {
               ...table.party,
               unsentDrafts: [
-                { ownerName: "Alex", lineCount: 2 },
-                { ownerName: "", lineCount: 1 },
+                { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
+                { billId: "bill-2", billNumber: 2, ownerName: "", lineCount: 1 },
               ],
             },
           };

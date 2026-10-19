@@ -3,6 +3,14 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "bill.unsent_dishes": {
+    en: "Send or remove the unsent dishes before paying.",
+    es: "Envía o quita los platos sin enviar antes de cobrar.",
+  },
+  "tab.cancel_context_changed": {
+    en: "The dish changed. Check its current kitchen state and choose again.",
+    es: "El plato ha cambiado. Revisa su estado actual en cocina y vuelve a elegir.",
+  },
   "device_zones.invalid": {
     en: "Choose the zones this device shows and a starting zone from that list.",
     es: "Elige las zonas que muestra este dispositivo y una zona inicial de esa lista.",

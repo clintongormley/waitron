@@ -4,6 +4,9 @@ import "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
+import type { CancellationContext } from "./line-cancel-context.js";
+import type { BillEditState } from "./order-drafts.js";
+import type { UnservedDish } from "./finish-party-service.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -435,6 +438,7 @@ declare module "@waitron/shared" {
      * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
      */
     "party.bill_outstanding": { partyId: string };
+    "party.unserved_dishes": { partyId: string; dishes: UnservedDish[] };
     /**
      * Record unpaid departure found no bill of the party's family still to pay — none presented,
      * and none open with items on it. Finish table is the action then.
@@ -463,16 +467,26 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
-    /** The draft is owned by someone else; `ownerId` and `ownerName` say who owns it now. */
-    "draft.taken_over": { draftId: string; ownerId: string; ownerName: string };
+    "draft.taken_over":
+      | { draftId: string; ownerId: string; ownerName: string }
+      | {
+          billId: string;
+          draftId: string | null;
+          ownerId: string;
+          ownerName: string | null;
+          edit: BillEditState;
+          conflicts?: BillEditState[];
+        };
     /** The draft has been submitted, so no command can act on it. */
     "draft.already_submitted": { draftId: string };
-    /**
-     * A draft command carried a draft revision another write has since moved past, or asked for a
-     * new draft where the person already has one open on the party. `draftId` and `revision` are
-     * that draft's current ones; the caller reloads and acts again.
-     */
-    "draft.out_of_date": { draftId: string; revision: number };
+    "draft.out_of_date":
+      | { draftId: string; revision: number }
+      | {
+          billId: string;
+          draftId: string | null;
+          revision: number | null;
+          edit: BillEditState;
+        };
     /**
      * The id names no draft that is open or submitted, or names one of another party than the one
      * the request is on. A discarded draft is not found.
@@ -506,6 +520,7 @@ declare module "@waitron/shared" {
     "group.line_held": { tabId: string; lineNo: number };
     /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
     "bill.nothing_outstanding": { workingOrderId: string };
+    "bill.unsent_dishes": { billId: string };
     /**
      * The venue has tips off and the payment would record a tip. `chargeable` is what can be taken
      * without one.
@@ -672,6 +687,7 @@ declare module "@waitron/shared" {
      * on a party's bills, is an open order of no party: a counter order.
      */
     "tab.not_open": { tabId: string };
+    "tab.cancel_context_changed": { context: CancellationContext };
     /**
      * No such line on the open bill: an adjustment names its line by id, every other caller by number.
      */

@@ -1,3 +1,10 @@
+import { observedOrderSender } from "./testing/order-writer-fixture.js";
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  placeOrder,
+} from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -23,16 +30,13 @@ import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { bumpGroupReady } from "./order-groups.js";
 import { splitPartyBill } from "./testing/serve-line.js";
+import { advanceTicketItem, bumpCourseReady, markServed } from "./working-order.js";
 import {
-  advanceTicketItem,
-  bumpCourseReady,
-  markServed,
-  placeOrder,
-  recallLines,
-  sendLines,
-  setLineCourse,
-} from "./working-order.js";
-import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+  provisionBillVenue,
+  seatedWith,
+  send as rawSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -378,3 +382,5 @@ describe("kitchen service attendance", () => {
     expect((await state()).days).toEqual([]);
   });
 });
+
+const send = observedOrderSender(() => suite.db, rawSend);

@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "@waitron/fiscal-verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";

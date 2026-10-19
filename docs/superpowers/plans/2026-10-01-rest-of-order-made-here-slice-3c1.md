@@ -1,5 +1,11 @@
 # What a station's ticket shows: the rest of the order, and dishes made at the till (slice 3c-1) Implementation Plan
 
+> **2026-10-19, A773-1:** T2's statement that a recalled dish is held again describes the earlier
+> table Recall. The approved [Recall design](../specs/2026-10-16-a773-courses-and-groups-design.md#310-recall)
+> instead brings a table dish into its bill's New order. Use the
+> [active implementation plan](2026-10-16-a773-1-unsent-list.md) for source reservations and
+> kitchen corrections. The historical body below is retained; A773-1 remains unlanded.
+
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
 > Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
 > governs retained history, routing cleanup and empty screen scopes. Earlier station/course

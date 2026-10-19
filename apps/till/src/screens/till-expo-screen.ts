@@ -1,3 +1,4 @@
+import { groupName } from "../widgets/group-name.js";
 import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
@@ -921,8 +922,7 @@ export class TillExpoScreen extends LitElement {
   }
 
   #groupSection(order: ExpoOrder, party: QueueParty, group: ExpoGroup): TemplateResult {
-    const name =
-      group.position === null ? "" : t("table.group_n").replace("{n}", String(group.position));
+    const name = groupName(group);
     return html`<div class="course" data-group-section=${group.groupId ?? "none"}>
       ${
         group.groupId === null

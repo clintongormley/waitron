@@ -23,6 +23,8 @@ import type { Placement } from "./floor-reset-plan.js";
 import { partPlaces } from "./joined-split-layout.js";
 import { holderOf, partyRevision } from "./parties.js";
 import type { SlipsLater } from "./moved-slips.js";
+import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { joinTables } from "./table-actions.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -128,7 +130,12 @@ export async function joinMergeMembers(
 ): Promise<void> {
   for (const member of await mergeMembers(tx, tableId)) {
     if ((await holderOf(tx, member)) !== null) continue;
+    // The enclosing seat/join already validated its bills; these free members add no bill work.
+    const expectedEdits: BillEditExpected[] = [];
+    for (const billId of await readPartyBillIds(tx, [partyId]))
+      expectedEdits.push(await readBillEditState(tx, billId));
     await joinTables(tx, cfg, partyId, member, {
+      expectedEdits,
       bills: "merge",
       expectedPartyRevision: await partyRevision(tx, partyId),
       operatorId,

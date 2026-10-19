@@ -604,6 +604,10 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
 
 ## Task 7 (#789, each person's draft kept on the server)
 
+**2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+supersedes the per-person draft model in this historical list. Reassess the history and validation
+observations against that design; the original observations below are not fresh verification.
+
 - **Task 7 (#789, each person's draft kept on the server).** Left open:
   - A draft that moves to the other party in a merge, because its owner had none there, records
     no history event: the event kinds have no "moved".
@@ -617,49 +621,32 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   - Only the draft routes fold the ids in the path to lower case (`requireDraftPartyParam`,
     `apps/server/src/till-api.ts`, and `submitDraft`'s `joinGroupId`); the other party routes
     only check that the id is an id, and the group submission passes `joinGroupId` on as sent.
-  - After a takeover into the taker's existing draft, or a merge that discards a draft, the
-    previous owner's next save of the old draft is answered `draft.not_found`, not
-    `draft.taken_over`.
   - A save must carry `draftId` and `revision` even for a new draft. A chosen option whose label
     id is not a UUID is refused `options.invalid` at save, where pricing answers
     `options.label_required`. An options or extras refusal at save names only the field, not the
     line, and the till shows one message for the whole draft (`asRefusal`,
     `apps/till/src/state/draft-sync.ts`), so it names no line.
-  - Three rulings made on the branch for the owner to confirm: a line whose quantity is not a
-    whole number never adds into another line; Finish table discards the party's open drafts,
-    keeping their lines, instead of refusing while one is open; taking over someone's draft when
-    you already have one adds their lines to yours and discards theirs, instead of refusing.
+  - Ruling made on the branch for the owner to confirm: a line whose quantity is not a
+    whole number never adds into another line. The takeover and finish-with-drafts rulings are
+    superseded by the [per-bill ownership decision](#one-editor-per-bill-owner-2026-10-17-a773).
 
 ## Task 8 (#806, the till works from the server's drafts)
 
 - **Task 8 (#806, the till works from the server's drafts).** Left open:
   - Saving and sending:
-    - An edit can be lost at sign-out without a message: one made after the session had
-      already ended (an inactivity sign-out), and one made while an earlier save was still
-      waiting for its answer when sign-out began.
     - If someone else signs in while a sign-out is still waiting for its save, the till skips
       signing the first person out on the server, so that session lasts until it expires.
     - A send cut off by the 150-second limit is not sent again, and after a reply that never
       came the draft can stay locked for up to two limits: the send, then the re-read.
     - When a send is refused because the menu changed, the re-read of the table's menu runs
       outside that limit.
-    - After a draft refusal whose re-read also fails, the till keeps the draft's old revision,
-      so the next Send is refused as out of date and re-reads first: a wasted round trip.
     - While the till follows a party onto its next bill, the screen can show no draft for a
       moment; and when a merge or move coincides with a refused save, the save's message can
       replace "another device changed this table".
-    - Drafts are not pushed to other tills: Sam's till sees Alex's latest draft only at its next
-      read. Taking over an older copy is refused and the table read again.
   - Other people's drafts:
-    - When the take-over added Alex's lines into Sam's own draft, Alex sees "Sam has an unsent
-      order", not "Taken over by Sam": `takenOverFrom` on Sam's draft is empty.
     - At phone width nothing on the menu view says other people have drafts on the table; the
       button reads "Review (0)". The floor's mark does say so.
-    - Three automatic changes to the draft (`adoptLines`, `removeLines` and `clear` on the
-      till's store) are not blocked while a take-over is out. Read in the code, not run.
     - The Spanish "has taken over this order" wording has no test.
-  - The floor:
-    - The map tag says "Unsent" but not whose.
   - The table screen:
     - Seating a table whose answer arrives while a newer table is still opening shows the seated
       table briefly before the newer one replaces it.
@@ -668,14 +655,11 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     - A dish no longer on the menu shows an empty name on its tick button in the person's own
       draft, and in the spoken names of its course picker and Split quantity button (read in
       the code, not run).
-    - The last-added bar is empty for a draft read back from the server until the next tap, and
-      does not follow a weighed line when the server's answer replaces the lines.
+    - The last-added bar is empty for a draft first read back from the server until the next tap.
     - While a weight is being entered, the weight entry covers the bottom of the menu and the
       bar.
     - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and
       calls them "items", so the two can differ for one draft.
-    - Keep lasts only until the server's answer rebuilds the lines; a kept line then asks
-      Remove or Keep again.
     - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on
       Review; its unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
     - The counter's basket also tracks its last-added line, which it does not use.
@@ -914,19 +898,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
     time is picked by comparing the stored times as text, right only while every writer stores the
     same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
-    recalled and fired again carries its new fire time but its old group's firer. Left by C80
-    (read from `draftSections` and `groupArrivingDishes`, not compared with a running till): the
-    till files a dish whose course it does not list (an inactive course) under the earliest course
-    it lists, while a move keeps it in its own held group; and when a round is SENT,
-    `working-order.ts` picks its earliest course without checking whether it is active, so with a
-    switched-off course the send path and the move path can file a dish with no course under
-    different courses. Owner, 2026-10-17: such a dish is a dish with no course (Fire now, listed
-    first), whether sent or moved; relayed to lane G for A773, whose spec does not cover it yet.
-    **2026-10-10 update:** A435 step 5's retained metadata now gives saved drafts their recorded
-    course section and fired lines their recorded label, including when the active list is empty.
-    The earlier C80 reading above is historical; the move/send comparison remains unverified here.
-  - **Task 10 (#875).** Unchecked Send to radios are Chromium's own dark-theme control, dim grey on
-    the dark dialog (seen in the 390 px Spanish dark screenshot).
+    recalled and fired again carries its new fire time but its old group's firer.
+    The owner's replacement for C80's earlier course-placement rule is retained under
+    [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
   - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
     waiter who taps a free table to seat it, goes back to the order tab while the seating is still
     under way and starts Move guests can have the move set the wrong table on the new party; the
@@ -996,6 +970,11 @@ original finding; its four-surface count and five-entry list no longer describe 
     crossed a border. Looked at, not measured: close once someone measures it.
 
 ## Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was being re-read is still hidden when the till follows the party onto its next tab
+
+**2026-10-19, A773-1:** the explanation below predates the
+[per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
+Keep the floor-read race as an unchecked observation; its old explanation does not establish how
+the bill-specific draft handles that race.
 
 - **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
   being re-read is still hidden when the till follows the party onto its next tab** (the second
@@ -1519,6 +1498,182 @@ The boot cases in `apps/server/src/boot.table-removal.test.ts` cover enabled boo
 cancelled bookings with bookings switched off, and a venue with no bookings table.
 A future booking still keeps its table when bookings is switched off; the management deletion
 preview names that booking as a refusal.
+
+### One editor per bill (owner, 2026-10-17; A773)
+
+Taking over Bill 1 transfers its saved New order in place. It does not combine it with your
+Bill 2, even when the dishes match. This replaces Task 7's earlier takeover-and-merge ruling;
+the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) gives the version,
+local-candidate and refusal contracts. `order-drafts.db.test.ts` checks both bills' identities,
+quantities and previous-editor metadata after takeover, plus the old editor's refused save.
+
+Direct group submissions carry the observed bill editing state too. The till client's
+`GroupSubmission` type requires `expectedEdit`; its compiler checks reject an omitted observation
+and check its exact type. The existing client payload fixtures now include that field.
+`bill-editing.group-submit.test.ts` checks the server's refusal for a missing observation and its
+use of the observed bill when the redundant `billId` is omitted. The client type and server checks cover that interface.
+
+Closing compares every bill's editing state, including bills retained by a merged party. A
+colleague's outbox refuses `draft.taken_over`; stale editing state refuses `draft.out_of_date`;
+the editor's remaining saved dishes refuse `bill.unsent_dishes` rather than being discarded.
+`apps/server/src/bill-editing.finish.test.ts` checks these refusals and unchanged database rows
+through direct Finish/close and authenticated Finish/unpaid-departure requests. It also checks
+closing with current empty observations while another party keeps its outbox. The separate paid-food confirmation and cancellation checks are in
+`apps/server/src/finish-party-service.test.ts`; the app cases are in
+`apps/till/src/till-app-parties.test.ts`.
+
+The floor shows each nonempty bill/editor pair. A compact map badge may remain "Unsent" when its
+accessible label names those pairs and the expanded detail shows them, as ownership design §6
+allows. `till-floor-screen.parties.test.ts` checks the card rows, compact accessible label and
+independent pair updates; `table-details-sheet.test.ts` checks the expanded list. These replace
+Task 8's ownerless-floor follow-up, not its other draft or navigation findings.
+
+Your unsent local edits stay separate from the saved order, kept for your person and bill.
+`till-app-drafts.test.ts` checks the app's idle sign-out callback, a `session.required` save refusal
+followed by that callback, and a second edit while a save awaits its answer. You can review the
+complete local copy after signing back in; another person cannot see it. A late save answer leaves
+that copy intact, and returning starts no save or Send. These app cases use a controlled API,
+not a real server's expiry clock. `state/draft-sync.test.ts` also checks that closing retains the
+unsaved dish and starts no save. Recovery lasts only in the current app instance;
+[ownership design section 5](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+gives no guarantee across reload or close.
+
+A failed recovery read keeps editing frozen, even if you discard the local copy. Discard restores
+the last confirmed saved lines; it cannot make the discarded edits available to a later save.
+A successful read restores editing authority, and applying a retained copy still needs your
+explicit review. The sync suite checks both a draft refusal and a lost save answer, including a
+bill with previously saved dishes. The app suite checks the native Discard action and recovery
+on focus. This replaces Task 8's old refusal-and-repeat-send observation.
+
+The takeover-helper cases in `state/draft-editing.test.ts` call `adoptLines`, `removeLines`
+and `clear` while a controlled takeover request waits for its answer. None sends a save; the
+answer restores the saved dishes and leaves your retained local copy separate and read-only.
+After you explicitly discard that copy, a new edit saves with the new editor version. This
+replaces Task 8's unrun observation about those internal store helpers; it does not add a blanket
+lock to helpers also used to apply server answers.
+
+While the table is visible, drafts refresh every 15 seconds and on window focus. The app's draft
+suite checks the interval, an unchanged focus refresh preserving selection and its Move window,
+and a failed periodic read preserving confirmed editing authority. This replaces the earlier
+manual-next-read observation without adding server push. A failed recovery read and a failed
+periodic read have different rules in ownership design section 5.
+
+The bill-merge cases in `bill-editing.bill-moves.test.ts` check a save after its source draft
+is combined into another draft, and after it moves intact to an empty destination. The original
+request still names the old bill and refuses `management.request_invalid` on `billId`; changing
+only the bill to the survivor refuses `draft.out_of_date`. Both the direct command and the
+`PUT /api/parties/:id/drafts` route leave every database row unchanged. A new save using the
+survivor's current edit state succeeds and retains the separately marked lines. These cases
+replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
+
+### Permanent group numbers (A773)
+
+A group's display number is separate from its firing position. Reordering held groups keeps
+their display numbers; removing or moving groups does not make their original numbers available
+again. `apps/server/src/order-group-numbers.test.ts` checks these operations and both group reads.
+`apps/till/src/widgets/sent-orders.test.ts` checks that a group at position 5 with display number 7
+is shown as Group 7. This replaces Task 4's position-derived-number observation; gaps in the
+visible numbers alone do not imply a numbering defect.
+
+### Replacement order controls (A773)
+
+On a paid bill, Cancel item can cancel only the unserved remainder after earlier cancellations.
+Served food uses Refund a payment on the receipt, as
+[A758 section 3.3](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#33-cancel-item-by-where-the-dish-is-picture-03)
+specifies. The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` check
+fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
+replay after serving. The unpaid served-food case retains its separate cancellation behavior.
+
+The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open Sent's dish
+window and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
+one request despite repeated confirmation, unchanged service facts until acceptance, and Undo of
+the accepted two portions. They cover English and Spanish, both themes, at 390 and 1280 px.
+These app checks use a controlled API boundary; server persistence and the physical-till trial
+remain separate. The quantity buttons use the standard size; their previous small setting measured
+32 px high in those cases on 2026-10-19.
+
+The [modifiers integration guide](../developers/modifiers.md#ordering-and-stored-facts) distinguishes
+fresh table-draft selections, priced on submission, from recalled sources whose modifier changes
+are saved to their existing bill rows. The 2026-10-19 documentation check ran the complete
+`draft-recall.modifiers`, `draft-recall`, `till-api.drafts` and `order-drafts.db` server suites:
+419 cases passed, including the €28.50-to-€32.50 added-extra example, invalid-choice refusals and
+submission replay. This is a check of those paths, not completion of the whole-branch prose audit.
+
+Phone Review counts the fixture's two Beers, one Flan with three Sauces, one weighed dish and
+two recalled portions as six dishes. The extras add no items to that count. The native Review
+and Back checks in `till-table-order-screen.review-acceptance.test.ts` retain the quantities,
+placement and selection without submitting, then show seven after the Beer quantity becomes three.
+They cover English and Spanish, both themes, at 360 and 390 px, with accessibility scans in both
+views. These component checks are complemented by the native app cases below; server persistence
+and physical trials remain separate.
+
+The native mixed-dish cases in `apps/till/src/till-app-drafts.test.ts` open the table through the
+floor's button, then use Review and Back. They retain the four saved dish families, their extras,
+recorded source details, placement and selection through a same-revision focus refresh. Review
+counts six dishes, including the weighed dish once and excluding extras. The checks cover English
+and Spanish in both themes at 360 and 390 px, measure the native Review and Back targets, and scan
+both views for accessibility. Review and Back send no save, submission or takeover request. The
+API replies and sign-in are controlled; these checks do not exercise server persistence or a
+physical till.
+
+The last-added strip follows a saved line's id when that order is refreshed, including weighed
+lines and lines kept separate. It clears when that id disappears or another order is loaded;
+it does not substitute a similar dish. Without a saved id, the existing draft merge rule still
+matches the last tap. `till-table-order-screen.last-added-refresh.test.ts` checks the strip after
+replacing saved lines, the exact line changed by +1, and the first-read and other-order boundaries.
+Its weighed-dish cases cover both languages at 390 and 1280 px. They retain the stored quantity
+`0.375` while showing `0,375` in Spanish. These are component
+checks, not a server polling or physical-till trial.
+
+New order's editable and read-only row labels and the basket's measured quantities use the
+screen's decimal mark. `till-table-order-screen.new-order-quantities.test.ts` checks English and
+Spanish rows at 390 and 1280 px, unit names containing punctuation, unnamed units and retained
+trailing zeros. Its native selected Fire checks still emit `0.375` when Spanish shows `0,375`;
+names and notes keep their punctuation. These component checks do not exercise server persistence.
+
+Choosing Keep in an unavailable dish's line window survives a refresh of that saved line in the
+open screen. The warning stays and the dish still cannot be sent. A different draft, bill, store
+or editor, a different warning, a removed line or a cleared warning ends that choice.
+`apps/till/src/screens/till-table-order-screen.keep.test.ts` checks the saved-line refresh in both
+languages at 390 and 1280 px, local-to-saved identity, and those boundaries. This is an in-memory
+choice; it is not saved for another screen or session.
+
+Sent's counters, Served and Held headings, dish slices, companions and extras use the screen's
+decimal mark. Extras retain their stored decimal places. The fractional native-browser cases in
+`apps/till/src/widgets/sent-orders.test.ts` cover both languages, leave punctuation in names alone
+and check that serving still emits the exact dot-decimal quantity.
+
+The group Fire confirmation formats quantities in the screen's language without rewriting dish
+names. It uses active dish rows from every bill in the group, subtracting cancelled quantities.
+If those rows are incomplete or disagree with the server's summary, it retains the full server
+summary, including its decimal spelling. The native held-group and reminder tests in
+`apps/till/src/screens/till-table-order-screen.sent.test.ts` cover both languages and the
+confirmation's group id; separate cases cover incomplete and stale row reads.
+
+New order keeps its dishes and disables Send all, selected Fire and Move while submission waits
+for an answer. `apps/till/src/till-app-drafts.test.ts`, "locked through native repeated presses",
+checks native double clicks against a held reply: one submission, unchanged saved and local lines,
+then the accepted result. After selected Fire, a new press can send the remaining dish. These
+checks exercise the app with a controlled API reply, not the server's transaction or retry logic.
+
+`apps/till/src/screens/till-table-order-screen.direct-send.a11y.test.ts` measures the native
+Send all, Fire and Move buttons at 390 and 1280 px in both languages and themes: each is at least
+44 px on each axis and stays within the viewport. The main screen suite's "tap target of 44 px"
+case measures the replacement held-group controls, Fire confirmation and Move earlier/later.
+Its twice-pressed Fire/Move cases use scripted clicks.
+
+The native Sent integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
+dish, All served and group Fire on till and phone while the API reply waits. They check one
+request, disabled service controls and no premature display change, then the accepted snapshot.
+A subsequent dish press or Undo uses the accepted party revision. These are application checks
+with controlled API replies, not server transaction or physical-till tests.
+
+A press on a disabled row must not freeze that display while it waits: the button receives
+pointer events without a click to release the frozen view.
+`apps/till/src/widgets/sent-orders.test.ts` checks both busy and unreleased rows, then checks
+updated ready-first ordering, the new quantity and a permitted serve. Its existing enabled-row
+case still checks that a real press holds the row's position until released. None of these
+checks replaces the physical-till trial.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 
@@ -2102,22 +2257,26 @@ build after A757's board if it has been decided, else name the table alone.
 
 ## A773. Courses, groups and the pass
 
-- **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
-  screen's unsent list, has a [plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
-  firing and the pass, is planned from the spec once A773-1 lands. Each
-  course gets "Held until fired". A table's unsent list is laid out as Fire now plus held groups:
-  it is arranged by ticking, Move to… and drag, and sent with Send all or Fire. The four draft
-  buttons and the check window go. Each bill keeps its own unsent list. Only the waiter fires. Each
-  station gets "Waits for the pass": fired food there becomes Requested until the pass fires it.
-  Station Fire and the venue's fire control go. Counter orders have no courses. Changes A756.
-  **Revised 2026-10-17** (owner): the right-hand panel becomes a Sent box (Served; Fired, ready
-  first; Held, folded, flashing when due) above a New order that empties on send; sent dishes have
-  no tick boxes and are acted on through A738's line window (Fire now, Recall, Move to station,
-  one Discount…, Cancel item with charge or no-charge by the dish's state); Recall returns a dish
-  to the New order; Pay waits for unsent dishes; Away and the pass's Done go; each pass fires only
-  what it sees. [Panel mockups](mockups/a773-order-panel/).
-  Migration. [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
-  [mockups](mockups/a773-courses-and-groups/)
+**A773-2**, firing and the pass, is planned from the
+[approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md) after
+A773-1 lands. It covers Requested and pass release, retiring Away/Done, station settings and
+counter changes. Coordinate A756's settings, A803's station/pass additions and A797's pass/kitchen
+design before building. The table panel and per-bill editing contracts belong to
+[A773-1's plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and the
+[ownership amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
+
+Two physical-till trials remain separate from browser and API checks:
+
+- Try long-press dragging of New order lines and held headings. If it does not work reliably,
+  keep Move to… and the heading's Move earlier/later actions.
+- Try serving part of a line through the dish window during service before deciding whether
+  the interaction needs to change.
+
+[Course mockups](mockups/a773-courses-and-groups/),
+[panel mockups](mockups/a773-order-panel/), [ownership pictures](mockups/a773-one-editor/).
+A758 owns its later reason rules, starter list, reports, filled refund form, refund links and
+counter-collection path. Its [section 10](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#10-for-other-lanes)
+defines the cancellation and Finish-table handoff built by A773-1.
 
 ## A678. Two readers answer "where is this order"
 
@@ -2259,9 +2418,7 @@ reach them.
   the target party; the deleted `moveTabLines` ignored groups, and whether the paths that move lines
   now do the same is not checked; a whole-order save replacing a held dish with another variant
   moves it to a new held group at the end; the counter's whole-order save does not answer the
-  party's revision; and the table screen offers no Send on a held no-route dish outside any group
-  (its per-line Send needs a kitchen ticket item, `sendsAlone`,
-  `apps/till/src/state/held-groups.ts`) — whether one can occur on a party's tab is not established.
+  party's revision.
   Left open by service Task 3 (#733, order groups).
 
 ## Task 10 (#908, the service dashboard's attention signals)

@@ -56,22 +56,19 @@ interface LineGroup {
   options: TillSaleLine[];
 }
 
-/**
- * The filed lines arrive dish-then-its-options, so a single forward scan attaching each child to the most
- * recent dish groups them. It recomputes no figure: it only groups the SAME already-filed lines.
- *
- * A LOCAL copy of `apps/server/src/receipt-lines.ts`'s `groupByParent`: importing it would drag server
- * code into the browser bundle. A leading child with no dish yet is treated as its own dish rather than
- * dropped, so no filed line ever vanishes from the on-screen ticket.
- */
+/** Parent numbers name positions in the unchanged filed list; an extra may follow other dishes.
+ * Orphans stay visible. Twin: `apps/server/src/receipt-lines.ts` / `apps/till/src/screens/till-ticket-view.ts`. */
 function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   const groups: LineGroup[] = [];
-  for (const line of lines) {
-    const current = groups[groups.length - 1];
-    if (line.parentLineNo == null || current === undefined) {
-      groups.push({ dish: line, options: [] });
+  const byPosition = new Map<number, LineGroup>();
+  for (const [index, line] of lines.entries()) {
+    const parent = line.parentLineNo == null ? undefined : byPosition.get(line.parentLineNo);
+    if (parent === undefined) {
+      const group = { dish: line, options: [] as TillSaleLine[] };
+      groups.push(group);
+      byPosition.set(index + 1, group);
     } else {
-      current.options.push(line);
+      parent.options.push(line);
     }
   }
   return groups;

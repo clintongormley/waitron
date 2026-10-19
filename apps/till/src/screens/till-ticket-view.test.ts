@@ -65,6 +65,32 @@ afterEach(() => {
 });
 
 describe("till-ticket-view", () => {
+  it("shows a later recalled extra under its original dish with its charged amount", async () => {
+    const { el } = await mount({
+      total: "34.00",
+      vatBreakdown: [{ rate: "0", base: "34.00", tax: "0.00" }],
+      lines: [
+        { descriptions: { "es-ES": "Primer plato" }, quantity: "1", gross: "10.00" },
+        { descriptions: { "es-ES": "Segundo plato" }, quantity: "1", gross: "20.00" },
+        {
+          descriptions: { "es-ES": "Extra del primero" },
+          quantity: "1",
+          gross: "4.00",
+          parentLineNo: 1,
+        },
+      ],
+    });
+    const rows = [...el.shadowRoot!.querySelectorAll(".line")];
+    expect(rows.map((row) => row.querySelector(".line-name")!.textContent!.trim())).toEqual([
+      "Primer plato",
+      "Extra del primero",
+      "Segundo plato",
+    ]);
+    expect(rows[1]!.classList.contains("option")).toBe(true);
+    expect(norm(rows[1]!.textContent!)).toContain("4,00 €");
+    expect(rows[2]!.classList.contains("option")).toBe(false);
+  });
+
   it("hides drawer opening on a historical cash receipt even when the device can open it", async () => {
     const { el } = await mount();
     el.canOpenDrawer = true;

@@ -1,3 +1,4 @@
+import { placeOrder } from "./order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
@@ -10,7 +11,7 @@ import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/share
 import type { Logger } from "../logger.js";
 import { mountOrdersApi } from "../orders-api.js";
 import { SESSION_COOKIE } from "../till-session.js";
-import { parkOrder, placeOrder } from "../working-order.js";
+import { parkOrder } from "../working-order.js";
 import {
   inTx,
   provisionBillVenue,

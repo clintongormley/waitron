@@ -1,3 +1,7 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -109,8 +113,17 @@ async function zoneTill(zoneId: string): Promise<string> {
   return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
 }
 
-function post(path: string, body: unknown, cookie = venue.cookie) {
-  return send(venue.app, cookie, "POST", path, body);
+async function post(path: string, body: unknown, cookie = venue.cookie) {
+  const place = /^\/api\/working-orders\/([^/]+)\/place$/.exec(path);
+  if (place !== null && body !== null && typeof body === "object")
+    body = { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, place[1]!)), ...body };
+  return send(
+    venue.app,
+    cookie,
+    "POST",
+    path,
+    await observedTableActionBody(venue.db, path, await observedMoveBillBody(venue.db, path, body)),
+  );
 }
 
 function revisionOf(partyId: string): number {
@@ -157,10 +170,13 @@ async function indoorContext() {
 /** Ana's party on the terrace, with `names` split off her main bill and presented. */
 async function presentedSplit(...names: string[]) {
   const ana = await seatedWith(venue, "Caña", ...names);
-  const split = await post(`/api/bills/${ana.tabId}/split`, {
-    transfers: names.map((_, i) => ({ lineNo: i + 2 })),
-    expectedPartyRevision: ana.revision,
-  });
+  const split = await post(
+    `/api/bills/${ana.tabId}/split`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+      transfers: names.map((_, i) => ({ lineNo: i + 2 })),
+      expectedPartyRevision: ana.revision,
+    }),
+  );
   expect(split.status).toBe(200);
   const presented = split.json.billId as string;
   const placed = await post(`/api/working-orders/${presented}/place`, {});

@@ -1,3 +1,11 @@
+import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+  placeOrder,
+} from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
@@ -46,8 +54,6 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
-  abandonHeldOrder,
-  addTabRound,
   advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
@@ -59,12 +65,7 @@ import {
   markCollected,
   parkOrder,
   paysAfterSending,
-  placeOrder,
-  recallLines,
-  sendLines,
   sendToPrep,
-  setLineCourse,
-  updateHeldOrder,
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -77,7 +78,7 @@ import {
   collectOrderOrchestration as collectOrder,
   fireDishesAtPayment,
   payWorkingOrder,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

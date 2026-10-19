@@ -26,6 +26,14 @@ export interface MoveHeldOrderDetail {
   /** Who the picker showed at the table, which the move sends as read there. */
   seated: SeatedRead;
   bills: BillChoiceDetail["bills"];
+  prompt?: object;
+}
+
+export interface HeldRelocationOpenDetail {
+  orderId: string;
+  table: TableState;
+  prompt: object;
+  ready: () => void;
 }
 
 @customElement("till-held-orders")
@@ -132,34 +140,55 @@ export class TillHeldOrders extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  #relocationPrompt: object | null = null;
+
   #openPicker(order: HeldOrderSummary): void {
+    this.#relocationPrompt = null;
     this.moving = order;
     this.choosing = null;
     this.#emit("move-held-order-open", undefined);
   }
 
   #closePicker(): void {
+    this.#relocationPrompt = null;
     this.moving = null;
     this.choosing = null;
   }
 
   #pick(table: TableState): void {
-    if (table.party !== null) {
-      this.choosing = table;
-      return;
+    const order = this.moving;
+    if (order === null) return;
+    const prompt = {};
+    this.#relocationPrompt = prompt;
+    const ready = () => {
+      if (!this.isConnected || this.moving !== order || this.#relocationPrompt !== prompt) return;
+      if (table.party !== null) this.choosing = table;
+      else this.#send(table, "merge");
+    };
+    const event = new CustomEvent<HeldRelocationOpenDetail>("held-relocation-open", {
+      detail: { orderId: order.id, table, prompt, ready },
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    if (this.dispatchEvent(event)) {
+      this.#relocationPrompt = null;
+      if (table.party !== null) this.choosing = table;
+      else this.#send(table, "merge");
     }
-    this.#send(table, "merge");
   }
 
   #send(table: TableState, bills: BillChoiceDetail["bills"]): void {
     const order = this.moving;
     if (order === null) return;
+    const prompt = this.#relocationPrompt;
     this.#closePicker();
     this.#emit("move-held-order", {
       orderId: order.id,
       tableId: table.id,
       seated: seatedRead(table),
       bills,
+      ...(prompt === null ? {} : { prompt }),
     } satisfies MoveHeldOrderDetail);
   }
 
@@ -274,6 +303,7 @@ export class TillHeldOrders extends LitElement {
       @bill-choice-cancel=${(event: Event) => {
         event.stopPropagation();
         this.choosing = null;
+        this.#relocationPrompt = null;
       }}
     ></till-bill-choice-dialog>`;
   }

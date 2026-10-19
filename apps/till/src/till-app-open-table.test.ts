@@ -226,6 +226,7 @@ let server: DraftServer;
 let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
+  for (const id of ["wo-7", "wo-9", "wo-new"]) server.bills.add(id);
   return {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
@@ -697,7 +698,7 @@ describe("A768 the left draft saves in the background", () => {
       server.personId = sentBy;
       const saved = server.save(partyId, save);
       server.personId = now;
-      return structuredClone(saved);
+      return server.snapshot(saved);
     });
     return answer;
   }
@@ -736,6 +737,28 @@ describe("A768 the left draft saves in the background", () => {
     expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
   });
 
+  it("reopening a failed left draft reads the saved bill before offering its local candidate", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await back(el);
+    const reads = api.listDrafts.mock.calls.length;
+    const saves = api.saveDraft.mock.calls.length;
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(api.listDrafts.mock.calls.slice(reads).map(([id]) => id)).toContain("v1");
+    expect(rows(el)).toEqual([]);
+    expect(
+      tableOrder(el)!.retainedDraft?.lines.map((line) => `${line.product.name} ×${line.quantity}`),
+    ).toEqual(["Beer ×1"]);
+    expect(api.saveDraft.mock.calls.length).toBe(saves);
+    expect(savedLines()).toEqual([]);
+  });
+
   it("a background save refused for another reason says it on the next table", async () => {
     const { el } = await mountApp();
     await openMesa(el);
@@ -760,7 +783,7 @@ describe("A768 the left draft saves in the background", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("signing out closes a draft still saving in the background", async () => {
+  it("signing out fences unsent local edits while an earlier background save completes", async () => {
     const savedBy: string[] = [];
     const { el } = await mountApp({
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
@@ -784,7 +807,23 @@ describe("A768 the left draft saves in the background", () => {
     await signIn(el, "p2", "Bea");
     await flush(el);
     expect(savedBy).not.toContain("p2");
-    expect(savedLines()).toEqual(expect.arrayContaining(["offer-beer ×1", "offer-steak ×1"]));
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t7");
+    expect(tableOrder(el)!.retainedDraft).toBeNull();
+    expect(rows(el)).toEqual([]);
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    await signIn(el, "p1", "Ana");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t7");
+    expect(rows(el)).toEqual([]);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+      "Steak",
+    ]);
+    expect(savedBy).not.toContain("p2");
   });
 
   it("the same party's table still waits for its own save", async () => {
@@ -873,7 +912,7 @@ describe("A768 the left draft saves in the background", () => {
     expect(rows(el)).toEqual(["Beer ×1"]);
   });
 
-  it("a left draft whose background save got no answer is shown and saved when its table opens again", async () => {
+  it("a failed left draft is reviewed separately before the same person explicitly saves it", async () => {
     const { el } = await mountApp();
     await openMesa(el);
     await tap(el, "Beer");
@@ -886,7 +925,15 @@ describe("A768 the left draft saves in the background", () => {
     await back(el);
     await reopen(el, "t4");
     await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(savedLines()).toEqual([]);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
     expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(savedLines()).toEqual([]);
+    await back(el);
     expect(savedLines()).toEqual(["offer-beer ×1"]);
   });
 
@@ -909,7 +956,14 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el, 6);
     await reopen(el, "t4");
     await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
     expect(rows(el)).toEqual(["Beer ×1"]);
+    await back(el);
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
   });
 
   it("a left draft whose background save was refused is read afresh when its table opens again", async () => {
@@ -926,7 +980,7 @@ describe("A768 the left draft saves in the background", () => {
     expect(rows(el)).toEqual([]);
   });
 
-  it("signing out sends a left draft whose background save got no answer, and the next person never saves it", async () => {
+  it("signing out retains an unanswered left draft privately without sending another save", async () => {
     const savedBy: string[] = [];
     const calls: string[] = [];
     const { el } = await mountApp({
@@ -946,8 +1000,8 @@ describe("A768 the left draft saves in the background", () => {
     calls.length = 0;
     emit(shell(el), "logout");
     await flush(el, 6);
-    expect(calls).toEqual(["save", "logout"]);
-    expect(savedLines()).toEqual(["offer-beer ×1"]);
+    expect(calls).toEqual(["logout"]);
+    expect(savedLines()).toEqual([]);
     await signIn(el, "p2", "Bea");
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -955,6 +1009,17 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el, 6);
     expect(rows(el)).toEqual([]);
     expect(savedBy).not.toContain("p2");
+    expect(tableOrder(el)!.retainedDraft).toBeNull();
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    await signIn(el, "p1", "Ana");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    expect(rows(el)).toEqual([]);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(savedBy).toEqual(["p1"]);
+    expect(savedLines()).toEqual([]);
   });
 
   /** Records who each save was sent as, the held one included. */
@@ -1033,7 +1098,7 @@ describe("A768 the left draft saves in the background", () => {
     expect(savedBy).toEqual(["p1"]);
   });
 
-  it("after a restart with no sign-out, the person who made a kept order sees and saves it again", async () => {
+  it("after a restart with no sign-out, its author reviews a kept candidate before saving again", async () => {
     const { savedBy, mounted } = mountRecordingSaves();
     const { el } = await mounted;
     await openMesa(el);
@@ -1048,7 +1113,15 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el);
     await reopen(el, "t4");
     await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(savedBy).toEqual(["p1"]);
+    expect(savedLines()).toEqual([]);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
     expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(savedBy).toEqual(["p1"]);
+    await back(el);
     expect(savedBy).toEqual(["p1", "p1"]);
     expect(savedLines()).toEqual(["offer-beer ×1"]);
   });
@@ -1124,7 +1197,21 @@ describe("A768 the left draft saves in the background", () => {
 
   it("after a restart with no sign-out, an order kept for the one before is not saved as the next person by a reopen still reading its bills", async () => {
     const savedBy: string[] = [];
-    const bills = [{ workingOrderId: "wo-4" }];
+    const bills = [
+      {
+        workingOrderId: "wo-4",
+        partyId: "v1",
+        status: "open",
+        revision: 0,
+        invoiceType: "F2",
+        recipient: null,
+        label: null,
+        total: "0.00",
+        outstanding: "0.00",
+        hasPayments: false,
+        receiptAvailable: false,
+      },
+    ];
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
@@ -1289,6 +1376,29 @@ describe("A768 the left draft saves in the background", () => {
     expect(api.saveDraft.mock.calls.length).toBe(saves);
   });
 
+  it("leaving while a move waits for a background save never reads or moves the abandoned destination", async () => {
+    const { el } = await mountApp({
+      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
+    await flush(el, 6);
+    await back(el);
+    await reopen(el, "t9");
+    expect(tableOrder(el)!.party?.id).toBe("v9");
+    const reads = api.listDrafts.mock.calls.length;
+    release();
+    await flush(el, 6);
+    expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).not.toContain("v1");
+    expect(api.moveGuests).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.party?.id).toBe("v9");
+    expect(rows(el)).toEqual([]);
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+  });
+
   it("moving guests onto the table just left waits for its own save", async () => {
     const { el } = await mountApp({
       moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
@@ -1306,10 +1416,13 @@ describe("A768 the left draft saves in the background", () => {
     const reads = api.listDrafts.mock.calls.length;
     emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
     await flush(el, 6);
-    expect(tableOrder(el)!.party?.id).toBe("v1");
+    expect(api.moveGuests).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.party?.id).toBe("v7");
     expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).not.toContain("v1");
     release();
     await flush(el, 6);
+    expect(api.moveGuests).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.party?.id).toBe("v1");
     expect(rows(el)).toEqual(["Beer ×1"]);
     await tap(el, "Steak");
     await back(el);
@@ -1374,7 +1487,7 @@ describe("A768 the order screen shows at once", () => {
       server.personId = sentBy;
       const saved = server.save(partyId, save);
       server.personId = now;
-      return structuredClone(saved);
+      return server.snapshot(saved);
     });
     return answer;
   }
@@ -1852,7 +1965,6 @@ describe("A768 the order screen shows at once", () => {
       .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
       .click();
     await flush(el);
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
     await flush(el, 6);
     expect(server.submitDraft).toHaveBeenCalledOnce();
     const [partyId, draftId] = server.submitDraft.mock.calls[0]!;
@@ -1860,6 +1972,9 @@ describe("A768 the order screen shows at once", () => {
     expect(server.saveDraft.mock.calls.at(-1)![1].lines).toEqual([
       expect.objectContaining({ menuItemId: "offer-beer" }),
     ]);
-    expect(await server.saveDraft.mock.results.at(-1)!.value).toMatchObject({ id: draftId });
+    expect(await server.saveDraft.mock.results.at(-1)!.value).toMatchObject({
+      draft: { id: draftId, billId: "wo-new" },
+      edit: { billId: "wo-new", draftId },
+    });
   });
 });

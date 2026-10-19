@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -77,6 +78,7 @@ async function post(
     {
       submissionId: randomUUID(),
       expectedRevision: await revisionOf(billId),
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
       lineId: null,
       reasonId: venue.reasonId.house,
       note: null,
@@ -134,7 +136,11 @@ describe("corrections through order actions on a station's printers", () => {
         venue.cookie.staff,
         "PUT",
         `/api/working-orders/${billId}/lines/1`,
-        { revision: await revisionOf(billId), quantity: "2" },
+        {
+          revision: await revisionOf(billId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+          quantity: "2",
+        },
       );
       expect(changed.status).toBe(200);
       expect((await papers()).slice(1)).toEqual([expect.stringContaining("HOLD CHANGED")]);
@@ -146,6 +152,7 @@ describe("corrections through order actions on a station's printers", () => {
         `/api/working-orders/${billId}`,
         {
           revision: await revisionOf(billId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
           lines: [
             {
               workingOrderLineId: await lineIdOf(venue, billId, 2),
@@ -413,6 +420,7 @@ describe("approval through the route (plan D6)", () => {
       return send(app, venue.cookie.staff, "POST", `/api/working-orders/${billId}/adjustments`, {
         submissionId: randomUUID(),
         expectedRevision: await revisionOf(billId),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
         note: null,
         ...body,
       });
@@ -488,6 +496,7 @@ describe("approval through the route (plan D6)", () => {
         {
           submissionId: randomUUID(),
           expectedRevision: await revisionOf(billId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
           note: null,
           ...(await comp(billId)),
           ...approvedBy(PINS.manager),
@@ -534,6 +543,7 @@ describe("approval through the route (plan D6)", () => {
         send(app, cookie, "POST", `/api/working-orders/${billId}/adjustments`, {
           submissionId: randomUUID(),
           expectedRevision: await revisionOf(billId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
           note: null,
           ...(await comp(billId)),
           ...approvedBy(pin),
@@ -721,6 +731,7 @@ describe("the route's own rules", () => {
     const body = {
       submissionId: randomUUID(),
       expectedRevision: await revisionOf(billId),
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
       lineId: null,
       reasonId: venue.reasonId.house,
       action: "discount_amount",
@@ -989,6 +1000,7 @@ describe("what the till reads", () => {
       {
         submissionId: randomUUID(),
         expectedRevision: await revisionOf(billId),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
         lineId: await lineIdOf(venue, billId, 1),
         reasonId: venue.reasonId.complaint,
         action: "comp",

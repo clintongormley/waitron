@@ -1,3 +1,12 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import {
+  recallLines,
+  updateHeldOrder,
+  updateOrderLine,
+  placeOrder,
+} from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -30,9 +39,10 @@ import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
-import { splitBill, transferItems } from "./bill-actions.js";
-import { moveBill } from "./move-bill.js";
-import { fireGroup, placeGroups } from "./order-groups.js";
+import { splitBill, transferItems } from "./testing/bill-action-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+import { fireGroup } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
@@ -40,19 +50,14 @@ import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   readSettledTicket,
   type TillSaleResult,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import {
-  addTabRound,
   advanceTicketItem,
   parkOrder,
-  placeOrder,
   readOrderRevision,
-  recallLines,
   splitLinesWithinOrder,
-  updateHeldOrder,
-  updateOrderLine,
 } from "./working-order.js";
-import { send } from "./testing/bill-venue.js";
+import { send as rawPaymentSend } from "./testing/bill-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import {
   billWith,
@@ -102,6 +107,7 @@ async function argsFor(tx: Transaction, billId: string, ask: Ask): Promise<Adjus
   const { amount, ...rest } = ask;
   return {
     orderId: billId,
+    expectedEdit: await readBillEditState(tx, billId),
     submissionId: randomUUID(),
     expectedRevision: order!.revision,
     lineId: null,
@@ -3544,3 +3550,5 @@ async function lastKitchenSlip(): Promise<string[]> {
   );
   return printedLines(job!.payload).filter((line) => line.trim() !== "");
 }
+
+const send = observedPaymentSender(() => venue.db, rawPaymentSend);

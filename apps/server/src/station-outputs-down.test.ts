@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -27,7 +28,7 @@ import {
 } from "./station-outputs-down.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
 import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";

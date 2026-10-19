@@ -231,7 +231,12 @@ it("Back protects the staged table choice, and the bill choice opens the guests 
   expect(app.commands).toEqual([
     {
       type: "split-table",
-      detail: { tableId: "t2", billId: "other", guests: { staying: 2, leaving: null } },
+      detail: {
+        tableId: "t2",
+        billId: "other",
+        guests: { staying: 2, leaving: null },
+        prompt: expect.any(Object),
+      },
     },
   ]);
   expect(app.protectionAtSubmit).toEqual([false]);

@@ -2,7 +2,9 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
+import { pointerGestureCommands } from "@waitron/ui/src/vitest-pointer-gestures.js";
 import { probeTillReload } from "./test/native-reload.js";
+import { holdDraftLine } from "./test/hold-draft-line.js";
 
 type ColorScheme = "light" | "dark" | null;
 
@@ -47,8 +49,10 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         probeTillReload,
+        holdDraftLine,
         emulateColorScheme,
         ...parkPointerCommands,
+        ...pointerGestureCommands,
       },
     },
     coverage: {

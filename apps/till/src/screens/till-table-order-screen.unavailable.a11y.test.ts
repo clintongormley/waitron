@@ -3,7 +3,14 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, flan, menuOf, products, resized } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  flan,
+  menuOf,
+  openDraftLine,
+  products,
+  resized,
+} from "./till-table-order-screen.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -51,9 +58,14 @@ describe.each(["light", "dark"] as const)(
         throw new Error(`the scan must include ${selector}`);
     }
 
-    it("has no violations beside browsing, with Remove and Keep on each flagged line", async () => {
+    it("has no violations beside browsing, with Remove and Keep in each flagged line window", async () => {
       const { el, host } = await flaggedDraft("1280px");
+      const picker = await openDraftLine(el, 0);
       mustShow(el, '[data-flag-remove="0"]');
+      await expectNoA11yViolations(host);
+      picker.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+      await settled(el);
+      await openDraftLine(el, 1);
       mustShow(el, '[data-flag-keep="1"]');
       await expectNoA11yViolations(host);
     });
@@ -62,18 +74,23 @@ describe.each(["light", "dark"] as const)(
       const { el, host } = await flaggedDraft("390px");
       el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
       await settled(el);
+      const picker = await openDraftLine(el, 0);
       el.shadowRoot!.querySelector<HTMLElement>('[data-flag-keep="0"]')!.click();
       await settled(el);
       mustShow(el, "[data-flag-kept]");
+      await expectNoA11yViolations(host);
+      picker.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+      await settled(el);
+      await openDraftLine(el, 1);
       mustShow(el, '[data-flag-remove="1"]');
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in a preview that names what it leaves out", async () => {
+    it("has no violations after direct Send leaves named warnings in the order", async () => {
       const { el, host } = await flaggedDraft("1280px");
       el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
       await settled(el);
-      mustShow(el, "[data-preview-left-out]");
+      mustShow(el, "[data-flag-warning]");
       await expectNoA11yViolations(host);
     });
   },

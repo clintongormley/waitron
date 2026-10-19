@@ -9,13 +9,12 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
+import { completeBillPayment, failBillPayment } from "./bill-payments.js";
 import {
-  completeBillPayment,
-  failBillPayment,
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,
-} from "./bill-payments.js";
+} from "./testing/bill-payment-fixture.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { setupPartyVenue, seat, order, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 import { openTillSession } from "./testing/session-device.js";

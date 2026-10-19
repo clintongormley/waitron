@@ -1,3 +1,6 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -58,8 +61,8 @@ import type { DeviceRequestConfig } from "./till-config.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
-} from "./till-sale.js";
-import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
+} from "./testing/whole-payment-fixture.js";
+import { createOpenOrder, parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -67,7 +70,7 @@ import {
   inTx,
   provisionBillVenue,
   seatedWith,
-  send,
+  send as rawPaymentSend,
   statusOf,
   tabWith,
   type BillVenue,
@@ -1200,8 +1203,11 @@ describe("the receipt language staff choose is saved on the order", () => {
     });
   }
 
-  function choose(venue: BillVenue, id: string, body: Record<string, unknown>) {
-    return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}/receipt-language`, body);
+  async function choose(venue: BillVenue, id: string, body: Record<string, unknown>) {
+    return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}/receipt-language`, {
+      ...body,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
+    });
   }
 
   async function billOf(venue: BillVenue, billId: string) {
@@ -1291,7 +1297,11 @@ describe("the receipt language staff choose is saved on the order", () => {
       venue.cookie,
       "PUT",
       `/api/working-orders/${billId}/receipt-language`,
-      { revision: read, language: "es-ES" },
+      {
+        revision: read,
+        language: "es-ES",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+      },
     );
     expect(firstTill).toEqual({ status: 200, json: { revision: read + 1 } });
     const afterFirst = await orderRow(venue, billId);
@@ -1301,7 +1311,11 @@ describe("the receipt language staff choose is saved on the order", () => {
       venue.cookie2,
       "PUT",
       `/api/working-orders/${billId}/receipt-language`,
-      { revision: read, language: "ca-ES" },
+      {
+        revision: read,
+        language: "ca-ES",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+      },
     );
 
     expect(secondTill).toEqual({
@@ -1464,7 +1478,11 @@ describe("a sale files in the receipt language saved on its order", () => {
       venue.cookie,
       "PUT",
       `/api/working-orders/${id}/receipt-language`,
-      { revision: await revisionOfOrder(venue, id), language },
+      {
+        revision: await revisionOfOrder(venue, id),
+        language,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
+      },
     );
     expect(saved.status).toBe(200);
   }
@@ -1545,6 +1563,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         "POST",
         `/api/working-orders/${billId}/adjustments`,
         {
+          expectedEdit: await readBillEditState(venue.db, billId),
           submissionId: randomUUID(),
           expectedRevision: await revisionOfOrder(venue, billId),
           lineId: null,
@@ -1564,10 +1583,11 @@ describe("a sale files in the receipt language saved on its order", () => {
       const venue = await barcelonaVenue();
       const billId = await billWith(venue, "Tarta", "Caña");
       const line = (quantity: string) =>
-        revisionOfOrder(venue, billId).then((revision) =>
+        revisionOfOrder(venue, billId).then(async (revision) =>
           send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/2`, {
             revision,
             quantity,
+            expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
           }),
         );
       expect((await line("2")).status).toBe(200);
@@ -2387,3 +2407,5 @@ describe("a sale files in the receipt language saved on its order", () => {
     );
   });
 });
+
+const send = observedPaymentSender(() => suite.db, rawPaymentSend);

@@ -13,13 +13,13 @@ import {
 } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
+import { sentFallbackFor } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
-import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
@@ -281,6 +281,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
+    recallToDraft: vi.fn().mockRejectedValue({ code: "server.internal" }),
     ...adjustmentStubs(),
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
@@ -342,6 +343,13 @@ async function flush(el: TillApp): Promise<void> {
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    (type === "change-line" || type === "set-line-course" || type === "send-lines") &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -381,6 +389,8 @@ async function toTableOrder(el: TillApp): Promise<TillTableOrderScreen> {
 beforeEach(() => {
   setLocale("es-ES");
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
+  for (const billId of ["wo-7", "wo-8", "wo-9", "wo-new", "order-a", "order-b"])
+    drafts.bills.add(billId);
 });
 const initialUrl = location.href;
 afterEach(() => {
@@ -582,9 +592,15 @@ it("moves a table dish with one submission id and reloads its current orders", a
     stationId: "kitchen",
     moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
   });
-  const readCurrentOrders = vi
-    .fn()
-    .mockResolvedValue({ revision: 1, reminder: null, groups: [], ungrouped: [] });
+  const readCurrentOrders = vi.fn().mockResolvedValue({
+    hasGroups: false,
+    nextDisplayNumber: 1,
+    retainedCourses: [],
+    revision: 1,
+    reminder: null,
+    groups: [],
+    ungrouped: [],
+  });
   const { el } = await mountApp({
     ...seatedFloor(),
     listStations,
@@ -611,6 +627,7 @@ it("moves a table dish with one submission id and reloads its current orders", a
       submissionId: expect.any(String),
       lineIds: ["line-1"],
       stationId: "kitchen",
+      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
     },
     expect.any(Object),
   );
@@ -729,17 +746,191 @@ describe("opening a table station move while its station list is pending", () =>
   });
 });
 
+describe("A773 table station moves retain their bill observation", () => {
+  const stations: Station[] = ["bar", "kitchen"].map((id, displayOrder) => ({
+    id,
+    name: id,
+    displayOrder,
+    isDefault: displayOrder === 0,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "open",
+  }));
+  const move = { workingOrderId: "wo-7", lineId: "line-1", name: "Café", stationId: "bar" };
+  const observation = (editorVersion: number) => ({
+    billId: "wo-7",
+    editorVersion,
+    draftId: null,
+    draftRevision: null,
+  });
+  async function fixture(overrides: Record<string, unknown> = {}) {
+    let version = 7;
+    const listDrafts = vi.fn(async () => ({
+      drafts: [],
+      billEdits: [{ ...observation(version), editorId: null, editorName: null }],
+    }));
+    const moveDishStation = vi.fn().mockResolvedValue({ revision: 1, moved: [] });
+    const listStations = vi.fn().mockResolvedValue(stations);
+    const { el } = await mountApp({
+      ...seatedFloor(),
+      listDrafts,
+      listStations,
+      moveDishStation,
+      ...overrides,
+    });
+    const screen = await toTableOrder(el);
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(0);
+    const refresh = async () => {
+      const reads = listDrafts.mock.calls.length;
+      version++;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el);
+    };
+    const open = async () => {
+      emit(screen, "move-station", move);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("till-station-choice-dialog"))
+        .not.toBeNull();
+      return el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    };
+    return { el, screen, listDrafts, listStations, moveDishStation, refresh, open };
+  }
+
+  it("keeps the original request after an unanswered move and a newer ownership read", async () => {
+    const { el, open, moveDishStation, refresh } = await fixture();
+    moveDishStation.mockImplementationOnce(async () => {
+      await refresh();
+      throw new TypeError("No answer");
+    });
+    emit(await open(), "station-chosen", { stationId: "kitchen" });
+    await expect.poll(() => moveDishStation.mock.calls.length, { timeout: 10000 }).toBe(2);
+    const first = moveDishStation.mock.calls[0]![1];
+    expect(first.expectedEdit).toEqual(observation(7));
+    expect(moveDishStation.mock.calls[1]![1]).toEqual(first);
+    await flush(el);
+  });
+
+  it("does not send an old dialog through a replacement API", async () => {
+    const { el, open, moveDishStation } = await fixture();
+    const target = await open();
+    const replacement = vi.fn();
+    el.api = stubApi({ moveDishStation: replacement });
+    await flush(el);
+    emit(target, "station-chosen", { stationId: "kitchen" });
+    await flush(el);
+    expect(moveDishStation).not.toHaveBeenCalled();
+    expect(replacement).not.toHaveBeenCalled();
+  });
+
+  it("does not reload another table after an earlier move is answered", async () => {
+    const { el, screen, open, moveDishStation } = await fixture();
+    let answer!: (value: unknown) => void;
+    moveDishStation.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    emit(await open(), "station-chosen", { stationId: "kitchen" });
+    await expect.poll(() => moveDishStation.mock.calls.length).toBe(1);
+    emit(screen, "back-to-floor");
+    await flush(el);
+    const read = vi.mocked(api.getTabLines);
+    const reads = read.mock.calls.length;
+    answer({ revision: 1, moved: [] });
+    await flush(el);
+    expect(read.mock.calls.length).toBe(reads);
+  });
+
+  it.each(["success", "refusal"])(
+    "refreshes the bill after a station move %s before another choice",
+    async (outcome) => {
+      const { el, open, moveDishStation, listDrafts } = await fixture();
+      const first = await open();
+      listDrafts.mockResolvedValueOnce({
+        drafts: [],
+        billEdits: [{ ...observation(8), editorId: null, editorName: null }],
+      });
+      if (outcome === "refusal")
+        moveDishStation.mockRejectedValueOnce({ code: "draft.out_of_date" });
+      emit(first, "station-chosen", { stationId: "kitchen" });
+      await flush(el);
+      const remaining = el.shadowRoot!.querySelector("till-station-choice-dialog");
+      if (remaining !== null) emit(remaining, "close");
+      await flush(el);
+      emit(await open(), "station-chosen", { stationId: "kitchen" });
+      await expect.poll(() => moveDishStation.mock.calls.length).toBe(2);
+      expect(moveDishStation.mock.calls[1]![1].expectedEdit).toEqual(observation(8));
+    },
+  );
+
+  it("sends the bill version that was shown when choosing a destination", async () => {
+    const { el, open, moveDishStation } = await fixture();
+    emit(await open(), "station-chosen", { stationId: "kitchen" });
+    await expect.poll(() => moveDishStation.mock.calls.length).toBe(1);
+    expect(moveDishStation.mock.calls[0]![1]).toEqual({
+      submissionId: expect.any(String),
+      lineIds: ["line-1"],
+      stationId: "kitchen",
+      expectedEdit: observation(7),
+    });
+    await flush(el);
+  });
+
+  it("does not open a destination choice after the bill version changes during the station read", async () => {
+    const { el, screen, listStations, refresh } = await fixture();
+    let answer!: (rows: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () =>
+        new Promise<Station[]>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    emit(screen, "move-station", move);
+    await expect.poll(() => answer).toBeDefined();
+    await refresh();
+    answer(stations);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  });
+
+  it("refuses an already-open destination choice after its bill version changes", async () => {
+    const { el, open, moveDishStation, refresh } = await fixture();
+    const dialog = await open();
+    await refresh();
+    emit(dialog, "station-chosen", { stationId: "kitchen" });
+    await flush(el);
+    expect(moveDishStation).not.toHaveBeenCalled();
+    expect(
+      (
+        el.shadowRoot!.querySelector("till-station-choice-dialog") as HTMLElement & {
+          refusal: string;
+        }
+      ).refusal,
+    ).toBe("draft.out_of_date");
+  });
+});
+
 it("clears a saved draft station missing from the station list", async () => {
   drafts.drafts.push({
     id: "draft-1",
     partyId: "v-2",
+    billId: "wo-7",
     ownerId: "p1",
     ownerName: "Ana",
     revision: 1,
     takenOverFrom: null,
     lines: [
       {
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
         id: "draft-line-1",
+        sourceLineId: null,
+        source: null,
         menuItemId: "menu-item-cafe-0",
         variantId: null,
         menuVersionId: null,
@@ -922,6 +1113,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
+    ["recall-lines", { lineNos: [1] }, "recallToDraft"],
     [
       "adjust",
       {
@@ -970,7 +1162,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       },
       "submitDraft",
     ],
-    ["recall-lines", { lineNos: [1] }, "recallLines"],
+    ["recall-lines", { lineNos: [1] }, "recallToDraft"],
     [
       "change-line",
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
@@ -1095,7 +1287,17 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
     await flush(el);
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "3.00" }, "wo-7");
+    expect(api.recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "3.00" },
+      "wo-7",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    );
   });
 
   it("empties the floor the table actions pick from when the re-read after a move fails", async () => {
@@ -1103,7 +1305,24 @@ describe("till-app table ordering: refused and failed table actions", () => {
       .fn()
       .mockResolvedValueOnce([openTable])
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    const { el } = await mountApp({ getTablesState });
+    const { el } = await mountApp({
+      getTablesState,
+      getPartyBills: vi.fn().mockResolvedValue([
+        {
+          workingOrderId: "wo-7",
+          revision: 0,
+          invoiceType: "F2",
+          recipient: null,
+          partyId: "v-2",
+          label: null,
+          status: "open",
+          total: "3.00",
+          outstanding: "3.00",
+          hasPayments: false,
+          receiptAvailable: false,
+        } satisfies PartyBill,
+      ]),
+    });
     const screen = await toTableOrder(el);
     expect(screen.tables).toEqual([openTable]);
 
@@ -1113,6 +1332,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(tableOrder(el)!.tables).toEqual([]);
     expect(banner(el)).toBeNull();
@@ -1206,7 +1426,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
   }
 
-  it("saves a note typed into Change with the order's revision, and the line then shows it at the same price", async () => {
+  it("applies the retained line-edit command with its opening revision and shows the note at the same price", async () => {
     const getTabLines = vi
       .fn()
       .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
@@ -1221,21 +1441,34 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
     screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await screen.updateComplete;
-    screen.shadowRoot!.querySelector<HTMLElement>('[data-change-line="5"]')!.click();
-    await screen.updateComplete;
-    const picker = screen.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
-    await picker.updateComplete;
-    const note = picker
-      .shadowRoot!.querySelector('[data-test="line-note"]')!
-      .shadowRoot!.querySelector("textarea")!;
-    note.value = "no onions";
-    note.dispatchEvent(new Event("input"));
-    await picker.updateComplete;
-    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    emit(screen, "change-line", {
+      lineNo: 5,
+      lineName: "Burger",
+      patch: { note: "no onions" },
+      revision: 7,
+      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      saleLine: {
+        menuItemId: "menu-item-burger",
+        quantity: "1.000",
+        options: [],
+        extras: [],
+        note: "no onions",
+      },
+    });
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7);
-    const row = tableOrder(el)!.shadowRoot!.querySelector(".pending-line")!;
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
+    const fallback = await sentFallbackFor(tableOrder(el)!);
+    const row = fallback.querySelector('[data-sent-fallback-line="line-5"]')!;
+    expect(
+      row.querySelector(".line-note"),
+      "the refreshed saved note is shown in Sent",
+    ).not.toBeNull();
     expect(row.querySelector(".line-note")!.textContent).toContain("no onions");
     expect(row.querySelector(".line-total")!.textContent).toBe(
       formatMoney("9.50", currentLocale()),
@@ -1309,7 +1542,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     emit(screen, "change-line", change);
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7);
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)!.textContent).toContain(t("held.changed_elsewhere"));
   });
@@ -1946,7 +2184,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(text).not.toContain(t("table.error"));
     });
 
-    it("names the refusal that lands after the operator logged out, and reads nothing again", async () => {
+    it("ignores the prior operator's late refusal after logout, and reads nothing again", async () => {
       const { el, settle, reads } = await changeOnFormFactor(tillFormFactor);
       emit(shell(el), "logout");
       await flush(el);
@@ -1956,7 +2194,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       settle().reject({ code: "ticket.already_started" });
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(banner(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
       expect(reads()).toBe(readsOnLeaving);
     });
   });
@@ -2329,7 +2568,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     emit(screen, "change-line", { ...change, patch: { quantity: "2" } });
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { quantity: "2" }, 7);
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { quantity: "2" }, 7, {
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
     expect(banner(el)!.textContent).toContain(codeMessage("extras.unsupported_product"));
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
@@ -2583,8 +2827,14 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
-    expect(call).toHaveLength(8);
+    expect(call).toHaveLength(9);
     expect(call[7]).toBeNull();
+    expect(call[8]).toEqual({
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
   });
 
   it("a bill with a full invoice shows no field and sends no guests", async () => {
@@ -2603,7 +2853,17 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     await payCash(el);
 
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "5" }, "wo-7");
+    expect(api.recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "5" },
+      "wo-7",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    );
   });
 });
 

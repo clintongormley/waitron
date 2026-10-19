@@ -30,6 +30,29 @@ const jamon: TillProduct = {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (theme) => {
+  it.each(["cash", "card"] as const)(
+    "has no violations while reconciling an unanswered %s payment",
+    async (method) => {
+      const store = new WorkingOrderStore();
+      const { host } = await mountWidget<TillTenderPay>(
+        "till-tender-pay",
+        {
+          store,
+          confirmation: {
+            tender:
+              method === "cash"
+                ? { method, amount: "150.00" }
+                : { method, amount: "120.00", externalRef: "operation-17" },
+            outstanding: "120.00",
+            guests: 4,
+          },
+        },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("has no violations in the idle Pay view", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");

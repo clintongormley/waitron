@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -84,6 +85,7 @@ function recordedOn(billId: string) {
 async function adjust(billId: string, lineNo: number, ask: Record<string, unknown>) {
   const line = (await linesOf(billId)).find((row) => row.lineNo === lineNo)!;
   return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/adjustments`, {
+    expectedEdit: await readBillEditState(venue.db, billId),
     submissionId: randomUUID(),
     expectedRevision: await revisionOf(billId),
     lineId: line.id,
@@ -193,6 +195,7 @@ describe("a bill discount over a paid line", () => {
       "POST",
       `/api/working-orders/${billId}/adjustments`,
       {
+        expectedEdit: await readBillEditState(venue.db, billId),
         submissionId: randomUUID(),
         expectedRevision: await revisionOf(billId),
         lineId: null,

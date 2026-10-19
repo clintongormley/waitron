@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { workingOrders } from "@waitron/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
@@ -10,7 +10,12 @@ import {
   orderTableLabel,
   readSentWork,
 } from "./kitchen-print.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { requireBillEditor, requireBillEditors } from "./bill-editing.js";
+import type { BillEditExpected, BillEditState } from "./order-drafts.js";
+import { isRecalledDish } from "./draft-source.js";
+import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   guardParty,
@@ -27,6 +32,7 @@ import {
   carveOffLines,
   createOpenOrder,
   moveOrderLines,
+  type OrderAttendance,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -45,6 +51,36 @@ export interface BillCommand {
 }
 
 type Transfers = { lineNo: number; quantity?: string }[];
+
+// Reserved sources change only through their owning draft's revision-checked commands.
+async function requireUnreservedTransfers(
+  tx: Transaction,
+  billId: string,
+  transfers: Transfers,
+  edit: BillEditState,
+): Promise<void> {
+  const [reserved] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, billId),
+        inArray(
+          workingOrderLines.lineNo,
+          transfers.map((line) => line.lineNo),
+        ),
+        isRecalledDish(tx),
+      ),
+    )
+    .limit(1);
+  if (reserved !== undefined)
+    throw new AppError("draft.out_of_date", {
+      billId,
+      draftId: edit.draftId,
+      revision: edit.draftRevision,
+      edit,
+    });
+}
 
 type BillStatus = (typeof workingOrders.$inferSelect)["status"];
 
@@ -134,12 +170,14 @@ export async function splitBill(
   cfg: OriginConfig,
   billId: string,
   transfers: Transfers,
-  command: BillCommand,
+  command: BillCommand & { expectedEdit: BillEditExpected },
 ): Promise<{ billId: string }> {
   if (transfers.length === 0) throw new AppError("sale.empty_basket", {});
   assertDistinctTransferLines(billId, transfers);
   const path = await guardPathParty(tx, billId, command);
   refuseClosedBill(billId, path.status);
+  const edit = await requireBillEditor(tx, billId, command.operatorId, command.expectedEdit);
+  await requireUnreservedTransfers(tx, billId, transfers, edit);
 
   const newBillId = randomUUID();
   await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {
@@ -174,13 +212,25 @@ export async function mergeBills(
   cfg: TillConfig,
   intoBillId: string,
   fromBillId: string,
-  command: BillCommand,
+  command: BillCommand & { expectedEdits: BillEditExpected[] },
+  attendance?: OrderAttendance,
 ): Promise<void> {
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
-  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId);
+  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId, {
+    operatorId: command.operatorId,
+    expectedEdits: command.expectedEdits,
+    ...(attendance === undefined
+      ? {}
+      : {
+          attendance: {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          },
+        }),
+  });
 }
 
 /**
@@ -195,12 +245,28 @@ export async function mergeCheckedBills(
   partyId: string,
   intoBillId: string,
   fromBillId: string,
-  known: { mainBillId?: string | null; kitchenTold?: boolean } = {},
+  known: {
+    operatorId: string;
+    expectedEdits: BillEditExpected[];
+    mainBillId?: string | null;
+    kitchenTold?: boolean;
+    attendance?: { recorder: AttendanceRecorder; at: string };
+  },
 ): Promise<void> {
+  await requireBillEditors(tx, [fromBillId, intoBillId], known.operatorId, known.expectedEdits);
   const mainBillId =
     known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined);
+  await moveDraftsToBill(
+    tx,
+    cfg,
+    fromBillId,
+    intoBillId,
+    known.operatorId,
+    known.expectedEdits,
+    known.attendance,
+  );
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
   await tx
@@ -222,7 +288,7 @@ export async function transferItems(
   fromBillId: string,
   toBillId: string,
   transfers: Transfers,
-  command: BillCommand,
+  command: BillCommand & { expectedEdits: BillEditExpected[] },
 ): Promise<void> {
   if (fromBillId === toBillId) throw new AppError("tab.transfer_self", { tabId: fromBillId });
   if (transfers.length === 0) throw new AppError("sale.empty_basket", {});
@@ -230,6 +296,18 @@ export async function transferItems(
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
   await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
+  const edits = await requireBillEditors(
+    tx,
+    [fromBillId, toBillId],
+    command.operatorId,
+    command.expectedEdits,
+  );
+  await requireUnreservedTransfers(
+    tx,
+    fromBillId,
+    transfers,
+    edits.find((e) => e.billId === fromBillId)!,
+  );
 
   const before = await readSentWork(tx, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {

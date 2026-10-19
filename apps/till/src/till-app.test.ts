@@ -607,6 +607,13 @@ const stationQueueWidget = (el: TillApp) =>
   counterBody(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    (type === "set-line-course" || type === "send-lines") &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -728,6 +735,8 @@ beforeEach(() => {
     if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
   setLocale("es-ES");
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
+  drafts.bills.add("wo-7");
+  drafts.bills.add("wo-new");
 });
 const initialUrl = location.href;
 afterEach(() => {
@@ -800,6 +809,12 @@ describe("till-app", () => {
       [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
       { method: "cash", amount: "2" },
       expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(order).toEqual(["ask", "pay"]);
   });
@@ -1645,6 +1660,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "20.00" },
       expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3166,6 +3187,12 @@ describe("till-app", () => {
       // replays and a retrieved order settles under its own id (see the retrieve→pay and retry tests
       // below).
       workingOrderId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
     // RETRIEVED/parked basket is synced first (see the retrieve→edit→pay test); syncing a walk-up here
@@ -3233,6 +3260,10 @@ describe("till-app", () => {
           countryCode: "ES",
         },
       },
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3249,6 +3280,113 @@ describe("till-app", () => {
     expect(currentApi.pay).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["basket", "success"],
+    ["basket", "refusal"],
+    ["api", "success"],
+    ["api", "refusal"],
+  ] as const)("ignores a Place %s replacement's late %s", async (replacement, outcome) => {
+    let accept!: () => void;
+    let refuse!: (error: unknown) => void;
+    const placeOrder = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          accept = resolve;
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountApp({
+      zonePolicy: { serviceMode: "ticket_then_pay" },
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      placeOrder,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const originalId = c.store.id;
+    emit(c, "place-order");
+    await flush(el);
+    expect(placeOrder).toHaveBeenCalledExactlyOnceWith(originalId, null);
+
+    if (replacement === "basket")
+      c.store.loadFrom("replacement", [{ product: cafe, quantity: "1" }], "Next order", 8);
+    else el.api = stubApi();
+    await flush(el);
+    const lines = structuredClone(c.store.lines);
+    const id = c.store.id;
+    const api = el.api;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    const stationReads = vi.mocked(api.getStationQueue).mock.calls.length;
+    if (outcome === "success") accept();
+    else refuse({ code: "sale.refused" });
+    await flush(el);
+
+    expect(tenderPay(el).stage).toBe("order");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? "").toBe("");
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines).toEqual(lines);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(stationReads);
+    expect(api.placeOrder).toHaveBeenCalledTimes(replacement === "api" ? 0 : 1);
+  });
+
+  it.each(["basket", "api"] as const)(
+    "does not place after a %s replacement while the invoice choice waits",
+    async (replacement) => {
+      let accept!: (value: { revision: number }) => void;
+      const setOrderInvoiceChoice = vi.fn(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            accept = resolve;
+          }),
+      );
+      const { el } = await mountApp({
+        ...fullInvoicesOn(),
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        setOrderInvoiceChoice,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await flush(el);
+      emit(c, "choose-invoice");
+      await flush(el);
+      emit(
+        el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+        "invoice-recipient-confirm",
+        {
+          invoiceType: "F1",
+          recipient: {
+            taxId: "12345678Z",
+            legalName: "Ana García",
+            address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+            countryCode: "ES",
+          },
+        },
+      );
+      await flush(el);
+      const originalApi = el.api;
+      emit(c, "place-order");
+      await flush(el);
+      expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
+      expect(originalApi.placeOrder).not.toHaveBeenCalled();
+      if (replacement === "basket")
+        c.store.loadFrom("next-basket", [{ product: cafe, quantity: "1" }], "Next order", 8);
+      else el.api = stubApi();
+      await flush(el);
+      const id = c.store.id;
+      const revision = c.store.revision;
+      const lines = structuredClone(c.store.lines);
+      accept({ revision: 9 });
+      await flush(el);
+      expect(originalApi.placeOrder).not.toHaveBeenCalled();
+      expect(el.api.placeOrder).not.toHaveBeenCalled();
+      expect(c.store.id).toBe(id);
+      expect(c.store.revision).toBe(revision);
+      expect(c.store.lines).toEqual(lines);
+      expect(tenderPay(el).stage).toBe("order");
+    },
+  );
+
   it("places a loaded bill over €3,000 without a recipient prompt despite retired timing metadata", async () => {
     const { el } = await mountApp({
       zonePolicy: { serviceMode: "invoice_first" },
@@ -3262,7 +3400,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
-    expect(currentApi.placeOrder).toHaveBeenCalledWith("large-bill");
+    expect(currentApi.placeOrder).toHaveBeenCalledWith("large-bill", null);
     expect(tenderPay(el).stage).toBe("collect");
     expect(ticket(el)).toBeNull();
     expect(currentApi.recordSale).not.toHaveBeenCalled();
@@ -3302,11 +3440,12 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      expectedEdit: null,
       revision: 0,
       invoiceType: "F1",
       recipient,
     });
-    expect(placeOrder).toHaveBeenCalledWith(id);
+    expect(placeOrder).toHaveBeenCalledWith(id, null);
     expect(vi.mocked(currentApi.setOrderInvoiceChoice).mock.invocationCallOrder[0]).toBeLessThan(
       placeOrder.mock.invocationCallOrder[0]!,
     );
@@ -3349,6 +3488,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      expectedEdit: null,
       revision: 0,
       invoiceType: "F1",
       recipient,
@@ -3414,6 +3554,7 @@ describe("till-app", () => {
     emit(c, "place-order");
     await flush(el);
     expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      expectedEdit: null,
       revision: 0,
       invoiceType: "F1",
       recipient: { ...recipient, legalName: "Ana García López" },
@@ -3589,6 +3730,10 @@ describe("till-app", () => {
           countryCode: "ES",
         },
       },
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3629,12 +3774,14 @@ describe("till-app", () => {
 
     expect(pay).toHaveBeenCalledTimes(2);
     expect(pay).toHaveBeenNthCalledWith(1, {
+      expectedEdit: null,
       id,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       invoiceType: "F1",
       recipient,
     });
     expect(pay).toHaveBeenNthCalledWith(2, {
+      expectedEdit: null,
       id,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       invoiceType: "F1",
@@ -3675,6 +3822,12 @@ describe("till-app", () => {
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       nextId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3712,6 +3865,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       c.store.id,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3759,6 +3918,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       c.store.id,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3807,6 +3972,12 @@ describe("till-app", () => {
       expect.anything(),
       expect.anything(),
       workingOrderId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(ticket(el)).not.toBeNull();
 
@@ -4046,6 +4217,9 @@ describe("till-app", () => {
         undefined,
         undefined,
         "es-ES",
+        undefined,
+        undefined,
+        null,
       );
     });
 
@@ -4087,6 +4261,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledWith(id, {
+        expectedEdit: null,
         revision: 0,
         language: "es-ES",
       });
@@ -4103,6 +4278,8 @@ describe("till-app", () => {
         id,
         { method: "cash", amount: "5" },
         "es-ES",
+        undefined,
+        null,
       );
     });
 
@@ -4125,6 +4302,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledWith(held, {
+        expectedEdit: null,
         revision: 0,
         language: "es-ES",
       });
@@ -4211,6 +4389,7 @@ describe("till-app", () => {
       await choose(el, "ca-ES");
 
       expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-1", {
+        expectedEdit: null,
         revision: 3,
         language: "ca-ES",
       });
@@ -4231,6 +4410,9 @@ describe("till-app", () => {
         undefined,
         undefined,
         "ca-ES",
+        undefined,
+        undefined,
+        null,
       );
     });
 
@@ -4264,6 +4446,12 @@ describe("till-app", () => {
         expect.anything(),
         { method: "cash", amount: "5" },
         "wo-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
       );
     });
 
@@ -5594,7 +5782,17 @@ describe("till-app", () => {
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "20.00" });
     await flush(el);
-    expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "20.00" }, "wo-7");
+    expect(recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "20.00" },
+      "wo-7",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=open-drawer]")!.click();
     await flush(el);
     expect(openDrawer).toHaveBeenCalledTimes(1);
@@ -5860,6 +6058,12 @@ describe("till-app", () => {
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
       { method: "card", amount: "1.50", externalRef: "OP-42" },
       workingOrderId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     const view = ticket(el)!;
     expect(view).not.toBeNull();
@@ -5942,6 +6146,12 @@ describe("till-app", () => {
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     // The order was retrieved but NOT edited, so it must NOT be re-synced: an unedited retrieve→pay
     // files from the stored lines (recordSale straight through).
@@ -5978,6 +6188,7 @@ describe("till-app", () => {
       ],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     // recordSale files the SAME edited composition under the same id, and the sync ran FIRST — the
     // server needs the lock updated before it files from it.
@@ -5988,6 +6199,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
@@ -6193,6 +6410,7 @@ describe("till-app", () => {
       ],
       label: undefined,
       revision: 0,
+      expectedEdit: null,
     });
   });
 
@@ -6313,6 +6531,7 @@ describe("till-app", () => {
           extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
         },
       ],
+      expectedEdit: null,
     });
   });
 
@@ -6475,6 +6694,12 @@ describe("till-app", () => {
       [plainLine("2")],
       { method: "cash", amount: "10" },
       "wo-customised",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
 
     emit(counter, "new-sale");
@@ -6487,6 +6712,7 @@ describe("till-app", () => {
       label: "Takeaway",
       revision: 0,
       lines: [plainLine("3")],
+      expectedEdit: null,
     });
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
   });
@@ -6727,6 +6953,7 @@ describe("till-app", () => {
           options: [{ listId: "list-punto", labelId: "label-medium" }],
         },
       ],
+      expectedEdit: null,
     });
   });
 
@@ -6753,6 +6980,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       c.store.id,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -6807,6 +7040,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(ticket(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
@@ -7062,6 +7301,7 @@ describe("till-app", () => {
       ],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     expect(parkOrder).not.toHaveBeenCalled();
     // Success path: the basket empties and stays on the counter (a hold is not a completed sale).
@@ -7087,6 +7327,7 @@ describe("till-app", () => {
       ],
       label: "Ana",
       revision: 3,
+      expectedEdit: null,
     });
     expect(setWorkingOrderLabel).not.toHaveBeenCalled();
     expect(c.store.lines).toHaveLength(0);
@@ -7190,6 +7431,7 @@ describe("till-app", () => {
     expect(setWorkingOrderLabel).toHaveBeenCalledExactlyOnceWith("wo-1", {
       label: "Ana",
       revision: 3,
+      expectedEdit: null,
     });
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
@@ -7250,6 +7492,7 @@ describe("till-app", () => {
       ],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     expect(parkOrder).not.toHaveBeenCalled();
   });
@@ -7563,7 +7806,7 @@ describe("till-app", () => {
     emit(c, "discard-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1", null);
     // once on entering the counter, once after the discard.
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
   });
@@ -7613,7 +7856,7 @@ describe("till-app", () => {
     emit(c, "discard-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1", null);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.stale"));
     expect(el.shadowRoot!.textContent).not.toContain("working_order.not_open");
@@ -7634,7 +7877,7 @@ describe("till-app", () => {
     emit(c, "discard-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1", null);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.discard_holds_money"));
     expect(banner.textContent).not.toContain(t("held.stale"));
@@ -8774,6 +9017,12 @@ describe("till-app", () => {
             submissionId: expect.any(String),
             expectedPartyRevision: 3,
             draftRevision: 1,
+            expectedEdit: {
+              billId: "wo-7",
+              editorVersion: 1,
+              draftId: "draft-1",
+              draftRevision: 1,
+            },
             groups: [{ release: "fire", lineIds: [expect.any(String)] }],
           },
           { signal: expect.any(AbortSignal) },
@@ -8839,6 +9088,7 @@ describe("till-app", () => {
         firedAt: null,
       };
       const heldGroup = {
+        courseIds: [],
         id: "g1",
         position: 1,
         state: "held" as const,
@@ -8959,7 +9209,12 @@ describe("till-app", () => {
         await flush(el);
 
         // Re-filed on the tab's own working order (activeTabId), then re-read so the picker reconciles.
-        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, "c2");
+        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, "c2", {
+          billId: "wo-7",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -8976,7 +9231,12 @@ describe("till-app", () => {
         emit(screen, "set-line-course", { lineNo: 1, courseId: null });
         await flush(el);
 
-        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, null);
+        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, null, {
+          billId: "wo-7",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        });
       });
 
       it("a rejected set-line-course surfaces the banner AND still reloads to reconcile to server truth", async () => {
@@ -9059,17 +9319,50 @@ describe("till-app", () => {
         await flush(el);
 
         // Released on the tab's own working order (activeTabId), then re-read so the drawer reconciles.
-        expect(sendLines).toHaveBeenCalledWith("wo-7", [1]);
+        expect(sendLines).toHaveBeenCalledWith("wo-7", [1], {
+          billId: "wo-7",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("recall-lines un-sends the not-yet-started lines then reloads its lines", async () => {
-        const recallLines = vi.fn().mockResolvedValue(undefined);
+      it("recall-lines puts the bill family into its owner's draft then reloads its lines", async () => {
+        const recallToDraft = vi.fn(async () => {
+          const draft: import("./api/client.js").Draft = {
+            id: "draft-recalled",
+            partyId: "v-2",
+            billId: "wo-7",
+            ownerId: "p1",
+            ownerName: "Ana",
+            revision: 1,
+            takenOverFrom: null,
+            lines: [
+              {
+                id: "reference-line-1",
+                sourceLineId: "line-1",
+                source: { line: tabLine, extras: [], netAmount: "3.00" },
+                quantity: "2.000",
+                note: null,
+                courseId: null,
+                makeAt: null,
+                noMerge: true,
+                unavailable: false,
+                slot: 0,
+                joinGroupId: null,
+                afterGroupId: null,
+              },
+            ],
+          };
+          drafts.drafts.push(draft);
+          return { revision: 4, draft, edit: drafts.edit(draft.billId) };
+        });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          recallLines,
+          recallToDraft,
           getTabLines,
         });
         const screen = await toTableOrder(el, openTable);
@@ -9077,7 +9370,17 @@ describe("till-app", () => {
         emit(screen, "recall-lines", { lineNos: [1] });
         await flush(el);
 
-        expect(recallLines).toHaveBeenCalledWith("wo-7", [1]);
+        expect(recallToDraft).toHaveBeenCalledWith(
+          "v-2",
+          "line-1",
+          {
+            submissionId: expect.any(String),
+            expectedPartyRevision: 3,
+            expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+          { signal: expect.any(AbortSignal) },
+        );
+        expect(tableOrder(el)!.draftStore!.lines[0]!.workingOrderLineId).toBe("line-1");
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -9113,7 +9416,7 @@ describe("till-app", () => {
             getTablesState: vi.fn().mockResolvedValue([openTable]),
             listZones: vi.fn().mockResolvedValue([floorZone]),
             getTabLines,
-            recallLines: vi.fn().mockRejectedValue({ code }),
+            recallToDraft: vi.fn().mockRejectedValue({ code }),
           });
           const screen = await toTableOrder(el, openTable);
           expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -9135,7 +9438,7 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          recallLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+          recallToDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -9193,6 +9496,7 @@ describe("till-app", () => {
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           moveGuests,
         });
@@ -9206,6 +9510,7 @@ describe("till-app", () => {
         expect(moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         });
         // Re-reads the floor so the freed/occupied tables reconcile, and stays on the table-order screen.
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -9219,6 +9524,7 @@ describe("till-app", () => {
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           joinTables,
         });
@@ -9231,6 +9537,7 @@ describe("till-app", () => {
         expect(joinTables).toHaveBeenCalledWith("v-2", "t9", "merge", {
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         });
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(tableOrder(el)).not.toBeNull();
@@ -9254,6 +9561,7 @@ describe("till-app", () => {
       });
 
       it("merge-bills absorbs another bill then reloads this bill's lines AND the floor", async () => {
+        drafts.bills.add("wo-9");
         const mergeBills = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
@@ -9273,6 +9581,10 @@ describe("till-app", () => {
         expect(mergeBills).toHaveBeenCalledWith("wo-7", "wo-9", {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdits: [
+            { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-9", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
         // The current tab absorbed the other's lines (reload) and the floor changed (reload).
         expect(getTabLines).toHaveBeenCalledTimes(2);
@@ -9280,6 +9592,7 @@ describe("till-app", () => {
       });
 
       it("transfer-lines moves selected lines out then reloads this tab's lines AND the floor", async () => {
+        drafts.bills.add("wo-9");
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
@@ -9299,12 +9612,17 @@ describe("till-app", () => {
         expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdits: [
+            { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-9", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
       it("requires staff confirmation before transferring lines off a bill over €3,000", async () => {
+        drafts.bills.add("wo-9");
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([largeOpenTable]),
@@ -9328,10 +9646,15 @@ describe("till-app", () => {
         expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdits: [
+            { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-9", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
 
-      it("sends no party with a bill action once the party has left the table while its bill is open", async () => {
+      it("refuses a bill action after its party leaves the table", async () => {
+        drafts.bills.add("wo-9");
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
@@ -9359,7 +9682,8 @@ describe("till-app", () => {
         emit(tableOrder(el)!, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
+        expect(transferItems).not.toHaveBeenCalled();
+        expect(tableOrder(el)!.orderId).toBe("wo-7");
       });
 
       it("split-lines switches pay and later receipt actions to the bill split off", async () => {
@@ -9385,6 +9709,7 @@ describe("till-app", () => {
         expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
         });
         expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
         expect(tableOrder(el)!.orderId).toBe("wo-check");
@@ -9396,6 +9721,12 @@ describe("till-app", () => {
           [],
           { method: "cash", amount: "10.00" },
           "wo-check",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
         );
         emit(ticket(el)!, "reprint");
         await flush(el);
@@ -9434,6 +9765,7 @@ describe("till-app", () => {
         expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
         });
       });
 
@@ -9455,6 +9787,7 @@ describe("till-app", () => {
         expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
         });
         expect(tableOrder(el)!.orderId).toBe("wo-7");
         expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -9528,7 +9861,17 @@ describe("till-app", () => {
         // The server files the tab's STORED locked lines and ignores the sent basket, so we send `[]`
         // (the documented shape) tagged with the tab's order id, and never #syncIfDirty →
         // updateWorkingOrder, which saves the counter basket, not the tab.
-        expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "10.00" }, "wo-7");
+        expect(recordSale).toHaveBeenCalledWith(
+          [],
+          { method: "cash", amount: "10.00" },
+          "wo-7",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        );
         expect(updateWorkingOrder).not.toHaveBeenCalled();
         expect(ticket(el)).not.toBeNull();
       });
@@ -9964,6 +10307,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: workingOrderId,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         tip: "0.50",
@@ -9985,6 +10329,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: c.store.id,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
       });
@@ -10659,8 +11004,10 @@ describe("till-app", () => {
         ],
         label: "Mesa 4",
         revision: 3,
+        expectedEdit: null,
       });
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: "wo-1",
         lines: [
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
@@ -10688,6 +11035,7 @@ describe("till-app", () => {
 
       expect(updateWorkingOrder).not.toHaveBeenCalled();
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: "wo-1",
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       });
@@ -10870,7 +11218,7 @@ describe("till-app", () => {
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         label: undefined,
       });
-      expect(currentApi.placeOrder).toHaveBeenCalledWith(id);
+      expect(currentApi.placeOrder).toHaveBeenCalledWith(id, null);
       expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
       expect(c.store.persisted).toBe(true); // marked persisted after the successful park
       expect(tenderPay(el).stage).toBe("collect"); // Place → Collect
@@ -10902,7 +11250,7 @@ describe("till-app", () => {
 
       expect(currentApi.parkOrder).not.toHaveBeenCalled();
       expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
-      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1", null);
       expect(tenderPay(el).stage).toBe("collect");
     });
 
@@ -10937,8 +11285,9 @@ describe("till-app", () => {
         ],
         label: "Mesa 4",
         revision: 3,
+        expectedEdit: null,
       });
-      expect(placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(placeOrder).toHaveBeenCalledWith("wo-1", null);
       expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
         placeOrder.mock.invocationCallOrder[0]!,
       );
@@ -11153,7 +11502,13 @@ describe("till-app", () => {
       emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
       await flush(el);
 
-      expect(currentApi.collectOrder).toHaveBeenCalledWith(id, { method: "cash", amount: "5" });
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        id,
+        { method: "cash", amount: "5" },
+        undefined,
+        undefined,
+        null,
+      );
       const view = ticket(el)!;
       expect(view).not.toBeNull();
       // The ticket renders the SERVER collect result (its `lines` are the filed placed composition),
@@ -11282,6 +11637,333 @@ describe("till-app", () => {
       expect(currentApi.collectOrder).not.toHaveBeenCalled();
     });
 
+    const collectionEdit = (version = 7) => ({
+      billId: "wo-debt",
+      editorId: null,
+      editorName: null,
+      editorVersion: version,
+      draftId: null,
+      draftRevision: null,
+    });
+    const debtSelection = (edit: unknown = collectionEdit()) => ({
+      ...billRow({
+        workingOrderId: "wo-debt",
+        partyId: "party-debt",
+        collectionStatus: "waiting_for_payment",
+        stillOwed: "30.00",
+        invoiceNumber: "A/12",
+      }),
+      edit,
+    });
+    async function openCollection(el: TillApp) {
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      return selectDebt(el);
+    }
+    it("A773 Find a bill carries the selected bill's released edit version into collection", async () => {
+      const { el } = await mountApp({ getFindBill: vi.fn().mockResolvedValue(debtSelection()) });
+      const form = await openCollection(el);
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!),
+      );
+      await flush(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledExactlyOnceWith(
+        "wo-debt",
+        { method: "cash", amount: "30.00" },
+        undefined,
+        undefined,
+        { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+      );
+    });
+    it("A773 Find a bill refuses missing table edit metadata before collection", async () => {
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection(undefined)),
+      });
+      // Explicitly remove the property rather than using the fixture's default argument.
+      vi.mocked(currentApi.getFindBill).mockResolvedValue({
+        ...debtSelection(),
+        edit: undefined,
+      } as never);
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await flush(el);
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+      expect(ticket(el)).toBeNull();
+      expect(form.error).toEqual({ code: "draft.out_of_date" });
+    });
+    it("A773 Find a bill retains the original collection tender and edit after a lost answer", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(saleResult);
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      const original = { method: "card", amount: "30.00", externalRef: "terminal-original" };
+      emit(form, "find-bill-pay", { workingOrderId: "wo-debt", tender: original, invoiced: true });
+      await flush(el);
+      expect(form.error).toBe("sale.unconfirmed");
+      original.externalRef = "mutated-after-send";
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "40.00" },
+        invoiced: false,
+      });
+      await flush(el);
+      expect(collect.mock.calls).toEqual([
+        [
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "terminal-original" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+        [
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "terminal-original" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      ]);
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+    });
+    it("A773 Find a bill ignores a collection answer from a replaced API", async () => {
+      let answer!: (result: TillSaleResult) => void;
+      const collect = vi.fn(
+        () =>
+          new Promise<TillSaleResult>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await vi.waitFor(() => expect(collect).toHaveBeenCalledOnce());
+      el.api = stubApi();
+      await el.updateComplete;
+      answer(saleResult);
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+    });
+    it.each(["draft.out_of_date", "draft.taken_over"])(
+      "A773 Find a bill shows %s and permits a fresh collection after a confirmed refusal",
+      async (code) => {
+        const collect = vi
+          .fn()
+          .mockRejectedValueOnce({ code, status: 409 })
+          .mockResolvedValue(saleResult);
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: collect,
+        });
+        const form = await openCollection(el);
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: { method: "cash", amount: "30.00" },
+          invoiced: true,
+        });
+        await flush(el);
+        expect(form.error).toEqual({ code });
+        expect(form.unconfirmed).toBe(false);
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: { method: "card", amount: "30.00", externalRef: "fresh-choice" },
+          invoiced: true,
+        });
+        await flush(el);
+        expect(collect.mock.calls[1]).toEqual([
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "fresh-choice" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ]);
+      },
+    );
+    it("A773 Find a bill keeps the original request through a retry authentication refusal", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockRejectedValueOnce({ code: "session.required", status: 401 })
+        .mockResolvedValue(saleResult);
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      const ask = (tender: unknown) =>
+        emit(form, "find-bill-pay", { workingOrderId: "wo-debt", tender, invoiced: true });
+      ask({ method: "card", amount: "30.00", externalRef: "original" });
+      await flush(el);
+      expect(form.unconfirmed).toBe(true);
+      ask({ method: "cash", amount: "40.00" });
+      await flush(el);
+      expect(form.unconfirmed).toBe(true);
+      ask({ method: "cash", amount: "50.00" });
+      await flush(el);
+      expect(collect.mock.calls).toHaveLength(3);
+      for (const call of collect.mock.calls)
+        expect(call).toEqual([
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "original" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ]);
+    });
+    it("A773 Find a bill does not collect a different bill through an old confirmation", async () => {
+      const { el } = await mountApp({ getFindBill: vi.fn().mockResolvedValue(debtSelection()) });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-other",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await flush(el);
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    });
+    it("A773 Find a bill ignores a selected bill read after API replacement", async () => {
+      let answer!: (value: unknown) => void;
+      const getFindBill = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { el } = await mountApp({ getFindBill });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: billRow({ workingOrderId: "wo-debt" }),
+      });
+      await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledOnce());
+      el.api = stubApi();
+      await el.updateComplete;
+      answer(debtSelection());
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    });
+    it("A773 reopening a collection keeps its original amount and tender after a fresh changed read", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(saleResult);
+      const lookup = vi.fn().mockResolvedValue(debtSelection());
+      const { el } = await mountApp({ getFindBill: lookup, collectOrder: collect });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "card", amount: "30.00", externalRef: "original" },
+        invoiced: true,
+      });
+      await flush(el);
+      lookup.mockResolvedValue({
+        ...debtSelection(collectionEdit(11)),
+        stillOwed: "12.00",
+        invoiceNumber: null,
+      });
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: billRow({ workingOrderId: "wo-debt" }),
+      });
+      await flush(el);
+      expect(form.bill!.stillOwed).toBe("30.00");
+      expect(form.bill!.invoiceNumber).toBe("A/12");
+      expect(form.shadowRoot!.querySelector("[name=cash-received]")).toBeNull();
+      const reference = form.shadowRoot!.querySelector<WtInput>("[name=terminal-reference]")!;
+      expect(reference.value).toBe("original");
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!),
+      );
+      await flush(el);
+      expect(collect.mock.calls[1]).toEqual([
+        "wo-debt",
+        { method: "card", amount: "30.00", externalRef: "original" },
+        undefined,
+        undefined,
+        { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+      ]);
+    });
+    it("A773 Find a bill retries its original unanswered request through a replacement API", async () => {
+      const first = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: first,
+      });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "card", amount: "30.00", externalRef: "original" },
+        invoiced: true,
+      });
+      await flush(el);
+      const retry = vi.fn().mockResolvedValue(saleResult);
+      el.api = stubApi({ collectOrder: retry });
+      await flush(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "40.00" },
+        invoiced: false,
+      });
+      await flush(el);
+      expect(retry).toHaveBeenCalledExactlyOnceWith(
+        "wo-debt",
+        { method: "card", amount: "30.00", externalRef: "original" },
+        undefined,
+        undefined,
+        { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+      );
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+    });
+    it("A773 Find a bill never replays an unanswered payment through a different selected bill", async () => {
+      const collect = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const lookup = vi
+        .fn()
+        .mockResolvedValueOnce(debtSelection())
+        .mockResolvedValue({
+          ...debtSelection(),
+          workingOrderId: "wo-other",
+          edit: { ...collectionEdit(), billId: "wo-other" },
+        });
+      const { el } = await mountApp({ getFindBill: lookup, collectOrder: collect });
+      const form = await openCollection(el);
+      const pay = () =>
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: { method: "cash", amount: "30.00" },
+          invoiced: true,
+        });
+      pay();
+      await flush(el);
+      expect(collect).toHaveBeenCalledOnce();
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: billRow({ workingOrderId: "wo-other" }),
+      });
+      await flush(el);
+      pay();
+      await flush(el);
+      expect(collect).toHaveBeenCalledOnce();
+      expect(ticket(el)).toBeNull();
+    });
     it("Find a bill collects an existing debt and offers a duplicate receipt", async () => {
       const waiting = vi.fn().mockResolvedValue([]);
       const { el } = await mountApp({ listCounterWaiting: waiting });
@@ -11304,10 +11986,16 @@ describe("till-app", () => {
         }),
       );
       await flush(el);
-      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
-        method: "cash",
-        amount: "30.00",
-      });
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        "wo-debt",
+        {
+          method: "cash",
+          amount: "30.00",
+        },
+        undefined,
+        undefined,
+        null,
+      );
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
       expect(waiting.mock.calls.length).toBeGreaterThan(reads);
     });
@@ -11332,7 +12020,7 @@ describe("till-app", () => {
       );
       await flush(el);
       expect(vi.mocked(currentApi.collectOrder).mock.calls).toStrictEqual([
-        ["wo-debt", { method: "cash", amount: "30.00" }],
+        ["wo-debt", { method: "cash", amount: "30.00" }, undefined, undefined, null],
       ]);
     });
 
@@ -11366,10 +12054,16 @@ describe("till-app", () => {
         expect(lookup).toHaveBeenCalledWith("wo-debt", { signal: expect.any(AbortSignal) });
         dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
         await flush(el);
-        expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
-          method: "cash",
-          amount: "30.00",
-        });
+        expect(currentApi.collectOrder).toHaveBeenCalledWith(
+          "wo-debt",
+          {
+            method: "cash",
+            amount: "30.00",
+          },
+          undefined,
+          undefined,
+          null,
+        );
         expect(ticket(el)!.originalReceiptAvailable).toBe(!invoiced);
       },
     );
@@ -11420,10 +12114,16 @@ describe("till-app", () => {
       expect(unload()).toBe(true);
       form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
       await el.updateComplete;
-      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
-        method: "cash",
-        amount: "40.00",
-      });
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        "wo-debt",
+        {
+          method: "cash",
+          amount: "40.00",
+        },
+        undefined,
+        undefined,
+        null,
+      );
       const protectionAtRefresh: boolean[] = [];
       vi.mocked(currentApi.listStations).mockImplementationOnce(async () => {
         protectionAtRefresh.push(unload());
@@ -15776,11 +16476,227 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       listWorkingOrders: vi.fn().mockResolvedValue([counterOrder]),
       getTablesState: vi.fn().mockResolvedValue([mesa7, mesa9]),
       moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false }),
+      getFindBill: vi.fn().mockResolvedValue({
+        ...billRow({ workingOrderId: "wo-12", partyId: null }),
+        edit: {
+          billId: "wo-12",
+          editorId: null,
+          editorName: null,
+          editorVersion: 8,
+          draftId: null,
+          draftRevision: null,
+        },
+      }),
+      listDrafts: vi.fn().mockResolvedValue({
+        drafts: [],
+        billEdits: [
+          {
+            billId: "wo-7",
+            editorId: null,
+            editorName: null,
+            editorVersion: 3,
+            draftId: null,
+            draftRevision: null,
+          },
+          {
+            billId: "wo-2",
+            editorId: "p1",
+            editorName: "Ana",
+            editorVersion: 5,
+            draftId: "draft-2",
+            draftRevision: 9,
+          },
+        ],
+      }),
       ...overrides,
     });
     const c = await toCounter(mounted.el);
     return { ...mounted, c };
   }
+
+  it("counter relocation keeps the destination observations shown before native confirmation", async () => {
+    const { el } = await counterWith();
+    const held = heldList(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await flush(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!);
+    await flush(el);
+    expect(currentApi.listDrafts).toHaveBeenCalledWith("v7", { signal: expect.any(AbortSignal) });
+    const choice = held.shadowRoot!.querySelector<HTMLElement>("till-bill-choice-dialog")!;
+    expect(choice).not.toBeNull();
+    vi.mocked(currentApi.listDrafts).mockResolvedValue({ drafts: [], billEdits: [] });
+    await userEvent.click(choice.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!);
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t7" }, "separate", {
+      partyId: null,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
+    });
+  });
+
+  it("counter relocation ignores the reply after its API changes", async () => {
+    let answer!: (result: unknown) => void;
+    const { el, c } = await counterWith({
+      moveBill: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledOnce();
+    const reads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+    el.api = { ...currentApi } as unknown as TillApi;
+    await flush(el);
+    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    await flush(el);
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(reads);
+    expect(toast(el).open).toBe(false);
+  });
+
+  it.each(["read", "reply"])(
+    "counter relocation keeps the floor unchanged after leaving during %s",
+    async (phase) => {
+      let release!: (value: unknown) => void;
+      const delayed = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const { el, c } = await counterWith({
+        [phase === "read" ? "getFindBill" : "moveBill"]: delayed,
+      });
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+      await flush(el);
+      expect(delayed).toHaveBeenCalledOnce();
+      selectTab(el, "floor");
+      await flush(el);
+      const reads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+      release(
+        phase === "read"
+          ? {
+              ...billRow({ workingOrderId: "wo-12", partyId: null }),
+              edit: {
+                billId: "wo-12",
+                editorVersion: 8,
+                draftId: null,
+                draftRevision: null,
+              },
+            }
+          : { partyId: "v-new", billId: "wo-12", merged: false },
+      );
+      await flush(el);
+      expect(currentApi.moveBill).toHaveBeenCalledTimes(phase === "read" ? 0 : 1);
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(reads);
+      expect(toast(el).open).toBe(false);
+    },
+  );
+
+  it("counter relocation asks before replacing a basket retrieved during the source read", async () => {
+    let release!: (row: unknown) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { el, c } = await counterWith({ getFindBill });
+    const held = heldList(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await flush(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t9"]')!);
+    await flush(el);
+    expect(getFindBill).toHaveBeenCalledOnce();
+    c.store.loadFrom("wo-12", [{ product: cafe, quantity: "2" }], "Retrieved", 0);
+    c.store.setLineQuantity(0, "3");
+    release({
+      ...billRow({ workingOrderId: "wo-12", partyId: null }),
+      edit: {
+        billId: "wo-12",
+        editorVersion: 8,
+        draftId: null,
+        draftRevision: null,
+      },
+    });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    await question.updateComplete;
+    await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!);
+    await flush(el);
+    expect(c.store.id).toBe("wo-12");
+    expect(c.store.lines[0]!.quantity).toBe("3");
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+  });
+
+  it("counter relocation sends the complete sorted source and destination bill observations", async () => {
+    const { el, c } = await counterWith();
+    emit(c, "move-held-order", {
+      orderId: "wo-12",
+      tableId: "t7",
+      seated: { id: "v7", revision: 9 },
+      bills: "separate",
+    });
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t7" }, "separate", {
+      partyId: null,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
+    });
+  });
+
+  it("counter relocation refuses missing source metadata before moving", async () => {
+    const { el, c } = await counterWith({
+      getFindBill: vi.fn().mockResolvedValue({
+        ...billRow({ workingOrderId: "wo-12", partyId: null }),
+        edit: null,
+      }),
+    });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    expect(alert(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it("counter relocation ignores a source read after API replacement", async () => {
+    let answer!: (row: unknown) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el, c } = await counterWith({ getFindBill });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(getFindBill).toHaveBeenCalledOnce();
+    el.api = { ...currentApi } as unknown as TillApi;
+    await flush(el);
+    answer({
+      ...billRow({ workingOrderId: "wo-12", partyId: null }),
+      edit: {
+        billId: "wo-12",
+        editorVersion: 8,
+        draftId: null,
+        draftRevision: null,
+      },
+    });
+    await flush(el);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+  });
 
   it("does not reload held orders when a move to a table answers after sign-out", async () => {
     let answer!: (result: { partyId: string; billId: string; merged: boolean }) => void;
@@ -15879,7 +16795,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(setMakeAt).toHaveBeenCalledWith("wo-12", 3, { "line-1": "kitchen" });
+    expect(setMakeAt).toHaveBeenCalledWith("wo-12", 3, { "line-1": "kitchen" }, null);
     expect(moveBill).toHaveBeenCalledOnce();
     expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(
       moveBill.mock.invocationCallOrder[0]!,
@@ -16032,6 +16948,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t9" }, "merge", {
       partyId: null,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
     });
     expect(counter(el)).not.toBeNull();
     expect(toast(el).open).toBe(true);
@@ -16105,6 +17022,11 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       partyId: null,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
     });
     expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 7"));
   });
@@ -16130,6 +17052,11 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       partyId: null,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -16279,6 +17206,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -16460,10 +17393,16 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     expect(tenderPay(el).stage).toBe("collect");
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
-    expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-sent", {
-      method: "cash",
-      amount: "5",
-    });
+    expect(currentApi.collectOrder).toHaveBeenCalledWith(
+      "wo-sent",
+      {
+        method: "cash",
+        amount: "5",
+      },
+      undefined,
+      undefined,
+      null,
+    );
 
     emit(ticket(el)!, "new-sale");
     await flush(el);
@@ -16496,6 +17435,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     await flush(el);
 
     expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-sent", {
+      expectedEdit: null,
       revision: 2,
       language: "es-ES",
     });
@@ -16507,6 +17447,8 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       "wo-sent",
       { method: "cash", amount: "5" },
       "es-ES",
+      undefined,
+      null,
     );
   });
 
@@ -17042,10 +17984,16 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-sent", {
-      method: "cash",
-      amount: "5",
-    });
+    expect(currentApi.collectOrder).toHaveBeenCalledWith(
+      "wo-sent",
+      {
+        method: "cash",
+        amount: "5",
+      },
+      undefined,
+      undefined,
+      null,
+    );
     expect(ticket(el)).not.toBeNull();
     expect(listCounterWaiting.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
@@ -18928,6 +19876,163 @@ describe("switching the device's profile from the header", () => {
           }
         });
 
+  it("Profile recovery reports a failed setup read and releases the dialog for retry", async () => {
+    const { el } = await openProfile();
+    vi.mocked(currentApi.getTill).mockRejectedValueOnce(new TypeError("offline"));
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("boot.error")));
+    expect(profileDialog(el)).toBeNull();
+    expect(lock(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    profileButton(el)!.click();
+    await flush(el);
+    expect(profileDialog(el)!.busy).toBe(false);
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await vi.waitFor(() => expect(profileDialog(el)).toBeNull());
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledTimes(2);
+  });
+  it.each(["reply", "refusal"] as const)(
+    "Profile recovery ignores a switch %s after logout",
+    async (answer) => {
+      let finish!: (value: { activeProfileId: string }) => void;
+      let refuse!: (error: Error) => void;
+      const switchDeviceProfile = vi.fn(
+        () =>
+          new Promise<{ activeProfileId: string }>((resolve, reject) => {
+            finish = resolve;
+            refuse = reject;
+          }),
+      );
+      const { el } = await openProfile({ switchDeviceProfile });
+      const reads = vi.mocked(currentApi.getTill).mock.calls.length;
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await vi.waitFor(() => expect(switchDeviceProfile).toHaveBeenCalledOnce());
+      emit(shell(el)!, "logout");
+      await flush(el);
+      if (answer === "reply") finish({ activeProfileId: BAR.id });
+      else refuse(new TypeError("offline"));
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(profileDialog(el)).toBeNull();
+      expect(currentApi.getTill).toHaveBeenCalledTimes(reads);
+      expect(el.shadowRoot!.textContent).not.toContain(t("boot.error"));
+    },
+  );
+  it.each(["reply", "refusal"] as const)(
+    "Profile recovery ignores a setup %s after logout",
+    async (answer) => {
+      let finish!: (value: Awaited<ReturnType<TillApi["getTill"]>>) => void;
+      let refuse!: (error: Error) => void;
+      const { el } = await openProfile();
+      vi.mocked(currentApi.getTill).mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = resolve;
+            refuse = reject;
+          }),
+      );
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await vi.waitFor(() => expect(currentApi.getTill).toHaveBeenCalledTimes(2));
+      emit(shell(el)!, "logout");
+      await flush(el);
+      if (answer === "reply")
+        finish({
+          ...till,
+          formFactor: "till",
+          courses: till.courses.map((course) => ({ ...course, heldUntilFired: false })),
+          clockingAvailable: false,
+          receiptLanguages: [],
+          activeReaders: [],
+          fullInvoices: false,
+          setupRevision: "switched",
+          startingScreen: "show-schedule",
+        });
+      else refuse(new TypeError("offline"));
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(profileDialog(el)).toBeNull();
+      expect(el.shadowRoot!.textContent).not.toContain(t("boot.error"));
+    },
+  );
+  it("Profile recovery ignores equipment answered after logout instead of signing the operator back in", async () => {
+    const { NFC_EQUIPMENT } = await import("../test/equipment-nfc.js");
+    let finish!: (value: DeviceEquipment) => void;
+    const getDeviceEquipment = vi.fn().mockResolvedValue(NFC_EQUIPMENT);
+    const { el } = await openProfile({ getDeviceEquipment });
+    const reads = getDeviceEquipment.mock.calls.length;
+    getDeviceEquipment.mockImplementationOnce(
+      () =>
+        new Promise<DeviceEquipment>((done) => {
+          finish = done;
+        }),
+    );
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalledTimes(reads + 1));
+    emit(shell(el)!, "logout");
+    await flush(el);
+    finish(NFC_EQUIPMENT);
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    expect(profileDialog(el)).toBeNull();
+  });
+  it("Bill gate cannot reopen the profile chooser from an identity reply after logout", async () => {
+    let finish!: (value: Awaited<ReturnType<TillApi["getDeviceIdentity"]>>) => void;
+    const { el } = await openProfile();
+    emit(profileDialog(el)!, "close");
+    await flush(el);
+    vi.mocked(currentApi.getDeviceIdentity).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    profileButton(el)!.click();
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    finish({ ...identity, kitchenScreens: [] });
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(profileDialog(el)).toBeNull();
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
+  it("Bill gate sends only one profile switch while its request is pending", async () => {
+    let finish!: (value: { activeProfileId: string }) => void;
+    const switchDeviceProfile = vi.fn(
+      () =>
+        new Promise<{ activeProfileId: string }>((done) => {
+          finish = done;
+        }),
+    );
+    const { el } = await openProfile({ switchDeviceProfile });
+    const dialog = profileDialog(el)!;
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(dialog.busy).toBe(true);
+    finish({ activeProfileId: BAR.id });
+    await vi.waitFor(() => expect(profileDialog(el)).toBeNull());
+  });
+  it("Bill gate refuses a pending profile change when its chooser closes before discard", async () => {
+    const { el, owner } = await scheduleWithProfile("Family visit");
+    const chooser = profileDialog(el)!;
+    emit(chooser, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    emit(chooser, "close");
+    await flush(el);
+    emit(question, "wt-unsaved-choice", { decision: "discard" });
+    await flush(el);
+    expect(profileDialog(el)).toBeNull();
+    expect(schedule(el)).toBe(owner);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
   it("offers no Profile button on a device approved for one profile", async () => {
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity, approvedProfiles: [COUNTER] }),
@@ -19756,6 +20861,17 @@ describe("W69 held move basket protection", () => {
         moveBill: vi
           .fn()
           .mockResolvedValue({ partyId: "party-new", billId: "wo-1", merged: false }),
+        getFindBill: vi.fn(async (id: string) => ({
+          ...billRow({ workingOrderId: id, partyId: null }),
+          edit: {
+            billId: id,
+            editorId: null,
+            editorName: null,
+            editorVersion: 0,
+            draftId: null,
+            draftRevision: null,
+          },
+        })),
         ...overrides,
       },
       theme,
@@ -19803,7 +20919,11 @@ describe("W69 held move basket protection", () => {
       "wo-1",
       { tableId: "t9" },
       "merge",
-      { partyId: null, otherPartyId: null },
+      {
+        partyId: null,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "wo-1", editorVersion: 0, draftId: null, draftRevision: null }],
+      },
     );
     expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
@@ -19957,7 +21077,13 @@ describe("W69 held move basket protection", () => {
               "other-held",
               { tableId: "t9" },
               "merge",
-              { partyId: null, otherPartyId: null },
+              {
+                partyId: null,
+                otherPartyId: null,
+                expectedEdits: [
+                  { billId: "other-held", editorVersion: 0, draftId: null, draftRevision: null },
+                ],
+              },
             );
             expect(warning(el).open).toBe(false);
             expect(c.store.id).toBe("wo-1");
@@ -20197,6 +21323,7 @@ describe("basket protection lifetimes", () => {
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     expect(unloadCancelled()).toBe(false);
     expect(c.store.lines[0]!.note).toBe("No sugar");
@@ -20787,6 +21914,181 @@ describe("A737 Find a bill page", () => {
     );
     return { el, counter, view: pageOf(el)! };
   }
+  it("Find gate ignores a second selection while the first fresh read is pending", async () => {
+    let finish!: (row: ReturnType<typeof billRow>) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof billRow>>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({ getFindBill });
+    emit(view, "find-bill-open", { row: billRow() });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "other-bill" }) });
+    await flush(el);
+    expect(getFindBill).toHaveBeenCalledExactlyOnceWith("bill-1", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(view.busy).toBe(true);
+    finish(billRow({ collectionStatus: "waiting_for_payment", invoiceNumber: "F/99" }));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
+    );
+    expect(
+      el.shadowRoot!.querySelector("till-find-bill-dialog")!.shadowRoot!.textContent,
+    ).toContain("F/99");
+  });
+  it("Find gate reports a party absent from the fresh floor without replacing the counter draft", async () => {
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "departed-party" })),
+      getTablesState: vi.fn().mockResolvedValue([]),
+      getPartyBills: vi.fn(),
+    });
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(pageOf(el)).toBe(view);
+    expect(view.busy).toBe(false);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(tableOrder(el)).toBeNull();
+    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
+  });
+  it("Find gate ignores table discovery completed after Back", async () => {
+    let finish!: (tables: TableState[]) => void;
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v-2" })),
+      getPartyBills: vi.fn(),
+    });
+    const getTablesState = vi.fn(
+      () =>
+        new Promise<TableState[]>((done) => {
+          finish = done;
+        }),
+    );
+    el.api.getTablesState = getTablesState;
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getTablesState).toHaveBeenCalledOnce());
+    emit(view, "find-bill-back");
+    await flush(el);
+    finish([openTable]);
+    await flush(el);
+    expect(pageOf(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
+  });
+  it("Find gate keeps the draft when a paid bill's filed receipt read fails and allows retry", async () => {
+    const getFiledTicket = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(saleResult);
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
+      getFiledTicket,
+    });
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(view.busy).toBe(false);
+    expect(ticket(el)).toBeNull();
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
+    expect(currentApi.markCollected).not.toHaveBeenCalled();
+  });
+  it("Find gate cannot show a paid receipt answered after Back", async () => {
+    let finish!: (result: TillSaleResult) => void;
+    const getFiledTicket = vi.fn(
+      () =>
+        new Promise<TillSaleResult>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
+      getFiledTicket,
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getFiledTicket).toHaveBeenCalledOnce());
+    emit(view, "find-bill-back");
+    await flush(el);
+    finish(saleResult);
+    await flush(el);
+    expect(ticket(el)).toBeNull();
+    expect(pageOf(el)).toBeNull();
+    expect(currentApi.markCollected).not.toHaveBeenCalled();
+  });
+  it("Find gate refuses an abandoned counter bill without retrieving or collecting it", async () => {
+    const { el, view, counter } = await open({
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue(billRow({ orderStatus: "abandoned", state: "held", paid: "0.00" })),
+      retrievePlacedOrder: vi.fn(),
+    });
+    const id = counter.store.id;
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
+    expect(pageOf(el)).toBe(view);
+    expect(counter.store.id).toBe(id);
+    expect(counter.store.lines).toEqual([]);
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+    expect(currentApi.retrievePlacedOrder).not.toHaveBeenCalled();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+  });
+  it("Find gate ignores a held order answered after Back and preserves a newer basket", async () => {
+    let finish!: (value: Awaited<ReturnType<TillApi["retrieveWorkingOrder"]>>) => void;
+    const retrieveWorkingOrder = vi.fn<TillApi["retrieveWorkingOrder"]>(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ state: "held", paid: "0.00" })),
+      retrieveWorkingOrder,
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(retrieveWorkingOrder).toHaveBeenCalledOnce());
+    emit(view, "find-bill-back");
+    await flush(el);
+    counter.store.addProduct(cafe, "2");
+    const id = counter.store.id;
+    finish({
+      kitchenNote: {
+        scope: { workingOrderId: "bill-1" },
+        note: null,
+        revision: 0,
+        ownerRevision: 3,
+      },
+      id: "bill-1",
+      orderNumber: 42,
+      label: "Held",
+      revision: 3,
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "3.000" }],
+    });
+    await flush(el);
+    expect(pageOf(el)).toBeNull();
+    expect(counter.store.id).toBe(id);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
+  });
   it("opens only from More as a page and Back preserves the counter basket", async () => {
     const { el, counter, view } = await open();
     counter.store.addProduct(cafe, "2");
@@ -20963,6 +22265,66 @@ describe("A737 Find a bill page", () => {
     last4: "0091",
   };
   const refundView = (el: TillApp) => el.shadowRoot!.querySelector("till-refund-acknowledgment");
+  it("Bill gate reports an acknowledgment print refusal, permits retry, and blocks original opening while printing", async () => {
+    let refuse!: (error: Error) => void;
+    const reprintTenderRefund = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const getTransactionReceipt = vi.fn().mockResolvedValue(saleResult);
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      reprintTenderRefund,
+      getTransactionReceipt,
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const receipt = refundView(el)!;
+    emit(receipt, "reprint");
+    await vi.waitFor(() => expect(receipt.busy).toBe(true));
+    emit(receipt, "refund-original");
+    await flush(el);
+    expect(getTransactionReceipt).not.toHaveBeenCalled();
+    expect(refundView(el)).toBe(receipt);
+    refuse(new TypeError("printer offline"));
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("reprint.error")));
+    expect(receipt.busy).toBe(false);
+    emit(receipt, "reprint");
+    await vi.waitFor(() => expect(reprintTenderRefund).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(receipt.busy).toBe(false);
+    expect(el.shadowRoot!.textContent).not.toContain(t("reprint.error"));
+    emit(receipt, "refund-original");
+    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+    expect(getTransactionReceipt).toHaveBeenCalledExactlyOnceWith("sale-1", {
+      signal: expect.any(AbortSignal),
+    });
+  });
+  it("Bill gate opens only the first transaction while its receipt is loading", async () => {
+    let finish!: (value: TillSaleResult) => void;
+    const getTransactionReceipt = vi.fn(
+      () =>
+        new Promise<TillSaleResult>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({ getTransactionReceipt });
+    emit(view, "find-transaction-open", { row: transactionRow({ saleId: "sale-first" }) });
+    emit(view, "find-transaction-open", { row: transactionRow({ saleId: "sale-second" }) });
+    await flush(el);
+    expect(getTransactionReceipt).toHaveBeenCalledExactlyOnceWith("sale-first", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(ticket(el)).toBeNull();
+    finish(saleResult);
+    await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
+  });
   it("opens a refund as its own payment acknowledgment, with no invoice reads or refund-on-refund", async () => {
     const getTenderRefundAcknowledgment = vi.fn().mockResolvedValue(acknowledgment);
     const getTransactionReceipt = vi.fn().mockResolvedValue(saleResult),
@@ -21155,10 +22517,10 @@ describe("A737 Find a bill page", () => {
   });
 
   it("freshens a bill by ID before showing the selected unpaid-invoice collector", async () => {
-    let resolve!: (value: ReturnType<typeof billRow>) => void;
+    let resolve!: (value: Awaited<ReturnType<TillApi["getFindBill"]>>) => void;
     const getFindBill = vi.fn<TillApi["getFindBill"]>(
       () =>
-        new Promise<ReturnType<typeof billRow>>((done) => {
+        new Promise<Awaited<ReturnType<TillApi["getFindBill"]>>>((done) => {
           resolve = done;
         }),
     );
@@ -21168,14 +22530,15 @@ describe("A737 Find a bill page", () => {
     await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledTimes(1));
     expect(getFindBill.mock.calls[0]![0]).toBe("bill-1");
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
-    resolve(
-      billRow({
+    resolve({
+      ...billRow({
         invoiceNumber: "F/99",
         stillOwed: "17.25",
         collectionStatus: "left_without_paying",
         departedAt: "2026-10-14T20:00:00Z",
       }),
-    );
+      edit: null,
+    });
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
     );
@@ -21541,7 +22904,13 @@ describe("A737 Find a bill page", () => {
     emit(collector, "find-bill-pay", detail);
     emit(collector, "find-bill-pay", detail);
     expect(collectOrder).toHaveBeenCalledTimes(1);
-    expect(collectOrder).toHaveBeenCalledWith("wo-debt", { method: "cash", amount: "30.00" });
+    expect(collectOrder).toHaveBeenCalledWith(
+      "wo-debt",
+      { method: "cash", amount: "30.00" },
+      undefined,
+      undefined,
+      null,
+    );
     finish(saleResult);
     await flush(el);
     expect(ticket(el)?.originalReceiptAvailable).toBe(false);
@@ -22019,6 +23388,36 @@ describe("A737 post-invoice refund integration", () => {
       expect(basket.store.lines[0]!.quantity).toBe("2");
     },
   );
+  it("can inspect a pending card refund on a device that cannot start a card refund", async () => {
+    const pending = {
+      ...cash,
+      tenderId: "reader-tender",
+      method: "card",
+      pendingRefundId: returned.id,
+    };
+    const getTenderRefund = vi.fn().mockResolvedValue({
+      ...returned,
+      tenderId: pending.tenderId,
+      state: "pending",
+      completedAt: null,
+    });
+    const { el, refundTransaction } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }),
+      getRefundableTenders: vi.fn().mockResolvedValue([pending]),
+      getTenderRefund,
+    });
+    const form = await openRefund(el);
+    expect(form.tenders).toEqual([pending]);
+    expect(form.shadowRoot!.querySelectorAll('input[name="tender"]')).toHaveLength(0);
+    await userEvent.click(
+      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-inspect]")!),
+    );
+    await flush(el);
+    expect(getTenderRefund).toHaveBeenCalledExactlyOnceWith(returned.id, {});
+    expect(dialog(el)!.result?.state).toBe("pending");
+    expect(refundTransaction).not.toHaveBeenCalled();
+  });
+
   it("does not offer a refund for an unsupported-only invoice", async () => {
     const { el } = await open({
       getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method: "voucher" }]),
@@ -22113,6 +23512,10 @@ describe("A737 post-invoice refund integration", () => {
       return returned;
     });
     const { el } = await open({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       getRefundableTenders: vi.fn().mockResolvedValue([manual]),
       refundTransaction,
     });
@@ -22414,6 +23817,10 @@ describe("A737 post-invoice refund integration", () => {
       .mockRejectedValueOnce({ code: "tender.manual_refund_pin_required" })
       .mockResolvedValue(returned);
     const overrides = {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       getRefundableTenders: vi.fn().mockResolvedValue([manual]),
       refundTransaction,
     };
@@ -22557,6 +23964,10 @@ describe("A737 post-invoice refund integration", () => {
   it("keeps an approver-list failure on the refund without sending a manual return", async () => {
     const refundTransaction = vi.fn();
     const { el } = await open({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
       getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, manual: true, method: "card" }]),
       listRefundAuthorizers: vi.fn().mockRejectedValue(new TypeError("offline")),
       refundTransaction,
@@ -22683,4 +24094,32 @@ describe("A737 post-invoice refund integration", () => {
     expect(dialog(el)).toBeNull();
     expect(refundKeys()).toEqual([]);
   });
+});
+
+it("A773 Find a bill retains the debt and approved refusal when unsent dishes block collection", async () => {
+  const { el } = await mountApp({
+    collectOrder: vi.fn().mockRejectedValue({
+      code: "bill.unsent_dishes",
+      billId: "wo-debt",
+      owners: [{ personId: "ana", name: "Ana", quantity: "2.000" }],
+    }),
+  });
+  await toCounter(el);
+  setLocale("en");
+  el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
+    .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+    .click();
+  await el.updateComplete;
+  const collector = await selectDebt(el);
+  emit(collector, "find-bill-pay", {
+    workingOrderId: "wo-debt",
+    tender: { method: "cash", amount: "30.00" },
+    invoiced: true,
+  });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(collector);
+  const actions = collector.shadowRoot!.querySelector("wt-form-actions")!;
+  expect(actions.error).toBe("Lucía. Send or remove the unsent dishes before paying.");
+  expect(ticket(el)).toBeNull();
+  expect(currentApi.collectOrder).toHaveBeenCalledOnce();
 });

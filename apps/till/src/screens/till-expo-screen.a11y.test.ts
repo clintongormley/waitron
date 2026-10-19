@@ -164,7 +164,16 @@ function section(
   state: "held" | "fired" | null,
   items: ExpoItem[],
 ): ExpoGroup {
-  return { groupId, position, state, fired: state !== "held", away: false, items };
+  return {
+    groupId,
+    position,
+    displayNumber: position,
+    numberPartyId: groupId === null ? null : "v-4",
+    state,
+    fired: state !== "held",
+    away: false,
+    items,
+  };
 }
 
 // A seated party's bill: the lines with no group, a group to mark ready, one to send away, and a held

@@ -1153,11 +1153,55 @@ describe("working_order_lines_require_open_parent_update's kitchen-group excepti
     ).toBe(OPEN_PARENT_REFUSAL);
   });
 
-  it("refuses a paid bill's line changing its group alone", () => {
+  it("accepts a paid bill's line changing only its group, and leaving it", () => {
+    for (const group of ["'group'", "null"]) {
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set group_id = ${group} where id = 'line-served-unchanged'`,
+        ),
+      ).toBeUndefined();
+      expect(
+        connection
+          .prepare(`select group_id from working_order_lines where id = 'line-served-unchanged'`)
+          .get(),
+      ).toEqual({ group_id: group === "null" ? null : "group" });
+    }
+  });
+
+  it("refuses changing only the group of an abandoned line", () => {
     expect(
       refusalFor(
         connection,
-        `update working_order_lines set group_id = 'group' where id = 'line-served-unchanged'`,
+        `update working_order_lines set group_id = 'group' where id = 'line-sent-abandoned'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
+  });
+
+  it.each(FROZEN_GROUPED_LINE_COLUMNS)(
+    "refuses a paid bill's line changing its group and also %s",
+    (column) => {
+      const value = CHANGED_VALUE[column] ?? `'changed'`;
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set group_id = 'group', ${column} = ${value} ` +
+            `where id = 'line-served-unchanged'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    },
+  );
+
+  it.each(
+    FROZEN_GROUPED_LINE_COLUMNS.filter(
+      (column) => !SERVED_COLUMNS.has(column) && column !== "sent_at",
+    ),
+  )("refuses a paid bill's line changing only frozen %s", (column) => {
+    const value = CHANGED_VALUE[column] ?? `'changed'`;
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set ${column} = ${value} where id = 'line-served-unchanged'`,
       ),
     ).toBe(OPEN_PARENT_REFUSAL);
   });

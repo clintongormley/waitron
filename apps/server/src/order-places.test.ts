@@ -9,8 +9,8 @@ import {
   readPartyNames,
   readPlacedOrders,
 } from "./order-places.js";
-import { finishTable } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { finishTable } from "./testing/party-close-fixture.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import {
   billRow,
   commandFor,

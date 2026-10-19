@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -48,16 +50,13 @@ import {
   printSaleReceipt,
   recordTillSaleOrchestration as recordTillSale,
   reprintSale,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import {
-  addTabRound,
   createOpenOrder,
   parkOrder,
-  placeOrder,
   priceStoredOrderForIssuance,
   readOrderRevision,
-  updateHeldOrder,
 } from "./working-order.js";
 import type { GrossOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";

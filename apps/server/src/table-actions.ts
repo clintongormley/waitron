@@ -2,6 +2,13 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
+import {
+  readPartyBillIds,
+  relocateBillEditor,
+  requireBillEditors,
+  requireRelocatableBillEditors,
+} from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { mergeCheckedBills } from "./bill-actions.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import {
@@ -15,7 +22,7 @@ import {
 } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
-import { moveDraftsToParty } from "./order-drafts.js";
+import { moveBillDraftsToParty, moveDraftsToParty } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   groupArrivingDishes,
@@ -48,6 +55,7 @@ import "./errors.js";
  */
 
 export interface TableActionOptions extends OtherPartyRead {
+  expectedEdits: BillEditExpected[];
   bills: "merge" | "separate";
   /** The party in the path. */
   expectedPartyRevision: number;
@@ -107,6 +115,12 @@ export async function moveGuests(
   }
   if (table.holding === null) await refuseUnseatable(tx, cfg, table);
 
+  await requireRelocatableBillEditors(
+    tx,
+    await readPartyBillIds(tx, [partyId]),
+    options.operatorId,
+    options.expectedEdits,
+  );
   return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
     const leaving = held.filter((id) => id !== toTableId);
     await leaveForClearing(tx, leaving, nowIso());
@@ -120,6 +134,8 @@ export async function moveGuests(
       await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
     }
     await leaveMergeOf(tx, toTableId, held);
+    for (const expected of options.expectedEdits)
+      await relocateBillEditor(tx, expected.billId, expected);
     return { partyId, mainBillId, merged: false };
   });
 }
@@ -164,6 +180,12 @@ export async function joinTables(
   }
   await refuseUnseatable(tx, cfg, table);
 
+  await requireRelocatableBillEditors(
+    tx,
+    await readPartyBillIds(tx, [partyId]),
+    options.operatorId,
+    options.expectedEdits,
+  );
   const reach =
     options.slipsLater === undefined ? { parties: [partyId] } : { later: options.slipsLater };
   return withMovedSlips(tx, cfg, reach, async () => {
@@ -196,6 +218,7 @@ async function combineAt(
         bills: options.bills,
         tables,
         operatorId: options.operatorId,
+        expectedEdits: options.expectedEdits,
         intoZoneId,
       },
       attendance,
@@ -227,6 +250,7 @@ export async function combineParties(
   args: {
     from: string;
     into: string;
+    expectedEdits: BillEditExpected[];
     bills: "merge" | "separate";
     tables: "leave" | "join";
     operatorId: string;
@@ -243,22 +267,37 @@ export async function combineParties(
   const partyOf = (partyId: string) => mains.find((party) => party.id === partyId)!;
   const fromMain = partyOf(from).mainBillId;
   const intoMain = partyOf(into).mainBillId;
+  await requireRelocatableBillEditors(
+    tx,
+    await readPartyBillIds(tx, [from, into]),
+    args.operatorId,
+    args.expectedEdits,
+  );
+  const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, cfg, into);
+  const merging =
+    args.bills === "merge" &&
+    fromMain !== null &&
+    intoMain !== null &&
+    (await isUntouched(tx, fromMain)) &&
+    (await isUntouched(tx, intoMain)) &&
+    // The incoming bill takes the zone's mode; the existing main bill keeps its own context.
+    (zoneId === null
+      ? await serviceModesMatch(tx, cfg, fromMain, intoMain)
+      : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode ===
+        (await VENUE_SERVICE.findOrderContext(tx, cfg, intoMain))?.serviceMode);
+  if (merging)
+    await requireBillEditors(
+      tx,
+      [fromMain!, intoMain!],
+      args.operatorId,
+      args.expectedEdits.filter((edit) => edit.billId === fromMain || edit.billId === intoMain),
+    );
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
-  await moveDraftsToParty(
-    tx,
-    from,
-    into,
-    args.operatorId,
-    attendance === undefined
-      ? undefined
-      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
-  );
-
-  const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, cfg, into);
   let fromMainState: BillState | undefined;
-  for (const billId of await billsTaking(tx, from, ["open", "placed"])) {
+  const movingBills = await billsTaking(tx, from, ["open", "placed"]);
+  for (const billId of movingBills) {
     // Whole groups travel with the party, so no bill leaves its group here.
     const state = await takeIntoParty(tx, cfg, billId, into, zoneId);
     if (billId === fromMain) fromMainState = state;
@@ -266,14 +305,20 @@ export async function combineParties(
 
   const mergedInto = new Map<string, string>();
   if (fromMain !== null && fromMainState !== undefined) {
-    if (
-      args.bills === "merge" &&
-      intoMain !== null &&
-      (await isUntouched(tx, fromMain, fromMainState)) &&
-      (await isUntouched(tx, intoMain)) &&
-      (await serviceModesMatch(tx, cfg, fromMain, intoMain))
-    ) {
+    if (merging && intoMain !== null) {
       await mergeCheckedBills(tx, cfg, into, intoMain, fromMain, {
+        operatorId: args.operatorId,
+        expectedEdits: args.expectedEdits.filter(
+          (e) => e.billId === fromMain || e.billId === intoMain,
+        ),
+        ...(attendance === undefined
+          ? {}
+          : {
+              attendance: {
+                recorder: attendance.recorder,
+                at: attendance.clock.now().instant.toISOString(),
+              },
+            }),
         mainBillId: intoMain,
         kitchenTold: true,
       });
@@ -282,6 +327,15 @@ export async function combineParties(
       await setMainBill(tx, into, fromMain);
     }
   }
+
+  await moveDraftsToParty(
+    tx,
+    from,
+    into,
+    args.expectedEdits.filter(
+      (edit) => movingBills.includes(edit.billId) && !mergedInto.has(edit.billId),
+    ),
+  );
 
   const at = nowIso();
   const tables = await memberTables(tx, from);
@@ -326,7 +380,12 @@ export async function splitTable(
   partyId: string,
   tableId: string,
   billId: string | null,
-  options: { expectedPartyRevision: number; operatorId: string; guests?: SplitGuests },
+  options: {
+    expectedPartyRevision: number;
+    operatorId: string;
+    guests?: SplitGuests;
+    expectedEdits: BillEditExpected[];
+  },
   attendance?: OrderAttendance,
 ): Promise<{ partyId: string; mainBillId: string | null }> {
   await checkAndBumpParty(
@@ -339,6 +398,12 @@ export async function splitTable(
   const held = await memberTables(tx, partyId);
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
+  await requireRelocatableBillEditors(
+    tx,
+    billId === null ? [] : [billId],
+    options.operatorId,
+    options.expectedEdits,
+  );
   const partyMain = await readMainBill(tx, partyId);
   let firers: ReadonlyMap<string, Firer> = new Map();
   if (billId !== null) {
@@ -364,8 +429,10 @@ export async function splitTable(
       mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
     } else {
       const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+      await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
       const { held } = await groupArrivingDishes(
         tx,
+        cfg,
         newParty,
         billId,
         options.operatorId,

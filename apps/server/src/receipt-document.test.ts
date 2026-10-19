@@ -22,6 +22,65 @@ function withoutOperationDate(): ReceiptDocumentInput["result"] {
 }
 
 describe("format-neutral invoice content", () => {
+  it("keeps separate filed discount families when two positions reuse the same line object", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    const line = {
+      descriptions: { "es-ES": "Repeated dish" },
+      quantity: "1",
+      gross: "8.00",
+      net: { unitPrice: "8.00", priceQuantity: "1.000", base: "8.00", tax: "0.00", rate: "0" },
+      listGross: "10.00",
+      listUnitPriceGross: "10.00",
+      adjustments: [{ kind: "discount" as const, amount: "2.00" }],
+    };
+    input.result.total = "16.00";
+    input.result.vatBreakdown = [{ rate: "0", base: "16.00", tax: "0.00" }];
+    input.result.lines = [line, line];
+    const rows = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "table" ? element.table.rows : [],
+    );
+    expect(rows.map((row) => [row.item, row.amount])).toEqual([
+      ["Repeated dish", "10,00"],
+      ["Descuento", "-2,00"],
+      ["Repeated dish", "10,00"],
+      ["Descuento", "-2,00"],
+    ]);
+  });
+
+  it("keeps late extras and their neighbours' separate discount families on the invoice", () => {
+    const row = (name: string, amount: string, list?: string) => ({
+      descriptions: { "es-ES": name },
+      quantity: "1",
+      gross: amount,
+      net: { unitPrice: amount, priceQuantity: "1.000", base: amount, tax: "0.00", rate: "0" },
+      ...(list === undefined
+        ? {}
+        : {
+            listGross: list,
+            listUnitPriceGross: list,
+            adjustments: [{ kind: "discount" as const, amount: "5.00" }],
+          }),
+    });
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.total = "36.00";
+    input.result.vatBreakdown = [{ rate: "0", base: "36.00", tax: "0.00" }];
+    input.result.lines = [
+      row("First", "10.00"),
+      row("Independent", "15.00", "20.00"),
+      { ...row("Split first", "5.00", "10.00"), dishFamily: 2 },
+      { ...row("Split second", "5.00", "10.00"), dishFamily: 2 },
+      { ...row("Extra for first", "1.00"), parentLineNo: 1 },
+    ];
+    const rows = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "table" ? element.table.rows : [],
+    );
+    expect(rows[1]).toMatchObject({ item: "Extra for first", amount: "1,00", itemIndent: 2 });
+    const independent = rows.findIndex((line) => line.item === "Independent");
+    const split = rows.findIndex((line) => line.item === "Split first");
+    expect(rows[independent + 1]).toMatchObject({ amount: "-5,00" });
+    expect(rows[split + 1]).toMatchObject({ amount: "-10,00" });
+  });
+
   it.each(["58mm", "80mm"] as const)("keeps the captured F1 paper bytes on %s", (paperWidth) => {
     const bytes = formatReceipt({
       ...FULL_INVOICE_FIXTURE,

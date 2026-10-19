@@ -1,3 +1,4 @@
+import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { asc, sql, eq } from "drizzle-orm";
@@ -32,7 +33,7 @@ import {
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { resetZone } from "./floor-today-store.js";
-import { placeGroups } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 
@@ -117,7 +118,9 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
   return app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : { body: JSON.stringify(await observedClosingBody(v.db, path, body)) }),
   });
 }
 

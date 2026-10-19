@@ -234,9 +234,9 @@ Where each one surfaces:
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name with ` x<n>` | `readMadeHereItems`, `apps/server/src/made-here.ts`, shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
-| Current orders on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts` |
+| Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
 | The floor's chip for a held dish that can no longer be sold ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
-| Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
+| Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the Sent dish window | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 | An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 
@@ -614,10 +614,17 @@ own, each at that menu's price; [design-system.md](design-system.md), _The till'
 standalone ordering the menu published as `not_sold_separately` (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
 extras list still offers it. Staff only gets a button like Anyone, because there is no guest
-ordering yet. A draft line, or a counter basket line not yet saved, that holds a dish now sold only
-as an extra is marked "Only sold as an extra" (`lineBlock`, `apps/till/src/state/menu-refresh.ts`):
+ordering yet. A fresh line in a table draft, or a counter basket line not yet saved, that holds a dish
+now sold only as an extra is marked "Only sold as an extra" (`lineBlock`,
+`apps/till/src/state/menu-refresh.ts`):
 a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
-is removed. A line already stored on a held order or tab is not marked, and still sends and pays,
+is removed.
+
+Recalled table dishes follow their recorded bill rows instead of these fresh-line
+availability checks; [the modifier contract](modifiers.md#ordering-and-stored-facts) describes
+which recorded choices you can keep and how new extras are checked.
+
+A line already stored on a held order or tab is not marked, and still sends and pays,
 because it was already ordered. The server refuses a new standalone line for such a dish with
 `product.not_sold_separately`, by the same published setting. A diet filter that staff turn on
 hides the dishes it rejects. A section it leaves with nothing keeps its place, faded and not
@@ -861,9 +868,29 @@ what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become archived or Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the kitchen already has is refused
-`product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
-and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
-(`priceStoredOrderForIssuance`).
+`product.unavailable` too, because the changed line is sent to the kitchen again in `applyLineEdits`).
+Stored-order pricing accepts such a line once it has been sent. A stored line never sent whose
+product cannot currently be sold is refused `product.unavailable`
+(`priceStoredOrderForIssuance`, `apps/server/src/working-order.ts`).
+
+That stored-line check is separate from a table bill's **New order**. Before starting a new
+payment, the payment paths check the bill's editor observation, then refuse `bill.unsent_dishes`
+if its saved outbox holds fresh dishes or recalled bill rows (`assertBillHasNoUnsent`,
+`apps/server/src/bill-unsent.ts`). Send or remove those dishes before paying. Another bill's outbox
+does not block this bill. Completed payment replays and reconciliation of an already captured card
+payment keep their existing result or reservation; they do not start another payment. Run the
+refusal, other-bill and replay checks alongside the separate stored-pricing checks with:
+
+```bash
+pnpm --filter @waitron/server exec vitest run src/bill-unsent.test.ts \
+  src/bill-editing.payments.test.ts src/bill-editing.whole-payments.test.ts \
+  src/working-order.test.ts
+```
+
+When you edit a recalled dish, the dish and any extra you keep retain their recorded prices and
+names. An added extra uses the current offered list and price; an unavailable dish or variant does
+not block that choice (`prepareRecalledModifiers`, `apps/server/src/working-order.ts`). A dish
+without recorded choice metadata keeps its modifiers and refuses explicit replacement selections.
 `listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is
 listed only under its parent's offer, only while Active, and as available only while Available; a
 menu cannot hide one (_Active and Available_, under _Variants_).

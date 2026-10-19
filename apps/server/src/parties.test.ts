@@ -22,7 +22,7 @@ import { listOutstandingSales } from "@waitron/core";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -50,7 +50,7 @@ import {
   runServiceCommand,
   partyFamily,
   type PartyBill,
-} from "./parties.js";
+} from "./testing/party-close-fixture.js";
 import {
   placedCounterBillMovedTo,
   provisionBillVenue,
@@ -62,8 +62,8 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { splitBill, mergeBills } from "./bill-actions.js";
-import { joinTables, moveGuests } from "./table-actions.js";
+import { splitBill, mergeBills } from "./testing/bill-action-fixture.js";
+import { joinTables, moveGuests, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 const suite = useVenueDb({
@@ -1282,6 +1282,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/join`, {
       tableId: s.tableId,
       bills: "merge",
+      expectedEdits: await inTx(suite, (tx) => partyBillEditsForTest(tx, [s.partyId, t.partyId])),
       expectedPartyRevision: await revisionOf(suite, t.partyId),
       otherPartyId: s.partyId,
       expectedOtherPartyRevision: await revisionOf(suite, s.partyId),
@@ -1382,6 +1383,24 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       invoiceNumber: listed.invoiceNumber,
     });
     expect(total(after)).toBe("0.00");
+
+    const unserved = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${t.partyId}/finish`,
+      { expectedPartyRevision: await revisionOf(suite, t.partyId) },
+    );
+    expect([unserved.status, unserved.json.code]).toEqual([409, "party.unserved_dishes"]);
+    const dishes = (unserved.json.params as { dishes: { lineId: string; quantity: string }[] })
+      .dishes;
+    expect(dishes).toHaveLength(1);
+    const served = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/served`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(suite, t.partyId),
+      items: dishes.map(({ lineId, quantity }) => ({ lineId, quantity })),
+    });
+    expect(served.status, JSON.stringify(served.json)).toBe(200);
 
     const finished = await send(
       venue.app,

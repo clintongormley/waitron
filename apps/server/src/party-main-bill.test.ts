@@ -1,3 +1,6 @@
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -5,10 +8,17 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, parties, saleLines, sales, workingOrders } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
-import { placeGroups, submitGroups } from "./order-groups.js";
-import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";
-import { saveDraft, submitDraft } from "./order-drafts.js";
+import { listTablesWithState } from "./working-order.js";
+
+import { placeGroups, submitGroups } from "./testing/group-submit-fixture.js";
+import {
+  finishTable,
+  partyZone,
+  readPartyBills,
+  setMainBill,
+  setPartyName,
+} from "./testing/party-close-fixture.js";
+import { readDrafts, submitDraft } from "./order-drafts.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -144,41 +154,68 @@ describe("the main bill", () => {
     },
   );
 
-  it.each(["group.submit", "draft.submit"])(
-    "made by a %s command moves the party's revision on once, as the command does",
-    async (kind) => {
-      const mesa = await v.table(`Mesa once ${kind}`);
-      const { partyId, tabId } = await seat(v, mesa);
-      await order(v, tabId, "Burger");
-      await pay(v, tabId, "12.00");
-      const revisionBefore = await revisionOf(v, partyId);
-      const lines = [{ menuItemId: v.item("Flan"), quantity: "1" }];
+  it("a group command without a bill creates the next main bill and moves the party revision once", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Group main"));
+    await order(v, tabId, "Burger");
+    await pay(v, tabId, "12.00");
+    const revisionBefore = await revisionOf(v, partyId);
+    const { tabId: landed, revision } = await inTx(v, (tx) =>
+      submitGroups(tx, v.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revisionBefore,
+        operatorId: OPERATOR,
+        groups: [{ lines: [{ menuItemId: v.item("Flan"), quantity: "1" }], release: "fire" }],
+      }),
+    );
+    expect(landed).not.toBe(tabId);
+    expect((await partyRow(v, partyId)).mainBillId).toBe(landed);
+    expect(revision).toBe(revisionBefore + 1);
+    expect(await revisionOf(v, partyId)).toBe(revisionBefore + 1);
+  });
 
-      const { tabId: landed, revision } = await inTx(v, async (tx) => {
-        const sent = { submissionId: randomUUID(), expectedPartyRevision: revisionBefore };
-        if (kind === "group.submit") {
-          const groups = [{ lines, release: "fire" as const }];
-          return submitGroups(tx, v.cfg, partyId, { ...sent, operatorId: OPERATOR, groups });
-        }
-        const draft = await saveDraft(tx, v.cfg, partyId, OPERATOR, {
-          draftId: null,
-          revision: 0,
-          lines,
-        });
-        return submitDraft(tx, v.cfg, partyId, draft.id, {
-          ...sent,
+  it("refuses a paid bill's saved draft without creating the next main bill or moving any revision", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Draft main"));
+    await order(v, tabId, "Burger");
+    const draft = await inTx(v, (tx) =>
+      saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: [{ menuItemId: v.item("Flan"), quantity: "1" }],
+      }),
+    );
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, tabId)),
+    );
+    const before = {
+      bills: await billsOfParty(v, partyId),
+      party: await partyRow(v, partyId),
+      lines: await linesOf(v, tabId),
+      drafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId)),
+    };
+    await expect(
+      inTx(v, async (tx) =>
+        submitDraft(tx, v.cfg, partyId, draft.id, {
+          submissionId: randomUUID(),
           operatorId: OPERATOR,
+          expectedPartyRevision: before.party.revision,
+          expectedEdit: await expectedDraftEditForTest(v.db, draft),
           draftRevision: draft.revision,
-          groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
-        });
-      });
-
-      expect(landed).not.toBe(tabId);
-      expect((await partyRow(v, partyId)).mainBillId).toBe(landed);
-      expect(revision).toBe(revisionBefore + 1);
-      expect(await revisionOf(v, partyId)).toBe(revisionBefore + 1);
-    },
-  );
+          groups: [{ lineIds: draft.lines.map(({ id }) => id), release: "fire" }],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "bill.paid", params: { workingOrderId: tabId } });
+    expect({
+      bills: await billsOfParty(v, partyId),
+      party: await partyRow(v, partyId),
+      lines: await linesOf(v, tabId),
+      drafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId)),
+    }).toEqual(before);
+    expect(before.party.mainBillId).toBeNull();
+  });
 
   it("is cleared when it is abandoned", async () => {
     const mesa8 = await v.table("Mesa 8");

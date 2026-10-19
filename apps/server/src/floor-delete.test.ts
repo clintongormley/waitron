@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -29,7 +30,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { floorDeletionFor } from "./floor-delete.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { leaveTables, finishTable } from "./parties.js";
+import { leaveTables, finishTable } from "./testing/party-close-fixture.js";
 import {
   setupPartyVenue,
   inTx,
@@ -43,7 +44,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
-import { handOverOrder, placeOrder } from "./working-order.js";
+import { handOverOrder } from "./working-order.js";
 
 let v: PartyVenue;
 useVenueDb({

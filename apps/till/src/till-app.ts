@@ -1,8 +1,11 @@
+import type { BillEditExpected, BillUnsent, Tender } from "./api/client.js";
+import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
+import { heldViews, placeFor } from "./state/draft-place.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
@@ -22,9 +25,13 @@ import {
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  addDecimal,
+  subtractDecimal,
   compareDecimal,
   decimal,
+  divideDecimal,
   formatMoney,
+  multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
   tillProviderForReader,
@@ -77,7 +84,7 @@ import {
   pause,
   resendUnanswered,
   type DraftRefused,
-  type DraftSaveOutcome,
+  type RetainedDraftCandidate,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
@@ -124,12 +131,12 @@ import type {
   ServeGroupDetail,
   ServeLinesDetail,
   SnoozeGroupDetail,
+  SplitDraftSourceDetail,
   SplitGroupLineDetail,
   SubmitDraftDetail,
   TakeOverDraftDetail,
   UnsnoozeGroupDetail,
 } from "./screens/till-table-order-screen.js";
-import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
@@ -141,6 +148,12 @@ import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
 import "./widgets/supervisor-override-dialog.js";
 import "./widgets/adjustment-dialog.js";
+import "./widgets/cancel-item-dialog.js";
+import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
+import "./widgets/finish-table-dialog.js";
+import type { FinishTableChoice } from "./widgets/finish-table-dialog.js";
+import type { FinishTableResolution, UnservedDish } from "./api/finish-table-types.js";
+import type { CancellationRead, CancelItemRequest } from "./api/line-cancel-types.js";
 import {
   refusalField,
   type AdjustKind,
@@ -196,6 +209,7 @@ import {
   moneyPlus,
   payLines,
   paymentAsk,
+  paymentNotRecorded,
   refundOffered,
   refundSubmissionFor,
   refusalOf,
@@ -218,13 +232,18 @@ import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 
 import type { StringKey } from "./i18n/strings.js";
-import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
+import {
+  TillHeldOrders,
+  type MoveHeldOrderDetail,
+  type HeldRelocationOpenDetail,
+} from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
-import { otherPartyRead, shownTableNames } from "./widgets/table-targets.js";
+import { otherPartyRead, shownTableNames, type SeatedRead } from "./widgets/table-targets.js";
 import type {
   BillPayDetail,
   MoveBillDetail,
+  TableRelocationOpenDetail,
   SplitRefusal,
   SplitTableDetail,
 } from "./screens/till-table-order-screen.js";
@@ -288,9 +307,7 @@ import type {
   OriginalReceiptPrint,
   PartyBill,
   TableActionResult,
-  TableActionRevisions,
   BillRevisions,
-  MoveBillRevisions,
   MoveBillResult,
   TillZoneMenu,
   ZoneOfferCatalogue,
@@ -565,8 +582,6 @@ function tableWriteError(error: unknown): CounterError {
     : { code };
 }
 
-/** A refusal of the person's draft save, or with `unsent` of its submission. Taken over, it names
- * who holds the draft now, and says the refused change is lost: the till never sends it again. */
 function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false): CounterError {
   if (refused === "draft.taken_over")
     return unsent ? { takenOver: ownerName ?? "", unsent } : { takenOver: ownerName ?? "" };
@@ -710,6 +725,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "bill.unsent_dishes",
   "service_zone.closed",
   "device.forbidden_action",
   "device.profile_changed",
@@ -732,14 +748,28 @@ function overLimitOf(error: unknown): { overLimit: string } | undefined {
 }
 
 /** A settle path's refusal shown in its own words rather than the generic `sale.error`. */
-function settleRefusalOf(
-  error: unknown,
-):
+function settleRefusalOf(error: unknown):
   | { overLimit: string }
-  | { code: "department.operation_description_required" | "sale.department_missing" }
+  | { unsentBill: BillUnsent }
+  | {
+      code:
+        | "department.operation_description_required"
+        | "sale.department_missing"
+        | "bill.unsent_dishes"
+        | "draft.out_of_date"
+        | "draft.taken_over";
+    }
   | undefined {
+  const unsent = billUnsentOf(error);
+  if (unsent !== undefined) return { unsentBill: unsent };
   const code = (error as { code?: string } | undefined)?.code;
-  if (code === "department.operation_description_required" || code === "sale.department_missing")
+  if (
+    code === "department.operation_description_required" ||
+    code === "sale.department_missing" ||
+    code === "bill.unsent_dishes" ||
+    code === "draft.out_of_date" ||
+    code === "draft.taken_over"
+  )
     return { code };
   return overLimitOf(error);
 }
@@ -762,6 +792,8 @@ function periodRefusal(error: unknown): CounterError | undefined {
 }
 
 function counterError(error: unknown, fallback: StringKey): CounterError {
+  const unsent = billUnsentOf(error);
+  if (unsent !== undefined) return { unsentBill: unsent };
   const period = periodRefusal(error);
   if (period !== undefined) return period;
   if (isPaymentsReceived(error)) return "bill.pay_with_bill_payments";
@@ -779,25 +811,126 @@ function discardError(error: unknown): CounterError {
     : "held.stale";
 }
 
-/** A party bill whose receipt language is asked: its revision and party when asked, and the
- * operator session that asked. */
 interface AskedBill {
+  api: TillApi;
+  expectedEdit: BillEditExpected;
   revision: number;
   partyId: string;
   session: number;
 }
 
-/** An adjustment dialog: where it was opened, the bill and the revision its lines were read at
- * when it opened, the order visit it opened on (on the counter, the operator session), and the
- * server's last answer. */
+interface BillComposition {
+  api: TillApi;
+  session: number;
+  visit: number;
+  sync: DraftSync | undefined;
+  sent: Sent;
+  partyId: string;
+  billId: string;
+  revisions: BillRevisions;
+  expectedEdits: BillEditExpected[];
+}
+
+interface TableRelocation {
+  source: BillComposition;
+  expectedEdits: BillEditExpected[];
+  target: SeatedRead;
+}
+
+interface CounterRelocation {
+  api: TillApi;
+  session: number;
+  generation: number;
+  basket: string;
+  orderId: string;
+  tableId: string;
+  target: SeatedRead;
+  expectedEdits: BillEditExpected[];
+  screen: Screen;
+  tab: BuiltInScreen | undefined;
+  drill: Drill | undefined;
+}
+
+interface CancellingItem {
+  bill: BillComposition;
+  id: number;
+  partyId: string;
+  billId: string;
+  lineId: string;
+  name: string;
+  unitPrecision: number;
+  session: number;
+  visit: number;
+  api: TillApi;
+  consent: CancellationRead;
+  refundableTenders: RefundableTender[];
+  busy: boolean;
+  refusal: string;
+  reasons?: AdjustmentReason[];
+  reasonsLoading?: boolean;
+  refusalField?: "reason" | "note" | null;
+  approval?: {
+    choice: CancelItemChoice;
+    role: NonNullable<AdjustmentPreview["needsApproval"]> | null;
+    authorizers: StaffMember[];
+    error: string | null;
+  };
+}
+
+function sameFinishContext(
+  a: CancellationRead["context"],
+  b: CancellationRead["context"],
+): boolean {
+  const values = (context: CancellationRead["context"]) => [
+    context.billStatus,
+    context.stage,
+    context.components
+      .map((row) => [
+        row.id,
+        row.lineId,
+        row.state,
+        row.firedAt,
+        row.quantity,
+        row.kitchenQuantity,
+        row.servedQuantity,
+        row.cancelledQuantity,
+      ])
+      .sort(
+        (x, y) =>
+          String(x[1]).localeCompare(String(y[1])) || String(x[0]).localeCompare(String(y[0])),
+      ),
+  ];
+  return JSON.stringify(values(a)) === JSON.stringify(values(b));
+}
+
+interface FinishingTable {
+  composition: BillComposition;
+  partyRevision: number;
+  dishes: UnservedDish[];
+  refunds: Record<string, string>;
+  receipts: { saleId: string; workingOrderId: string; lineId: string; label: string }[];
+  refundAtTill: boolean;
+  reasons: AdjustmentReason[] | null;
+  reasonsLoading: boolean;
+  busy: boolean;
+  refusal: string;
+  refusalField?: "reason" | "note" | null;
+  command?: Omit<FinishTableResolution, "approver">;
+  unconfirmed?: boolean;
+  retryApproverId?: string;
+  approval?: { authorizers: StaffMember[]; error: string | null };
+}
+
 interface Adjusting {
   id: number;
+  bill?: BillComposition;
   /** The table's open bill, or the stored order in the counter's basket. */
   surface: "table" | "counter";
   orderId: string;
   revision: number;
   visit: number;
   kind: AdjustKind;
+  combined?: true;
   target: AdjustTarget;
   reasons: AdjustmentReason[];
   choice: AdjustmentChoice | null;
@@ -806,6 +939,13 @@ interface Adjusting {
   busy: boolean;
   /** The banner that offered this cancel, which goes once the cancel is made. */
   offer: CounterError | undefined;
+  source?: {
+    sync: DraftSync;
+    lineId: string;
+    quantity: string;
+    discard?: string[];
+    unlock: () => void;
+  };
 }
 
 /** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
@@ -814,6 +954,24 @@ interface PayingOrder {
   surface: "table" | "counter";
   billId: string;
   visit: number;
+}
+
+interface WholePayment {
+  presented: boolean;
+  invoiced: boolean;
+  outstanding: string;
+  bill: BillLookupRow | null;
+  tender: Tender;
+  guests?: number | null;
+  expectedEdit: BillEditExpected | null;
+}
+
+interface PendingBillPayment extends Submission {
+  shown: {
+    asked: PayRequest;
+    preview: AllocationPreview;
+    expectedEdit: BillEditExpected | null;
+  };
 }
 
 /** The bill payment dialog: the order it pays, and what the server last answered it. */
@@ -825,6 +983,7 @@ interface BillPaying extends PayingOrder {
   balance: BillBalance | null;
   asked: PayRequest | null;
   preview: AllocationPreview | null;
+  expectedEdit: BillEditExpected | null;
   refusal: PayRefusal | null;
   taken: PayTaken | null;
   refunded: RefundNotice | null;
@@ -847,6 +1006,7 @@ interface BillRefunding extends PayingOrder {
 
 /** The unpaid departure dialog, opened from the refusal of Finish table on party `partyId`. */
 interface Departing {
+  composition: BillComposition;
   id: number;
   partyId: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
@@ -946,6 +1106,14 @@ interface DishMove {
   counter?: boolean;
   basketRevision?: number;
   basketGeneration?: number;
+  bill?: {
+    expectedEdit: BillEditExpected;
+    api: TillApi;
+    session: number;
+    visit: number;
+    partyId: string;
+    viewBillId: string | undefined;
+  };
 }
 
 /** Every dish of a paid order in the counter's waiting list that can still move. `stationId` is
@@ -958,6 +1126,8 @@ interface WaitingOrderMove {
   refusal: string | null;
   busy: boolean;
   session: number;
+  api: TillApi;
+  expectedEdit: BillEditExpected | null;
 }
 
 /** A banner's string key, a refusal shown through its code's own message, a save refused because
@@ -968,10 +1138,12 @@ type CounterError =
   /** `tableId`: the table a refusal names, for wording that names it. */
   | { code: string; menuId?: string; tableId?: string }
   | { billPayments: string }
+  | { replacedGroups: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
   | { excess: string; lineChange?: true }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
+  | { unsentBill: BillUnsent }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
@@ -982,6 +1154,17 @@ type CounterError =
 interface BillChange {
   key: "adjust.changed_bill" | "adjust.changed_line" | "adjust.changed_line_gone";
   line: string;
+}
+
+interface ServedCommand {
+  api: TillApi;
+  partyId: string;
+  billId: string;
+  visit: number;
+  session: number;
+  expiresAt: number;
+  items: ServeLinesDetail["items"];
+  names: string[];
 }
 
 /** When a table action was sent: its operator session, and how many table opens had begun. */
@@ -1003,8 +1186,12 @@ function errorText(
   error: CounterError,
   menus: readonly TillZoneMenu[],
   tables: readonly TableState[],
+  billLabel?: string,
 ): string | TemplateResult {
+  if (typeof error === "object" && "unsentBill" in error) return billUnsentText(billLabel);
   if (typeof error === "string") return t(error);
+  if ("replacedGroups" in error)
+    return t("table.draft_replaced_groups").replace("{groups}", () => error.replacedGroups);
   if ("code" in error) {
     if (error.code === "menu_period.not_running") {
       const menu = menus.find((menu) => menu.id === error.menuId);
@@ -1221,6 +1408,12 @@ export class TillApp extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      .finish-refund-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
       :host {
         display: block;
         height: 100%;
@@ -1417,7 +1610,8 @@ export class TillApp extends LitElement {
       this.#store.lines.length > 0 ||
       this.#partylessDraft.lines.length > 0 ||
       this.leave.coordinator.isDirty() ||
-      this.#unansweredPayment !== null ||
+      this.#unansweredPayments.size > 0 ||
+      this.#unansweredWholePayments.size > 0 ||
       this.#unansweredRefund !== null ||
       this.transferLocalCopies.length > 0 ||
       this.#requestsOut()
@@ -1450,10 +1644,7 @@ export class TillApp extends LitElement {
     this.reload();
   }
 
-  /** Requests out that a reload would cut off, so one the server never received would be lost:
-   * every resend-until-answered request, a whole bill payment or refund (`#unansweredPayment` and
-   * `#unansweredRefund` are set only once it ends), a prep-queue Collect, and a sign-out's save of
-   * the draft. */
+  /** An in-flight write keeps its reload hold until its request settles. */
   #reloadHolds = 0;
 
   async #holdingReload<T>(work: () => Promise<T>): Promise<T> {
@@ -1706,7 +1897,12 @@ export class TillApp extends LitElement {
     this.sessionActivity.noteInteraction();
   };
 
+  readonly #onDraftFocus = (): void => {
+    void this.#refreshBillDraft();
+  };
+
   readonly #onVisibility = (): void => {
+    void this.#refreshBillDraft();
     this.sessionActivity.reacquire();
     this.#syncEquipmentNfc();
   };
@@ -1752,6 +1948,7 @@ export class TillApp extends LitElement {
     this.addEventListener("pointerdown", this.#onInteraction);
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
+    window.addEventListener("focus", this.#onDraftFocus);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
@@ -1760,6 +1957,10 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeFinishTable();
+    this.finishRefunds = null;
+    clearTimeout(this.#servedTimer);
+    this.servedCommand = null;
     this.#closeDeviceZones();
     this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
@@ -1795,6 +1996,10 @@ export class TillApp extends LitElement {
     this.removeEventListener("pointerdown", this.#onInteraction);
     this.removeEventListener("keydown", this.#onInteraction);
     document.removeEventListener("visibilitychange", this.#onVisibility);
+    window.removeEventListener("focus", this.#onDraftFocus);
+    clearTimeout(this.#billDraftTimer);
+    this.#candidateScope?.dispose();
+    this.#candidateScope = undefined;
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
@@ -2116,7 +2321,6 @@ export class TillApp extends LitElement {
   /** Rounds whose lines carry a mark from a refused send, marked again whenever their table's offers
    * change, so a dish that can be sold again is not left marked. */
   #markedRounds = new Set<WorkingOrderStore>();
-  /** The signed-in person's draft on the open order's party. */
   #draftSync?: DraftSync;
   /** Drafts left for another party's table, each settling once its save has answered. */
   #leavingDrafts = new Map<DraftSync, Promise<void>>();
@@ -2124,6 +2328,34 @@ export class TillApp extends LitElement {
    * party opens for the person who made it; a sign-out sends that person's and drops the rest; a
    * sign-in by someone else and a server switch drop them. */
   #unsavedDrafts = new Map<string, DraftSync>();
+  readonly #draftCandidates = new Map<string, RetainedDraftCandidate>();
+  @state() private resolvingDraftCandidate: DraftSync | null = null;
+  #billDraftTimer?: ReturnType<typeof setTimeout>;
+  #billDraftReading?: DraftSync;
+  readonly #candidateOwner = {};
+  #candidateScope?: DraftScope<string>;
+  #candidateObserved = "[]";
+
+  #syncCandidateProtection(): void {
+    if (!this.isConnected) return;
+    if (this.#candidateScope === undefined) {
+      this.#candidateScope = this.leave.coordinator.register({
+        id: this.#candidateOwner,
+        current: () => JSON.stringify([...this.#draftCandidates.keys()]),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: () => undefined,
+      });
+      this.#candidateScope.commit("[]");
+      this.#candidateObserved = "[]";
+    }
+    const current = JSON.stringify([...this.#draftCandidates.keys()]);
+    if (current !== this.#candidateObserved) {
+      this.#candidateObserved = current;
+      this.#candidateScope.changed();
+    }
+  }
+
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
   #signIns = 0;
@@ -2343,6 +2575,13 @@ export class TillApp extends LitElement {
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
   @state() private collectionBill: BillLookupRow | null = null;
+  #collectionObservation?: {
+    billId: string;
+    api: TillApi;
+    session: number;
+    expectedEdit: BillEditExpected | null | undefined;
+  };
+  readonly #unansweredWholePayments = new Map<string, WholePayment>();
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
   #findBillRead?: AbortController;
@@ -2376,7 +2615,8 @@ export class TillApp extends LitElement {
     approvers?: StaffMember[];
     pinError: string | null;
   } | null = null;
-  @state() private findBillError?: StringKey | { overLimit: string } | { code: string };
+  @state() private findBillError?:
+    StringKey | { overLimit: string } | { code: string } | { unsentBill: BillUnsent };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -2446,6 +2686,7 @@ export class TillApp extends LitElement {
   @state() private editDeadEnds: {
     answer: DeadEndAnswer;
     change: ChangeLineDetail;
+    composition: BillComposition;
     orderId: string;
     visit: number;
     stationId?: string;
@@ -2455,7 +2696,6 @@ export class TillApp extends LitElement {
   #editDeadEndsClose?: (reason: LeaveReason) => Promise<boolean>;
   @state() private deadEndsQuestion: { answer: DeadEndAnswer; allowRemove: boolean } | null = null;
   #resolveDeadEnds?: (decision: DeadEndsDecision | null) => void;
-  #previewSaveOutcome?: { sent: readonly OrderLine[]; outcome: DraftSaveOutcome };
   /** Defaults to prepay, so an unresolved boot never shows the Place/Collect controls. */
   @state() private orderFlow: OrderFlow = "prepay";
   @state() private onboardingIntent?: TillInfo["onboardingIntent"];
@@ -2536,6 +2776,8 @@ export class TillApp extends LitElement {
   @state() private errorKey?: CounterError;
   /** What a complete submission of a draft did, said once the till is back on the floor. */
   @state() private submittedNotice: string | null = null;
+  @state() private servedCommand: ServedCommand | null = null;
+  #servedTimer?: ReturnType<typeof setTimeout>;
   /**
    * Authorizers for an open cash-drawer override; `undefined` means the dialog is closed, and a possibly
    * empty array opens it.
@@ -2625,6 +2867,28 @@ export class TillApp extends LitElement {
   #equipmentStale = false;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
   @state() private adjusting: Adjusting | null = null;
+  @state() private cancellingItem: CancellingItem | null = null;
+  #cancelItems = 0;
+  @state() private finishingTable: FinishingTable | null = null;
+  #finishOpening?: { composition: BillComposition; controller: AbortController; reading?: boolean };
+  @state() private finishRefunds: {
+    api: TillApi;
+    session: number;
+    visit: number;
+    tab: BuiltInScreen | undefined;
+    receipts: FinishingTable["receipts"];
+    busy: boolean;
+    refusal: string;
+  } | null = null;
+  #cancelItemRead?: {
+    partyId: string;
+    billId: string;
+    session: number;
+    visit: number;
+    api: TillApi;
+    bill: BillComposition;
+    controller: AbortController;
+  };
   /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
   @state() private adjustApprovers?: StaffMember[];
   @state() private adjustApproverError: string | null = null;
@@ -2636,12 +2900,8 @@ export class TillApp extends LitElement {
   /** The open bill payment dialog, with what the server last answered it. */
   @state() private billPaying: BillPaying | null = null;
   #billPays = 0;
-  /** The last bill payment sent that no result answered (`unansweredAfter`), which the same
-   * confirmation resends under its submission id. */
-  #unansweredPayment: Submission | null = null;
-  /** Each payment send. Only the one started last writes {@link #unansweredPayment}, so an earlier
-   * operator's send answered late neither replaces nor clears a later one's. */
-  #paymentSends = 0;
+  #unansweredPayments = new Map<string, PendingBillPayment>();
+  #paymentSends = new Map<string, number>();
   @state() private departing: Departing | null = null;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
@@ -2701,6 +2961,8 @@ export class TillApp extends LitElement {
   @state() private invoiceRecipientRefusalField = "";
   private invoiceRecipientOrderId?: string;
   private invoiceRecipientBill?: {
+    api: TillApi;
+    expectedEdit: BillEditExpected;
     orderId: string;
     revision: number;
     partyId: string;
@@ -2733,11 +2995,15 @@ export class TillApp extends LitElement {
     ...tillPath,
     leave: {
       isDirty: () =>
-        this.leave.coordinator.isDirty(undefined, [this.#basketOwner, this.#partylessOwner]),
+        this.leave.coordinator.isDirty(undefined, [
+          this.#basketOwner,
+          this.#partylessOwner,
+          this.#candidateOwner,
+        ]),
       request: (proceed, signal) =>
         this.leave.coordinator.request({
           scopes: "all",
-          except: [this.#basketOwner, this.#partylessOwner],
+          except: [this.#basketOwner, this.#partylessOwner, this.#candidateOwner],
           reason: "navigation",
           proceed,
           signal,
@@ -2760,7 +3026,9 @@ export class TillApp extends LitElement {
     reason: "navigation" | "signout" = "navigation",
   ): void {
     const except =
-      reason === "signout" ? [this.#basketOwner] : [this.#basketOwner, this.#partylessOwner];
+      reason === "signout"
+        ? [this.#basketOwner, this.#candidateOwner]
+        : [this.#basketOwner, this.#partylessOwner, this.#candidateOwner];
     if (!this.leave.coordinator.isDirty(undefined, except)) {
       void proceed();
       return;
@@ -2860,6 +3128,7 @@ export class TillApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    this.#syncCandidateProtection();
     this.#reconcileSavedDeviceZones();
     if (this.operatorName !== "" && !this.#loginPending) {
       if (this.#counterMenuPending) this.#followDefault();
@@ -2870,8 +3139,25 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (this.finishRefunds !== null && !this.#finishRefundsCurrent(this.finishRefunds))
+      this.finishRefunds = null;
+    if (
+      (this.finishingTable !== null && !this.#finishCurrent(this.finishingTable.composition)) ||
+      (this.#finishOpening !== undefined &&
+        (this.#finishOpening.reading
+          ? !this.#finishCurrent(this.#finishOpening.composition)
+          : this.api !== this.#finishOpening.composition.api ||
+            this.#operatorSession !== this.#finishOpening.composition.session))
+    )
+      this.#closeFinishTable();
+    if (this.cancellingItem !== null && !this.#cancellationCurrent(this.cancellingItem))
+      this.#closeCancelItem();
+    if (this.#cancelItemRead !== undefined && !this.#cancellationCurrent(this.#cancelItemRead))
+      this.#closeCancelItem();
     if (changed.has("api")) {
       this.#forgetZoneCatalogues();
+      if (changed.get("api") !== undefined && this.#draftSync !== undefined)
+        this.#resumeOrderDraft();
       this.#cancelFindBillRead();
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
@@ -4573,6 +4859,9 @@ export class TillApp extends LitElement {
   #reconcileDraft(reread = true): void {
     const sync = this.#draftSync;
     if (!this.#draftRefreshDue || sync === undefined || !this.#draftReady) return;
+    if (sync.store.editsLocked || sync.candidate !== null) return;
+    const edit = sync.edit;
+    if (edit === null || (edit.editorId !== null && edit.editorId !== sync.personId)) return;
     if (!this.#tableOffers.loaded || sync.store.sending || sync.saving) return;
     if (this.basketRefresh !== undefined || dialogOpenUnder(this.renderRoot)) return;
     const zoneId = this.#tableZoneId;
@@ -5067,33 +5356,17 @@ export class TillApp extends LitElement {
       reachedFiscal = true;
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
-      const result =
-        guests !== undefined
-          ? await this.api.recordSale(
-              lines,
-              tender,
-              id,
-              undefined,
-              invoice,
-              language,
-              this.#store.kitchenNote ?? undefined,
-              guests,
-            )
-          : this.#store.kitchenNote !== null
-            ? await this.api.recordSale(
-                lines,
-                tender,
-                id,
-                undefined,
-                invoice,
-                language,
-                this.#store.kitchenNote,
-              )
-            : language !== undefined
-              ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
-              : invoice
-                ? await this.api.recordSale(lines, tender, id, undefined, invoice)
-                : await this.api.recordSale(lines, tender, id);
+      const result = await this.api.recordSale(
+        lines,
+        tender,
+        id,
+        undefined,
+        invoice,
+        language,
+        this.#store.kitchenNote ?? undefined,
+        guests,
+        null,
+      );
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
@@ -5214,6 +5487,7 @@ export class TillApp extends LitElement {
         true,
         () =>
           this.api.pay({
+            expectedEdit: null,
             id,
             lines,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
@@ -5431,28 +5705,39 @@ export class TillApp extends LitElement {
     return this.#store.lineCount > 0;
   }
 
-  async #askStoredDeadEnds(workingOrderId: string, toZoneId?: string): Promise<boolean> {
+  async #askStoredDeadEnds(
+    workingOrderId: string,
+    asked: { api: TillApi; expectedEdit: BillEditExpected | null; current: () => boolean },
+    toZoneId?: string,
+  ): Promise<boolean> {
+    if (!asked.current()) return false;
     const question = limited(3_000);
     let answer: DeadEndAnswer | undefined;
     try {
       answer = await Promise.race([
-        this.api.askOrderDeadEnds(workingOrderId, toZoneId),
+        asked.api.askOrderDeadEnds(workingOrderId, toZoneId),
         pause(question.signal).then(() => undefined),
       ]);
     } catch {
-      return true;
+      return asked.current();
     } finally {
       question.done();
     }
+    if (!asked.current()) return false;
     if (!answer?.sends || answer.deadEnds.length === 0) return true;
     const decision = await this.#openDeadEnds(answer, false);
-    if (decision === null) return false;
+    if (decision === null || !asked.current()) return false;
     try {
-      await this.api.setMakeAt(workingOrderId, answer.revision!, decision.choices);
-      return true;
+      await asked.api.setMakeAt(
+        workingOrderId,
+        answer.revision!,
+        decision.choices,
+        asked.expectedEdit,
+      );
+      return asked.current();
     } catch (error) {
       if ((error as { code?: string }).code === "route.station_inactive")
-        return this.#askStoredDeadEnds(workingOrderId, toZoneId);
+        return this.#askStoredDeadEnds(workingOrderId, asked, toZoneId);
       throw error;
     }
   }
@@ -5958,6 +6243,7 @@ export class TillApp extends LitElement {
     const payload = this.#basketPayload();
     try {
       const saved = await this.api.updateWorkingOrder(id, {
+        expectedEdit: null,
         lines,
         label,
         revision: this.#store.revision,
@@ -5993,6 +6279,11 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
+    const api = this.api;
+    const current = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      basketVisit === this.#store.loadGeneration;
     if (!refusalRetry) this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
     let reachedFiscal = false;
@@ -6002,46 +6293,43 @@ export class TillApp extends LitElement {
     let placed = false;
     try {
       if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       const lines = this.#currentSaleLines();
       const label = this.#store.label;
       const payload = this.#basketPayload();
       if (this.#store.persisted) {
-        if (
-          !(await this.#syncIfDirty(id, lines, label)) ||
-          basketVisit !== this.#store.loadGeneration
-        )
-          return;
+        if (!(await this.#syncIfDirty(id, lines, label)) || !current()) return;
       } else {
-        await this.api.parkOrder({
+        await api.parkOrder({
           id,
           lines,
           label,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
         });
-        if (session !== this.#operatorSession) return;
+        if (!current()) return;
         if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
         this.#commitBasket(payload);
       }
       if (this.invoiceChoice?.orderId === id) {
-        const saved = await this.api.setOrderInvoiceChoice(id, {
+        const saved = await api.setOrderInvoiceChoice(id, {
           revision: this.#store.revision,
           ...this.invoiceChoice.invoice,
+          expectedEdit: null,
         });
-        if (session !== this.#operatorSession) return;
+        if (!current()) return;
         this.#store.markSaved(saved.revision);
       }
       await this.#saveUnsavedReceiptLanguage(id);
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       reachedFiscal = true;
-      await this.api.placeOrder(id);
-      if (session !== this.#operatorSession) return;
+      await api.placeOrder(id, null);
+      if (!current()) return;
       this.stage = "collect";
       placed = true;
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       if (
         !refusalRetry &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6060,7 +6348,7 @@ export class TillApp extends LitElement {
     } finally {
       this.placing = false;
     }
-    if (session !== this.#operatorSession) return;
+    if (!current()) return;
     if (placed)
       void this.#refreshListsAfterWrite(session, [
         ["station", "refresh.station_after_place"],
@@ -6090,12 +6378,7 @@ export class TillApp extends LitElement {
     let collected = false;
     try {
       const language = this.#chosenReceiptLanguage(id);
-      const result =
-        guests !== undefined
-          ? await this.api.collectOrder(id, tender, language, guests)
-          : language === undefined
-            ? await this.api.collectOrder(id, tender)
-            : await this.api.collectOrder(id, tender, language);
+      const result = await this.api.collectOrder(id, tender, language, guests, null);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
@@ -6139,33 +6422,52 @@ export class TillApp extends LitElement {
     this.#cancelFindBillRead();
     const controller = (this.#findBillRead = new AbortController());
     const session = this.#operatorSession;
+    const api = this.api;
     const visit = this.#invoiceRecoveryVisit;
     const current = () =>
       this.isConnected &&
+      api === this.api &&
       this.drill?.kind === "find-bill" &&
       session === this.#operatorSession &&
       visit === this.#invoiceRecoveryVisit;
     this.findBillBusy = true;
     this.errorKey = undefined;
     try {
-      const row = await this.api.getFindBill(event.detail.row.workingOrderId, {
+      const row = await api.getFindBill(event.detail.row.workingOrderId, {
         signal: controller.signal,
       });
       if (!current()) return;
-      if (row.collectionStatus !== null) {
-        this.collectionBill = {
+      const pending = this.#unansweredWholePayments.get(row.workingOrderId);
+      if (row.collectionStatus !== null || pending !== undefined) {
+        this.#collectionObservation = {
+          billId: row.workingOrderId,
+          api,
+          session,
+          expectedEdit:
+            row.partyId === null
+              ? null
+              : row.edit === undefined || row.edit === null
+                ? undefined
+                : {
+                    billId: row.edit.billId,
+                    editorVersion: row.edit.editorVersion,
+                    draftId: row.edit.draftId,
+                    draftRevision: row.edit.draftRevision,
+                  },
+        };
+        this.collectionBill = pending?.bill ?? {
           workingOrderId: row.workingOrderId,
           orderNumber: row.orderNumber,
           label: row.label,
           partyName: row.partyName,
           tables: row.tables,
-          invoiceNumber: row.invoiceNumber,
+          invoiceNumber: pending?.invoiced === false ? null : row.invoiceNumber,
           openedAt: row.openedAt,
           departedAt: row.departedAt,
-          status: row.collectionStatus,
-          stillOwed: row.stillOwed,
+          status: row.collectionStatus ?? "waiting_for_payment",
+          stillOwed: pending?.outstanding ?? row.stillOwed,
         };
-        this.findBillError = undefined;
+        this.findBillError = pending === undefined ? undefined : "sale.unconfirmed";
         this.findingBill = true;
         return;
       }
@@ -6247,11 +6549,21 @@ export class TillApp extends LitElement {
     });
   }
 
-  async #openHistoricalReceipt(row: {
-    saleId: string;
-    workingOrderId: string | null;
-    refundId: string | null;
-  }): Promise<void> {
+  async #openHistoricalReceipt(
+    row: {
+      saleId: string;
+      workingOrderId: string | null;
+      refundId: string | null;
+    },
+    cancellation?: CancellingItem | (() => boolean),
+  ): Promise<void> {
+    const originCurrent =
+      cancellation === undefined
+        ? undefined
+        : typeof cancellation === "function"
+          ? cancellation
+          : () => this.#cancellationCurrent(cancellation);
+    if (originCurrent !== undefined && !originCurrent()) return;
     if (this.findBillBusy) return;
     this.#cancelFindBillRead();
     const controller = (this.#findBillRead = new AbortController());
@@ -6261,8 +6573,10 @@ export class TillApp extends LitElement {
     const origin = this.historicalReceipt;
     const current = () =>
       this.isConnected &&
-      (this.drill?.kind === "find-bill" ||
-        (this.drill?.kind === "ticket" && this.historicalReceipt === origin)) &&
+      (originCurrent !== undefined
+        ? originCurrent()
+        : this.drill?.kind === "find-bill" ||
+          (this.drill?.kind === "ticket" && this.historicalReceipt === origin)) &&
       api === this.api &&
       session === this.#operatorSession &&
       visit === this.#invoiceRecoveryVisit;
@@ -6303,7 +6617,20 @@ export class TillApp extends LitElement {
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
       this.#pushDrill({ kind: "ticket" });
-      if (refundId === null) void this.#readRefundableTenders();
+      if (refundId === null) {
+        if (cancellation === undefined) void this.#readRefundableTenders();
+        else {
+          const receipt = this.historicalReceipt;
+          await this.#readRefundableTenders();
+          if (
+            this.isConnected &&
+            this.historicalReceipt === receipt &&
+            this.#operatorSession === session &&
+            this.api === api
+          )
+            this.#openTenderRefund();
+        }
+      }
     } catch {
       if (current())
         this.errorKey =
@@ -6324,6 +6651,19 @@ export class TillApp extends LitElement {
     });
   }
 
+  #refundMethodAllowed(row: RefundableTender): boolean {
+    return (
+      (row.method === "cash" || row.method === "card") &&
+      this.capabilities.includes(
+        row.method === "cash"
+          ? "take-cash"
+          : row.manual
+            ? "hand-keyed-card-payment"
+            : "integrated-card-payment",
+      )
+    );
+  }
+
   #hasRefundableTenders(): boolean {
     if (this.historicalReceipt?.kind !== "invoice" || this.#tenderRefundSession === undefined)
       return false;
@@ -6336,7 +6676,8 @@ export class TillApp extends LitElement {
       (row) =>
         (row.method === "cash" || row.method === "card") &&
         (row.pendingRefundId !== null ||
-          compareDecimal(moneyPlus(row.appliedRemaining, row.tipRemaining), decimal("0")) > 0),
+          (this.#refundMethodAllowed(row) &&
+            compareDecimal(moneyPlus(row.appliedRemaining, row.tipRemaining), decimal("0")) > 0)),
     );
   }
 
@@ -6430,12 +6771,7 @@ export class TillApp extends LitElement {
     const open = this.tenderRefunding;
     if (!open || open.busy || open.attempt || open.result) return;
     const tender = this.refundableTenders.find((row) => row.tenderId === ask.tenderId);
-    if (
-      !tender ||
-      tender.pendingRefundId !== null ||
-      (tender.method !== "cash" && tender.method !== "card")
-    )
-      return;
+    if (!tender || tender.pendingRefundId !== null || !this.#refundMethodAllowed(tender)) return;
     this.tenderRefunding = { ...open, ask, busy: true, refusal: null };
     if (tender.manual) await this.#askTenderRefundApprover();
     else await this.#runTenderRefund("submit");
@@ -6546,7 +6882,7 @@ export class TillApp extends LitElement {
     const open = this.tenderRefunding;
     if (!open) return nothing;
     return html`<till-tender-refund-dialog
-        .tenders=${this.refundableTenders}
+        .tenders=${this.refundableTenders.filter((row) => row.pendingRefundId !== null || this.#refundMethodAllowed(row))}
         .invoiceNumber=${this.result?.invoiceNumber ?? ""}
         .attempt=${open.attempt}
         .result=${open.result}
@@ -6640,24 +6976,115 @@ export class TillApp extends LitElement {
     </div>`;
   }
 
+  #sendWholePayment(api: TillApi, billId: string, payment: WholePayment): Promise<TillSaleResult> {
+    if (!payment.presented)
+      return api.recordSale(
+        [],
+        payment.tender,
+        billId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        payment.guests,
+        payment.expectedEdit,
+      );
+    return api.collectOrder(
+      billId,
+      payment.tender,
+      undefined,
+      payment.guests,
+      payment.expectedEdit,
+    );
+  }
+
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
-    this.submitting = true;
+    if (this.#unansweredPayments.get(workingOrderId)?.unconfirmed === true) {
+      this.findBillError = "bill_pay.unconfirmed";
+      return;
+    }
+    const observation = this.#collectionObservation;
     const session = this.#operatorSession;
+    const api = this.api;
+    const visit = this.#invoiceRecoveryVisit;
+    const key = workingOrderId;
+    const unanswered = this.#unansweredWholePayments.get(key);
+    if (
+      observation !== undefined &&
+      (observation.billId !== workingOrderId ||
+        (unanswered === undefined && (observation.api !== api || observation.session !== session)))
+    )
+      return;
+    const current = () =>
+      this.isConnected &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      visit === this.#invoiceRecoveryVisit;
+
+    let payment = unanswered;
+    this.submitting = true;
     this.findBillBusy = true;
     this.findBillError = undefined;
     let collected = false;
     try {
-      const result = await this.api.collectOrder(workingOrderId, tender);
-      if (session !== this.#operatorSession) return;
+      if (
+        (unanswered === undefined &&
+          this.#draftSync !== undefined &&
+          !(await this.#flushDraft())) ||
+        !current()
+      )
+        return;
+      if (payment === undefined) {
+        let expectedEdit = observation?.expectedEdit;
+        if (observation === undefined) {
+          expectedEdit = this.#draftSync?.expectedEditFor(workingOrderId);
+          if (expectedEdit === undefined) {
+            const bill = await api.getFindBill(workingOrderId);
+            if (!current()) return;
+            if (bill.workingOrderId !== workingOrderId) throw { code: "draft.out_of_date" };
+            expectedEdit =
+              bill.partyId === null
+                ? null
+                : bill.edit == null
+                  ? undefined
+                  : {
+                      billId: bill.edit.billId,
+                      editorVersion: bill.edit.editorVersion,
+                      draftId: bill.edit.draftId,
+                      draftRevision: bill.edit.draftRevision,
+                    };
+          }
+        }
+        if (expectedEdit === undefined) throw { code: "draft.out_of_date" };
+        payment = structuredClone({
+          presented: true,
+          tender,
+          invoiced,
+          outstanding: this.collectionBill?.stillOwed ?? tender.amount,
+          expectedEdit,
+          bill: this.collectionBill?.workingOrderId === workingOrderId ? this.collectionBill : null,
+        });
+      }
+      this.#unansweredWholePayments.set(key, payment);
+      const result = await this.#sendWholePayment(api, workingOrderId, payment);
+      if (this.#unansweredWholePayments.get(key) === payment)
+        this.#unansweredWholePayments.delete(key);
+      if (!current()) return;
       this.shadowRoot!.querySelector("till-find-bill-dialog")?.closeSaved();
       this.result = result;
       this.findingBill = false;
-      this.#showTicket(workingOrderId, !invoiced);
+      this.#showTicket(workingOrderId, !payment.invoiced);
       collected = true;
     } catch (error) {
-      if (session !== this.#operatorSession) return;
+      if (
+        (unanswered === undefined || paymentNotRecorded(error)) &&
+        !isNetworkFailure(error) &&
+        this.#unansweredWholePayments.get(key) === payment
+      )
+        this.#unansweredWholePayments.delete(key);
+      if (!current()) return;
       this.findBillError = isPermanentSaleRefusal(error)
         ? "sale.refused"
         : isNetworkFailure(error)
@@ -6669,9 +7096,9 @@ export class TillApp extends LitElement {
               : (settleRefusalOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
-      this.findBillBusy = false;
+      if (current()) this.findBillBusy = false;
     }
-    if (!collected || session !== this.#operatorSession) return;
+    if (!collected || !current()) return;
     void this.#refreshListsAfterWrite(session, [
       ["station", "refresh.station_after_sale"],
       ["waiting", "refresh.waiting_after_sale"],
@@ -6894,6 +7321,7 @@ export class TillApp extends LitElement {
         if (!(await this.#flushCounterKitchenNote()) || session !== this.#operatorSession) return;
         if (!this.#store.dirty && label !== undefined && label !== this.#store.label) {
           const saved = await this.api.setWorkingOrderLabel(id, {
+            expectedEdit: null,
             label,
             revision: this.#store.revision,
           });
@@ -7179,7 +7607,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     let refused = false;
     try {
-      await this.api.abandonWorkingOrder(id);
+      await this.api.abandonWorkingOrder(id, null);
     } catch (error) {
       if (session !== this.#operatorSession) return;
       refused = true;
@@ -7355,6 +7783,7 @@ export class TillApp extends LitElement {
       const saved = await this.api.setOrderReceiptLanguage(id, {
         revision: this.#store.revision,
         language,
+        expectedEdit: null,
       });
       if (this.#hasLeftCounterOrder(id, session)) return;
       this.#store.markSaved(saved.revision);
@@ -7381,9 +7810,11 @@ export class TillApp extends LitElement {
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
     const partyId = this.orderParty?.id;
     if (bill?.revision !== revision || partyId === undefined) return;
+    const expectedEdit = this.#billChoiceEdit(workingOrderId);
+    if (expectedEdit === null) return;
     this.receiptLanguageAsking = {
       orderId: workingOrderId,
-      bill: { revision, partyId, session: this.#operatorSession },
+      bill: { revision, partyId, session: this.#operatorSession, expectedEdit, api: this.api },
     };
   }
 
@@ -7392,17 +7823,31 @@ export class TillApp extends LitElement {
   async #saveBillReceiptLanguage(orderId: string, asked: AskedBill, language: string) {
     if (language === this.#billReceiptLanguageShown(orderId) || this.submitting) return;
     const sent = this.#sentNow();
-    if (sent.session !== asked.session || this.#hasLeftParty(asked.partyId, sent)) return;
+    if (
+      sent.session !== asked.session ||
+      asked.api !== this.api ||
+      this.#hasLeftParty(asked.partyId, sent)
+    )
+      return;
     // Holds the bill's other actions while it is saved, so none starts from the revision replaced.
     this.submitting = true;
     this.errorKey = undefined;
     let outOfDate = false;
+    let writeStarted = false;
     try {
+      if (!this.#billChoiceCurrent(asked.expectedEdit)) throw { code: "draft.out_of_date" };
+      writeStarted = true;
       const saved = await this.api.setOrderReceiptLanguage(orderId, {
         revision: asked.revision,
         language,
+        expectedEdit: asked.expectedEdit,
       });
-      if (this.#hasLeftParty(asked.partyId, sent)) return;
+      if (
+        asked.api !== this.api ||
+        this.#hasLeftParty(asked.partyId, sent) ||
+        !this.#billChoiceMatches(asked.expectedEdit)
+      )
+        return;
       this.partyBills = this.partyBills.map((bill) =>
         bill.workingOrderId === orderId && bill.revision === asked.revision
           ? { ...bill, revision: saved.revision, receiptLanguage: language }
@@ -7411,12 +7856,19 @@ export class TillApp extends LitElement {
       if (this.activeTabId === orderId && this.tabRevision === asked.revision)
         this.tabRevision = saved.revision;
     } catch (error) {
-      if (this.#hasLeftParty(asked.partyId, sent)) return;
+      if (
+        asked.api !== this.api ||
+        this.#hasLeftParty(asked.partyId, sent) ||
+        (writeStarted && !this.#billChoiceMatches(asked.expectedEdit))
+      )
+        return;
       const code = (error as { code?: string } | undefined)?.code;
       outOfDate = code === "working_order.out_of_date";
       this.errorKey = outOfDate
         ? "held.changed_elsewhere"
-        : counterError(error, "receipt_language.save_error");
+        : code === "draft.out_of_date" || code === "draft.taken_over"
+          ? { code }
+          : counterError(error, "receipt_language.save_error");
     } finally {
       this.submitting = false;
     }
@@ -7430,6 +7882,7 @@ export class TillApp extends LitElement {
     const saved = await this.api.setOrderReceiptLanguage(id, {
       revision: this.#store.revision,
       language: choice.language,
+      expectedEdit: null,
     });
     if (this.receiptLanguageChoice === choice)
       this.receiptLanguageChoice = { ...choice, saved: true };
@@ -8294,6 +8747,7 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-adjustment-dialog
         .kind=${open.kind}
+        .combined=${open.combined === true}
         .target=${open.target}
         .reasons=${open.reasons}
         .preview=${open.preview}
@@ -8322,9 +8776,51 @@ export class TillApp extends LitElement {
       }`;
   }
 
+  #renderCancelItem(): TemplateResult | typeof nothing {
+    const open = this.cancellingItem;
+    if (open === null) return nothing;
+    return html`<till-cancel-item-dialog
+        .lineId=${open.lineId}
+        .name=${open.name}
+        .unitPrecision=${open.unitPrecision}
+        .consent=${open.consent}
+        .reasons=${open.reasons ?? null}
+        .reasonsLoading=${open.reasonsLoading === true}
+        .refundAvailable=${this.#cancellationRefundAvailable(open)}
+        .refundAtTill=${!this.#cancellationRefundAvailable(open) && open.refundableTenders.some((row) => this.#cancellationPaymentAvailable(row))}
+        .busy=${open.busy || open.approval !== undefined}
+        .refusal=${open.refusal}
+        .refusalField=${open.refusalField ?? null}
+        @cancel-item-choice=${(event: CustomEvent<CancelItemChoice>) => void this.#onCancelItemChoice(event)}
+        @cancel-item-reasons=${(event: Event) => void this.#loadCancelReasons(event)}
+        @cancel-item-close=${() => this.#closeCancelItem()}
+      ></till-cancel-item-dialog>
+      ${
+        open.approval === undefined
+          ? nothing
+          : html` <till-supervisor-override-dialog
+              data-cancel-approval
+              .approverRole=${open.approval.role}
+              .authorizers=${open.approval.authorizers}
+              .error=${open.approval.error}
+              @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => void this.#onCancelApprover(event, open)}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                if (
+                  this.cancellingItem?.id === open.id &&
+                  this.cancellingItem.approval === open.approval &&
+                  !this.cancellingItem.busy
+                )
+                  this.cancellingItem = { ...this.cancellingItem, approval: undefined };
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
+  }
+
   #renderBillPaying(): TemplateResult | typeof nothing {
     const open = this.billPaying;
     if (open === null) return nothing;
+    const pending = this.#unansweredPayments.get(open.billId);
     return html`<till-bill-pay-dialog
         .balance=${open.balance}
         .lines=${open.lines}
@@ -8336,13 +8832,14 @@ export class TillApp extends LitElement {
         .taken=${open.taken}
         .refunded=${open.refunded}
         .busy=${open.busy}
+        .confirmationLocked=${pending?.unconfirmed === true}
         .tipsEnabled=${this.tipsEnabled}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .asksGuests=${this.#billPayingAsksGuests(open)}
-        .receiptGuests=${open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
+        .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guests ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -8600,6 +9097,10 @@ export class TillApp extends LitElement {
     this.#draftSync = undefined;
     this.#draftReady = false;
     this.requestUpdate();
+    if (sync.edit === null) {
+      sync.drop();
+      return;
+    }
     const session = this.#operatorSession;
     this.#leavingDrafts.set(
       sync,
@@ -8607,7 +9108,7 @@ export class TillApp extends LitElement {
         if (!this.#leavingDrafts.delete(sync)) return;
         if (saved === "failed" && session === this.#operatorSession)
           this.#unsavedDrafts.set(sync.partyId, sync);
-        else sync.drop();
+        sync.drop();
         if (session !== this.#operatorSession || saved === "saved") return;
         if (saved === "failed") {
           if (this.errorKey === undefined) this.errorKey = "table.draft_save_failed";
@@ -8668,7 +9169,7 @@ export class TillApp extends LitElement {
         leaving.partyId !== this.tables.find((row) => row.id === tableId)?.party?.id
       )
         this.#releaseDraft(leaving);
-      else await this.#flushDraft();
+      else if (this.#draftReady) await this.#flushDraft();
       if (abandoned() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
@@ -8804,7 +9305,7 @@ export class TillApp extends LitElement {
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         const [, opened] = await Promise.all([
           billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
-          this.#openDraft(true, session),
+          this.#openDraft(session),
         ]);
         if (left() || session !== this.#operatorSession) return;
         this.#showDraft(opened);
@@ -8847,11 +9348,24 @@ export class TillApp extends LitElement {
               ownerRevision: revision,
             },
           };
-          const opened = await this.#openDraft(false, session);
+          const opened = await this.#openDraft(session);
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           // A restart with no sign-out keeps the session counter, so the next person may be in by now.
-          if (carried && opened?.sync?.personId === carried.carrier && carried.lines.length > 0)
-            opened.sync.store.appendLines(carried.lines);
+          if (carried && opened?.sync?.personId === carried.carrier && carried.lines.length > 0) {
+            const lines = this.#placeFirstOrder(carried.lines);
+            if (opened.read && !opened.sync.store.editsLocked) opened.sync.store.appendLines(lines);
+            else {
+              this.#draftCandidates.set(JSON.stringify([carried.carrier, tabId]), {
+                personId: carried.carrier,
+                partyId,
+                billId: tabId,
+                base: { billId: tabId, editorVersion: 0, draftId: null, draftRevision: null },
+                lines: structuredClone(lines),
+                localGeneration: 0,
+              });
+              opened.sync.store.ownershipLocked = true;
+            }
+          }
           this.#showDraft(opened);
         } catch (error) {
           if (session !== this.#operatorSession) return;
@@ -8883,8 +9397,30 @@ export class TillApp extends LitElement {
     }
   }
 
+  #placeFirstOrder(lines: readonly OrderLine[]): OrderLine[] {
+    const placed: OrderLine[] = [];
+    for (const line of lines) {
+      const placement = placeFor(line.courseId ?? line.product.courseId ?? null, {
+        courses: this.courses,
+        held: [],
+        firstOrder: true,
+        placed: placed.map((row) => ({
+          courseId: row.courseId ?? row.product.courseId ?? null,
+          place: row.place!,
+        })),
+      });
+      if (placement.shift !== undefined) {
+        for (const row of placed)
+          if (row.place?.kind === "new" && row.place.slot >= placement.shift.from) row.place.slot++;
+      }
+      placed.push({ ...line, place: { ...placement.place } });
+    }
+    return placed;
+  }
+
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
   async #loadTabLines(): Promise<void> {
+    await this.#followPartyDraft();
     const read = ++this.#tabLinesRead;
     const partyId = this.orderParty?.id ?? null;
     if (this.activeTabId === undefined) {
@@ -8917,6 +9453,7 @@ export class TillApp extends LitElement {
     this.tabGroups = partyGroups ?? [];
     this.#groupsUnread = partyGroups === null;
     this.#groupsReadFor = partyId;
+    this.requestUpdate();
     this.printProblems = partyProblems;
     this.currentOrders = partyOrders;
     this.currentOrdersUnread = partyId !== null && partyOrders === null;
@@ -9087,47 +9624,46 @@ export class TillApp extends LitElement {
     const held = this.orderParty;
     const older = floor !== null && floor.id === held?.id && floor.revision < held.revision;
     if (row !== undefined && !older) this.orderParty = floor;
-    this.#followPartyDraft();
+    void this.#followPartyDraft();
   }
 
-  /** The draft the open order shows: the person's on its party, whichever of the party's bills is on
-   * screen. It waits for the party's own groups, since the screen decides from them whether its first
-   * line is a later addition. */
+  /** The draft the open order shows belongs to the bill on screen. It waits for the party's own
+   * groups, since the screen decides from them whether its first line is a later addition. */
   #tableDraft(): WorkingOrderStore | null {
     if (this.orderParty === null) return this.#partylessDraft;
     const sync = this.#draftSync;
     const party = this.orderParty.id;
-    return this.#draftReady && sync?.partyId === party && this.#groupsReadFor === party
+    return this.#draftReady &&
+      sync?.partyId === party &&
+      sync.billId === this.activeTabId &&
+      this.#groupsReadFor === party
       ? sync.store
       : null;
   }
 
-  /** Starts the person's draft on the order's party: the one kept for them when its save got no
-   * answer, or else one read from the server unless `read` is false.
-   * The screen shows it only once {@link #showDraft} says so. Nothing is started for a table opened
-   * in an operator session that has since ended. */
-  async #openDraft(read: boolean, session: number): Promise<OpenedDraft> {
+  async #openDraft(session: number): Promise<OpenedDraft> {
     this.#dropDraft();
     this.#resetPartylessDraft();
     if (session !== this.#operatorSession) return undefined;
     const party = this.orderParty;
-    if (party === null) return { sync: undefined, read: true };
+    const billId = this.activeTabId;
+    if (party === null || billId === undefined) return { sync: undefined, read: true };
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
-    if (kept?.personId === this.#sessionPersonId) {
-      this.#draftSync = kept;
-      void this.#flushDraft();
-      return { sync: kept, read: true };
-    }
     kept?.drop();
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
+      billId,
       personId: this.#sessionPersonId,
+      candidates: this.#draftCandidates,
       rebuild: (lines) =>
         lines.map((line) =>
           fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
         ),
+      onSaved: () => {
+        if (sync === this.#draftSync) this.requestUpdate();
+      },
       onReplaced: () => {
         if (sync !== this.#draftSync) return;
         this.#draftRefreshDue = true;
@@ -9140,22 +9676,61 @@ export class TillApp extends LitElement {
         }),
       requestLimitMs: TABLE_REQUEST_LIMIT_MS,
     });
+    sync.store.placer = (courseId, exceptIndex) => {
+      const courses = new Map([
+        ...sync.store.lines.flatMap((line) =>
+          line.course === undefined ? [] : [[line.course.id, line.course] as const],
+        ),
+        ...(this.currentOrders?.retainedCourses ?? []).map(
+          (course) => [course.id, course] as const,
+        ),
+        ...this.courses.map((course) => [course.id, course] as const),
+      ]);
+      return placeFor(courseId, {
+        courses: [...courses.values()],
+        held: heldViews(this.currentOrders, this.tabGroups),
+        firstOrder: this.currentOrders?.hasGroups === false,
+        placed: sync.store.lines.flatMap((line, index) =>
+          index === exceptIndex
+            ? []
+            : [
+                {
+                  courseId: line.courseId ?? line.product.courseId ?? null,
+                  place: line.place ?? { kind: "fire" as const },
+                },
+              ],
+        ),
+      });
+    };
+    sync.store.cancelSource = (line, quantity) => {
+      void this.#openSourceCancellation(sync, line, quantity);
+    };
     this.#draftSync = sync;
+    this.#syncDraftBillStatus();
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
     sync.store.subscribe(() => {
       if (sync === this.#draftSync) {
+        this.requestUpdate();
         this.#markDraft(false, false);
         if (this.#tableMenuPending) this.#followTableMenu();
       }
     });
-    return { sync, read: read ? await sync.load() : true };
+    return { sync, read: await sync.load() };
+  }
+
+  #syncDraftBillStatus(): void {
+    const sync = this.#draftSync;
+    const bill = this.partyBills.find(
+      (row) => row.partyId === sync?.partyId && row.workingOrderId === sync.billId,
+    );
+    if (sync !== undefined && bill !== undefined) sync.billStatus = bill.status;
   }
 
   #resumeOrderDraft(): void {
     const session = this.#operatorSession;
     const party = this.orderParty?.id;
     if (![...this.#leavingDrafts.keys()].some((sync) => sync.partyId === party)) {
-      void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
+      void this.#openDraft(session).then((opened) => this.#showDraft(opened));
       return;
     }
     void this.#savesOutFor(party).then(async () => {
@@ -9165,7 +9740,7 @@ export class TillApp extends LitElement {
         this.#draftSync !== undefined
       )
         return;
-      this.#showDraft(await this.#openDraft(true, session));
+      this.#showDraft(await this.#openDraft(session));
     });
   }
 
@@ -9174,15 +9749,13 @@ export class TillApp extends LitElement {
   #showDraft(opened: OpenedDraft): void {
     if (opened === undefined || opened.sync !== this.#draftSync) return;
     this.#draftReady = opened.read;
+    if (opened.sync !== undefined) this.#scheduleBillDraftRefresh();
     if (opened.read) this.#clearUnlistedDraftStations();
     this.requestUpdate();
     if (!opened.read) this.errorKey = "table.draft_read_failed";
     else this.#reconcileDraft();
   }
 
-  /** At a sign-in: the server takes the person from the session, so a save sent from now on goes in
-   * as the person signing in: a new draft becomes theirs unless they already hold one there, and one
-   * naming another person's draft is refused. */
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
     for (const sync of [...this.#leavingDrafts.keys()])
@@ -9204,7 +9777,60 @@ export class TillApp extends LitElement {
     this.#unsavedDrafts.clear();
   }
 
+  #scheduleBillDraftRefresh(): void {
+    clearTimeout(this.#billDraftTimer);
+    this.#billDraftTimer = setTimeout(() => {
+      void this.#refreshBillDraft().finally(() => {
+        if (this.isConnected && this.#draftSync !== undefined) this.#scheduleBillDraftRefresh();
+      });
+    }, 15_000);
+  }
+
+  async #refreshBillDraft(): Promise<void> {
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      this.#billDraftReading === sync ||
+      !this.#tableCatalogueActive() ||
+      this.operatorName === "" ||
+      document.hidden
+    )
+      return;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const before = sync.edit;
+    this.#billDraftReading = sync;
+    try {
+      const loaded = await sync.load();
+      if (
+        !loaded ||
+        sync !== this.#draftSync ||
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit
+      )
+        return;
+      this.#draftReady = true;
+      const edit = sync.edit;
+      if (
+        sync.candidate !== null &&
+        edit?.editorId != null &&
+        edit.editorId !== sync.personId &&
+        (before?.editorId !== edit.editorId || before.editorVersion !== edit.editorVersion)
+      ) {
+        this.#onDraftRefused(sync, {
+          refused: "draft.taken_over",
+          ...(edit.editorName === null ? {} : { ownerName: edit.editorName }),
+        });
+      }
+      this.requestUpdate();
+    } finally {
+      if (this.#billDraftReading === sync) this.#billDraftReading = undefined;
+    }
+  }
+
   #dropDraft(): void {
+    clearTimeout(this.#billDraftTimer);
+    if (this.adjusting?.source !== undefined) this.#closeAdjust();
     this.#draftSync?.drop();
     this.#draftSync = undefined;
     this.#draftReady = false;
@@ -9213,31 +9839,39 @@ export class TillApp extends LitElement {
 
   /** At a point the person leaves the draft: an edit no save reached is said, unless the operator
    * session has ended by the time the save answers, since the next person may have signed in. */
-  async #flushDraft(): Promise<void> {
-    if (this.#draftSync === undefined) return;
-    const session = this.#operatorSession;
-    const saved = await this.#draftSync.flush();
-    if (saved === "failed" && session === this.#operatorSession)
-      this.errorKey = "table.draft_save_failed";
-  }
-
-  /** An order that moved to another party, by a merge or a move, takes that party's draft; the
-   * person's edits are saved to the party they were made on first. */
-  #followPartyDraft(): void {
+  async #flushDraft(): Promise<boolean> {
     const sync = this.#draftSync;
-    if (sync === undefined || sync.partyId === this.orderParty?.id) return;
+    if (sync === undefined) return true;
     const session = this.#operatorSession;
-    void this.#flushDraft().then(async () => {
-      if (this.#draftSync !== sync) return;
-      const party = this.orderParty?.id;
-      await this.#savesOutFor(party);
-      if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
-      this.#showDraft(await this.#openDraft(true, session));
-    });
+    const saved = await sync.flush();
+    if (
+      saved !== "saved" &&
+      (saved === "failed" || saved.refused !== "session.required") &&
+      session === this.#operatorSession &&
+      sync === this.#draftSync
+    )
+      this.errorKey = saved === "failed" ? "table.draft_save_failed" : draftRefusalError(saved);
+    return saved === "saved";
   }
 
-  /** A save refused. An edit made after the session ended is lost: nothing can send it now. A line
-   * the refusal names is marked once the table's offers are read again. */
+  /** Relocation invalidates the old party's write scope; retain its candidate for review. */
+  async #followPartyDraft(): Promise<void> {
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      (sync.partyId === this.orderParty?.id && sync.billId === this.activeTabId)
+    )
+      return;
+    const session = this.#operatorSession;
+    if (sync.partyId === this.orderParty?.id && this.#draftReady && !(await this.#flushDraft()))
+      return;
+    if (this.#draftSync !== sync) return;
+    const party = this.orderParty?.id;
+    await this.#savesOutFor(party);
+    if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
+    this.#showDraft(await this.#openDraft(session));
+  }
+
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     this.errorKey = draftRefusalError(refusal);
@@ -9246,8 +9880,6 @@ export class TillApp extends LitElement {
       void this.#reloadTableOffers(zoneId);
   }
 
-  /** The other people's drafts on the party of the draft shown, `shown` being what
-   * {@link #tableDraft} answered; read-only, built again only when they or the table's offers change. */
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
     const sync = this.#draftSync;
     if (sync === undefined || shown !== sync.store) return [];
@@ -9275,7 +9907,6 @@ export class TillApp extends LitElement {
     views: readonly OtherDraft[];
   };
 
-  /** The person's own unsaved edits go first; the answer's draft becomes theirs to change. */
   async #onTakeOverDraft(event: Event): Promise<void> {
     const { draftId, revision } = (event as CustomEvent<TakeOverDraftDetail>).detail;
     const sync = this.#draftSync;
@@ -9292,6 +9923,54 @@ export class TillApp extends LitElement {
       else this.errorKey = takeOverRefusalError(outcome.refused);
     } finally {
       this.takeOversAnswered += 1;
+    }
+  }
+
+  async #onResolveDraftCandidate(
+    event: CustomEvent<{ candidate: RetainedDraftCandidate; apply: boolean }>,
+  ): Promise<void> {
+    const sync = this.#draftSync;
+    const { candidate, apply } = event.detail;
+    if (sync === undefined || sync.candidate !== candidate || this.resolvingDraftCandidate === sync)
+      return;
+    if (!apply) {
+      sync.resolveCandidate(null);
+      this.requestUpdate();
+      return;
+    }
+    const expected = sync.expectedEdit;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    this.resolvingDraftCandidate = sync;
+    try {
+      const read = await sync.load();
+      if (
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        sync !== this.#draftSync ||
+        sync.candidate !== candidate
+      )
+        return;
+      if (!read) {
+        this.errorKey = "table.draft_recovery_failed";
+        return;
+      }
+      const current = sync.expectedEdit;
+      if (
+        expected === null ||
+        current === null ||
+        expected.billId !== current.billId ||
+        expected.editorVersion !== current.editorVersion ||
+        expected.draftId !== current.draftId ||
+        expected.draftRevision !== current.draftRevision
+      ) {
+        this.#onDraftRefused(sync, { refused: "draft.out_of_date" });
+        return;
+      }
+      sync.resolveCandidate(candidate.lines);
+    } finally {
+      if (this.resolvingDraftCandidate === sync) this.resolvingDraftCandidate = null;
+      this.requestUpdate();
     }
   }
 
@@ -9320,6 +9999,7 @@ export class TillApp extends LitElement {
       const bills = await this.api.getPartyBills(party.id);
       if (read === this.#partyBillsRead) {
         this.partyBills = bills;
+        this.#syncDraftBillStatus();
         void this.#loadBillBalance(balance);
       }
       return { read, partyId: party.id, bills };
@@ -9350,13 +10030,6 @@ export class TillApp extends LitElement {
     } catch {
       if (read === this.#billBalanceRead) this.billBalance = null;
     }
-  }
-
-  /** What a move or join sends of the parties read: the open party's revision, and what the floor
-   * showed at the target table — another party and its revision, or null when it read free. */
-  #tableActionRevisions(party: TableParty, tableId: string): TableActionRevisions {
-    const seated = this.tables.find((table) => table.id === tableId)?.party ?? null;
-    return { expectedPartyRevision: party.revision, ...otherPartyRead(seated, party.id) };
   }
 
   /** The party the open bill was read under, for a bill action. */
@@ -9396,9 +10069,123 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** A draft lands on the bill it names, or else the party's main bill, which the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
-   * and says what the draft's submissions filed. Once the operator's session ends, the submission
-   * sends nothing more, says nothing and does not move the next person's screen. */
+  async #recoverDraftTargets(sync: DraftSync, live: () => boolean): Promise<boolean> {
+    if (
+      !sync.store.lines.some(
+        (line) =>
+          line.place?.kind === "join" ||
+          (line.place?.kind === "new" && line.place.afterGroupId !== undefined),
+      )
+    )
+      return false;
+    const oldGroups = this.tabGroups;
+    const partyId = sync.partyId;
+    const billId = sync.billId;
+    const current = () =>
+      live() &&
+      this.#draftSync === sync &&
+      this.orderParty?.id === partyId &&
+      this.activeTabId === billId;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const refreshed = await Promise.race([
+        Promise.all([
+          this.api.getTablesState(),
+          this.api.listGroups(partyId),
+          this.api.readCurrentOrders(partyId),
+        ]),
+        pause(limit.signal).then(() => undefined),
+      ]);
+      if (!current()) return true;
+      if (refreshed === undefined) throw new Error("refresh timed out");
+      const [tables, groups, orders] = refreshed;
+      const party = tables.find((table) => table.id === this.activeTableId)?.party;
+      if (
+        party?.id !== partyId ||
+        party.revision < this.orderParty!.revision ||
+        groups.revision < this.orderParty!.revision ||
+        orders.revision < this.orderParty!.revision
+      ) {
+        this.errorKey = { code: "party.out_of_date" };
+        return true;
+      }
+      const held = heldViews(orders, groups.groups);
+      const heldIds = new Set(held.map((group) => group.id));
+      const invalid = new Map<number, string>();
+      for (const [index, line] of sync.store.lines.entries()) {
+        const place = line.place;
+        const target =
+          place?.kind === "join"
+            ? place.groupId
+            : place?.kind === "new"
+              ? place.afterGroupId
+              : undefined;
+        if (target !== undefined && !heldIds.has(target)) invalid.set(index, target);
+      }
+      if (invalid.size === 0) return false;
+      const courses = new Map([
+        ...sync.store.lines.flatMap((line) =>
+          line.course === undefined ? [] : [[line.course.id, line.course] as const],
+        ),
+        ...orders.retainedCourses.map((course) => [course.id, course] as const),
+        ...this.courses.map((course) => [course.id, course] as const),
+      ]);
+      const placed = sync.store.lines.flatMap((line, index) =>
+        invalid.has(index)
+          ? []
+          : [
+              {
+                courseId: line.courseId ?? line.product.courseId ?? null,
+                place: line.place ?? { kind: "fire" as const },
+              },
+            ],
+      );
+      const replacements = new Map<number, OrderLine>();
+      for (const index of invalid.keys()) {
+        const line = sync.store.lines[index]!;
+        const courseId = line.courseId ?? line.product.courseId ?? null;
+        const { place } = placeFor(courseId, {
+          courses: [...courses.values()],
+          held,
+          firstOrder: false,
+          placed,
+        });
+        replacements.set(index, { ...line, place });
+        placed.push({ courseId, place });
+      }
+      const outcome = await sync.correctPlaces(replacements, limit.signal, current);
+      if (!current()) return true;
+      if (outcome !== "saved") {
+        this.errorKey =
+          outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
+        return true;
+      }
+      this.tables = tables;
+      this.orderParty = party;
+      this.tabGroups = groups.groups;
+      this.currentOrders = orders;
+      this.#groupsUnread = false;
+      this.#groupsReadFor = partyId;
+      this.currentOrdersUnread = false;
+      this.errorKey = {
+        replacedGroups: [...new Set(invalid.values())]
+          .map((id) => {
+            const group = oldGroups.find((group) => group.id === id);
+            return group === undefined
+              ? t("table.group_held")
+              : t("table.group_n").replace("{n}", () => String(group.displayNumber));
+          })
+          .join(", "),
+      };
+      return true;
+    } catch {
+      if (current()) this.errorKey = "table.draft_recovery_failed";
+      return true;
+    } finally {
+      limit.done();
+    }
+  }
+
   async #onSubmitDraft(event: Event): Promise<void> {
     const { groups, joinGroupId, billId, store, sent, draft } = (
       event as CustomEvent<Partial<SubmitDraftDetail>>
@@ -9407,7 +10194,7 @@ export class TillApp extends LitElement {
     const tableId = this.activeTableId;
     let party = this.orderParty;
     if (tabId === undefined || store?.sending === true) return;
-    if (sent?.some((line) => line.blocked === "period_ended")) {
+    if (sent?.some((line) => line.source === undefined && line.blocked === "period_ended")) {
       this.errorKey = "menu.last_orders_ended";
       return;
     }
@@ -9415,7 +10202,14 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
-    if (joinGroupId !== undefined && (await this.#refuseWithGroupsUnread())) return;
+    if (
+      (joinGroupId !== undefined ||
+        groups?.some(
+          (group) => group.joinGroupId !== undefined || group.afterGroupId !== undefined,
+        )) &&
+      (await this.#refuseWithGroupsUnread())
+    )
+      return;
     const sync = this.#draftSync;
     if (sync === undefined || store !== sync.store || groups === undefined || sent === undefined) {
       this.errorKey = "table.error";
@@ -9457,7 +10251,7 @@ export class TillApp extends LitElement {
     if (followUp === "recheck-dead-ends") {
       this.renderRoot
         .querySelector<TillTableOrderScreen>("till-table-order-screen")
-        ?.reopenDraftPreview(sent);
+        ?.refreshDraftRouting(store, sent);
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
@@ -9465,9 +10259,6 @@ export class TillApp extends LitElement {
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
       if (!live()) return;
-      // The server puts a draft only on a bill of its own party, the one named or else the main
-      // bill, so the table is followed only while it still holds the party the screen showed when
-      // the draft was sent.
       const now = this.tables.find((row) => row.id === tableId)?.party;
       const landed = billId ?? now?.mainBillId ?? null;
       if (landed !== null && now?.id === partyId && onSentTable()) this.#followDraft(tabId, landed);
@@ -9485,6 +10276,20 @@ export class TillApp extends LitElement {
     this.#returnToFloor();
   }
 
+  #draftRoutingRevision(store: WorkingOrderStore | null): number | null {
+    const sync = this.#draftSync;
+    if (
+      !this.#draftReady ||
+      sync === undefined ||
+      store !== sync.store ||
+      sync.saving ||
+      sync.draftId === null ||
+      sync.lineIds(sync.store.lines.map((_, index) => index)) === null
+    )
+      return null;
+    return sync.revision;
+  }
+
   async #onCheckDeadEnds(event: Event): Promise<void> {
     event.preventDefault();
     const { sent, checkId } = (
@@ -9495,7 +10300,6 @@ export class TillApp extends LitElement {
       .find((node) => node instanceof HTMLElement && node.tagName === "TILL-TABLE-ORDER-SCREEN") as
       TillTableOrderScreen | undefined;
     if (screen === undefined) return;
-    this.#previewSaveOutcome = undefined;
     const sync = this.#draftSync;
     const party = this.orderParty;
     if (sync === undefined || party === null) {
@@ -9503,30 +10307,37 @@ export class TillApp extends LitElement {
       return;
     }
     const session = this.#operatorSession;
+    const api = this.api;
+    const draftId = sync.draftId;
+    const revision = sync.revision;
+    const current = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      sync === this.#draftSync &&
+      party.id === this.orderParty?.id &&
+      screen.currentDeadEndsCheck(checkId) &&
+      sync.draftId === draftId &&
+      sync.revision === revision &&
+      this.#draftRoutingRevision(sync.store) === revision &&
+      !sync.store.editsLocked;
+    if (!current()) return;
     const request = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const saved = await sync.flush(request.signal);
-      if (saved !== "saved") {
-        if (screen.currentDeadEndsCheck(checkId))
-          this.#previewSaveOutcome = { sent, outcome: saved };
-        return;
-      }
       const positions = sent.map((line) => sync.store.lines.indexOf(line));
       const ids = positions.includes(-1) ? null : sync.lineIds(positions);
       if (ids === null || sync.draftId === null) return;
-      screen.beginDeadEndsQuestion(sent, checkId);
       const question = limited(3_000, request.signal);
       let answer: DeadEndAnswer | undefined;
       try {
         answer = await Promise.race([
-          this.api.askDraftDeadEnds(party.id, sync.draftId, ids, { signal: question.signal }),
+          api.askDraftDeadEnds(party.id, sync.draftId, ids, { signal: question.signal }),
           pause(question.signal).then(() => undefined),
         ]);
       } finally {
         question.done();
       }
       if (answer === undefined) return;
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       const byId = new Map(ids.map((id, index) => [id, index]));
       screen.answerDeadEnds(
         sent,
@@ -9547,10 +10358,10 @@ export class TillApp extends LitElement {
     }
   }
 
-  #tally({ tally }: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
+  #tally({ tally }: Draft, groups: SubmitDraftDetail["groups"], joinGroupId?: string): void {
     for (const group of groups) {
       if (group.release === "fire") tally.fired += 1;
-      else if (joinGroupId !== undefined) tally.joined += 1;
+      else if (group.joinGroupId !== undefined || joinGroupId !== undefined) tally.joined += 1;
       else tally.held += 1;
     }
   }
@@ -9564,7 +10375,7 @@ export class TillApp extends LitElement {
     tabId: string,
     party: TableParty,
     sync: DraftSync,
-    submission: { groups: readonly DraftGroup[]; joinGroupId?: string; billId?: string },
+    submission: Pick<SubmitDraftDetail, "groups" | "joinGroupId" | "billId">,
     sent: readonly OrderLine[],
     live: () => boolean,
     retried: boolean,
@@ -9575,16 +10386,15 @@ export class TillApp extends LitElement {
     const send = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
     try {
-      const checked = this.#previewSaveOutcome;
-      this.#previewSaveOutcome = undefined;
-      const saved =
-        checked !== undefined &&
-        checked.sent.length === sent.length &&
-        checked.sent.every((line, index) => line === sent[index])
-          ? checked.outcome
-          : await sync.flush(send.signal);
+      const saved = await sync.flush(send.signal);
       if (!live()) return;
       if (saved !== "saved") {
+        if (
+          saved !== "failed" &&
+          isGroupGone({ code: saved.refused }) &&
+          (await this.#recoverDraftTargets(sync, live))
+        )
+          return;
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
         return;
       }
@@ -9597,12 +10407,15 @@ export class TillApp extends LitElement {
         return;
       }
       const command: DraftSubmission = {
+        expectedEdit: sync.expectedEdit!,
         submissionId: crypto.randomUUID(),
         expectedPartyRevision: party.revision,
         draftRevision: sync.revision,
         groups: groups.map((group) => ({
           release: group.release,
           lineIds: group.lineIndexes.map((index) => ids[index]!),
+          ...(group.joinGroupId === undefined ? {} : { joinGroupId: group.joinGroupId }),
+          ...(group.afterGroupId === undefined ? {} : { afterGroupId: group.afterGroupId }),
         })),
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
         ...(billId === undefined ? {} : { billId }),
@@ -9630,6 +10443,15 @@ export class TillApp extends LitElement {
         this.errorKey = "table.round_unconfirmed";
         return "find-tab";
       }
+      if (
+        (isGroupGone(error) ||
+          (isPartyOutOfDate(error) &&
+            groups.some(
+              (group) => group.joinGroupId !== undefined || group.afterGroupId !== undefined,
+            ))) &&
+        (await this.#recoverDraftTargets(sync, live))
+      )
+        return;
       if (isPartyOutOfDate(error)) {
         await this.#onPartyOutOfDate(error, live);
         return;
@@ -9644,8 +10466,6 @@ export class TillApp extends LitElement {
       }
       if (isGroupGone(error)) await this.#loadTabLines();
       if (!live()) return;
-      // The server raises this for the bill a submission names (`requireBillOfParty`), or, when it
-      // names none, for the party's main bill (`partyMainBill`), which the server chose.
       this.errorKey =
         billId !== undefined && refusal?.refused === "tab.not_open"
           ? { code: "tab.not_open" }
@@ -9658,7 +10478,7 @@ export class TillApp extends LitElement {
     }
     this.#notePartyRevision(party.id, submitted.revision);
     if (!live()) return;
-    sync.submitted(submitted.draft, sent);
+    sync.submitted(submitted.draft, sent, submitted.edit);
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
   }
 
@@ -9683,11 +10503,11 @@ export class TillApp extends LitElement {
     this.errorKey = lineWriteError(error);
   }
 
-  /** A command on the party's held groups, sent with the revision the party was shown at; then the
-   * order and its groups are read again. A press while one is running is dropped: it would carry the
-   * revision the running one is about to move on. */
-  async #onGroupCommand(send: (party: TableParty) => Promise<unknown>): Promise<void> {
-    if (this.groupCommandBusy) return;
+  async #onGroupCommand(
+    send: (party: TableParty) => Promise<unknown>,
+    current: () => boolean = () => true,
+  ): Promise<void> {
+    if (this.groupCommandBusy || !current()) return;
     this.groupCommandBusy = true;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
@@ -9697,7 +10517,8 @@ export class TillApp extends LitElement {
       if (
         !(await this.#flushPartyKitchenNote()) ||
         visit !== this.#orderVisit ||
-        session !== this.#operatorSession
+        session !== this.#operatorSession ||
+        !current()
       )
         return;
       const party = this.orderParty;
@@ -9708,42 +10529,50 @@ export class TillApp extends LitElement {
       try {
         await send(party);
       } catch (error) {
-        await this.#onReleaseRefusal(error);
+        if (current()) await this.#onReleaseRefusal(error);
         return;
       }
-      await this.#loadTabLines();
+      if (current()) await this.#loadTabLines();
     } finally {
       this.groupCommandBusy = false;
     }
   }
 
-  /** One request on the party under a submission id of its own, at `revision`. The answer's revision
-   * is noted, so a later command carries it, and returned for a next request in the same command. */
   async #partyRequest(
     party: TableParty,
     revision: number,
     request: (command: GroupCommand) => Promise<{ revision: number }>,
+    current: () => boolean = () => true,
   ): Promise<number> {
     const answer = await request({
       submissionId: crypto.randomUUID(),
       expectedPartyRevision: revision,
     });
-    this.#notePartyRevision(party.id, answer.revision);
+    if (current()) this.#notePartyRevision(party.id, answer.revision);
     return answer.revision;
   }
 
-  /** A group command of one request, at the revision the party was shown at. */
   async #onGroupRequest(
     request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
+    current: () => boolean = () => true,
   ): Promise<void> {
-    await this.#onGroupCommand((party) =>
-      this.#partyRequest(party, party.revision, (command) => request(party, command)),
+    await this.#onGroupCommand(
+      (party) =>
+        this.#partyRequest(party, party.revision, (command) => request(party, command), current),
+      current,
     );
   }
 
   async #onFireGroup(event: Event): Promise<void> {
     const { groupId } = (event as CustomEvent<FireGroupDetail>).detail;
     await this.#onGroupRequest((party, command) => this.api.fireGroup(party.id, groupId, command));
+  }
+
+  async #onFireHeldLine(event: Event): Promise<void> {
+    const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
+    await this.#onGroupRequest((party, command) =>
+      this.api.fireHeldLine(party.id, lineId, command),
+    );
   }
 
   async #onReorderGroups(event: Event): Promise<void> {
@@ -9754,26 +10583,218 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveGroupLine(event: Event): Promise<void> {
-    const { lineId, quantity, target } = (event as CustomEvent<MoveGroupLineDetail>).detail;
-    await this.#onGroupRequest((party, command) =>
-      this.api.moveLinesToGroup(party.id, [{ lineId, quantity }], target, command),
-    );
+    if (this.groupCommandBusy) return;
+    if (this.orderParty === null) {
+      this.errorKey = "table.error";
+      return;
+    }
+    const { lineId, quantity, target, expectedEdits } = (event as CustomEvent<MoveGroupLineDetail>)
+      .detail;
+    const row = this.currentOrders?.groups
+      .flatMap((group) => group.rows)
+      .find((row) => row.lineId === lineId);
+    const billId =
+      row?.workingOrderId ??
+      (this.tabLines.some((line) => line.id === lineId) ? this.activeTabId : undefined);
+    const expectedEdit =
+      Array.isArray(expectedEdits) && expectedEdits.length === 1 ? expectedEdits[0] : null;
+    if (
+      billId === undefined ||
+      expectedEdit == null ||
+      expectedEdit.billId !== billId ||
+      !this.#billChoiceCurrent(expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
+    this.groupCommandBusy = true;
+    this.errorKey = undefined;
+    try {
+      if (await this.#refuseWithGroupsUnread()) return;
+      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
+      const party = this.orderParty!;
+      const answer = await composition.api.moveLinesToGroup(
+        party.id,
+        [{ lineId, quantity }],
+        target,
+        {
+          submissionId: crypto.randomUUID(),
+          expectedPartyRevision: party.revision,
+          expectedEdits: [{ ...expectedEdit }],
+        },
+      );
+      if (!live()) return;
+      this.#notePartyRevision(party.id, answer.revision);
+      await this.#loadTabLines();
+    } catch (error) {
+      if (live()) await this.#onReleaseRefusal(error);
+    } finally {
+      this.groupCommandBusy = false;
+    }
   }
 
   async #onSplitGroupLine(event: Event): Promise<void> {
+    if (this.groupCommandBusy) return;
+    if (this.orderParty === null) {
+      this.errorKey = "table.error";
+      return;
+    }
     const { lineId } = (event as CustomEvent<SplitGroupLineDetail>).detail;
-    await this.#onGroupRequest((party, command) =>
-      this.api.splitHeldLineIntoUnits(party.id, lineId, command),
+    const row = this.currentOrders?.groups
+      .flatMap((group) => group.rows)
+      .find((row) => row.lineId === lineId);
+    const billId =
+      row?.workingOrderId ??
+      (this.tabLines.some((line) => line.id === lineId) ? this.activeTabId : undefined);
+    const expectedEdit = billId === undefined ? null : this.#billChoiceEdit(billId);
+    if (billId === undefined || expectedEdit == null) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
+    await this.#onGroupRequest(
+      (party, command) =>
+        composition.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit }),
+      live,
     );
   }
 
-  /** Serving, its undo and a reminder's snooze and its clearing are commands on the party whose
-   * order is open; with no order open they send nothing. */
+  async #onSplitDraftSource(event: Event): Promise<void> {
+    const { store, line } = (event as CustomEvent<SplitDraftSourceDetail>).detail;
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      store !== this.#tableDraft() ||
+      store !== sync.store ||
+      !store.lines.includes(line) ||
+      line.source === undefined ||
+      this.groupCommandBusy ||
+      store.sending ||
+      store.editsLocked
+    )
+      return;
+    const sourceLineId = line.source.line.id;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const live = () =>
+      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
+    this.errorKey = undefined;
+    this.groupCommandBusy = true;
+    store.busyAction = "split";
+    try {
+      const outcome = await sync.runCommand(async (state, options) => {
+        const party = this.orderParty;
+        if (
+          !live() ||
+          party?.id !== sync.partyId ||
+          !store.lines.some((row) => row.source?.line.id === sourceLineId)
+        )
+          throw { code: "draft.out_of_date" };
+        return this.api.splitHeldLineIntoUnits(
+          party.id,
+          sourceLineId,
+          {
+            submissionId: crypto.randomUUID(),
+            expectedPartyRevision: party.revision,
+            expectedEdit: state.expectedEdit,
+          },
+          options,
+        );
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
+        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+      else this.errorKey = outcome === "failed" ? "table.error" : draftRefusalError(outcome);
+      await this.#loadTabLines();
+    } finally {
+      delete store.busyAction;
+      this.groupCommandBusy = false;
+    }
+  }
+
+  async #onDiscardDraft(): Promise<void> {
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      this.#tableDraft() !== sync.store ||
+      sync.store.lineCount === 0 ||
+      sync.store.sending ||
+      sync.store.editsLocked ||
+      this.groupCommandBusy ||
+      this.adjusting !== null ||
+      this.#adjustOpening
+    )
+      return;
+    const source = sync.store.lines.find((line) => line.source !== undefined);
+    if (source !== undefined) {
+      await this.#openSourceCancellation(sync, source, source.quantity, true);
+      return;
+    }
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const live = () =>
+      sync === this.#draftSync && visit === this.#orderVisit && session === this.#operatorSession;
+    this.groupCommandBusy = true;
+    sync.store.busyAction = "cancel";
+    this.errorKey = undefined;
+    try {
+      const outcome = await sync.runCommand(async (state, options) => {
+        await this.#loadTabLines();
+        if (!live() || state.draftId === null) throw { code: "draft.not_found" };
+        return this.api.discardDraft(
+          sync.partyId,
+          state.draftId,
+          {
+            submissionId: crypto.randomUUID(),
+            revision: state.revision,
+            expectedRevision: this.tabRevision,
+            expectedEdit: state.expectedEdit,
+          },
+          options,
+        );
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#noteBillParty(outcome.applied.party);
+        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+      else this.errorKey = outcome === "failed" ? "table.error" : draftRefusalError(outcome);
+      await this.#loadTabLines();
+    } finally {
+      delete sync.store.busyAction;
+      this.groupCommandBusy = false;
+    }
+  }
+
   async #onServiceRequest(
     request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
-    if (this.activeTabId === undefined) return;
-    await this.#onGroupRequest(request);
+    const api = this.api;
+    const billId = this.activeTabId;
+    const partyId = this.orderParty?.id;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    if (billId === undefined) return;
+    await this.#onGroupRequest(
+      request,
+      () =>
+        this.isConnected &&
+        api === this.api &&
+        billId === this.activeTabId &&
+        partyId === this.orderParty?.id &&
+        visit === this.#orderVisit &&
+        session === this.#operatorSession &&
+        this.#orderScreenShown(),
+    );
   }
 
   /** Records or takes back the party's bill request, then reads the floor, which carries it. A
@@ -9812,8 +10833,78 @@ export class TillApp extends LitElement {
   }
 
   async #onServeLines(event: Event): Promise<void> {
-    const { items } = (event as CustomEvent<ServeLinesDetail>).detail;
-    await this.#onServiceRequest((party, command) => this.api.markServed(party.id, items, command));
+    const items = (event as CustomEvent<ServeLinesDetail>).detail.items.map((item) => ({
+      ...item,
+    }));
+    const api = this.api;
+    const billId = this.activeTabId;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const rows = [
+      ...(this.currentOrders?.ungrouped ?? []),
+      ...(this.currentOrders?.groups.flatMap((group) => group.rows) ?? []),
+    ];
+    const names = items.flatMap(({ lineId }) => {
+      const row = rows.find((row) => row.lineId === lineId);
+      return row ? [row.name] : [];
+    });
+    await this.#onServiceRequest(async (party, command) => {
+      const answer = await api.markServed(party.id, items, command);
+      if (
+        this.isConnected &&
+        api === this.api &&
+        billId !== undefined &&
+        billId === this.activeTabId &&
+        party.id === this.orderParty?.id &&
+        visit === this.#orderVisit &&
+        session === this.#operatorSession &&
+        this.#orderScreenShown() &&
+        items.length > 0
+      ) {
+        clearTimeout(this.#servedTimer);
+        this.servedCommand = {
+          api,
+          partyId: party.id,
+          billId,
+          visit,
+          session,
+          expiresAt: Date.now() + 5_000,
+          items,
+          names,
+        };
+        this.#servedTimer = setTimeout(() => {
+          this.servedCommand = null;
+        }, 5_000);
+      }
+      return answer;
+    });
+  }
+
+  #currentServedCommand(): ServedCommand | null {
+    const served = this.servedCommand;
+    return served &&
+      this.isConnected &&
+      served.api === this.api &&
+      served.billId === this.activeTabId &&
+      served.partyId === this.orderParty?.id &&
+      served.visit === this.#orderVisit &&
+      served.session === this.#operatorSession &&
+      this.#orderScreenShown() &&
+      Date.now() < served.expiresAt
+      ? served
+      : null;
+  }
+
+  async #undoServed(served: ServedCommand): Promise<void> {
+    if (this.groupCommandBusy || this.#currentServedCommand() !== served) return;
+    await this.#onServiceRequest(async (party, command) => {
+      const answer = await served.api.unmarkServed(party.id, served.items, command);
+      if (this.servedCommand === served) {
+        clearTimeout(this.#servedTimer);
+        this.servedCommand = null;
+      }
+      return answer;
+    });
   }
 
   async #onUnserveLines(event: Event): Promise<void> {
@@ -9844,60 +10935,125 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** The reload runs on both paths: after a raced `ticket.already_fired` the line is fired, and
-   * re-reading reconciles the picker. */
   async #onSetLineCourse(event: Event): Promise<void> {
-    const { lineNo, courseId } = (event as CustomEvent<{ lineNo: number; courseId: string | null }>)
-      .detail;
-    if (this.activeTabId === undefined) return;
+    const { lineNo, courseId, expectedEdit } = (
+      event as CustomEvent<{
+        lineNo: number;
+        courseId: string | null;
+        expectedEdit: BillEditExpected | null;
+      }>
+    ).detail;
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    if (
+      expectedEdit == null ||
+      expectedEdit.billId !== billId ||
+      !this.#billChoiceCurrent(expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
     this.errorKey = undefined;
     try {
-      await this.api.setLineCourse(this.activeTabId, lineNo, courseId);
+      await composition.api.setLineCourse(billId, lineNo, courseId, expectedEdit);
     } catch (error) {
+      if (!live()) return;
       this.errorKey = tableWriteError(error);
     }
-    await this.#loadTabLines();
+    if (live()) await this.#loadTabLines();
   }
 
-  /** Sends held lines outside any held group, such as a recalled one. The reload runs on both paths,
-   * as in {@link #onRecallLines}. */
   async #onSendLines(event: Event): Promise<void> {
-    const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
-    const tabId = this.activeTabId;
-    if (tabId === undefined) return;
+    const { lineNos, expectedEdit } = (
+      event as CustomEvent<{
+        lineNos: number[];
+        expectedEdit: BillEditExpected | null;
+      }>
+    ).detail;
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    if (
+      expectedEdit == null ||
+      expectedEdit.billId !== billId ||
+      !this.#billChoiceCurrent(expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
     this.errorKey = undefined;
-    const visit = this.#orderVisit;
-    const session = this.#operatorSession;
     try {
-      if (
-        !(await this.#flushPartyKitchenNote()) ||
-        visit !== this.#orderVisit ||
-        session !== this.#operatorSession ||
-        tabId !== this.activeTabId
-      )
-        return;
-      await this.api.sendLines(tabId, lineNos);
+      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
+      await composition.api.sendLines(billId, lineNos, expectedEdit);
     } catch (error) {
+      if (!live()) return;
       await this.#onReleaseRefusal(error);
       return;
     }
-    await this.#loadTabLines();
+    if (live()) await this.#loadTabLines();
   }
 
-  /**
-   * The reload runs on both paths: after a raced `ticket.already_started` or `ticket.already_fired`,
-   * re-reading drops the line's Recall and Change.
-   */
   async #onRecallLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
-    if (this.activeTabId === undefined) return;
+    const sync = this.#draftSync;
+    const line = this.tabLines.find((row) => row.lineNo === lineNos[0]);
+    if (
+      sync === undefined ||
+      this.#tableDraft() !== sync.store ||
+      this.activeTabId !== sync.billId ||
+      lineNos.length !== 1 ||
+      line === undefined ||
+      line.parentLineNo != null ||
+      this.groupCommandBusy ||
+      sync.store.sending ||
+      sync.store.editsLocked
+    )
+      return;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const live = () =>
+      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
+    this.groupCommandBusy = true;
+    sync.store.busyAction = "recall";
     this.errorKey = undefined;
     try {
-      await this.api.recallLines(this.activeTabId, lineNos);
-    } catch (error) {
-      this.errorKey = lineWriteError(error);
+      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
+      const outcome = await sync.runCommand(async (state, options) => {
+        const party = this.orderParty;
+        if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
+        return this.api.recallToDraft(
+          party.id,
+          line.id,
+          {
+            submissionId: crypto.randomUUID(),
+            expectedPartyRevision: party.revision,
+            expectedEdit: state.expectedEdit,
+          },
+          options,
+        );
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
+        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+      else if (outcome === "failed") this.errorKey = "table.error";
+      else
+        this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
+          ? draftRefusalError(outcome)
+          : lineWriteError({ code: outcome.refused });
+      await this.#loadTabLines();
+    } finally {
+      delete sync.store.busyAction;
+      this.groupCommandBusy = false;
     }
-    await this.#loadTabLines();
   }
 
   async #onMoveStation(event: Event): Promise<void> {
@@ -9925,6 +11081,23 @@ export class TillApp extends LitElement {
     const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
     const revision = this.#store.revision;
     const generation = this.#store.loadGeneration;
+    const expectedEdit =
+      detail.counter === true ? null : this.#billChoiceEdit(detail.workingOrderId);
+    if (detail.counter !== true && expectedEdit === null) {
+      this.#moveStationOpening = null;
+      return;
+    }
+    const bill =
+      expectedEdit === null
+        ? undefined
+        : {
+            expectedEdit,
+            api: this.api,
+            session,
+            visit,
+            partyId: this.orderParty!.id,
+            viewBillId: orderId,
+          };
     const counterEligible = () =>
       detail.counter !== true ||
       (detail.workingOrderId === orderId &&
@@ -9940,6 +11113,8 @@ export class TillApp extends LitElement {
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
         orderId !== (detail.counter === true ? this.#store.id : this.activeTabId) ||
+        (bill !== undefined &&
+          (!this.#stationBillCurrent(bill) || !this.#billChoiceCurrent(bill.expectedEdit))) ||
         !counterEligible()
       )
         return;
@@ -9947,6 +11122,7 @@ export class TillApp extends LitElement {
         ...detail,
         refusal: null,
         busy: false,
+        ...(bill === undefined ? {} : { bill }),
         ...(detail.counter === true
           ? { basketRevision: revision, basketGeneration: generation }
           : {}),
@@ -10002,10 +11178,31 @@ export class TillApp extends LitElement {
       this.#store.setLineMakeAt(open.index, stationId ?? undefined);
   }
 
+  #stationBillCurrent(bill: NonNullable<DishMove["bill"]>): boolean {
+    return (
+      this.isConnected &&
+      bill.api === this.api &&
+      bill.session === this.#operatorSession &&
+      bill.visit === this.#orderVisit &&
+      bill.partyId === this.orderParty?.id &&
+      bill.viewBillId === this.activeTabId
+    );
+  }
+
   async #onStationChosen(event: Event, open: DishMove): Promise<void> {
     if (this.movingStation !== open) return;
     const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
     if (open.busy || stationId === null || stationId === open.stationId) return;
+    if (open.bill !== undefined) {
+      if (!this.#stationBillCurrent(open.bill)) {
+        this.movingStation = null;
+        return;
+      }
+      if (!this.#billChoiceCurrent(open.bill.expectedEdit)) {
+        this.movingStation = { ...open, refusal: "draft.out_of_date" };
+        return;
+      }
+    }
     if (
       open.counter === true &&
       (open.basketGeneration !== this.#store.loadGeneration ||
@@ -10018,7 +11215,12 @@ export class TillApp extends LitElement {
       this.movingStation = null;
       return;
     }
-    const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
+    const body = {
+      submissionId: crypto.randomUUID(),
+      lineIds: [open.lineId],
+      stationId,
+      expectedEdit: open.bill?.expectedEdit ?? null,
+    };
     const busy = { ...open, busy: true, refusal: null };
     this.movingStation = busy;
     const session = this.#operatorSession;
@@ -10028,12 +11230,18 @@ export class TillApp extends LitElement {
     if (counterSubmission !== null) this.#counterMoveSubmitting = counterSubmission;
     const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const api = open.bill?.api ?? this.api;
+    const live = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      (open.bill === undefined || this.#stationBillCurrent(open.bill));
     try {
       await this.#resend(
-        (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
+        (signal) => api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
-        () => session === this.#operatorSession,
+        live,
       );
+      if (!live()) return;
       if (this.movingStation === busy) this.movingStation = null;
       if (open.counter === true) {
         if (
@@ -10044,6 +11252,7 @@ export class TillApp extends LitElement {
           await this.#reloadCounterOrder(open.workingOrderId, session, counterSubmission);
       } else await this.#loadTabLines();
     } catch (error) {
+      if (!live()) return;
       const refusal = lineWriteError(error);
       if (this.movingStation === busy)
         this.movingStation = {
@@ -10066,6 +11275,7 @@ export class TillApp extends LitElement {
       limit.done();
       unlock();
       if (this.#counterMoveSubmitting === counterSubmission) this.#counterMoveSubmitting = null;
+      if (open.bill !== undefined && live()) await this.#refreshBillDraft();
     }
   }
 
@@ -10089,12 +11299,16 @@ export class TillApp extends LitElement {
     const opening = {};
     this.#moveStationOpening = opening;
     const session = this.#operatorSession;
+    const api = this.api;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      await this.#loadStations();
+      await this.#loadStations(true, { signal: limit.signal });
+      const bill = await api.getFindBill(id, { signal: limit.signal });
       const row = this.#movableWaitingRow(id);
       if (
         this.#moveStationOpening !== opening ||
         session !== this.#operatorSession ||
+        api !== this.api ||
         row === undefined
       )
         return;
@@ -10107,8 +11321,26 @@ export class TillApp extends LitElement {
         refusal: null,
         busy: false,
         session,
+        api,
+        expectedEdit:
+          bill.partyId === null
+            ? null
+            : {
+                billId: bill.edit!.billId,
+                editorVersion: bill.edit!.editorVersion,
+                draftId: bill.edit!.draftId,
+                draftRevision: bill.edit!.draftRevision,
+              },
       };
+    } catch (error) {
+      if (
+        this.#moveStationOpening === opening &&
+        session === this.#operatorSession &&
+        api === this.api
+      )
+        this.errorKey = lineWriteError(error);
     } finally {
+      limit.done();
       if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
     }
   }
@@ -10132,16 +11364,23 @@ export class TillApp extends LitElement {
       this.movingStation = null;
       return;
     }
-    const body = { submissionId: crypto.randomUUID(), lineIds, stationId };
+    const body = {
+      submissionId: crypto.randomUUID(),
+      lineIds,
+      stationId,
+      expectedEdit: open.expectedEdit,
+    };
     const busy = { ...open, busy: true, refusal: null };
     this.movingStation = busy;
     this.errorKey = undefined;
-    const live = () => open.session === this.#operatorSession;
+    const live = () =>
+      this.isConnected && open.session === this.#operatorSession && open.api === this.api;
+    if (!live()) return;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let refusal: string | null = null;
     try {
       await this.#resend(
-        (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
+        (signal) => open.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         live,
       );
@@ -10173,15 +11412,404 @@ export class TillApp extends LitElement {
     this.errorKey = moveRefusalKey(refusal, true) ?? { code: refusal };
   }
 
-  /** Cancel, Give away or Discount pressed, or Cancel offered: the reasons are read, then the dialog
-   * opens on the bill as the screen last read it. */
+  #cancellationCurrent(
+    open: Pick<CancellingItem, "partyId" | "billId" | "session" | "visit" | "api" | "bill">,
+  ): boolean {
+    return (
+      this.isConnected &&
+      open.api === this.api &&
+      this.#billCompositionCurrent(open.bill) &&
+      open.session === this.#operatorSession &&
+      this.orderParty?.id === open.partyId &&
+      !this.#hasLeftOrder(open.billId, open.visit)
+    );
+  }
+
+  #cancellationPaymentAvailable(row: RefundableTender): boolean {
+    return (
+      (row.method === "cash" || row.method === "card") &&
+      row.pendingRefundId === null &&
+      compareDecimal(decimal(row.appliedRemaining), decimal("0")) > 0
+    );
+  }
+
+  #cancellationRefundAvailable(open: CancellingItem): boolean {
+    return (
+      open.consent.context.billStatus === "settled" &&
+      open.consent.saleId !== undefined &&
+      this.#tenderRefundSession !== undefined &&
+      open.refundableTenders.some(
+        (row) => this.#cancellationPaymentAvailable(row) && this.#refundMethodAllowed(row),
+      )
+    );
+  }
+
+  async #cancellationTenders(
+    api: TillApi,
+    consent: CancellationRead,
+    signal?: AbortSignal,
+  ): Promise<RefundableTender[]> {
+    return consent.context.billStatus === "settled" &&
+      consent.saleId !== undefined &&
+      this.#tenderRefundSession !== undefined
+      ? api.getRefundableTenders(consent.saleId, { signal })
+      : [];
+  }
+
+  #closeCancelItem(): void {
+    this.#cancelItemRead?.controller.abort();
+    this.#cancelItemRead = undefined;
+    this.cancellingItem = null;
+  }
+
+  async #onCancelItem(event: CustomEvent<{ lineId: string }>): Promise<void> {
+    if (
+      this.cancellingItem !== null ||
+      this.#cancelItemRead !== undefined ||
+      this.adjusting !== null ||
+      this.#adjustOpening ||
+      this.groupCommandBusy ||
+      this.orderParty === null ||
+      this.activeTabId === undefined
+    )
+      return;
+    const lineId = event.detail.lineId;
+    const line = this.tabLines.find((row) => row.id === lineId && row.parentLineNo == null);
+    const recorded = [
+      ...(this.currentOrders?.ungrouped ?? []),
+      ...(this.currentOrders?.groups.flatMap((group) => group.rows) ?? []),
+    ].find((row) => row.lineId === lineId && row.workingOrderId === this.activeTabId);
+    if (line === undefined && recorded === undefined) return;
+    const bill = this.#billComposition([this.activeTabId]);
+    if (bill === null) return;
+    const opening = {
+      bill,
+      partyId: this.orderParty.id,
+      billId: this.activeTabId,
+      session: this.#operatorSession,
+      visit: this.#orderVisit,
+      api: this.api,
+      controller: new AbortController(),
+    };
+    this.#cancelItemRead = opening;
+    this.errorKey = undefined;
+    try {
+      const consent = await opening.api.getCancellation(opening.partyId, lineId, {
+        signal: opening.controller.signal,
+      });
+      if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
+      const refundableTenders = await this.#cancellationTenders(
+        opening.api,
+        consent,
+        opening.controller.signal,
+      );
+      if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
+      if (consent.billId !== opening.billId || !this.#billCompositionUnchanged(opening.bill))
+        return;
+      this.cancellingItem = {
+        ...opening,
+        id: ++this.#cancelItems,
+        lineId,
+        name: line?.name ?? recorded?.name ?? "",
+        unitPrecision: line?.unitPrecision ?? recorded?.unitPrecision ?? 0,
+        consent,
+        refundableTenders,
+        busy: false,
+        refusal: "",
+      };
+    } catch (error) {
+      if (this.#cancelItemRead === opening && this.#cancellationCurrent(opening))
+        this.errorKey = {
+          code: (error as { code?: string } | undefined)?.code ?? "server.internal",
+        };
+    } finally {
+      if (this.#cancelItemRead === opening) this.#cancelItemRead = undefined;
+    }
+  }
+
+  async #onCancelItemChoice(event: CustomEvent<CancelItemChoice>): Promise<void> {
+    event.stopPropagation();
+    const open = this.cancellingItem;
+    if (
+      open === null ||
+      open.busy ||
+      open.reasonsLoading === true ||
+      open.approval !== undefined ||
+      !this.#cancellationCurrent(open) ||
+      event.detail.lineId !== open.lineId
+    )
+      return;
+    if (!this.#cancellationReady(open)) return;
+    const choice = event.detail;
+    if (choice.outcome === "remove_charge") {
+      if (choice.consent.context.stage === "started" || choice.preparationStarted === true)
+        await this.#previewItemCancellation(open, choice);
+      else await this.#sendItemCancellation(open, choice);
+      return;
+    }
+    if (choice.outcome === "keep_charge" || choice.outcome === "refund")
+      await this.#sendItemCancellation(open, choice);
+  }
+
+  async #loadCancelReasons(event: Event): Promise<void> {
+    event.stopPropagation();
+    const open = this.cancellingItem;
+    if (open === null || open.busy || open.reasonsLoading || !this.#cancellationReady(open)) return;
+    this.cancellingItem = { ...open, reasonsLoading: true, refusal: "" };
+    try {
+      const reasons = await open.api.listAdjustmentReasons();
+      if (this.cancellingItem?.id !== open.id || !this.#cancellationReady(open)) return;
+      this.cancellingItem = {
+        ...this.cancellingItem!,
+        reasons,
+        reasonsLoading: false,
+        refusal: "",
+      };
+    } catch {
+      if (this.cancellingItem?.id === open.id && this.#cancellationCurrent(open))
+        this.cancellingItem = {
+          ...this.cancellingItem,
+          reasonsLoading: false,
+          refusal: t("adjust.reasons_error"),
+        };
+    }
+  }
+
+  async #previewItemCancellation(open: CancellingItem, choice: CancelItemChoice): Promise<void> {
+    this.cancellingItem = { ...open, busy: true, refusal: "", refusalField: null };
+    try {
+      const preview = await open.api.previewAdjustment(open.billId, {
+        expectedEdit: open.bill.expectedEdits[0]!,
+        expectedRevision: choice.consent.billRevision,
+        lineId: open.lineId,
+        action: "cancel",
+        quantity: choice.quantity,
+        reasonId: choice.reasonId!,
+        note: choice.note ?? null,
+      });
+      if (!this.#cancellationReady(open)) return;
+      if (preview.needsApproval === null) {
+        await this.#sendItemCancellation(open, choice);
+        return;
+      }
+      const authorizers = await open.api.listAdjustmentApprovers(preview.needsApproval);
+      if (!this.#cancellationReady(open)) return;
+      this.cancellingItem = {
+        ...open,
+        busy: false,
+        refusal: "",
+        approval: {
+          choice: structuredClone(choice),
+          role: preview.needsApproval,
+          authorizers,
+          error: null,
+        },
+      };
+    } catch (error) {
+      if (this.#itemCancellationShown(open))
+        await this.#refuseItemCancellation(open, choice, error, "preview");
+    }
+  }
+
+  async #onCancelApprover(
+    event: CustomEvent<{ personId: string; pin: string }>,
+    offered: CancellingItem,
+  ): Promise<void> {
+    event.stopPropagation();
+    const open = this.cancellingItem;
+    if (
+      open === null ||
+      open.id !== offered.id ||
+      open.approval !== offered.approval ||
+      open.busy ||
+      open.approval === undefined ||
+      !this.#cancellationReady(open)
+    )
+      return;
+    await this.#sendItemCancellation(
+      { ...open, approval: { ...open.approval, error: null } },
+      open.approval.choice,
+      event.detail,
+    );
+  }
+
+  #itemCancellationShown(open: CancellingItem): boolean {
+    return this.#cancellationCurrent(open) && this.cancellingItem?.id === open.id;
+  }
+
+  #cancellationReady(open: CancellingItem): boolean {
+    if (!this.#itemCancellationShown(open)) return false;
+    if (this.#billCompositionUnchanged(open.bill)) return true;
+    if (this.cancellingItem?.id === open.id)
+      this.cancellingItem = {
+        ...open,
+        busy: false,
+        approval: undefined,
+        refusal: codeMessage("draft.out_of_date"),
+      };
+    return false;
+  }
+
+  async #sendItemCancellation(
+    open: CancellingItem,
+    choice: CancelItemChoice,
+    approver?: { personId: string; pin: string },
+  ): Promise<void> {
+    if (!this.#cancellationReady(open)) return;
+    if (choice.outcome === "refund" && !this.#cancellationRefundAvailable(open)) return;
+    const command: CancelItemRequest = {
+      expectedEdit: open.bill.expectedEdits[0]!,
+      quantity: choice.quantity,
+      outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
+      ...(choice.outcome === "refund" ? { refundHandoff: true } : {}),
+      ...(choice.preparationStarted === undefined
+        ? {}
+        : { preparationStarted: choice.preparationStarted }),
+      expectedPartyRevision: choice.consent.revision,
+      expectedBillRevision: choice.consent.billRevision,
+      expectedContext: structuredClone(choice.consent.context),
+      submissionId: crypto.randomUUID(),
+      ...(choice.reasonId === undefined ? {} : { reasonId: choice.reasonId }),
+      ...(choice.note === undefined ? {} : { note: choice.note }),
+      ...(approver === undefined ? {} : { approver }),
+    };
+    this.cancellingItem = { ...open, busy: true, refusal: "", refusalField: null };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const answer = await this.#resend(
+        (signal) => open.api.cancelItem(open.partyId, open.lineId, command, { signal }),
+        limit.signal,
+        () => this.#cancellationCurrent(open),
+      );
+      if (!this.#itemCancellationShown(open)) return;
+      this.#notePartyRevision(open.partyId, answer.revision);
+      this.#closeCancelItem();
+      await this.#rereadAmounts(open.billId, open.visit);
+      if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
+        await this.updateComplete;
+        // Kitchen cancellation is committed before entering the independently retried refund flow.
+        this.#requestLeave(() =>
+          this.#openHistoricalReceipt(
+            {
+              saleId: open.consent.saleId!,
+              workingOrderId: open.billId,
+              refundId: null,
+            },
+            open,
+          ),
+        );
+      }
+    } catch (error) {
+      if (!this.#itemCancellationShown(open)) return;
+      await this.#refuseItemCancellation(
+        open,
+        choice,
+        error,
+        approver === undefined ? "apply" : "approved",
+        limit.signal,
+      );
+    } finally {
+      limit.done();
+    }
+  }
+
+  async #refuseItemCancellation(
+    open: CancellingItem,
+    choice: CancelItemChoice,
+    error: unknown,
+    stage: "preview" | "apply" | "approved",
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!this.#itemCancellationShown(open)) return;
+    const code = (error as { code?: string } | undefined)?.code ?? "server.internal";
+    if (code === "tab.cancel_context_changed") {
+      try {
+        const consent = await open.api.getCancellation(open.partyId, open.lineId, {
+          signal,
+        });
+        if (!this.#itemCancellationShown(open)) return;
+        const refundableTenders = await this.#cancellationTenders(open.api, consent, signal);
+        if (!this.#itemCancellationShown(open)) return;
+        this.#closeCancelItem();
+        if (consent.billId !== open.billId) return;
+        this.cancellingItem = {
+          ...open,
+          id: ++this.#cancelItems,
+          consent,
+          refundableTenders,
+          approval: undefined,
+          busy: false,
+          refusal: codeMessage(code),
+        };
+      } catch {
+        if (this.#itemCancellationShown(open)) {
+          this.#closeCancelItem();
+          this.errorKey = { code };
+        }
+      }
+    } else if (
+      stage === "apply" &&
+      choice.outcome === "refund" &&
+      code === "authorization.not_permitted"
+    ) {
+      this.cancellingItem = { ...open, busy: true, refusal: "" };
+      try {
+        const authorizers = await open.api.listRefundAuthorizers();
+        if (!this.#cancellationReady(open)) return;
+        this.cancellingItem = {
+          ...open,
+          busy: false,
+          refusal: "",
+          approval: { choice: structuredClone(choice), role: null, authorizers, error: null },
+        };
+      } catch {
+        if (this.#itemCancellationShown(open))
+          this.cancellingItem = { ...open, busy: false, refusal: codeMessage("server.internal") };
+      }
+    } else if (stage === "approved" && APPROVER_REFUSALS.has(code) && open.approval !== undefined) {
+      this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };
+    } else if (stage !== "preview" && isNetworkFailure(error)) {
+      this.#closeCancelItem();
+      await this.#rereadAmounts(open.billId, open.visit);
+      if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
+    } else {
+      const field = refusalField(code, "cancel", false);
+      this.cancellingItem = {
+        ...open,
+        busy: false,
+        approval: undefined,
+        refusal: codeMessage(code),
+        refusalField: field === "reason" || field === "note" ? field : null,
+        reasons:
+          code === "adjustment.note_required"
+            ? open.reasons?.map((reason) =>
+                reason.id === choice.reasonId ? { ...reason, noteRequired: true } : reason,
+              )
+            : open.reasons,
+      };
+      if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
+    }
+  }
+
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target, offered, counter } = (event as CustomEvent<AdjustDetail>).detail;
+    const { kind, target, offered, counter, combined } = (event as CustomEvent<AdjustDetail>)
+      .detail;
     const surface = counter === true ? "counter" : "table";
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
-    if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
+    if (
+      orderId === undefined ||
+      this.adjusting !== null ||
+      this.#adjustOpening ||
+      this.cancellingItem !== null ||
+      this.#cancelItemRead !== undefined
+    )
+      return;
+    const partyBill = surface === "table" && this.orderParty !== null;
+    const bill = partyBill ? this.#billComposition([orderId]) : null;
+    if (partyBill && bill === null) return;
     const session = this.#operatorSession;
     const opened = {
+      ...(bill === null ? {} : { bill }),
       surface,
       orderId,
       revision: surface === "counter" ? this.#store.revision : this.tabRevision,
@@ -10195,13 +11823,18 @@ export class TillApp extends LitElement {
     try {
       reasons = await this.api.listAdjustmentReasons();
     } catch {
-      if (session === this.#operatorSession) this.errorKey = "adjust.reasons_error";
+      if (
+        session === this.#operatorSession &&
+        (bill === null || this.#billCompositionCurrent(bill))
+      )
+        this.errorKey = "adjust.reasons_error";
       return;
     } finally {
       this.#adjustOpening = false;
     }
     if (
       session !== this.#operatorSession ||
+      (bill !== null && !this.#billCompositionUnchanged(bill)) ||
       this.#hasLeftAdjusted(opened) ||
       (surface === "counter" && !this.#counterStillAdjustable(opened))
     )
@@ -10210,6 +11843,7 @@ export class TillApp extends LitElement {
       id: ++this.#adjustments,
       ...opened,
       kind,
+      ...(combined === true ? { combined } : {}),
       target,
       reasons,
       choice: null,
@@ -10218,6 +11852,98 @@ export class TillApp extends LitElement {
       busy: false,
       offer,
     };
+  }
+
+  async #openSourceCancellation(
+    sync: DraftSync,
+    line: OrderLine,
+    quantity: string,
+    discard = false,
+  ): Promise<void> {
+    const store = sync.store;
+    if (
+      sync !== this.#draftSync ||
+      !store.lines.includes(line) ||
+      line.source === undefined ||
+      this.groupCommandBusy ||
+      this.adjusting !== null ||
+      this.#adjustOpening ||
+      store.sending ||
+      store.editsLocked
+    )
+      return;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const sourceId = line.source.line.id;
+    const live = () =>
+      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
+    this.#adjustOpening = true;
+    this.groupCommandBusy = true;
+    store.busyAction = "cancel";
+    store.sending = true;
+    this.errorKey = undefined;
+    let unlock: (() => void) | undefined;
+    try {
+      if ((await sync.flush()) !== "saved") {
+        if (live()) this.errorKey ??= "table.draft_save_failed";
+        return;
+      }
+      if (!live()) return;
+      const bill = this.#billComposition([sync.billId]);
+      if (bill === null) return;
+      await this.#loadTabLines();
+      if (!live() || !this.#billCompositionUnchanged(bill)) return;
+      const source = store.lines.find((row) => row.source?.line.id === sourceId)?.source;
+      if (source === undefined) return;
+      const sources = store.lines.flatMap((row) => (row.source === undefined ? [] : [row.source]));
+      const reasons = await bill.api.listAdjustmentReasons();
+      if (!live() || !this.#billCompositionUnchanged(bill)) return;
+      unlock = store.lockEdits();
+      this.adjusting = {
+        id: ++this.#adjustments,
+        bill,
+        surface: "table",
+        orderId: sync.billId,
+        revision: this.tabRevision,
+        visit,
+        kind: "cancel",
+        target: {
+          lineId: discard ? null : sourceId,
+          name: discard ? t("table.draft_title") : (source.line.name ?? ""),
+          quantity: discard ? null : quantity,
+          total: discard
+            ? sumDecimals(sources.map((row) => decimal(row.netAmount)))
+            : divideDecimal(
+                multiplyDecimal(decimal(source.netAmount), decimal(quantity)),
+                decimal(source.line.quantity),
+                MONEY_SCALE,
+              ),
+          unitTotal: null,
+        },
+        reasons,
+        choice: null,
+        preview: null,
+        refusal: null,
+        busy: false,
+        offer: undefined,
+        source: {
+          sync,
+          lineId: sourceId,
+          quantity,
+          unlock,
+          ...(discard ? { discard: sources.map((row) => row.line.id) } : {}),
+        },
+      };
+      unlock = undefined;
+    } catch {
+      if (live()) this.errorKey = "adjust.reasons_error";
+    } finally {
+      unlock?.();
+      delete store.busyAction;
+      store.sending = false;
+      this.#adjustOpening = false;
+      this.groupCommandBusy = false;
+    }
   }
 
   /** The counter's basket still holds the stored order it held when `open` was opened, at the same
@@ -10255,22 +11981,87 @@ export class TillApp extends LitElement {
   }
 
   #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
-    return { expectedRevision: open.revision, lineId: open.target.lineId, ...choice };
+    return {
+      expectedEdit: open.bill === undefined ? null : open.bill.expectedEdits[0]!,
+      expectedRevision: open.revision,
+      lineId: open.target.lineId,
+      ...choice,
+      ...(open.source === undefined
+        ? {}
+        : {
+            action: "cancel",
+            quantity: open.source.quantity,
+            expectedEdit: open.source.sync.expectedEdit!,
+            sourceDraftId: open.source.sync.expectedEdit!.draftId!,
+          }),
+    };
   }
 
-  /** The dialog as it is now, when it is still the one `id` names. */
   #adjustingNow(id: number): Adjusting | null {
-    return this.adjusting?.id === id ? this.adjusting : null;
+    const open = this.adjusting;
+    if (open?.id !== id) return null;
+    if (open.bill !== undefined && !this.#billCompositionCurrent(open.bill)) {
+      this.#closeAdjust();
+      return null;
+    }
+    return open;
+  }
+
+  #adjustmentReady(open: Adjusting): boolean {
+    if (this.#adjustingNow(open.id) === null) return false;
+    if (
+      open.combined === true &&
+      open.surface === "table" &&
+      this.#draftSync?.billStatus !== "open"
+    ) {
+      const paid = this.#draftSync?.billStatus === "settled";
+      this.#closeAdjust();
+      this.errorKey = { code: paid ? "bill.paid" : "working_order.not_open" };
+      return false;
+    }
+    if (open.bill === undefined || this.#billCompositionUnchanged(open.bill)) return true;
+    this.#closeApprovers();
+    this.adjusting = { ...open, busy: false, refusal: "draft.out_of_date", preview: null };
+    return false;
   }
 
   async #onAdjustPreview(event: Event): Promise<void> {
     const choice = (event as CustomEvent<AdjustmentChoice>).detail;
-    // The dialog's events come only while it is open. A press while a request is out is dropped.
-    const open = this.adjusting!;
-    if (open.busy) return;
+    const open = this.adjusting;
+    if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     this.adjusting = { ...open, choice, refusal: null, busy: true };
     try {
-      const preview = await this.api.previewAdjustment(open.orderId, this.#adjustAsk(open, choice));
+      let preview: AdjustmentPreview;
+      if (open.source?.discard === undefined) {
+        preview = await (open.bill?.api ?? this.api).previewAdjustment(
+          open.orderId,
+          this.#adjustAsk(open, choice),
+        );
+      } else {
+        const previews: AdjustmentPreview[] = [];
+        for (const lineId of open.source.discard) {
+          previews.push(
+            await this.api.previewAdjustment(open.orderId, {
+              ...choice,
+              action: "cancel",
+              lineId,
+              expectedRevision: open.revision,
+              expectedEdit: open.source.sync.expectedEdit!,
+              sourceDraftId: open.source.sync.expectedEdit!.draftId!,
+            }),
+          );
+          if (!this.#adjustmentReady(open)) return;
+        }
+        const roles = ["admin", "manager", "supervisor", "staff"] as const;
+        preview = {
+          reduction: sumDecimals(previews.map((row) => decimal(row.reduction))),
+          nominalValue: sumDecimals(previews.map((row) => decimal(row.nominalValue))),
+          needsApproval:
+            roles.find((role) => previews.some((row) => row.needsApproval === role)) ?? null,
+          overBillDiscountLimit: previews.some((row) => row.overBillDiscountLimit),
+          lines: previews.flatMap((row) => row.lines),
+        };
+      }
       const now = this.#adjustingNow(open.id);
       if (now !== null) this.adjusting = { ...now, preview, busy: false };
     } catch (error) {
@@ -10278,10 +12069,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Confirmed: applied at once, or first the approver's PIN when the preview asked for it. */
   async #onAdjustConfirm(): Promise<void> {
-    const open = this.adjusting!;
-    if (open.busy) return;
+    const open = this.adjusting;
+    if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     const role = open.preview!.needsApproval;
     if (role === null) {
       await this.#applyAdjustment(open);
@@ -10289,7 +12079,7 @@ export class TillApp extends LitElement {
     }
     this.adjusting = { ...open, refusal: null, busy: true };
     try {
-      const approvers = await this.api.listAdjustmentApprovers(role);
+      const approvers = await (open.bill?.api ?? this.api).listAdjustmentApprovers(role);
       const now = this.#adjustingNow(open.id);
       if (now === null) return;
       this.adjusting = { ...now, busy: false };
@@ -10300,34 +12090,25 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The approver's PIN leaves in the request and is never kept. */
   async #onAdjustApproverConfirm(event: Event): Promise<void> {
     event.stopPropagation();
     const { personId, pin } = (event as CustomEvent<{ personId: string; pin: string }>).detail;
-    // The PIN prompt is drawn only over an open dialog.
-    const open = this.adjusting!;
-    if (open.busy) return;
+    const open = this.adjusting;
+    if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     this.adjustApproverError = null;
     await this.#applyAdjustment(open, { personId, pin });
   }
 
-  /**
-   * A fresh submission id for each confirmation, sent again unchanged only while a request gets no
-   * answer (plan D8). Applied, the dialog closes if still open, the party's new revision is noted
-   * ({@link #noteBillParty}) and, unless the waiter has left the order, it is read again
-   * ({@link #rereadAdjusted}). With no answer at all while the dialog is open, it closes, the order
-   * is read again too, and unless the waiter has left the order by then the message says the change
-   * may have been made, and when that read failed or its answer was dropped, to hold and retrieve
-   * the order to check; an order found gone is said to be gone, and nothing more. Once the dialog
-   * is gone, no answer on a table's bill only reads the floor again and takes the party from it
-   * ({@link #retakePartyFromFloor}) while the operator session that sent it lasts, and a refusal
-   * changes nothing. On the counter nothing is sent once the basket no longer holds the order as
-   * the dialog opened on it: the dialog closes and says so.
-   */
+  // Retries retain the original command, including its bill observation and submission ID.
   async #applyAdjustment(
     open: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
+    if (open.source !== undefined) {
+      await this.#applySourceCancellation(open, approver);
+      return;
+    }
+    if (!this.#adjustmentReady(open)) return;
     if (open.surface === "counter" && !this.#counterStillAdjustable(open)) {
       this.#closeAdjust();
       this.errorKey = "adjust.basket_changed";
@@ -10341,12 +12122,17 @@ export class TillApp extends LitElement {
     this.adjusting = { ...open, refusal: null, busy: true };
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const api = open.bill?.api ?? this.api;
+    const live = () =>
+      session === this.#operatorSession &&
+      (open.bill === undefined || this.#billCompositionCurrent(open.bill));
     try {
       const answer = await this.#resend(
-        (signal) => this.api.applyAdjustment(open.orderId, command, { signal }),
+        (signal) => api.applyAdjustment(open.orderId, command, { signal }),
         limit.signal,
-        () => session === this.#operatorSession,
+        live,
       );
+      if (!live()) return;
       this.#noteBillParty(answer.party);
       if (this.#adjustingNow(open.id) !== null) {
         this.shadowRoot!.querySelector<TillAdjustmentDialog>(
@@ -10358,6 +12144,7 @@ export class TillApp extends LitElement {
       if (this.#hasLeftAdjusted(open)) return;
       await this.#rereadAdjusted(open);
     } catch (error) {
+      if (!live()) return;
       if (this.#adjustingNow(open.id) === null) {
         if (
           open.surface === "table" &&
@@ -10370,6 +12157,116 @@ export class TillApp extends LitElement {
       await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
     } finally {
       limit.done();
+      if (open.bill !== undefined && live()) await this.#refreshBillDraft();
+    }
+  }
+
+  async #applySourceCancellation(
+    open: Adjusting,
+    approver?: { personId: string; pin: string },
+  ): Promise<void> {
+    const source = open.source!;
+    const { sync } = source;
+    const live = () => sync === this.#draftSync && !this.#hasLeftAdjusted(open);
+    if (!live() || this.groupCommandBusy) return;
+    const command: AdjustmentCommand = {
+      ...this.#adjustAsk(open, open.choice!),
+      submissionId: crypto.randomUUID(),
+      ...(approver === undefined ? {} : { approver }),
+    };
+    this.adjusting = { ...open, busy: true, refusal: null };
+    this.groupCommandBusy = true;
+    source.unlock();
+    sync.store.busyAction = "cancel";
+    let refusal: unknown;
+    try {
+      const outcome = await sync.runCommand(async (state, options) => {
+        if (
+          !live() ||
+          !this.#billCompositionUnchanged(open.bill!) ||
+          !sync.store.lines.some((line) => line.source?.line.id === source.lineId)
+        )
+          throw { code: "draft.out_of_date" };
+        try {
+          if (source.discard !== undefined) {
+            if (state.draftId === null) throw { code: "draft.not_found" };
+            return await this.api.discardDraft(
+              sync.partyId,
+              state.draftId,
+              {
+                submissionId: command.submissionId,
+                revision: state.revision,
+                expectedRevision: open.revision,
+                expectedEdit: state.expectedEdit,
+                reasonId: open.choice!.reasonId,
+                note: open.choice!.note,
+                ...(approver === undefined ? {} : { approver }),
+              },
+              options,
+            );
+          }
+          return await this.api.applyAdjustment(
+            open.orderId,
+            {
+              ...command,
+              expectedEdit: state.expectedEdit,
+              sourceDraftId: state.draftId!,
+            },
+            options,
+          );
+        } catch (error) {
+          refusal = error;
+          throw error;
+        }
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#noteBillParty(outcome.applied.party);
+        this.shadowRoot!.querySelector<HTMLElementTagNameMap["till-adjustment-dialog"]>(
+          "till-adjustment-dialog",
+        )?.closeSaved();
+        this.#closeAdjust();
+        await this.#loadTabLines();
+        if (live() && !outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") {
+        this.#closeAdjust();
+        this.errorKey ??= "table.draft_save_failed";
+      } else if (typeof outcome === "object" && DRAFT_REFUSALS.has(outcome.refused)) {
+        this.#closeAdjust();
+        this.errorKey = draftRefusalError(outcome);
+        await this.#loadTabLines();
+      } else if (sync.store.editsLocked) {
+        this.#closeAdjust();
+        this.errorKey = "table.draft_read_failed";
+      } else {
+        if (this.#adjustingNow(open.id) === null) return;
+        await this.#onAdjustRefused(
+          refusal ??
+            (typeof outcome === "object" ? { code: outcome.refused } : new Error("No answer")),
+          approver === undefined ? "apply" : "approved",
+        );
+        const required = refusal as
+          { code?: string; params?: { approverRole?: unknown } } | undefined;
+        const now = this.#adjustingNow(open.id);
+        const role = required?.params?.approverRole;
+        if (
+          source.discard !== undefined &&
+          required?.code === "adjustment.approval_required" &&
+          (role === "staff" || role === "supervisor" || role === "manager" || role === "admin") &&
+          now?.preview !== undefined &&
+          now.preview !== null
+        )
+          this.adjusting = {
+            ...now,
+            preview: { ...now.preview, needsApproval: role },
+            refusal: null,
+          };
+        if (this.#adjustingNow(open.id) !== null && !sync.store.editsLocked)
+          source.unlock = sync.store.lockEdits();
+      }
+    } finally {
+      delete sync.store.busyAction;
+      this.groupCommandBusy = false;
     }
   }
 
@@ -10399,7 +12296,8 @@ export class TillApp extends LitElement {
       return;
     }
     const refusal = code ?? "server.internal";
-    const onField = refusalField(refusal, open.kind, open.target.unitTotal !== null) !== null;
+    const kind = open.combined === true && open.choice?.action !== "comp" ? "discount" : open.kind;
+    const onField = refusalField(refusal, kind, open.target.unitTotal !== null) !== null;
     let reasons = open.reasons;
     if (REASON_REFUSALS.has(refusal)) {
       try {
@@ -10423,6 +12321,7 @@ export class TillApp extends LitElement {
       !this.#hasLeftAdjusted(open)
     )
       await this.#rereadAdjusted(open);
+    if (open.bill !== undefined && DRAFT_REFUSALS.has(refusal)) await this.#refreshBillDraft();
   }
 
   /**
@@ -10465,27 +12364,28 @@ export class TillApp extends LitElement {
   }
 
   #closeAdjust(): void {
+    this.adjusting?.source?.unlock();
     this.adjusting = null;
     this.#closeApprovers();
   }
 
-  /**
-   * A saved change stores the new revision and reads the order, its bills and what the party owes
-   * again whenever that order is still the open one, wherever the waiter is, so the next change is
-   * not refused as out of date and an extra's price shows at once. A refusal reads the order again
-   * too, and one because the kitchen has started the line offers to cancel it. A change that got
-   * no answer also reads the order, its bills and what the party owes again.
-   * When the order is no longer the open one, or {@link #orderVisit} says the waiter started leaving
-   * it and did not come back to it, a refusal or a change that got no answer changes nothing on
-   * screen but the message, which names the line, and its table while the floor lists it, because
-   * the waiter may believe a note (an allergy, say) was saved. Paying the tab and a server switch
-   * take the order off screen without that counter moving.
-   */
   async #onChangeLine(event: Event): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
+    const composition = this.#billComposition([orderId]);
+    if (composition === null) return;
+    if (
+      change.expectedEdit == null ||
+      change.expectedEdit.billId !== orderId ||
+      !this.#billChoiceCurrent(change.expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const identity = () =>
+      this.api === composition.api && this.#operatorSession === composition.session;
     const visit = this.#orderVisit;
     const left = () => this.#hasLeftOrder(orderId, visit);
     const tableId = this.activeTableId;
@@ -10493,13 +12393,35 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     let outcome: { saved: { revision: number; party: BillParty } } | { error: unknown };
     try {
-      outcome = { saved: await this.api.updateOrderLine(orderId, lineNo, patch, revision) };
+      outcome = {
+        saved: await composition.api.updateOrderLine(
+          orderId,
+          lineNo,
+          patch,
+          revision,
+          change.expectedEdit,
+        ),
+      };
     } catch (error) {
       outcome = { error };
     }
+    if (!identity()) return;
+    if (
+      this.activeTabId === orderId &&
+      this.#draftReady &&
+      !this.#billChoiceCurrent(change.expectedEdit)
+    ) {
+      if (
+        "saved" in outcome &&
+        this.#draftSync === composition.sync &&
+        this.#draftSync?.edit?.editorId === this.operatorPersonId
+      )
+        await this.#rereadAmounts(orderId, visit);
+      return;
+    }
     if ("saved" in outcome) {
-      this.#noteBillParty(outcome.saved.party);
       if (this.activeTabId !== orderId) return;
+      this.#noteBillParty(outcome.saved.party);
       this.tabRevision = outcome.saved.revision;
       await this.#rereadAmounts(orderId, visit);
       return;
@@ -10523,12 +12445,12 @@ export class TillApp extends LitElement {
       const question = limited(3_000);
       try {
         const answer = await Promise.race([
-          this.api.askSaleDeadEnds([change.saleLine], orderId),
+          composition.api.askSaleDeadEnds([change.saleLine], orderId),
           pause(question.signal).then(() => undefined),
         ]);
-        if (left()) return;
+        if (!identity() || left()) return;
         if (answer !== undefined && answer.deadEnds.length > 0) {
-          this.editDeadEnds = { answer, change, orderId, visit };
+          this.editDeadEnds = { answer, change, composition, orderId, visit };
           return;
         }
       } catch {
@@ -10537,15 +12459,23 @@ export class TillApp extends LitElement {
         question.done();
       }
     }
+    if (!identity()) return;
     this.errorKey =
-      code === "working_order.out_of_date"
-        ? "held.changed_elsewhere"
-        : code === "bill.received_exceeds_total"
-          ? billWriteError(outcome.error, true)
-          : lineWriteError(outcome.error);
+      code !== undefined && DRAFT_REFUSALS.has(code)
+        ? draftRefusalError({
+            refused: code,
+            ownerName: (outcome.error as { ownerName?: string }).ownerName,
+          })
+        : code === "working_order.out_of_date"
+          ? "held.changed_elsewhere"
+          : code === "bill.received_exceeds_total"
+            ? billWriteError(outcome.error, true)
+            : lineWriteError(outcome.error);
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
     else await this.#loadTabLines();
+    if (!identity()) return;
+    if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
@@ -10558,11 +12488,7 @@ export class TillApp extends LitElement {
 
   #syncEditDeadEnds(): void {
     const pending = this.editDeadEnds;
-    if (
-      pending === null ||
-      this.activeTabId !== pending.orderId ||
-      this.#hasLeftOrder(pending.orderId, pending.visit)
-    ) {
+    if (pending === null || !this.#editDeadEndsCurrent(pending)) {
       this.#releaseEditDeadEnds();
       return;
     }
@@ -10589,6 +12515,7 @@ export class TillApp extends LitElement {
     return (
       this.isConnected &&
       this.editDeadEnds?.change === pending.change &&
+      this.#billCompositionCurrent(pending.composition) &&
       this.activeTabId === pending.orderId &&
       !this.#hasLeftOrder(pending.orderId, pending.visit)
     );
@@ -10625,12 +12552,7 @@ export class TillApp extends LitElement {
 
   #renderEditDeadEnds(): TemplateResult | typeof nothing {
     const pending = this.editDeadEnds;
-    if (
-      pending === null ||
-      this.activeTabId !== pending.orderId ||
-      this.#hasLeftOrder(pending.orderId, pending.visit)
-    )
-      return nothing;
+    if (pending === null || !this.#editDeadEndsCurrent(pending)) return nothing;
     return html`${keyed(
       pending.change,
       html`<wt-dialog
@@ -10751,34 +12673,44 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * The guests move off all their tables to the one chosen, which becomes {@link activeTableId}. At a
-   * table another party held, they are now that party: the screen follows them to its main bill, or
-   * the bill {@link billToOpen} picks, and says so when bills asked to merge stayed apart. Once the
-   * floor is read again after the answer, none of this happens if the waiter has left the party
-   * ({@link #hasLeftParty}); and nothing is said about bills kept apart, then or later, once the
-   * waiter has left the order and either has not come back to it or a table open is under way
-   * ({@link #leftSince}).
-   */
   async #onMoveGuests(event: Event): Promise<void> {
-    const { toTableId, bills } = (
-      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate" }>
+    const { toTableId, bills, prompt } = (
+      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate"; prompt?: object }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
     const visit = this.#orderVisit;
     this.errorKey = undefined;
-    const revisions = this.#tableActionRevisions(party, toTableId);
+    const asked = await (prompt === undefined
+      ? this.#relocationEdits(
+          this.partyBills.map((bill) => bill.workingOrderId),
+          this.tables.find((table) => table.id === toTableId)?.party ?? null,
+        )
+      : this.#relocationPrompts.get(prompt));
+    if (asked == null || !this.#billCompositionUnchanged(asked.source)) return;
+    const revisions = {
+      expectedPartyRevision: asked.source.revisions.expectedPartyRevision!,
+      ...otherPartyRead(asked.target, asked.source.partyId),
+      expectedEdits: asked.expectedEdits,
+    };
+    const live = () =>
+      this.api === asked.source.api &&
+      this.#operatorSession === asked.source.session &&
+      !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await this.api.moveGuests(party.id, toTableId, bills, revisions);
+      result = await asked.source.api.moveGuests(party.id, toTableId, bills, revisions);
     } catch (error) {
-      await this.#onTableRefusal(error);
+      if (!live()) return;
+      await this.#onRelocationRefusal(error, live);
       return;
     }
+    if (!live()) return;
+    await this.#refreshBillDraft();
+    if (!live()) return;
     await this.#reloadTables();
-    if (this.#hasLeftParty(party.id, sent)) return;
+    if (!live()) return;
     this.activeTableId = toTableId;
     this.#rememberOrderParty();
     const followed = this.orderParty?.id;
@@ -10795,33 +12727,44 @@ export class TillApp extends LitElement {
     this.#sayBillsKeptApart(revisions, bills, result);
   }
 
-  /**
-   * The bill on screen moves whole to another table or to the counter, in the zone the counter's
-   * orders are made in. The screen stays with this party, on its main bill or {@link billToOpen}'s,
-   * and goes back to the floor when the party has no bill left. A failed read of the floor after the
-   * move keeps the last floor and the party on screen. Once the waiter has left the bill, the move
-   * opens no other bill, does not go back to the floor and says nothing about bills kept apart.
-   */
   async #onMoveBill(event: Event): Promise<void> {
-    const { to, bills } = (event as CustomEvent<MoveBillDetail>).detail;
+    const { to, bills, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
     const billId = this.activeTabId;
     const party = this.orderParty;
     if (billId === undefined || party === null) return;
     const visit = this.#orderVisit;
     this.errorKey = undefined;
     const toTable = "tableId" in to;
-    const revisions: MoveBillRevisions = {
-      ...this.#billRevisions(),
-      ...(toTable ? otherPartyRead(to.seated, party.id) : {}),
+    const asked = await (prompt === undefined
+      ? this.#relocationEdits([billId], toTable ? to.seated : null)
+      : this.#relocationPrompts.get(prompt));
+    if (asked == null || !this.#billCompositionUnchanged(asked.source)) return;
+    const revisions = {
+      ...asked.source.revisions,
+      ...(toTable ? otherPartyRead(asked.target, asked.source.partyId) : {}),
+      expectedEdits: asked.expectedEdits,
     };
+    const live = () => this.#billCompositionCurrent(asked.source);
     let result: MoveBillResult | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const zoneId = toTable
           ? this.tables.find((table) => table.id === to.tableId)?.zoneId
           : this.counterServiceZoneId;
-        if (!(await this.#askStoredDeadEnds(billId, zoneId || undefined))) return;
-        result = await this.api.moveBill(
+        if (
+          !(await this.#askStoredDeadEnds(
+            billId,
+            {
+              api: asked.source.api,
+              expectedEdit: asked.source.expectedEdits.find((edit) => edit.billId === billId)!,
+              current: () => this.#billCompositionUnchanged(asked.source),
+            },
+            zoneId || undefined,
+          ))
+        )
+          return;
+        if (!this.#billCompositionUnchanged(asked.source)) return;
+        result = await asked.source.api.moveBill(
           billId,
           toTable
             ? { tableId: to.tableId }
@@ -10831,16 +12774,22 @@ export class TillApp extends LitElement {
         );
         break;
       } catch (error) {
-        if (attempt === 0 && (error as { code?: string }).code === "station.no_replacement")
+        if (!live()) return;
+        if (
+          attempt === 0 &&
+          (error as { code?: string } | undefined)?.code === "station.no_replacement"
+        )
           continue;
-        await this.#onTableRefusal(error);
+        await this.#onRelocationRefusal(error, live);
         return;
       }
     }
-    if (result === undefined) return;
+    if (result === undefined || !live()) return;
+    await this.#refreshBillDraft();
+    if (!live()) return;
     if (!toTable) void this.#refreshAfterWrite("held", "refresh.held_after_move");
     const floorRead = await this.#refreshFloor();
-    if (this.#hasLeftOrder(billId, visit)) return;
+    if (!live() || this.#hasLeftOrder(billId, visit)) return;
     if (floorRead) this.#rememberOrderParty();
     const { bills: read } = await this.#loadPartyBills();
     if (this.#hasLeftOrder(billId, visit)) return;
@@ -10862,44 +12811,166 @@ export class TillApp extends LitElement {
     return billToOpen(left);
   }
 
-  /**
-   * A counter order, read with no party, moves to a table. The counter stays on screen and says
-   * where it went; a basket holding that order is emptied, since it is now the table's bill.
-   */
-  async #onMoveHeldOrder(event: Event, retried = false): Promise<void> {
-    const { orderId, tableId, seated, bills } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
-    const session = this.#operatorSession;
-    const basket = this.#basketPayload();
-    const generation = this.#store.loadGeneration;
+  readonly #heldRelocationPrompts = new WeakMap<object, Promise<CounterRelocation | null>>();
+
+  #counterRelocationCurrent(asked: CounterRelocation): boolean {
+    return (
+      this.api === asked.api &&
+      this.#operatorSession === asked.session &&
+      this.stage === "order" &&
+      this.screen === asked.screen &&
+      this.activeTabKey === asked.tab &&
+      this.drill === asked.drill &&
+      this.#store.loadGeneration === asked.generation &&
+      this.#basketPayload() === asked.basket
+    );
+  }
+
+  async #onHeldRelocationOpen(event: Event): Promise<void> {
+    event.preventDefault();
+    const { orderId, table, prompt, ready } = (event as CustomEvent<HeldRelocationOpenDetail>)
+      .detail;
+    const opening = {
+      api: this.api,
+      session: this.#operatorSession,
+      generation: this.#store.loadGeneration,
+      basket: this.#basketPayload(),
+      screen: this.screen,
+      tab: this.activeTabKey,
+      drill: this.drill,
+    };
+    const pending = this.#counterRelocationEdits(orderId, table.id, table.party);
+    this.#heldRelocationPrompts.set(prompt, pending);
+    const asked = await pending;
+    if (asked !== null && this.#counterRelocationCurrent(asked)) ready();
+    else if (
+      this.api === opening.api &&
+      this.#operatorSession === opening.session &&
+      this.screen === opening.screen &&
+      this.activeTabKey === opening.tab &&
+      this.drill === opening.drill &&
+      this.#store.id === orderId &&
+      (this.#store.loadGeneration !== opening.generation ||
+        this.#basketPayload() !== opening.basket)
+    ) {
+      this.#replaceBasket(() => this.#onHeldRelocationOpen(event));
+    }
+  }
+
+  async #counterRelocationEdits(
+    orderId: string,
+    tableId: string,
+    target: SeatedRead,
+  ): Promise<CounterRelocation | null> {
+    const asked: CounterRelocation = {
+      api: this.api,
+      session: this.#operatorSession,
+      generation: this.#store.loadGeneration,
+      basket: this.#basketPayload(),
+      orderId,
+      tableId,
+      target: target == null ? target : { id: target.id, revision: target.revision },
+      expectedEdits: [],
+      screen: this.screen,
+      tab: this.activeTabKey,
+      drill: this.drill,
+    };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const bill = await asked.api.getFindBill(orderId, { signal: limit.signal });
+      if (!this.#counterRelocationCurrent(asked)) return null;
+      if (
+        bill.workingOrderId !== orderId ||
+        bill.partyId !== null ||
+        bill.edit == null ||
+        bill.edit.billId !== orderId
+      )
+        throw { code: "draft.out_of_date" };
+      const edits = [bill.edit];
+      if (target != null) {
+        const destination = await asked.api.listDrafts(target.id, { signal: limit.signal });
+        edits.push(...destination.billEdits);
+      }
+      if (!this.#counterRelocationCurrent(asked)) return null;
+      asked.expectedEdits = edits
+        .map(({ billId, editorVersion, draftId, draftRevision }) => ({
+          billId,
+          editorVersion,
+          draftId,
+          draftRevision,
+        }))
+        .sort((a, b) => (a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0));
+      if (
+        new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
+      )
+        throw { code: "draft.out_of_date" };
+      return asked;
+    } catch (error) {
+      if (this.#counterRelocationCurrent(asked)) {
+        const code = (error as { code?: string } | undefined)?.code;
+        this.errorKey =
+          code === "draft.out_of_date" || code === "draft.taken_over"
+            ? { code }
+            : "table.reread_failed";
+      }
+      return null;
+    } finally {
+      limit.done();
+    }
+  }
+
+  async #onMoveHeldOrder(
+    event: Event,
+    retried = false,
+    original?: CounterRelocation,
+  ): Promise<void> {
+    const { orderId, tableId, seated, bills, prompt } = (event as CustomEvent<MoveHeldOrderDetail>)
+      .detail;
+    const asked =
+      original ??
+      (await (prompt === undefined
+        ? this.#counterRelocationEdits(orderId, tableId, seated)
+        : this.#heldRelocationPrompts.get(prompt)));
+    if (
+      asked == null ||
+      !this.#counterRelocationCurrent(asked) ||
+      asked.orderId !== orderId ||
+      asked.tableId !== tableId
+    )
+      return;
+    this.errorKey = undefined;
+    const live = () => this.#counterRelocationCurrent(asked);
     const moveTo = this.tables.find((table) => table.id === tableId);
     const label = moveTo === undefined ? "" : shownUnder(moveTo);
-    this.errorKey = undefined;
     try {
-      const zoneId = this.tables.find((table) => table.id === tableId)?.zoneId;
-      if (!(await this.#askStoredDeadEnds(orderId, zoneId ?? undefined))) return;
-      if (session !== this.#operatorSession) return;
-      await this.api.moveBill(orderId, { tableId }, bills, {
+      if (
+        !(await this.#askStoredDeadEnds(
+          orderId,
+          { api: asked.api, expectedEdit: null, current: live },
+          moveTo?.zoneId ?? undefined,
+        ))
+      )
+        return;
+      if (!live()) return;
+      await asked.api.moveBill(orderId, { tableId }, bills, {
         partyId: null,
-        ...otherPartyRead(seated, null),
+        ...otherPartyRead(asked.target, null),
+        expectedEdits: asked.expectedEdits,
       });
-      if (session !== this.#operatorSession) return;
+      if (!live()) return;
     } catch (error) {
-      if (session !== this.#operatorSession) return;
-      if (!retried && (error as { code?: string }).code === "station.no_replacement") {
-        await this.#onMoveHeldOrder(event, true);
+      if (!live()) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      if (!retried && code === "station.no_replacement") {
+        await this.#onMoveHeldOrder(event, true, asked);
         return;
       }
-      await this.#onTableRefusal(error, () => session === this.#operatorSession);
-      if (session !== this.#operatorSession) return;
-      // A failed re-read keeps the list it had; the banner says the refusal.
-      await this.#refreshHeldOrders().catch(() => undefined);
+      if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
+      else await this.#onTableRefusal(error, live);
+      if (live()) await this.#refreshHeldOrders().catch(() => undefined);
       return;
     }
-    if (
-      this.#store.id === orderId &&
-      generation === this.#store.loadGeneration &&
-      basket === this.#basketPayload()
-    ) {
+    if (this.#store.id === orderId) {
       this.#dismissStationChoices();
       this.#clearBasket();
     }
@@ -10908,29 +12979,42 @@ export class TillApp extends LitElement {
     await this.#refreshAfterWrite("held", "refresh.held_after_move");
   }
 
-  /** The chosen table joins the party; a party seated there joins it with all its tables. If the
-   * waiter has left the party ({@link #hasLeftParty}) by the time the server answers, nothing is
-   * read or said; nothing is said about bills kept apart, then or later, once the waiter has left
-   * the order and either has not come back to it or a table open is under way
-   * ({@link #leftSince}). */
   async #onJoinTables(event: Event): Promise<void> {
-    const { tableId, bills } = (
-      event as CustomEvent<{ tableId: string; bills: "merge" | "separate" }>
+    const { tableId, bills, prompt } = (
+      event as CustomEvent<{ tableId: string; bills: "merge" | "separate"; prompt?: object }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
     const visit = this.#orderVisit;
     this.errorKey = undefined;
-    const revisions = this.#tableActionRevisions(party, tableId);
+    const asked = await (prompt === undefined
+      ? this.#relocationEdits(
+          this.partyBills.map((bill) => bill.workingOrderId),
+          this.tables.find((table) => table.id === tableId)?.party ?? null,
+        )
+      : this.#relocationPrompts.get(prompt));
+    if (asked == null || !this.#billCompositionUnchanged(asked.source)) return;
+    const revisions = {
+      expectedPartyRevision: asked.source.revisions.expectedPartyRevision!,
+      ...otherPartyRead(asked.target, asked.source.partyId),
+      expectedEdits: asked.expectedEdits,
+    };
+    const live = () =>
+      this.api === asked.source.api &&
+      this.#operatorSession === asked.source.session &&
+      !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await this.api.joinTables(party.id, tableId, bills, revisions);
+      result = await asked.source.api.joinTables(party.id, tableId, bills, revisions);
     } catch (error) {
-      await this.#onTableRefusal(error);
+      if (!live()) return;
+      await this.#onRelocationRefusal(error, live);
       return;
     }
-    if (this.#hasLeftParty(party.id, sent)) return;
+    if (!live()) return;
+    await this.#refreshBillDraft();
+    if (!live()) return;
     await this.#reloadOrder();
     if (this.#hasLeftParty(result.partyId, sent) || this.#leftSince(visit)) return;
     this.#sayBillsKeptApart(revisions, bills, result);
@@ -10946,26 +13030,45 @@ export class TillApp extends LitElement {
       this.errorKey = "table.bills_kept_separate";
   }
 
-  /**
-   * The table leaves the party with the chosen bill, or none, and a new party starts there. The
-   * screen stays with this party: at another of its tables when the open one left, and on its main
-   * bill when the bill on screen left with the table. With no main bill, the party's bills are read
-   * and {@link billToOpen} picks one, unless the waiter has left the party ({@link #hasLeftParty})
-   * by the time they answer. A refusal of one side's count goes back to the screen's guests window
-   * under that side's field, unless the waiter has left the party since; any other is said on the
-   * banner.
-   */
+  // Refreshing the view cannot replace the bill observation a guests dialog opened with.
+  readonly #splitTablePrompts = new WeakMap<object, BillComposition | null>();
+
+  #onSplitTableOpen(event: Event): void {
+    const { billId, prompt } = (
+      event as CustomEvent<Pick<SplitTableDetail, "billId"> & { prompt: object }>
+    ).detail;
+    this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
+  }
+
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId, guests } = (event as CustomEvent<SplitTableDetail>).detail;
+    const { tableId, billId, guests, prompt } = (event as CustomEvent<SplitTableDetail>).detail;
     const party = this.orderParty;
     if (party === null) return;
-    const sent = this.#sentNow();
+    const asked =
+      prompt === undefined
+        ? this.#billComposition(billId === null ? [] : [billId])
+        : this.#splitTablePrompts.get(prompt);
+    if (asked == null) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    if (!this.#billCompositionUnchanged(asked)) return;
+    const live = () => this.#billCompositionCurrent(asked);
+    const sent = asked.sent;
     const visit = this.#orderVisit;
     this.errorKey = undefined;
     this.splitRefusal = null;
     try {
-      await this.api.splitTable(party.id, tableId, billId, party.revision, guests);
+      await asked.api.splitTable(
+        party.id,
+        tableId,
+        billId,
+        asked.revisions.expectedPartyRevision!,
+        asked.expectedEdits,
+        guests,
+      );
     } catch (error) {
+      if (!live()) return;
       const refused = error as { code?: string; field?: string } | undefined;
       const side = refusedSplitSide(refused);
       if (side !== undefined) {
@@ -10977,26 +13080,38 @@ export class TillApp extends LitElement {
             leaving: guestField(guests.leaving),
             field: side,
             message: t("seat.guest_count_invalid"),
+            ...(prompt === undefined ? {} : { prompt }),
           };
         return;
       }
-      await this.#onTableRefusal(error);
+      if (refused?.code === "draft.out_of_date" || refused?.code === "draft.taken_over")
+        this.errorKey = { code: refused.code };
+      else await this.#onTableRefusal(error, live);
+      if (live()) await this.#refreshBillDraft();
       return;
     }
+    if (!live()) return;
     if (this.activeTableId === tableId)
       this.activeTableId = party.tableIds.find((id) => id !== tableId);
     await this.#reloadTables();
+    if (!live()) return;
     this.#rememberOrderParty();
     if (billId !== null && this.activeTabId === billId) {
       const main = this.orderParty?.mainBillId ?? null;
       if (main !== null) this.activeTabId = main;
       else {
         const { bills: read } = await this.#loadPartyBills();
-        if (this.#hasLeftParty(party.id, sent)) return;
+        if (!live()) return;
         this.activeTabId = billToOpen(read ?? []);
       }
     }
     await this.#loadLinesAndBills();
+    if (
+      this.api === asked.api &&
+      asked.session === this.#operatorSession &&
+      !this.#hasLeftParty(party.id, sent)
+    )
+      await this.#refreshBillDraft();
   }
 
   /** A refusal of the name itself goes back to the screen's field, unless the waiter has left the
@@ -11067,17 +13182,128 @@ export class TillApp extends LitElement {
     await this.#loadPartyBills();
   }
 
+  async #onRelocationRefusal(error: unknown, live: () => boolean): Promise<void> {
+    if (!live()) return;
+    const code = (error as { code?: string } | undefined)?.code;
+    if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
+    else await this.#onTableRefusal(error, live);
+    if (live()) await this.#refreshBillDraft();
+  }
+
+  readonly #relocationPrompts = new WeakMap<object, Promise<TableRelocation | null>>();
+
+  async #onRelocationOpen(event: Event): Promise<void> {
+    event.preventDefault();
+    const { verb, table, prompt, ready } = (event as CustomEvent<TableRelocationOpenDetail>).detail;
+    const ids =
+      verb === "move-bill"
+        ? this.activeTabId === undefined
+          ? []
+          : [this.activeTabId]
+        : this.partyBills.map((bill) => bill.workingOrderId);
+    const pending = this.#relocationEdits(ids, table?.party ?? null);
+    this.#relocationPrompts.set(prompt, pending);
+    const asked = await pending;
+    if (asked !== null && this.#billCompositionUnchanged(asked.source)) ready();
+  }
+
+  async #relocationEdits(
+    sourceIds: string[],
+    target: SeatedRead = null,
+  ): Promise<TableRelocation | null> {
+    const source = this.#billComposition(sourceIds);
+    if (source === null) return null;
+    let destination: BillEditExpected[] = [];
+    if (target !== undefined && target !== null && target.id !== source.partyId) {
+      try {
+        await this.#savesOutFor(target.id);
+        if (!this.#billCompositionUnchanged(source)) return null;
+        const snapshot = await source.api.listDrafts(target.id);
+        destination = snapshot.billEdits.map(
+          ({ billId, editorVersion, draftId, draftRevision }) => ({
+            billId,
+            editorVersion,
+            draftId,
+            draftRevision,
+          }),
+        );
+      } catch {
+        if (this.#billCompositionCurrent(source)) this.errorKey = "table.reread_failed";
+        return null;
+      }
+    }
+    if (!this.#billCompositionUnchanged(source)) return null;
+    const expectedEdits = [...source.expectedEdits, ...destination].sort((a, b) =>
+      a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0,
+    );
+    if (new Set(expectedEdits.map((edit) => edit.billId)).size !== expectedEdits.length) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return null;
+    }
+    return { source, expectedEdits, target };
+  }
+
+  #billComposition(billIds: string[]): BillComposition | null {
+    const party = this.orderParty;
+    const billId = this.activeTabId;
+    if (party === null || billId === undefined) return null;
+    const expectedEdits: BillEditExpected[] = [];
+    for (const id of [...new Set(billIds)].sort()) {
+      const edit = this.#billChoiceEdit(id);
+      if (edit === null) return null;
+      expectedEdits.push(edit);
+    }
+    return {
+      api: this.api,
+      session: this.#operatorSession,
+      visit: this.#orderVisit,
+      sync: this.#draftSync,
+      sent: this.#sentNow(),
+      partyId: party.id,
+      billId,
+      revisions: this.#billRevisions(),
+      expectedEdits,
+    };
+  }
+
+  #billCompositionCurrent(asked: BillComposition): boolean {
+    return (
+      this.api === asked.api &&
+      this.#operatorSession === asked.session &&
+      this.#draftSync === asked.sync &&
+      !this.#hasLeftParty(asked.partyId, asked.sent) &&
+      this.orderParty?.id === asked.partyId &&
+      this.activeTabId === asked.billId
+    );
+  }
+
+  #billCompositionUnchanged(asked: BillComposition): boolean {
+    if (!this.#billCompositionCurrent(asked) || this.#orderVisit !== asked.visit) return false;
+    if (asked.expectedEdits.every((edit) => this.#billChoiceCurrent(edit))) return true;
+    this.errorKey = { code: "draft.out_of_date" };
+    return false;
+  }
+
   async #onMergeBills(event: Event): Promise<void> {
     const { fromBillId } = (event as CustomEvent<{ fromBillId: string }>).detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
+    const asked = this.#billComposition([this.activeTabId, fromBillId]);
+    if (asked === null) return;
     try {
-      await this.api.mergeBills(this.activeTabId, fromBillId, this.#billRevisions());
+      await asked.api.mergeBills(asked.billId, fromBillId, {
+        ...asked.revisions,
+        expectedEdits: asked.expectedEdits,
+      });
     } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
       await this.#onBillPairRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
+    if (!this.#billCompositionCurrent(asked)) return;
     await this.#reloadOrder();
+    if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
   async #askDifferentPeople(proceed: () => Promise<void>): Promise<boolean> {
@@ -11122,84 +13348,571 @@ export class TillApp extends LitElement {
     await pending.proceed();
   }
 
-  async #onTransferLines(event: Event, confirmed = false): Promise<void> {
+  async #onTransferLines(event: Event, confirmed?: BillComposition): Promise<void> {
     const { toBillId, transfers } = (
       event as CustomEvent<{ toBillId: string; transfers: TabTransfer[] }>
     ).detail;
     if (this.activeTabId === undefined || transfers.length === 0) return;
-    if (!confirmed && (await this.#askDifferentPeople(() => this.#onTransferLines(event, true))))
+    const asked = confirmed ?? this.#billComposition([this.activeTabId, toBillId]);
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    if (
+      confirmed === undefined &&
+      (await this.#askDifferentPeople(() => this.#onTransferLines(event, asked)))
+    )
       return;
+    if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      await this.api.transferItems(this.activeTabId, toBillId, transfers, this.#billRevisions());
+      await asked.api.transferItems(asked.billId, toBillId, transfers, {
+        ...asked.revisions,
+        expectedEdits: asked.expectedEdits,
+      });
     } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
       await this.#onBillPairRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
+    if (!this.#billCompositionCurrent(asked)) return;
     await this.#reloadOrder();
+    if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** Put the chosen items on a new bill of the party, and show that bill unless the waiter has left
-   * the party since ({@link #hasLeftParty}). */
-  async #onSplitLines(event: Event, confirmed = false): Promise<void> {
+  async #onSplitLines(event: Event, confirmed?: BillComposition): Promise<void> {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
-    const billId = this.activeTabId;
-    const partyId = this.orderParty?.id;
-    if (billId === undefined) return;
-    if (!confirmed && (await this.#askDifferentPeople(() => this.#onSplitLines(event, true))))
+    if (this.activeTabId === undefined) return;
+    const asked = confirmed ?? this.#billComposition([this.activeTabId]);
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    if (
+      confirmed === undefined &&
+      (await this.#askDifferentPeople(() => this.#onSplitLines(event, asked)))
+    )
       return;
-    const sent = this.#sentNow();
+    if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      const split = await this.api.splitBill(billId, transfers, this.#billRevisions());
-      if (this.#hasLeftParty(partyId, sent)) return;
+      const split = await asked.api.splitBill(asked.billId, transfers, {
+        ...asked.revisions,
+        expectedEdit: asked.expectedEdits[0]!,
+      });
+      if (!this.#billCompositionCurrent(asked)) return;
       this.activeTabId = split.billId;
     } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string }).code;
       if (code === "tab.transfer_modifier_line") this.errorKey = "table.split_modifier_error";
       else if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
       else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
       else await this.#onTableRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
     await this.#reloadOrder();
   }
 
-  /** Finish frees the party's tables, or leaves them to clear. Unless the order's party has changed
-   * or the operator session has ended (a logout or a server switch) since, the finished party is
-   * closed: the floor comes next, except when the waiter has left the order and either has not come
-   * back to it or a table open is under way ({@link #leftSince}); then the screen stays where it is
-   * and only the floor is read again. A bill still unpaid (with the offer to take its payment), or
-   * one still holding money, is said on the screen and the party's bills read again, unless the
-   * waiter has left the party since ({@link #hasLeftParty}). At finish, `bill.payments_received`
-   * means an open bill with no items left still holds money (`finishTable`,
-   * apps/server/src/parties.ts), so it gets its own words rather than the merge and transfer ones. */
+  #finishCurrent(composition: BillComposition): boolean {
+    return (
+      this.isConnected &&
+      this.#billCompositionCurrent(composition) &&
+      this.#orderVisit === composition.visit
+    );
+  }
+
+  #closeFinishTable(): void {
+    this.#finishOpening?.controller.abort();
+    this.#finishOpening = undefined;
+    this.finishingTable = null;
+  }
+
   async #onFinishTable(): Promise<void> {
     const party = this.orderParty;
-    if (party === null) return;
-    const visit = this.#orderVisit;
-    const sent = this.#sentNow();
+    if (party === null || this.#finishOpening !== undefined || this.finishingTable !== null) return;
+    const asked = this.#billComposition(this.partyBills.map((bill) => bill.workingOrderId));
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    const opening = { composition: asked, controller: new AbortController() };
+    this.#finishOpening = opening;
+    const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     this.errorKey = undefined;
     this.finishRefused = false;
     try {
-      await this.api.finishTable(party.id, party.revision);
+      await asked.api.finishTable(party.id, party.revision, asked.expectedEdits);
     } catch (error) {
-      if ((error as { code?: string } | undefined)?.code === "party.bill_outstanding") {
-        if (this.#hasLeftParty(party.id, sent)) return;
+      if (!live() || this.#hasLeftParty(party.id, asked.sent)) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code === "party.unserved_dishes") {
+        await this.#readFinishDishes(opening, party.revision, error as { dishes: UnservedDish[] });
+        return;
+      }
+      if (code === "party.bill_outstanding") {
         this.finishRefused = true;
         await this.#loadPartyBills();
         return;
       }
       if (isPaymentsReceived(error)) {
-        if (this.#hasLeftParty(party.id, sent)) return;
         this.errorKey = "table.finish_bill_holds_money";
         await this.#loadPartyBills();
         return;
       }
-      await this.#onTableRefusal(error);
+      if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
+      else await this.#onTableRefusal(error, live);
+      if (live() && !this.#hasLeftParty(party.id, asked.sent)) await this.#refreshBillDraft();
+      return;
+    } finally {
+      if (this.#finishOpening === opening) this.#finishOpening = undefined;
+    }
+    if (live()) await this.#onTableClosed(party.id, asked.visit, asked.sent);
+  }
+
+  async #readFinishDishes(
+    opening: { composition: BillComposition; controller: AbortController; reading?: boolean },
+    partyRevision: number,
+    observation: { dishes: UnservedDish[] },
+  ): Promise<void> {
+    opening.reading = true;
+    const asked = opening.composition;
+    const current = () => this.#finishOpening === opening && this.#finishCurrent(asked);
+    const refunds: Record<string, string> = {};
+    const receipts: FinishingTable["receipts"] = [];
+    const budgets = new Map<string, ReturnType<typeof decimal>>();
+    let refundAtTill = false;
+    try {
+      for (const dish of observation.dishes) {
+        const consent = await asked.api.getCancellation(asked.partyId, dish.lineId, {
+          signal: opening.controller.signal,
+        });
+        if (!current()) return;
+        if (
+          consent.billId !== dish.billId ||
+          consent.billRevision !== dish.billRevision ||
+          consent.revision !== partyRevision ||
+          !sameFinishContext(consent.context, dish.context)
+        )
+          throw { code: "tab.cancel_context_changed" };
+        if (
+          consent.saleId === undefined ||
+          consent.refundValue === undefined ||
+          this.#tenderRefundSession === undefined
+        )
+          continue;
+        if (!budgets.has(consent.saleId)) {
+          const payments = await this.#cancellationTenders(
+            asked.api,
+            consent,
+            opening.controller.signal,
+          );
+          if (!current()) return;
+          const available = payments.filter((row) => this.#cancellationPaymentAvailable(row));
+          const eligible = available.filter((row) => this.#refundMethodAllowed(row));
+          refundAtTill ||= available.length > 0 && eligible.length === 0;
+          budgets.set(
+            consent.saleId,
+            sumDecimals(eligible.map((row) => decimal(row.appliedRemaining))),
+          );
+        }
+        const value = consent.refundValue;
+        if (compareDecimal(decimal(value.quantity), decimal("0")) <= 0) continue;
+        const cancelled = decimal(
+          consent.context.components.find((row) => row.lineId === dish.lineId)!.cancelledQuantity,
+        );
+        const share = (quantity: ReturnType<typeof decimal>) =>
+          divideDecimal(
+            multiplyDecimal(decimal(value.gross), quantity),
+            decimal(value.quantity),
+            2,
+          );
+        const gross = subtractDecimal(
+          share(addDecimal(cancelled, decimal(dish.quantity))),
+          share(cancelled),
+        );
+        const budget = budgets.get(consent.saleId)!;
+        const amount = compareDecimal(gross, budget) < 0 ? gross : budget;
+        if (compareDecimal(amount, decimal("0")) <= 0) continue;
+        refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
+        budgets.set(consent.saleId, subtractDecimal(budget, amount));
+        receipts.push({
+          saleId: consent.saleId,
+          workingOrderId: dish.billId,
+          lineId: dish.lineId,
+          label: this.#paymentBillLabel(dish.billId) ?? dish.name,
+        });
+      }
+      if (!current() || !this.#billCompositionUnchanged(asked)) return;
+      this.finishingTable = {
+        composition: asked,
+        partyRevision,
+        dishes: structuredClone(observation.dishes),
+        refunds,
+        receipts,
+        refundAtTill,
+        reasons: null,
+        reasonsLoading: false,
+        busy: false,
+        refusal: "",
+      };
+      await this.#loadFinishReasons();
+    } catch (error) {
+      if (current())
+        this.errorKey = { code: (error as { code?: string })?.code ?? "server.internal" };
+    }
+  }
+
+  async #loadFinishReasons(): Promise<void> {
+    const open = this.finishingTable;
+    if (open === null || open.busy || open.reasonsLoading || !this.#finishCurrent(open.composition))
+      return;
+    this.finishingTable = { ...open, reasonsLoading: true, refusal: "" };
+    try {
+      const reasons = await open.composition.api.listAdjustmentReasons();
+      if (
+        this.finishingTable?.composition === open.composition &&
+        this.#finishCurrent(open.composition)
+      )
+        this.finishingTable = {
+          ...this.finishingTable,
+          reasons,
+          reasonsLoading: false,
+          refusal: "",
+        };
+    } catch {
+      if (
+        this.finishingTable?.composition === open.composition &&
+        this.#finishCurrent(open.composition)
+      )
+        this.finishingTable = {
+          ...this.finishingTable,
+          reasonsLoading: false,
+          refusal: t("adjust.reasons_error"),
+        };
+    }
+  }
+
+  async #confirmFinishTable(event: CustomEvent<FinishTableChoice>): Promise<void> {
+    event.stopPropagation();
+    const open = this.finishingTable;
+    if (
+      open === null ||
+      open.busy ||
+      open.approval !== undefined ||
+      !this.#finishCurrent(open.composition)
+    )
+      return;
+    if (!open.unconfirmed && !this.#billCompositionUnchanged(open.composition)) {
+      this.finishingTable = { ...open, busy: false, refusal: codeMessage("draft.out_of_date") };
       return;
     }
-    await this.#onTableClosed(party.id, visit, sent);
+    const choices = event.detail.cancellations;
+    if (
+      choices.length !== open.dishes.length ||
+      new Set(choices.map((row) => row.lineId)).size !== choices.length ||
+      open.dishes.some((dish) => {
+        const choice = choices.find((row) => row.lineId === dish.lineId);
+        return (
+          choice === undefined ||
+          choice.quantity !== dish.quantity ||
+          choice.expectedBillRevision !== dish.billRevision ||
+          !sameFinishContext(choice.expectedContext, dish.context) ||
+          (choice.refundHandoff === true && open.refunds[dish.lineId] === undefined)
+        );
+      })
+    )
+      return;
+    const command = open.command ?? {
+      submissionId: crypto.randomUUID(),
+      cancellations: structuredClone(event.detail.cancellations),
+    };
+    if (open.unconfirmed && open.retryApproverId !== undefined) {
+      this.finishingTable = { ...open, command, busy: true, refusal: "" };
+      await this.#askFinishApprover({ ...open, command });
+    } else await this.#sendFinishTable({ ...open, command });
+  }
+
+  async #sendFinishTable(
+    open: FinishingTable,
+    approver?: { personId: string; pin: string },
+  ): Promise<void> {
+    const asked = open.composition;
+    if (!this.#finishCurrent(asked)) return;
+    if (!open.unconfirmed && !this.#billCompositionUnchanged(asked)) {
+      this.finishingTable = {
+        ...open,
+        busy: false,
+        approval: undefined,
+        command: undefined,
+        refusal: codeMessage("draft.out_of_date"),
+      };
+      return;
+    }
+    this.finishingTable = { ...open, busy: true, refusal: "", refusalField: null };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await this.#resend(
+        (signal) =>
+          asked.api.finishTable(
+            asked.partyId,
+            open.partyRevision,
+            asked.expectedEdits,
+            { ...open.command!, ...(approver === undefined ? {} : { approver }) },
+            { signal },
+          ),
+        limit.signal,
+        () => this.#finishCurrent(asked),
+      );
+      if (!this.#finishCurrent(asked)) return;
+      this.#closeFinishTable();
+      const selected = new Set(
+        open.command!.cancellations.filter((row) => row.refundHandoff).map((row) => row.lineId),
+      );
+      const receipts = open.receipts.filter(
+        (row, index, all) =>
+          selected.has(row.lineId) &&
+          all.findIndex((other) => selected.has(other.lineId) && other.saleId === row.saleId) ===
+            index,
+      );
+      await this.#onTableClosed(asked.partyId, asked.visit, asked.sent);
+      if (
+        receipts.length > 0 &&
+        this.isConnected &&
+        this.api === asked.api &&
+        this.#operatorSession === asked.session &&
+        this.orderParty === null
+      ) {
+        this.finishRefunds = {
+          api: asked.api,
+          session: asked.session,
+          visit: this.#orderVisit,
+          tab: this.activeTabKey,
+          receipts,
+          busy: false,
+          refusal: "",
+        };
+        if (receipts.length === 1) await this.#openFinishRefund(receipts[0]!);
+      }
+    } catch (error) {
+      if (!this.#finishCurrent(asked) || this.finishingTable?.composition !== asked) return;
+      const code = (error as { code?: string })?.code ?? "server.internal";
+      if (isPartyOutOfDate(error) || code === "party.not_open") {
+        this.#closeFinishTable();
+        await this.#onTableRefusal(
+          error,
+          () => this.api === asked.api && this.#operatorSession === asked.session,
+        );
+        if (this.#finishCurrent(asked)) await this.#refreshBillDraft();
+      } else if (code === "party.bill_outstanding" || isPaymentsReceived(error)) {
+        this.#closeFinishTable();
+        if (code === "party.bill_outstanding") this.finishRefused = true;
+        else this.errorKey = "table.finish_bill_holds_money";
+        await this.#loadPartyBills();
+      } else if (code === "party.unserved_dishes") {
+        const opening = { composition: asked, controller: new AbortController() };
+        this.#finishOpening = opening;
+        this.finishingTable = null;
+        try {
+          await this.#readFinishDishes(
+            opening,
+            open.partyRevision,
+            error as { dishes: UnservedDish[] },
+          );
+        } finally {
+          if (this.#finishOpening === opening) this.#finishOpening = undefined;
+        }
+      } else if (
+        code === "authorization.not_permitted" &&
+        approver === undefined &&
+        open.command!.cancellations.some((row) => row.refundHandoff)
+      ) {
+        await this.#askFinishApprover(open);
+      } else if (
+        approver !== undefined &&
+        APPROVER_REFUSALS.has(code) &&
+        open.approval !== undefined
+      ) {
+        this.finishingTable = { ...open, busy: false, approval: { ...open.approval, error: code } };
+      } else {
+        const field = refusalField(code, "cancel", false);
+        this.finishingTable = {
+          ...open,
+          busy: false,
+          refusalField: field === "reason" || field === "note" ? field : null,
+          reasons:
+            code === "adjustment.note_required"
+              ? (open.reasons?.map((reason) =>
+                  open.command!.cancellations.some((row) => row.reasonId === reason.id)
+                    ? { ...reason, noteRequired: true }
+                    : reason,
+                ) ?? null)
+              : open.reasons,
+          command: isNetworkFailure(error) ? open.command : undefined,
+          approval: undefined,
+          unconfirmed: isNetworkFailure(error),
+          retryApproverId: isNetworkFailure(error)
+            ? (approver?.personId ?? open.retryApproverId)
+            : undefined,
+          refusal: isNetworkFailure(error) ? t("adjust.unconfirmed") : codeMessage(code),
+        };
+        if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
+      }
+    } finally {
+      limit.done();
+    }
+  }
+
+  async #askFinishApprover(open: FinishingTable): Promise<void> {
+    const asked = open.composition;
+    try {
+      const all = await asked.api.listRefundAuthorizers();
+      if (this.finishingTable?.composition !== asked || !this.#finishCurrent(asked)) return;
+      const authorizers =
+        open.retryApproverId === undefined
+          ? all
+          : all.filter((row) => row.personId === open.retryApproverId);
+      this.finishingTable = { ...open, busy: false, approval: { authorizers, error: null } };
+    } catch {
+      if (this.finishingTable?.composition === asked && this.#finishCurrent(asked))
+        this.finishingTable = {
+          ...open,
+          busy: false,
+          command: open.unconfirmed ? open.command : undefined,
+          refusal: codeMessage("server.internal"),
+        };
+    }
+  }
+
+  async #approveFinishTable(
+    event: CustomEvent<{ personId: string; pin: string }>,
+    offered: FinishingTable,
+  ): Promise<void> {
+    event.stopPropagation();
+    const open = this.finishingTable;
+    if (
+      open === null ||
+      open.composition !== offered.composition ||
+      open.approval === undefined ||
+      open.approval !== offered.approval ||
+      open.busy ||
+      (open.retryApproverId !== undefined && open.retryApproverId !== event.detail.personId)
+    )
+      return;
+    await this.#sendFinishTable(
+      { ...open, approval: { ...open.approval, error: null } },
+      event.detail,
+    );
+  }
+
+  #finishRefundsCurrent(open: NonNullable<TillApp["finishRefunds"]>): boolean {
+    return (
+      this.isConnected &&
+      this.api === open.api &&
+      this.#operatorSession === open.session &&
+      this.#orderVisit === open.visit &&
+      this.activeTabKey === open.tab &&
+      this.orderParty === null
+    );
+  }
+
+  async #openFinishRefund(receipt: FinishingTable["receipts"][number]): Promise<void> {
+    const open = this.finishRefunds;
+    if (open === null || open.busy || !this.#finishRefundsCurrent(open)) return;
+    this.finishRefunds = { ...open, busy: true, refusal: "" };
+    const origin = this.drill;
+    await this.#openHistoricalReceipt(
+      { saleId: receipt.saleId, workingOrderId: receipt.workingOrderId, refundId: null },
+      () =>
+        this.finishRefunds !== null && this.#finishRefundsCurrent(open) && this.drill === origin,
+    );
+    if (this.finishRefunds === null || !this.#finishRefundsCurrent(open)) return;
+    if (
+      this.historicalReceipt?.kind === "invoice" &&
+      this.historicalReceipt.saleId === receipt.saleId
+    ) {
+      const receipts = open.receipts.filter((row) => row.saleId !== receipt.saleId);
+      this.finishRefunds =
+        receipts.length === 0 ? null : { ...open, receipts, busy: false, refusal: "" };
+    } else
+      this.finishRefunds = { ...open, busy: false, refusal: t("find_bill.invoice_load_failed") };
+  }
+
+  #renderFinishTable(): TemplateResult | typeof nothing {
+    const open = this.finishingTable;
+    const handoff = this.finishRefunds;
+    return html`${
+      open === null
+        ? nothing
+        : html`<till-finish-table-dialog
+              .dishes=${open.dishes}
+              .refunds=${open.refunds}
+              .refundAtTill=${open.refundAtTill}
+              .reasons=${open.reasons}
+              .reasonsLoading=${open.reasonsLoading}
+              .busy=${open.busy || open.approval !== undefined}
+              .refusal=${open.refusal}
+              .confirmationLocked=${open.unconfirmed === true}
+              .refusalField=${open.refusalField ?? null}
+              @finish-table-choice=${(event: CustomEvent<FinishTableChoice>) => void this.#confirmFinishTable(event)}
+              @finish-table-reasons=${() => void this.#loadFinishReasons()}
+              @finish-table-close=${() => this.#closeFinishTable()}
+            ></till-finish-table-dialog>
+            ${
+              open.approval === undefined
+                ? nothing
+                : html`<till-supervisor-override-dialog
+                    data-finish-approval
+                    .approverRole=${null}
+                    .authorizers=${open.approval.authorizers}
+                    .error=${open.approval.error}
+                    @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => void this.#approveFinishTable(event, open)}
+                    @override-cancel=${(event: Event) => {
+                      event.stopPropagation();
+                      if (
+                        this.finishingTable?.approval === open.approval &&
+                        !this.finishingTable?.busy
+                      )
+                        this.finishingTable = {
+                          ...open,
+                          approval: undefined,
+                          command: open.unconfirmed ? open.command : undefined,
+                        };
+                    }}
+                  ></till-supervisor-override-dialog>`
+            }`
+    }
+    ${
+      handoff === null || this.drill?.kind === "ticket"
+        ? nothing
+        : html`<wt-dialog
+            ${trackDialog()}
+            .open=${true}
+            .heading=${t("find_page.refund")}
+            .beforeClose=${async () => !this.finishRefunds?.busy}
+            @wt-close=${(event: Event) => {
+              event.stopPropagation();
+              this.finishRefunds = null;
+            }}
+          >
+            <div class="finish-refund-list">
+              ${handoff.receipts.map(
+                (receipt) =>
+                  html`<wt-button
+                    data-finish-refund=${receipt.saleId}
+                    .disabled=${handoff.busy}
+                    .loading=${handoff.busy}
+                    @click=${() => void this.#openFinishRefund(receipt)}
+                    >${receipt.label}</wt-button
+                  >`,
+              )}
+            </div>
+            <wt-form-actions slot="footer" .error=${handoff.refusal}>
+              <wt-button
+                slot="cancel"
+                variant="secondary"
+                .disabled=${handoff.busy}
+                @click=${() => {
+                  if (!this.finishRefunds?.busy) this.finishRefunds = null;
+                }}
+                >${t("action.back")}</wt-button
+              >
+            </wt-form-actions>
+          </wt-dialog>`
+    }`;
   }
 
   /** The party closed by Finish table or an unpaid departure leaves the screen as Finish leaves it. */
@@ -11221,7 +13934,10 @@ export class TillApp extends LitElement {
   #onRecordUnpaidDeparture(): void {
     const party = this.orderParty;
     if (party === null || this.departing !== null) return;
+    const composition = this.#billComposition(this.partyBills.map((bill) => bill.workingOrderId));
+    if (composition === null || !this.#billCompositionUnchanged(composition)) return;
     this.departing = {
+      composition,
       id: ++this.#departings,
       partyId: party.id,
       reason: "",
@@ -11261,8 +13977,8 @@ export class TillApp extends LitElement {
   async #onDepartureContinue(event: Event): Promise<void> {
     const { reason } = (event as CustomEvent<{ reason: string }>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
-    const open = this.departing!;
-    if (open.busy) return;
+    const open = this.departing;
+    if (open === null || open.busy) return;
     await this.#sendDeparture({ ...open, reason });
   }
 
@@ -11271,17 +13987,12 @@ export class TillApp extends LitElement {
     event.stopPropagation();
     const override = (event as CustomEvent<{ personId: string; pin: string }>).detail;
     // The PIN prompt is drawn only over an open departure dialog.
-    const open = this.departing!;
-    if (open.busy) return;
+    const open = this.departing;
+    if (open === null || open.busy) return;
     this.departureApproverError = null;
     await this.#sendDeparture(open, { personId: override.personId, pin: override.pin });
   }
 
-  /**
-   * Each press builds its request from the party as read now; one that gets no answer is sent
-   * again unchanged. On success the table leaves the screen as a finished one does, and the bills
-   * left unpaid are read again.
-   */
   async #sendDeparture(
     open: Departing,
     override?: { personId: string; pin: string },
@@ -11291,10 +14002,14 @@ export class TillApp extends LitElement {
       this.#closeDeparting();
       return;
     }
+    const asked = open.composition;
+    if (!this.#billCompositionUnchanged(asked)) return;
+    const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     const sending: Departing = { ...open, refusal: null, busy: true };
     this.departing = sending;
     const request: UnpaidDepartureRequest = {
-      expectedPartyRevision: party.revision,
+      expectedPartyRevision: asked.revisions.expectedPartyRevision!,
+      expectedEdits: asked.expectedEdits,
       reason: open.reason,
       ...(override === undefined ? {} : { override }),
     };
@@ -11306,12 +14021,13 @@ export class TillApp extends LitElement {
       await this.#resend(
         (signal) => {
           sends++;
-          return this.api.recordUnpaidDeparture(party.id, request, { signal });
+          return asked.api.recordUnpaidDeparture(party.id, request, { signal });
         },
         limit.signal,
-        () => sent.session === this.#operatorSession,
+        live,
       );
     } catch (error) {
+      if (!live()) return;
       // The server closes the party in the departure's own transaction, so a resend that finds it
       // closed most likely follows a first send that was recorded but whose answer was lost.
       if (sends > 1 && refusalOf(error).code === "party.not_open") {
@@ -11324,7 +14040,7 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
     }
-    await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+    if (live()) await this.#onDepartureRecorded(open.id, party.id, visit, sent);
   }
 
   /** The dialog closes and the table leaves the screen as a finished one does. */
@@ -11340,16 +14056,21 @@ export class TillApp extends LitElement {
 
   /** The people who can approve the departure in dialog `id` are read, and their PIN prompt opens. */
   async #askDepartureApprover(id: number): Promise<void> {
+    const open = this.#departingNow(id);
+    if (open === null) return;
+    const current = () =>
+      this.#departingNow(id) !== null && this.#billCompositionCurrent(open.composition);
     try {
-      const approvers = await this.api.listUnpaidDepartureAuthorizers();
+      const approvers = await open.composition.api.listUnpaidDepartureAuthorizers();
       const now = this.#departingNow(id);
-      if (now === null) return;
+      if (now === null || !current()) return;
       this.departing = { ...now, busy: false };
       this.departureApproverError = null;
       this.departureApprovers = approvers;
     } catch {
       const now = this.#departingNow(id);
-      if (now !== null) this.departing = { ...now, refusal: { code: "approvers" }, busy: false };
+      if (now !== null && current())
+        this.departing = { ...now, refusal: { code: "approvers" }, busy: false };
     }
   }
 
@@ -11383,7 +14104,10 @@ export class TillApp extends LitElement {
     }
     this.#closeDepartureApprovers();
     this.departing = { ...now, refusal, busy: false };
-    if (!this.#hasLeftParty(open.partyId, sent)) await this.#loadPartyBills();
+    if (!this.#hasLeftParty(open.partyId, sent)) {
+      await this.#loadPartyBills();
+      if (this.#billCompositionCurrent(open.composition)) await this.#refreshBillDraft();
+    }
   }
 
   /** Cancel and credit, offered on an invoiced bill nothing is paid on: its dialog opens. */
@@ -11689,13 +14413,79 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Charges another bill of the party from the same screen. */
+  #paymentBillLabel(billId: string): string | undefined {
+    const index = shownBills(this.partyBills).findIndex((bill) => bill.workingOrderId === billId);
+    return index < 0 ? undefined : billName(this.orderParty?.displayName ?? "", index);
+  }
+
   async #onTakePayment(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const billId = this.activeTabId;
+    if (this.#draftReady && !(await this.#flushDraft())) return;
+    if (
+      session !== this.#operatorSession ||
+      visit !== this.#orderVisit ||
+      billId !== this.activeTabId
+    )
+      return;
     this.errorKey = undefined;
     this.finishRefused = false;
     this.activeTabId = workingOrderId;
     await this.#loadTabLines();
+  }
+
+  #tableBillEdits(): BillEditExpected[] {
+    if (!this.#draftReady) return [];
+    const ids = new Set([
+      ...(this.activeTabId === undefined ? [] : [this.activeTabId]),
+      ...this.partyBills.map((bill) => bill.workingOrderId),
+      ...(this.currentOrders?.groups.flatMap((group) =>
+        group.rows.map((row) => row.workingOrderId),
+      ) ?? []),
+    ]);
+    return [...ids].sort().flatMap((id) => {
+      const edit = this.#draftSync?.expectedEditFor(id);
+      return edit == null ? [] : [edit];
+    });
+  }
+
+  #billChoiceEdit(billId: string): BillEditExpected | null {
+    const sync = this.#draftSync;
+    const edit =
+      sync?.partyId === this.orderParty?.id && this.#draftReady
+        ? sync?.expectedEditFor(billId)
+        : null;
+    if (edit == null) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return null;
+    }
+    return edit;
+  }
+
+  #billChoiceCurrent(expected: BillEditExpected): boolean {
+    const current = this.#billChoiceEdit(expected.billId);
+    return (
+      current !== null &&
+      current.editorVersion === expected.editorVersion &&
+      current.draftId === expected.draftId &&
+      current.draftRevision === expected.draftRevision
+    );
+  }
+
+  #billChoiceMatches(expected: BillEditExpected): boolean {
+    const sync = this.#draftSync;
+    const current =
+      this.#draftReady && sync?.partyId === this.orderParty?.id
+        ? sync?.expectedEditFor(expected.billId)
+        : undefined;
+    return (
+      current != null &&
+      current.editorVersion === expected.editorVersion &&
+      current.draftId === expected.draftId &&
+      current.draftRevision === expected.draftRevision
+    );
   }
 
   #onChooseBillInvoice(event: Event): void {
@@ -11709,11 +14499,15 @@ export class TillApp extends LitElement {
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
     const partyId = this.orderParty?.id;
     if (bill?.revision !== revision || partyId === undefined) return;
+    const expectedEdit = this.#billChoiceEdit(workingOrderId);
+    if (expectedEdit === null) return;
     const target = {
       orderId: workingOrderId,
       revision,
       partyId,
       session: this.#operatorSession,
+      expectedEdit,
+      api: this.api,
     };
     this.invoiceRecipientBill = target;
     this.invoiceRecipientOrderId = undefined;
@@ -11730,18 +14524,24 @@ export class TillApp extends LitElement {
     complete: () => boolean,
   ): Promise<void> {
     const bill = this.invoiceRecipientBill;
-    if (bill === undefined || this.invoiceRecipientSaving) return;
+    if (bill === undefined || this.invoiceRecipientSaving || bill.api !== this.api) return;
     const lifetime = this.#invoiceRecipientLifetime;
+    let writeStarted = false;
     const current = () =>
       this.isConnected &&
       this.#invoiceRecipientLifetime === lifetime &&
       this.invoiceRecipientBill === bill &&
-      this.#operatorSession === bill.session;
+      this.api === bill.api &&
+      this.#operatorSession === bill.session &&
+      (!writeStarted || this.#billChoiceMatches(bill.expectedEdit));
     this.invoiceRecipientSaving = true;
     try {
+      if (!this.#billChoiceCurrent(bill.expectedEdit)) throw { code: "draft.out_of_date" };
+      writeStarted = true;
       const saved = await this.api.setOrderInvoiceChoice(bill.orderId, {
         revision: bill.revision,
         ...choice,
+        expectedEdit: bill.expectedEdit,
       });
       if (!current()) return;
       const close = complete();
@@ -11822,6 +14622,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#resetPartylessDraft();
     this.leave.forceReset();
+    this.#candidateScope = undefined;
     this.#partylessScope = undefined;
     this.#basketScope = undefined;
     this.#syncBasketDraft();
@@ -11872,8 +14673,14 @@ export class TillApp extends LitElement {
   async #onPayTab(event: Event): Promise<void> {
     if (this.submitting || this.activeTabId === undefined) return;
     const id = this.activeTabId;
+    if (this.#unansweredPayments.get(id)?.unconfirmed === true) {
+      this.errorKey = "bill_pay.unconfirmed";
+      return;
+    }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
-    if (bill !== undefined && paidInPart(bill)) {
+    const key = id;
+    const unanswered = this.#unansweredWholePayments.get(key);
+    if (unanswered === undefined && bill !== undefined && paidInPart(bill)) {
       this.#sayBillPayments(bill.outstanding);
       return;
     }
@@ -11884,36 +14691,63 @@ export class TillApp extends LitElement {
     let paidMeanwhile = false;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
+    const api = this.api;
+    let payment = unanswered;
     try {
       if (
-        !(await this.#flushPartyKitchenNote()) ||
+        (unanswered === undefined && !(await this.#flushDraft())) ||
         visit !== this.#orderVisit ||
         session !== this.#operatorSession ||
+        api !== this.api ||
+        id !== this.activeTabId ||
+        (unanswered === undefined && !(await this.#flushPartyKitchenNote())) ||
+        visit !== this.#orderVisit ||
+        session !== this.#operatorSession ||
+        api !== this.api ||
         id !== this.activeTabId
       )
         return;
-      // The bill's id is the idempotency key on both paths, so a retry replays the first answer.
-      this.result =
-        guests === undefined
-          ? presented
-            ? await this.api.collectOrder(id, tender)
-            : await this.api.recordSale([], tender, id)
-          : presented
-            ? await this.api.collectOrder(id, tender, undefined, guests)
-            : await this.api.recordSale(
-                [],
-                tender,
-                id,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                guests,
-              );
-      this.#showTicket(id, bill?.receiptAvailable !== true);
+      if (payment === undefined) {
+        const expectedEdit = this.#draftSync?.expectedEditFor(id);
+        if (expectedEdit == null) throw { code: "draft.out_of_date" };
+        payment = structuredClone({
+          presented,
+          tender,
+          guests,
+          expectedEdit,
+          invoiced: bill?.receiptAvailable === true,
+          outstanding: bill?.outstanding ?? tender.amount,
+          bill: null,
+        });
+      }
+      this.#unansweredWholePayments.set(key, payment);
+      const result = await this.#sendWholePayment(api, id, payment);
+      if (this.#unansweredWholePayments.get(key) === payment)
+        this.#unansweredWholePayments.delete(key);
+      if (
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        api !== this.api ||
+        id !== this.activeTabId
+      )
+        return;
+      this.result = result;
+      this.#showTicket(id, !payment.invoiced);
     } catch (error) {
+      if (
+        (unanswered === undefined || paymentNotRecorded(error)) &&
+        !isNetworkFailure(error) &&
+        this.#unansweredWholePayments.get(key) === payment
+      )
+        this.#unansweredWholePayments.delete(key);
+      if (
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        api !== this.api ||
+        id !== this.activeTabId
+      )
+        return;
       paidMeanwhile = isPaymentsReceived(error);
-      // No preliminary save, so any network failure may have filed.
       this.errorKey = paidMeanwhile
         ? "bill.pay_with_bill_payments"
         : isPermanentSaleRefusal(error)
@@ -11939,10 +14773,20 @@ export class TillApp extends LitElement {
     const { way, lines, amount } = (event as CustomEvent<BillPayDetail>).detail;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
+    const api = this.api;
+    const id = this.activeTabId;
+    const unconfirmed = id !== undefined && this.#unansweredPayments.get(id)?.unconfirmed === true;
     if (
-      !(await this.#flushPartyKitchenNote()) ||
+      (!unconfirmed && !(await this.#flushDraft())) ||
       visit !== this.#orderVisit ||
-      session !== this.#operatorSession
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      id !== this.activeTabId ||
+      (!unconfirmed && !(await this.#flushPartyKitchenNote())) ||
+      visit !== this.#orderVisit ||
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      id !== this.activeTabId
     )
       return;
     await this.#openBillPaying(way, lines, amount);
@@ -12036,6 +14880,11 @@ export class TillApp extends LitElement {
   ): Promise<BillPaying | null> {
     if (order === undefined || this.billPaying !== null) return null;
     const { billId } = order;
+    if (this.#unansweredWholePayments.has(billId)) {
+      this.errorKey = "sale.unconfirmed";
+      return null;
+    }
+    const pending = this.#unansweredPayments.get(billId);
     const open: BillPaying = {
       id: ++this.#billPays,
       ...order,
@@ -12045,7 +14894,9 @@ export class TillApp extends LitElement {
       balance: this.billBalance?.workingOrderId === billId ? this.billBalance : null,
       asked: null,
       preview: null,
-      refusal: null,
+      expectedEdit: null,
+      ...(pending?.unconfirmed === true ? pending.shown : {}),
+      refusal: pending?.unconfirmed === true ? { code: "network" } : null,
       taken: null,
       refunded: null,
       busy: false,
@@ -12082,29 +14933,45 @@ export class TillApp extends LitElement {
     // The dialog's events come only while it is open. A press while a request is out is dropped.
     const open = this.billPaying!;
     if (open.busy) return;
+    const pending = this.#unansweredPayments.get(open.billId);
+    if (pending?.unconfirmed === true) {
+      this.billPaying = { ...open, ...pending.shown, refusal: { code: "network" } };
+      return;
+    }
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     try {
-      if (!(await this.#askStoredDeadEnds(open.billId))) {
+      const expectedEdit =
+        open.surface === "counter" ? null : this.#draftSync?.expectedEditFor(open.billId);
+      if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
+        throw { code: "draft.out_of_date" };
+      const api = this.api;
+      const session = this.#operatorSession;
+      const visit = this.#orderVisit;
+      const sync = this.#draftSync;
+      const current = () =>
+        this.api === api &&
+        this.#operatorSession === session &&
+        this.#billPayingNow(open.id) !== null &&
+        (open.surface === "counter" ||
+          (this.#orderVisit === visit &&
+            this.#draftSync === sync &&
+            this.#billChoiceCurrent(expectedEdit!)));
+      if (!(await this.#askStoredDeadEnds(open.billId, { api, expectedEdit, current }))) {
         const now = this.#billPayingNow(open.id);
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const preview = await this.api.previewBillPayment(
+      const preview = await api.previewBillPayment(
         open.billId,
-        paymentAsk(asked.choice, asked.pay, asked.allocation),
+        paymentAsk(asked.choice, asked.pay, asked.allocation, expectedEdit),
       );
       const now = this.#billPayingNow(open.id);
-      if (now !== null) this.billPaying = { ...now, asked, preview, busy: false };
+      if (now !== null) this.billPaying = { ...now, asked, preview, expectedEdit, busy: false };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
     }
   }
 
-  /**
-   * Takes the payment the dialog showed. Its submission id is fresh for each confirmation, and is
-   * the one sent before only while that same confirmation on the same bill got no answer (plan
-   * D8).
-   */
   async #onBillPayConfirm(event: Event): Promise<void> {
     // Sent only from the confirmation, which shows an allocated preview of what was asked.
     const open = this.billPaying!;
@@ -12113,28 +14980,41 @@ export class TillApp extends LitElement {
     const detail: ReceiptGuestsDetail =
       (event as CustomEvent<ReceiptGuestsDetail | null>).detail ?? {};
     const confirmation = confirmationOf(
-      paymentAsk(asked.choice, asked.pay, asked.allocation),
+      paymentAsk(asked.choice, asked.pay, asked.allocation, open.expectedEdit),
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
       asked.card,
     );
-    // The guests stay out of the resend key, as the server's `retryShapeOf` leaves them out.
-    const keyed = submissionFor(open.billId, confirmation, this.#unansweredPayment);
-    const submission =
-      "guests" in detail
-        ? { ...keyed, request: { ...keyed.request, guests: detail.guests } }
-        : keyed;
-    const turn = ++this.#paymentSends;
+    const key = open.billId;
+    const previous = this.#unansweredPayments.get(key);
+    const keyed = submissionFor(open.billId, { ...confirmation, ...detail }, previous ?? null);
+    const submission: PendingBillPayment =
+      keyed === previous
+        ? previous
+        : {
+            ...keyed,
+            shown: structuredClone({
+              asked,
+              preview: open.preview!,
+              expectedEdit: open.expectedEdit,
+            }),
+          };
+    const turn = (this.#paymentSends.get(key) ?? 0) + 1;
+    this.#paymentSends.set(key, turn);
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     const session = this.#operatorSession;
+    const api = this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const settle = (error?: unknown) => {
-      if (turn === this.#paymentSends) this.#unansweredPayment = unansweredAfter(submission, error);
+      if (this.#paymentSends.get(key) !== turn) return;
+      const unanswered = unansweredAfter(submission, error);
+      if (unanswered === null) this.#unansweredPayments.delete(key);
+      else this.#unansweredPayments.set(key, unanswered);
     };
     await this.#holdingReload(async () => {
       try {
         const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
           this.#resend(
-            (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
+            (signal) => api.takeBillPayment(open.billId, submission.request, { signal }),
             limit.signal,
             () => session === this.#operatorSession,
           ),
@@ -12211,6 +15091,8 @@ export class TillApp extends LitElement {
     const now = this.#billPayingNow(id);
     if (now === null) return;
     const refusal = refusalOf(error, stage === "take");
+    if (refusal.unsent !== undefined)
+      refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
     if (refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
@@ -12236,6 +15118,12 @@ export class TillApp extends LitElement {
   }
 
   #onBillPayEdit(): void {
+    const open = this.billPaying!;
+    const pending = this.#unansweredPayments.get(open.billId);
+    if (pending?.unconfirmed === true) {
+      this.billPaying = { ...open, ...pending.shown, refusal: { code: "network" } };
+      return;
+    }
     this.billPaying = { ...this.billPaying!, asked: null, preview: null, refusal: null };
   }
 
@@ -12552,7 +15440,6 @@ export class TillApp extends LitElement {
     this.#abandonListRefreshes();
     this.#setScreen("lock");
     this.#configureSessionActivity();
-    // The server takes the person from the session, so the draft is saved before the session ends.
     const signIns = this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
@@ -12725,6 +15612,7 @@ export class TillApp extends LitElement {
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
         .api=${this.api}
+        .operatorSession=${this.#operatorSession}
         .canExitToCounter=${false}
         .canOpenStation=${this.#allowsDestination("station")}
         .canChangeToday=${this.capabilities.includes("take-orders")}
@@ -12744,6 +15632,7 @@ export class TillApp extends LitElement {
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
+      .serviceVisit=${this.#orderVisit}
       .currentOrders=${this.currentOrders}
       .currentOrdersUnread=${this.currentOrdersUnread}
       .printProblems=${this.printProblems}
@@ -12766,8 +15655,14 @@ export class TillApp extends LitElement {
       .tables=${this.tables}
       .zones=${this.zones}
       .orderId=${this.activeTabId}
+      .billEdits=${this.#tableBillEdits()}
+      .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
+      .routingRevision=${this.#draftRoutingRevision(draft)}
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
+      .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
+      .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
+      .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
       .takeOversAnswered=${this.takeOversAnswered}
       .party=${this.orderParty}
       .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
@@ -12776,6 +15671,7 @@ export class TillApp extends LitElement {
       .receiptLanguages=${this.receiptLanguages}
       .fullInvoices=${this.fullInvoices}
       .billBalance=${this.billBalance}
+      .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
       .guestsRefusal=${this.guestsRefusal}
@@ -12869,6 +15765,7 @@ export class TillApp extends LitElement {
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
+          .serviceVisit=${this.#orderVisit}
           .currentOrders=${this.currentOrders}
           .currentOrdersUnread=${this.currentOrdersUnread}
           .printProblems=${this.printProblems}
@@ -12891,8 +15788,14 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .zones=${this.zones}
           .orderId=${this.activeTabId}
+          .billEdits=${this.#tableBillEdits()}
+          .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
+          .routingRevision=${this.#draftRoutingRevision(draft)}
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
+          .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
+          .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
+          .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.orderParty}
           .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
@@ -12901,6 +15804,7 @@ export class TillApp extends LitElement {
           .receiptLanguages=${this.receiptLanguages}
           .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
+          .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .guestsRefusal=${this.guestsRefusal}
@@ -13066,11 +15970,15 @@ export class TillApp extends LitElement {
 
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
+    const served = this.#currentServedCommand();
     const errorMessage = this.errorKey
       ? errorText(
           this.errorKey,
           this.#orderScreenShown() ? this.tableMenus : this.menus,
           this.tables,
+          typeof this.errorKey === "object" && "unsentBill" in this.errorKey
+            ? this.#paymentBillLabel(this.errorKey.unsentBill.billId)
+            : undefined,
         )
       : nothing;
     return html`
@@ -13160,7 +16068,11 @@ export class TillApp extends LitElement {
           })}
         @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
         @find-bill-selection=${() => {
-          this.findBillError = undefined;
+          this.findBillError =
+            this.collectionBill !== null &&
+            this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)
+              ? "sale.unconfirmed"
+              : undefined;
         }}
         @find-bill-close=${() => {
           this.#invoiceRecoveryVisit++;
@@ -13179,10 +16091,14 @@ export class TillApp extends LitElement {
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
         @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
+        @resolve-draft-candidate=${(event: CustomEvent<{ candidate: RetainedDraftCandidate; apply: boolean }>) => void this.#onResolveDraftCandidate(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
+        @fire-held-line=${(event: Event) => void this.#onFireHeldLine(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
         @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}
+        @split-draft-source=${(event: Event) => void this.#onSplitDraftSource(event)}
+        @discard-draft=${() => void this.#onDiscardDraft()}
         @serve-lines=${(event: Event) => void this.#onServeLines(event)}
         @unserve-lines=${(event: Event) => void this.#onUnserveLines(event)}
         @serve-group=${(event: Event) => void this.#onServeGroup(event)}
@@ -13194,11 +16110,14 @@ export class TillApp extends LitElement {
         @move-station=${(event: Event) => void this.#onMoveStation(event)}
         @open-make-at=${(event: Event) => void this.#onOpenMakeAt(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
+        @cancel-item=${(event: CustomEvent<{ lineId: string }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
+        @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}
+        @held-relocation-open=${(event: Event) => void this.#onHeldRelocationOpen(event)}
         @move-held-order-open=${() => {
           this.#onFloorRefresh();
           void this.#refreshFloorZones();
@@ -13216,6 +16135,7 @@ export class TillApp extends LitElement {
           } else void this.#onMoveHeldOrder(event);
         }}
         @join-tables=${(event: Event) => void this.#onJoinTables(event)}
+        @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
@@ -13330,11 +16250,39 @@ export class TillApp extends LitElement {
           class="submitted-toast"
           data-submitted-toast
           tone="info"
-          .open=${this.submittedNotice !== null}
+          .open=${this.submittedNotice !== null && served === null}
           .message=${this.submittedNotice ?? ""}
           close-label=${t("table.submitted_close")}
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
+        <wt-toast
+          class="submitted-toast"
+          data-served-toast
+          .duration=${0}
+          .open=${served !== null}
+          .message=${served === null ? "" : [...served.names, t("table.row_served")].join(" · ")}
+          close-label=${t("table.submitted_close")}
+          @wt-close=${() => {
+            this.servedCommand = null;
+            clearTimeout(this.#servedTimer);
+          }}
+        >
+          ${
+            served === null
+              ? nothing
+              : keyed(
+                  served,
+                  html`<wt-button
+                    slot="action"
+                    variant="secondary"
+                    data-undo-served
+                    ?disabled=${this.groupCommandBusy}
+                    @click=${() => void this.#undoServed(served)}
+                    >${t("expo.undo")}</wt-button
+                  >`,
+                )
+          }
+        </wt-toast>
         <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
         <wt-toast
           class="equipment-toast"
@@ -13388,6 +16336,8 @@ export class TillApp extends LitElement {
           this.findingBill
             ? html`<till-find-bill-dialog
                 .bill=${this.collectionBill}
+                .confirmationTender=${this.collectionBill === null ? undefined : this.#unansweredWholePayments.get(this.collectionBill.workingOrderId)?.tender}
+                .unconfirmed=${this.collectionBill !== null && this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)}
                 .busy=${this.findBillBusy}
                 .error=${this.findBillError}
               ></till-find-bill-dialog>`
@@ -13415,8 +16365,9 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
-        ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
-        ${this.#renderTenderRefund()} ${this.#renderCancelCrediting()}
+        ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
+        ${this.#renderBillPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
+        ${this.#renderCancelCrediting()}
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}

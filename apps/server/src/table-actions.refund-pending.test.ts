@@ -13,6 +13,8 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 import { createTable } from "./testing/live-table.js";
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 
 // Joining and unjoining tables while a card refund of a bill is pending (bill payments design §5.2):
 // neither is refused, and neither changes what the bill charges.
@@ -27,8 +29,18 @@ useVenueDb({
   },
 });
 
-function post(path: string, body: unknown): Promise<Answer> {
-  return send(venue.app, venue.cookie, "POST", path, body);
+async function post(path: string, body: unknown): Promise<Answer> {
+  return send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    path,
+    await observedTableActionBody(
+      venue.db,
+      path,
+      await observedBillActionBody(venue.db, path, body),
+    ),
+  );
 }
 
 function get(path: string): Promise<Answer> {

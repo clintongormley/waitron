@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -31,7 +32,8 @@ import {
   stationDayStates,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
-import { placeGroups, fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -39,7 +41,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { send } from "./testing/bill-venue.js";
+import { send as rawGroupSend } from "./testing/bill-venue.js";
 import {
   inTx,
   orderForParty,
@@ -941,3 +943,5 @@ describe("the kitchen display's station day", () => {
     expect(await rows()).toEqual([]);
   });
 });
+
+const send = observedGroupSender(() => v.db, rawGroupSend);

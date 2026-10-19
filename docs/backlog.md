@@ -85,9 +85,8 @@ Ranked by the owner on 2026-10-16, for the time they are away (17 October to 2 N
 is its own brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 Everything not listed here needs more spec work first.
 
-1. **A773 — courses, groups and the pass** (_The till, devices and table service_). A773-1, the
-   table screen's unsent list, has a plan; A773-2, firing and the pass, is planned once A773-1
-   lands.
+1. **A773-2 — firing and the pass** (_The till, devices and table service_). Plan the remaining
+   kitchen and pass work from the approved design, following A773-1's Sent and New order panel.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A682 — translations: nothing required, every missing name reported, all languages side by
@@ -1937,10 +1936,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
   party get a kitchen group).
 
-- **C80: a dish whose course is switched off is a dish with no course (owner, 2026-10-17)** — Fire
-  now, listed first, whether sent or moved; relayed to A773. Delete this entry once A773 covers it.
-  [Detail](backlog/kitchen.md#left-by-c80-a-dish-whose-course-the-till-does-not-list)
-
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
   caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
   route (`apps/server/src/management-api.ts`) and the client method
@@ -2143,13 +2138,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
 
-- **Review follow-up: nutrition for extras in Current orders.** The A668-5 reviewer’s
-  read-only finding is that Current orders’ extra summaries carry names and quantities, while the
-  pending/served child rows can show their own nutrition icons. Reproduce the two views with a
-  dish and a differently declared extra, then decide whether the Current orders wire and rows
-  should carry the extra’s nutrition too. The visual difference is unverified; A668-5’s explicit
-  dish-name scope does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`)
-  and `apps/till/src/screens/till-table-order-screen.ts` (`#currentRow`).
+- **Review follow-up: nutrition for extras in Sent.** The Current orders wire's extra summaries
+  carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill
+  lines; `till-table-order-screen.served-details.test.ts` checks that fallback and its removal when
+  the line identities no longer match. Reproduce a dish and a differently declared extra with and
+  without those bill-line details, then decide whether the service read and Sent rows should carry
+  the extra's nutrition too. The visual comparison remains unverified; A668-5's dish-name scope
+  does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`) and
+  `apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
 
 - **A765. Say which table an order belongs to (owner, 2026-10-16).** Held orders shows a table's
   bill as "#2" with nothing else; the summary carries only a party id. The server sends the table's
@@ -2217,29 +2213,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
-  **A773-1**, the table screen's Sent/New order panel, remains unlanded. Its
-  [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
-  `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
-  target recovery. Single-dish Fire now's command/API/client work is qualified on the feature
-  branch at `e65f6005e`; its visible sent-line menu follows in T16.
-  The approved [ownership design](superpowers/specs/2026-10-17-a773-one-editor-design.md) is
-  **one editor per bill**: Ana can edit Bill 1 while Luis edits Bill 2 at one table. Takeover,
-  read-only/local unsaved recovery, first accepted nonempty save and release are per bill; Pay
-  checks only its own bill. Shared firing/serving stays shared. Join/move conflicts require explicit
-  needed takeovers. T24 and its affected-task map add concrete ownership/version/route/recovery
-  contracts and floor bill/editor pairs. Ownership remains to build; this docs revision verifies
-  no product behavior. The empty-bill first-save rule and three exact EN/ES messages have final
-  approval after the relay correction; five earlier Pay name/count strings are withdrawn. Twelve
-  cancellation translations stay approved; English Void/Comp naming stands.
-  **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
-  removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)
-  are answered in spec §14. Physical trials and the remaining panel/actions/finish/delivery work
-  stay open. [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
-  [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
-  [course mockups](backlog/mockups/a773-courses-and-groups/),
-  [panel mockups](backlog/mockups/a773-order-panel/),
-  [ownership pictures](backlog/mockups/a773-one-editor/)
+- **A773-2. Firing and the pass.** Plan from the approved courses/groups design after the
+  table-panel branch lands. Add Requested and pass release, remove Away/Done, and finish the
+  station settings and counter changes. Coordinate A756, A803 and A797 before building.
+  [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+
+- **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
+  headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
+  Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
+  [Spec §11](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
+
+- **A773 physical-till trial: serving part of a line.** Try marking part of a line served through
+  the dish window during service. Decide whether it is practical before changing that workflow.
+  [Spec §11](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
@@ -2730,15 +2716,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   settled check's lines naming a group now on the target party; three more points are in the
   detail. [Detail](backlog/till.md#task-3-733-order-groups)
 
-- **Loose ends left by service Task 4 (#748, the table screen works with order groups).**
-  - Group summaries come from the server, so a weighed quantity shows a dot decimal in Spanish (a
-    summary shows only when Current orders cannot be read).
-  - Group numbers are the server's positions, so the list can read "Group 1, Group 3"; the preview
-    gives counts, not contents.
-  - The screen's older small buttons are 32 px tall, under the 44 px tap target.
-  - Per-line Send and Change have no guard against a second press while the first is running
-    (Cancel has one since B11a; the group commands have one).
-
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
@@ -2746,13 +2723,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 7 (#789, each person's draft kept on the server).** A draft
   that moves to the other party in a merge records no history event; the server's own
-  `unavailable` flag misses some lines that are refused at submission; and three rulings made on
+  `unavailable` flag misses some lines that are refused at submission; and remaining rulings made on
   the branch are for the owner to confirm.
   [Detail](backlog/till.md#task-7-789-each-persons-draft-kept-on-the-server)
 
-- **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** An edit
-  can be lost at sign-out without a message; a send cut off by the 150-second limit is not sent
-  again; drafts are not pushed to other tills; and the map tag says "Unsent" but not whose.
+- **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** The old
+  send-timeout, server logout and remaining screen observations are in the detail. Local draft
+  recovery on sign-out, failed-read editing protection, pending-takeover helper checks and
+  visible-table refresh follow the
+  [per-bill ownership decision](backlog/till.md#one-editor-per-bill-owner-2026-10-17-a773).
   [Detail](backlog/till.md#task-8-806-the-till-works-from-the-servers-drafts)
   - Seating a table whose answer arrives while a newer table is still opening shows the seated
     table briefly before the newer one replaces it.
@@ -2761,13 +2740,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - A dish no longer on the menu shows an empty name on its tick button in the person's own draft,
     and in the spoken names of its course picker and Split quantity button (read in the code, not
     run).
-  - The last-added bar is empty for a draft read back from the server until the next tap, and does
-    not follow a weighed line when the server's answer replaces the lines.
+  - The last-added bar is empty for a draft first read back from the server until the next tap.
   - While a weight is being entered, the weight entry covers the bottom of the menu and the bar.
   - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and calls
     them "items", so the two can differ for one draft.
-  - Keep lasts only until the server's answer rebuilds the lines; a kept line then asks Remove or
-    Keep again.
   - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on Review; its
     unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
   - The counter's basket also tracks its last-added line, which it does not use.
@@ -2902,8 +2878,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     to a table; and a database built on purpose with a delivery table in another location now
     names the order by its own label — no product path creates that state, and whether every
     existing venue database is free of it was not checked.
-  - Unchecked Send to radios are Chromium's own dark-theme control, dim grey on the dark dialog
-    (seen in the 390 px Spanish dark screenshot).
   - Open (found by #905's review, by reading, not reproduced): on a handheld, a waiter who taps a
     free table to seat it, goes back to the order tab while the seating is still under way and
     starts Move guests can have the move set the wrong table on the new party; the suggested fix
@@ -3097,10 +3071,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   seconds on every till; choose the interval and cost first.
   [Detail](backlog/till.md#refresh-the-floor-without-a-staff-action-in-a-zones-list-view--open-3d-w16)
 
-- **Current orders hides kitchen progress for an extra made at another station** (P6). — left open
-  by the product folders work. The till's Current orders read attaches extras under each dish but
-  reads kitchen state only from the dish's record (`readCurrentOrders`,
-  `apps/server/src/order-groups.ts`). Show the extra's own progress.
+- **Sent does not show an extra's separate kitchen progress** (P6). The service read attaches
+  extras under each dish without their own station or kitchen-state fields (`CurrentOrderExtra`
+  and `readCurrentOrders`, `apps/server/src/order-groups.ts`). The dish's Ready projection
+  already waits for its kitchen components, including a split-off extra, as checked by
+  `apps/server/src/current-orders.test.ts`. The open work is showing each extra's own progress;
+  `apps/till/src/widgets/sent-orders.ts` currently draws its name and quantity.
 
 - **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
   does not notice a publish that adds a required options list to a dish in the basket, or lowers a
@@ -5953,8 +5929,9 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
     a declaration.** If a future change puts a second vite in the tree, they could land on a
     different one silently.
     [Detail](backlog/dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
-  - **A dependency-optimizer receipt taken on vite 6 was not re-measured.** Nobody re-checked that
-    vite 8 still emits that warning, or that the `include` lists are still the fix.
+  - **The dependency-optimizer fix still needs a cold-cache check on Vite 8.** A773-1 locally
+    observed the reload warning followed by failed imports and no executed tests on 2026-10-18.
+    A later run with the optimizer cache populated passed; that does not measure an `include` fix.
     [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
 
 - **Loose ends left by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).**

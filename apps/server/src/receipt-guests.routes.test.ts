@@ -1,3 +1,8 @@
+import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -35,8 +40,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import { fingerprint, seatTable } from "./parties.js";
-import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
-import { addTabRound, createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
+import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
+import { createOpenOrder, parkOrder } from "./working-order.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -242,8 +247,6 @@ async function venue(db: Database): Promise<Venue> {
 
 const CASH = { method: "cash", amount: "12.00" };
 
-const BASE_FINGERPRINT = "13f0e57e4ee5aeb6378c0fb791c1778c4cc7cd95712930833a0596fcfef4df90";
-
 /** Sells eight at 1,50 € (12,00 €) on `/api/sales`, with `extra` merged into the body. */
 async function sell(
   v: Venue,
@@ -254,6 +257,7 @@ async function sell(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
+      ...(observedWholePaymentBody(v.db, "/api/sales", { workingOrderId: id }) as object),
       workingOrderId: id,
       lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
       tender,
@@ -423,7 +427,12 @@ async function collect(
   const res = await v.app.request(`/api/working-orders/${id}/collect`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
-    body: JSON.stringify({ tender: CASH, ...extra }),
+    body: JSON.stringify(
+      observedWholePaymentBody(v.db, `/api/working-orders/${id}/collect`, {
+        tender: CASH,
+        ...extra,
+      }),
+    ),
   });
   return { status: res.status, body: await res.json() };
 }
@@ -494,6 +503,7 @@ async function payByReader(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
+      ...(observedWholePaymentBody(v.db, "/api/pay", { id }) as object),
       id,
       lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
       simulationOutcome: "captured",
@@ -705,12 +715,14 @@ async function payPart(
   const res = await v.app.request(`/api/working-orders/${billId}/payments`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
-    body: JSON.stringify({
-      submissionId: randomUUID(),
-      kind: "contribution",
-      tip: "0.00",
-      ...extra,
-    }),
+    body: JSON.stringify(
+      await observedPaymentBody(suite.db, `/api/working-orders/${billId}/payments`, {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        tip: "0.00",
+        ...extra,
+      }),
+    ),
   });
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
@@ -819,6 +831,7 @@ describe("a bill payment's retry is matched on the payment alone, never its gues
       ]);
     }
     const request: BillPaymentRequest = {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, billId)),
       kind: "contribution",
       method: "cash",
       amount: "10.00",
@@ -832,12 +845,22 @@ describe("a bill payment's retry is matched on the payment alone, never its gues
     ]);
   });
 
-  it("stores the fingerprint a request with no guests was stored under before guests existed", async () => {
+  it("fingerprints a payment without guests with its observed bill state", async () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { quantity: "14" });
     expect((await payPart(v, billId, cashPart("10.00"))).status).toBe(200);
-    // Measured on e3b6e09bb, before `/payments` read guests, for this same body.
-    expect((await storedPayments(suite.db, billId))[0]!.fingerprint).toBe(BASE_FINGERPRINT);
+    expect((await storedPayments(suite.db, billId))[0]!.fingerprint).toBe(
+      fingerprint({
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+        addedTip: "0.00",
+        expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
+      }),
+    );
   });
 
   it("replays a completing payment re-sent with other guests, and the row keeps its count", async () => {

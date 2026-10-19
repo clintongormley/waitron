@@ -1,3 +1,5 @@
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -18,11 +20,17 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { groupArrivingDishes } from "./order-groups.js";
+import { createCourse } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { createTable } from "./testing/live-table.js";
-import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  seatedWith,
+  send as rawSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -79,10 +87,16 @@ async function prepare(action: Action) {
     );
   }
   const [party] = await suite.db.select().from(parties).where(eq(parties.id, source.partyId));
-  const split = await send(v.app, v.cookie, "POST", `/api/bills/${source.tabId}/split`, {
-    transfers: [{ lineNo: 2 }],
-    expectedPartyRevision: party!.revision,
-  });
+  const split = await send(
+    v.app,
+    v.cookie,
+    "POST",
+    `/api/bills/${source.tabId}/split`,
+    await observedBillActionBody(v.db, `/api/bills/${source.tabId}/split`, {
+      transfers: [{ lineNo: 2 }],
+      expectedPartyRevision: party!.revision,
+    }),
+  );
   expect(split.status).toBe(200);
   const destination = action === "move-party" ? await seatedWith(v) : null;
   const [updated] = await suite.db.select().from(parties).where(eq(parties.id, source.partyId));
@@ -157,9 +171,16 @@ describe("attendance for dishes arriving in a party", () => {
       .update(ticketItems)
       .set({ firedAt: null, madeHere: false })
       .where(eq(ticketItems.workingOrderLineId, lines[1]!.id));
+    await run(async (tx) => {
+      const course = await createCourse(tx, v.cfg, { name: "Held arrival", displayOrder: 1 });
+      await tx
+        .update(workingOrderLines)
+        .set({ courseId: course.id })
+        .where(eq(workingOrderLines.id, lines[1]!.id));
+    });
     const before = await state();
     const made = await run((tx) =>
-      groupArrivingDishes(tx, p.partyId, p.tabId, v.operatorId, new Map(), {
+      groupArrivingDishes(tx, v.cfg, p.partyId, p.tabId, v.operatorId, new Map(), {
         recorder: recordAttendanceFact,
         at: "2026-01-05T16:40:00.987Z",
       }),
@@ -258,3 +279,5 @@ describe("attendance for dishes arriving in a party", () => {
     expect((await factsAt(other!.id)).filter((f) => f.key === saved.facts[0]!.key)).toEqual([]);
   });
 });
+
+const send = observedRelocationSender(() => suite.db, rawSend);

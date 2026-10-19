@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { createHash, randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
@@ -12,7 +13,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { paymentAttemptIsLive } from "./till-sale.js";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
 let venue: BillVenue;

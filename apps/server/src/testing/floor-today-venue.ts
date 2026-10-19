@@ -34,7 +34,7 @@ import {
   updateLayout,
   type ResetOnto,
 } from "../floor-today-store.js";
-import { finishTable, markTableCleared } from "../parties.js";
+import { finishTable, markTableCleared } from "./party-close-fixture.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
 

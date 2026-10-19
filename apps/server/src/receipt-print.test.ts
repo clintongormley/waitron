@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { recordSale } from "@waitron/core";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
@@ -91,10 +92,10 @@ import {
   readSettledTicket,
   recordTillSaleOrchestration as recordTillSale,
   reprintSale,
-} from "./till-sale.js";
-import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
+} from "./testing/whole-payment-fixture.js";
+import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   DRAWER_KICK,
   enqueueReceiptReprint,

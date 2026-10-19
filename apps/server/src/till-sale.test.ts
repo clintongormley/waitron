@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
@@ -74,8 +76,8 @@ import {
   receiptQr,
   recordTillSaleOrchestration as recordTillSale,
   type TillSaleRequest,
-} from "./till-sale.js";
-import { addTabRound, createOpenOrder, updateHeldOrder, updateOrderLine } from "./working-order.js";
+} from "./testing/whole-payment-fixture.js";
+import { createOpenOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { recordSale } from "@waitron/core";

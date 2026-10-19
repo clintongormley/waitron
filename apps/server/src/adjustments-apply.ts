@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   billCancelNeedsManager,
   billDiscountNeedsManager,
@@ -24,7 +24,16 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  nowIso,
+  orderDrafts,
+  orderDraftLines,
+  orderDraftRecalledLines,
+  orderGroups,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -37,6 +46,7 @@ import {
 } from "@waitron/identity";
 import {
   AppError,
+  isUuid,
   centsToDecimal,
   compareDecimal,
   decimal,
@@ -54,6 +64,14 @@ import {
 import { invalid, money } from "./bill-allocation.js";
 import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
+import {
+  requireOrderBillEditor,
+  parseBillEditExpected,
+  readBillEditState,
+  closeBillDraft,
+} from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
+import { refuseRecalledWrite } from "./draft-source.js";
 import type { TillConfig } from "./till-config.js";
 import {
   assertTabOpen,
@@ -73,10 +91,13 @@ import {
   type VoidTarget,
 } from "./working-order.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
+import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import "./errors.js";
 
 /** What an adjustment asks, as a preview and an apply share it. */
 export interface AdjustmentAsk {
+  expectedEdit: BillEditExpected | null;
+  sourceDraftId?: string;
   orderId: string;
   /** The bill's revision as the caller read it (plan D19). */
   expectedRevision: number;
@@ -94,6 +115,7 @@ export interface AdjustmentAsk {
 
 export interface AdjustmentArgs extends AdjustmentAsk {
   submissionId: string;
+  preparationStarted?: boolean;
   /** Someone at or above the plan's approver role: the higher of the reason's approver role (when
    * the operator is below its apply role) and a manager (when the bill's discount limit asks for
    * one). */
@@ -163,6 +185,7 @@ interface Carve {
 }
 
 interface Plan {
+  recalledDraftId: string | null;
   reason: AdjustmentReason;
   reasonName: string;
   /** The dish or the extra the action names; null on a bill-level discount. */
@@ -397,6 +420,18 @@ export async function planAdjustment(
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
   await refusePaymentInFlight(tx, [orderId]);
+  await requireOrderBillEditor(tx, orderId, ask);
+  const sourceDraftId = sourceDraftIdOf(ask.sourceDraftId);
+  if (sourceDraftId !== undefined) {
+    const edit = await readBillEditState(tx, orderId);
+    if (edit.draftId !== sourceDraftId)
+      throw new AppError("draft.out_of_date", {
+        billId: orderId,
+        draftId: edit.draftId,
+        revision: edit.draftRevision,
+        edit,
+      });
+  }
   const reason = await findAdjustmentReason(tx, ask.reasonId);
   const rows = await readRows(tx, orderId);
 
@@ -445,6 +480,13 @@ export async function planAdjustment(
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
       if (ask.amount !== undefined) throw invalid("amount");
+      const cancelled = await readLineCancellations(tx, [target.id]);
+      if (covered > serviceQuantities(target.quantity, 0, cancelled.get(target.id) ?? 0).active)
+        throw new AppError("adjustment.quantity_invalid", {
+          workingOrderId: orderId,
+          lineNo: target.lineNo,
+          quantity: ask.quantity ?? thousandthsToDecimal(covered),
+        });
       removed = partial ? covered : null;
       const left = familyAt(family, target.quantity - covered);
       cancelLeft = left;
@@ -540,7 +582,34 @@ export async function planAdjustment(
   if (overBillDiscountLimit && (approverRole === null || !roleAtLeast(approverRole, "manager"))) {
     approverRole = "manager";
   }
+  const parents = new Set(
+    (ask.action === "cancel" ? [line!] : changes.map((change) => change.row)).map(
+      (row) => row.parentLineId ?? row.id,
+    ),
+  );
+  let recalledDraftId: string | null = null;
+  if (parents.size > 0) {
+    const scope = and(
+      eq(workingOrderLines.workingOrderId, orderId),
+      inArray(workingOrderLines.id, [...parents]),
+    )!;
+    if (sourceDraftId === undefined) await refuseRecalledWrite(tx, scope);
+    else {
+      const reservations = await tx
+        .select({ draftId: orderDraftRecalledLines.draftId })
+        .from(orderDraftRecalledLines)
+        .innerJoin(
+          workingOrderLines,
+          eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId),
+        )
+        .where(scope);
+      if (reservations.some((row) => row.draftId !== sourceDraftId))
+        await refuseRecalledWrite(tx, scope);
+      if (reservations.length > 0) recalledDraftId = sourceDraftId;
+    }
+  }
   return {
+    recalledDraftId,
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
     line,
@@ -820,12 +889,15 @@ export async function applyAdjustment(
   attendance?: OrderAttendance,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
   const { submissionId, approver, ...command } = args;
+  const expectedEdit =
+    args.expectedEdit == null ? args.expectedEdit : parseBillEditExpected(args.expectedEdit);
+  const sourceDraftId = sourceDraftIdOf(args.sourceDraftId);
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: args.orderId },
     submissionId,
     "adjustment.apply",
-    { ...command, approverId: approver?.personId },
+    { ...command, expectedEdit, sourceDraftId, approverId: approver?.personId },
     async () => {
       const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver, attempts);
@@ -843,12 +915,38 @@ export async function applyAdjustment(
           plan.removed,
           args.operatorId,
           activity,
+          args.preparationStarted,
         );
       } else {
         splits = await reprice(tx, cfg, args.orderId, plan.carve, plan.changes);
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
+      }
+      if (plan.recalledDraftId !== null) {
+        const [fresh] = await tx
+          .select({ id: orderDraftLines.id })
+          .from(orderDraftLines)
+          .where(eq(orderDraftLines.draftId, plan.recalledDraftId))
+          .limit(1);
+        const [source] = await tx
+          .select({ id: orderDraftRecalledLines.id })
+          .from(orderDraftRecalledLines)
+          .where(eq(orderDraftRecalledLines.draftId, plan.recalledDraftId))
+          .limit(1);
+        if (fresh === undefined && source === undefined)
+          await closeBillDraft(
+            tx,
+            args.orderId,
+            args.operatorId,
+            await readBillEditState(tx, args.orderId),
+            "discarded",
+          );
+        else
+          await tx
+            .update(orderDrafts)
+            .set({ revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
+            .where(eq(orderDrafts.id, plan.recalledDraftId));
       }
       const { line } = plan;
       const id = await recordAdjustment(tx, {
@@ -903,4 +1001,10 @@ export async function applyAdjustment(
     },
     cfg.madeHereSink,
   );
+}
+
+function sourceDraftIdOf(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !isUuid(value)) throw invalid("sourceDraftId");
+  return value.toLowerCase();
 }

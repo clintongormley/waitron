@@ -1,3 +1,8 @@
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
+import { observedOrderSender } from "./testing/order-writer-fixture.js";
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -30,7 +35,7 @@ import {
   inTx,
   provisionBillVenue,
   seatedWith,
-  send,
+  send as rawGroupSend,
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -892,11 +897,17 @@ describe("made-here route wiring", () => {
     const [line] = await inTx(venue, (tx) =>
       tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item!.workingOrderLineId)),
     );
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${party.tabId}/split`, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: await revisionOf(party.partyId),
-      transfers: [{ lineNo: line!.lineNo, quantity: "1" }],
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${party.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        transfers: [{ lineNo: line!.lineNo, quantity: "1" }],
+      }),
+    );
     expect(split.status).toBe(200);
     const [splitItem] = await inTx(venue, (tx) =>
       tx
@@ -1295,13 +1306,16 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/parties/${party.partyId}/drafts`,
       {
+        billId: party.tabId,
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
       },
     );
     expect(saved.status).toBe(200);
-    const draft = saved.json as { id: string; revision: number; lines: { id: string }[] };
+    const { draft } = saved.json as {
+      draft: { id: string; revision: number; lines: { id: string }[] };
+    };
     const check = await assertMadeHere(party.tabId);
     const answer = await send(
       venue.app,
@@ -1728,3 +1742,21 @@ describe("made-here route wiring", () => {
     ).toHaveLength(jobsBefore.length + 1);
   });
 });
+
+const send = observedGroupSender(
+  () => venue.db,
+  observedRelocationSender(
+    () => venue.db,
+    observedOrderSender(
+      () => venue.db,
+      async (app, cookie, method, path, body) =>
+        rawGroupSend(
+          app,
+          cookie,
+          method,
+          path,
+          await observedDraftCommandBody(venue.db, method, path, body),
+        ),
+    ),
+  ),
+);

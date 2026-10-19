@@ -19,6 +19,7 @@ import { requireSession } from "./till-session.js";
 import { recordUnpaidDeparture, type UnpaidDepartureRequest } from "./unpaid-departure.js";
 import "./errors.js";
 import { checkZones } from "./zone-access.js";
+import type { BillEditExpected } from "./order-drafts.js";
 
 /** The body, refused field by field as `management.request_invalid`, as a bill refund's is. */
 function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
@@ -28,7 +29,12 @@ function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
   );
   const reason = parseReason(body.reason);
   const override = parseOverrideField(body.override);
-  return { expectedPartyRevision, reason, ...(override === undefined ? {} : { override }) };
+  return {
+    expectedPartyRevision,
+    expectedEdits: body.expectedEdits as BillEditExpected[],
+    reason,
+    ...(override === undefined ? {} : { override }),
+  };
 }
 
 /**

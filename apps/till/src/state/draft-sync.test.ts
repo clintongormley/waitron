@@ -3,13 +3,22 @@ import { draftServer, type DraftServer } from "../widgets/test-helpers.js";
 import {
   DRAFT_SAVE_DELAY_MS,
   DraftSync,
+  DraftStore,
   SUBMIT_RETRIES,
   SUBMIT_RETRY_PAUSE_MS,
   pause,
   resendUnanswered,
 } from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
-import type { Draft, DraftLine, TillProduct } from "../api/client.js";
+import type {
+  BillDraftSnapshot,
+  Draft,
+  DraftLine,
+  FreshDraftLine,
+  TillProduct,
+} from "../api/client.js";
+import type { Place } from "./draft-place.js";
+import { fromDraftLine } from "./draft-lines.js";
 
 const dish = (id: string, name: string): TillProduct => ({
   id,
@@ -28,7 +37,7 @@ const byOffer = new Map([beer, steak].map((product) => [product.menuItemId!, pro
 /** Rebuilds a saved line as the app does from the table's offers, trimming a whole count. */
 const rebuild = (lines: readonly DraftLine[]): OrderLine[] =>
   lines.map((line) => ({
-    product: byOffer.get(line.menuItemId)!,
+    product: byOffer.get(line.menuItemId!)!,
     quantity: line.quantity.replace(/\.0+$/, ""),
     ...(line.note === null ? {} : { note: line.note }),
   }));
@@ -53,10 +62,11 @@ let refused: string[];
 
 let replaced: number;
 
-function sync(personId = "p1"): DraftSync {
+function sync(personId = "p1", billId = "wo-4"): DraftSync {
   return new DraftSync({
     api: server,
     partyId: "v1",
+    billId,
     personId,
     rebuild,
     onRefused: (code) => refused.push(code),
@@ -75,9 +85,13 @@ function seed(ownerId: string, ...products: TillProduct[]): Draft {
   const personId = server.personId;
   server.personId = ownerId;
   const draft = server.save("v1", {
+    billId: "wo-4",
     draftId: null,
     revision: 0,
     lines: products.map((product) => ({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
       menuItemId: product.menuItemId!,
       variantId: null,
       menuVersionId: null,
@@ -102,16 +116,79 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("DraftSync: reading a party's drafts", () => {
+  it("keeps saved row identities when a passive read returns the same bill revision", async () => {
+    seed("p1", beer, steak);
+    const draft = sync();
+    await draft.load();
+    const [first, second] = draft.store.lines;
+    const expected = draft.expectedEdit;
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.store.lines[0]).toBe(first);
+    expect(draft.store.lines[1]).toBe(second);
+    expect(draft.expectedEdit).toEqual(expected);
+    expect(replaced).toBe(1);
+    expect(rows(draft)).toEqual(["Beer ×1", "Steak ×1"]);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.drop();
+  });
+
+  it("updates availability on the same saved rows without replacing the outbox", async () => {
+    seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const [shown] = draft.store.lines;
+    server.unavailable.add("offer-beer");
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.store.lines[0]).toBe(shown);
+    expect(shown!.unavailableOnServer).toBe(true);
+    expect(replaced).toBe(1);
+    server.unavailable.delete("offer-beer");
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.lines[0]).toBe(shown);
+    expect(shown!.unavailableOnServer).toBeUndefined();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.drop();
+  });
+
+  it("replaces the rows when the same editor's other device saves a newer revision", async () => {
+    const saved = seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const [shown] = draft.store.lines;
+    server.save("v1", {
+      billId: "wo-4",
+      draftId: saved.id,
+      revision: saved.revision,
+      lines: saved.lines.map((line) => ({ ...line, quantity: "2" })),
+    });
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.store.lines[0]).not.toBe(shown);
+    expect(rows(draft)).toEqual(["Beer ×2"]);
+    expect(draft.revision).toBe(2);
+    expect(replaced).toBe(2);
+    expect(draft.candidate).toBeNull();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.drop();
+  });
+
   it("shows the signed-in person's own draft and keeps the others' apart", async () => {
     const theirs = seed("p2", steak);
+    theirs.billId = "wo-check";
     seed("p1", beer, beer);
     const draft = sync();
 
     expect(await draft.load()).toBe(true);
 
     expect(rows(draft)).toEqual(["Beer ×2"]);
-    expect(draft.others.map((other) => other.id)).toEqual([theirs.id]);
+    expect(draft.others.map((other) => other.id)).toEqual([]);
     expect(draft.draftId).toBe(server.drafts[1]!.id);
+    expect(server.drafts.find((row) => row.id === theirs.id)?.billId).toBe("wo-check");
     expect(draft.revision).toBe(1);
     expect(draft.store.dirty).toBe(false);
     await settle();
@@ -129,7 +206,117 @@ describe("DraftSync: reading a party's drafts", () => {
   });
 });
 
+describe("DraftSync: bill ownership", () => {
+  it("loads only this bill's own draft and colleagues", async () => {
+    const ownOther = seed("p1", steak);
+    const colleagueOther = seed("p2", beer);
+    server.drafts = [
+      { ...colleagueOther, billId: "wo-check" },
+      { ...ownOther, id: "own-here", billId: "wo-4", lines: colleagueOther.lines },
+    ];
+    const draft = sync();
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.draftId).toBe("own-here");
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.others.map((other) => other.id)).toEqual([]);
+  });
+
+  it("starts empty on another bill owned by the same person", async () => {
+    const other = seed("p1", steak);
+    server.drafts = [{ ...other, billId: "wo-4" }];
+    const draft = sync("p1", "wo-check");
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.draftId).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    expect(draft.others).toEqual([]);
+  });
+
+  it("takes over this bill's colleague without absorbing another bill's own draft", async () => {
+    const elsewhere = seed("p1", beer);
+    elsewhere.billId = "wo-check";
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
+
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(
+      server.drafts.map((each) => [each.billId, each.ownerId, each.lines[0]!.menuItemId]),
+    ).toEqual([
+      ["wo-check", "p1", "offer-beer"],
+      ["wo-4", "p1", "offer-steak"],
+    ]);
+    expect(draft.others).toEqual([]);
+  });
+
+  it("saves each edit with the sync's recorded bill", async () => {
+    const draft = sync("p1", "wo-check");
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toBe("saved");
+
+    expect(server.saveDraft).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ billId: "wo-check" }),
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+});
+
 describe("DraftSync: saving", () => {
+  it("retains saved row IDs on load, save answers and later edits", async () => {
+    const initial = seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    expect(draft.store.lines[0]).toHaveProperty("draftLineId", initial.lines[0]!.id);
+    draft.store.setLineQuantity(0, "2");
+    await draft.flush();
+    expect(server.saveDraft.mock.calls[0]![1].lines[0]).toMatchObject({
+      id: initial.lines[0]!.id,
+      quantity: "2",
+    });
+    draft.store.addProduct(steak, "1");
+    await draft.flush();
+    const saved = server.drafts[0]!;
+    expect(draft.store.lines[1]).toHaveProperty("draftLineId", saved.lines[1]!.id);
+    draft.store.setLineQuantity(1, "3");
+    await draft.flush();
+    expect(server.saveDraft.mock.calls[2]![1].lines).toMatchObject([
+      { id: saved.lines[0]!.id },
+      { id: saved.lines[1]!.id, quantity: "3" },
+    ]);
+  });
+
+  it("attaches an answering save's IDs to the same lines after an in-flight edit", async () => {
+    let answer!: () => void;
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return server.snapshot(server.save(partyId, save));
+    });
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    draft.store.addProduct(steak, "1");
+    const saving = draft.flush();
+    await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+    draft.store.removeLine(0);
+    draft.store.setLineQuantity(0, "3");
+    answer();
+    await saving;
+    const steakId = server.drafts[0]!.lines[1]!.id;
+    expect(draft.store.lines[0]).toMatchObject({ draftLineId: steakId, quantity: "3" });
+    await draft.flush();
+    expect(server.saveDraft.mock.calls[1]![1].lines).toMatchObject([
+      { id: steakId, menuItemId: "offer-steak", quantity: "3" },
+    ]);
+  });
+
   it("saves three taps on Beer once, as one Beer ×3, after the edits stop", async () => {
     const draft = sync();
     await draft.load();
@@ -146,8 +333,10 @@ describe("DraftSync: saving", () => {
     expect(server.saveDraft).toHaveBeenCalledWith(
       "v1",
       {
+        billId: "wo-4",
         draftId: null,
         revision: 0,
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
       },
       { signal: expect.any(AbortSignal) },
@@ -167,8 +356,15 @@ describe("DraftSync: saving", () => {
     expect(server.saveDraft).toHaveBeenLastCalledWith(
       "v1",
       {
+        billId: "wo-4",
         draftId: server.drafts[0]!.id,
         revision: 1,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: server.drafts[0]!.id,
+          draftRevision: 1,
+        },
         lines: [expect.anything(), expect.anything()],
       },
       { signal: expect.any(AbortSignal) },
@@ -182,7 +378,7 @@ describe("DraftSync: saving", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -197,8 +393,15 @@ describe("DraftSync: saving", () => {
 
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
     expect(server.saveDraft.mock.calls[1]![1]).toEqual({
+      billId: "wo-4",
       draftId: server.drafts[0]!.id,
       revision: 1,
+      expectedEdit: {
+        billId: "wo-4",
+        editorVersion: 1,
+        draftId: server.drafts[0]!.id,
+        draftRevision: 1,
+      },
       lines: [
         expect.objectContaining({ menuItemId: "offer-beer", quantity: "1" }),
         expect.objectContaining({ menuItemId: "offer-steak", quantity: "2" }),
@@ -227,7 +430,10 @@ describe("DraftSync: saving", () => {
     draft.store.addProduct(beer, "1");
 
     expect(await draft.flush()).toBe("failed");
-    expect(draft.lineIds([0])).toBeNull();
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledTimes(1);
+    draft.resolveCandidate(draft.candidate!.lines);
     expect(await draft.flush()).toBe("saved");
 
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
@@ -265,17 +471,17 @@ describe("DraftSync: saving", () => {
       ],
     };
 
-    async function saveAnswered(change: (line: DraftLine) => void): Promise<DraftSync> {
+    async function saveAnswered(change: (line: FreshDraftLine) => void): Promise<DraftSync> {
       const draft = sync();
       await draft.load();
       draft.store.loadFrom(draft.store.id, [structuredClone(answered)]);
       draft.store.setLineExtras(0, { note: "no ice" });
       server.saveDraft.mockImplementationOnce(async (partyId, save) => {
         const saved = structuredClone(server.save(partyId, save));
-        saved.lines[0]!.options.reverse();
-        saved.lines[0]!.extras[0]!.picks.reverse();
-        change(saved.lines[0]!);
-        return saved;
+        (saved.lines[0] as FreshDraftLine).options.reverse();
+        (saved.lines[0] as FreshDraftLine).extras[0]!.picks.reverse();
+        change(saved.lines[0] as FreshDraftLine);
+        return server.snapshot(saved);
       });
       await draft.flush();
       return draft;
@@ -298,7 +504,7 @@ describe("DraftSync: saving", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -338,20 +544,138 @@ describe("DraftSync: a refused save", () => {
   it.each(["draft.taken_over", "draft.not_found", "draft.already_submitted"])(
     "re-reads the drafts after %s and says so",
     async (code) => {
-      const theirs = seed("p2", steak);
       const draft = sync();
       await draft.load();
       server.saveDraft.mockRejectedValueOnce({ code, status: 409 });
       draft.store.addProduct(beer, "1");
+      const theirs = seed("p2", steak);
 
       expect(await draft.flush()).toEqual({ refused: code });
 
       expect(server.listDrafts).toHaveBeenCalledTimes(2);
-      expect(draft.store.lineCount).toBe(0);
+      expect(draft.store.lineCount).toBe(1);
+      expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
       expect(draft.others.map((other) => other.id)).toEqual([theirs.id]);
       expect(refused).toEqual([code]);
     },
   );
+
+  it("keeps editing frozen after a refused save's recovery read fails until a current read succeeds", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toEqual({ refused: "draft.out_of_date" });
+    expect(draft.store.editsLocked).toBe(true);
+    const candidate = draft.candidate!;
+    expect(candidate.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    draft.resolveCandidate(candidate.lines);
+    expect(draft.candidate).toBe(candidate);
+    draft.store.addProduct(steak, "1");
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(await draft.flush()).toBe("failed");
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+
+    expect(await draft.load()).toBe(true);
+    expect(draft.candidate).toBe(candidate);
+    draft.resolveCandidate(candidate.lines);
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.editsLocked).toBe(false);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(await draft.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-beer", "1"],
+    ]);
+    draft.drop();
+  });
+
+  it("discarding a candidate after failed recovery never saves its discarded lines on the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toEqual({ refused: "draft.out_of_date" });
+    draft.resolveCandidate(null);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(await draft.flush()).toBe("failed");
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.editsLocked).toBe(false);
+    await settle();
+    expect(rows(draft)).toEqual([]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts).toEqual([]);
+
+    draft.store.addProduct(steak, "1");
+    expect(await draft.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-steak", "1"],
+    ]);
+    draft.drop();
+  });
+
+  it("discarding a candidate after lost-save recovery never saves its discarded lines on the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockRejectedValueOnce(new TypeError("Lost save answer"));
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toBe("failed");
+    draft.resolveCandidate(null);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(await draft.flush()).toBe("failed");
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.editsLocked).toBe(false);
+    await settle();
+    expect(rows(draft)).toEqual([]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts).toEqual([]);
+
+    draft.store.addProduct(steak, "1");
+    expect(await draft.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-steak", "1"],
+    ]);
+    draft.drop();
+  });
+
+  it("discard after failed recovery restores the last confirmed saved lines without discarding that order", async () => {
+    seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const saved = structuredClone(server.drafts);
+    draft.store.setLineQuantity(0, "2");
+    draft.store.addProduct(steak, "1");
+    server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toEqual({ refused: "draft.out_of_date" });
+    expect(draft.candidate?.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Beer", "2"],
+      ["Steak", "1"],
+    ]);
+    draft.resolveCandidate(null);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.editsLocked).toBe(true);
+    expect(server.drafts).toEqual(saved);
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.editsLocked).toBe(false);
+    await settle();
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts).toEqual(saved);
+    draft.drop();
+  });
 
   it("keeps the edit unsaved after a save rejected with nothing at all", async () => {
     const draft = sync();
@@ -361,6 +685,9 @@ describe("DraftSync: a refused save", () => {
 
     expect(await draft.flush()).toBe("failed");
     expect(refused).toEqual([]);
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledTimes(1);
+    draft.resolveCandidate(draft.candidate!.lines);
     expect(await draft.flush()).toBe("saved");
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
   });
@@ -378,13 +705,13 @@ describe("DraftSync: a refused save", () => {
     expect(refused).toEqual(["party.not_open"]);
   });
 
-  it("ignores a save answer overtaken by a read", async () => {
+  it("accepts a newer save answer after a read with the same observation", async () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     const saving = draft.flush();
@@ -395,8 +722,9 @@ describe("DraftSync: a refused save", () => {
     answer();
     await saving;
 
-    expect(draft.draftId).toBeNull();
-    expect(draft.store.lineCount).toBe(0);
+    expect(draft.draftId).toBe(server.drafts[0]!.id);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual(["Beer ×1"]);
   });
 });
 
@@ -426,6 +754,9 @@ describe("DraftSync: a save or read that does not come back", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(outcome).toBe("failed");
 
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledTimes(1);
+    draft.resolveCandidate(draft.candidate!.lines);
     expect(await draft.flush()).toBe("saved");
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
   });
@@ -464,19 +795,20 @@ describe("DraftSync: a save or read that does not come back", () => {
 });
 
 describe("DraftSync: signing out", () => {
-  it("sends what is unsaved at once when no save is out, and nothing after", async () => {
+  it("retains unsaved work at sign-out and starts no further save", async () => {
     const draft = sync();
     await draft.load();
     draft.store.addProduct(beer, "1");
 
     const closed = draft.close();
-    expect(await closed).toBe("saved");
-    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(await closed).toBe("failed");
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(server.saveDraft).not.toHaveBeenCalled();
 
     draft.store.addProduct(steak, "1");
     await settle();
     expect(await draft.flush()).toBe("failed");
-    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
   });
 
   it("sends nothing more while a save is out, since it could go out under the next session", async () => {
@@ -485,7 +817,7 @@ describe("DraftSync: signing out", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -493,8 +825,15 @@ describe("DraftSync: signing out", () => {
     const queued = draft.flush();
 
     const closed = draft.close();
+    const onClosed = vi.fn();
+    void closed.then(onClosed);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(draft.store.editsLocked).toBe(true);
     answer();
     await closed;
+    expect(onClosed).toHaveBeenCalledOnce();
     await queued;
     await settle();
 
@@ -511,13 +850,14 @@ describe("DraftSync: after a submission", () => {
     await draft.flush();
     const [sentLine, kept] = draft.store.lines;
     const answered = server.apply("v1", draft.draftId!, {
+      expectedEdit: draft.expectedEdit!,
       submissionId: "s1",
       expectedPartyRevision: 3,
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
     });
 
-    draft.submitted(answered.draft, [sentLine!]);
+    draft.submitted(answered.draft, [sentLine!], answered.edit);
 
     expect(draft.store.lines).toEqual([kept]);
     expect(draft.store.lines[0]).toBe(kept);
@@ -533,7 +873,8 @@ describe("DraftSync: after a submission", () => {
     draft.store.addProduct(beer, "1");
     await draft.flush();
 
-    draft.submitted(null, draft.store.lines);
+    server.drafts = [];
+    draft.submitted(null, draft.store.lines, server.edit("wo-4"));
 
     expect(draft.store.lineCount).toBe(0);
     expect(draft.draftId).toBeNull();
@@ -554,7 +895,7 @@ describe("DraftSync: after a submission", () => {
     await draft.flush();
     const rest = seed("p9", steak);
 
-    draft.submitted(rest, []);
+    draft.submitted(rest, [], server.edit(rest.billId));
 
     expect(rows(draft)).toEqual(["Steak ×1"]);
     expect(draft.lineIds([0])).toEqual([rest.lines[0]!.id]);
@@ -562,8 +903,165 @@ describe("DraftSync: after a submission", () => {
 });
 
 describe("DraftSync: a party's draft store", () => {
-  it("adds a tap into the line ordering the same thing", () => {
+  it.each([
+    { slot: 2, joinGroupId: null, afterGroupId: null },
+    { slot: 0, joinGroupId: "g3", afterGroupId: null },
+    { slot: 1, joinGroupId: null, afterGroupId: "g3" },
+  ])(
+    "takes a save's changed placement %j instead of keeping a different arrangement",
+    async (wire) => {
+      const draft = new DraftSync({
+        api: server,
+        partyId: "v1",
+        billId: "wo-4",
+        personId: "p1",
+        rebuild: (lines) => lines.map((line) => fromDraftLine(line, new Map())),
+        onRefused: (code) => refused.push(code),
+        requestLimitMs: LIMIT,
+      });
+      await draft.load();
+      draft.store.placer = () => ({ place: { kind: "new", slot: 1 } });
+      draft.store.addProduct(steak, "1");
+      server.saveDraft.mockImplementationOnce(async (party, input) => {
+        const result = server.save(party, input);
+        return server.snapshot({
+          ...result,
+          lines: result.lines.map((line) => ({ ...line, ...wire })),
+        });
+      });
+      expect(await draft.flush()).toBe("saved");
+      expect(draft.store.lines[0]!.place).toEqual(
+        wire.joinGroupId === null
+          ? {
+              kind: "new",
+              slot: wire.slot,
+              ...(wire.afterGroupId === null ? {} : { afterGroupId: wire.afterGroupId }),
+            }
+          : { kind: "join", groupId: "g3" },
+      );
+      expect(refused).toEqual([]);
+      draft.drop();
+    },
+  );
+
+  it("keeps line identity when the saved arrangement matches", async () => {
     const draft = sync();
+    await draft.load();
+    draft.store.placer = () => ({ place: { kind: "new", slot: 2, afterGroupId: "g3" } });
+    draft.store.addProduct(steak, "1");
+    const line = draft.store.lines[0];
+    expect(await draft.flush()).toBe("saved");
+    expect(draft.store.lines[0]).toBe(line);
+    expect(server.drafts[0]!.lines[0]).toMatchObject({
+      slot: 2,
+      joinGroupId: null,
+      afterGroupId: "g3",
+    });
+    draft.drop();
+  });
+
+  it("does not shift another line when an addition exceeds the order limit", () => {
+    const store = new DraftStore();
+    store.addProduct(beer, "1");
+    store.lines[0]!.place = { kind: "new", slot: 1 };
+    store.simplifiedInvoiceLimit = "3.00";
+    store.placer = () => ({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
+    store.markPersisted();
+    const changed = vi.fn();
+    store.subscribe(changed);
+    store.addProduct(steak, "1");
+    expect(store.lines.map((line) => ({ product: line.product.id, place: line.place }))).toEqual([
+      { product: "beer", place: { kind: "new", slot: 1 } },
+    ]);
+    expect(changed).not.toHaveBeenCalled();
+    expect(store.dirty).toBe(false);
+  });
+
+  it("shifts other groups when changing a line's course inserts an earlier slot", () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [
+      { product: steak, quantity: "1", place: { kind: "new", slot: 1 } },
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+    ]);
+    store.placer = () => ({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
+    store.setLineCourse(1, "mains");
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 1 },
+    ]);
+  });
+
+  it("places additions by their effective course and merges only matching places", () => {
+    const store = new DraftStore();
+    let place: Place = { kind: "new", slot: 1 };
+    const courses: (string | null)[] = [];
+    store.placer = (courseId) => {
+      courses.push(courseId);
+      return { place };
+    };
+    store.addProduct({ ...steak, courseId: "mains" }, "1");
+    store.addProduct({ ...steak, courseId: "mains" }, "2");
+    place = { kind: "fire" };
+    store.addProduct({ ...steak, courseId: "mains" }, "1");
+    expect(store.lines.map((line) => ({ quantity: line.quantity, place: line.place }))).toEqual([
+      { quantity: "3", place: { kind: "new", slot: 1 } },
+      { quantity: "1", place: { kind: "fire" } },
+    ]);
+    expect(courses).toEqual(["mains", "mains", "mains"]);
+  });
+
+  it("shifts existing slots before adding a line without merging into the displaced slot", () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [{ product: steak, quantity: "1", place: { kind: "new", slot: 1 } }]);
+    const changed = vi.fn();
+    store.subscribe(changed);
+    store.placer = () => ({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
+    store.addMerging(steak, "1");
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 1 },
+    ]);
+    expect(store.lines.map((line) => line.quantity)).toEqual(["1", "1"]);
+    expect(changed).toHaveBeenCalledOnce();
+  });
+
+  it("re-places only the changed course, excluding that line from the placement context", () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [
+      { product: { ...steak, courseId: "mains" }, quantity: "1", place: { kind: "new", slot: 1 } },
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+    ]);
+    const calls: unknown[] = [];
+    store.placer = (courseId, exceptIndex) => {
+      calls.push([courseId, exceptIndex]);
+      return { place: { kind: "join", groupId: "g3" } };
+    };
+    const changed = vi.fn();
+    store.subscribe(changed);
+    store.setLineCourse(0, "desserts");
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "join", groupId: "g3" },
+      { kind: "fire" },
+    ]);
+    expect(calls).toEqual([["desserts", 0]]);
+    expect(changed).toHaveBeenCalledOnce();
+    store.setLineCourse(0, undefined);
+    expect(calls).toEqual([
+      ["desserts", 0],
+      ["mains", 0],
+    ]);
+    expect(store.lines[0]!.courseId).toBeUndefined();
+  });
+
+  it("leaves an unseated store's additions unplaced", () => {
+    const store = new DraftStore();
+    store.addProduct(steak, "1");
+    expect(store.lines[0]).not.toHaveProperty("place");
+  });
+
+  it("adds a tap into the line ordering the same thing", async () => {
+    const draft = sync();
+    await draft.load();
     draft.store.addProduct(beer, "1");
     draft.store.addProduct(steak, "1");
     draft.store.addProduct(beer, "2");
@@ -582,7 +1080,16 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(server.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
       "v1",
       theirs.id,
-      theirs.revision,
+      {
+        revision: theirs.revision,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: theirs.id,
+          draftRevision: theirs.revision,
+        },
+        submissionId: expect.any(String),
+      },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(rows(draft)).toEqual(["Steak ×1"]);
@@ -600,60 +1107,69 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(refused).toEqual([]);
   });
 
-  it("saves the person's own edit first, then takes the draft the server added into theirs", async () => {
-    const theirs = seed("p2", steak);
+  it("takes only the saved bill outbox and retains the losing local edit separately", async () => {
     const draft = sync();
     await draft.load();
     draft.store.addProduct(beer, "1");
+    const theirs = seed("p2", steak);
+    await draft.load();
 
     expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
 
-    const saved = server.saveDraft.mock.invocationCallOrder[0]!;
-    expect(saved).toBeLessThan(server.takeOverDraft.mock.invocationCallOrder[0]!);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
     const own = server.drafts.find((each) => each.ownerId === "p1")!;
     expect(draft.draftId).toBe(own.id);
-    expect(draft.draftId).not.toBe(theirs.id);
-    expect(rows(draft)).toEqual(["Beer ×1", "Steak ×1"]);
-    expect(draft.lineIds([0, 1])).toEqual(own.lines.map((line) => line.id));
+    expect(draft.draftId).toBe(theirs.id);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.lineIds([0])).toEqual(own.lines.map((line) => line.id));
     expect(draft.others).toEqual([]);
   });
 
   it("keeps the other people's drafts it did not take", async () => {
     const theirs = seed("p2", steak);
     const another = seed("p3", beer);
+    another.billId = "wo-check";
     const draft = sync();
     await draft.load();
 
     expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
 
-    expect(draft.others.map((other) => other.id)).toEqual([another.id]);
+    expect(draft.others).toEqual([]);
+    expect(server.drafts.find((row) => row.id === another.id)).toEqual(another);
   });
 
-  it("takes nothing over when the person's own edit could not be saved", async () => {
-    const theirs = seed("p2", steak);
+  it("takeover sends no preparatory save even when saving would fail", async () => {
     const draft = sync();
     await draft.load();
     server.saveDraft.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     draft.store.addProduct(beer, "1");
+    const theirs = seed("p2", steak);
+    await draft.load();
 
-    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
 
-    expect(server.takeOverDraft).not.toHaveBeenCalled();
-    expect(rows(draft)).toEqual(["Beer ×1"]);
-    expect(draft.lineIds([0])).toBeNull();
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(draft.store.editsLocked).toBe(true);
   });
 
-  it("takes nothing over when the person's own edit was refused, which it has already said", async () => {
-    const theirs = seed("p2", steak);
+  it("a refused takeover preserves the saved editor and local candidate", async () => {
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
+    server.takeOverDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     draft.store.addProduct(beer, "1");
+    const theirs = seed("p2", steak);
+    await draft.load();
 
-    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toEqual({ refused: "party.not_open" });
 
-    expect(server.takeOverDraft).not.toHaveBeenCalled();
-    expect(refused).toEqual(["party.not_open"]);
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(draft.edit?.editorId).toBe("p2");
   });
 
   it("reads the drafts again, and sends nothing more, when the draft moved on since it was read", async () => {
@@ -669,8 +1185,8 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(server.takeOverDraft).toHaveBeenCalledOnce();
     expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
     expect(draft.others.map((other) => other.ownerId)).toEqual(["p2"]);
-    expect(draft.draftId).toBeNull();
-    expect(rows(draft)).toEqual([]);
+    expect(draft.draftId).toBe(theirs.id);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
     await settle();
     expect(server.takeOverDraft).toHaveBeenCalledOnce();
     expect(server.saveDraft).not.toHaveBeenCalled();
@@ -695,20 +1211,20 @@ describe("DraftSync: taking over another person's draft", () => {
     const theirs = seed("p2", steak);
     const draft = sync();
     await draft.load();
-    let answer!: (value: Draft) => void;
+    let answer!: (value: BillDraftSnapshot) => void;
     server.takeOverDraft.mockImplementationOnce(
-      () => new Promise<Draft>((resolve) => (answer = resolve)),
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
     );
     const reads = server.listDrafts.mock.calls.length;
 
     const outcome = draft.takeOver(theirs.id, theirs.revision);
     await vi.advanceTimersByTimeAsync(0);
     draft.drop();
-    answer(structuredClone(server.takeOver("v1", theirs.id, theirs.revision)));
+    answer(server.snapshot(server.takeOver("v1", theirs.id, theirs.revision)));
 
     expect(await outcome).toBe("failed");
-    expect(rows(draft)).toEqual([]);
-    expect(draft.draftId).toBeNull();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.draftId).toBe(theirs.id);
     expect(server.listDrafts).toHaveBeenCalledTimes(reads);
   });
 
@@ -718,7 +1234,7 @@ describe("DraftSync: taking over another person's draft", () => {
     await draft.load();
     let refuse!: (error: unknown) => void;
     server.takeOverDraft.mockImplementationOnce(
-      () => new Promise<Draft>((_resolve, reject) => (refuse = reject)),
+      () => new Promise<BillDraftSnapshot>((_resolve, reject) => (refuse = reject)),
     );
     const reads = server.listDrafts.mock.calls.length;
 
@@ -735,16 +1251,16 @@ describe("DraftSync: taking over another person's draft", () => {
     const theirs = structuredClone(seed("p2", steak));
     const draft = sync();
     await draft.load();
-    let answer!: (value: Draft) => void;
+    let answer!: (value: BillDraftSnapshot) => void;
     server.takeOverDraft.mockImplementationOnce(
-      () => new Promise<Draft>((resolve) => (answer = resolve)),
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
     );
 
     const outcome = draft.takeOver(theirs.id, theirs.revision);
     await vi.advanceTimersByTimeAsync(0);
     expect(draft.store.sending).toBe(true);
     draft.store.addProduct(beer, "1");
-    answer(structuredClone(server.takeOver("v1", theirs.id, theirs.revision)));
+    answer(server.snapshot(server.takeOver("v1", theirs.id, theirs.revision)));
 
     expect(await outcome).toBe("taken");
     await vi.advanceTimersByTimeAsync(2_000);
@@ -772,6 +1288,7 @@ describe("DraftSync: taking over another person's draft", () => {
     const draft = new DraftSync({
       api: server,
       partyId: "v1",
+      billId: "wo-4",
       personId: "p1",
       rebuild,
       onRefused: (_code, ownerName) => names.push(ownerName),
@@ -822,13 +1339,14 @@ describe("DraftSync: what the server says about each line", () => {
     const [sentLine] = draft.store.lines;
     server.unavailable.add("offer-steak");
     const answered = server.apply("v1", draft.draftId!, {
+      expectedEdit: draft.expectedEdit!,
       submissionId: "s1",
       expectedPartyRevision: 3,
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
     });
 
-    draft.submitted(answered.draft, [sentLine!]);
+    draft.submitted(answered.draft, [sentLine!], answered.edit);
 
     expect(flags(draft)).toEqual([true]);
   });
@@ -875,7 +1393,7 @@ describe("DraftSync: what the server says about each line", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     expect(draft.saving).toBe(false);
@@ -963,5 +1481,140 @@ describe("resendUnanswered", () => {
 
     expect(await resendUnanswered(send, new AbortController().signal, () => true)).toBe("answered");
     expect(send).toHaveBeenCalledOnce();
+  });
+});
+
+describe("A773 drafts on a bill that is no longer open", () => {
+  it.each(["placed", "settled", "abandoned"] as const)(
+    "%s refuses edits and saves without losing the pending dishes",
+    async (status) => {
+      const s = sync();
+      await s.load();
+      s.store.addProduct(beer, "1");
+      s.billStatus = status;
+      s.store.addProduct(steak, "1");
+      s.store.setLineQuantity(0, "2");
+      s.store.setLineModifiers(0, { note: "changed" });
+      s.store.setLineCourse(0, "mains");
+      s.store.setLineMakeAt(0, "grill");
+      s.store.setLinePlaces([0], { kind: "new", slot: 2 });
+      s.store.removeLine(0);
+      await settle();
+      expect(
+        s.store.lines.map((line) => [
+          line.product.name,
+          line.quantity,
+          line.note,
+          line.courseId,
+          line.makeAt,
+          line.place,
+        ]),
+      ).toEqual([["Beer", "1", undefined, undefined, undefined, undefined]]);
+      expect(server.drafts).toEqual([]);
+      expect(await s.flush()).toEqual({
+        refused:
+          status === "placed"
+            ? "bill.presented"
+            : status === "abandoned"
+              ? "tab.not_open"
+              : "bill.paid",
+      });
+      expect(server.drafts).toEqual([]);
+      expect(s.store.lines[0]!.product.name).toBe("Beer");
+      s.drop();
+    },
+  );
+
+  it("automatically saves retained dishes when a presented bill reopens", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    draft.billStatus = "placed";
+    await settle();
+    expect(server.drafts).toEqual([]);
+    draft.billStatus = "open";
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS - 1);
+    expect(server.drafts).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.drafts).toHaveLength(1);
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-beer", "1"],
+    ]);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.lineIds([0])).toEqual([server.drafts[0]!.lines[0]!.id]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    draft.drop();
+  });
+
+  it("a bill presenting before takeover starts prevents the takeover request", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const taking = draft.takeOver(theirs.id, theirs.revision);
+    draft.billStatus = "placed";
+    expect(await taking).toEqual({ refused: "bill.presented" });
+    expect(server.takeOverDraft).not.toHaveBeenCalled();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.sending).toBe(false);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(server.drafts[0]!.ownerId).toBe("p2");
+    draft.drop();
+  });
+
+  it("an authoritative read cannot clear the bill's edit restriction", async () => {
+    seed("p1", beer);
+    const s = sync();
+    await s.load();
+    s.billStatus = "settled";
+    expect(await s.load()).toBe(true);
+    s.store.addProduct(steak, "1");
+    expect(s.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(s.store.editsLocked).toBe(true);
+    s.drop();
+  });
+
+  it("a bill reopening permits retained edits to save without clearing a separate read lock", async () => {
+    const s = sync();
+    await s.load();
+    s.store.addProduct(beer, "1");
+    s.billStatus = "placed";
+    const unlock = s.store.lockEdits();
+    s.billStatus = "open";
+    s.store.addProduct(steak, "1");
+    expect(s.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    unlock();
+    s.store.addProduct(steak, "1");
+    expect(await s.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-beer", "1"],
+      ["offer-steak", "1"],
+    ]);
+    s.drop();
+  });
+
+  it("cannot take over a colleague's draft on a presented bill", async () => {
+    const theirs = seed("p2", steak);
+    const s = sync();
+    await s.load();
+    await s.load();
+    s.billStatus = "placed";
+    expect(await s.takeOver(theirs.id, theirs.revision)).toEqual({ refused: "bill.presented" });
+    expect(server.drafts[0]!.ownerId).toBe("p2");
+    expect(s.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    expect(s.store.editsLocked).toBe(true);
+    s.drop();
+  });
+
+  it("sign-out does not write pending dishes onto a paid bill", async () => {
+    const s = sync();
+    await s.load();
+    s.store.addProduct(beer, "1");
+    s.billStatus = "settled";
+    expect(await s.close()).toBe("failed");
+    expect(s.candidate?.lines[0]?.product.name).toBe("Beer");
+    expect(server.drafts).toEqual([]);
+    expect(s.store.lines[0]!.product.name).toBe("Beer");
+    s.drop();
   });
 });

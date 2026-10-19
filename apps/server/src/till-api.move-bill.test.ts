@@ -1,3 +1,8 @@
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -5,7 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentLines, billPaymentRefunds, floorZones, saleLines, sales } from "@waitron/db";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -94,7 +99,15 @@ function cashContribution(billId: string, amount: string) {
   });
 }
 
-function post(path: string, body: unknown, cookie = venue.cookie) {
+async function post(path: string, body: unknown, cookie = venue.cookie) {
+  body = await observedTableActionBody(
+    venue.db,
+    path,
+    await observedMoveBillBody(venue.db, path, body),
+  );
+  const place = /^\/api\/working-orders\/([^/]+)\/place$/.exec(path);
+  if (place !== null && body !== null && typeof body === "object")
+    body = { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, place[1]!)), ...body };
   return send(venue.app, cookie, "POST", path, body);
 }
 
@@ -109,10 +122,13 @@ function revisionOf(partyId: string): number {
 async function splitAtTwoParties(names: string[], lineNos: number[]) {
   const ana = await seatedWith(venue, ...names);
   const luis = await seatedWith(venue, "Caña");
-  const split = await post(`/api/bills/${ana.tabId}/split`, {
-    transfers: lineNos.map((lineNo) => ({ lineNo })),
-    expectedPartyRevision: ana.revision,
-  });
+  const split = await post(
+    `/api/bills/${ana.tabId}/split`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+      transfers: lineNos.map((lineNo) => ({ lineNo })),
+      expectedPartyRevision: ana.revision,
+    }),
+  );
   expect(split.status).toBe(200);
   return { ana, luis, billId: split.json.billId as string };
 }
@@ -352,10 +368,16 @@ describe("money on a moved bill", () => {
   it("finishes a card payment still at the reader on the bill it began on, after the bill moved party", async () => {
     const ana = await seatedWith(venue, "Tarta", "Pulpo"); // €18.00 + €20.00
     const luis = await seatedWith(venue, "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
-      expectedPartyRevision: ana.revision,
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${ana.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+        transfers: [{ lineNo: 2 }],
+        expectedPartyRevision: ana.revision,
+      }),
+    );
     const billId = split.json.billId as string; // Pulpo, €20.00
     const body: Body = {
       submissionId: randomUUID(),
@@ -371,13 +393,17 @@ describe("money on a moved bill", () => {
     const first = pay(billId, body);
     await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
 
-    const moved = await send(venue.app, venue.cookie2, "POST", `/api/bills/${billId}/move`, {
-      to: { tableId: luis.tableId },
-      bills: "merge",
-      expectedPartyRevision: ana.revision + 1,
-      otherPartyId: luis.partyId,
-      expectedOtherPartyRevision: luis.revision,
-    });
+    const moved = await post(
+      `/api/bills/${billId}/move`,
+      {
+        to: { tableId: luis.tableId },
+        bills: "merge",
+        expectedPartyRevision: ana.revision + 1,
+        otherPartyId: luis.partyId,
+        expectedOtherPartyRevision: luis.revision,
+      },
+      venue.cookie2,
+    );
     release();
     const answered = await first;
     const retry = await pay(billId, body);
@@ -632,6 +658,19 @@ describe("paying a moved bill, by its state", () => {
     const collected = await post(`/api/working-orders/${id}/collect`, {
       tender: { method: "cash", amount: "18.00" },
     });
+    const unserved = await post(`/api/parties/${ana.partyId}/finish`, {
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect([unserved.status, unserved.json.code]).toEqual([409, "party.unserved_dishes"]);
+    const dishes = (unserved.json.params as { dishes: { lineId: string; quantity: string }[] })
+      .dishes;
+    expect(dishes).toHaveLength(2);
+    const served = await post(`/api/parties/${ana.partyId}/served`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revisionOf(ana.partyId),
+      items: dishes.map(({ lineId, quantity }) => ({ lineId, quantity })),
+    });
+    expect(served.status, JSON.stringify(served.json)).toBe(200);
     const finished = await post(`/api/parties/${ana.partyId}/finish`, {
       expectedPartyRevision: revisionOf(ana.partyId),
     });
@@ -697,10 +736,13 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
   it("keeps the moved bill separate from a receiving main bill with a card refund in progress", async () => {
     const ana = await seatedWith(venue, "Tarta", "Pulpo");
     const luis = await seatedWith(venue, "Croquetas");
-    const split = await post(`/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
-      expectedPartyRevision: ana.revision,
-    });
+    const split = await post(
+      `/api/bills/${ana.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+        transfers: [{ lineNo: 2 }],
+        expectedPartyRevision: ana.revision,
+      }),
+    );
     const billId = split.json.billId as string;
     const card = await cardContribution(luis.tabId, "3.00");
     const paymentId = (card.json.payment as { id: string }).id;

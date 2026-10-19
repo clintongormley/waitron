@@ -341,7 +341,7 @@ const partyGroups: StationQueueGroup[] = [
         name: "Ensalada",
         quantity: "1.000",
         course: null,
-        group: { id: "g-2", position: 2, state: "fired" },
+        group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -351,7 +351,7 @@ const partyGroups: StationQueueGroup[] = [
         name: "Solomillo",
         quantity: "2.000",
         course: null,
-        group: { id: "g-3", position: 3, state: "held" },
+        group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
         firedAt: null,
       },
     ],

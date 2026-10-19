@@ -290,4 +290,48 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
+
+  it("keeps a group's number origin when its current party changes, including duplicate numbers", async () => {
+    const origin = await party();
+    const destination = await party();
+    const original = await group({ partyId: origin, displayNumber: 1, numberPartyId: origin });
+    const other = await group({
+      partyId: destination,
+      displayNumber: 1,
+      numberPartyId: destination,
+    });
+    await inTx((tx) =>
+      tx.update(orderGroups).set({ partyId: destination }).where(eq(orderGroups.id, original)),
+    );
+    const { rows } = suite.db.execute(sql`
+      select id, display_number, number_party_id from order_groups where party_id = ${destination}
+    `);
+    expect(new Map(rows.map((row) => [row.id, [row.display_number, row.number_party_id]]))).toEqual(
+      new Map([
+        [original, [1, origin]],
+        [other, [1, destination]],
+      ]),
+    );
+  });
+
+  it("refuses a number origin that names no party", async () => {
+    const partyId = await party();
+    const error = await captureError(() =>
+      group({ partyId, displayNumber: 1, numberPartyId: MISSING }),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const id = await group({ partyId, displayNumber: 1, numberPartyId: partyId });
+    const [stored] = await inTx((tx) =>
+      tx.select().from(orderGroups).where(eq(orderGroups.id, id)),
+    );
+    expect(stored).toMatchObject({ displayNumber: 1, numberPartyId: partyId });
+  });
+
+  it("leaves pre-live unnumbered rows explicitly unbound for application refusal", async () => {
+    const id = await group({ partyId: await party() });
+    const [stored] = await inTx((tx) =>
+      tx.select().from(orderGroups).where(eq(orderGroups.id, id)),
+    );
+    expect(stored).toMatchObject({ displayNumber: 0, numberPartyId: null });
+  });
 });

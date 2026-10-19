@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { recallLines } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -16,7 +18,7 @@ import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce"
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
-import { parkOrder, recallLines } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
@@ -83,7 +85,7 @@ async function prepare(action: Action) {
   const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
   return { id, lineId: line!.id, revision: order!.revision };
 }
-function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof prepare>>) {
+async function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof prepare>>) {
   const extra = { personId: v.adminId, at: "2026-01-06T22:00:00Z" };
   return send(
     app,
@@ -92,6 +94,7 @@ function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof pre
     `/api/working-orders/${order.id}/${action === "course" ? "lines/1/course" : action === "make-at" ? "make-at" : `lines/${action}`}`,
     {
       ...extra,
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, order.id)),
       ...(action === "course"
         ? { courseId }
         : action === "make-at"

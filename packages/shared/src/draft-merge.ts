@@ -5,15 +5,25 @@ import { QUANTITY_SCALE, stringToThousandths } from "./scales.js";
 
 /** What the draft merge rule (plan D10) reads of a draft line; the server and the till each carry more. */
 export interface MergeableDraftLine {
+  sourceLineId?: null;
   menuItemId: string;
   variantId: string | null;
   menuVersionId: string | null;
   courseId: string | null;
   makeAt?: string | null;
+  slot?: number;
+  joinGroupId?: string | null;
+  afterGroupId?: string | null;
   note: string | null;
   options: readonly OptionSelection[];
   extras: readonly ExtraSelection[];
   /** A decimal string. */
+  quantity: string;
+  noMerge: boolean;
+}
+
+interface SourceDraftLine {
+  sourceLineId: string;
   quantity: string;
   noMerge: boolean;
 }
@@ -24,7 +34,9 @@ export interface MergeableDraftLine {
  * separately, and one 0.8 kg row would lose that. Options compare as a set and extras picks as a
  * multiset, never by order.
  */
-export function draftLineMergeKey(line: MergeableDraftLine): string | null {
+
+export function draftLineMergeKey(line: MergeableDraftLine | SourceDraftLine): string | null {
+  if (line.sourceLineId != null) return null;
   if (line.noMerge || stringToThousandths(line.quantity) % 1000 !== 0) return null;
   const options = [
     ...new Set(line.options.map(({ listId, labelId }) => JSON.stringify([listId, labelId]))),
@@ -43,6 +55,9 @@ export function draftLineMergeKey(line: MergeableDraftLine): string | null {
     line.menuVersionId,
     line.courseId,
     line.makeAt ?? null,
+    line.slot ?? 0,
+    line.joinGroupId ?? null,
+    line.afterGroupId ?? null,
     line.note,
     options,
     extras,
@@ -53,7 +68,9 @@ export function draftLineMergeKey(line: MergeableDraftLine): string | null {
  * Adds each line into the first earlier line that orders the same thing, which keeps its id and
  * position; a merged quantity is written at the quantity scale.
  */
-export function normaliseDraftLines<T extends MergeableDraftLine>(lines: readonly T[]): T[] {
+export function normaliseDraftLines<T extends MergeableDraftLine | SourceDraftLine>(
+  lines: readonly T[],
+): T[] {
   const merged: T[] = [];
   const byKey = new Map<string, number>();
   for (const line of lines) {

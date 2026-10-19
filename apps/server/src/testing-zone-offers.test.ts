@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -29,7 +30,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
-import { addTabRound, parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import type { OriginConfig } from "./till-config.js";

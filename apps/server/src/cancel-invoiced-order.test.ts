@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -48,7 +49,7 @@ import {
 } from "./testing/bill-venue.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import "./errors.js";
 import { failingDerivationsOf, watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
@@ -1813,6 +1814,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
       venue.cookie,
       "POST",
       `/api/working-orders/${party.tabId}/place`,
+      { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)) },
     );
     expect(place.status).toBe(200);
 

@@ -15,9 +15,15 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
-import { mergeBills, requireUntouched, splitBill, transferItems } from "./bill-actions.js";
-import { takeBillPayment } from "./bill-payments.js";
-import { fireGroup, placeGroups } from "./order-groups.js";
+import {
+  mergeBills,
+  requireUntouched,
+  splitBill,
+  transferItems,
+} from "./testing/bill-action-fixture.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { fireGroup } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -42,7 +48,7 @@ import {
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
-import { joinTables, moveGuests } from "./table-actions.js";
+import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";

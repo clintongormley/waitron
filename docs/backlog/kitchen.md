@@ -69,8 +69,6 @@ list does not exist.
 - **Task 6 (#761, HOLD tickets in advance).** Left open:
   - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
     like every correction slip: none is recorded in `kitchen_print_jobs`.
-  - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
-    another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
   - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
     correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
     never printed that group's HOLD ticket.
@@ -180,24 +178,6 @@ Open points:
   runs them to the edge; needs `course-list.ts` styles), and an error under the list would sit on
   the card's bottom border (read from the code, not seen).
 
-## Left by C80: a dish whose course the till does not list
-
-**Owner, 2026-10-17:** a dish whose course is switched off is treated as a dish with no course
-(Fire now, listed first, as A773's design says), whether sent or moved. Relayed to A773; delete
-this section once A773 covers it. The reading below is what A773 has to change.
-
-- Left by C80 (read from `draftSections` and `groupArrivingDishes`, not compared with a running
-  till): the till files a dish whose course it does not list (an inactive course) under the earliest
-  course it lists, while a move keeps it in its own held group; and when a round is SENT,
-  `working-order.ts` picks its earliest course without checking whether it is active, so with a
-  switched-off course the send path and the move path can file a dish with no course under different
-  courses (owner, 2026-09-29: not queued). Left open by the table actions plan's Task 9 (#874,
-  dishes arriving in a party get a kitchen group).
-
-  **2026-10-10 update:** A435 step 5 now shows saved drafts in their recorded course section and
-  fired lines with their recorded label, even with no active courses. The C80 reading above is
-  historical; its move/send comparison remains unverified here.
-
 ## A long word in a routing-grid row name still splits at 390 px
 
 - **A long word in a routing-grid row name still splits at 390 px** — since A507 part 2 a name
@@ -242,6 +222,18 @@ this section once A773 covers it. The reading below is what A773 has to change.
   further. Decide: should extras keep their earlier choice, as the dish does?
 
 ## Decisions and deliberate limits
+
+### A switched-off course uses Fire now (owner, 2026-10-17; C80)
+
+A dish whose course is switched off follows the no-course rule: Fire now, listed first, whether
+you send it or move its bill. This replaces the earlier earliest-listed-course rule in the
+[table-actions plan](../superpowers/plans/2026-09-28-table-actions.md).
+
+On 2026-10-19, A773-1's `draft-place.test.ts` checked first and later placement;
+`till-table-order-screen.arranged-send.test.ts` and `till-app-drafts.test.ts` checked the direct
+Send all request. The server's `party-arriving-inactive-course.test.ts` and
+`party-arriving-dishes.test.ts` checked moved dishes, their firing order and retained bill rows.
+These are separate send and move checks, not a trial on a physical till.
 
 ### A756 point 1. Courses have their own page under Products and menus (owner, 2026-10-16)
 

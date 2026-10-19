@@ -1,3 +1,6 @@
+import { observedOrderSender } from "./testing/order-writer-fixture.js";
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -14,7 +17,12 @@ import { createStation } from "./kitchen.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { provisionBillVenue, send, seatedWith, type BillVenue } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  send as rawSend,
+  seatedWith,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import "./errors.js";
 
 // A receipt-language change is refused while an open order at the location holds a line: the till
@@ -509,10 +517,14 @@ describe("a receipt-language change while orders are open", () => {
   it("does not count a seated party's abandoned bill, which is no longer open", async () => {
     reset();
     const party = await seatedWith(venue, "Paella", "Tarta");
-    const split = await till("POST", `/api/bills/${party.tabId}/split`, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      transfers: [{ lineNo: 2 }],
-    });
+    const split = await till(
+      "POST",
+      `/api/bills/${party.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        transfers: [{ lineNo: 2 }],
+      }),
+    );
     expect(split.status).toBe(200);
     const billId = split.json.billId as string;
     expect((await till("DELETE", `/api/working-orders/${billId}`)).status).toBe(200);
@@ -551,10 +563,14 @@ describe("a receipt-language change while orders are open", () => {
     venue.db.run(
       sql`update locations set invoice_locales = '["gl-ES"]' where id = ${venue.cfg.locationId}`,
     );
-    const split = await till("POST", `/api/bills/${party.tabId}/split`, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      transfers: [{ lineNo: 2 }],
-    });
+    const split = await till(
+      "POST",
+      `/api/bills/${party.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        transfers: [{ lineNo: 2 }],
+      }),
+    );
     expect(split).toMatchObject({ status: 500, json: { code: "server.internal" } });
     expect(dishLines(party.tabId)).toEqual(before);
   });
@@ -582,3 +598,8 @@ describe("PUT /management-api/venue-defaults while orders are open", () => {
     expect(vatClass()).toBe(before);
   });
 });
+
+const send = observedRelocationSender(
+  () => venue.db,
+  observedOrderSender(() => venue.db, rawSend),
+);

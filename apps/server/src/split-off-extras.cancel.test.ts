@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { recallLines } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
@@ -5,12 +7,13 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
-import { addTabRound, recallLines } from "./working-order.js";
+
 import "./errors.js";
 
 const suite = useVenueDb({

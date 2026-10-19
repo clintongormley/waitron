@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { sendLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -34,14 +36,11 @@ import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-confi
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import {
-  addTabRound,
   advanceTicketItem,
   createOpenOrder,
   listExpoQueue,
   listStationQueue,
   priceStoredOrder,
-  sendLines,
-  updateOrderLine,
 } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -52,9 +51,9 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, serveLine, splitPartyBill } from "./testing/serve-line.js";
 import "./errors.js";
-import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
-import { moveBill } from "./move-bill.js";
-import { moveGuests } from "./table-actions.js";
+import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { cancelLine } from "./testing/cancel-line.js";
 

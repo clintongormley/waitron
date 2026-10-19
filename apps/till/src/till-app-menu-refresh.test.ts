@@ -343,6 +343,7 @@ beforeEach(() => {
   setLocale("en-GB");
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   drafts = draftServer(() => landed("wo-7"));
+  for (const id of ["wo-7", "wo-8", "wo-9", "wo-next"]) drafts.bills.add(id);
 });
 afterEach(() => {
   cleanupWidgets();
@@ -1100,25 +1101,18 @@ async function toTable(el: TillApp): Promise<void> {
   );
 }
 
-/** Presses Fire all now; the preview it opens is confirmed by {@link confirmPreview}. */
-function pressFireAll(el: TillApp): void {
-  tableScreen(el).shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+function pressSendAll(el: TillApp): void {
+  tableScreen(el).shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
 }
 
-function confirmPreview(el: TillApp): void {
-  tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-}
-
-/** Taps the round's Lemonade tile, then Fire all now, and confirms its preview. */
+/** Taps the round's Lemonade tile and sends its saved arrangement. */
 async function sendLemonadeRound(el: TillApp): Promise<void> {
   const tileButton = [...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
     (button) => button.querySelector(".name")!.textContent === "Lemonade",
   )!;
   tileButton.click();
   await flush(el);
-  pressFireAll(el);
-  await flush(el);
-  confirmPreview(el);
+  pressSendAll(el);
   await flush(el);
 }
 
@@ -1179,9 +1173,7 @@ describe("a table round refused because the menu changed", () => {
         .click();
       await flush(el);
     }
-    pressFireAll(el);
-    await flush(el);
-    confirmPreview(el);
+    pressSendAll(el);
     await flush(el);
 
     expect(api.submitDraft.mock.calls.map(sentLines)).toEqual([
@@ -1588,7 +1580,7 @@ describe("a kept round and another table", () => {
     expect(roundStore(el).lineCount).toBe(0);
     expect(
       tableScreen(el)
-        .shadowRoot!.querySelector('[data-draft-action="fire-all"]')!
+        .shadowRoot!.querySelector('[data-draft-action="send-all"]')!
         .hasAttribute("disabled"),
     ).toBe(true);
 
@@ -1682,9 +1674,7 @@ describe("a round's lock once its send is decided", () => {
     };
     lemonadeTile(el).click();
     await settle();
-    pressFireAll(el);
-    await settle();
-    confirmPreview(el);
+    pressSendAll(el);
     await settle();
 
     await vi.advanceTimersByTimeAsync(149_999);
@@ -2016,9 +2006,7 @@ describe("a round send that timed out while the floor cannot be read either", ()
     };
     lemonadeTile(el).click();
     await settle();
-    pressFireAll(el);
-    await settle();
-    confirmPreview(el);
+    pressSendAll(el);
     await settle();
 
     await vi.advanceTimersByTimeAsync(150_000);

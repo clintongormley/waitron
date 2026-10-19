@@ -15,9 +15,11 @@ import {
 } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { moveBill } from "./move-bill.js";
+import { readBillEditState } from "./bill-editing.js";
+import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { listOrders } from "./orders-list.js";
-import { finishTable, holderOf } from "./parties.js";
+import { finishTable, holderOf } from "./testing/party-close-fixture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
@@ -50,7 +52,7 @@ import {
   withZoneRevision,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -161,6 +163,7 @@ async function pushOnto(partyId: string, moving: string, target: string, seats: 
     tableId: moving,
     bills: "merge",
     expectedPartyRevision: await revisionOf(v, partyId),
+    expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [partyId])),
     otherPartyId: null,
     merge: { moving, target, side: "left", seats },
   });
@@ -279,10 +282,11 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
 
     const expectedPartyRevision = await revisionOf(v, guests.partyId);
-    const printed = await jobsFrom(() =>
+    const printed = await jobsFrom(async () =>
       post(`/api/parties/${guests.partyId}/move`, {
         toTableId: table.t9!,
         expectedPartyRevision,
+        expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [guests.partyId])),
       }),
     );
 
@@ -442,6 +446,9 @@ async function splitTableOff(partyId: string, tableId: string, billId: string | 
     tableId,
     billId,
     expectedPartyRevision: await revisionOf(v, partyId),
+    expectedEdits: await inTx(v, async (tx) =>
+      billId === null ? [] : [await readBillEditState(tx, billId)],
+    ),
   });
 }
 
@@ -509,6 +516,7 @@ describe("guests moved onto one table of their group renamed for today, as the k
     await post(`/api/parties/${partyId}/move`, {
       toTableId,
       expectedPartyRevision: await revisionOf(v, partyId),
+      expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [partyId])),
     });
   }
 
@@ -805,7 +813,9 @@ describe("a counter order delivered to a table an action brings into or takes ou
   it("the same, with a party holding Counter 6 alone, prints one MOVED slip from Cumple to Table 9 and one for the party's bill from Cumple to Counter 6", async () => {
     const cumple = suffixed("Cumple");
     const { table, zoneId } = await unseatedGroup(cumple);
-    await post(`/api/bills/${await counterOrder(v, "Burger")}/move`, {
+    const movedBillId = await counterOrder(v, "Burger");
+    await post(`/api/bills/${movedBillId}/move`, {
+      expectedEdits: await inTx(v, async (tx) => [await readBillEditState(tx, movedBillId)]),
       to: { tableId: table.c6! },
       otherPartyId: null,
     });
@@ -876,6 +886,7 @@ describe("the till's Join pushing a table onto a group, as the kitchen sees it",
         tableId: table.c6!,
         bills: "merge",
         expectedPartyRevision: await revisionOf(v, guests.partyId),
+        expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [guests.partyId])),
         otherPartyId: null,
         merge: { moving: table.long!, target: table.c6!, side: "right", seats: 16 },
       }),

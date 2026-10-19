@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { kitchenStations, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   billRow,
   inTx,

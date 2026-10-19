@@ -29,6 +29,9 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
+import type { BillEditExpected } from "./order-drafts.js";
+import { readPartyBillIds, requireBillEditors } from "./bill-editing.js";
+import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { seatMergeMembers } from "./floor-today-merges.js";
 import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -674,14 +677,14 @@ export async function leaveForClearing(
     .where(inArray(diningTables.id, [...clearing]));
 }
 
-/**
- * Finish the party's table: refused while any bill of the party's family is placed or open with
- * items on it; an empty open bill is abandoned. The party then closes and leaves its tables
- * ({@link leaveForClearing}).
- */
 export async function finishTable(
   tx: Transaction,
-  args: { partyId: string; expectedPartyRevision: number; operatorId: string },
+  args: {
+    partyId: string;
+    expectedPartyRevision: number;
+    operatorId: string;
+    expectedEdits: BillEditExpected[];
+  },
   attendance?: { recorder: AttendanceRecorder; locationId: string },
 ): Promise<{ state: "closed" }> {
   const { partyId } = args;
@@ -692,20 +695,29 @@ export async function finishTable(
     throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
-  return closeParty(tx, partyId, empty, args.operatorId, attendance);
+  return closeParty(tx, partyId, empty, args.operatorId, attendance, args.expectedEdits);
 }
 
-/**
- * Close a party: its empty open bills `emptyBillIds` are abandoned, its drafts discarded, and it
- * leaves its tables ({@link leaveForClearing}). Finish table and an unpaid departure both end here.
- */
+export async function requirePartyClosingEdits(
+  tx: Transaction,
+  partyId: string,
+  operatorId: string,
+  expectedEdits: BillEditExpected[],
+): Promise<void> {
+  const bills = await readPartyBillIds(tx, await partyFamily(tx, partyId));
+  await requireBillEditors(tx, bills, operatorId, expectedEdits);
+  for (const billId of bills) await assertBillHasNoUnsent(tx, billId);
+}
+
 export async function closeParty(
   tx: Transaction,
   partyId: string,
   emptyBillIds: readonly string[],
   operatorId: string,
-  attendance?: { recorder: AttendanceRecorder; locationId: string },
+  attendance: { recorder: AttendanceRecorder; locationId: string } | undefined,
+  expectedEdits: BillEditExpected[],
 ): Promise<{ state: "closed" }> {
+  await requirePartyClosingEdits(tx, partyId, operatorId, expectedEdits);
   // An emptied bill can still hold a tip its refunded payment kept (design §2.3, §4.5).
   await refuseBillHoldingMoney(tx, emptyBillIds);
   if (emptyBillIds.length > 0) {

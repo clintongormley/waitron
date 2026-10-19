@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 /** The device join, enrolment and management surface end to end. */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -25,7 +26,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mountDeviceApi } from "./device-api.js";

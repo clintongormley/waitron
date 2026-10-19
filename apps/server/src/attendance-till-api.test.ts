@@ -1,3 +1,6 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -18,7 +21,7 @@ import { AppError } from "@waitron/shared";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
 import { attendanceOperationFacts } from "@waitron/workforce";
-import { saveDraft } from "./order-drafts.js";
+
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
@@ -86,11 +89,12 @@ function login(app: Hono, pin = "1234", personId = OPERATOR) {
 }
 describe("till attendance recorder admission", () => {
   it.each(["finish", "unpaid-departure"] as const)(
-    "passes the admitted %s actor to discarded draft capture",
+    "explicit disposal before %s retains the admitted draft actor",
     async (path) => {
       const { partyId, tabId } = await seat(v, await v.table("Closing attendance"));
       const draft = await withTransaction(suite.db, (tx) =>
         saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId: tabId,
           draftId: null,
           revision: 0,
           lines: [
@@ -108,6 +112,27 @@ describe("till attendance recorder admission", () => {
           ],
         }),
       );
+
+      const api = app();
+      const opened = await login(api);
+      expect(opened.status).toBe(200);
+      const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
+      vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
+      const discarded = await api.request(`/api/parties/${partyId}/drafts`, {
+        method: "PUT",
+        headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          billId: tabId,
+          draftId: draft.id,
+          revision: draft.revision,
+          expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
+          lines: [],
+          personId: "untrusted person",
+          at: "2026-10-15T20:00:00Z",
+        }),
+      });
+      expect(discarded.status).toBe(200);
+      expect(await discarded.json()).toMatchObject({ draft: null });
       if (path === "unpaid-departure") {
         await order(v, tabId, "Burger");
         await placeByHand(v, tabId);
@@ -118,16 +143,12 @@ describe("till attendance recorder admission", () => {
           OPERATOR,
         );
       }
-      const api = app();
-      const opened = await login(api);
-      expect(opened.status).toBe(200);
-      const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
-      vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
       const response = await api.request(`/api/parties/${partyId}/${path}`, {
         method: "POST",
         headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
         body: JSON.stringify({
           expectedPartyRevision: 0,
+          expectedEdits: await withTransaction(suite.db, (tx) => closingEditsForTest(tx, partyId)),
           reason: "Guests left",
           personId: "untrusted person",
           at: "2026-10-15T20:00:00Z",
@@ -185,6 +206,9 @@ describe("till attendance recorder admission", () => {
                   zoneId: v.counter.zoneId,
                   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
                 }
+              : {}),
+            ...(path === "collection"
+              ? { expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)) }
               : {}),
             tender: { method: "cash", amount: "20.00" },
             personId: "untrusted person",
@@ -246,6 +270,7 @@ describe("till attendance recorder admission", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         submissionId: "attendance-payment",
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         kind: "contribution",
         amount: "1.00",
         method: "cash",
@@ -304,6 +329,7 @@ describe("till attendance recorder admission", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         submissionId: "payment-rollback",
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         kind: "contribution",
         amount: "1.00",
         method: "cash",
@@ -355,7 +381,7 @@ describe("till attendance recorder admission", () => {
     );
   });
   it("passes the recorder to the actual draft save route after its admission checks", async () => {
-    const { partyId } = await seat(v, await v.table("Draft attendance"));
+    const { partyId, tabId } = await seat(v, await v.table("Draft attendance"));
     const api = app();
     const opened = await login(api);
     expect(opened.status).toBe(200);
@@ -365,6 +391,8 @@ describe("till attendance recorder admission", () => {
       method: "PUT",
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
+        billId: tabId,
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         draftId: null,
         revision: 0,
         lines: [
@@ -383,7 +411,7 @@ describe("till attendance recorder admission", () => {
       }),
     });
     expect(saved.status).toBe(200);
-    const draft = (await saved.json()) as { id: string; revision: number };
+    const { draft } = (await saved.json()) as { draft: { id: string; revision: number } };
     expect(
       (await suite.db.select().from(attendanceOperationFacts)).map((r) => [
         r.source,
@@ -417,6 +445,7 @@ describe("till refund attendance", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         submissionId: "refund-source",
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         kind: "contribution",
         amount: "1.00",
         applied: "1.00",

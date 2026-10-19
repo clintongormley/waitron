@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -31,12 +33,7 @@ import {
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
-import {
-  addTabRound,
-  listStationQueues,
-  moveOrderLines,
-  updateHeldOrder,
-} from "./working-order.js";
+import { listStationQueues, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
 import {
   kitchenNotices,
@@ -46,7 +43,8 @@ import {
   writePrintMovedSlips,
 } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
@@ -69,9 +67,9 @@ import {
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { joinTables, moveGuests, splitTable } from "./table-actions.js";
-import { moveBill } from "./move-bill.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { enqueueCorrectionSlips, reprintOrderTickets } from "./kitchen-print.js";
 
 const LOCALE = "es-ES";

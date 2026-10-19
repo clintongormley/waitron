@@ -1,3 +1,4 @@
+import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -20,13 +21,14 @@ import { hashPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { placeGroups } from "./order-groups.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -34,10 +36,8 @@ import {
   fireLines,
   markCollected,
   parkOrder,
-  placeOrder,
   readOrderRevision,
   unsentDishLines,
-  updateOrderLine,
 } from "./working-order.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 

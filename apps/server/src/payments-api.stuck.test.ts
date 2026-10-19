@@ -59,7 +59,7 @@ import {
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { takeReaderBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
@@ -70,7 +70,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import "./errors.js";

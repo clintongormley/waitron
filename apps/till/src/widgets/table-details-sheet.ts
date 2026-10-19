@@ -11,12 +11,13 @@ import { signalOf } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import { trackDialog } from "./track-dialog.js";
 
-export function unsentText({ ownerName, lineCount }: UnsentDraft): string {
-  return named(
+export function unsentText({ billNumber, ownerName, lineCount }: UnsentDraft): string {
+  const bill = t("floor.unsent_bill").replace("{n}", String(billNumber));
+  return `${bill} · ${named(
     ownerName,
     countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
     countText(lineCount, "floor.unsent", "floor.unsent_one"),
-  );
+  )}`;
 }
 
 /** Nothing of the party is left to pay, and no tab is open that could still take a round. */
@@ -83,6 +84,10 @@ export class TillTableDetailsSheet extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+
+      [data-unsent] {
+        overflow-wrap: anywhere;
       }
 
       .lines + .chips {

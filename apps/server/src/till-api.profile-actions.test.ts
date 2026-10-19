@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -80,6 +81,9 @@ import {
  * | POST /api/working-orders/:id/cancel                       | take-orders                | take-orders           |
  * | PUT /api/working-orders/:id/make-at                       | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/lines/move-station, /send, /recall | take-orders          | take-orders           |
+ * | POST /api/parties/:id/lines/:lineId/recall | take-orders | own refusing row below; allowed: draft-recall.test.ts |
+ * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | take-orders | line-cancel-api.test.ts: "requires take-orders for %s and permits it once restored"; queued revocation: "refuses take-orders revoked during a manager PIN check" |
+ * | POST /api/parties/:id/drafts/:did/discard | take-orders | own refusing row below; allowed: draft-discard.test.ts |
  * | PUT /api/working-orders/:id/lines/:lineNo                 | take-orders                | take-orders           |
  * | PATCH /api/working-orders/:id/lines/:lineNo/course        | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/adjustments                  | take-orders                | take-orders           |
@@ -106,12 +110,12 @@ import {
  * | POST /api/parties/:id/finish, /bill-request, /move, /join, /split-table | take-orders  | take-orders           |
  * | PUT /api/parties/:id/name                                 | take-orders                | take-orders           |
  * | PUT /api/parties/:id/guests                               | take-orders                | take-orders           |
- * | POST /api/parties/:id/groups, /groups/move, /groups/split-line; PUT /groups/order | take-orders            | take-orders           |
+ * | POST /api/parties/:id/groups, /groups/move, /groups/split-line, /groups/fire-line; PUT /groups/order | take-orders            | take-orders           |
  * | POST /api/parties/:id/groups/:gid/fire, /snooze, /unsnooze | take-orders               | take-orders           |
  * | POST /api/parties/:id/groups/:gid/ready                   | prepare-orders             | prepare-orders        |
  * | POST /api/parties/:id/groups/:gid/away, /served           | hand-over-orders           | hand-over-orders      |
  * | POST /api/parties/:id/served, /unserved                   | hand-over-orders           | hand-over-orders      |
- * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit | take-orders        | take-orders           |
+ * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit, /split | take-orders        | take-orders           |
  * | POST /api/parties/:id/unpaid-departure                    | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/department-transfers         | take-orders                | department-transfer-api.test.ts: refuses request without the take-orders profile action |
  * | POST /api/department-transfers/:id/withdraw, /accept, /decline | take-orders             | department-transfer-api.test.ts: refuses <verb> without the take-orders profile action |
@@ -438,9 +442,11 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/move`),
   ordering("POST", `/api/parties/${id}/join`),
   ordering("POST", `/api/parties/${id}/split-table`),
+  ordering("POST", `/api/parties/${id}/drafts/${id}/split`),
   ordering("POST", `/api/parties/${id}/groups`),
   ordering("POST", `/api/parties/${id}/groups/move`),
   ordering("POST", `/api/parties/${id}/groups/split-line`),
+  ordering("POST", `/api/parties/${id}/groups/fire-line`),
   ordering("PUT", `/api/parties/${id}/groups/order`),
   ordering("POST", `/api/parties/${id}/groups/${id}/fire`),
   ordering("POST", `/api/parties/${id}/groups/${id}/snooze`),
@@ -453,6 +459,8 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/parties/${id}/drafts`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/take-over`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/submit`),
+  ordering("POST", `/api/parties/${id}/lines/${id}/recall`),
+  ordering("POST", `/api/parties/${id}/drafts/${id}/discard`),
   ordering("POST", `/api/parties/${id}/unpaid-departure`),
   ordering("POST", `/api/bills/${id}/split`),
   ordering("POST", `/api/bills/${id}/merge`),
@@ -751,6 +759,7 @@ describe("a refund checks the action its payment was taken with", () => {
     await order(v, bill, "Paella", "Paella", "Paella");
     const take = async (body: Record<string, unknown>) => {
       const answer = await send(cookie, "POST", `/api/working-orders/${bill}/payments`, {
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, bill)),
         kind: "contribution",
         amount: "1.00",
         submissionId: randomUUID(),

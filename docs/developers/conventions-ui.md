@@ -63,6 +63,14 @@ found hidden Cancel, Delete and Back controls even though direct `.click()` test
 `packages/staffing/src/dashboard/shift-edit-dialog.test.ts` and `publish-dialog.test.ts` now check
 their native buttons' rendered width; those tests cover the staffing dialogs, not other callers.
 
+## Register a till dialog before deferring menu updates
+
+Put `trackDialog()` on each till dialog. The app uses `dialogOpenUnder` before asking about
+changed menu prices; an unregistered window does not defer that question. The Move to case in
+`apps/till/src/till-app-drafts.test.ts` covers this window. In the A773-1 experiment on
+2026-10-18, removing its registration made that case show the price question while Move to
+was open; restoring it kept the question deferred until after closing and the next poll.
+
 ## A screen does not draw its own form field
 
 A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive
@@ -539,6 +547,26 @@ Pair while the explicit read is pending, then returns the same id with a later `
 checks that Pair closed without denying the replacement. Removing the version comparison failed
 the first case; removing the shared replacement check failed the second. The tests cover the
 Devices join list, not every screen's mixture of explicit and observed reads.
+
+## An unchanged saved draft keeps its displayed rows
+
+When a passive read returns the same bill editor version, draft id and draft revision, update its
+availability and source facts in place. New order selections refer to the displayed row objects;
+rebuilding equal rows loses those selections. A newer revision still replaces the rows, and local
+unsaved changes still follow the candidate-preservation rules.
+
+On 2026-10-18, these cases exercised an unchanged read, changing availability, a newer save
+from the same editor's other device, and a native Move to flow across a focus refresh:
+
+```sh
+pnpm --filter @waitron/till exec vitest run \
+  src/state/draft-sync.test.ts src/till-app-drafts.test.ts \
+  -t 'passive read returns|availability on the same|other device saves a newer|unchanged focus refresh'
+```
+
+Restoring row replacement failed the identity checks; omitting the in-place refresh failed availability;
+retaining rows across a newer revision failed the replacement check. These cases cover this draft
+sync path, not every screen's snapshot updates.
 
 ## A background API client does not make POST requests passive
 
@@ -1084,6 +1112,13 @@ produced two `wt-close` events in the new consecutive-opening test before the re
 check. The confirmation tests cover Keep/Discard, silent abort, keyboard focus, tokens and axe in
 both themes; the integration suite exercises a retained edited field at phone and desktop widths
 with EN/ES copy. Those shared-component checks do not establish protection in an unwired app form.
+
+A leave request scoped to a screen sees a nested editor only through the registry's parent
+relationship. The table-order line picker receives its screen as `draftParent` through the basket.
+On 2026-10-18, the enclosing-leave case in
+`apps/till/src/screens/till-table-order-screen.preview-unsaved.test.ts` found no question for a
+staged note before that link was added. Removing the picker's parent registration in an
+independently installed checkout failed the same assertion; restoring it passed the suite.
 
 Each connected application shell owns one `LeaveController`; resolve its coordinator from a
 contributed form with `leaveCoordinatorFor(element)` (`@waitron/ui`). A disconnected shell

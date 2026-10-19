@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -27,9 +28,12 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
-import { addTabRound, listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
-import { payWorkingOrder, recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
+import {
+  payWorkingOrder,
+  recordTillSaleOrchestration as recordTillSale,
+} from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";

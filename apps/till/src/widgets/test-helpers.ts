@@ -9,6 +9,10 @@ import type {
   DraftLine,
   DraftSave,
   DraftSubmission,
+  BillEditState,
+  BillDraftSnapshot,
+  DraftTakeover,
+  PartyDraftSnapshot,
   GroupLine,
   GroupRelease,
   SubmittedDraft,
@@ -257,6 +261,8 @@ export interface SentGroup {
 }
 
 function asGroupLine(line: DraftLine): GroupLine {
+  if (line.sourceLineId != null)
+    throw { code: "management.request_invalid", status: 400, field: "sourceLineId" };
   return {
     menuItemId: line.menuItemId,
     quantity: line.quantity,
@@ -269,13 +275,25 @@ function asGroupLine(line: DraftLine): GroupLine {
   };
 }
 
-/**
- * The server's side of drafts for an app test's `TillApi` stub: each person's open draft per party,
- * merged on save with the shared rule and re-identified on every save; a submission takes its lines
- * out, and a repeat of a submission id answers as the first. Requests come from {@link personId}'s
- * session. {@link answer} says what the placed groups were; a test replaces it for another tab or
- * revision, or wraps {@link apply} to refuse or to lose the reply.
- */
+/** Submission assertions read that revision's rows even after later saves. */
+export function draftSnapshot(draft: Draft): BillDraftSnapshot {
+  return {
+    draft,
+    edit: {
+      billId: draft.billId,
+      editorId: draft.ownerId,
+      editorName: draft.ownerName,
+      editorVersion: 1,
+      draftId: draft.id,
+      draftRevision: draft.revision,
+    },
+  };
+}
+
+export function partyDraftSnapshot(drafts: Draft[]): PartyDraftSnapshot {
+  return { drafts, billEdits: drafts.map((draft) => draftSnapshot(draft).edit) };
+}
+
 export function draftServer(
   answer: (partyId: string) => SubmittedGroups = () => ({
     tabId: "wo-4",
@@ -284,12 +302,48 @@ export function draftServer(
   }),
 ) {
   let ids = 0;
+  const versions = new Map<string, number>();
+  const observed = new Map<string, { editorId: string | null; draftId: string | null }>();
   const replies = new Map<string, SubmittedDraft>();
   const clone = <T>(value: T): T => structuredClone(value);
-  /** Merges as the server does, and gives every line a new id, recorded by that id. */
+  const rowsAtRevision = new Map<number, Map<string, DraftLine>>();
+  const remember = (draft: Draft): void => {
+    const rows = rowsAtRevision.get(draft.revision) ?? new Map<string, DraftLine>();
+    for (const line of draft.lines) rows.set(line.id, clone(line));
+    rowsAtRevision.set(draft.revision, rows);
+  };
   const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
-    normaliseDraftLines(lines).map((line) => {
-      const saved = { ...line, id: `line-${++ids}`, unavailable: false };
+    normaliseDraftLines(
+      lines.map((line) => (line.sourceLineId != null ? { ...line, noMerge: true as const } : line)),
+    ).map((line) => {
+      let saved: DraftLine;
+      if (line.sourceLineId != null) {
+        const prior =
+          server.linesById.get(line.id) ??
+          server.drafts.flatMap((draft) => draft.lines).find((row) => row.id === line.id);
+        if (prior?.sourceLineId !== line.sourceLineId)
+          throw { code: "management.request_invalid", status: 400, field: "sourceLineId" };
+        saved = {
+          ...prior,
+          quantity: line.quantity,
+          note: line.note,
+          courseId: line.courseId,
+          makeAt: line.makeAt,
+          slot: line.slot,
+          joinGroupId: line.joinGroupId,
+          afterGroupId: line.afterGroupId,
+          noMerge: true,
+          unavailable: false,
+        };
+      } else {
+        saved = {
+          ...line,
+          sourceLineId: null,
+          source: null,
+          id: line.id ?? `line-${++ids}`,
+          unavailable: false,
+        };
+      }
       server.linesById.set(saved.id, saved);
       return saved;
     });
@@ -301,27 +355,98 @@ export function draftServer(
     /** The menu items the server reads as unavailable when it answers a line. */
     unavailable: new Set<string>(),
     answer,
-    listDrafts: vi.fn(async (partyId: string) =>
-      server.flagged(clone(server.drafts.filter((draft) => draft.partyId === partyId))),
-    ),
-    saveDraft: vi.fn(async (partyId: string, save: DraftSave) =>
-      server.flagged(clone(server.save(partyId, save))),
-    ),
+    bills: new Set(["wo-4", "wo-check", "bill-1"]),
+    edit(billId: string): BillEditState {
+      const draft = server.drafts.find(
+        (draft) => draft.billId === billId && draft.lines.length > 0,
+      );
+      const prior = observed.get(billId);
+      const current = { editorId: draft?.ownerId ?? null, draftId: draft?.id ?? null };
+      if (
+        prior !== undefined &&
+        (prior.editorId !== current.editorId || prior.draftId !== current.draftId)
+      )
+        versions.set(billId, (versions.get(billId) ?? (prior.editorId === null ? 0 : 1)) + 1);
+      observed.set(billId, current);
+      return {
+        billId,
+        editorId: draft?.ownerId ?? null,
+        editorName: draft?.ownerName ?? null,
+        editorVersion: versions.get(billId) ?? (draft === undefined ? 0 : 1),
+        draftId: draft?.id ?? null,
+        draftRevision: draft?.revision ?? null,
+      };
+    },
+    snapshot(draft: Draft | null, billId = draft!.billId): BillDraftSnapshot {
+      return { draft: server.flagged(clone(draft)), edit: server.edit(billId) };
+    },
+    listDrafts: vi.fn(async (partyId: string) => ({
+      drafts: server.flagged(clone(server.drafts.filter((draft) => draft.partyId === partyId))),
+      billEdits: [...new Set([...server.bills, ...server.drafts.map((draft) => draft.billId)])].map(
+        (id) => server.edit(id),
+      ),
+    })),
+    saveDraft: vi.fn(async (partyId: string, save: DraftSave) => {
+      server.compare(save.billId, save.expectedEdit);
+      const before = server.edit(save.billId);
+      if (save.lines.length === 0 && before.draftId === null)
+        return server.snapshot(null, save.billId);
+      const draft = server.save(partyId, save);
+      if (draft.lines.length === 0) {
+        server.drafts.splice(server.drafts.indexOf(draft), 1);
+        return server.snapshot(null, save.billId);
+      }
+      return server.snapshot(draft);
+    }),
     submitDraft: vi.fn(async (partyId: string, draftId: string, submission: DraftSubmission) =>
       clone(server.apply(partyId, draftId, submission)),
     ),
-    takeOverDraft: vi.fn(async (partyId: string, draftId: string, revision: number) =>
-      server.flagged(clone(server.takeOver(partyId, draftId, revision))),
-    ),
+    takeOverDraft: vi.fn(async (partyId: string, draftId: string, ask: DraftTakeover) => {
+      const edit = server.edit(ask.expectedEdit.billId);
+      server.compare(edit.billId, ask.expectedEdit, true);
+      const draft = server.takeOver(partyId, draftId, ask.revision);
+      return server.snapshot(draft);
+    }),
+    compare(billId: string, expected: DraftSave["expectedEdit"], takeover = false): void {
+      const edit = server.edit(billId);
+      if (!takeover && edit.editorId !== null && edit.editorId !== server.personId)
+        throw {
+          code: "draft.taken_over",
+          status: 409,
+          billId,
+          draftId: edit.draftId,
+          ownerId: edit.editorId,
+          ownerName: edit.editorName,
+          edit,
+        };
+      if (
+        expected.editorVersion !== edit.editorVersion ||
+        expected.draftId !== edit.draftId ||
+        expected.draftRevision !== edit.draftRevision
+      )
+        throw {
+          code: "draft.out_of_date",
+          status: 409,
+          billId,
+          draftId: edit.draftId,
+          revision: edit.draftRevision,
+          edit,
+        };
+    },
     /** `unavailable` worked out on each answer, as the server does, never stored. */
     flagged<T extends Draft | Draft[] | null>(answer: T): T {
       for (const draft of answer === null ? [] : Array.isArray(answer) ? answer : [answer])
-        for (const line of draft.lines) line.unavailable = server.unavailable.has(line.menuItemId);
+        for (const line of draft.lines)
+          if (line.sourceLineId === null)
+            line.unavailable = server.unavailable.has(line.menuItemId);
       return answer;
     },
-    save(partyId: string, save: DraftSave): Draft {
+    save(partyId: string, save: Omit<DraftSave, "expectedEdit">): Draft {
       const own = server.drafts.find(
-        (draft) => draft.partyId === partyId && draft.ownerId === server.personId,
+        (draft) =>
+          draft.partyId === partyId &&
+          draft.ownerId === server.personId &&
+          draft.billId === save.billId,
       );
       let draft: Draft;
       if (save.draftId === null) {
@@ -329,6 +454,7 @@ export function draftServer(
         draft = {
           id: `draft-${++ids}`,
           partyId,
+          billId: save.billId,
           ownerId: server.personId,
           ownerName: server.personName,
           revision: 0,
@@ -341,10 +467,9 @@ export function draftServer(
       }
       draft.revision += 1;
       draft.lines = reidentify(save.lines);
+      remember(draft);
       return draft;
     },
-    /** A take-over as the server does it: the person's own draft answers as it is; another's
-     * becomes theirs, or is added into the draft they already hold, which answers. */
     takeOver(partyId: string, draftId: string, revision: number): Draft {
       const draft = server.drafts.find(
         (candidate) => candidate.id === draftId && candidate.partyId === partyId,
@@ -352,20 +477,12 @@ export function draftServer(
       if (draft === undefined) throw { code: "draft.not_found", status: 404, draftId };
       if (draft.ownerId === server.personId) return draft;
       if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
-      const own = server.drafts.find(
-        (candidate) => candidate.partyId === partyId && candidate.ownerId === server.personId,
-      );
-      if (own === undefined) {
-        draft.takenOverFrom = { personId: draft.ownerId, name: draft.ownerName };
-        draft.ownerId = server.personId;
-        draft.ownerName = server.personName;
-        draft.revision += 1;
-        return draft;
-      }
-      server.drafts.splice(server.drafts.indexOf(draft), 1);
-      own.revision += 1;
-      own.lines = reidentify([...own.lines, ...draft.lines]);
-      return own;
+      draft.takenOverFrom = { personId: draft.ownerId, name: draft.ownerName };
+      draft.ownerId = server.personId;
+      draft.ownerName = server.personName;
+      draft.revision += 1;
+      remember(draft);
+      return draft;
     },
     /** A submission as the server takes it, whether or not its answer reaches the till. */
     apply(partyId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {
@@ -377,9 +494,11 @@ export function draftServer(
         throw { code: "management.request_invalid", status: 400, field: "groups" };
       draft.lines = draft.lines.filter((line) => !named.includes(line.id));
       draft.revision += 1;
+      remember(draft);
       if (draft.lines.length === 0) server.drafts.splice(server.drafts.indexOf(draft), 1);
       const reply = {
         ...server.answer(partyId),
+        edit: server.edit(draft.billId),
         draft: draft.lines.length === 0 ? null : server.flagged(clone(draft)),
       };
       replies.set(submission.submissionId, reply);
@@ -405,7 +524,11 @@ export function draftServer(
     sentGroups(submission: DraftSubmission): SentGroup[] {
       return submission.groups.map((group) => ({
         release: group.release,
-        lines: group.lineIds.map((id) => asGroupLine(server.linesById.get(id)!)),
+        lines: group.lineIds.map((id) =>
+          asGroupLine(
+            rowsAtRevision.get(submission.draftRevision)?.get(id) ?? server.linesById.get(id)!,
+          ),
+        ),
       }));
     },
   };

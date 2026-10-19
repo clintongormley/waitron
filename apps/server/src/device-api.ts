@@ -622,7 +622,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           cfg,
           id,
           request,
-          { deviceId: device.deviceId, personId },
+          { deviceId: device.deviceId, personId, kind: "kitchen" },
           {
             assertFrom: async (stationId) => {
               if (!(await worksStation(tx, deps.cfg, screen, stationId)))

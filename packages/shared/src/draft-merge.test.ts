@@ -219,6 +219,53 @@ describe("draftLineMergeKey (D10)", () => {
 });
 
 describe("normaliseDraftLines (D10)", () => {
+  it.each([
+    ["Fire now and a new group", { slot: 0 }, { slot: 1 }],
+    ["two new groups", { slot: 1 }, { slot: 2 }],
+    ["Fire now and a held group", { joinGroupId: null }, { joinGroupId: "held-1" }],
+    ["two held groups", { joinGroupId: "held-1" }, { joinGroupId: "held-2" }],
+    [
+      "a group at the end and one after a held group",
+      { slot: 1, afterGroupId: null },
+      { slot: 1, afterGroupId: "held-1" },
+    ],
+    [
+      "new groups after different held groups",
+      { slot: 1, afterGroupId: "held-1" },
+      { slot: 1, afterGroupId: "held-2" },
+    ],
+  ])("keeps identical dishes separate in %s", (_place, firstPlace, secondPlace) => {
+    const first = { ...line({ menuItemId: BURGER }), ...firstPlace };
+    const second = { ...line({ menuItemId: BURGER }), ...secondPlace };
+
+    expect(draftLineMergeKey(first)).not.toBe(draftLineMergeKey(second));
+    expect(normaliseDraftLines([first, second])).toEqual([first, second]);
+  });
+
+  it.each([
+    { slot: 0, joinGroupId: null, afterGroupId: null },
+    { slot: 2, joinGroupId: null, afterGroupId: "held-1" },
+    { slot: 0, joinGroupId: "held-1", afterGroupId: null },
+  ])("merges identical dishes with the same place %j", (place) => {
+    const first = { ...line({ menuItemId: BURGER }), ...place };
+    const second = { ...line({ menuItemId: BURGER }), ...place };
+
+    expect(normaliseDraftLines([first, second])).toEqual([{ ...first, quantity: "2.000" }]);
+  });
+
+  it("treats an omitted place as Fire now", () => {
+    const first = line({ menuItemId: BURGER });
+    const second = {
+      ...line({ menuItemId: BURGER }),
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
+    };
+
+    expect(draftLineMergeKey(first)).toBe(draftLineMergeKey(second));
+    expect(normaliseDraftLines([first, second])).toEqual([{ ...first, quantity: "2.000" }]);
+  });
+
   it("gives one line Beer ×3 from three Beer rows", () => {
     const first = line({ menuItemId: BEER });
     const merged = normaliseDraftLines([
@@ -269,5 +316,15 @@ describe("normaliseDraftLines (D10)", () => {
     const first = line({ menuItemId: BEER });
     normaliseDraftLines([first, line({ menuItemId: BEER })]);
     expect(first.quantity).toBe("1");
+  });
+});
+
+describe("source-backed draft merge boundaries", () => {
+  it("never merges a recalled source with fresh rows or another source, even without noMerge", () => {
+    const fresh = line({ menuItemId: BURGER });
+    const source = { ...fresh, id: "recall-1", sourceLineId: "sent-1" };
+    const other = { ...fresh, id: "recall-2", sourceLineId: "sent-2" };
+    expect(draftLineMergeKey(source)).toBeNull();
+    expect(normaliseDraftLines([fresh, source, other])).toEqual([fresh, source, other]);
   });
 });

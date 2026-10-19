@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readBillEditState } from "./bill-editing.js";
 import { Hono } from "hono";
 import { sql, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -37,12 +38,13 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { DEVICE_COOKIE } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createStation } from "./kitchen.js";
-import { moveDishesToStation } from "./station-move.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { StationQueueGroup } from "./working-order.js";
 import { parkOrder } from "./working-order.js";
@@ -158,9 +160,12 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/groups/:gid/fire|ready|away|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
  * | POST /api/parties/:id/served, /unserved                 | party                  | refuses POST /api/parties/:id/<served|unserved>      |
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
- * | POST /api/parties/:id/groups/move, /groups/split-line   | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
+ * | POST /api/parties/:id/groups/move, /groups/split-line, /groups/fire-line | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
- * | POST /api/parties/:id/drafts/:did/take-over, /submit    | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
+ * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
+ * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
+ * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
+ * | POST /api/parties/:id/drafts/:did/take-over, /submit, /split | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |
  * | POST /api/dead-ends/draft                               | body party             | refuses POST /api/dead-ends/draft                    |
  * | POST /api/dead-ends/order                               | body order; body zone  | refuses POST /api/dead-ends/order (order), (zone)    |
@@ -936,6 +941,9 @@ const ROUTES: readonly Row[] = [
       (x) => ({
         [verb === "move" ? "toTableId" : "tableId"]: x.restFreeTable,
         expectedPartyRevision: 0,
+        expectedEdits: [
+          { billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       }),
       deliTableZone,
     ],
@@ -946,6 +954,9 @@ const ROUTES: readonly Row[] = [
       (x) => ({
         [verb === "move" ? "toTableId" : "tableId"]: x.deliTable,
         expectedPartyRevision: 0,
+        expectedEdits: [x.restTab, x.deliTab]
+          .sort()
+          .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
       }),
       deliTableZone,
     ],
@@ -954,7 +965,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/split-table",
     "POST",
     (x) => `/api/parties/${x.deliParty}/split-table`,
-    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0 }),
+    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0, expectedEdits: [] }),
     deliTableZone,
   ],
   ...(["bills", "groups", "current-orders", "print-problems", "drafts"] as const).map(
@@ -970,7 +981,12 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/groups",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups`,
-    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, groups: [] }),
+    (x) => ({
+      submissionId: randomUUID(),
+      expectedPartyRevision: 0,
+      groups: [],
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null },
+    }),
     deliTableZone,
   ],
   ...(["fire", "ready", "away", "served", "snooze", "unsnooze"] as const).map((verb): Row => [
@@ -995,6 +1011,13 @@ const ROUTES: readonly Row[] = [
     deliTableZone,
   ],
   [
+    "POST /api/parties/:id/groups/fire-line",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/groups/fire-line`,
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, lineId: randomUUID() }),
+    deliTableZone,
+  ],
+  [
     "POST /api/parties/:id/groups/split-line",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups/split-line`,
@@ -1015,11 +1038,12 @@ const ROUTES: readonly Row[] = [
     () => ({ draftId: null, revision: 0 }),
     deliTableZone,
   ],
-  ...(["take-over", "submit"] as const).map((verb): Row => [
+  ...(["take-over", "submit", "split"] as const).map((verb): Row => [
     `POST /api/parties/:id/drafts/:did/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/drafts/${id}/${verb}`,
-    () => ({
+    (x) => ({
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: id, draftRevision: 0 },
       submissionId: randomUUID(),
       expectedPartyRevision: 0,
       revision: 0,
@@ -1028,6 +1052,29 @@ const ROUTES: readonly Row[] = [
     }),
     deliTableZone,
   ]),
+  [
+    "POST /api/parties/:id/lines/:lineId/recall",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/lines/${id}/recall`,
+    (x) => ({
+      submissionId: randomUUID(),
+      expectedPartyRevision: 0,
+      expectedEdit: { billId: x.deliOrder, editorVersion: 0, draftId: null, draftRevision: null },
+    }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/drafts/:did/discard",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/drafts/${id}/discard`,
+    (x) => ({
+      submissionId: randomUUID(),
+      revision: 0,
+      expectedRevision: 0,
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: id, draftRevision: 0 },
+    }),
+    deliTableZone,
+  ],
   [
     "POST /api/parties/:id/unpaid-departure",
     "POST",
@@ -1109,14 +1156,24 @@ const ROUTES: readonly Row[] = [
     "POST /api/bills/:id/merge (into)",
     "POST",
     (x) => `/api/bills/${x.deliTab}/merge`,
-    (x) => ({ fromBillId: x.restTab }),
+    (x) => ({
+      fromBillId: x.restTab,
+      expectedEdits: [x.restTab, x.deliTab]
+        .sort()
+        .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
+    }),
     deliTableZone,
   ],
   [
     "POST /api/bills/:id/merge (from)",
     "POST",
     (x) => `/api/bills/${x.restTab}/merge`,
-    (x) => ({ fromBillId: x.deliTab }),
+    (x) => ({
+      fromBillId: x.deliTab,
+      expectedEdits: [x.restTab, x.deliTab]
+        .sort()
+        .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
+    }),
     deliTableZone,
   ],
   [
@@ -1137,21 +1194,32 @@ const ROUTES: readonly Row[] = [
     "POST /api/bills/:id/move (bill)",
     "POST",
     (x) => `/api/bills/${x.deliTab}/move`,
-    (x) => ({ to: { tableId: x.restFreeTable } }),
+    (x) => ({
+      to: { tableId: x.restFreeTable },
+      expectedEdits: [{ billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null }],
+    }),
     deliTableZone,
   ],
   [
     "POST /api/bills/:id/move (table)",
     "POST",
     (x) => `/api/bills/${x.restTab}/move`,
-    (x) => ({ to: { tableId: x.deliTable } }),
+    (x) => ({
+      to: { tableId: x.deliTable },
+      expectedEdits: [x.restTab, x.deliTab]
+        .sort()
+        .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
+    }),
     deliTableZone,
   ],
   [
     "POST /api/bills/:id/move (counter)",
     "POST",
     (x) => `/api/bills/${x.restTab}/move`,
-    (x) => ({ to: { counter: { zoneId: x.deliCounter } } }),
+    (x) => ({
+      to: { counter: { zoneId: x.deliCounter } },
+      expectedEdits: [{ billId: x.restTab, editorVersion: 0, draftId: null, draftRevision: null }],
+    }),
     deliOrderZone,
   ],
   [
@@ -1675,6 +1743,7 @@ describe("the bill and invoice lookups", () => {
     const lines = await send(plain, "GET", `/api/working-orders/${tabId}/lines`);
     const chosen = await send(plain, "PUT", `/api/working-orders/${tabId}/invoice-choice`, {
       revision: lines.body.revision,
+      expectedEdit: await inTx(v, (tx) => readBillEditState(tx, tabId)),
       invoiceType: "F1",
       recipient: {
         taxId: "B12345674",

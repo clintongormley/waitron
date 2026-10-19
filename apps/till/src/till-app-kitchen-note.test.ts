@@ -219,6 +219,13 @@ async function flush(el: TillApp) {
   }
 }
 function emit(source: Element, type: string, detail?: unknown) {
+  if (
+    (type === "set-line-course" || type === "send-lines") &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 const counter = (el: TillApp) =>
@@ -522,7 +529,7 @@ describe("note save inverse controls", () => {
       if (action === "pay") expect(api.recordSale).toHaveBeenCalledOnce();
       if (action === "card") expect(api.pay).toHaveBeenCalledOnce();
       if (action === "hold") expect(basket(el).store.id).not.toBe("wo-9");
-      if (action === "place") expect(api.placeOrder).toHaveBeenCalledWith("wo-9");
+      if (action === "place") expect(api.placeOrder).toHaveBeenCalledWith("wo-9", null);
       expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     },
   );
@@ -622,6 +629,7 @@ it("waits for the kitchen note before saving only a held label", async () => {
   expect(api.setWorkingOrderLabel).toHaveBeenCalledWith("wo-9", {
     label: "New label",
     revision: 4,
+    expectedEdit: null,
   });
   expect(api.updateWorkingOrder).not.toHaveBeenCalled();
 });
@@ -920,6 +928,9 @@ async function mountedTable(
   formFactor: FormFactor = "till",
 ) {
   const server = draftServer();
+  server.bills.add("bill-table");
+  if (initialParty?.mainBillId !== null && initialParty?.mainBillId !== undefined)
+    server.bills.add(initialParty.mainBillId);
   const el = await mounted(
     {
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
@@ -1077,12 +1088,24 @@ it.each(["send-lines", "pay-tab", "bill-pay"])(
     expect(api.getBillBalance).not.toHaveBeenCalled();
     pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
     await flush(el);
-    if (action === "send-lines") expect(api.sendLines).toHaveBeenCalledWith("bill-table", [1]);
+    if (action === "send-lines")
+      expect(api.sendLines).toHaveBeenCalledWith("bill-table", [1], {
+        billId: "bill-table",
+        editorVersion: 0,
+        draftId: null,
+        draftRevision: null,
+      });
     if (action === "pay-tab")
       expect(api.recordSale).toHaveBeenCalledWith(
         [],
         { method: "cash", amount: "10.00" },
         "bill-table",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { billId: "bill-table", editorVersion: 0, draftId: null, draftRevision: null },
       );
     if (action === "bill-pay") expect(api.getBillBalance).toHaveBeenCalled();
   },
@@ -1173,6 +1196,23 @@ it.each([false, true])(
     const note = { ...partyNote, note: "Train", revision: 1, ownerRevision: 0 };
     const { el, server } = await mountedTable(
       {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          courses: [{ id: "mains", name: "Mains", displayOrder: 0, heldUntilFired: true }],
+        }),
+        listStations: vi.fn().mockResolvedValue([
+          {
+            id: "s1",
+            name: "Grill",
+            displayOrder: 0,
+            isDefault: true,
+            active: true,
+            open: true,
+            byHand: null,
+            sendsTo: null,
+            why: "default",
+          },
+        ]),
         seatTable: vi.fn(async () => {
           vi.mocked(api.getTablesState).mockResolvedValue([tableRow(tableParty(note))]);
           return {
@@ -1193,7 +1233,7 @@ it.each([false, true])(
       draft.setLineCourse(0, "mains");
       draft.setLineMakeAt(0, "s1");
     }
-    const lines = draft.lines;
+    const lines = draft.lines.map((line) => ({ ...line, place: { kind: "new", slot: 1 } }));
     await flush(el);
     emit(tableScreen(el), "open-table", { tableId: "table-four", seated: false, guestCount: 2 });
     await flush(el);

@@ -17,23 +17,19 @@ import {
 } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
+import { orderGroups } from "./order-groups.js";
+import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 
 export const orderDraftState = enumType(["open", "submitted", "discarded"]);
 
-/**
- * One operator's unsent order on a party (`apps/server/src/order-drafts.ts`). The partial unique
- * index allows each person one OPEN draft per party. Drafts are never deleted, because their events
- * point at them.
- *
- * `owner_id` is a plain person id with no key: `persons` is in @waitron/identity's migration set,
- * not the core one.
- */
+// owner_id has no key because persons belongs to the identity module's migration set.
 export const orderDrafts = table(
   "order_drafts",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     partyId: id("party_id").notNull(),
+    billId: id("bill_id"),
     ownerId: id("owner_id").notNull(),
     revision: count("revision").notNull().default(0),
     state: orderDraftState("state").notNull().default("open"),
@@ -46,26 +42,26 @@ export const orderDrafts = table(
       foreignColumns: [parties.id],
       name: "order_drafts_party_fk",
     }),
+    foreignKey({
+      columns: [t.billId],
+      foreignColumns: [workingOrders.id],
+      name: "order_drafts_bill_fk",
+    }),
     index("order_drafts_party_idx").on(t.partyId),
     uniqueIndex("order_drafts_open_owner_uq")
-      .on(t.partyId, t.ownerId)
+      .on(t.billId)
       .where(sql`${t.state} = 'open'`),
     check("order_drafts_state_ck", enumCheck(t.state)),
   ],
 );
 
-/**
- * One line of a draft, as the till last saved it: what a basket line names, before pricing. No
- * author column: the whole draft is credited to its owner when it is submitted.
- */
 export const orderDraftLines = table(
   "order_draft_lines",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     draftId: id("draft_id").notNull(),
     position: count("position").notNull(),
-    // No key: `menu_items` is in the catalogue module's migration set; pricing at submission
-    // refuses a menu item the zone does not offer.
+    // No key: `menu_items` is in the catalogue module's migration set.
     menuItemId: id("menu_item_id").notNull(),
     variantId: id("variant_id"),
     menuVersionId: id("menu_version_id"),
@@ -75,6 +71,10 @@ export const orderDraftLines = table(
     quantity: quantity("quantity").notNull(),
     courseId: id("course_id"),
     makeAtStationId: id("make_at_station_id"),
+    // Fire now is slot 0; a join keeps 0, and a new held group uses a positive slot.
+    slot: count("slot").notNull().default(0),
+    joinGroupId: id("join_group_id"),
+    afterGroupId: id("after_group_id"),
     // `normaliseDraftLines` never adds this row to another, nor another to it.
     noMerge: flag("no_merge").notNull().default(false),
   },
@@ -94,9 +94,22 @@ export const orderDraftLines = table(
       foreignColumns: [kitchenStations.id],
       name: "order_draft_lines_make_at_station_fk",
     }),
+    foreignKey({
+      columns: [t.joinGroupId],
+      foreignColumns: [orderGroups.id],
+      name: "order_draft_lines_join_group_fk",
+    }),
+    foreignKey({
+      columns: [t.afterGroupId],
+      foreignColumns: [orderGroups.id],
+      name: "order_draft_lines_after_group_fk",
+    }),
     index("order_draft_lines_draft_idx").on(t.draftId),
     index("order_draft_lines_course_idx").on(t.courseId),
     check("order_draft_lines_quantity_ck", sql`${t.quantity} > 0`),
+    check("order_draft_lines_slot_ck", sql`${t.slot} >= 0`),
+    check("order_draft_lines_place_ck", sql`${t.joinGroupId} is null or ${t.slot} = 0`),
+    check("order_draft_lines_after_ck", sql`${t.afterGroupId} is null or ${t.slot} >= 1`),
   ],
 );
 

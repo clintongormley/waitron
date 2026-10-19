@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -20,8 +21,8 @@ import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import {
   payWorkingOrderIntegratedOrchestration as payIntegrated,
   payWorkingOrder,
-} from "./till-sale.js";
-import { createOpenOrder, placeOrder } from "./working-order.js";
+} from "./testing/whole-payment-fixture.js";
+import { createOpenOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";

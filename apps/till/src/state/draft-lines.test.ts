@@ -3,19 +3,26 @@ import {
   fromDraftLine,
   orderLineMergeKey,
   rebuildReturned,
-  toDraftLineInput,
+  toDraftLineInput as draftInput,
 } from "./draft-lines.js";
 import { lineBlock } from "./menu-refresh.js";
-import { draftSections } from "./draft-groups.js";
+import { draftLayout } from "./draft-layout.js";
 import { productAsVariant } from "./order-line.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
+import type { Place } from "./draft-place.js";
 import {
   menuOfferToTillProduct,
-  type DraftLine,
-  type DraftLineInput,
+  type FreshDraftLine,
+  type FreshDraftLineInput,
   type TillMenuOffer,
   type TillProduct,
 } from "../api/client.js";
+
+function toDraftLineInput(line: OrderLine): FreshDraftLineInput {
+  const input = draftInput(line);
+  if (input.sourceLineId != null) throw new Error("fresh fixture became a recalled line");
+  return input;
+}
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
@@ -161,6 +168,39 @@ const burger = offer({
 const fish = offer({ id: "mi-fish", productId: "p-fish", unit: kg, unitPrice: "30.00" });
 const offers = new Map([burger, fish].map((entry) => [entry.id, entry]));
 
+describe("fresh draft row identity", () => {
+  it("sends a retained row ID while new lines leave the ID absent", () => {
+    expect(toDraftLineInput(burgerLine())).not.toHaveProperty("id");
+    expect(
+      toDraftLineInput(Object.assign(burgerLine(), { draftLineId: "saved-row" })),
+    ).toMatchObject({ id: "saved-row", menuItemId: "mi-burger" });
+  });
+
+  it("keeps the saved row ID through hydration and a missing offer returning", () => {
+    const savedLine: FreshDraftLine = {
+      sourceLineId: null,
+      source: null,
+      ...toDraftLineInput(burgerLine()),
+      id: "saved-row",
+      unavailable: false,
+    };
+    const missing = fromDraftLine(savedLine, new Map());
+    expect(missing).toHaveProperty("draftLineId", "saved-row");
+    const returned = rebuildReturned([missing], offers, new Map([["dinner", VERSION]])).get(0)!;
+    expect(returned).toHaveProperty("draftLineId", "saved-row");
+    expect(toDraftLineInput(returned)).toHaveProperty("id", "saved-row");
+  });
+
+  it("keeps only the original row's ID when splitting a saved quantity", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [Object.assign(burgerLine(), { draftLineId: "saved-row" })]);
+    store.splitLine(0);
+    expect(store.lines).toHaveLength(2);
+    expect(toDraftLineInput(store.lines[0]!)).toMatchObject({ id: "saved-row", quantity: "1" });
+    expect(toDraftLineInput(store.lines[1]!)).not.toHaveProperty("id");
+  });
+});
+
 const VERSION = "mv-7";
 const doubleBurger = (): TillProduct => {
   const dish = menuOfferToTillProduct(burger, VERSION);
@@ -207,18 +247,79 @@ const burgerLine = (): OrderLine => ({
   courseId: "course-mains",
 });
 
-/** What the server answers for a saved input: a fresh id, the quantity at three places. */
-const saved = (input: DraftLineInput, quantity: string): DraftLine => ({
+/** A saved row with an explicit identity and quantity at three places. */
+const saved = (input: FreshDraftLineInput, quantity: string): FreshDraftLine => ({
   ...input,
+  sourceLineId: null,
+  source: null,
   id: "dl-1",
   quantity,
   unavailable: false,
 });
 
 describe("toDraftLineInput", () => {
+  it.each([
+    [{ kind: "fire" }, { slot: 0, joinGroupId: null, afterGroupId: null }],
+    [
+      { kind: "new", slot: 3 },
+      { slot: 3, joinGroupId: null, afterGroupId: null },
+    ],
+    [
+      { kind: "new", slot: 2, afterGroupId: "g1" },
+      { slot: 2, joinGroupId: null, afterGroupId: "g1" },
+    ],
+    [
+      { kind: "join", groupId: "g2" },
+      { slot: 0, joinGroupId: "g2", afterGroupId: null },
+    ],
+  ] satisfies [Place, Pick<FreshDraftLineInput, "slot" | "joinGroupId" | "afterGroupId">][])(
+    "round-trips the %j place through a saved draft",
+    (place, wire) => {
+      const line: OrderLine = { ...burgerLine(), place };
+      const input = toDraftLineInput(line);
+      expect(input).toMatchObject(wire);
+      const restored = fromDraftLine({ ...saved(input, "2.000"), ...wire }, offers);
+      expect(restored.place ?? { kind: "fire" }).toEqual(place);
+      expect(toDraftLineInput(restored)).toEqual({ ...input, id: "dl-1" });
+    },
+  );
+
+  it("keeps identical dishes in different places separate in the till's merge key", () => {
+    const line = burgerLine();
+    expect(orderLineMergeKey({ ...line, place: { kind: "new", slot: 1 } })).not.toBe(
+      orderLineMergeKey(line),
+    );
+    expect(orderLineMergeKey({ ...line, place: { kind: "join", groupId: "g2" } })).not.toBe(
+      orderLineMergeKey({ ...line, place: { kind: "join", groupId: "g3" } }),
+    );
+    expect(
+      orderLineMergeKey({ ...line, place: { kind: "new", slot: 1, afterGroupId: "g2" } }),
+    ).not.toBe(orderLineMergeKey({ ...line, place: { kind: "new", slot: 1, afterGroupId: "g3" } }));
+    expect(orderLineMergeKey({ ...line, place: { kind: "fire" } })).toBe(orderLineMergeKey(line));
+  });
+
+  it("keeps an unavailable dish's place when its offer returns", () => {
+    const input = { ...toDraftLineInput(burgerLine()), slot: 2, afterGroupId: "g3" };
+    const missing = fromDraftLine(saved(input, "2.000"), new Map());
+    const returned = rebuildReturned([missing], offers, new Map([["dinner", VERSION]])).get(0)!;
+    expect(returned.place).toEqual({ kind: "new", slot: 2, afterGroupId: "g3" });
+    expect(toDraftLineInput(returned)).toEqual({ ...input, id: "dl-1" });
+  });
+
+  it("gives an unplaced line explicit Fire-now wire defaults", () => {
+    expect(toDraftLineInput(burgerLine())).toMatchObject({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
+    });
+  });
+
   it("sends a plain line's menu item and version, with every other part empty", () => {
     const line: OrderLine = { product: menuOfferToTillProduct(fish, VERSION), quantity: "0.350" };
     expect(toDraftLineInput(line)).toEqual({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
       menuItemId: "mi-fish",
       variantId: null,
       menuVersionId: VERSION,
@@ -233,6 +334,9 @@ describe("toDraftLineInput", () => {
 
   it("sends the variant, each answer, each list's picks, the note, the course and no-merge", () => {
     expect(toDraftLineInput({ ...burgerLine(), noMerge: true })).toEqual({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
       menuItemId: "mi-burger",
       variantId: "v-double",
       menuVersionId: VERSION,
@@ -279,7 +383,12 @@ describe("toDraftLineInput", () => {
 describe("fromDraftLine", () => {
   it("keeps matching read course metadata locally and omits it from every save", () => {
     const input = toDraftLineInput(burgerLine());
-    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const course = {
+      id: "retired",
+      name: "Recorded dessert",
+      displayOrder: 3,
+      heldUntilFired: true,
+    };
     const restored = fromDraftLine(
       { ...input, courseId: course.id, course, unavailable: false },
       new Map(),
@@ -298,18 +407,24 @@ describe("fromDraftLine", () => {
 
     const rebuilt = fromDraftLine(saved(input, "2.000"), offers);
 
-    expect(toDraftLineInput(rebuilt)).toEqual(input);
-    expect(rebuilt).toEqual(line);
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
+    expect(rebuilt).toEqual({ ...line, draftLineId: "dl-1" });
   });
 
   it("rebuilds a weighed line at its own places", () => {
     const line: OrderLine = { product: menuOfferToTillProduct(fish, VERSION), quantity: "0.350" };
-    expect(fromDraftLine(saved(toDraftLineInput(line), "0.350"), offers)).toEqual(line);
+    expect(fromDraftLine(saved(toDraftLineInput(line), "0.350"), offers)).toEqual({
+      ...line,
+      draftLineId: "dl-1",
+    });
   });
 
   it("rebuilds a line with no version or variant as the live offer sells it", () => {
     const line: OrderLine = { product: menuOfferToTillProduct(fish), quantity: "1.250" };
-    expect(fromDraftLine(saved(toDraftLineInput(line), "1.250"), offers)).toEqual(line);
+    expect(fromDraftLine(saved(toDraftLineInput(line), "1.250"), offers)).toEqual({
+      ...line,
+      draftLineId: "dl-1",
+    });
   });
 
   it("keeps a not-offered line with no version or variant without inventing either", () => {
@@ -317,12 +432,15 @@ describe("fromDraftLine", () => {
     const rebuilt = fromDraftLine(saved(input, "1.000"), new Map());
     expect(rebuilt.product.variantId).toBeUndefined();
     expect(rebuilt.product.menuVersionId).toBeUndefined();
-    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, quantity: "1" });
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, quantity: "1", id: "dl-1" });
   });
 
   it("keeps the no-merge mark", () => {
     const line: OrderLine = { ...burgerLine(), noMerge: true };
-    expect(fromDraftLine(saved(toDraftLineInput(line), "2.000"), offers)).toEqual(line);
+    expect(fromDraftLine(saved(toDraftLineInput(line), "2.000"), offers)).toEqual({
+      ...line,
+      draftLineId: "dl-1",
+    });
   });
 
   it("keeps a line whose menu item is no longer offered, with its ids, marked as not offered", () => {
@@ -332,11 +450,11 @@ describe("fromDraftLine", () => {
     expect(rebuilt.notOffered).toBe(true);
     expect(rebuilt.blocked).toBe("removed");
     expect(rebuilt.product.name).toBe("");
-    expect(toDraftLineInput(rebuilt)).toEqual(input);
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
   });
 
   it("keeps a variant, a pick and an answer the offer no longer holds, by their ids", () => {
-    const input: DraftLineInput = {
+    const input: FreshDraftLineInput = {
       ...toDraftLineInput(burgerLine()),
       variantId: "v-gone",
       options: [{ listId: "doneness", labelId: "blue" }],
@@ -345,7 +463,7 @@ describe("fromDraftLine", () => {
 
     const rebuilt = fromDraftLine(saved(input, "2.000"), offers);
 
-    expect(toDraftLineInput(rebuilt)).toEqual(input);
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
     expect(rebuilt.notOffered).toBeUndefined();
     expect(rebuilt.product.variantName).toBeUndefined();
     expect(rebuilt.extras).toEqual([
@@ -370,7 +488,7 @@ describe("fromDraftLine", () => {
 
       const rebuilt = fromDraftLine(saved(input, "2.000"), measured);
 
-      expect(toDraftLineInput(rebuilt)).toEqual(input);
+      expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
       expect(rebuilt.extras).toEqual([
         { listId: "toppings", productId: "p-cheese", name: "", price: "0.00", quantity: 2 },
         { listId: "toppings", productId: "p-bacon", name: "", price: "0.00", quantity: 1 },
@@ -396,7 +514,7 @@ describe("fromDraftLine", () => {
         extrasList("toppings", [extraItem("p-cheese", "1.00", false)]),
       ],
     });
-    const input: DraftLineInput = {
+    const input: FreshDraftLineInput = {
       ...toDraftLineInput(burgerLine()),
       options: [{ listId: "doneness", labelId: "rare" }],
       extras: [{ listId: "toppings", picks: [{ productId: "p-cheese", quantity: 1 }] }],
@@ -425,7 +543,10 @@ describe("fromDraftLine: what the server and the live menu say about the line", 
     const stale = fromDraftLine(saved(input, "2.000"), offers, live("mv-8"));
     expect(stale.earlierPriceUnknown).toBe(true);
     expect(stale.product.menuVersionId).toBe(VERSION);
-    expect(fromDraftLine(saved(input, "2.000"), offers, live(VERSION))).toEqual(burgerLine());
+    expect(fromDraftLine(saved(input, "2.000"), offers, live(VERSION))).toEqual({
+      ...burgerLine(),
+      draftLineId: "dl-1",
+    });
     const unversioned = { ...input, menuVersionId: null };
     expect(
       fromDraftLine(saved(unversioned, "2.000"), offers, live("mv-8")).earlierPriceUnknown,
@@ -453,7 +574,7 @@ describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
     expect(() => preview(rebuilt)).not.toThrow();
     expect(preview(rebuilt).total).toBe("0.00");
     expect(rebuilt.quantity).toBe("0.35");
-    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, quantity: "0.35" });
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, quantity: "0.35", id: "dl-1" });
   });
 
   it("keeps a dish no longer offered at a whole quantity, and the preview reads it", () => {
@@ -477,7 +598,7 @@ describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
     expect(preview(rebuilt).total).toBe("9.25");
     expect(rebuilt.quantity).toBe("0.500");
     expect(rebuilt.blocked).toBe("unit_changed");
-    expect(toDraftLineInput(rebuilt)).toEqual(input);
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
   });
 
   it("leaves an offered line that fits its unit unmarked", () => {
@@ -489,7 +610,7 @@ describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
 
 describe("rebuildReturned: a line kept while its dish was not offered", () => {
   const live = (version: string) => new Map([["dinner", version]]);
-  const kept = (input: DraftLineInput, unavailable = false) =>
+  const kept = (input: FreshDraftLineInput, unavailable = false) =>
     fromDraftLine({ ...saved(input, "2.000"), unavailable }, new Map());
 
   it("rebuilds the line from the offer once it is back, keeping every id and selection", () => {
@@ -497,13 +618,18 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
 
     const rebuilt = rebuildReturned([kept(input)], offers, live(VERSION));
 
-    expect([...rebuilt]).toEqual([[0, burgerLine()]]);
-    expect(toDraftLineInput(rebuilt.get(0)!)).toEqual(input);
+    expect([...rebuilt]).toEqual([[0, { ...burgerLine(), draftLineId: "dl-1" }]]);
+    expect(toDraftLineInput(rebuilt.get(0)!)).toEqual({ ...input, id: "dl-1" });
   });
 
   it("keeps the recorded course section when an unavailable draft dish is offered again without leaking metadata into saves", () => {
     const input = { ...toDraftLineInput(burgerLine()), courseId: "retired" };
-    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const course = {
+      id: "retired",
+      name: "Recorded dessert",
+      displayOrder: 3,
+      heldUntilFired: true,
+    };
     const missing = fromDraftLine(
       { ...saved(input, "2.000"), course, unavailable: true },
       new Map(),
@@ -515,9 +641,15 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
     expect(rebuilt.notOffered).toBeUndefined();
     expect(rebuilt.unavailableOnServer).toBe(true);
     expect(
-      draftSections([{ courseId: rebuilt.courseId ?? null, course: rebuilt.course }], []),
-    ).toEqual([{ course, lineIndexes: [0] }]);
-    expect(toDraftLineInput(rebuilt)).toEqual(input);
+      draftLayout({
+        lines: [rebuilt],
+        courses: [],
+        groups: [],
+        locale: "en",
+        nextDisplayNumber: 1,
+      })[0]!.sections,
+    ).toEqual([{ course, heading: false, indexes: [0] }]);
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
     expect(missing.course).toEqual(course);
     expect(missing.notOffered).toBe(true);
 
@@ -525,13 +657,27 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
     working.loadFrom("draft", [rebuilt]);
     working.setLineCourse(0, "new-course");
     expect(working.lines[0]!.course).toBeUndefined();
-    expect(toDraftLineInput(working.lines[0]!)).toEqual({ ...input, courseId: "new-course" });
+    expect(toDraftLineInput(working.lines[0]!)).toEqual({
+      ...input,
+      courseId: "new-course",
+      id: "dl-1",
+    });
   });
 
   it("does not adopt recorded metadata for another course when an unavailable dish returns", () => {
     const missing = kept({ ...toDraftLineInput(burgerLine()), courseId: "selected" });
     const rebuilt = rebuildReturned(
-      [{ ...missing, course: { id: "retired", name: "Recorded dessert", displayOrder: 3 } }],
+      [
+        {
+          ...missing,
+          course: {
+            id: "retired",
+            name: "Recorded dessert",
+            displayOrder: 3,
+            heldUntilFired: true,
+          },
+        },
+      ],
       offers,
       live(VERSION),
     ).get(0)!;
@@ -539,8 +685,14 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
     expect(rebuilt.courseId).toBe("selected");
     expect(rebuilt.course).toBeUndefined();
     expect(
-      draftSections([{ courseId: rebuilt.courseId ?? null, course: rebuilt.course }], []),
-    ).toEqual([{ course: null, lineIndexes: [0] }]);
+      draftLayout({
+        lines: [rebuilt],
+        courses: [],
+        groups: [],
+        locale: "en",
+        nextDisplayNumber: 1,
+      })[0]!.sections,
+    ).toEqual([{ course: null, heading: false, indexes: [0] }]);
   });
 
   it("marks the line as holding no earlier price when the offer is back under another version", () => {
@@ -550,18 +702,18 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
       live("mv-8"),
     ).get(0);
 
-    expect(rebuilt).toEqual({ ...burgerLine(), earlierPriceUnknown: true });
+    expect(rebuilt).toEqual({ ...burgerLine(), earlierPriceUnknown: true, draftLineId: "dl-1" });
   });
 
   it("keeps a pick the returned offer no longer holds, which still stops the line", () => {
-    const input: DraftLineInput = {
+    const input: FreshDraftLineInput = {
       ...toDraftLineInput(burgerLine()),
       extras: [{ listId: "toppings", picks: [{ productId: "p-gone", quantity: 1 }] }],
     };
 
     const rebuilt = rebuildReturned([kept(input)], offers, live(VERSION)).get(0)!;
 
-    expect(toDraftLineInput(rebuilt)).toEqual(input);
+    expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
     expect(rebuilt.notOffered).toBeUndefined();
     expect(lineBlock(rebuilt, burger)?.reason).toBe("extra_removed");
   });

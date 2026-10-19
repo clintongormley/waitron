@@ -1,15 +1,17 @@
+import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
-import { moveBill } from "./move-bill.js";
-import { placeGroups } from "./order-groups.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
   OPERATOR,
   billRow,
@@ -23,7 +25,7 @@ import {
 } from "./testing/party-venue.js";
 import { addExtras } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { fireLines, splitLinesWithinOrder, updateOrderLine } from "./working-order.js";
+import { fireLines, splitLinesWithinOrder } from "./working-order.js";
 import "./errors.js";
 
 // ticket_items.sent_order_number: the number of the order a dish the kitchen had seen left.

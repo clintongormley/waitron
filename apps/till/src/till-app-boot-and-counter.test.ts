@@ -1,6 +1,7 @@
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import {
   transactionRow,
+  billRow,
   billOptions,
   listPage,
   resolvedDates,
@@ -172,6 +173,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       revision: 0,
       ownerRevision: 0,
     })),
+    getFindBill: vi.fn(async (id: string) => ({ ...billRow({ workingOrderId: id }), edit: null })),
     getTill: vi.fn().mockResolvedValue(till),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -2251,8 +2253,23 @@ describe("till-app counter: the guests the receipt prints", () => {
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
     expect(call[2]).toBe(c.store.id);
-    expect(call).toHaveLength(8);
+    expect(call).toHaveLength(9);
     expect(call[7]).toBeNull();
+  });
+
+  it("identifies a counter sale as having no table editor", async () => {
+    const { el } = await counterWithCafe();
+    await payCash(el);
+    expect(vi.mocked(api.recordSale).mock.calls[0]).toHaveLength(9);
+    expect(vi.mocked(api.recordSale).mock.calls[0]![8]).toBeNull();
+  });
+
+  it("identifies a counter collection as having no table editor", async () => {
+    const { el, c } = await counterWithCafe();
+    emit(c, "collect-order", { method: "cash", amount: "5", guests: 2 });
+    await flush(el);
+    expect(vi.mocked(api.collectOrder).mock.calls[0]).toHaveLength(5);
+    expect(vi.mocked(api.collectOrder).mock.calls[0]![4]).toBeNull();
   });
 
   it("a cash sale after typing 2 sends 2", async () => {
@@ -2273,7 +2290,7 @@ describe("till-app counter: the guests the receipt prints", () => {
     await flush(el);
 
     expect(vi.mocked(api.collectOrder).mock.calls).toStrictEqual([
-      [c.store.id, { method: "cash", amount: "5" }, undefined, 2],
+      [c.store.id, { method: "cash", amount: "5" }, undefined, 2, null],
     ]);
   });
 
@@ -2306,11 +2323,33 @@ describe("till-app counter: the guests the receipt prints", () => {
       c.store.id,
       undefined,
       invoice,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 });
 
 describe("till-app integrated card collection", () => {
+  it("identifies a counter reader payment as having no table editor", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "simulator",
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      }),
+      pay,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    emit(c, "collect-card", { readerId: "reader-2" });
+    await flush(el);
+    expect(pay.mock.calls[0]![0]).toHaveProperty("expectedEdit", null);
+  });
+
   it("sends the reader the operator picked", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const { el } = await mountApp({
@@ -5855,6 +5894,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     const receiptLanguages = ["es-ES", "ca-ES"];
     const groups = [
       {
+        courseIds: [],
         id: "g-1",
         position: 1,
         state: "held",

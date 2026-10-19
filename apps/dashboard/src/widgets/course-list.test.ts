@@ -1,8 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
-import type { WtInput } from "@waitron/ui";
+import type { WtInput, WtSwitch } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -12,15 +12,22 @@ import { CourseList } from "./course-list.js";
 afterEach(cleanupWidgets);
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
-  { id: "c3", name: "Desserts", displayOrder: 5, active: true, inUse: false },
+  {
+    id: "c1",
+    name: "Starters",
+    displayOrder: 0,
+    active: true,
+    inUse: false,
+    heldUntilFired: false,
+  },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true, heldUntilFired: true },
+  { id: "c3", name: "Desserts", displayOrder: 5, active: true, inUse: false, heldUntilFired: true },
 ];
 
 /** Deleted rows supplied to check that configuration choices omit them. */
 const DISABLED: Course[] = [
-  { id: "d1", name: "Brunch", displayOrder: 1, active: false, inUse: true },
-  { id: "d2", name: "Tapas", displayOrder: 3, active: false, inUse: false },
+  { id: "d1", name: "Brunch", displayOrder: 1, active: false, inUse: true, heldUntilFired: true },
+  { id: "d2", name: "Tapas", displayOrder: 3, active: false, inUse: false, heldUntilFired: true },
 ];
 
 /** A fixture mixing live and deleted rows in display order. */
@@ -1225,6 +1232,7 @@ describe("permanent delete lifecycle", () => {
     expect([...el.shadowRoot!.querySelectorAll("th")].map((h) => h.textContent!.trim())).toEqual([
       t("kitchen.reorder_course"),
       t("kitchen.course_name"),
+      t("courses.held_until_fired"),
       t("kitchen.course_actions"),
     ]);
   });
@@ -1614,4 +1622,71 @@ it("reorders only active courses when a fixture includes deleted rows", async ()
   await settle(el);
   expect(vi.mocked(api.moveCourse).mock.calls).toEqual([["c3", 1]]);
   expect(rowIds(el)).toEqual(["c1", "c3", "c2"]);
+});
+
+describe("Held until fired", () => {
+  let previousLocale: ReturnType<typeof currentLocale>;
+  beforeEach(() => {
+    previousLocale = currentLocale();
+    setLocale("en");
+  });
+  afterEach(() => setLocale(previousLocale));
+  it("saves the changed course setting and redraws its stored state", async () => {
+    const rows = copy(COURSES);
+    const updateCourse = vi.fn(async (id: string, patch: { heldUntilFired?: boolean }) => {
+      Object.assign(
+        rows.find((row) => row.id === id)!,
+        patch,
+      );
+    });
+    const { el } = await mount(
+      stubApi({
+        listCourses: vi.fn(async () => copy(rows)),
+        updateCourse,
+      }),
+    );
+    const control = q<WtSwitch>(el, '[data-course="c2"] wt-switch');
+    expect(control).not.toBeNull();
+    await page.getByRole("switch", { name: "Held until fired: Mains" }).click({ force: true });
+    await vi.waitFor(() => {
+      expect(updateCourse).toHaveBeenCalledExactlyOnceWith("c2", { heldUntilFired: false });
+      const checkbox = q<WtSwitch>(el, '[data-course="c2"] wt-switch')!.shadowRoot!.querySelector(
+        "input",
+      )!;
+      expect(checkbox.checked).toBe(false);
+      expect(el.shadowRoot!.querySelector('[data-course="c2"]')!.textContent).toContain(
+        "No · goes to Fire now",
+      );
+    });
+  });
+
+  it("shows held and immediate states on a read-only list without switches", async () => {
+    const { el } = await mount(stubApi());
+    el.readOnly = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("wt-switch")).toHaveLength(0);
+    expect(q(el, '[data-course="c1"]')!.textContent).toContain("No · goes to Fire now");
+    expect(q(el, '[data-course="c2"]')!.textContent).toContain("Held until fired");
+  });
+
+  it("restores the stored setting after a refusal and allows another attempt", async () => {
+    const updateCourse = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue(undefined);
+    const { el } = await mount(stubApi({ updateCourse }));
+    const control = q<WtSwitch>(el, '[data-course="c2"] wt-switch');
+    expect(control).not.toBeNull();
+    await page.getByRole("switch", { name: "Held until fired: Mains" }).click({ force: true });
+    await vi.waitFor(() => {
+      expect(alertLine(el)).not.toBeNull();
+      const input = q<WtSwitch>(el, '[data-course="c2"] wt-switch')!.shadowRoot!.querySelector(
+        "input",
+      )!;
+      expect(input.checked).toBe(true);
+      expect(input.disabled).toBe(false);
+    });
+    await page.getByRole("switch", { name: "Held until fired: Mains" }).click({ force: true });
+    await vi.waitFor(() => expect(updateCourse).toHaveBeenCalledTimes(2));
+  });
 });

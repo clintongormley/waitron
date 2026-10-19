@@ -99,13 +99,16 @@ changes nothing on an open order by itself: an extras pick is its own order line
 answer is stored as the wording that was chosen. Each published menu keeps the list until you
 publish that menu again. For an options list this matters, because its options are gone: until you
 publish, the till cannot add a dish that carried the list, and saving changes to a parked order that
-holds such a dish is refused. A table's order can still take a new round without such a dish, and
-you can still change the quantity of one of its lines, but other changes to an order holding such a
-dish can be refused the same way. So publish your menus again straight after deleting an options
-list. After that, the next change saved to a parked order takes off any extra picked from a deleted
-list, and its charge with it, and drops any answer to a deleted options list. On a table's order
-those extras and answers stay, and raising the quantity of a dish that carries such an extra is
-refused.
+holds such a dish is refused. Publish your menus again straight after deleting an options list.
+After that, the next change saved to a parked counter order takes off any extra picked from a deleted
+list, and its charge with it, and drops any answer to a deleted options list.
+
+A dish already sent at a table keeps its recorded extras and options answers. To change them, use
+**Recall** in the dish's line window, then edit it in **New order**. Recall is available only on an
+unpaid bill, while changes to sent dishes are allowed and the kitchen has not started the dish.
+The recalled dish keeps its recorded prices and discounts. You can leave an old answer or extra
+unchanged even when it is no longer offered; a newly selected extra uses its current offered price.
+Send the dish again when its changes are ready.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
 that one product's Modifiers section.
@@ -141,8 +144,8 @@ is stored as wording, all three names of the list and all three of the chosen op
 matches on the staff name of each. An extra keeps the product and the list it was picked from, so
 another list offering the same product cannot silently take its place.
 
-Change the staff name of a list or an option, or turn an option off, and an options answer no longer
-matches. The till will not guess: it asks the operator to open that line and choose again before the
+On a parked counter order, changing the staff name of a list or an option, or turning an option off,
+means an options answer no longer matches. The till will not guess: it asks the operator to open that line and choose again before the
 order can be sent.
 
 Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but

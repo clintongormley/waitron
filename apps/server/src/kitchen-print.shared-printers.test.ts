@@ -22,7 +22,8 @@ import { writePrintHeldWork } from "@waitron/venue-service";
 import type { OriginConfig } from "./till-config.js";
 import { createStation, updateStation } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import { cancelLine } from "./testing/cancel-line.js";

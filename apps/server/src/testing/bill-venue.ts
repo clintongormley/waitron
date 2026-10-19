@@ -1,5 +1,10 @@
+import { observedClosingBody } from "./party-close-fixture.js";
+import { observedWholePaymentBody } from "./whole-payment-fixture.js";
+import { observedPaymentBody } from "./bill-payment-fixture.js";
+import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments, departmentReceipts } from "@waitron/venue-service";
+import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -46,7 +51,7 @@ import { openPartyTab } from "./serve-line.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
-import { parkOrder, placeOrder } from "../working-order.js";
+import { parkOrder } from "../working-order.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
@@ -103,6 +108,7 @@ export interface BillVenue {
 }
 
 const quiet: Logger = () => {};
+const appDatabases = new WeakMap<Hono, Database>();
 
 export async function provisionBillVenue(db: Database): Promise<BillVenue> {
   const clock = systemClock();
@@ -273,6 +279,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
       },
       quiet,
     );
+    appDatabases.set(app, db);
     return app;
   };
   // The operator's shift on `device`, as signing in there opens it.
@@ -333,10 +340,23 @@ export async function send(
   path: string,
   body?: unknown,
 ): Promise<Answer> {
+  const database = appDatabases.get(app);
+  const payload =
+    database === undefined
+      ? body
+      : observedWholePaymentBody(
+          database,
+          path,
+          await observedClosingBody(
+            database,
+            path,
+            await observedPaymentBody(database, path, body),
+          ),
+        );
   const res = await app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
   });
   const text = await res.text();
   const parsed = res.headers.get("content-type")?.includes("json")
@@ -419,6 +439,7 @@ export async function seatedWith(
   const partyId = seated.json.partyId as string;
   if (names.length > 0) {
     const ordered = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, seated.json.tabId as string)),
       submissionId: randomUUID(),
       expectedPartyRevision: seated.json.revision,
       groups: [
@@ -458,6 +479,12 @@ export async function placedCounterBillMovedTo(
   );
   const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${id}/move`, {
     to: { tableId: party.tableId },
+    expectedEdits: await withTransaction(venue.db, async (tx) => {
+      const edits = [];
+      for (const billId of [id, ...(await readPartyBillIds(tx, [party.partyId]))].sort())
+        edits.push(await readBillEditState(tx, billId));
+      return edits;
+    }),
     otherPartyId: party.partyId,
     expectedOtherPartyRevision: row!.revision,
   });

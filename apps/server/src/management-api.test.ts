@@ -2263,6 +2263,54 @@ describe("/management-api/stations (KDS-1 config)", () => {
 });
 
 describe("/management-api/courses + product course + fire-control (KDS-2 config)", () => {
+  it("courses default to held, and create and update persist an explicit false", async () => {
+    const id = await createCourse(unique("Held"));
+    expect((await listCourses()).find((c) => c.id === id)).toMatchObject({ heldUntilFired: true });
+    const changed = await req(
+      `/courses/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ heldUntilFired: false }),
+      },
+      managerCookie,
+    );
+    expect(changed.status).toBe(204);
+    expect((await listCourses()).find((c) => c.id === id)).toMatchObject({ heldUntilFired: false });
+    const created = await req(
+      "/courses",
+      {
+        method: "POST",
+        body: JSON.stringify({ name: unique("Immediate"), heldUntilFired: false }),
+      },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const fresh = (await created.json()) as { id: string };
+    expect((await listCourses()).find((c) => c.id === fresh.id)).toMatchObject({
+      heldUntilFired: false,
+    });
+  });
+
+  it.each(
+    ["no", null, 0, [], {}].flatMap((value) =>
+      ["POST", "PATCH"].map((method) => ({ value, method })),
+    ),
+  )("$method refuses non-boolean heldUntilFired: $value", async ({ value, method }) => {
+    const id = await createCourse(unique("InvalidHeld"));
+    const response = await req(
+      method === "POST" ? "/courses" : `/courses/${id}`,
+      {
+        method,
+        body: JSON.stringify({ name: unique("InvalidHeldInput"), heldUntilFired: value }),
+      },
+      managerCookie,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "heldUntilFired" } },
+    });
+  });
+
   async function createCourse(
     name: string,
     extra: { displayOrder?: number } = {},

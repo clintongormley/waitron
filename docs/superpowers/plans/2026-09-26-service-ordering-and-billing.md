@@ -1,5 +1,14 @@
 # Service, ordering and billing — Implementation Plan
 
+> **2026-10-19, A773-1:** use the later
+> [table-panel plan](2026-10-16-a773-1-unsent-list.md) and
+> [per-bill ownership contract](../specs/2026-10-17-a773-one-editor-design.md)
+> for table drafts, takeover, moves and submission. The per-person open-draft key, takeover
+> absorption and draft/submission interfaces below describe this plan's earlier design.
+> Table Recall now belongs to New order in the later design; the counter retains its separate
+> path. A773-1 is unlanded, with cancellation/Finish integration and final validation still open.
+> Its ownership checks before closing do not complete held-dish resolution in A773-1's Task 22.
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

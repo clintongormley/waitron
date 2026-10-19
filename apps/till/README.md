@@ -8,6 +8,43 @@ Slice 1 (**7a — walk-up cash sale**) of the Counter POS, built in #60.
 The matching HTTP surface lives in `@waitron/server` (`apps/server/src/till-api.ts`); this app never
 talks to the database directly.
 
+## Table ordering
+
+**2026-10-19, A773-1:** the counter flow and slice boundaries below describe the early counter
+implementation. At a table, work on the bill you want to charge. Its **Sent** box shows the dishes
+already sent, above **New order**, where you arrange dishes before sending them.
+
+New order separates **Fire now**, new held groups and dishes that will join an existing held group.
+**Send all** sends the eligible dishes in that arrangement immediately, without a preview or a
+second bill choice. To fire only some dishes, select them and press **Fire**. Fresh dishes that
+cannot currently be sold stay in New order.
+
+When you Recall a sent dish, it keeps its recorded bill row, price and existing discount. You can
+send it again even if the dish is no longer offered. If either kind still needs a station choice,
+it stays in New order. Changing a recalled dish's modifiers can change its bill
+amount during the draft save; newly added extras use current prices. See the
+[modifier contract](../../docs/developers/modifiers.md#ordering-and-stored-facts) for the save and
+send rules. Only unsent dishes have selection controls; sent dishes have their own line window.
+
+Each bill has one saved New order and one editor while it contains unsent dishes. You and a
+colleague can edit different bills at the same table. On the same bill, a colleague's saved dishes
+are read-only until you confirm **Take over**. That transfers the saved arrangement in place;
+it does not send the dishes. Groups belong to the table and can contain dishes from several bills.
+
+A new payment is refused while its bill has unsent dishes: **Send or remove the unsent dishes
+before paying.** Another bill's unsent dishes do not block this payment.
+
+On a paid bill, **Cancel item…** offers **Refund** only when this device can return an original
+cash or card payment that still has money available toward the bill. The device profile must allow
+that payment method. If you need a different device, the dialog directs you to **Refund a payment**
+on the receipt at a till. Cancelling the dish stops its kitchen work; returning money remains a
+separate step.
+
+The [courses and groups design](../../docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
+and [one-editor-per-bill amendment](../../docs/superpowers/specs/2026-10-17-a773-one-editor-design.md)
+define the table workflow. The [implementation plan](../../docs/superpowers/plans/2026-10-16-a773-1-unsent-list.md)
+keeps the pass-coordination changes separate as A773-2.
+
 ## The flow
 
 `<till-app>` (`src/till-app.ts`) runs the whole journey and never gates on anything but the sale

@@ -23,6 +23,8 @@ export const orderGroups = table(
     // No unique index: a reorder rewrites the positions one row at a time, and a unique index would
     // refuse a midway state that the final one satisfies.
     position: count("position").notNull(),
+    displayNumber: count("display_number").notNull().default(0),
+    numberPartyId: id("number_party_id").references(() => parties.id),
     state: orderGroupState("state").notNull(),
     firedAt: tsString("fired_at"),
     firedBy: id("fired_by"),

@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { partyTables, parties, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
-import { splitBill } from "../bill-actions.js";
+import { splitBill } from "./bill-action-fixture.js";
 import { partyRevisionOfOrder, setMainBill } from "../parties.js";
 import type { OriginConfig, TillConfig } from "../till-config.js";
 import {

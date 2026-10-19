@@ -95,9 +95,11 @@ The unsaved product fields remain in place if the nested save fails or you cance
 
 ## Choose the course {#course}
 
-Use the **Default course** field under **Kitchen** to choose the course the dish goes out in. It
-saves with the product. On a table's order, the till sorts the dishes into one section per course,
-in the venue's course order, and staff can give a dish a different course there.
+Use the **Default course** field under **Kitchen** to choose the course for new dishes. It saves
+with the product. At a table, arrange dishes in **New order**: they can go in **Fire now**, a new
+held group or an existing held group. You can change an unsent dish's course before sending it.
+Use groups to choose which dishes you fire together, rather than treating each course as one
+fixed section for the whole table.
 
 **Edit courses…** at the end of the **Default course** list opens the course list in a window that
 saves each change as you make it. When you close it, the last course you added becomes the product's

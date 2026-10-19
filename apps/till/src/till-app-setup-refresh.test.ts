@@ -1,3 +1,4 @@
+import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -228,6 +229,7 @@ let server: DraftServer;
 let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
+  for (const id of ["wo-7", "wo-9"]) server.bills.add(id);
   return {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
@@ -670,10 +672,10 @@ describe("A768 the till follows the venue's setup revision", () => {
     const { el } = await mountApp();
     await openMesa(el);
     await tap(el, "Beer");
-    await chooseOption(
-      tableOrder(el)!.shadowRoot!.querySelector<WtCombobox>("[data-round-course]")!,
-      "mains",
-    );
+    const form = await openDraftLine(tableOrder(el)!, 0);
+    await chooseOption(form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!, "mains");
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
     await flush(el);
     api.getTill.mockResolvedValue({
       ...till(drillFormFactor),
@@ -685,10 +687,13 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(courseIds(tableOrder(el)!.courses)).toEqual(["drinks", "desserts"]);
     expect(tableOrder(el)!.draftStore!.lines.map((line) => line.courseId)).toEqual(["mains"]);
     const order = tableOrder(el)!.shadowRoot!;
-    expect(order.querySelector("[data-round-course]")!.getAttribute("placeholder")).toBe("Mains");
-    expect(
-      order.querySelector('[data-draft-section="mains"] .draft-section-name')?.textContent,
-    ).toBe("Mains");
+    const retained = await openDraftLine(tableOrder(el)!, 0);
+    expect(retained.shadowRoot!.querySelector('[name="course"]')!.getAttribute("placeholder")).toBe(
+      "Mains",
+    );
+    expect(order.querySelector('[data-draft-group="fire"]')?.getAttribute("aria-label")).toBe(
+      "Fire now · Mains",
+    );
   });
 });
 

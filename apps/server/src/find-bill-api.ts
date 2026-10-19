@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { sql, type SQL } from "drizzle-orm";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
+import { readBillEditState } from "./bill-editing.js";
 import { readLocationClock } from "@waitron/reporting";
 import { findBillsRelation, readFindBill, readFindBills } from "./find-bill-bills.js";
 import { findTransactionsRelation, readFindTransactions } from "./find-bill-transactions.js";
@@ -67,12 +68,13 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
       const id = raw.toLowerCase();
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
-        return readFindBill(
+        const bill = await readFindBill(
           tx,
           deps.cfg,
           id,
           await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
         );
+        return { ...bill, edit: await readBillEditState(tx, id) };
       });
       return c.json(result);
     }),

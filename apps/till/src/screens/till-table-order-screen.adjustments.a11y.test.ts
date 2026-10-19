@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { openSentDish, openSentMore } from "./till-table-order-screen.sent.test-helpers.js";
+import { current, row } from "./till-table-order-screen.current-orders.test-helpers.js";
+import { addDecimal, grossOf } from "@waitron/shared";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PartyBill, TabLine, TableParty } from "../api/client.js";
-
-// The table screen's Give away and Discount actions, on a dish and on an extra, the bill's
-// Discount, and a given-away or discounted line's earlier price struck through (service plan Task
-// 11, part B; B11d).
 
 const party: TableParty = {
   kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
@@ -66,7 +65,6 @@ const lines: TabLine[] = [
     unitPriceGross: "0.00",
     listUnitPriceGross: "12.00",
   },
-  // An extra, with Give away, Discount and Cancel of its own, painted muted a size down.
   {
     ...base,
     id: "l4",
@@ -90,7 +88,10 @@ const lines: TabLine[] = [
 ];
 
 beforeEach(() => setLocale("es-ES"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 describe.each(["light", "dark"] as const)(
   "till-table-order-screen adjustments a11y (%s theme)",
@@ -98,12 +99,60 @@ describe.each(["light", "dark"] as const)(
     it("has no violations with the actions and the earlier prices shown", async () => {
       const { el, host } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
-        { products: [], lines, statuses: [], orderId: "wo-4", party, bills: [bill] },
+        {
+          products: [],
+          lines,
+          statuses: [],
+          orderId: "wo-4",
+          party,
+          bills: [bill],
+          currentOrders: current({
+            groups: [],
+            reminder: null,
+            ungrouped: lines
+              .filter((line) => line.parentLineNo == null)
+              .map((line) =>
+                row(line.id, line.name!, line.quantity, {
+                  lineNo: line.lineNo,
+                  netAmount: lines
+                    .filter((extra) => extra.parentLineNo === line.lineNo)
+                    .reduce(
+                      (sum, extra) =>
+                        addDecimal(sum, grossOf(extra.unitPriceGross, extra.quantity)),
+                      grossOf(line.unitPriceGross, line.quantity),
+                    ),
+                  servedAt: line.servedAt,
+                  servedQuantity: line.servedAt === null ? "0.000" : line.quantity,
+                  extras: lines
+                    .filter((extra) => extra.parentLineNo === line.lineNo)
+                    .map((extra) => ({
+                      lineId: extra.id,
+                      name: extra.name!,
+                      quantity: extra.quantity,
+                      unitPriceGross: extra.unitPriceGross,
+                      priceQuantity: "1.000",
+                      netAmount: grossOf(extra.unitPriceGross, extra.quantity),
+                    })),
+                }),
+              ),
+          }),
+        },
         theme,
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await el.updateComplete;
+      await openSentDish(el, "l1");
+      expect(el.shadowRoot!.querySelector("[data-sent-line-dialog]")!.textContent).toContain(
+        "Queso",
+      );
+      expect(el.shadowRoot!.querySelector("[data-sent-line-dialog] s")!.textContent).toContain(
+        "12,00",
+      );
+      await openSentMore(el);
+      expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
       await expectNoA11yViolations(host);
     });
   },

@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
@@ -24,15 +26,16 @@ import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
-import { moveBill } from "./move-bill.js";
-import { saveDraft } from "./order-drafts.js";
-import { fireGroup, placeGroups, snoozeReminder } from "./order-groups.js";
-import { finishTable } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+
+import { fireGroup, snoozeReminder } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { finishTable } from "./testing/party-close-fixture.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import {
   cashContribution,
   commandFor,
@@ -52,7 +55,6 @@ import {
 import { serveLine } from "./testing/serve-line.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import {
-  addTabRound,
   advanceTicketItem,
   listHeldOrders,
   markServed,
@@ -214,7 +216,7 @@ describe("the floor's attention signals", () => {
     );
     expect((await floorRow(v, mesa2)).signals).toEqual([]);
   });
-  it("asks a just-seated party for its order, until a draft exists", async () => {
+  it("asks a just-seated party for its order until dishes are saved", async () => {
     const v = await setupPartyVenue(suite.db);
     const lucia = await person(v, "Lucía");
     const quiet = await seat(v, await v.table("Mesa 1"));
@@ -224,19 +226,26 @@ describe("the floor's attention signals", () => {
       { kind: "take_order" },
     ]);
 
-    // A draft holding no line yet is enough to say someone is taking the order.
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, quiet.partyId, lucia, { draftId: null, revision: 0, lines: [] }),
+      saveDraft(tx, v.cfg, quiet.partyId, lucia, {
+        billId: quiet.tabId,
+        draftId: null,
+        revision: 0,
+        lines: [],
+      }),
     );
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, drafting.partyId, lucia, {
+        billId: drafting.tabId,
         draftId: null,
         revision: 0,
         lines: [draftLine(v, "Burger")],
       }),
     );
 
-    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([]);
+    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([
+      { kind: "take_order" },
+    ]);
     expect((await floorRow(v, await tableOf(v, drafting.partyId))).signals).toEqual([
       { kind: "unsent_draft", ownerNames: ["Lucía"] },
     ]);
@@ -534,6 +543,7 @@ describe("the floor's attention signals", () => {
       await askForBill(v, partyId);
       await inTx(v, (tx) =>
         saveDraft(tx, v.cfg, partyId, lucia, {
+          billId: tabId,
           draftId: null,
           revision: 0,
           lines: [draftLine(v, "Agua")],

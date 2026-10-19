@@ -17,8 +17,15 @@ import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
-import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
+import type {
+  KitchenNoteSnapshot,
+  HeldExtra,
+  TillCourse,
+  TillProduct,
+  RecalledDraftLine,
+} from "../api/client.js";
 import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
+import type { Place, placeFor } from "./draft-place.js";
 
 /**
  * One extras pick on a basket line. `name` and `price` are the client's copy of what the offer
@@ -58,6 +65,11 @@ export interface LineSelection {
 }
 
 export interface OrderLine {
+  source?: RecalledDraftLine["source"];
+  /** Explicit picker intent; frozen source snapshots never imply a new selection. */
+  sourceSelection?: LineSelection;
+  place?: Place;
+  draftLineId?: string;
   workingOrderLineId?: string;
   product: TillProduct;
   /** A decimal string accepted by the product unit's precision. */
@@ -182,7 +194,9 @@ function applySelection(line: OrderLine, selection: LineSelection | undefined): 
 }
 
 export class WorkingOrderStore {
+  protected placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
   readonly #lines: OrderLine[] = [];
+  readonly #splitFamilies = new WeakMap<OrderLine, readonly OrderLine[]>();
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
   /** The idempotency key park and pay send, so a retried request settles the order once. */
   #id: string = crypto.randomUUID();
@@ -205,6 +219,8 @@ export class WorkingOrderStore {
   /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
   #revision = 0;
   #sending = false;
+  /** An operation holding the sending lock without submitting the order. */
+  busyAction?: "split" | "cancel" | "recall";
   #editLock: object | null = null;
   #loadGeneration = 0;
   #kitchenNote: string | null = null;
@@ -370,7 +386,7 @@ export class WorkingOrderStore {
   }
 
   get #refusesEdits(): boolean {
-    return this.#sending || this.#editLock !== null;
+    return this.#sending || this.editsLocked;
   }
 
   /** No `"changed"` notification: not a rendering concern. */
@@ -419,14 +435,39 @@ export class WorkingOrderStore {
     this.#total = null;
   }
 
-  /**
-   * An edit sends each line without its not-offered picks, so the server takes them off the order;
-   * they leave the basket now to match. No prompt: the retrieve banner
-   * (`held.extra_not_offered`) already said that changing the order removes them.
-   */
   #markDirty(): void {
     this.#dirty = true;
-    for (const line of this.#lines) delete line.notOfferedExtras;
+    for (const line of this.#lines) if (line.source === undefined) delete line.notOfferedExtras;
+  }
+
+  refreshRecalledLine(line: OrderLine, snapshot: OrderLine, savedSelection?: LineSelection): void {
+    if (
+      !this.#lines.includes(line) ||
+      snapshot.source === undefined ||
+      line.source?.line.id !== snapshot.source.line.id
+    )
+      return;
+    line.source = snapshot.source;
+    line.product = snapshot.product;
+    const pending = { ...line.sourceSelection };
+    if (pending.options === savedSelection?.options) {
+      delete pending.options;
+      delete pending.optionSnapshots;
+      delete line.options;
+      if (snapshot.optionSnapshots === undefined) delete line.optionSnapshots;
+      else line.optionSnapshots = snapshot.optionSnapshots;
+    }
+    if (pending.extras === savedSelection?.extras) {
+      delete pending.extras;
+      if (snapshot.extras === undefined) delete line.extras;
+      else line.extras = snapshot.extras;
+      if (snapshot.notOfferedExtras === undefined) delete line.notOfferedExtras;
+      else line.notOfferedExtras = snapshot.notOfferedExtras;
+    }
+    if (pending.options === undefined && pending.extras === undefined) delete line.sourceSelection;
+    else line.sourceSelection = pending;
+    this.#invalidatePricing();
+    this.emit("changed");
   }
 
   appendLines(lines: readonly OrderLine[]): void {
@@ -454,13 +495,16 @@ export class WorkingOrderStore {
     if (this.#refusesEdits) return;
     if (this.#refusesSelection(product)) return;
     const line = newLine(product, quantity, selection);
-    const into = mergeTarget(this.#lines, line);
+    const placement = this.placer?.(product.courseId ?? null);
+    if (placement !== undefined) line.place = { ...placement.place };
+    const into = placement?.shift === undefined ? mergeTarget(this.#lines, line) : undefined;
     const merged =
       into === undefined
         ? undefined
         : { ...into, quantity: addDecimal(decimal(into.quantity), decimal(quantity)) };
     if (this.#passesLimit(into === undefined ? ZERO : lineGross(into), lineGross(merged ?? line)))
       return;
+    if (placement?.shift !== undefined) this.#shiftSlots(placement.shift.from);
     if (into === undefined) this.#lines.push(line);
     else into.quantity = merged!.quantity;
     this.#lastAdded = into ?? line;
@@ -488,9 +532,39 @@ export class WorkingOrderStore {
     delete line.options;
     delete line.optionSnapshots;
     applySelection(line, selection);
+    if (line.source !== undefined) {
+      line.sourceSelection = {
+        ...selection,
+        options: selection.options ?? [],
+        extras: selection.extras ?? [],
+      };
+      delete line.notOfferedExtras;
+    }
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
+  }
+
+  /** Omitted kinds keep their recorded choices: a recalled dish can outlive its offered lists. */
+  patchRecalledLineModifiers(index: number, selection: LineSelection): void {
+    if (this.#refusesEdits) return;
+    const line = this.#lines[index];
+    if (
+      line?.source === undefined ||
+      (selection.options === undefined && selection.extras === undefined)
+    )
+      return;
+    if (selection.options !== undefined) {
+      delete line.options;
+      delete line.optionSnapshots;
+    }
+    if (selection.extras !== undefined) {
+      delete line.extras;
+      delete line.notOfferedExtras;
+    }
+    applySelection(line, selection);
+    line.sourceSelection = { ...line.sourceSelection, ...selection };
+    this.#changedLines();
   }
 
   /** Never merges lines: stepping one line's count never folds it into an identical sibling. */
@@ -526,8 +600,51 @@ export class WorkingOrderStore {
     line.quantity = "1";
     line.noMerge = true;
     if (this.#lastAdded === line) this.#lastAdded = undefined;
-    const rest = Array.from({ length: count - 1 }, () => copyLine(line));
+    const rest = Array.from({ length: count - 1 }, () => {
+      const copy = copyLine(line);
+      delete copy.draftLineId;
+      return copy;
+    });
     this.#lines.splice(index + 1, 0, ...rest);
+    const family = [line, ...rest];
+    for (const member of family) this.#splitFamilies.set(member, family);
+    this.#changedLines();
+  }
+
+  splitFamily(line: OrderLine): readonly OrderLine[] | undefined {
+    const family = this.#splitFamilies.get(line);
+    if (family === undefined) return undefined;
+    const mergeable = { ...line };
+    delete mergeable.noMerge;
+    const key = orderLineMergeKey(mergeable);
+    if (key === null) return undefined;
+    const unitGross = lineGross({ ...line, quantity: "1" });
+    for (const member of family) {
+      if (!this.#lines.includes(member) || !soldByTheUnit(member.product)) return undefined;
+      const candidate = { ...member };
+      delete candidate.noMerge;
+      if (
+        orderLineMergeKey(candidate) !== key ||
+        lineGross({ ...member, quantity: "1" }) !== unitGross
+      )
+        return undefined;
+    }
+    return family;
+  }
+
+  foldSplitFamily(line: OrderLine): void {
+    if (this.#refusesEdits) return;
+    const family = this.splitFamily(line);
+    if (family === undefined) return;
+    const first = family[0]!;
+    const quantity = sumDecimals(family.map((member) => decimal(member.quantity)));
+    if (lineGross({ ...first, quantity }) !== sumDecimals(family.map(lineGross))) return;
+    first.quantity = quantity;
+    delete first.noMerge;
+    for (const member of family) {
+      this.#splitFamilies.delete(member);
+      if (member !== first) this.#lines.splice(this.#lines.indexOf(member), 1);
+    }
     this.#changedLines();
   }
 
@@ -542,8 +659,56 @@ export class WorkingOrderStore {
     if (courseId === undefined) delete line.courseId;
     else line.courseId = courseId;
     if (course !== undefined) line.course = course;
+    const placement = this.placer?.(courseId ?? line.product.courseId ?? null, index);
+    if (placement !== undefined) {
+      if (placement.shift !== undefined) this.#shiftSlots(placement.shift.from);
+      line.place = { ...placement.place };
+    }
     this.#markDirty();
     this.emit("changed");
+  }
+
+  setLinePlaces(indexes: readonly number[], place: Place, shift?: { from: number }): void {
+    if (this.#refusesEdits) return;
+    const lines = indexes.flatMap((index) => this.#lines[index] ?? []);
+    if (lines.length === 0) return;
+    if (shift !== undefined) this.#shiftSlots(shift.from);
+    for (const line of lines) line.place = { ...place };
+    this.#changedLines();
+  }
+
+  insertSlotAfter(slot: number | null): number {
+    const next = (slot ?? 0) + 1;
+    if (this.#refusesEdits) return next;
+    this.#shiftSlots(next);
+    this.#changedLines();
+    return next;
+  }
+
+  moveSlot(from: number, to: number): void {
+    if (this.#refusesEdits || from === to) return;
+    if (!this.#lines.some((line) => line.place?.kind === "new" && line.place.slot === from)) return;
+    const destination = this.#lines.find(
+      (line) => line.place?.kind === "new" && line.place.slot === to,
+    )?.place;
+    for (const line of this.#lines) {
+      const place = line.place;
+      if (place?.kind !== "new") continue;
+      const slot = place.slot;
+      if (slot === from) {
+        line.place = { ...(destination?.kind === "new" ? destination : place), slot: to };
+      } else if (from < to && slot > from && slot <= to) line.place = { ...place, slot: slot - 1 };
+      else if (from > to && slot >= to && slot < from) line.place = { ...place, slot: slot + 1 };
+    }
+    this.#changedLines();
+  }
+
+  #shiftSlots(from: number): void {
+    for (const line of this.#lines) {
+      if (line.place?.kind === "new" && line.place.slot >= from) {
+        line.place = { ...line.place, slot: line.place.slot + 1 };
+      }
+    }
   }
 
   setLineMakeAt(index: number, stationId: string | undefined): void {
@@ -650,10 +815,8 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
-   * stored it under, and the `revision` its copy was read at. The same order read again (a saved
-   * draft's answer rebuilds every line) keeps {@link lastAdded} on the line ordering the same thing,
-   * by the draft merge rule. */
+  /** A saved line's id survives replacement even when its quantity or being kept separate prevents
+   * merging. Without a saved id, only the draft merge rule can identify the last-added line. */
   loadFrom(
     id: string,
     lines: OrderLine[],
@@ -667,7 +830,12 @@ export class WorkingOrderStore {
     },
   ): void {
     const last = id === this.#id ? this.lastAdded : undefined;
-    this.#lastAdded = last === undefined ? undefined : mergingWith(lines, last);
+    this.#lastAdded =
+      last === undefined
+        ? undefined
+        : last.draftLineId === undefined
+          ? mergingWith(lines, last)
+          : lines.find((line) => line.draftLineId === last.draftLineId);
     this.#id = id;
     this.#fullInvoiceOrderId = undefined;
     this.#revision = revision;

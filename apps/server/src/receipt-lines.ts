@@ -98,21 +98,19 @@ export interface LineGroup {
   options: TillSaleLine[];
 }
 
-/**
- * Group the filed lines into dishes with their option lines. Filed lines arrive dish-first
- * (`grossBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
- * lines still reconcile with the filed total. A child with no dish before it becomes its own group
- * rather than being dropped, so no filed line vanishes from a legal receipt.
- * Copied in `apps/till/src/screens/till-ticket-view.ts`; the two are kept in step.
- */
+/** Parent numbers name positions in the unchanged filed list; an extra may follow other dishes.
+ * Orphans stay visible. Twin: `apps/server/src/receipt-lines.ts` / `apps/till/src/screens/till-ticket-view.ts`. */
 export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   const groups: LineGroup[] = [];
-  for (const line of lines) {
-    const current = groups[groups.length - 1];
-    if (line.parentLineNo == null || current === undefined) {
-      groups.push({ dish: line, options: [] });
+  const byPosition = new Map<number, LineGroup>();
+  for (const [index, line] of lines.entries()) {
+    const parent = line.parentLineNo == null ? undefined : byPosition.get(line.parentLineNo);
+    if (parent === undefined) {
+      const group = { dish: line, options: [] as TillSaleLine[] };
+      groups.push(group);
+      byPosition.set(index + 1, group);
     } else {
-      current.options.push(line);
+      parent.options.push(line);
     }
   }
   return groups;

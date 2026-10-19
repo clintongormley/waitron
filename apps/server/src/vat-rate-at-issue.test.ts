@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -26,7 +28,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
-import { takeBillPayment, type BillPaymentRequest } from "./bill-payments.js";
+import { takeBillPayment, type BillPaymentRequest } from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
@@ -34,8 +36,8 @@ import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   recordTillSaleOrchestration as recordTillSale,
-} from "./till-sale.js";
-import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
+} from "./testing/whole-payment-fixture.js";
+import { parkOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

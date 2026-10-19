@@ -1,3 +1,5 @@
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -30,7 +32,7 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
-import { placeOrder, abandonHeldOrder } from "./working-order.js";
+
 import { readBillBalance, readPaymentsByBill, outstandingOf } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 

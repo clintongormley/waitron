@@ -1,19 +1,25 @@
-import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import {
   kitchenCourses,
   newId,
   nowIso,
   orderDraftEvents,
   orderDraftLines,
+  orderDraftRecalledLines,
+  workingOrderLines,
   orderDrafts,
+  billEditStates,
+  orderGroups,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
-import type { ZoneMenuOffer } from "@waitron/module";
+import type { ZoneMenuOffer, ZoneOffers } from "@waitron/module";
 import {
   AppError,
+  centsToDecimal,
+  sumDecimals,
   isUuid,
   normaliseDraftLines,
   stringToThousandths,
@@ -22,18 +28,53 @@ import {
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { placeGroups } from "./order-groups.js";
+import { listOrderGroups, placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
-import { checkAndBumpParty, partyZone, requireOpenParty, runServiceCommand } from "./parties.js";
-import { screenNote } from "./working-order.js";
+import {
+  checkAndBumpParty,
+  partyZone,
+  partyRevisionOfOrder,
+  requireBillOfParty,
+  type FamilyBill,
+  requireOpenParty,
+  runServiceCommand,
+} from "./parties.js";
+import {
+  createOpenOrder,
+  moveOrderLines,
+  bumpRevision,
+  prepareRecalledModifiers,
+  readTabLines,
+  readOrderRevision,
+  refusePaymentInFlight,
+  screenNote,
+} from "./working-order.js";
+import type { TabLine, OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import { saveRecalledLine } from "./draft-recall.js";
+import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
+import type { PinAttempts } from "@waitron/identity";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import {
+  acquireBillEditor,
+  closeBillDraft,
+  parseBillEditExpected,
+  readBillEditState,
+  relocateBillEditor,
+  requireBillEditors,
+  requireBillEditor,
+  transferBillEditor,
+} from "./bill-editing.js";
 import "./errors.js";
+import { orderTableLabel } from "./kitchen-print.js";
+import { assertBillInvariant } from "./bill-payments.js";
 
-export interface DraftLine {
+export interface FreshDraftLine {
+  sourceLineId: null;
+  source: null;
   id: string;
   menuItemId: string;
   variantId: string | null;
@@ -43,15 +84,41 @@ export interface DraftLine {
   note: string | null;
   quantity: string;
   courseId: string | null;
-  course?: { id: string; name: string; displayOrder: number };
+  course?: { id: string; name: string; displayOrder: number; heldUntilFired: boolean };
   makeAt?: string | null;
   noMerge: boolean;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
   unavailable: boolean;
 }
+
+export interface RecalledDraftLine {
+  id: string;
+  sourceLineId: string;
+  source: { line: TabLine; extras: TabLine[]; netAmount: string };
+  quantity: string;
+  note: string | null;
+  courseId: string | null;
+  course?: FreshDraftLine["course"];
+  makeAt: string | null;
+  noMerge: true;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
+  unavailable: false;
+  menuItemId?: never;
+  variantId?: never;
+  menuVersionId?: never;
+  options?: never;
+  extras?: never;
+}
+export type DraftLine = FreshDraftLine | RecalledDraftLine;
 
 export interface Draft {
   id: string;
   partyId: string;
+  billId: string;
   ownerId: string;
   ownerName: string;
   revision: number;
@@ -60,29 +127,220 @@ export interface Draft {
   takenOverFrom: { personId: string; name: string } | null;
 }
 
+export interface BillEditState {
+  billId: string;
+  editorId: string | null;
+  editorName: string | null;
+  editorVersion: number;
+  draftId: string | null;
+  draftRevision: number | null;
+}
+
+export type BillEditExpected = Pick<
+  BillEditState,
+  "billId" | "editorVersion" | "draftId" | "draftRevision"
+>;
+
+export interface BillDraftSnapshot {
+  draft: Draft | null;
+  edit: BillEditState;
+}
+
+export interface SplitDraftResult {
+  billId: string;
+  revision: number;
+  source: BillDraftSnapshot;
+  destination: BillDraftSnapshot;
+}
+
+export async function splitDraft(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  draftId: string,
+  input: PartyCommandArgs & { expectedEdit: BillEditExpected; lineIds: unknown },
+  attendance?: AttendanceRecorder,
+): Promise<SplitDraftResult> {
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (!Array.isArray(input.lineIds) || input.lineIds.length === 0) throw invalid("lineIds");
+  const lineIds = input.lineIds.map((value: unknown) => uuid(value, "lineIds"));
+  if (new Set(lineIds).size !== lineIds.length) throw invalid("lineIds");
+  const submissionId = uuid(input.submissionId, "submissionId");
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    submissionId,
+    "draft.split",
+    { partyId, draftId: id, operatorId: input.operatorId, expectedEdit, lineIds },
+    async () => {
+      const draft = await draftOnParty(tx, id, partyId);
+      const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      await requireBillEditor(tx, billId, input.operatorId, expectedEdit);
+      const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
+      const selected = lines.filter((line) => lineIds.includes(line.id));
+      if (selected.length !== lineIds.length) throw invalid("lineIds");
+      const revision = await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
+      const newBillId = newId();
+      await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: billId,
+      });
+      await acquireBillEditor(tx, newBillId, input.operatorId, {
+        billId: newBillId,
+        editorVersion: 0,
+        draftId: null,
+        draftRevision: null,
+      });
+      const newDraftId = newId();
+      await tx.insert(orderDrafts).values({
+        id: newDraftId,
+        partyId,
+        billId: newBillId,
+        ownerId: input.operatorId,
+      });
+      const sourceIds = selected.filter(isRecalled).map((line) => line.sourceLineId);
+      if (sourceIds.length > 0) {
+        const families = await tx
+          .select({ lineNo: workingOrderLines.lineNo })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, billId),
+              or(
+                inArray(workingOrderLines.id, sourceIds),
+                inArray(workingOrderLines.parentLineId, sourceIds),
+              ),
+            ),
+          );
+        await moveOrderLines(
+          tx,
+          cfg,
+          billId,
+          newBillId,
+          families.map((line) => line.lineNo),
+        );
+        await assertBillInvariant(tx, [billId]);
+        await bumpRevision(tx, [billId, newBillId]);
+        await tx
+          .update(orderDraftRecalledLines)
+          .set({ draftId: newDraftId })
+          .where(
+            and(
+              eq(orderDraftRecalledLines.draftId, id),
+              inArray(orderDraftRecalledLines.id, lineIds),
+            ),
+          );
+      }
+      await tx
+        .update(orderDraftLines)
+        .set({ draftId: newDraftId })
+        .where(and(eq(orderDraftLines.draftId, id), inArray(orderDraftLines.id, lineIds)));
+      const empty = selected.length === lines.length;
+      if (empty) await closeBillDraft(tx, billId, input.operatorId, expectedEdit, "discarded");
+      else
+        await tx
+          .update(orderDrafts)
+          .set({ revision: draft.revision + 1, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, id));
+      const at = nowIso();
+      await recordDraftEvents(
+        tx,
+        attendance === undefined ? undefined : { recorder: attendance, at },
+        {
+          draftId: newDraftId,
+          kind: "created",
+          fromPerson: null,
+          toPerson: input.operatorId,
+          actorId: input.operatorId,
+          detail: { splitFrom: id, lineIds },
+        },
+      );
+      if (empty)
+        await recordDraftEvents(
+          tx,
+          attendance === undefined ? undefined : { recorder: attendance, at },
+          {
+            draftId: id,
+            kind: "discarded",
+            fromPerson: draft.ownerId,
+            toPerson: draft.ownerId,
+            actorId: input.operatorId,
+            detail: { intoDraftId: newDraftId, lineIds },
+          },
+        );
+      await captureDraft(
+        tx,
+        attendance,
+        cfg.locationId,
+        input.operatorId,
+        id,
+        draft.revision + 1,
+        "save",
+        at,
+      );
+      return {
+        billId: newBillId,
+        revision,
+        source: {
+          draft: empty ? null : await readOpenDraft(tx, cfg, partyId, id),
+          edit: await readBillEditState(tx, billId),
+        },
+        destination: {
+          draft: await readOpenDraft(tx, cfg, partyId, newDraftId),
+          edit: await readBillEditState(tx, newBillId),
+        },
+      };
+    },
+  );
+}
+
 export { normaliseDraftLines };
 
-/** A line as the till saves it: without the id a save gives it or the flag a read works out. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
+export type FreshDraftLineInput = Omit<
+  FreshDraftLine,
+  "id" | "unavailable" | "course" | "source"
+> & { id?: string };
+export type RecalledDraftLineInput = Pick<
+  RecalledDraftLine,
+  | "id"
+  | "sourceLineId"
+  | "quantity"
+  | "note"
+  | "courseId"
+  | "makeAt"
+  | "slot"
+  | "joinGroupId"
+  | "afterGroupId"
+> & {
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+};
+export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
 
 export interface SaveDraftInput {
-  /** Null asks for the operator's new draft on the party. */
+  expectedEdit: BillEditExpected;
+  billId: unknown;
+  /** Null compares an unallocated outbox on this bill. */
   draftId: string | null;
   revision: number;
   /** Screened by the save before it reads or writes anything. */
   lines: unknown;
 }
 
-/** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
+/** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
+  billId: string;
+  billNumber: number;
   ownerName: string;
   lineCount: number;
 }
 
-/**
- * Every open draft on the party, whoever owns it, each line marked by {@link unavailable} against
- * the zone's live offers. The mark is worked out on each read and never stored.
- */
 export async function readDrafts(
   tx: Transaction,
   cfg: TillConfig,
@@ -91,12 +349,114 @@ export async function readDrafts(
   return readOpenDrafts(tx, cfg, partyId);
 }
 
-/**
- * Replace the lines of the operator's draft with `input.lines`, added together by
- * {@link normaliseDraftLines}, or start the operator's draft on the party when `draftId` is null. A
- * save to an existing draft moves its revision on; no save moves the party's, and none sends
- * anything to the kitchen.
- */
+export async function appendRecalledLine(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  billId: string,
+  operatorId: string,
+  sourceLineId: string,
+  joinGroupId: string | null,
+  attendance?: OrderAttendance,
+): Promise<Draft> {
+  const [own] = await openDraftsOn(tx, partyId, operatorId, billId);
+  const draftId = own?.id ?? newId();
+  if (own === undefined) {
+    await tx.insert(orderDrafts).values({ id: draftId, partyId, billId, ownerId: operatorId });
+    await recordDraftEvents(
+      tx,
+      attendance === undefined
+        ? undefined
+        : {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          },
+      {
+        draftId,
+        kind: "created",
+        fromPerson: null,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: {},
+      },
+    );
+  } else
+    await tx
+      .update(orderDrafts)
+      .set({ revision: own.revision + 1, updatedAt: nowIso() })
+      .where(eq(orderDrafts.id, draftId));
+  const held = await storedLines(tx, cfg, [draftId]);
+  const position = held.reduce((maximum, line) => Math.max(maximum, line.position), 0) + 1;
+  const place =
+    joinGroupId === null
+      ? await recalledPlace(
+          tx,
+          cfg,
+          partyId,
+          sourceLineId,
+          held.map((row) => row.line),
+        )
+      : { joinGroupId, slot: 0, afterGroupId: null };
+  await tx.insert(orderDraftRecalledLines).values({ draftId, sourceLineId, position, ...place });
+  return readOpenDraft(tx, cfg, partyId, draftId);
+}
+
+async function recalledPlace(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  sourceLineId: string,
+  own: readonly DraftLine[],
+): Promise<{ slot: number; joinGroupId: string | null; afterGroupId: string | null }> {
+  const fire = { slot: 0, joinGroupId: null, afterGroupId: null };
+  const [source] = await tx
+    .select({ courseId: workingOrderLines.courseId })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, sourceLineId));
+  if (source!.courseId === null) return fire;
+  const courses = await tx
+    .select()
+    .from(kitchenCourses)
+    .where(eq(kitchenCourses.locationId, cfg.locationId));
+  const course = courses.find((candidate) => candidate.id === source!.courseId);
+  if (course?.heldUntilFired === false) return fire;
+  const groups = (await listOrderGroups(tx, partyId)).groups.filter(
+    (group) => group.state === "held",
+  );
+  const slots = [
+    ...new Map(own.filter((line) => line.slot > 0).map((line) => [line.slot, line])).values(),
+  ].sort((a, b) => a.slot - b.slot);
+  const atSlot = (slot: number) =>
+    own.some((line) => line.slot === slot && line.courseId === source!.courseId);
+  const placeOf = (line: DraftLine) => ({
+    slot: line.slot,
+    joinGroupId: null,
+    afterGroupId: line.afterGroupId,
+  });
+  for (const group of groups) {
+    if (
+      group.courseIds.includes(source!.courseId) ||
+      own.some((line) => line.joinGroupId === group.id && line.courseId === source!.courseId)
+    )
+      return { ...fire, joinGroupId: group.id };
+    const match = slots.find((line) => line.afterGroupId === group.id && atSlot(line.slot));
+    if (match !== undefined) return placeOf(match);
+  }
+  const ids = new Set(groups.map((group) => group.id));
+  const match = slots.find((line) => !ids.has(line.afterGroupId ?? "") && atSlot(line.slot));
+  if (match !== undefined) return placeOf(match);
+  const later =
+    course !== undefined &&
+    groups.length > 0 &&
+    groups.every((group) =>
+      group.courseIds.every((id) => {
+        const previous = courses.find((candidate) => candidate.id === id);
+        return previous !== undefined && course.displayOrder > previous.displayOrder;
+      }),
+    );
+  return later ? { ...fire, slot: (slots.at(-1)?.slot ?? 0) + 1 } : fire;
+}
+
 export async function saveDraft(
   tx: Transaction,
   cfg: TillConfig,
@@ -104,26 +464,82 @@ export async function saveDraft(
   operatorId: string,
   input: SaveDraftInput,
   attendance?: AttendanceRecorder,
-): Promise<Draft> {
+): Promise<BillDraftSnapshot> {
   const at = nowIso();
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
-  let previous: DraftLine[] = [];
-  const draft =
-    input.draftId === null ? null : await requireDraft(tx, foldIfUuid(input.draftId), partyId);
-  if (draft !== null) {
-    await requireOwnDraftAt(tx, draft, operatorId, input.revision);
-    previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
+  const billId = uuid(input.billId, "billId");
+  const expected = parseBillEditExpected(input.expectedEdit);
+  if (expected.billId !== billId) throw invalid("expectedEdit.billId");
+  if (expected.draftId !== (input.draftId === null ? null : foldIfUuid(input.draftId)))
+    throw invalid("expectedEdit.draftId");
+  if (input.revision !== (expected.draftRevision ?? 0)) throw invalid("revision");
+  if (expected.draftId !== null) {
+    const [named] = await tx.select().from(orderDrafts).where(eq(orderDrafts.id, expected.draftId));
+    if (named === undefined || named.partyId !== partyId || named.state === "submitted")
+      await requireDraft(tx, expected.draftId, partyId);
+    if (named?.billId !== undefined && named.billId !== billId) throw invalid("billId");
   }
-  await requireCourses(tx, cfg, lines, previous);
-  // The lines replace the draft's, so these are every offer the read at the end needs.
-  const offers = await offersFor(
-    tx,
-    cfg,
-    partyId,
-    lines.map((line) => line.menuItemId),
+  await requireBillOfParty(tx, partyId, billId);
+  await refusePaymentInFlight(tx, [billId]);
+  const edit = await requireBillEditor(tx, billId, operatorId, expected);
+  if (lines.length === 0 && edit.draftId === null) return { draft: null, edit };
+  let previous: DraftLine[] = [];
+  const draft = edit.draftId === null ? null : await requireDraft(tx, edit.draftId, partyId);
+  if (draft !== null) previous = (await storedLines(tx, cfg, [draft.id])).map(({ line }) => line);
+  const owned = new Map(previous.map((line) => [line.id, line]));
+  const named = new Set<string>();
+  for (const [index, line] of lines.entries()) {
+    if (line.id === undefined) continue;
+    if (!owned.has(line.id) || named.has(line.id)) throw invalid(`lines.${index}.id`);
+    named.add(line.id);
+  }
+  const retainedSources = new Set(previous.filter(isRecalled).map((line) => line.id));
+  for (const [index, line] of lines.entries()) {
+    const prior = line.id === undefined ? undefined : owned.get(line.id);
+    if (line.sourceLineId === null) {
+      if (prior?.sourceLineId != null) throw invalid(`lines.${index}.sourceLineId`);
+      continue;
+    }
+    if (prior?.sourceLineId !== line.sourceLineId) throw invalid(`lines.${index}.sourceLineId`);
+    const source = prior as RecalledDraftLine;
+    if (stringToThousandths(line.quantity) < stringToThousandths(source.quantity))
+      throw invalid(`lines.${index}.quantity`);
+    if (
+      source.source.line.menuItemId === null &&
+      (line.options !== undefined || line.extras !== undefined)
+    )
+      throw invalid(`lines.${index}.sourceLineId`);
+    retainedSources.delete(line.id);
+  }
+  if (retainedSources.size > 0) throw invalid("lines");
+  const freshLines = lines.filter(isFresh);
+  await validateDraftPlaces(tx, partyId, lines);
+  await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
+  const choiceOffers = lines.flatMap((line) =>
+    line.sourceLineId !== null && (line.options !== undefined || line.extras !== undefined)
+      ? [(owned.get(line.id)! as RecalledDraftLine).source.line.menuItemId!]
+      : [],
   );
-  for (const line of lines) {
+  let snapshot: ZoneOffers | undefined;
+  if (choiceOffers.length > 0) {
+    const zoneId = await partyZone(tx, cfg, partyId);
+    if (zoneId !== null)
+      snapshot = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+        menuItemIds: [...new Set([...choiceOffers, ...freshLines.map((line) => line.menuItemId)])],
+        withDefault: false,
+      });
+  }
+  const offers =
+    snapshot === undefined
+      ? await offersFor(
+          tx,
+          cfg,
+          partyId,
+          freshLines.map((line) => line.menuItemId),
+        )
+      : new Map(snapshot.offers.map((offer) => [offer.id, offer]));
+  for (const line of freshLines) {
     const offer = offers.get(line.menuItemId);
     if (offer?.ordering === "not_sold_separately") {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
@@ -131,12 +547,9 @@ export async function saveDraft(
   }
   let draftId: string;
   if (draft === null) {
-    const [held] = await openDraftsOn(tx, partyId, operatorId);
-    if (held !== undefined) {
-      throw new AppError("draft.out_of_date", { draftId: held.id, revision: held.revision });
-    }
+    await acquireBillEditor(tx, billId, operatorId, expected);
     draftId = newId();
-    await tx.insert(orderDrafts).values({ id: draftId, partyId, ownerId: operatorId });
+    await tx.insert(orderDrafts).values({ id: draftId, partyId, billId, ownerId: operatorId });
     await recordDraftEvents(
       tx,
       attendance === undefined ? undefined : { recorder: attendance, at },
@@ -151,30 +564,113 @@ export async function saveDraft(
     );
   } else {
     draftId = draft.id;
-    await tx
-      .update(orderDrafts)
-      .set({ revision: draft.revision + 1, updatedAt: nowIso() })
-      .where(eq(orderDrafts.id, draftId));
+    if (lines.length > 0)
+      await tx
+        .update(orderDrafts)
+        .set({ revision: draft.revision + 1, updatedAt: nowIso() })
+        .where(eq(orderDrafts.id, draftId));
   }
   const priorChoices = new Map<string, number>();
-  for (const line of previous) {
+  for (const line of previous.filter(isFresh)) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     priorChoices.set(key, (priorChoices.get(key) ?? 0) + 1);
   }
-  for (const line of lines) {
+  for (const line of freshLines) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     const held = priorChoices.get(key) ?? 0;
     if (held > 0) priorChoices.set(key, held - 1);
     else await requireMakeAtStation(tx, cfg, line.makeAt);
   }
+  const sources = lines.filter((line) => line.sourceLineId !== null);
+  const families =
+    sources.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId));
+  const sourcePlans = await prepareRecalledModifiers(
+    tx,
+    cfg,
+    billId,
+    sources.map((line) => {
+      const parent = families.find((row) => row.id === line.sourceLineId);
+      if (parent === undefined) throw invalid("sourceLineId");
+      return {
+        parent,
+        children: families.filter((child) => child.parentLineId === parent.id),
+        input: line,
+      };
+    }),
+    snapshot,
+  );
+  for (const line of lines) {
+    if (line.sourceLineId !== null)
+      await saveRecalledLine(
+        tx,
+        cfg,
+        partyId,
+        line.sourceLineId,
+        line,
+        operatorId,
+        sourcePlans.get(line.sourceLineId),
+      );
+  }
+  const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  const assigned = new Set(
+    allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+  );
   await replaceLines(
     tx,
     [draftId],
     draftId,
-    normaliseDraftLines(lines.map((line) => ({ ...line, id: newId(), unavailable: false }))),
+    normaliseDraftLines(
+      lines.map((line): DraftLine =>
+        line.sourceLineId === null
+          ? {
+              ...line,
+              source: null,
+              id: line.id ?? newId(),
+              noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+              unavailable: false,
+            }
+          : {
+              ...(owned.get(line.id)! as RecalledDraftLine),
+              slot: line.slot,
+              joinGroupId: line.joinGroupId,
+              afterGroupId: line.afterGroupId,
+            },
+      ),
+    ),
   );
+  if (lines.length === 0) {
+    const released = await closeBillDraft(tx, billId, operatorId, expected, "discarded");
+    await recordDraftEvents(
+      tx,
+      attendance === undefined ? undefined : { recorder: attendance, at },
+      {
+        draftId,
+        kind: "discarded",
+        fromPerson: operatorId,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: {},
+      },
+    );
+    await captureDraft(
+      tx,
+      attendance,
+      cfg.locationId,
+      operatorId,
+      draftId,
+      draft!.revision + 1,
+      "discard",
+      at,
+    );
+    return { draft: null, edit: released };
+  }
   const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
   await captureDraft(
     tx,
@@ -186,121 +682,173 @@ export async function saveDraft(
     "save",
     at,
   );
-  return saved;
+  return { draft: saved, edit: await readBillEditState(tx, billId) };
 }
 
-/**
- * Make the operator the owner of another person's open draft. Where the operator already has an
- * open draft on the party, the taken lines are added to it, as a save adds lines, and the taken
- * draft is discarded, so no one holds two; the operator's draft is returned. Taking over one's own
- * draft changes nothing and returns it as it is. A draft of another party is not found.
- */
 export async function takeOverDraft(
   tx: Transaction,
   cfg: TillConfig,
   partyId: string,
   draftId: string,
   operatorId: string,
-  revision: number,
+  ask: { revision: number; expectedEdit: BillEditExpected; submissionId: string },
   attendance?: AttendanceRecorder,
-): Promise<Draft> {
-  const at = nowIso();
-  const draft = await requireDraft(tx, foldIfUuid(draftId), partyId);
-  await requireOpenParty(tx, partyId);
-  if (draft.ownerId === operatorId) return readOpenDraft(tx, cfg, partyId, draft.id);
-  requireDraftRevision(draft, revision);
-  const [own] = await openDraftsOn(tx, partyId, operatorId);
+): Promise<BillDraftSnapshot> {
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(ask.expectedEdit);
+  const submissionId = uuid(ask.submissionId, "submissionId");
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (ask.revision !== expectedEdit.draftRevision) throw invalid("revision");
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    submissionId,
+    "draft.take-over",
+    { partyId, draftId: id, operatorId, revision: ask.revision, expectedEdit },
+    async () => {
+      const draft = await draftOnParty(tx, id, partyId);
+      const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      const edit = await transferBillEditor(tx, billId, operatorId, expectedEdit);
+      if (draft.ownerId !== operatorId) {
+        const at = nowIso();
+        await recordDraftEvents(
+          tx,
+          attendance === undefined ? undefined : { recorder: attendance, at },
+          {
+            draftId: draft.id,
+            kind: "taken_over",
+            fromPerson: draft.ownerId,
+            toPerson: operatorId,
+            actorId: operatorId,
+            detail: {},
+          },
+        );
+        await captureDraft(
+          tx,
+          attendance,
+          cfg.locationId,
+          operatorId,
+          draft.id,
+          edit.draftRevision!,
+          "take-over",
+          at,
+        );
+      }
+      return { draft: await readOpenDraft(tx, cfg, partyId, draft.id), edit };
+    },
+  );
+}
+
+export async function moveDraftsToBill(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromBillId: string,
+  intoBillId: string,
+  operatorId: string,
+  expectedEdits: BillEditExpected[],
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<void> {
+  const edits = await requireBillEditors(tx, [fromBillId, intoBillId], operatorId, expectedEdits);
+  const from = edits.find((e) => e.billId === fromBillId)!;
+  const into = edits.find((e) => e.billId === intoBillId)!;
+  const [bill] = await tx
+    .select({ partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, intoBillId));
+  if (bill?.partyId == null) throw invalid("billId");
+  if (from.draftId !== null) {
+    if (into.draftId === null) {
+      await tx
+        .update(orderDrafts)
+        .set({
+          partyId: bill.partyId,
+          billId: intoBillId,
+          revision: from.draftRevision! + 1,
+          updatedAt: nowIso(),
+        })
+        .where(eq(orderDrafts.id, from.draftId));
+    } else {
+      await tx
+        .update(orderDrafts)
+        .set({
+          billId: intoBillId,
+          state: "discarded",
+          revision: from.draftRevision! + 1,
+          updatedAt: nowIso(),
+        })
+        .where(eq(orderDrafts.id, from.draftId));
+      await addDiscardedDraft(
+        tx,
+        cfg,
+        from.draftId,
+        { id: into.draftId, revision: into.draftRevision! },
+        operatorId,
+        operatorId,
+        attendance,
+      );
+    }
+  } else if (into.draftId !== null) {
+    await tx
+      .update(orderDrafts)
+      .set({ revision: into.draftRevision! + 1, updatedAt: nowIso() })
+      .where(eq(orderDrafts.id, into.draftId));
+  }
+  // A merged bill releases its editor even when its draft moves intact to the surviving bill.
+  for (const edit of edits) {
+    const editorId =
+      edit.billId === fromBillId || (from.draftId === null && into.draftId === null)
+        ? null
+        : operatorId;
+    await tx
+      .insert(billEditStates)
+      .values({ billId: edit.billId, editorId, editorVersion: edit.editorVersion + 1 })
+      .onConflictDoUpdate({
+        target: billEditStates.billId,
+        set: { editorId, editorVersion: edit.editorVersion + 1 },
+      });
+  }
+}
+
+export async function moveBillDraftsToParty(
+  tx: Transaction,
+  billId: string,
+  intoPartyId: string,
+  expectedEdit: BillEditExpected,
+): Promise<void> {
+  await relocateBillEditor(tx, billId, expectedEdit);
   await tx
     .update(orderDrafts)
     .set({
-      ownerId: operatorId,
-      revision: draft.revision + 1,
-      updatedAt: nowIso(),
-      ...(own === undefined ? {} : { state: "discarded" as const }),
+      partyId: intoPartyId,
     })
-    .where(eq(orderDrafts.id, draft.id));
-  await recordDraftEvents(tx, attendance === undefined ? undefined : { recorder: attendance, at }, {
-    draftId: draft.id,
-    kind: "taken_over",
-    fromPerson: draft.ownerId,
-    toPerson: operatorId,
-    actorId: operatorId,
-    detail: {},
-  });
-  await captureDraft(
-    tx,
-    attendance,
-    cfg.locationId,
-    operatorId,
-    draft.id,
-    draft.revision + 1,
-    "take-over",
-    at,
-  );
-  if (own === undefined) return readOpenDraft(tx, cfg, partyId, draft.id);
-  await addDiscardedDraft(
-    tx,
-    draft.id,
-    own,
-    operatorId,
-    operatorId,
-    attendance === undefined ? undefined : { recorder: attendance, at },
-  );
-  return readOpenDraft(tx, cfg, partyId, own.id);
+    .where(and(eq(orderDrafts.billId, billId), eq(orderDrafts.state, "open")));
 }
 
-/**
- * A merge's drafts (D2): each open draft on `fromPartyId` moves to `intoPartyId`, unless its owner
- * already has an open draft there; then its lines are added to that draft, as a takeover into the
- * taker's own draft adds them, and it is discarded. Every draft this touches has its revision moved
- * on.
- */
 export async function moveDraftsToParty(
   tx: Transaction,
   fromPartyId: string,
   intoPartyId: string,
-  operatorId: string,
-  attendance?: { recorder: AttendanceRecorder; at: string },
+  expectedEdits: BillEditExpected[],
 ): Promise<void> {
-  const moving = await openDraftsOn(tx, fromPartyId);
-  if (moving.length === 0) return;
-  const held = new Map(
-    (await openDraftsOn(tx, intoPartyId)).map((draft) => [draft.ownerId, draft] as const),
-  );
-  const moved = moving.filter((draft) => !held.has(draft.ownerId));
-  const absorbed = moving.filter((draft) => held.has(draft.ownerId));
-  if (moved.length > 0) {
+  // Separate bills keep their outboxes; explicit bill merges resolve theirs before relocation.
+  for (const expected of expectedEdits) {
+    await relocateBillEditor(tx, expected.billId, expected);
     await tx
       .update(orderDrafts)
-      .set({
-        partyId: intoPartyId,
-        revision: sql`${orderDrafts.revision} + 1`,
-        updatedAt: nowIso(),
-      })
+      .set({ partyId: intoPartyId })
       .where(
-        inArray(
-          orderDrafts.id,
-          moved.map((draft) => draft.id),
+        and(
+          eq(orderDrafts.partyId, fromPartyId),
+          eq(orderDrafts.billId, expected.billId),
+          eq(orderDrafts.state, "open"),
         ),
       );
   }
-  await discardDrafts(
-    tx,
-    absorbed.map((draft) => draft.id),
-  );
-  for (const draft of absorbed) {
-    await addDiscardedDraft(
-      tx,
-      draft.id,
-      held.get(draft.ownerId)!,
-      draft.ownerId,
-      operatorId,
-      attendance,
-    );
-  }
 }
 
-/** Finishing a table: every open draft on the party is discarded with an event, its lines kept. */
 export async function discardPartyDrafts(
   tx: Transaction,
   partyId: string,
@@ -310,6 +858,17 @@ export async function discardPartyDrafts(
   const at = nowIso();
   const open = await openDraftsOn(tx, partyId);
   if (open.length === 0) return;
+  const [unresolved] = await tx
+    .select({ id: orderDraftRecalledLines.id })
+    .from(orderDraftRecalledLines)
+    .where(
+      inArray(
+        orderDraftRecalledLines.draftId,
+        open.map((draft) => draft.id),
+      ),
+    )
+    .limit(1);
+  if (unresolved !== undefined) throw invalid("drafts");
   await discardDrafts(
     tx,
     open.map((draft) => draft.id),
@@ -342,26 +901,161 @@ export async function discardPartyDrafts(
   }
 }
 
+export interface DiscardDraftInput {
+  expectedEdit: BillEditExpected;
+  submissionId: string;
+  revision: number;
+  expectedRevision: number;
+  reasonId?: string;
+  note: string | null;
+  approver?: AdjustmentArgs["approver"];
+}
+
+export async function discardDraft(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  draftId: string,
+  operatorId: string,
+  input: DiscardDraftInput,
+  venueLocale: string,
+  attempts?: PinAttempts,
+  attendance?: OrderAttendance,
+): Promise<{
+  draftId: string;
+  billId: string;
+  revision: number;
+  adjustmentIds: string[];
+  party: { id: string; revision: number } | null;
+}> {
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (input.revision !== expectedEdit.draftRevision) throw invalid("revision");
+  const { submissionId, approver, ...command } = input;
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    submissionId,
+    "draft.discard",
+    { ...command, expectedEdit, draftId: id, operatorId, approverId: approver?.personId },
+    async () => {
+      const draft = await draftOnParty(tx, id, partyId);
+      const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      await requireBillEditor(tx, billId, operatorId, expectedEdit);
+      const revision = await readOrderRevision(tx, billId);
+      if (revision !== input.expectedRevision)
+        throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
+      const sources = await tx
+        .select({ sourceLineId: orderDraftRecalledLines.sourceLineId })
+        .from(orderDraftRecalledLines)
+        .where(eq(orderDraftRecalledLines.draftId, draft.id))
+        .orderBy(orderDraftRecalledLines.position);
+      if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
+      const adjustmentIds: string[] = [];
+      for (const source of sources) {
+        // Reservation release and charge cancellation share the validated Discard transaction.
+        await tx
+          .delete(orderDraftRecalledLines)
+          .where(
+            and(
+              eq(orderDraftRecalledLines.draftId, draft.id),
+              eq(orderDraftRecalledLines.sourceLineId, source.sourceLineId),
+            ),
+          );
+        const applied = await applyAdjustment(
+          tx,
+          cfg,
+          {
+            orderId: billId,
+            expectedEdit: await readBillEditState(tx, billId),
+            expectedRevision: await readOrderRevision(tx, billId),
+            submissionId: newId(),
+            lineId: source.sourceLineId,
+            action: "cancel",
+            reasonId: input.reasonId!,
+            note: input.note,
+            operatorId,
+            ...(approver === undefined ? {} : { approver }),
+          },
+          venueLocale,
+          attempts,
+          attendance,
+        );
+        await tx
+          .update(orderDrafts)
+          .set({ revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, draft.id));
+        adjustmentIds.push(...applied.adjustmentIds);
+      }
+      const at = nowIso();
+      await tx.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
+      await tx.delete(orderDraftRecalledLines).where(eq(orderDraftRecalledLines.draftId, draft.id));
+      await closeBillDraft(
+        tx,
+        billId,
+        operatorId,
+        await readBillEditState(tx, billId),
+        "discarded",
+      );
+      await recordDraftEvents(
+        tx,
+        attendance === undefined ? undefined : { recorder: attendance.recorder, at },
+        {
+          draftId: draft.id,
+          kind: "discarded",
+          fromPerson: operatorId,
+          toPerson: operatorId,
+          actorId: operatorId,
+          detail: {},
+        },
+      );
+      const [closed] = await tx
+        .select({ revision: orderDrafts.revision })
+        .from(orderDrafts)
+        .where(eq(orderDrafts.id, draft.id));
+      await captureDraft(
+        tx,
+        attendance?.recorder,
+        cfg.locationId,
+        operatorId,
+        draft.id,
+        closed!.revision,
+        "discard",
+        at,
+      );
+      return {
+        draftId: draft.id,
+        billId,
+        revision: closed!.revision,
+        adjustmentIds,
+        party: await partyRevisionOfOrder(tx, billId),
+      };
+    },
+    cfg.madeHereSink,
+  );
+}
+
 export interface SubmitDraftInput extends PartyCommandArgs {
+  expectedEdit: BillEditExpected;
   draftRevision: number;
   /** Lines of the draft's current revision, each named once across the groups. */
-  groups: { lineIds: string[]; release: GroupRelease }[];
+  groups: {
+    lineIds: string[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
-  /** As `submitGroups` takes it: the bill of the party the lines go on. */
-  billId?: string;
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
-export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
+export type SubmittedDraft = SubmittedGroups & { draft: Draft | null; edit: BillEditState };
 
-/**
- * Send the named lines of the operator's own draft as groups, through {@link placeGroups}, so each
- * line is credited to the operator and each group submitted by them. The sent lines leave the
- * draft and the rest keep their positions; the draft is `submitted` once it has no line left. A
- * retry under the same submission id answers the first result (D8), from the record of `partyId`,
- * where a draft of another party is not found.
- */
 export async function submitDraft(
   tx: Transaction,
   cfg: OriginConfig,
@@ -372,10 +1066,15 @@ export async function submitDraft(
 ): Promise<SubmittedDraft> {
   const at = nowIso();
   const { operatorId } = input;
-  const id = foldIfUuid(draftId);
-  const groups = input.groups.map(({ lineIds, release }) => ({
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (input.draftRevision !== expectedEdit.draftRevision) throw invalid("draftRevision");
+  const groups = input.groups.map(({ lineIds, release, joinGroupId, afterGroupId }) => ({
     lineIds: lineIds.map(foldIfUuid),
     release,
+    ...(joinGroupId === undefined ? {} : { joinGroupId: foldIfUuid(joinGroupId) }),
+    ...(afterGroupId === undefined ? {} : { afterGroupId: foldIfUuid(afterGroupId) }),
   }));
   const joinGroupId = input.joinGroupId === undefined ? undefined : foldIfUuid(input.joinGroupId);
   return runServiceCommand(
@@ -383,48 +1082,81 @@ export async function submitDraft(
     { kind: "party", partyId },
     input.submissionId,
     "draft.submit",
-    { partyId, draftId: id, operatorId, groups, joinGroupId, billId: input.billId },
+    { partyId, draftId: id, operatorId, groups, joinGroupId, expectedEdit },
     async () => {
-      const draft = await requireDraft(tx, id, partyId);
-      await requireOwnDraftAt(tx, draft, operatorId, input.draftRevision);
+      const draft = await draftOnParty(tx, id, partyId);
+      const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      const edit = await requireBillEditor(tx, billId, operatorId, expectedEdit);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
-      const lines = (await storedLines(tx, [id])).map(({ line }) => line);
+      const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
       const named = new Set<string>();
       for (const lineId of groups.flatMap((group) => group.lineIds)) {
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
+      const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+      const assigned = new Set(
+        allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+      );
+      const freshGroups = groups.map(({ lineIds }) => {
+        const selected = new Set(lineIds);
+        return normaliseDraftLines(
+          lines
+            .filter(isFresh)
+            .filter((line) => selected.has(line.id))
+            .map((line) => ({
+              ...line,
+              noMerge: assigned.has(line.id),
+              slot: 0,
+              joinGroupId: null,
+              afterGroupId: null,
+            })),
+        );
+      });
+      const sources = lines.filter(isRecalled).filter((line) => named.has(line.id));
+      await tx.delete(orderDraftRecalledLines).where(
+        inArray(
+          orderDraftRecalledLines.id,
+          sources.map((line) => line.id),
+        ),
+      );
       const placed = await placeGroups(
         tx,
         cfg,
         partyId,
         {
-          groups: groups.map(({ lineIds, release }) => {
+          groups: groups.map(({ lineIds, release, joinGroupId, afterGroupId }, index) => {
             const inGroup = new Set(lineIds);
-            return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
+            return {
+              release,
+              joinGroupId,
+              afterGroupId,
+              existingLineIds: sources
+                .filter((line) => inGroup.has(line.id))
+                .map((line) => line.sourceLineId),
+              lines: freshGroups[index]!.map(groupLine),
+            };
           }),
           joinGroupId,
           operatorId,
-          billId: input.billId,
-          sourceDraftLineIds: groups.flatMap(({ lineIds }) => {
-            const selected = new Set(lineIds);
-            return lines.filter((line) => selected.has(line.id)).map((line) => line.id);
-          }),
-          revisionMoved: true,
+          billId,
+          expectedEdit,
+          sourceDraftLineIds: freshGroups.flatMap((lines) => lines.map((line) => line.id)),
         },
         attendance === undefined ? undefined : { recorder: attendance, at },
       );
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
-      await tx
-        .update(orderDrafts)
-        .set({
-          revision: draft.revision + 1,
-          updatedAt: nowIso(),
-          ...(emptied ? { state: "submitted" as const } : {}),
-        })
-        .where(eq(orderDrafts.id, id));
+      if (emptied) await closeBillDraft(tx, billId, operatorId, edit, "submitted");
+      else
+        await tx
+          .update(orderDrafts)
+          .set({ revision: draft.revision + 1, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, id));
       await recordDraftEvents(
         tx,
         attendance === undefined ? undefined : { recorder: attendance, at },
@@ -447,7 +1179,11 @@ export async function submitDraft(
         "submit",
         at,
       );
-      return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id) };
+      return {
+        ...placed,
+        draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id),
+        edit: await readBillEditState(tx, billId),
+      };
     },
     cfg.madeHereSink,
   );
@@ -475,32 +1211,80 @@ async function captureDraft(
   });
 }
 
-/** Each party's open drafts holding at least one line, oldest first, in one query. */
 export async function readUnsentDrafts(
   tx: Transaction,
   partyIds: readonly string[],
+  billsOf: ReadonlyMap<string, readonly FamilyBill[]>,
 ): Promise<Map<string, UnsentDraft[]>> {
   const unsent = new Map<string, UnsentDraft[]>(partyIds.map((id) => [id, []]));
-  if (partyIds.length === 0) return unsent;
+  const shown = new Map(
+    partyIds.map((id) => [id, billsOf.get(id)!.filter((bill) => bill.status !== "abandoned")]),
+  );
+  const billIds = [
+    ...new Set([...shown.values()].flatMap((bills) => bills.map((bill) => bill.workingOrderId))),
+  ];
+  if (billIds.length === 0) return unsent;
   const rows = await tx
     .select({
-      partyId: orderDrafts.partyId,
+      billId: orderDrafts.billId,
       ownerName: persons.displayName,
-      lineCount: sql<number>`cast(count(${orderDraftLines.id}) as int)`,
+      lineCount: sql<number>`cast(count(distinct ${orderDraftLines.id}) + count(distinct ${orderDraftRecalledLines.id}) as int)`,
     })
     .from(orderDrafts)
-    .innerJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
+    .leftJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
+    .leftJoin(orderDraftRecalledLines, eq(orderDraftRecalledLines.draftId, orderDrafts.id))
     .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
-    .where(and(inArray(orderDrafts.partyId, [...partyIds]), eq(orderDrafts.state, "open")))
-    .groupBy(orderDrafts.id)
-    .orderBy(asc(orderDrafts.createdAt), asc(orderDrafts.id));
-  for (const row of rows) {
-    unsent.get(row.partyId)!.push({ ownerName: row.ownerName ?? "", lineCount: row.lineCount });
+    .where(and(inArray(orderDrafts.billId, billIds), eq(orderDrafts.state, "open")))
+    .groupBy(orderDrafts.billId, orderDrafts.ownerId)
+    .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`);
+  const byBill = new Map(rows.map((row) => [row.billId, row]));
+  for (const [partyId, bills] of shown) {
+    for (const [index, bill] of bills.entries()) {
+      const draft = byBill.get(bill.workingOrderId);
+      if (draft !== undefined) {
+        unsent.get(partyId)!.push({
+          billId: bill.workingOrderId,
+          billNumber: index + 1,
+          ownerName: draft.ownerName ?? "",
+          lineCount: draft.lineCount,
+        });
+      }
+    }
   }
   return unsent;
 }
 
 const QUANTITY_PATTERN = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,3})?$/;
+
+async function validateDraftPlaces(
+  tx: Transaction,
+  partyId: string,
+  lines: readonly DraftLineInput[],
+): Promise<void> {
+  const anchors = new Map<number, string | null>();
+  const ids = new Set<string>();
+  for (const [index, line] of lines.entries()) {
+    if (line.slot > 0) {
+      if (anchors.has(line.slot) && anchors.get(line.slot) !== line.afterGroupId) {
+        throw invalid(`lines.${index}.slot`);
+      }
+      anchors.set(line.slot, line.afterGroupId);
+    }
+    if (line.joinGroupId !== null) ids.add(line.joinGroupId);
+    if (line.afterGroupId !== null) ids.add(line.afterGroupId);
+  }
+  if (ids.size === 0) return;
+  const rows = await tx
+    .select({ id: orderGroups.id, state: orderGroups.state })
+    .from(orderGroups)
+    .where(and(eq(orderGroups.partyId, partyId), inArray(orderGroups.id, [...ids])));
+  const states = new Map(rows.map((row) => [row.id, row.state]));
+  for (const groupId of ids) {
+    const state = states.get(groupId);
+    if (state === undefined) throw new AppError("group.not_found", { groupId });
+    if (state !== "held") throw new AppError("group.not_held", { groupId });
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -524,7 +1308,7 @@ function foldIfUuid(id: string): string {
 }
 
 /** A draft line as pricing takes a basket line, with each null field left out. */
-function groupLine(line: DraftLine): GroupLine {
+function groupLine(line: FreshDraftLine): GroupLine {
   return {
     [RETAINED_COURSE]: true,
     menuItemId: line.menuItemId,
@@ -549,7 +1333,6 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     const field = (name: string) => `lines.${index}.${name}`;
     if (!isRecord(entry)) throw invalid(`lines.${index}`);
     const { quantity, note, noMerge } = entry;
-    const menuItemId = uuid(entry.menuItemId, field("menuItemId"));
     if (
       typeof quantity !== "string" ||
       !QUANTITY_PATTERN.test(quantity) ||
@@ -561,8 +1344,36 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
       throw invalid(field("note"));
     }
     if (noMerge !== undefined && typeof noMerge !== "boolean") throw invalid(field("noMerge"));
+    const slot = entry.slot === undefined ? 0 : entry.slot;
+    if (typeof slot !== "number" || !Number.isInteger(slot) || slot < 0) {
+      throw invalid(field("slot"));
+    }
+    const joinGroupId = optionalId(entry.joinGroupId, field("joinGroupId"));
+    const afterGroupId = optionalId(entry.afterGroupId, field("afterGroupId"));
+    if (joinGroupId !== null && slot !== 0) throw invalid(field("slot"));
+    if (afterGroupId !== null && slot === 0) throw invalid(field("afterGroupId"));
+    const sourceLineId =
+      entry.sourceLineId === undefined || entry.sourceLineId === null
+        ? null
+        : uuid(entry.sourceLineId, field("sourceLineId"));
+    if (sourceLineId !== null)
+      return {
+        id: uuid(entry.id, field("id")),
+        sourceLineId,
+        quantity,
+        note: screenNote(note),
+        courseId: optionalId(entry.courseId, field("courseId")),
+        makeAt: optionalId(entry.makeAt, field("makeAt")),
+        slot,
+        joinGroupId,
+        afterGroupId,
+        ...(entry.options === undefined ? {} : { options: readOptionSelections(entry.options) }),
+        ...(entry.extras === undefined ? {} : { extras: readExtraSelections(entry.extras) }),
+      };
     return {
-      menuItemId,
+      ...(entry.id === undefined ? {} : { id: uuid(entry.id, field("id")) }),
+      sourceLineId: null,
+      menuItemId: uuid(entry.menuItemId, field("menuItemId")),
       variantId: optionalId(entry.variantId, field("variantId")),
       menuVersionId: optionalId(entry.menuVersionId, field("menuVersionId")),
       options: entry.options === undefined ? [] : readOptionSelections(entry.options),
@@ -572,6 +1383,9 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
       courseId: optionalId(entry.courseId, field("courseId")),
       makeAt: optionalId(entry.makeAt, field("makeAt")),
       noMerge: noMerge ?? false,
+      slot,
+      joinGroupId,
+      afterGroupId,
     };
   });
 }
@@ -579,10 +1393,10 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
 async function requireCourses(
   tx: Transaction,
   cfg: TillConfig,
-  lines: readonly DraftLineInput[],
-  previous: readonly DraftLine[],
+  lines: readonly FreshDraftLineInput[],
+  previous: readonly FreshDraftLine[],
 ): Promise<void> {
-  const keyOf = (line: DraftLineInput) =>
+  const keyOf = (line: FreshDraftLineInput) =>
     JSON.stringify([
       foldIfUuid(line.menuItemId),
       line.variantId === null ? null : foldIfUuid(line.variantId),
@@ -607,10 +1421,18 @@ async function requireCourses(
 }
 
 async function requireDraft(tx: Transaction, draftId: string, partyId: string) {
+  const draft = await draftOnParty(tx, draftId, partyId);
+  if (draft.state === "discarded") throw new AppError("draft.not_found", { draftId });
+  if (draft.state === "submitted") throw new AppError("draft.already_submitted", { draftId });
+  return draft;
+}
+
+async function draftOnParty(tx: Transaction, draftId: string, partyId: string) {
   const [draft] = await tx
     .select({
       id: orderDrafts.id,
       partyId: orderDrafts.partyId,
+      billId: orderDrafts.billId,
       ownerId: orderDrafts.ownerId,
       revision: orderDrafts.revision,
       state: orderDrafts.state,
@@ -618,46 +1440,27 @@ async function requireDraft(tx: Transaction, draftId: string, partyId: string) {
     })
     .from(orderDrafts)
     .where(eq(orderDrafts.id, draftId));
-  if (draft === undefined || draft.state === "discarded" || draft.partyId !== partyId) {
+  if (draft === undefined || draft.partyId !== partyId) {
     throw new AppError("draft.not_found", { draftId });
   }
-  if (draft.state === "submitted") throw new AppError("draft.already_submitted", { draftId });
   return draft;
 }
 
-/** Refuse a draft another person now owns, then one that has moved on since `revision`. */
-async function requireOwnDraftAt(
-  tx: Transaction,
-  draft: { id: string; ownerId: string; revision: number },
-  operatorId: string,
-  revision: number,
-): Promise<void> {
-  if (draft.ownerId !== operatorId) {
-    throw new AppError("draft.taken_over", {
-      draftId: draft.id,
-      ownerId: draft.ownerId,
-      ownerName: await personName(tx, draft.ownerId),
-    });
-  }
-  requireDraftRevision(draft, revision);
-}
-
-function requireDraftRevision(draft: { id: string; revision: number }, revision: number): void {
-  if (draft.revision !== revision) {
-    throw new AppError("draft.out_of_date", { draftId: draft.id, revision: draft.revision });
-  }
-}
-
-/** The party's open drafts; with `ownerId`, only that person's, of which there is at most one. */
-async function openDraftsOn(tx: Transaction, partyId: string, ownerId?: string) {
+async function openDraftsOn(tx: Transaction, partyId: string, ownerId?: string, billId?: string) {
   return tx
-    .select({ id: orderDrafts.id, ownerId: orderDrafts.ownerId, revision: orderDrafts.revision })
+    .select({
+      id: orderDrafts.id,
+      billId: orderDrafts.billId,
+      ownerId: orderDrafts.ownerId,
+      revision: orderDrafts.revision,
+    })
     .from(orderDrafts)
     .where(
       and(
         eq(orderDrafts.partyId, partyId),
         eq(orderDrafts.state, "open"),
         ownerId === undefined ? undefined : eq(orderDrafts.ownerId, ownerId),
+        billId === undefined ? undefined : eq(orderDrafts.billId, billId),
       ),
     );
 }
@@ -673,11 +1476,12 @@ async function discardDrafts(tx: Transaction, draftIds: readonly string[]): Prom
 
 /**
  * Discarding `fromDraftId` into `into`, which its owner holds: the event, then `into`'s lines
- * followed by the discarded draft's, added together and numbered from one, and `into`'s revision
+ * followed by the discarded draft's, retaining row ids and numbered from one, and `into`'s revision
  * moved on. The caller has already marked `fromDraftId` discarded.
  */
 async function addDiscardedDraft(
   tx: Transaction,
+  cfg: TillConfig,
   fromDraftId: string,
   into: { id: string; revision: number },
   ownerId: string,
@@ -692,39 +1496,24 @@ async function addDiscardedDraft(
     actorId,
     detail: { intoDraftId: into.id },
   });
-  const stored = await storedLines(tx, [into.id, fromDraftId]);
-  const combined = [
-    ...stored.filter(({ draftId }) => draftId === into.id),
-    ...stored.filter(({ draftId }) => draftId === fromDraftId),
-  ].map(({ line }) => line);
-  const [owner] = await tx
-    .select({ partyId: orderDrafts.partyId })
-    .from(orderDrafts)
-    .where(eq(orderDrafts.id, into.id));
-  const allergy = await VENUE_SERVICE.readPartyAllergy(tx, owner!.partyId);
-  const assigned = new Set(
-    allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+  const stored = await storedLines(tx, cfg, [into.id, fromDraftId]);
+  const combined = absorbLines(
+    stored.filter(({ draftId }) => draftId === into.id).map(({ line }) => line),
+    stored.filter(({ draftId }) => draftId === fromDraftId).map(({ line }) => line),
   );
-  await replaceLines(
-    tx,
-    [into.id, fromDraftId],
-    into.id,
-    normaliseDraftLines(
-      combined.map((line) => (assigned.has(line.id) ? { ...line, noMerge: true } : line)),
-    ),
-  );
+  await replaceLines(tx, [into.id, fromDraftId], into.id, combined);
   await tx
     .update(orderDrafts)
     .set({ revision: into.revision + 1, updatedAt: nowIso() })
     .where(eq(orderDrafts.id, into.id));
 }
 
-async function personName(tx: Transaction, personId: string): Promise<string> {
-  const [person] = await tx
-    .select({ displayName: persons.displayName })
-    .from(persons)
-    .where(eq(persons.id, personId));
-  return person?.displayName ?? "";
+function absorbLines(receiving: readonly DraftLine[], absorbed: readonly DraftLine[]): DraftLine[] {
+  const offset = receiving.reduce((maximum, line) => Math.max(maximum, line.slot), 0);
+  return [
+    ...receiving,
+    ...absorbed.map((line) => (line.slot > 0 ? { ...line, slot: line.slot + offset } : line)),
+  ];
 }
 
 type DraftEvent = typeof orderDraftEvents.$inferInsert;
@@ -740,7 +1529,7 @@ async function recordDraftEvents(
     const orders = await tx
       .selectDistinct({ locationId: workingOrders.locationId })
       .from(workingOrders)
-      .innerJoin(orderDrafts, eq(orderDrafts.partyId, workingOrders.partyId))
+      .innerJoin(orderDrafts, eq(orderDrafts.billId, workingOrders.id))
       .where(eq(orderDrafts.id, event.draftId));
     if (orders.length !== 1) continue;
     await attendance.recorder(tx, {
@@ -760,10 +1549,20 @@ async function recordDraftEvents(
  * The drafts' stored lines, in position order, each with its draft's id, and `unavailable` not yet
  * worked out.
  */
+function isRecalled(line: DraftLine): line is RecalledDraftLine {
+  return line.sourceLineId !== null;
+}
+function isFresh<T extends DraftLine | DraftLineInput>(
+  line: T,
+): line is T & (FreshDraftLine | FreshDraftLineInput) {
+  return line.sourceLineId === null;
+}
+
 async function storedLines(
   tx: Transaction,
+  cfg: TillConfig,
   draftIds: readonly string[],
-): Promise<{ draftId: string; line: DraftLine }[]> {
+): Promise<{ draftId: string; position: number; line: DraftLine }[]> {
   const rows = await tx
     .select({
       line: orderDraftLines,
@@ -771,56 +1570,143 @@ async function storedLines(
         id: kitchenCourses.id,
         name: kitchenCourses.name,
         displayOrder: kitchenCourses.displayOrder,
+        heldUntilFired: kitchenCourses.heldUntilFired,
       },
     })
     .from(orderDraftLines)
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, orderDraftLines.courseId))
     .where(inArray(orderDraftLines.draftId, [...draftIds]))
     .orderBy(asc(orderDraftLines.position), asc(orderDraftLines.id));
-  return rows.map(({ line: row, course }) => ({
-    draftId: row.draftId,
-    line: {
-      id: row.id,
-      menuItemId: row.menuItemId,
-      variantId: row.variantId,
-      menuVersionId: row.menuVersionId,
-      options: row.options,
-      extras: row.extras,
-      note: row.note,
-      quantity: thousandthsToDecimal(row.quantity),
-      courseId: row.courseId,
-      ...(course === null ? {} : { course }),
-      makeAt: row.makeAtStationId,
-      noMerge: row.noMerge,
-      unavailable: false,
-    },
-  }));
+  const fresh = rows.map(
+    ({ line: row, course }) =>
+      ({
+        draftId: row.draftId,
+        position: row.position,
+        line: {
+          sourceLineId: null,
+          source: null,
+          id: row.id,
+          menuItemId: row.menuItemId,
+          variantId: row.variantId,
+          menuVersionId: row.menuVersionId,
+          options: row.options,
+          extras: row.extras,
+          note: row.note,
+          quantity: thousandthsToDecimal(row.quantity),
+          courseId: row.courseId,
+          ...(course === null ? {} : { course }),
+          makeAt: row.makeAtStationId,
+          noMerge: row.noMerge,
+          slot: row.slot,
+          joinGroupId: row.joinGroupId,
+          afterGroupId: row.afterGroupId,
+          unavailable: false,
+        },
+      }) satisfies { draftId: string; position: number; line: FreshDraftLine },
+  );
+  const sources = await tx
+    .select({
+      reference: orderDraftRecalledLines,
+      billId: orderDrafts.billId,
+      sourceBillId: workingOrderLines.workingOrderId,
+      parentLineId: workingOrderLines.parentLineId,
+      course: {
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+        heldUntilFired: kitchenCourses.heldUntilFired,
+      },
+      makeAt: workingOrderLines.makeAtStationId,
+    })
+    .from(orderDraftRecalledLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId))
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .where(inArray(orderDraftRecalledLines.draftId, [...draftIds]));
+  const recalled: { draftId: string; position: number; line: RecalledDraftLine }[] = [];
+  for (const billId of new Set(sources.map((row) => row.billId))) {
+    if (billId === null) throw invalid("billId");
+    const bill = await readTabLines(tx, cfg, billId);
+    const amounts = await tx
+      .select({ id: workingOrderLines.id, total: workingOrderLines.lineTotal })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const totals = new Map(amounts.map((row) => [row.id, centsToDecimal(row.total)]));
+    for (const { reference, sourceBillId, parentLineId, makeAt, course } of sources.filter(
+      (row) => row.billId === billId,
+    )) {
+      if (sourceBillId !== billId || parentLineId !== null) throw invalid("sourceLineId");
+      const line = bill.find((line) => line.id === reference.sourceLineId)!;
+      const extras = bill.filter((child) => child.parentLineNo === line.lineNo);
+      recalled.push({
+        draftId: reference.draftId,
+        position: reference.position,
+        line: {
+          id: reference.id,
+          sourceLineId: line.id,
+          source: {
+            line,
+            extras,
+            netAmount: sumDecimals([line, ...extras].map((row) => totals.get(row.id)!)),
+          },
+          quantity: line.quantity,
+          note: line.note,
+          courseId: line.courseId,
+          ...(course === null ? {} : { course }),
+          makeAt,
+          noMerge: true,
+          unavailable: false,
+          slot: reference.slot,
+          joinGroupId: reference.joinGroupId,
+          afterGroupId: reference.afterGroupId,
+        },
+      });
+    }
+  }
+  return [...fresh, ...recalled].sort(
+    (a, b) => a.position - b.position || a.line.id.localeCompare(b.line.id),
+  );
 }
 
-/** Delete every line of `fromDraftIds`, then write `lines` to `intoDraftId` numbered from one. */
 async function replaceLines(
   tx: Transaction,
   fromDraftIds: readonly string[],
   intoDraftId: string,
   lines: readonly DraftLine[],
 ): Promise<void> {
+  for (const [index, line] of lines.entries()) {
+    if (isRecalled(line))
+      await tx
+        .update(orderDraftRecalledLines)
+        .set({
+          draftId: intoDraftId,
+          position: index + 1,
+          slot: line.slot,
+          joinGroupId: line.joinGroupId,
+          afterGroupId: line.afterGroupId,
+        })
+        .where(eq(orderDraftRecalledLines.id, line.id));
+  }
+  const fresh = lines.flatMap((line, index) =>
+    isFresh(line) ? [{ line, position: index + 1 }] : [],
+  );
   // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
   await tx.delete(orderDraftLines).where(
     and(
       inArray(orderDraftLines.draftId, [...fromDraftIds]),
-      lines.length === 0
+      fresh.length === 0
         ? undefined
         : notInArray(
             orderDraftLines.id,
-            lines.map((line) => line.id),
+            fresh.map(({ line }) => line.id),
           ),
     ),
   );
-  if (lines.length === 0) return;
-  const rows = lines.map((line, index) => ({
+  if (fresh.length === 0) return;
+  const rows = fresh.map(({ line, position }) => ({
     id: line.id,
     draftId: intoDraftId,
-    position: index + 1,
+    position,
     menuItemId: line.menuItemId,
     variantId: line.variantId,
     menuVersionId: line.menuVersionId,
@@ -831,6 +1717,9 @@ async function replaceLines(
     courseId: line.courseId,
     makeAtStationId: line.makeAt ?? null,
     noMerge: line.noMerge,
+    slot: line.slot,
+    joinGroupId: line.joinGroupId,
+    afterGroupId: line.afterGroupId,
   }));
   await tx
     .insert(orderDraftLines)
@@ -840,8 +1729,19 @@ async function replaceLines(
       set: {
         draftId: intoDraftId,
         position: sql`excluded.position`,
+        menuItemId: sql`excluded.menu_item_id`,
+        variantId: sql`excluded.variant_id`,
+        menuVersionId: sql`excluded.menu_version_id`,
+        options: sql`excluded.options`,
+        extras: sql`excluded.extras`,
+        note: sql`excluded.note`,
+        courseId: sql`excluded.course_id`,
+        makeAtStationId: sql`excluded.make_at_station_id`,
         quantity: sql`excluded.quantity`,
         noMerge: sql`excluded.no_merge`,
+        slot: sql`excluded.slot`,
+        joinGroupId: sql`excluded.join_group_id`,
+        afterGroupId: sql`excluded.after_group_id`,
       },
     });
 }
@@ -869,6 +1769,7 @@ async function readOpenDrafts(
     .select({
       id: orderDrafts.id,
       partyId: orderDrafts.partyId,
+      billId: orderDrafts.billId,
       ownerId: orderDrafts.ownerId,
       ownerName: persons.displayName,
       revision: orderDrafts.revision,
@@ -886,6 +1787,7 @@ async function readOpenDrafts(
   if (drafts.length === 0) return [];
   const lines = await storedLines(
     tx,
+    cfg,
     drafts.map((draft) => draft.id),
   );
   const offers =
@@ -894,7 +1796,7 @@ async function readOpenDrafts(
       tx,
       cfg,
       partyId,
-      lines.map(({ line }) => line.menuItemId),
+      lines.flatMap(({ line }) => (isFresh(line) ? [line.menuItemId] : [])),
     ));
   const takenFrom = await takenOverFrom(
     tx,
@@ -902,14 +1804,19 @@ async function readOpenDrafts(
   );
   return drafts.map((draft) => ({
     ...draft,
+    billId: uuid(draft.billId, "billId"),
     ownerName: draft.ownerName ?? "",
     takenOverFrom: takenFrom.get(draft.id) ?? null,
     lines: lines
       .filter((stored) => stored.draftId === draft.id)
-      .map(({ line }) => ({
-        ...line,
-        unavailable: unavailable(line, offers.get(line.menuItemId)),
-      })),
+      .map(({ line }) =>
+        isRecalled(line)
+          ? line
+          : {
+              ...line,
+              unavailable: unavailable(line, offers.get(line.menuItemId)),
+            },
+      ),
   }));
 }
 
@@ -967,7 +1874,7 @@ async function offersFor(
  * those is refused when the line is priced. An options list the line leaves unanswered is not
  * checked.
  */
-function unavailable(line: DraftLine, offer: ZoneMenuOffer | undefined): boolean {
+function unavailable(line: FreshDraftLine, offer: ZoneMenuOffer | undefined): boolean {
   if (offer === undefined || !offer.available || offer.ordering === "not_sold_separately")
     return true;
   if (

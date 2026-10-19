@@ -983,11 +983,16 @@ describe("catalogue-screen", () => {
 
   it("offers the venue's courses and saves the course inside the product write", async () => {
     const api = stubApi({
-      listCourses: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "k1", name: "Starters", displayOrder: 0, active: true, inUse: false },
-        ]),
+      listCourses: vi.fn().mockResolvedValue([
+        {
+          id: "k1",
+          name: "Starters",
+          displayOrder: 0,
+          active: true,
+          inUse: false,
+          heldUntilFired: true,
+        },
+      ]),
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -2120,8 +2125,22 @@ describe("catalogue-screen", () => {
 
   describe("the courses window", () => {
     const venueCourses: Course[] = [
-      { id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
-      { id: "k2", name: "Principales", displayOrder: 1, active: true, inUse: false },
+      {
+        id: "k1",
+        name: "Entrantes",
+        displayOrder: 0,
+        active: true,
+        inUse: false,
+        heldUntilFired: true,
+      },
+      {
+        id: "k2",
+        name: "Principales",
+        displayOrder: 1,
+        active: true,
+        inUse: false,
+        heldUntilFired: true,
+      },
     ];
     const slowly = <T>(value: T): Promise<T> =>
       new Promise((resolve) => setTimeout(() => resolve(value), 100));
@@ -2142,7 +2161,10 @@ describe("catalogue-screen", () => {
         createCourse: vi.fn(
           async ({ name, displayOrder }: { name: string; displayOrder: number }) => {
             if (slowCreate) await slowly(null);
-            rows = [...rows, { id: "k-new", name, displayOrder, active: true, inUse: false }];
+            rows = [
+              ...rows,
+              { id: "k-new", name, displayOrder, active: true, inUse: false, heldUntilFired: true },
+            ];
             return { id: "k-new" };
           },
         ),
@@ -2299,6 +2321,7 @@ describe("catalogue-screen", () => {
         displayOrder: 2,
         active: true,
         inUse: false,
+        heldUntilFired: true,
       };
       const courses = () =>
         Promise.resolve([...venueCourses, ...(added ? [postres] : [])].map((c) => ({ ...c })));
@@ -2488,6 +2511,7 @@ describe("catalogue-screen", () => {
         displayOrder: 2,
         active: false,
         inUse: true,
+        heldUntilFired: true,
       };
       const api = courseApi({}, false, [...venueCourses, brunch]);
       const el = await openCourses(api, "k1");
@@ -2649,7 +2673,14 @@ describe("catalogue-screen", () => {
       expect(editor(el).currentValue.courseId).toBe("k2");
       answer([
         ...venueCourses,
-        { id: "k-new", name: "Postres", displayOrder: 2, active: true, inUse: false },
+        {
+          id: "k-new",
+          name: "Postres",
+          displayOrder: 2,
+          active: true,
+          inUse: false,
+          heldUntilFired: true,
+        },
       ]);
       await flush(el);
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);

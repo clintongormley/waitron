@@ -11,8 +11,8 @@ import "./courses-screen.js";
 afterEach(cleanupWidgets);
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: false },
+  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false, heldUntilFired: true },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: false, heldUntilFired: false },
 ];
 
 function stubApi(courses: Course[] = COURSES): DashboardApi {
@@ -120,7 +120,7 @@ describe("dashboard-courses-screen", () => {
     await vi.waitFor(() => expect(courseList.shadowRoot!.activeElement).toBe(field));
   });
 
-  it("read-only: names only, no Add course, and the description without the drag sentence", async () => {
+  it("read-only: names and firing settings, no Add course, and no drag instructions", async () => {
     const { el } = await mount(true);
     expect(q(el, "[data-test=add-course]")).toBeNull();
     expect(q(el, ".description")!.textContent!.trim()).toBe(t("courses.description_read_only"));
@@ -128,9 +128,13 @@ describe("dashboard-courses-screen", () => {
     expect(courseList.readOnly).toBe(true);
     expect(
       [...courseList.shadowRoot!.querySelectorAll("li[data-course]")].map((row) =>
-        row.textContent!.trim(),
+        row.textContent!.trim().replace(/\s+/g, " "),
       ),
-    ).toEqual(["Starters", "Mains"]);
+    ).toEqual([
+      `Starters · ${t("courses.held_until_fired")}`,
+      `Mains · ${t("courses.goes_to_fire_now")}`,
+    ]);
+    expect(courseList.shadowRoot!.querySelectorAll("wt-switch")).toHaveLength(0);
     expect(courseList.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
     expect(courseList.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
   });

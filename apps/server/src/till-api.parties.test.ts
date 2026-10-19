@@ -1,3 +1,5 @@
+import { observedClosingBody } from "./testing/party-close-fixture.js";
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -132,7 +134,17 @@ async function send(
 ): Promise<Response> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (withSession) headers.cookie = await cookie();
-  return app(suite.db).request(path, { method, headers, body: JSON.stringify(body) });
+  return app(suite.db).request(path, {
+    method,
+    headers,
+    body: JSON.stringify(
+      await observedClosingBody(
+        suite.db,
+        path,
+        await observedGroupSubmitBody(suite.db, path, body),
+      ),
+    ),
+  });
 }
 
 async function post(path: string, body: unknown, withSession = true): Promise<Response> {

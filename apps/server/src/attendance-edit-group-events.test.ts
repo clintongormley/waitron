@@ -1,3 +1,6 @@
+import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -21,9 +24,10 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { saveDraft, submitDraft } from "./order-drafts.js";
-import { submitGroups } from "./order-groups.js";
-import { updateHeldOrder, updateOrderLine, type UpdateHeldOrderRequest } from "./working-order.js";
+import { submitDraft } from "./order-drafts.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
+import { type UpdateHeldOrderRequest } from "./working-order.js";
 import { provisionBillVenue, seatedWith, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
@@ -53,6 +57,7 @@ async function prepare(action: Action) {
   if (action === "submit-draft") {
     const draft = await run((tx) =>
       saveDraft(tx, v.cfg, party.partyId, v.operatorId, {
+        billId: party.tabId,
         draftId: null,
         revision: 0,
         lines: ["Ensalada", "Tarta"].map((name) => ({
@@ -72,6 +77,7 @@ async function prepare(action: Action) {
       partyId: party.partyId,
       tabId: party.tabId,
       draft,
+      expectedEdit: await expectedDraftEditForTest(suite.db, draft),
       submissionId: newId(),
       revision: party.revision,
     };
@@ -95,6 +101,7 @@ async function prepare(action: Action) {
     partyId: party.partyId,
     tabId: placed.tabId,
     draft: null,
+    expectedEdit: null,
     submissionId: newId(),
     revision: order!.revision,
   };
@@ -105,7 +112,7 @@ async function command(
   recorder?: AttendanceRecorder,
 ) {
   if (action === "submit-draft")
-    return run((tx) =>
+    return run(async (tx) =>
       submitDraft(
         tx,
         v.cfg,
@@ -115,6 +122,7 @@ async function command(
           submissionId: p.submissionId,
           expectedPartyRevision: p.revision,
           operatorId: v.operatorId,
+          expectedEdit: p.expectedEdit!,
           draftRevision: p.draft!.revision,
           groups: p.draft!.lines.map((line) => ({ lineIds: [line.id], release: "hold" as const })),
         },

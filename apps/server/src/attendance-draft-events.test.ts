@@ -1,3 +1,8 @@
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import {
+  saveDraftForTest as saveDraft,
+  takeOverDraftForTest as takeOverDraft,
+} from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -5,6 +10,7 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
+  parties,
   workingOrders,
   withTransaction,
 } from "@waitron/db";
@@ -15,16 +21,11 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import {
-  discardPartyDrafts,
-  moveDraftsToParty,
-  saveDraft,
-  submitDraft,
-  takeOverDraft,
-  type Draft,
-} from "./order-drafts.js";
+import { readBillEditState } from "./bill-editing.js";
+import { discardPartyDrafts, moveDraftsToBill, submitDraft, type Draft } from "./order-drafts.js";
 import { OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { newId } from "@waitron/db";
+import { createOpenOrder } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -51,14 +52,20 @@ function save(
   owner = OPERATOR,
   party = partyId,
   attendance: AttendanceRecorder | null = recordAttendanceFact,
+  billId?: string,
 ) {
-  return run((tx) =>
-    saveDraft(
+  return run(async (tx) => {
+    const [row] = await tx
+      .select({ billId: parties.mainBillId })
+      .from(parties)
+      .where(eq(parties.id, party));
+    return saveDraft(
       tx,
       v.cfg,
       party,
       owner,
       {
+        billId: billId ?? row!.billId!,
         draftId: null,
         revision: 0,
         lines: [
@@ -76,8 +83,20 @@ function save(
         ],
       },
       attendance ?? undefined,
-    ),
-  );
+    );
+  });
+}
+async function saveOtherBill(owner: string) {
+  const billId = newId();
+  await run(async (tx) => {
+    const [party] = await tx.select().from(parties).where(eq(parties.id, partyId));
+    await createOpenOrder(tx, v.cfg, billId, [], "Other bill", {
+      partyId,
+      existingService: true,
+      copyServiceContextFrom: party!.mainBillId!,
+    });
+  });
+  return save(owner, partyId, recordAttendanceFact, billId);
 }
 const state = async () => ({
   drafts: await suite.db.select().from(orderDrafts),
@@ -139,7 +158,7 @@ describe("natural draft-event attendance snapshots", () => {
     "takeover snapshots every derived event under the taker (own draft: %s)",
     async (own) => {
       const draft = await save();
-      if (own) await save(other);
+      if (own) await saveOtherBill(other);
       const before = await state();
       vi.setSystemTime(new Date("2026-01-05T13:00:00.987Z"));
       await run((tx) =>
@@ -148,7 +167,7 @@ describe("natural draft-event attendance snapshots", () => {
       const events = (await state()).events.filter(
         (e) => !before.events.some((old) => old.id === e.id),
       );
-      expect(events.map((e) => e.kind)).toEqual(own ? ["taken_over", "discarded"] : ["taken_over"]);
+      expect(events.map((e) => e.kind)).toEqual(["taken_over"]);
       await assertSnapshots(events, "2026-01-05T13:00:00.000Z", other);
     },
   );
@@ -160,6 +179,7 @@ describe("natural draft-event attendance snapshots", () => {
       submissionId: newId(),
       expectedPartyRevision: 0,
       operatorId: OPERATOR,
+      expectedEdit: await expectedDraftEditForTest(suite.db, draft),
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lines.map((l) => l.id), release: "hold" as const }],
     };
@@ -180,7 +200,7 @@ describe("natural draft-event attendance snapshots", () => {
   });
   it("discard snapshots all owners' events under the acting worker", async () => {
     await save();
-    await save(other);
+    await saveOtherBill(other);
     const before = await state();
     vi.setSystemTime(new Date("2026-01-05T15:00:00.987Z"));
     await run((tx) =>
@@ -198,13 +218,30 @@ describe("natural draft-event attendance snapshots", () => {
   it("an absorbed draft retains the mover, original source location and supplied command instant", async () => {
     const from = await save();
     const target = await seat(v, await v.table("Target"));
-    await save(OPERATOR, target.partyId);
-    const before = await state();
+    const into = await save(OPERATOR, target.partyId);
     await run((tx) =>
-      moveDraftsToParty(tx, partyId, target.partyId, other, {
-        recorder: recordAttendanceFact,
-        at: "2026-01-05T16:00:00.987Z",
-      }),
+      takeOverDraft(tx, v.cfg, partyId, from.id, other, from.revision, recordAttendanceFact),
+    );
+    await run((tx) =>
+      takeOverDraft(tx, v.cfg, target.partyId, into.id, other, into.revision, recordAttendanceFact),
+    );
+    const before = await state();
+    await run(async (tx) =>
+      moveDraftsToBill(
+        tx,
+        v.cfg,
+        from.billId,
+        target.tabId,
+        other,
+        [
+          await readBillEditState(tx, [from.billId, target.tabId].sort()[0]!),
+          await readBillEditState(tx, [from.billId, target.tabId].sort()[1]!),
+        ],
+        {
+          recorder: recordAttendanceFact,
+          at: "2026-01-05T16:00:00.987Z",
+        },
+      ),
     );
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));

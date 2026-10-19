@@ -1,4 +1,14 @@
+import {
+  current,
+  currentGroup,
+  row as currentRow,
+} from "./till-table-order-screen.current-orders.test-helpers.js";
+import { grossOf } from "@waitron/shared";
+import { DraftStore } from "../state/draft-sync.js";
+import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
+import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -10,6 +20,7 @@ import "./till-table-order-screen.js";
 import "../widgets/adjustment-dialog.js";
 import type {
   AdjustDetail,
+  SubmitDraftDetail,
   TableServiceStatus,
   TillTableOrderScreen,
 } from "./till-table-order-screen.js";
@@ -26,7 +37,6 @@ import type {
   AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 
 const products: TillProduct[] = [
   {
@@ -105,7 +115,7 @@ const lines: TabLine[] = [
   },
 ];
 
-const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
+const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0, heldUntilFired: true }];
 
 const statuses: TableServiceStatus[] = [{ id: "s1", label: "Reservada", color: "#cc0000" }];
 
@@ -308,28 +318,57 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await el.updateComplete;
     }
 
-    it("has no violations on a line offering Change, Recall and Cancel with its note shown", async () => {
+    it("has no violations on a sent line with its note shown and no direct Change", async () => {
       const { el, host } = await mountDrawer([sentLine]);
       await settle(el);
+      expect(el.shadowRoot!.querySelector("[data-change-line]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the open Change editor", async () => {
+    it("has no violations in the recalled New order editor", async () => {
       const dish: TillProduct = { ...products[0]!, offeredModifiers: [cookedList, extrasList] };
       const { el, host } = await mountDrawer([sentLine], [dish]);
-      el.shadowRoot!.querySelector<HTMLElement>('[data-change-line="5"]')!.click();
+      const draft = new DraftStore();
+      draft.loadFrom("recalled", [
+        {
+          draftLineId: "source-reference",
+          workingOrderLineId: sentLine.id,
+          source: {
+            line: sentLine,
+            extras: [],
+            netAmount: grossOf(sentLine.unitPriceGross, sentLine.quantity),
+          },
+          product: {
+            ...dish,
+            name: sentLine.name!,
+            variants: [],
+            unitPrice: sentLine.unitPriceGross,
+          },
+          quantity: "2",
+          note: sentLine.note!,
+          noMerge: true,
+        },
+      ]);
+      el.draftStore = draft;
       await el.updateComplete;
-      await el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!
-        .updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await el.updateComplete;
+      const picker = await openDraftLine(el, 0);
+      expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).not.toBeNull();
+      expect(
+        picker.shadowRoot!.querySelector('[data-test="pick-list-extras-p-cheese-count"]'),
+      ).not.toBeNull();
       await settle(el);
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the dialog asking how many to cancel", async () => {
+    it("has no violations in the dialog asking how many to cancel after the app offers it", async () => {
       const { el } = await mountDrawer([sentLine]);
       let asked: AdjustDetail | undefined;
       el.addEventListener("adjust", (e) => (asked = (e as CustomEvent<AdjustDetail>).detail));
-      el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="5"]')!.click();
+      el.cancelOffer = 5;
+      await el.updateComplete;
+      expect(asked!.offered).toBe(true);
       // The app opens the dialog on what the screen asked for.
       const { el: dialog, host } = await mountWidget<TillAdjustmentDialog>(
         "till-adjustment-dialog",
@@ -430,16 +469,25 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(selected.host);
     });
 
-    it("has no violations in the preview dialog", async () => {
+    it("has no violations after selected Fire, without another confirmation", async () => {
       const { el, host } = await withDraft({}, true);
-      el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!.click();
+      const submitted: SubmitDraftDetail[] = [];
+      el.addEventListener("submit-draft", (event) =>
+        submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
+      );
+      await openReview(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!,
+      );
       await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0]!.lines).toEqual([{ menuItemId: "offer-cafe", quantity: "1" }]);
+      expect(submitted[0]!.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+      expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the preview's Send to choice", async () => {
+    it("has no violations after direct Send with several bills, without a destination choice", async () => {
       const { el, host } = await withDraft(
         {
           party,
@@ -450,19 +498,36 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
         false,
       );
-      el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+      const own = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+      const submitted: SubmitDraftDetail[] = [];
+      el.addEventListener("submit-draft", (event) =>
+        submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
+      );
+      await openReview(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+      );
       await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-      if (el.shadowRoot!.querySelector("[data-send-to]") === null)
-        throw new Error("the scan must include the Send to choice");
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0]!.store).toBe(own);
+      expect(submitted[0]!.sent).toEqual([...own.lines]);
+      expect(submitted[0]!.lines).toEqual([
+        { menuItemId: "offer-cafe", quantity: "1" },
+        { menuItemId: "offer-cafe", quantity: "2" },
+      ]);
+      expect(submitted[0]!).not.toHaveProperty("billId");
+      expect(el.shadowRoot!.querySelector("[data-send-to]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in a later addition's destination and held-group picker", async () => {
+    it("has no violations in Move to with the later addition's held-group choices", async () => {
       const group = (id: string, position: number, state: OrderGroup["state"]): OrderGroup => ({
+        courseIds: [],
         id,
         position,
+        displayNumber: position,
+        numberPartyId: "v1",
         state,
         firedAt: state === "fired" ? "2026-08-20T09:59:00.000Z" : null,
         remindAt: null,
@@ -471,11 +536,20 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       });
       const { el, host } = await withDraft(
         { groups: [group("g1", 1, "fired"), group("g2", 2, "held"), group("g3", 3, "held")] },
-        false,
+        true,
       );
-      el.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
-      await el.updateComplete;
       await openReview(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-move]")!);
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!
+          .open,
+      ).toBe(true);
+      expect(
+        [...el.shadowRoot!.querySelectorAll('[data-draft-move-to^="join:"]')].map((choice) =>
+          choice.getAttribute("data-draft-move-to"),
+        ),
+      ).toEqual(["join:g2", "join:g3"]);
       await expectNoA11yViolations(host);
     });
   });
@@ -487,8 +561,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       state: OrderGroup["state"],
       lineIds: string[],
     ): OrderGroup => ({
+      courseIds: [],
       id,
       position,
+      displayNumber: position,
+      numberPartyId: "v1",
       state,
       firedAt: state === "fired" ? "2026-08-20T09:59:00.000Z" : null,
       remindAt: null,
@@ -534,29 +611,81 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       return mounted;
     }
 
-    async function press(el: TillTableOrderScreen, selector: string): Promise<void> {
-      el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
-      await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-    }
-
-    it("has no violations in the list, a fired group and held ones with every control", async () => {
+    it("has no violations in Sent's recorded-dish fallback", async () => {
       const { el, host } = await withGroups();
-      if (el.shadowRoot!.querySelector("[data-split-group-line]") === null)
-        throw new Error("the scan must include Split quantity");
+      expect(el.shadowRoot!.querySelector("[data-split-group-line], [data-move-line]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-group-line]")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-sent-fallback-line="line-1"]')).not.toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the Move to… picker", async () => {
+    it("has no violations in New order Move with a recalled source", async () => {
       const { el, host } = await withGroups();
-      await press(el, '[data-move-line="line-1"]');
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      const draft = new DraftStore();
+      draft.loadFrom("recalled", [
+        {
+          product: products[0]!,
+          quantity: "2.000",
+          place: { kind: "fire" },
+          source: {
+            line: groupLines[0]!,
+            extras: [],
+            netAmount: "3.00",
+          },
+        },
+      ]);
+      el.draftStore = draft;
+      el.style.width = "1280px";
+      await resized(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!);
+      await el.updateComplete;
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-move]")!);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-draft-move-dialog]")!.hasAttribute("open")).toBe(
+        true,
+      );
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the Fire confirmation", async () => {
+    it("has no violations in the Fire confirmation from Sent", async () => {
       const { el, host } = await withGroups();
-      await press(el, '[data-group-fire="g2"]');
+      el.currentOrders = current({
+        groups: [
+          currentGroup("g2", 2, "held", [
+            currentRow("line-1", "Café", "2.000", {
+              workingOrderId: "wo-1",
+              courseId: "c1",
+              netAmount: "3.00",
+              firedAt: null,
+              released: false,
+              kitchen: {
+                stationId: null,
+                movable: false,
+                state: "queued",
+                firedAt: null,
+                awayAt: null,
+              },
+            }),
+          ]),
+        ],
+        ungrouped: [],
+        reminder: null,
+      });
+      await el.updateComplete;
+      const panel = await sentPanelFor(el);
+      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+        if (toggle.getAttribute("aria-expanded") === "false") {
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+        }
+      }
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g2"]')!,
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-fire-dialog]")!.hasAttribute("open")).toBe(true);
       await expectNoA11yViolations(host);
     });
 

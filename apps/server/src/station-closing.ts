@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, count, eq, gt, inArray, isNull, ne } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { invalid } from "./bill-allocation.js";
-import { moveDishesToStation, stillMovable, type StationMover } from "./station-move.js";
+import { moveDishesToStation, stillMovable, type StationMoveActor } from "./station-move.js";
 import type { TillConfig } from "./till-config.js";
 
 export async function openDishCount(
@@ -46,7 +46,7 @@ export async function withStationDishes(
   destination: string | undefined,
   choice: OpenDishesChoice | undefined,
   close: (at: Date) => Promise<void>,
-  mover: StationMover,
+  mover: StationMoveActor,
 ): Promise<void> {
   const at = new Date();
   const dishes = await tx
@@ -84,7 +84,7 @@ export async function withStationDishes(
           stationId: destination!,
           lineIds,
         },
-        mover,
+        { ...mover, kind: "kitchen" },
         { includeExtras: true },
       );
   } else if (choice === "leave" && dishes.length > 0) {

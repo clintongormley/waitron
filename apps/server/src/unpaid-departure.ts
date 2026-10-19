@@ -7,7 +7,14 @@ import { authorize } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
 import { AppError, decimalToCents } from "@waitron/shared";
 import type { Decimal, DeviceId, SaleId } from "@waitron/shared";
-import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
+import {
+  billOwes,
+  checkAndBumpParty,
+  closeParty,
+  readBillsOfParties,
+  requirePartyClosingEdits,
+} from "./parties.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig } from "./till-config.js";
@@ -24,6 +31,7 @@ import "./errors.js";
 
 export interface UnpaidDepartureRequest {
   expectedPartyRevision: number;
+  expectedEdits: BillEditExpected[];
   /** Trimmed, 1 to 500 characters. */
   reason: string;
   override?: Override;
@@ -70,6 +78,7 @@ export async function recordUnpaidDeparture(
     operator.attempts,
   );
   await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
+  await requirePartyClosingEdits(tx, partyId, operator.personId, req.expectedEdits);
 
   const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
   const owing = bills.filter(billOwes);
@@ -166,6 +175,7 @@ export async function recordUnpaidDeparture(
     deps.attendance === undefined
       ? undefined
       : { recorder: deps.attendance, locationId: cfg.locationId },
+    req.expectedEdits,
   );
   return { ...closed, departures };
 }

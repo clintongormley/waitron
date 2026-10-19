@@ -1,3 +1,5 @@
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
+import { updateHeldOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { setImmediate as yieldTurn } from "node:timers/promises";
@@ -71,10 +73,12 @@ import {
   issueIfFullyPaid,
   readBillBalance,
   readPaymentsByBill,
+} from "./bill-payments.js";
+import {
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,
-} from "./bill-payments.js";
+} from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -92,14 +96,9 @@ import {
   readSettledTicket,
   printSaleReceipt,
   reprintSale,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import {
-  abandonHeldOrder,
-  updateHeldOrder,
-  moveOrderLines,
-  setOrderInvoiceChoice,
-} from "./working-order.js";
+import { moveOrderLines } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";

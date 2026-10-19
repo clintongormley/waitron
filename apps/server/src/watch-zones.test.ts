@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { joinTables, moveGuests } from "./table-actions.js";
+import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 
 import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";

@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -18,11 +20,12 @@ import { createExtraList, createProduct, writeProductModifiers } from "@waitron/
 import { createPrinter } from "@waitron/printing";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";
-import { listStationQueue, updateHeldOrder } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
 import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import {
   inTx,
@@ -178,6 +181,7 @@ async function gherkinsCancel(billId: string): Promise<Command> {
   const lineId = await lineIdOf(venue, billId, 4);
   return inTx(venue, async (tx) => ({
     orderId: billId,
+    expectedEdit: await readBillEditState(tx, billId),
     submissionId: randomUUID(),
     expectedRevision: await revisionOf(tx, billId),
     lineId,

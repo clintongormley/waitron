@@ -1,3 +1,6 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
@@ -33,7 +36,7 @@ import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { eq } from "drizzle-orm";
 import { republishMenus } from "./testing/publish-menu.js";
 import { mountManagementApi } from "./management-api.js";
-import { saveDraft, readDrafts, submitDraft } from "./order-drafts.js";
+import { readDrafts, submitDraft } from "./order-drafts.js";
 import { listOrderGroups } from "./order-groups.js";
 import {
   fireCourse,
@@ -41,7 +44,6 @@ import {
   readTabLines,
   listExpoQueue,
   advanceTicketItem,
-  addTabRound,
 } from "./working-order.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
@@ -64,6 +66,7 @@ it("keeps retained draft, group, course and ready station history through manage
     const createdCourse = await createCourse(tx, v.cfg, {
       name: "Recorded dessert",
       displayOrder: 3,
+      heldUntilFired: true,
     });
     const station = {
       ...(await createStation(tx, v.cfg, { name: "Recorded pastry" })),
@@ -130,6 +133,7 @@ it("keeps retained draft, group, course and ready station history through manage
     app.request(`/management-api/${kind}/${id}`, { method: "DELETE", headers: { cookie } });
   const draft = await inTx(v, (tx) =>
     saveDraft(tx, v.cfg, seated.partyId, OPERATOR, {
+      billId: seated.tabId,
       draftId: null,
       revision: 0,
       lines: [
@@ -159,14 +163,20 @@ it("keeps retained draft, group, course and ready station history through manage
   expect(retained!.lines).toEqual([
     {
       ...draft.lines[0],
-      course: { id: course.id, name: course.name, displayOrder: course.displayOrder },
+      course: {
+        id: course.id,
+        name: course.name,
+        displayOrder: course.displayOrder,
+        heldUntilFired: true,
+      },
     },
   ]);
-  const submitted = await inTx(v, (tx) =>
+  const submitted = await inTx(v, async (tx) =>
     submitDraft(tx, v.cfg, seated.partyId, draft.id, {
       operatorId: OPERATOR,
       submissionId: randomUUID(),
       expectedPartyRevision: seated.revision,
+      expectedEdit: await expectedDraftEditForTest(v.db, draft),
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lines.map((line) => line.id), release: "hold" }],
     }),

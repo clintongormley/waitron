@@ -1,4 +1,5 @@
 /** Current orders fixtures shared by the table screen's Current orders suites. */
+import { grossOf } from "@waitron/shared";
 import type {
   CurrentOrderGroup,
   CurrentOrderRow,
@@ -17,9 +18,14 @@ export function row(
   over: Partial<CurrentOrderRow> = {},
 ) {
   return {
+    billStatus: "open",
+    netAmount: grossOf("2.00", quantity),
+    readyAt: null,
+    firedAt: fired,
     lineId,
     workingOrderId: "wo-4",
     lineNo: 1,
+    courseId: null,
     name,
     quantity,
     unitPrecision: 0,
@@ -63,7 +69,17 @@ export const pulpo = row("l-pulpo", "Pulpo", "1.000", { workingOrderId: "wo-chec
 export const flan = row("l-flan", "Flan", "2.000", {
   released: false,
   kitchen: { stationId: null, movable: false, state: "queued", firedAt: null, awayAt: null },
-  extras: [{ lineId: "l-cream", name: "Cream", quantity: "2.000" }],
+  netAmount: "6.00",
+  extras: [
+    {
+      lineId: "l-cream",
+      name: "Cream",
+      quantity: "2.000",
+      netAmount: "2.00",
+      unitPriceGross: "1.00",
+      priceQuantity: "1.000",
+    },
+  ],
 });
 export const tarta = row("l-tarta", "Tarta", "1.000", {
   released: false,
@@ -86,6 +102,8 @@ export function currentGroup(
   return {
     id,
     position,
+    displayNumber: position,
+    numberPartyId: "v1",
     state,
     firedAt: state === "fired" ? fired : null,
     remindAt: null,
@@ -98,8 +116,11 @@ export function currentGroup(
 
 export function orderGroup(id: string, position: number, state: "held" | "fired"): OrderGroup {
   return {
+    courseIds: [],
     id,
     position,
+    displayNumber: position,
+    numberPartyId: "v1",
     state,
     firedAt: state === "fired" ? fired : null,
     remindAt: null,
@@ -117,6 +138,9 @@ export const groups = [
 
 export function current(over: Partial<CurrentOrders> = {}): CurrentOrders {
   return {
+    hasGroups: true,
+    nextDisplayNumber: 5,
+    retainedCourses: [],
     revision: 7,
     reminder: { groupId: "g3", dueAt: "2026-09-28T20:15:00.000Z" },
     groups: [

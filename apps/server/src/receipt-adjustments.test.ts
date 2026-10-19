@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -28,8 +30,8 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
-import { payWorkingOrder, readSettledTicket } from "./till-sale.js";
-import { readStoredOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { payWorkingOrder, readSettledTicket } from "./testing/whole-payment-fixture.js";
+import { readStoredOrder } from "./working-order.js";
 import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
 
@@ -60,6 +62,7 @@ async function adjust(billId: string, ask: Ask): Promise<void> {
       tx,
       venue.cfg,
       {
+        expectedEdit: await readBillEditState(tx, billId),
         orderId: billId,
         submissionId: randomUUID(),
         expectedRevision: order!.revision,

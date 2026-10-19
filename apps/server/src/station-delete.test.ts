@@ -1,3 +1,5 @@
+import { updateHeldOrder } from "./testing/order-writer-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -34,9 +36,8 @@ import {
   OPERATOR,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { listStationQueue, updateHeldOrder } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
 import { readRestOfOrder } from "./rest-of-order.js";
-import { saveDraft } from "./order-drafts.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const at = "2026-10-10T12:00:00.000Z";
@@ -282,9 +283,10 @@ describe("permanent station deletion", () => {
     const { v, id } = await fixture();
     const first = await food(v, id, { ticket: false });
     const ready = await food(v, id, { state: "ready" });
-    const { partyId } = await seat(v, await v.table("Draft"));
+    const { partyId, tabId } = await seat(v, await v.table("Draft"));
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        billId: tabId,
         draftId: null,
         revision: 0,
         lines: [
@@ -383,6 +385,7 @@ describe("permanent station deletion", () => {
     await expect(
       inTx(v, (tx) =>
         saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId: draft.billId,
           draftId: draft.id,
           revision: draft.revision,
           lines: [],

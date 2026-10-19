@@ -1,4 +1,11 @@
+import type { FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
+import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
+export type {
+  CancellationContext,
+  CancellationRead,
+  CancelItemRequest,
+} from "./line-cancel-types.js";
 import type {
   RefundableTender,
   TenderRefundRequest,
@@ -211,6 +218,7 @@ export interface TillCourse {
   id: string;
   name: string;
   displayOrder: number;
+  heldUntilFired: boolean;
 }
 
 /**
@@ -558,6 +566,9 @@ export interface GroupLine extends SaleLine {
 export interface OrderGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
@@ -566,11 +577,11 @@ export interface OrderGroup {
   /** Present only when every fired kitchen item of the group has left the pass. */
   away?: true;
   lineIds: string[];
+  courseIds: string[];
   summary: string;
 }
 
-/** The party's first held group, and when staff are reminded to fire it; `dueAt` is null while a
- * fired group before it has a dish line not fully served, or when nothing dates it. */
+/** When to remind staff to fire the next held group with active dishes. */
 export interface ReleaseReminder {
   groupId: string;
   dueAt: string | null;
@@ -593,27 +604,45 @@ export interface LineNutrition {
 }
 
 export interface CurrentOrderRow {
+  billStatus: WorkingOrderStatus;
+  /** Stored dish and extras total, after adjustments. */
+  netAmount: string;
+  readyAt: string | null;
+  firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
   lineNo: number;
+  courseId: string | null;
   /** The staff name. */
   name: string;
   quantity: string;
+  /** Part of the billed quantity cancelled without removing its charge. */
+  cancelledQuantity?: string;
   /** Decimal places the line's unit takes (0 = sold by the unit). */
   unitPrecision: number | null;
   servedQuantity: string;
-  /** Set once the whole quantity is served. */
   servedAt: string | null;
   released: boolean;
   kitchen: CurrentOrderKitchen | null;
   note: string | null;
-  extras: { lineId: string; name: string; quantity: string }[];
+  extras: {
+    lineId: string;
+    name: string;
+    quantity: string;
+    netAmount: string;
+    unitPriceGross: string;
+    priceQuantity: string;
+    cancelledQuantity?: string;
+  }[];
 }
 
 export interface CurrentOrderGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
@@ -627,6 +656,9 @@ export interface CurrentOrderGroup {
 /** What the party has ordered and what is known of it, groups in sequence. */
 export interface CurrentOrders {
   revision: number;
+  hasGroups: boolean;
+  nextDisplayNumber: number;
+  retainedCourses: TillCourse[];
   reminder: ReleaseReminder | null;
   groups: CurrentOrderGroup[];
   /** Dish rows in no group. */
@@ -656,7 +688,13 @@ export interface BillRequestCommand extends GroupCommand {
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
  * added to the existing held group `joinGroupId`. */
 export interface GroupSubmission extends GroupCommand {
-  groups: { lines: GroupLine[]; release: GroupRelease }[];
+  expectedEdit: BillEditExpected;
+  groups: {
+    lines: GroupLine[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   joinGroupId?: string;
 }
 
@@ -668,13 +706,9 @@ export interface SubmittedGroups {
   groups: OrderGroup[];
 }
 
-/**
- * One line of a person's unsent order on a party (`apps/server/src/order-drafts.ts`). A draft line
- * carries offer ids and no product name or price. Its course metadata is read-only. Every save gives
- * every line a NEW id, so an id names a line of
- * one revision only. `unavailable` is worked out by the server on each read, never stored.
- */
-export interface DraftLine {
+export interface FreshDraftLine {
+  sourceLineId: null;
+  source: null;
   id: string;
   menuItemId: string;
   variantId: string | null;
@@ -693,11 +727,58 @@ export interface DraftLine {
   makeAt?: string | null;
   /** Never merged with another line, either way; Split quantity's rows carry it. */
   noMerge: boolean;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
   unavailable: boolean;
 }
 
-/** A draft line as the till saves it. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
+export interface RecalledDraftLine {
+  id: string;
+  sourceLineId: string;
+  source: { line: TabLine; extras: TabLine[]; netAmount: string };
+  quantity: string;
+  note: string | null;
+  courseId: string | null;
+  course?: TillCourse;
+  makeAt: string | null;
+  noMerge: true;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
+  unavailable: false;
+  menuItemId?: never;
+  variantId?: never;
+  menuVersionId?: never;
+  options?: never;
+  extras?: never;
+}
+
+export type DraftLine = FreshDraftLine | RecalledDraftLine;
+export type FreshDraftLineInput = Omit<
+  FreshDraftLine,
+  "id" | "unavailable" | "course" | "source" | "sourceLineId"
+> & { id?: string; sourceLineId?: null };
+export type RecalledDraftLineInput = Pick<
+  RecalledDraftLine,
+  | "id"
+  | "sourceLineId"
+  | "quantity"
+  | "note"
+  | "courseId"
+  | "makeAt"
+  | "slot"
+  | "joinGroupId"
+  | "afterGroupId"
+> & {
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+  menuItemId?: never;
+  variantId?: never;
+  menuVersionId?: never;
+  noMerge?: true;
+};
+export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
 
 export interface DeadEndAnswer {
   sends: boolean;
@@ -713,10 +794,11 @@ export interface DeadEndAnswer {
   revision?: number;
 }
 
-/** One person's unsent order on a party, at the revision a save or submit sends back. */
+/** A bill's saved unsent dishes at the revision last read or saved. */
 export interface Draft {
   id: string;
   partyId: string;
+  billId: string;
   ownerId: string;
   ownerName: string;
   revision: number;
@@ -728,27 +810,83 @@ export interface Draft {
 
 /** A save of the signed-in person's draft: `draftId` null and `revision` 0 start a new one. */
 export interface DraftSave {
+  billId: string;
   draftId: string | null;
   revision: number;
+  expectedEdit: BillEditExpected;
   lines: DraftLineInput[];
+}
+
+export interface BillEditState {
+  billId: string;
+  editorId: string | null;
+  editorName: string | null;
+  editorVersion: number;
+  draftId: string | null;
+  draftRevision: number | null;
+}
+
+export type BillEditExpected = Pick<
+  BillEditState,
+  "billId" | "editorVersion" | "draftId" | "draftRevision"
+>;
+
+export interface BillDraftSnapshot {
+  draft: Draft | null;
+  edit: BillEditState;
+}
+
+export interface PartyDraftSnapshot {
+  drafts: Draft[];
+  billEdits: BillEditState[];
+}
+
+export interface DraftTakeover {
+  revision: number;
+  expectedEdit: BillEditExpected;
+  submissionId: string;
+}
+
+export interface DraftDiscard {
+  submissionId: string;
+  revision: number;
+  expectedRevision: number;
+  expectedEdit: BillEditExpected;
+  reasonId?: string;
+  note?: string | null;
+  approver?: { personId: string; pin: string };
+}
+
+export interface DiscardedDraft {
+  draftId: string;
+  billId: string;
+  revision: number;
+  adjustmentIds: string[];
+  party: BillParty;
 }
 
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
+  expectedEdit: BillEditExpected;
   draftRevision: number;
-  groups: { lineIds: string[]; release: GroupRelease }[];
+  groups: {
+    lineIds: string[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   joinGroupId?: string;
-  /** The party's bill to put the lines on; the server refuses one that is not an open bill of the
-   * party. Absent, they go on the party's main bill, which the server makes if there is none. */
   billId?: string;
 }
 
 /** The groups placed, and the draft as it is left: null once every line was sent. */
-export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
+export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 
-/** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
+/** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
+  billId: string;
+  billNumber: number;
   ownerName: string;
   lineCount: number;
 }
@@ -779,6 +917,8 @@ export interface AdjustmentReason {
  * extra; null is a discount on the whole bill. `quantity` absent covers the whole line; an extra is
  * taken only whole. */
 export interface AdjustmentAsk {
+  expectedEdit: BillEditExpected | null;
+  sourceDraftId?: string;
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
   lineId: string | null;
@@ -944,6 +1084,7 @@ export type AllocationChoice = "full_with_tip" | "use_pool";
 
 /** What a bill payment asks for, before the operator has seen its allocation. */
 export interface BillPaymentAsk {
+  expectedEdit: BillEditExpected | null;
   kind: "items" | "contribution" | "share";
   /** `items` only: parent lines; a line with no `quantity` is paid whole. */
   lines?: { lineNo: number; quantity?: string }[];
@@ -1025,6 +1166,10 @@ export interface BillPaymentView {
   refunds: BillRefundView[];
 }
 
+export interface BillUnsent {
+  billId: string;
+}
+
 export interface BillBalance {
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
@@ -1069,6 +1214,7 @@ export interface BillRefundResult {
 
 /** `POST /api/parties/:id/unpaid-departure`: the party's guests left without paying. */
 export interface UnpaidDepartureRequest {
+  expectedEdits: BillEditExpected[];
   expectedPartyRevision: number;
   reason: string;
   override?: { personId: string; pin: string };
@@ -1334,6 +1480,9 @@ export interface QueueParty {
 export interface QueueGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
 }
 
@@ -1711,6 +1860,9 @@ export interface ExpoCourse {
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;
+  displayNumber: number | null;
+  numberPartyId: string | null;
+  numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
   away: boolean;
@@ -1863,8 +2015,7 @@ export interface TableParty {
   outstanding: string;
   billCount: number;
   tableIds: string[];
-  /** Every open draft on the party that holds a line, oldest first; `ownerName` is "" for an
-   * unknown person. */
+  /** Nonempty saved outboxes in the bill list’s order; `ownerName` is "" for an unknown person. */
   unsentDrafts: UnsentDraft[];
   /** Null when the venue has reminders off, no group is held, or the party is not open. */
   reminder: ReleaseReminder | null;
@@ -1914,6 +2065,7 @@ export interface JoinMerge {
  * its revision, or null for a table read free; both are left out for a table of the party itself.
  */
 export interface TableActionRevisions {
+  expectedEdits: BillEditExpected[];
   expectedPartyRevision: number;
   otherPartyId?: string | null;
   expectedOtherPartyRevision?: number;
@@ -1943,6 +2095,7 @@ export interface MoveBillRevisions
     Omit<BillRevisions, "partyId">,
     Pick<TableActionRevisions, "otherPartyId" | "expectedOtherPartyRevision"> {
   partyId?: string | null;
+  expectedEdits: BillEditExpected[];
 }
 
 /** A move's answer: the party the bill is in now (null at the counter), and the bill it ended up
@@ -2079,8 +2232,7 @@ export interface TabLines {
 
 /**
  * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
- * `unitPriceGross` is the gross unit price LOCKED at add-time. `servedAt` is the pre-fiscal served
- * marker (`null` ⇒ still to serve).
+ * `unitPriceGross` is the gross unit price LOCKED at add-time.
  */
 export interface TabLine {
   nutrition?: LineNutrition;
@@ -2104,6 +2256,8 @@ export interface TabLine {
    * on this wire that tells the two apart. An absent value reads as a dish. */
   parentLineNo?: number | null;
   quantity: string;
+  /** Part of the billed quantity cancelled without removing its charge. */
+  cancelledQuantity?: string;
   /** Physical amount represented by one priced portion, frozen when the line was added. */
   priceQuantity?: string;
   /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit).
@@ -2125,9 +2279,7 @@ export interface TabLine {
    * ticket item. A following extra has none; a split-off extra has its own. */
   firedAt: string | null;
   /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A following extra
-   * has none; a split-off extra has its own. A parent line can lack one too. A
-   * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
-   * (`editSentLines`); "preparing"/"ready" is cancel-only. */
+   * has none; a split-off extra has its own. A parent line can lack one too. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved in from another party's bill or from a bill with no party. */
@@ -2611,14 +2763,22 @@ export class TillApi {
     lines: SaleLine[],
     tender: Tender,
     workingOrderId: string,
-    zoneId?: string,
-    invoice?: {
-      invoiceType: "F1" | "F2";
-      recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
-    },
-    receiptLanguage?: string,
-    kitchenNote?: string | null,
-    guests?: number | null,
+    zoneId: string | undefined,
+    invoice:
+      | {
+          invoiceType: "F1" | "F2";
+          recipient: {
+            taxId: string;
+            legalName: string;
+            address: string;
+            countryCode: string;
+          } | null;
+        }
+      | undefined,
+    receiptLanguage: string | undefined,
+    kitchenNote: string | null | undefined,
+    guests: number | null | undefined,
+    expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2629,6 +2789,7 @@ export class TillApi {
       receiptLanguage,
       kitchenNote,
       ...(guests === undefined ? {} : { guests }),
+      expectedEdit,
     });
   }
 
@@ -2640,6 +2801,7 @@ export class TillApi {
    * decline is data, not a throw — see {@link PayOutcome}.
    */
   pay(req: {
+    expectedEdit: BillEditExpected | null;
     id: string;
     lines: SaleLine[];
     invoiceType?: "F1" | "F2";
@@ -2863,6 +3025,7 @@ export class TillApi {
   setOrderInvoiceChoice(
     id: string,
     choice: {
+      expectedEdit: BillEditExpected | null;
       revision: number;
       invoiceType: "F1" | "F2";
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
@@ -2880,7 +3043,7 @@ export class TillApi {
    * `null` goes back to the location's own → `PUT /api/working-orders/:id/receipt-language`. */
   setOrderReceiptLanguage(
     id: string,
-    choice: { revision: number; language: string | null },
+    choice: { revision: number; language: string | null; expectedEdit: BillEditExpected | null },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(
       `/api/working-orders/${id}/receipt-language`,
@@ -2927,14 +3090,19 @@ export class TillApi {
    */
   updateWorkingOrder(
     id: string,
-    req: { lines: SaleLine[]; label?: string; revision: number },
+    req: {
+      lines: SaleLine[];
+      label?: string;
+      revision: number;
+      expectedEdit: BillEditExpected | null;
+    },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(`/api/working-orders/${id}`, "PUT", req);
   }
 
   setWorkingOrderLabel(
     id: string,
-    req: { label: string; revision: number },
+    req: { label: string; revision: number; expectedEdit: BillEditExpected | null },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(`/api/working-orders/${id}/label`, "PUT", req);
   }
@@ -2950,11 +3118,12 @@ export class TillApi {
     lineNo: number,
     patch: OrderLinePatch,
     revision: number,
+    expectedEdit: BillEditExpected | null,
   ): Promise<{ revision: number; party: BillParty }> {
     return this.#request<{ revision: number; party: BillParty }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
-      { ...patch, revision },
+      { ...patch, revision, expectedEdit },
     );
   }
 
@@ -2965,8 +3134,8 @@ export class TillApi {
    * otherwise `working_order.not_open` for a non-open or unknown id. So a non-open order that
    * still holds money answers `bill.payments_received`.
    */
-  async abandonWorkingOrder(id: string): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${id}`, "DELETE");
+  async abandonWorkingOrder(id: string, expectedEdit: BillEditExpected | null): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}`, "DELETE", { expectedEdit });
   }
 
   /**
@@ -2974,8 +3143,10 @@ export class TillApi {
    * composition and opens its amendment log. A non-open or absent id rejects with
    * `working_order.not_open`.
    */
-  placeOrder(id: string): Promise<PlaceOrderResult> {
-    return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST");
+  placeOrder(id: string, expectedEdit: BillEditExpected | null): Promise<PlaceOrderResult> {
+    return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST", {
+      expectedEdit,
+    });
   }
 
   /**
@@ -2987,13 +3158,15 @@ export class TillApi {
   collectOrder(
     id: string,
     tender: Tender,
-    receiptLanguage?: string,
-    guests?: number | null,
+    receiptLanguage: string | undefined,
+    guests: number | null | undefined,
+    expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
       tender,
       receiptLanguage,
       ...(guests === undefined ? {} : { guests }),
+      expectedEdit,
     });
   }
 
@@ -3062,7 +3235,7 @@ export class TillApi {
 
   moveDishStation(
     orderId: string,
-    body: StationMoveBody,
+    body: StationMoveBody & { expectedEdit: BillEditExpected | null },
     options: ReadOptions = {},
   ): Promise<StationMoveAnswer> {
     return this.#request(
@@ -3491,14 +3664,23 @@ export class TillApi {
     });
   }
 
-  /**
-   * Finish a party's table → `POST /api/parties/:partyId/finish`. Rejects `party.bill_outstanding`
-   * while a bill is unpaid, `bill.payments_received` while an open bill with no items left still
-   * holds money, `party.not_open`, or `party.out_of_date` when the party changed since
-   * `expectedPartyRevision` was read.
-   */
-  finishTable(partyId: string, expectedPartyRevision: number): Promise<{ state: "closed" }> {
-    return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
+  finishTable(
+    partyId: string,
+    expectedPartyRevision: number,
+    expectedEdits: BillEditExpected[],
+    resolution?: FinishTableResolution,
+    options: ReadOptions = {},
+  ): Promise<{ state: "closed" }> {
+    return this.#request(
+      `/api/parties/${partyId}/finish`,
+      "POST",
+      {
+        expectedPartyRevision,
+        expectedEdits,
+        ...resolution,
+      },
+      options.signal,
+    );
   }
 
   /**
@@ -3556,7 +3738,10 @@ export class TillApi {
     );
   }
 
-  getFindBill(workingOrderId: string, options: ReadOptions = {}): Promise<BillRow> {
+  getFindBill(
+    workingOrderId: string,
+    options: ReadOptions = {},
+  ): Promise<BillRow & { edit: BillEditState | null }> {
     return this.#request(
       `/api/bills/${encodeURIComponent(workingOrderId)}`,
       "GET",
@@ -3659,13 +3844,6 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups`, "GET");
   }
 
-  /**
-   * Put groups of lines on a party's main bill → `POST /api/parties/:partyId/groups`, each released
-   * now or held. A party with no main bill, as after its last one was paid, presented or abandoned,
-   * gets a new one: the answer names the bill the lines landed on. A repeat with the same submission id answers as the first.
-   * Rejects `party.out_of_date`, `party.not_open`, `submission.id_reused`, `group.not_held` and
-   * `group.not_found` as `{ code }`.
-   */
   submitGroups(
     partyId: string,
     submission: GroupSubmission,
@@ -3674,25 +3852,32 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups`, "POST", submission, options.signal);
   }
 
-  /** Every open draft on a party, whoever holds it, oldest first → `GET /api/parties/:partyId/drafts`. */
-  async listDrafts(partyId: string, options: ReadOptions = {}): Promise<Draft[]> {
-    const { drafts } = await this.#request<{ drafts: Draft[] }>(
-      `/api/parties/${partyId}/drafts`,
-      "GET",
-      undefined,
-      options.signal,
-    );
-    return drafts;
+  /** Saved outboxes and every bill's editing state, read together. */
+  listDrafts(partyId: string, options: ReadOptions = {}): Promise<PartyDraftSnapshot> {
+    return this.#request(`/api/parties/${partyId}/drafts`, "GET", undefined, options.signal);
   }
 
-  /**
-   * Replace every line of the signed-in person's draft → `PUT /api/parties/:partyId/drafts`. The
-   * server merges lines that order the same thing and answers the draft as saved. Rejects, among
-   * others, `draft.out_of_date` (with the draft's `draftId` and `revision`), `draft.taken_over` (with
-   * `ownerId` and `ownerName`), `draft.not_found`, `draft.already_submitted` and `party.not_open`.
-   */
-  saveDraft(partyId: string, save: DraftSave, options: ReadOptions = {}): Promise<Draft> {
+  /** Replace this bill's outbox at its observed editing state. */
+  saveDraft(
+    partyId: string,
+    save: DraftSave,
+    options: ReadOptions = {},
+  ): Promise<BillDraftSnapshot> {
     return this.#request(`/api/parties/${partyId}/drafts`, "PUT", save, options.signal);
+  }
+
+  discardDraft(
+    partyId: string,
+    draftId: string,
+    command: DraftDiscard,
+    options: ReadOptions = {},
+  ): Promise<DiscardedDraft> {
+    return this.#request(
+      `/api/parties/${partyId}/drafts/${draftId}/discard`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   askDraftDeadEnds(
@@ -3733,28 +3918,45 @@ export class TillApi {
     workingOrderId: string,
     revision: number,
     lines: Record<string, string>,
+    expectedEdit: BillEditExpected | null,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/working-orders/${workingOrderId}/make-at`, "PUT", {
       revision,
       lines,
+      expectedEdit,
     });
   }
 
-  /**
-   * Make another person's draft the signed-in person's →
-   * `POST /api/parties/:partyId/drafts/:draftId/take-over`. When they already hold a draft on the
-   * party, the taken lines join it and the answer is THAT draft, under its own id.
-   */
+  splitDraft(
+    partyId: string,
+    draftId: string,
+    command: GroupCommand & { expectedEdit: BillEditExpected; lineIds: string[] },
+    options: ReadOptions = {},
+  ): Promise<{
+    billId: string;
+    revision: number;
+    source: BillDraftSnapshot;
+    destination: BillDraftSnapshot;
+  }> {
+    return this.#request(
+      `/api/parties/${partyId}/drafts/${draftId}/split`,
+      "POST",
+      command,
+      options.signal,
+    );
+  }
+
+  /** Transfer the shown bill's saved outbox in place, with replay under the same submission id. */
   takeOverDraft(
     partyId: string,
     draftId: string,
-    revision: number,
+    command: DraftTakeover,
     options: ReadOptions = {},
-  ): Promise<Draft> {
+  ): Promise<BillDraftSnapshot> {
     return this.#request(
       `/api/parties/${partyId}/drafts/${draftId}/take-over`,
       "POST",
-      { revision },
+      command,
       options.signal,
     );
   }
@@ -3844,7 +4046,7 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/served`, "POST", command);
   }
 
-  /** Put off the release reminder of the group waiting (the party's first held group) →
+  /** Put off the release reminder of the group waiting →
    * `POST /api/parties/:partyId/groups/:groupId/snooze`: it becomes due `minutes` from now. A
    * fired group rejects `group.not_held`, and a held group other than the one waiting
    * `group.not_waiting`. */
@@ -3905,15 +4107,29 @@ export class TillApi {
     });
   }
 
-  splitHeldLineIntoUnits(
+  fireHeldLine(
     partyId: string,
     lineId: string,
     command: GroupCommand,
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/split-line`, "POST", {
+    return this.#request(`/api/parties/${partyId}/groups/fire-line`, "POST", {
       ...command,
       lineId,
     });
+  }
+
+  splitHeldLineIntoUnits(
+    partyId: string,
+    lineId: string,
+    command: GroupCommand & { expectedEdit: BillEditExpected },
+    options: ReadOptions = {},
+  ): Promise<{ revision: number }> {
+    return this.#request(
+      `/api/parties/${partyId}/groups/split-line`,
+      "POST",
+      { ...command, lineId },
+      options.signal,
+    );
   }
 
   /** Move lines, or part of one, between held groups, or into a new held group at the end →
@@ -3922,7 +4138,7 @@ export class TillApi {
     partyId: string,
     moves: { lineId: string; quantity: string }[],
     target: { groupId: string } | "new",
-    command: GroupCommand,
+    command: GroupCommand & { expectedEdits: BillEditExpected[] },
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/move`, "POST", {
       ...command,
@@ -3950,9 +4166,15 @@ export class TillApi {
    * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
    * `tab.line_not_found`, or `ticket.already_fired`.
    */
-  async setLineCourse(orderId: string, lineNo: number, courseId: string | null): Promise<void> {
+  async setLineCourse(
+    orderId: string,
+    lineNo: number,
+    courseId: string | null,
+    expectedEdit: BillEditExpected | null,
+  ): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/course`, "PATCH", {
       courseId,
+      expectedEdit,
     });
   }
 
@@ -3961,20 +4183,67 @@ export class TillApi {
    * NON-FISCAL; idempotent — an unknown or already-fired line matches nothing. Rejects `tab.not_open`,
    * and `group.line_held` for a named line in a held group, which only firing its group releases.
    */
-  async sendLines(orderId: string, lineNos: number[]): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });
+  async sendLines(
+    orderId: string,
+    lineNos: number[],
+    expectedEdit: BillEditExpected | null,
+  ): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", {
+      lineNos,
+      expectedEdit,
+    });
   }
 
-  /**
-   * UN-send not-yet-started lines of an open tab → `POST /api/working-orders/:orderId/lines/recall`, the
-   * inverse of {@link sendLines}. NON-FISCAL; a previously-fired line gets a RECALLED correction slip.
-   * Rejects `tab.not_open`, `tab.line_not_found`, `ticket.already_started` (the kitchen has started
-   * it), or `ticket.already_fired` (the venue does not allow changes to sent items and a line with a
-   * ticket item has been sent — a recalled line still counts as sent); a held line never sent changes
-   * nothing but the order's revision.
-   */
-  async recallLines(orderId: string, lineNos: number[]): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
+  async recallLines(
+    orderId: string,
+    lineNos: number[],
+    expectedEdit: BillEditExpected | null,
+  ): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", {
+      lineNos,
+      expectedEdit,
+    });
+  }
+
+  getCancellation(
+    partyId: string,
+    lineId: string,
+    options: ReadOptions = {},
+  ): Promise<CancellationRead> {
+    return this.#request(
+      `/api/parties/${partyId}/lines/${lineId}/cancellation`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  cancelItem(
+    partyId: string,
+    lineId: string,
+    command: CancelItemRequest,
+    options: ReadOptions = {},
+  ): Promise<{ revision: number }> {
+    return this.#request(
+      `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
+      "POST",
+      command,
+      options.signal,
+    );
+  }
+
+  recallToDraft(
+    partyId: string,
+    lineId: string,
+    command: GroupCommand & { expectedEdit: BillEditExpected },
+    options: ReadOptions = {},
+  ): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
+    return this.#request(
+      `/api/parties/${partyId}/lines/${lineId}/recall`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   /** The active reasons a cancel, a give-away or a discount can be made under →
@@ -4299,6 +4568,7 @@ export class TillApi {
     tableId: string,
     billId: string | null,
     expectedPartyRevision: number,
+    expectedEdits: BillEditExpected[],
     guests?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
@@ -4309,6 +4579,7 @@ export class TillApi {
       tableId,
       billId,
       expectedPartyRevision,
+      expectedEdits,
       ...(guests === undefined ? {} : { guests }),
     });
   }
@@ -4346,7 +4617,7 @@ export class TillApi {
   splitBill(
     billId: string,
     transfers: readonly TabTransfer[],
-    revisions: BillRevisions,
+    revisions: BillRevisions & { expectedEdit: BillEditExpected },
   ): Promise<{ billId: string }> {
     return this.#request(`/api/bills/${billId}/split`, "POST", { transfers, ...revisions });
   }
@@ -4359,7 +4630,7 @@ export class TillApi {
   async mergeBills(
     intoBillId: string,
     fromBillId: string,
-    revisions: BillRevisions,
+    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
   ): Promise<void> {
     await this.#request<void>(`/api/bills/${intoBillId}/merge`, "POST", {
       fromBillId,
@@ -4376,7 +4647,7 @@ export class TillApi {
     fromBillId: string,
     toBillId: string,
     transfers: readonly TabTransfer[],
-    revisions: BillRevisions,
+    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
   ): Promise<void> {
     await this.#request<void>(`/api/bills/${fromBillId}/transfer`, "POST", {
       toBillId,

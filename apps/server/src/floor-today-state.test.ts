@@ -19,7 +19,7 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpDue, ensureToday, placeSpareToday, takeOffToday } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import {
   giveKeptSize,

@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_courses` ADD `held_until_fired` integer DEFAULT true NOT NULL;

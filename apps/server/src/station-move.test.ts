@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { updateOrderLine, recallLines, sendLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -34,9 +36,10 @@ import {
   writePrintHeldWork,
 } from "@waitron/venue-service";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
+import { fireGroup, readCurrentOrders } from "./order-groups.js";
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {
@@ -51,18 +54,15 @@ import { routeProductTo } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { readStationQueueMoves } from "./station-queue-moves.js";
-import { moveDishesToStation, stillMovable } from "./station-move.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
+import { stillMovable } from "./station-move.js";
 import { withStationDishes } from "./station-closing.js";
 import {
-  addTabRound,
   carveOffLines,
   createOpenOrder,
   listStationQueue,
   readTabLines,
-  updateOrderLine,
   fireCourse,
-  recallLines,
-  sendLines,
 } from "./working-order.js";
 
 let venue: PartyVenue;

@@ -1,5 +1,13 @@
 # Service, ordering and billing workflows
 
+> **2026-10-19, A773-1:** the [one-editor-per-bill design](2026-10-17-a773-one-editor-design.md)
+> replaces this document's per-person drafts and takeover/merge rules. The
+> [table-panel design](2026-10-16-a773-courses-and-groups-design.md#3-the-table-screen)
+> replaces the draft actions, later-addition placement and sent-line controls; Recall returns a
+> table dish to New order. Those earlier rules below remain a historical record. A773-1 is still
+> unlanded; its revised cancellation/Finish integration and final validation remain open.
+> Pass release, station settings and retiring Away/Done belong to A773-2.
+
 **Status:** Revision 2, 2026-09-26, **approved by the owner** the same day. Revision 1 (2026-09-20)
 recorded the product decisions from the workflow discussion. This revision folds in:
 

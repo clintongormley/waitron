@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WtTextarea } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillProduct } from "../api/client.js";
 import {
@@ -11,6 +12,7 @@ import {
   jamon,
   menuOf,
   mount,
+  openDraftLine,
   rows,
   store,
   tap,
@@ -140,8 +142,8 @@ describe("till-table-order-screen: one view of the draft", () => {
       products: byCourse,
       menus: menuOf(byCourse),
       courses: [
-        { id: "drinks", name: "Drinks", displayOrder: 0 },
-        { id: "desserts", name: "Desserts", displayOrder: 1 },
+        { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+        { id: "desserts", name: "Desserts", displayOrder: 1, heldUntilFired: true },
       ],
     });
     await tap(el, "Beer");
@@ -158,7 +160,7 @@ describe("till-table-order-screen: one view of the draft", () => {
     );
     const first = baskets[0]!.shadowRoot!;
     expect(first.querySelector(".step-inc")).not.toBeNull();
-    expect(first.querySelector(".note-toggle")).not.toBeNull();
+    expect(first.querySelector('[data-line-detail="0"]')).not.toBeNull();
     expect(first.querySelector(".remove")).not.toBeNull();
 
     first.querySelector<HTMLElement>(".step-inc")!.click();
@@ -211,8 +213,8 @@ describe("till-table-order-screen: a note being written while other lines move",
   };
   const byCourse = [{ ...flan, courseId: "desserts" }, cola, { ...beer, courseId: "drinks" }];
   const courses = [
-    { id: "drinks", name: "Drinks", displayOrder: 0 },
-    { id: "desserts", name: "Desserts", displayOrder: 1 },
+    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+    { id: "desserts", name: "Desserts", displayOrder: 1, heldUntilFired: true },
   ];
 
   /** Flan, Cola, Beer, and Cola's note editor open, holding "no ice". */
@@ -223,41 +225,37 @@ describe("till-table-order-screen: a note being written while other lines move",
     await tap(el, "Beer");
     store(el).setLineExtras(1, { note: "no ice" });
     await el.updateComplete;
-    noteButton(el, "Cola").click();
+    await openDraftLine(el, 1);
     await settle(el);
     expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
     return el;
   }
 
-  function noteButton(el: TillTableOrderScreen, dish: string): HTMLElement {
-    return [...el.shadowRoot!.querySelectorAll("till-basket")]
-      .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".note-toggle")])
-      .find((button) => button.getAttribute("aria-label")!.endsWith(dish))!;
-  }
-
-  /** The dish whose row the open note editor sits under, and what the editor holds. */
   function openNote(el: TillTableOrderScreen): { dish: string; note: string } | null {
     for (const basket of el.shadowRoot!.querySelectorAll("till-basket")) {
-      const editor = basket.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]');
-      if (editor === null) continue;
-      const open = basket.shadowRoot!.querySelector('.note-toggle[aria-expanded="true"]')!;
-      return {
-        dish: open.getAttribute("aria-label")!.split(" ").at(-1)!,
-        note: editor.value,
-      };
+      const picker = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
+      if (picker === null) continue;
+      const dialog = picker.shadowRoot!.querySelector("wt-modal");
+      const editor = picker.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]');
+      if (!dialog?.open || editor === null) continue;
+      return { dish: dialog.heading, note: editor.value };
     }
     return null;
   }
 
   async function settle(el: TillTableOrderScreen): Promise<void> {
+    await el.updateComplete;
     for (const basket of el.shadowRoot!.querySelectorAll<
       HTMLElement & { updateComplete: Promise<unknown> }
-    >("till-basket"))
+    >("till-basket")) {
       await basket.updateComplete;
+      await basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")
+        ?.updateComplete;
+    }
     await el.updateComplete;
   }
 
-  it("stays under its dish when a line in another section is removed", async () => {
+  it("keeps its dish and note when another section loses a line", async () => {
     const el = await writingColasNote();
     const flanRemove = [...el.shadowRoot!.querySelectorAll("till-basket")]
       .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".remove")])
@@ -270,13 +268,13 @@ describe("till-table-order-screen: a note being written while other lines move",
     expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
   });
 
-  it("stays open under its dish when the section above it empties", async () => {
+  it("keeps the line window open when the section above it empties", async () => {
     const { el } = await mount({ products: byCourse, menus: menuOf(byCourse), courses });
     await tap(el, "Flan");
     await tap(el, "Cola");
     store(el).setLineExtras(0, { note: "no cream" });
     await el.updateComplete;
-    noteButton(el, "Flan").click();
+    await openDraftLine(el, 0);
     await settle(el);
     expect(openNote(el)).toEqual({ dish: "Flan", note: "no cream" });
 
@@ -287,7 +285,7 @@ describe("till-table-order-screen: a note being written while other lines move",
     expect(openNote(el)).toEqual({ dish: "Flan", note: "no cream" });
   });
 
-  it("stays under its dish when the last-added bar's −1 takes an earlier line out", async () => {
+  it("keeps its dish and note when the last-added bar's −1 takes an earlier line out", async () => {
     const el = await writingColasNote();
     await tap(el, "Flan");
     await settle(el);

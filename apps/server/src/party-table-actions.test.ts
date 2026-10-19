@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -15,11 +16,12 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { splitBill } from "./bill-actions.js";
-import { readDrafts, saveDraft } from "./order-drafts.js";
-import { placeGroups } from "./order-groups.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
+import { readDrafts } from "./order-drafts.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { finishTable, readPartyBills, setPartyName } from "./parties.js";
+import { finishTable, readPartyBills, setPartyName } from "./testing/party-close-fixture.js";
 import { switchOff } from "./testing/live-table.js";
 import { listExpoQueue } from "./working-order.js";
 import {
@@ -28,7 +30,7 @@ import {
   moveGuests,
   splitTable,
   type TableActionOptions,
-} from "./table-actions.js";
+} from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   OPERATOR,
@@ -928,12 +930,13 @@ describe("drafts when parties combine", () => {
     const [m4, m7] = await tables("Borrador", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
-    for (const [partyId, dish] of [
-      [ana.partyId, "Flan"],
-      [luis.partyId, "Agua"],
+    for (const [partyId, billId, dish] of [
+      [ana.partyId, ana.tabId, "Flan"],
+      [luis.partyId, luis.tabId, "Agua"],
     ] as const) {
       await act((tx) =>
         saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId,
           draftId: null,
           revision: 0,
           lines: [{ menuItemId: v.item(dish), quantity: "1" }],

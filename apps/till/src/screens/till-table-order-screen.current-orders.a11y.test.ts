@@ -1,5 +1,7 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { userEvent } from "vitest/browser";
+import { chooseSentServing, sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -13,11 +15,8 @@ import {
 
 afterEach(cleanupWidgets);
 
-// The fixture holds every row state Current orders draws: fired minutes ago, ready, en route,
-// preparing, no kitchen item, partly served, served, held with extras, groups whose sender is named
-// and groups whose sender is not, rows in no group, and a due reminder with Snooze and Fire.
-describe.each(["light", "dark"] as const)("Current orders a11y (%s theme)", (theme) => {
-  async function mountDrawer(over: Partial<TillTableOrderScreen> = {}) {
+describe.each(["light", "dark"] as const)("Sent service a11y (%s theme)", (theme) => {
+  async function mountSent(over: Partial<TillTableOrderScreen> = {}) {
     const mounted = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
       {
@@ -34,48 +33,54 @@ describe.each(["light", "dark"] as const)("Current orders a11y (%s theme)", (the
       },
       theme,
     );
-    mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await mounted.el.updateComplete;
+    const panel = await sentPanelFor(mounted.el);
+    for (const selector of ["[data-sent-toggle]", "[data-held-toggle]", "[data-served-toggle]"]) {
+      const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
+      if (toggle?.getAttribute("aria-expanded") === "false") {
+        await userEvent.click(toggle);
+        await panel.updateComplete;
+      }
+    }
     await new Promise((resolve) => setTimeout(resolve, 0));
     await mounted.el.updateComplete;
     return mounted;
   }
 
   it("has no violations with every row state and a due reminder", async () => {
-    const { host } = await mountDrawer();
+    const { host } = await mountSent();
     await expectNoA11yViolations(host);
   });
 
   it("has no violations with a reminder not yet due", async () => {
-    const { host } = await mountDrawer({ now: now - 5 * 60_000 });
+    const { host } = await mountSent({ now: now - 5 * 60_000 });
     await expectNoA11yViolations(host);
   });
 
   it("has no violations with a snoozed reminder that is due", async () => {
-    const { host } = await mountDrawer({ currentOrders: snoozed() });
+    const { host } = await mountSent({ currentOrders: snoozed() });
     await expectNoA11yViolations(host);
   });
 
   it("has no violations with a snoozed reminder not yet due", async () => {
-    const { host } = await mountDrawer({ currentOrders: snoozed(), now: now - 5 * 60_000 });
+    const { host } = await mountSent({ currentOrders: snoozed(), now: now - 5 * 60_000 });
     await expectNoA11yViolations(host);
   });
 
   it("has no violations saying Current orders could not be read", async () => {
-    const { host } = await mountDrawer({ currentOrders: null, currentOrdersUnread: true });
+    const { host } = await mountSent({ currentOrders: null, currentOrdersUnread: true });
     await expectNoA11yViolations(host);
   });
 
   it("has no violations while a group command runs", async () => {
-    const { host } = await mountDrawer({ groupCommandBusy: true });
+    const { host } = await mountSent({ groupCommandBusy: true });
     await expectNoA11yViolations(host);
   });
 
-  it.each(["data-serve-row", "data-unserve-row"])(
+  it.each(["serve", "undo"])(
     "has no violations with the how-many dialog open from %s",
     async (attribute) => {
-      const { el, host } = await mountDrawer();
-      el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="l-croq"]`)!.click();
+      const { el, host } = await mountSent();
+      await chooseSentServing(el, "l-croq", attribute === "undo");
       await el.updateComplete;
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;

@@ -112,7 +112,8 @@ describe("Find a bill client", () => {
     ).toEqual({ q: "", page: "0", sort: "openedAt", direction: "descending" });
   });
   it("reads fresh selection and options with the caller's abort signal", async () => {
-    const row: BillRow = {
+    const row: BillRow & { edit: null } = {
+      edit: null,
       workingOrderId: "order-1",
       openedAt: "2026-10-15T12:00:00.000Z",
       orderNumber: 1,

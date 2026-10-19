@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
+  billEditStates,
   deviceProfiles,
   devices,
   floorZones,
@@ -74,6 +75,47 @@ describe("Find a bill list routes", () => {
     expect(await get("/api/find-bill/options")).toMatchObject({
       status: 200,
       json: { timeZone: "Pacific/Honolulu" },
+    });
+  });
+  it("returns retained edit versions for selected table and counter bills", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    await inTx(venue, (tx) =>
+      tx.insert(billEditStates).values({
+        billId: party.tabId,
+        editorId: null,
+        editorVersion: 7,
+      }),
+    );
+    const counter = await parked(venue, "Caña");
+    expect(await get(`/api/bills/${party.tabId}`)).toMatchObject({
+      status: 200,
+      json: {
+        partyId: party.partyId,
+        edit: {
+          billId: party.tabId,
+          editorId: null,
+          editorName: null,
+          editorVersion: 7,
+          draftId: null,
+          draftRevision: null,
+        },
+      },
+    });
+    await inTx(venue, (tx) =>
+      tx.insert(billEditStates).values({ billId: counter, editorId: null, editorVersion: 11 }),
+    );
+    expect(await get(`/api/bills/${counter}`)).toMatchObject({
+      status: 200,
+      json: {
+        edit: {
+          billId: counter,
+          editorId: null,
+          editorName: null,
+          editorVersion: 11,
+          draftId: null,
+          draftRevision: null,
+        },
+      },
     });
   });
   it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {

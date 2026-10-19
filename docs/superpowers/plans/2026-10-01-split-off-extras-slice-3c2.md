@@ -1,5 +1,16 @@
 # Extras made at their own station, and tickets that name each other (slice 3c-2) Implementation Plan
 
+> **2026-10-19, A773-1:** the approved
+> [Recall design](../specs/2026-10-16-a773-courses-and-groups-design.md#310-recall) replaces this
+> plan's table Recall-to-held behavior with Recall into that bill's New order. The
+> [active implementation plan](2026-10-16-a773-1-unsent-list.md) specifies retained dish/extra
+> charges, source reservations and kitchen corrections. The older Recall observations and tests
+> remain below as historical receipts; A773-1 remains unlanded.
+
+> **2026-10-19, A773-1:** standalone table-line Send is retired in the unlanded A773-1 branch.
+> Recalled dishes resend through New order under the [current table-panel design](../specs/2026-10-16-a773-courses-and-groups-design.md#35-the-new-order).
+> The `sendsAlone` observations and helper tests below describe the earlier interface.
+
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
 > Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
 > governs retained history, routing cleanup and empty screen scopes. Earlier station/course

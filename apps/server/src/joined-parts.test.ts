@@ -10,9 +10,9 @@ import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { placeSpareToday, resetZone } from "./floor-today-store.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { listTables } from "./tables.js";
-import { moveGuests } from "./table-actions.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { createOpenOrder, listTablesWithState } from "./working-order.js";
 import {
   activeTablesOf,

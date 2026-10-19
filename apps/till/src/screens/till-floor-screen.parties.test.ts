@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-floor-screen.js";
@@ -341,36 +342,42 @@ describe("till-floor-screen: a table's unsent orders", () => {
 
   it("shows Mesa 4 with a mark naming who has an unsent order and how many items", async () => {
     const el = await mountFloor([
-      seated({}, { unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] }),
+      seated(
+        {},
+        { unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }] },
+      ),
     ]);
 
-    expect(marks(el, "t4")).toEqual(["Alex has an unsent order: 2 items"]);
+    expect(marks(el, "t4")).toEqual(["Bill 1 · Alex has an unsent order: 2 items"]);
   });
 
   it("says one item in the singular", async () => {
     const el = await mountFloor([
-      seated({}, { unsentDrafts: [{ ownerName: "Alex", lineCount: 1 }] }),
+      seated(
+        {},
+        { unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 1 }] },
+      ),
     ]);
 
-    expect(marks(el, "t4")).toEqual(["Alex has an unsent order: 1 item"]);
+    expect(marks(el, "t4")).toEqual(["Bill 1 · Alex has an unsent order: 1 item"]);
   });
 
-  it("gives each person with an unsent order a line of their own, oldest first", async () => {
+  it("gives each bill with an unsent order a line of its own, in bill order", async () => {
     const el = await mountFloor([
       seated(
         {},
         {
           unsentDrafts: [
-            { ownerName: "Alex", lineCount: 2 },
-            { ownerName: "Sam", lineCount: 1 },
+            { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
+            { billId: "bill-2", billNumber: 2, ownerName: "Sam", lineCount: 1 },
           ],
         },
       ),
     ]);
 
     expect(marks(el, "t4")).toEqual([
-      "Alex has an unsent order: 2 items",
-      "Sam has an unsent order: 1 item",
+      "Bill 1 · Alex has an unsent order: 2 items",
+      "Bill 2 · Sam has an unsent order: 1 item",
     ]);
   });
 
@@ -380,14 +387,17 @@ describe("till-floor-screen: a table's unsent orders", () => {
         {},
         {
           unsentDrafts: [
-            { ownerName: "", lineCount: 3 },
-            { ownerName: "", lineCount: 1 },
+            { billId: "bill-1", billNumber: 1, ownerName: "", lineCount: 3 },
+            { billId: "bill-2", billNumber: 2, ownerName: "", lineCount: 1 },
           ],
         },
       ),
     ]);
 
-    expect(marks(el, "t4")).toEqual(["An unsent order: 3 items", "An unsent order: 1 item"]);
+    expect(marks(el, "t4")).toEqual([
+      "Bill 1 · An unsent order: 3 items",
+      "Bill 2 · An unsent order: 1 item",
+    ]);
   });
 
   it("says it in Spanish", async () => {
@@ -397,20 +407,20 @@ describe("till-floor-screen: a table's unsent orders", () => {
         {},
         {
           unsentDrafts: [
-            { ownerName: "Alex", lineCount: 2 },
-            { ownerName: "Sam", lineCount: 1 },
-            { ownerName: "", lineCount: 4 },
-            { ownerName: "", lineCount: 1 },
+            { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
+            { billId: "bill-2", billNumber: 2, ownerName: "Sam", lineCount: 1 },
+            { billId: "bill-3", billNumber: 3, ownerName: "", lineCount: 4 },
+            { billId: "bill-4", billNumber: 4, ownerName: "", lineCount: 1 },
           ],
         },
       ),
     ]);
 
     expect(marks(el, "t4")).toEqual([
-      "Alex tiene un pedido sin enviar: 2 artículos",
-      "Sam tiene un pedido sin enviar: 1 artículo",
-      "Un pedido sin enviar: 4 artículos",
-      "Un pedido sin enviar: 1 artículo",
+      "Cuenta 1 · Alex tiene un pedido sin enviar: 2 artículos",
+      "Cuenta 2 · Sam tiene un pedido sin enviar: 1 artículo",
+      "Cuenta 3 · Un pedido sin enviar: 4 artículos",
+      "Cuenta 4 · Un pedido sin enviar: 1 artículo",
     ]);
   });
 
@@ -424,7 +434,10 @@ describe("till-floor-screen: a table's unsent orders", () => {
     const unplaced = Array.from({ length: 6 }, (_, i) =>
       seated(
         { id: `u${i}`, label: `${i + 10}` },
-        { id: `vu${i}`, unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] },
+        {
+          id: `vu${i}`,
+          unsentDrafts: [{ billId: `bill-u${i}`, billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+        },
       ),
     );
     const el = await mountFloor([table({ id: "t5", label: "5", ...onMap }), ...unplaced]);
@@ -458,11 +471,98 @@ describe("till-floor-screen: a table's unsent orders", () => {
   it("marks an unplaced table's token in the map's tray", async () => {
     const el = await mountFloor([
       table({ id: "t5", label: "5", ...onMap }),
-      seated({}, { unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] }),
+      seated(
+        {},
+        { unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }] },
+      ),
     ]);
 
     const tray = el.shadowRoot!.querySelector<Token>('[data-tray-table="t4"] wt-table-token')!;
-    expect(await tokenMark(tray)).toBe("Unsent: Alex");
+    expect(await tokenMark(tray)).toBe("Unsent: Bill 1 · Alex has an unsent order: 2 items");
+  });
+});
+
+describe("till-floor-screen: bill editor pairs", () => {
+  const pairs = [
+    { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 },
+    { billId: "bill-2", billNumber: 2, ownerName: "Alex", lineCount: 1 },
+  ];
+  const marks = (el: TillFloorScreen) =>
+    [...card(el, "t4").querySelectorAll<HTMLElement>("[data-unsent]")].map((mark) =>
+      mark.textContent!.replace(/\s+/g, " ").trim(),
+    );
+
+  it("shows equal editor names on independent numbered bills and updates only the changed pair", async () => {
+    const el = await mountFloor([seated({}, { unsentDrafts: pairs })]);
+    expect(marks(el)).toEqual([
+      "Bill 1 · Alex has an unsent order: 2 items",
+      "Bill 2 · Alex has an unsent order: 1 item",
+    ]);
+    el.tables = [seated({}, { unsentDrafts: [{ ...pairs[0]!, ownerName: "Sam" }, pairs[1]!] })];
+    await el.updateComplete;
+    expect(marks(el)).toEqual([
+      "Bill 1 · Sam has an unsent order: 2 items",
+      "Bill 2 · Alex has an unsent order: 1 item",
+    ]);
+    el.tables = [seated({}, { unsentDrafts: [pairs[1]!] })];
+    await el.updateComplete;
+    expect(marks(el)).toEqual(["Bill 2 · Alex has an unsent order: 1 item"]);
+  });
+
+  it("names both numbered bills in a compact map token's accessible unsent label", async () => {
+    const el = await mountFloor([
+      table({ id: "t5", label: "5", today: today() }),
+      seated({}, { unsentDrafts: pairs }),
+    ]);
+    const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      '[data-tray-table="t4"] wt-table-token',
+    )!;
+    await token.updateComplete;
+    expect(token.shadowRoot!.querySelector("[data-unsent]")!.getAttribute("aria-label")).toBe(
+      "Unsent: Bill 1 · Alex has an unsent order: 2 items, Bill 2 · Alex has an unsent order: 1 item",
+    );
+  });
+
+  it.each([360, 390])(
+    "keeps long bill editor pairs inside their phone card at %i px",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const el = await mountFloor([
+          seated(
+            {},
+            {
+              unsentDrafts: [
+                { ...pairs[0]!, ownerName: "AlexandradelRosariodelasMercedesFernandezFernandez" },
+                pairs[1]!,
+              ],
+            },
+          ),
+        ]);
+        const box = card(el, "t4").getBoundingClientRect();
+        for (const mark of card(el, "t4").querySelectorAll<HTMLElement>("[data-unsent]")) {
+          const range = document.createRange();
+          range.selectNodeContents(mark);
+          const bounds = range.getBoundingClientRect();
+          expect(bounds.left).toBeGreaterThanOrEqual(box.left);
+          expect(bounds.right).toBeLessThanOrEqual(box.right);
+        }
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  it("keeps both bill labels in Spanish including the unknown-editor fallback", async () => {
+    setLocale("es");
+    const el = await mountFloor([
+      seated({}, { unsentDrafts: [pairs[0]!, { ...pairs[1]!, ownerName: "" }] }),
+    ]);
+    expect(marks(el)).toEqual([
+      "Cuenta 1 · Alex tiene un pedido sin enviar: 2 artículos",
+      "Cuenta 2 · Un pedido sin enviar: 1 artículo",
+    ]);
   });
 });
 

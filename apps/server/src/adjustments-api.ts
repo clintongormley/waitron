@@ -1,3 +1,4 @@
+import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { ADJUSTMENT_ACTIONS, listAdjustmentReasons } from "@waitron/adjustments";
@@ -34,6 +35,7 @@ import {
   type TillApiDeps,
 } from "./till-api.js";
 import { requestCfg } from "./request-config.js";
+import { discardDraft } from "./order-drafts.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import "./errors.js";
@@ -70,6 +72,8 @@ function parseAsk(
   }
   return {
     orderId,
+    expectedEdit: body.expectedEdit as AdjustmentAsk["expectedEdit"],
+    ...(body.sourceDraftId === undefined ? {} : { sourceDraftId: body.sourceDraftId as string }),
     expectedRevision,
     lineId: lineId === null ? null : lineId.toLowerCase(),
     reasonId: requireBodyUuid(body.reasonId, "reasonId").toLowerCase(),
@@ -93,7 +97,7 @@ function requireRole(value: string | undefined): PersonRoleValue {
  * The approver whose PIN the transaction will check: the plan, read now, needs an approver. A plan
  * that cannot be made is refused inside the transaction, so it names no one here.
  */
-async function approverToCheck(
+export async function approverToCheck(
   db: Database,
   ask: AdjustmentAsk,
   approver: { personId: string; pin: string } | undefined,
@@ -123,7 +127,73 @@ export function mountAdjustmentsApi(
 ): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
 
-  // One that leaves the bill exactly paid files its invoice on the requesting device's till.
+  app.post("/api/parties/:id/drafts/:did/discard", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const partyId = requireBodyUuid(c.req.param("id"), "partyId").toLowerCase();
+      const draftId = requireBodyUuid(c.req.param("did"), "draftId").toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expectedEdit = parseBillEditExpected(body.expectedEdit);
+      const revision = requireRevision(body.revision);
+      const expectedRevision = requireRevision(body.expectedRevision, "expectedRevision");
+      const submissionId = submissionIdOf(body);
+      const reasonId =
+        body.reasonId === undefined
+          ? undefined
+          : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
+      const { note } = body;
+      if (
+        note !== undefined &&
+        note !== null &&
+        (typeof note !== "string" || note.length > NOTE_LIMIT)
+      )
+        throw invalid("note");
+      const parsedApprover = parseDrawerOverride(
+        body.approver as { personId?: unknown; pin?: unknown } | undefined,
+      );
+      const attempts = overridePinAttempts(pinThrottle, session.deviceId);
+      const answer = await withPinCheckAhead(deps.db, parsedApprover, attempts, (checked) =>
+        withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          const applied = await discardDraft(
+            tx,
+            cfg,
+            partyId,
+            draftId,
+            session.personId,
+            {
+              submissionId,
+              revision,
+              expectedRevision,
+              expectedEdit,
+              ...(reasonId === undefined ? {} : { reasonId }),
+              note: typeof note === "string" ? note : null,
+              approver: withCheck(parsedApprover, checked),
+            },
+            deps.venueLocale,
+            attempts,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+          await issueIfFullyPaid(
+            tx,
+            fiscal,
+            sendingCfg(cfg, c, session.device),
+            applied.billId,
+            session.personId,
+          );
+          if (applied.adjustmentIds.length > 0) {
+            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, applied.billId);
+          }
+          return applied;
+        }),
+      );
+      return c.json(answer);
+    }),
+  );
+
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

@@ -1,4 +1,7 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
+import { requireOrderBillEditor } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
+import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
@@ -179,6 +182,7 @@ export interface TillTender {
  * pay a parked order, the till sends that order's own id.
  */
 export interface TillSaleRequest {
+  expectedEdit: BillEditExpected | null;
   kitchenNote?: string | null;
   /** A line MAY carry `options`, `extras` and per-line `LineExtras` (NON-FISCAL, never threaded into
    *  a sale/fiscal projection). The server validates them against the dish's own definitions. */
@@ -479,6 +483,7 @@ export async function readBillTenderLines(
  *    park and pay never moves the filed total.
  */
 export interface PayWorkingOrderRequest {
+  expectedEdit: BillEditExpected | null;
   id: string;
   kitchenNote?: string | null;
   /** The walk-up basket; IGNORED for a retrieved order. Carries the same per-line fields as
@@ -541,6 +546,7 @@ async function storeSentReceiptLanguage(
  *    locked lines (`priceStoredOrderForIssuance`).
  */
 export interface IntegratedPayRequest {
+  expectedEdit: BillEditExpected | null;
   id: string;
   kitchenNote?: string | null;
   invoiceType?: unknown;
@@ -667,6 +673,8 @@ async function runPayWorkingOrder(
         throw new AppError("working_order.not_open", { workingOrderId: req.id });
       }
       if (locked !== undefined) {
+        await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
+        await assertBillHasNoUnsent(tx, req.id);
         // Before the in-flight check, so the answer names the money already on the bill.
         await refuseBillWithPayments(tx, req.id);
         // A card payment of this order would file its own sale after this one (plan D22).
@@ -1165,6 +1173,9 @@ async function payIntegrated(
       }
 
       if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
+
+      await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
+      await assertBillHasNoUnsent(tx, req.id);
 
       if (outstanding !== undefined) {
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
@@ -2073,6 +2084,9 @@ async function runCollectOrder(
     await refuseBillWithPayments(tx, req.id);
     await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
+    await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
+    await assertBillHasNoUnsent(tx, req.id);
+
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
       throw new AppError("sale.unsupported_tender", { method: req.tender.method });
@@ -2214,6 +2228,7 @@ async function runTillSale(
     cfg,
     {
       id: req.workingOrderId ?? randomUUID(),
+      expectedEdit: req.expectedEdit,
       lines: req.lines,
       tender: req.tender,
       kitchenNote: req.kitchenNote,

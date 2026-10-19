@@ -34,7 +34,10 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
 import type {} from "./till-config.js";
-import { payWorkingOrder, recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
+import {
+  payWorkingOrder,
+  recordTillSaleOrchestration as recordTillSale,
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";

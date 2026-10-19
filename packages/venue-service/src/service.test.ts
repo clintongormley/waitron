@@ -59,6 +59,7 @@ describe("VENUE_SERVICE", () => {
       "menuState",
       "mergePartyAllergies",
       "moveAllergyDraftTicks",
+      "moveBillAllergies",
       "narrowDeviceKitchenScreens",
       "openStationForToday",
       "orderInZones",

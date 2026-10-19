@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normaliseDraftLines } from "./order-drafts.js";
-import type { DraftLine } from "./order-drafts.js";
+import type { FreshDraftLine } from "./order-drafts.js";
 
 const BEER = "aaaaaaaa-0000-4000-8000-000000000001";
 const BURGER = "aaaaaaaa-0000-4000-8000-000000000002";
@@ -18,10 +18,12 @@ const NO_ONIONS = { listId: ONIONS, labelId: "none" };
 
 let nextId = 0;
 
-function line(overrides: Partial<DraftLine> & { menuItemId: string }): DraftLine {
+function line(overrides: Partial<FreshDraftLine> & { menuItemId: string }): FreshDraftLine {
   nextId += 1;
   return {
     id: `line-${nextId}`,
+    sourceLineId: null,
+    source: null,
     variantId: null,
     menuVersionId: "version-7",
     options: [],
@@ -30,13 +32,16 @@ function line(overrides: Partial<DraftLine> & { menuItemId: string }): DraftLine
     quantity: "1.000",
     courseId: null,
     noMerge: false,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     unavailable: false,
     ...overrides,
   };
 }
 
 /** What the rows say, without the ids a merge keeps from whichever row came first. */
-const summary = (lines: DraftLine[]) =>
+const summary = (lines: FreshDraftLine[]) =>
   lines.map(({ menuItemId, quantity }) => ({ menuItemId, quantity }));
 
 describe("normaliseDraftLines (D10)", () => {

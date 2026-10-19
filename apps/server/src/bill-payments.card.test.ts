@@ -1,3 +1,6 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -18,7 +21,7 @@ import {
   type BillVenue,
   partyRevisionOf,
 } from "./testing/bill-venue.js";
-import { addTabRound } from "./working-order.js";
+
 import { revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -889,10 +892,16 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
 
   it("refuses a void, a round and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
     const billId = await tabWithDishes("Paella", "Tarta", "Caña", "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
-      transfers: [{ lineNo: 3 }, { lineNo: 4 }],
-      expectedPartyRevision: await partyRevisionOf(venue, billId),
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${billId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
+        transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+        expectedPartyRevision: await partyRevisionOf(venue, billId),
+      }),
+    );
     const otherBill = split.json.billId as string;
     const card = await heldCard(billId, "10.00");
 
@@ -912,6 +921,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       venue.cookie,
       "DELETE",
       `/api/working-orders/${billId}`,
+      { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)) },
     );
     const otherLines = await send(
       venue.app,
@@ -924,7 +934,11 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       venue.cookie,
       "PUT",
       `/api/working-orders/${otherBill}/lines/1`,
-      { revision: otherLines.json.revision, note: "sin espuma" },
+      {
+        revision: otherLines.json.revision,
+        note: "sin espuma",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, otherBill)),
+      },
     );
     card.release();
     await card.answer;

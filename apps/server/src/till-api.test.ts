@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 
 import { randomUUID } from "node:crypto";
@@ -98,11 +99,13 @@ async function sendRound(
   return app.request(`/api/parties/${partyId}/groups`, {
     method: "POST",
     headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({
-      submissionId: randomUUID(),
-      expectedPartyRevision: revision,
-      groups: [{ lines, release: "fire" }],
-    }),
+    body: JSON.stringify(
+      await observedGroupSubmitBody(suite.db, `/api/parties/${partyId}/groups`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        groups: [{ lines, release: "fire" }],
+      }),
+    ),
   });
 }
 
@@ -1488,7 +1491,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // case stays order-independent.
     await suite.db.insert(kitchenCourses).values([
       { locationId: cfg.locationId, name: "Postres", displayOrder: 2, active: true },
-      { locationId: cfg.locationId, name: "Entrantes", displayOrder: 1, active: true },
+      {
+        locationId: cfg.locationId,
+        name: "Entrantes",
+        displayOrder: 1,
+        active: true,
+        heldUntilFired: false,
+      },
       { locationId: cfg.locationId, name: "Retirado", displayOrder: 0, active: false },
     ]);
     try {
@@ -1500,8 +1509,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const body = (await res.json()) as { courses: { name: string; displayOrder: number }[] };
       // Active-only, by display_order: Entrantes (1) before Postres (2); the deactivated Retirado absent.
       expect(body.courses).toEqual([
-        { id: expect.any(String), name: "Entrantes", displayOrder: 1 },
-        { id: expect.any(String), name: "Postres", displayOrder: 2 },
+        { id: expect.any(String), name: "Entrantes", displayOrder: 1, heldUntilFired: false },
+        { id: expect.any(String), name: "Postres", displayOrder: 2, heldUntilFired: true },
       ]);
     } finally {
       await suite.db.execute(

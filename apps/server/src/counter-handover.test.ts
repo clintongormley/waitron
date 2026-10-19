@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -15,11 +16,10 @@ import {
   listCounterWaiting,
   markCollected,
   parkOrder,
-  placeOrder,
   readInvoiceNumbers,
 } from "./working-order.js";
 import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -28,7 +28,7 @@ import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import "./errors.js";
 
 // Counter service (spec §5): a counter order may be handed over before or after it is paid.

@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { recallLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
@@ -39,7 +41,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireGroup,
@@ -48,18 +50,11 @@ import {
   submitGroups,
   type GroupLine,
   type GroupRelease,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import { seatTable } from "./parties.js";
-import {
-  addTabRound,
-  markGroupServed,
-  markServed,
-  recallLines,
-  unmarkServed,
-  updateOrderLine,
-} from "./working-order.js";
+import { markGroupServed, markServed, unmarkServed } from "./working-order.js";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";

@@ -152,6 +152,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "order lines in flight; copied to a standby, never drained back",
   ),
+  classify(
+    "line_service_cancellations",
+    "state",
+    "cancelled service that retains its bill charge; copied to a standby, never drained back",
+  ),
   appendOnly(
     "order_amendments",
     "state",
@@ -195,6 +200,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who (a person or a kitchen display) submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
   ),
   classify(
+    "bill_edit_states",
+    "state",
+    "bill editing responsibility and retained ownership version; copied to a standby, never drained back",
+  ),
+  classify(
     "order_drafts",
     "state",
     "each operator's unsent order on a seated party; copied to a standby, never drained back",
@@ -203,6 +213,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "order_draft_lines",
     "state",
     "the lines of an unsent order; copied to a standby, never drained back",
+  ),
+  classify(
+    "order_draft_recalled_lines",
+    "state",
+    "exclusive draft references to priced bill lines awaiting resend; copied to a standby, never drained back",
   ),
   appendOnly(
     "order_draft_events",

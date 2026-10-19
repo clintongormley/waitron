@@ -1,10 +1,17 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
+import { sessions, setProfileAdmission } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   orderGroupEvents,
+  orderGroups,
+  devices,
+  deviceProfiles,
   products,
   serviceCommands,
   ticketItems,
@@ -17,12 +24,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { addTabRound } from "./working-order.js";
+
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPaidQuantities } from "./bill-payments.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancelBody } from "./testing/cancel-line.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
@@ -54,8 +61,14 @@ async function seated(): Promise<Seated> {
   return seat.json as unknown as Seated;
 }
 
-function call(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, body);
+async function call(method: string, path: string, body?: unknown) {
+  return send(
+    venue.app,
+    venue.cookie,
+    method,
+    path,
+    await observedGroupCompositionBody(venue.db, path, body),
+  );
 }
 
 async function revisionOf(partyId: string): Promise<number> {
@@ -176,19 +189,25 @@ describe("POST /api/parties/:id/groups", () => {
         {
           id: lines[0]!.groupId,
           position: 1,
+          displayNumber: 1,
+          numberPartyId: party.partyId,
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
           lineIds: [lines[0]!.id],
+          courseIds: [],
           summary: "2 × Caña",
         },
         {
           id: lines[1]!.groupId,
           position: 2,
+          displayNumber: 2,
+          numberPartyId: party.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
           lineIds: [lines[1]!.id, lines[2]!.id],
+          courseIds: [],
           summary: "1 × Tarta, 1 × Croquetas",
         },
       ],
@@ -784,28 +803,37 @@ describe("GET /api/parties/:id/groups", () => {
         {
           id: party.fired.id,
           position: 1,
+          displayNumber: 1,
+          numberPartyId: party.partyId,
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
           lineIds: [lines[0]!.id],
+          courseIds: [],
           summary: "1 × Caña",
         },
         {
           id: party.tarta.id,
           position: 2,
+          displayNumber: 2,
+          numberPartyId: party.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
           lineIds: [lines[1]!.id],
+          courseIds: [],
           summary: "1 × Tarta",
         },
         {
           id: party.croquetas.id,
           position: 3,
+          displayNumber: 3,
+          numberPartyId: party.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
           lineIds: [lines[2]!.id],
+          courseIds: [],
           summary: "1 × Croquetas",
         },
       ],
@@ -878,6 +906,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
 
     const refused = await call("POST", `/api/working-orders/${party.tabId}/lines/send`, {
       lineNos: [lineNo],
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
     });
 
     expect(refused.status).toBe(409);
@@ -986,6 +1015,7 @@ describe("the line-editing routes act as the session's operator", () => {
     const changed = await call("PUT", `/api/working-orders/${party.tabId}/lines/${cana.lineNo}`, {
       quantity: "2",
       revision: tab.revision,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
     });
 
     expect(changed.status).toBe(200);
@@ -1010,6 +1040,7 @@ describe("the line-editing routes act as the session's operator", () => {
       lines: [...kept, dish("Pulpo")],
       revision: tab.revision,
       operatorId: venue.adminId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
     });
 
     expect(saved.status).toBe(200);
@@ -1597,6 +1628,26 @@ async function remindAts(partyId: string) {
 }
 
 describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/current-orders", () => {
+  it("includes each sent line's recorded course in the Current orders response", async () => {
+    const party = await seated();
+    const mains = await inTx(venue, (tx) =>
+      createCourse(tx, venue.cfg, { name: `Mains-${randomUUID()}` }),
+    );
+    const submitted = await call("POST", `/api/parties/${party.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      groups: [{ release: "hold", lines: [{ ...dish("Tarta"), courseId: mains.id }] }],
+    });
+    expect(submitted.status).toBe(200);
+
+    const read = await call("GET", `/api/parties/${party.partyId}/current-orders`);
+
+    expect(read.status).toBe(200);
+    expect(read.json).toMatchObject({
+      groups: [{ rows: [{ courseId: mains.id }] }],
+    });
+  });
+
   it("snoozes the group waiting by whole minutes, answering the party's revision, and Current orders shows the reminder once the work ahead is served", async () => {
     const party = await withGroups();
     const revision = await revisionOf(party.partyId);
@@ -2178,5 +2229,270 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     }
     const quantities = await inTx(venue, (tx) => readPaidQuantities(tx, party.tabId));
     expect([...quantities]).toEqual([[body.lineId, paid * 1000]]);
+  });
+});
+
+describe("per-group HTTP destinations direct", () => {
+  async function prepared() {
+    const party = await seated();
+    const initial = await call("POST", `/api/parties/${party.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party.revision,
+      groups: [
+        { release: "hold", lines: [dish("Tarta")] },
+        { release: "hold", lines: [dish("Croquetas")] },
+      ],
+    });
+    expect(initial.status).toBe(200);
+    const [first, second] = (initial.json as unknown as { groups: { id: string }[] }).groups;
+    return { party, first: first!.id, second: second!.id };
+  }
+
+  it("preserves joins and insert-after through the real request", async () => {
+    const { party, first, second } = await prepared();
+
+    const groups = [
+      { release: "fire", lines: [dish("Caña")] },
+      { release: "hold", joinGroupId: first.toUpperCase(), lines: [dish("Pulpo")] },
+      { release: "hold", joinGroupId: second, lines: [dish("Croquetas")] },
+      { release: "hold", afterGroupId: first.toUpperCase(), lines: [dish("Tarta")] },
+    ];
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      groups,
+    };
+    const response = await call("POST", `/api/parties/${party.partyId}/groups`, body);
+    expect(response.status).toBe(200);
+    expect(response.json).toMatchObject({
+      groups: [
+        { state: "fired", displayNumber: 3 },
+        { id: first, state: "held", displayNumber: 1 },
+        { id: second, state: "held", displayNumber: 2, position: 3 },
+        { state: "held", displayNumber: 4, position: 2 },
+      ],
+    });
+    const before = await snapshot(party);
+    expect(await call("POST", `/api/parties/${party.partyId}/groups`, body)).toEqual(response);
+    expect(await snapshot(party)).toEqual(before);
+  });
+
+  it.each(["joinGroupId", "afterGroupId"] as const)(
+    "refuses malformed %s values instead of ignoring them",
+    async (field) => {
+      const { party } = await prepared();
+
+      for (const value of [null, 2, [], {}, "", "missing"]) {
+        const before = await snapshot(party);
+        const refused = await call("POST", `/api/parties/${party.partyId}/groups`, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await revisionOf(party.partyId),
+          groups: [{ release: "hold", [field]: value, lines: [dish("Caña")] }],
+        });
+        expect(refused.status).toBe(400);
+        expect(refused.json).toMatchObject({
+          code: "management.request_invalid",
+          params: { field },
+        });
+        expect(await snapshot(party)).toEqual(before);
+      }
+    },
+  );
+});
+
+it("direct group HTTP cannot claim an existing bill line using the internal resend field", async () => {
+  const party = await seated();
+  const existing = await submit(party.partyId, [{ lines: [dish("Caña")], release: "hold" }]);
+  const first = existing.json as unknown as SubmitAnswer;
+  const originalId = first.groups[0]!.lineIds[0]!;
+  const response = await call("POST", `/api/parties/${party.partyId}/groups`, {
+    submissionId: randomUUID(),
+    expectedPartyRevision: await revisionOf(party.partyId),
+    groups: [{ release: "fire", lines: [dish("Tarta")], existingLineIds: [originalId] }],
+  });
+  expect(response.status).toBe(200);
+  const second = response.json as unknown as SubmitAnswer;
+  expect(second.groups[0]!.lineIds).toHaveLength(1);
+  expect(second.groups[0]!.lineIds).not.toContain(originalId);
+  expect((await dishLines(party.tabId)).find((line) => line.id === originalId)!.groupId).toBe(
+    first.groups[0]!.id,
+  );
+});
+
+describe("POST one held dish's Fire now", () => {
+  it("fires the named dish using the authenticated operator, leaves other held groups and replays once", async () => {
+    const party = await withGroups();
+    const command = {
+      lineId: party.tarta.lineIds[0]!,
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      operatorId: randomUUID(),
+    };
+    const path = `/api/parties/${party.partyId}/groups/fire-line`;
+    const answer = await call("POST", path, command);
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({ revision: command.expectedPartyRevision + 1 });
+    const held = await venue.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, party.croquetas.lineIds[0]!));
+    expect(held[0]!.groupId).toBe(party.croquetas.id);
+    const fired = await venue.db
+      .select()
+      .from(orderGroupEvents)
+      .where(eq(orderGroupEvents.partyId, party.partyId));
+    expect(fired.at(-1)).toMatchObject({ actorId: venue.operatorId });
+    const before = await snapshot(party);
+    expect(await call("POST", path, command)).toEqual(answer);
+    expect(await snapshot(party)).toEqual(before);
+  });
+  it.each([undefined, null, 3, [], "bad-id"])(
+    "refuses invalid lineId %j without writes",
+    async (lineId) => {
+      const party = await withGroups();
+      const before = await snapshot(party);
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/fire-line`, {
+        lineId,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual(refusal("management.request_invalid", { field: "lineId" }));
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
+  it("requires a session without touching the kitchen", async () => {
+    const party = await withGroups();
+    const before = await snapshot(party);
+    const answer = await send(
+      venue.app,
+      "",
+      "POST",
+      `/api/parties/${party.partyId}/groups/fire-line`,
+      {
+        lineId: party.tarta.lineIds[0],
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+      },
+    );
+    expect(answer.status).toBe(401);
+    expect(answer.json).toMatchObject({ code: "session.required" });
+    expect(await snapshot(party)).toEqual(before);
+  });
+});
+
+describe("one held dish rechecks admission after reading its request", () => {
+  async function stored(party: Seated) {
+    return {
+      revision: await revisionOf(party.partyId),
+      lines: await venue.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
+        .orderBy(workingOrderLines.id),
+      groups: await venue.db
+        .select()
+        .from(orderGroups)
+        .where(eq(orderGroups.partyId, party.partyId))
+        .orderBy(orderGroups.id),
+      tickets: await venue.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, party.tabId))
+        .orderBy(ticketItems.id),
+      events: await eventCount(party.partyId),
+      commands: await commandCount(party.partyId),
+    };
+  }
+
+  it.each([
+    ["ended session", "session.required", 401],
+    ["disabled device", "device.unauthorized", 401],
+    ["removed action", "device.forbidden_action", 403],
+    ["removed admission", "device_profile.not_admitted", 403],
+  ] as const)("refuses %s without firing", async (kind, code, status) => {
+    const party = await withGroups();
+    const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+    const [profile] = await venue.db
+      .select()
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, device!.deviceProfileId));
+    const [session] = await venue.db
+      .select()
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.deviceId, venue.deviceId),
+          eq(sessions.personId, venue.operatorId),
+          isNull(sessions.endedAt),
+        ),
+      );
+    const text = JSON.stringify({
+      lineId: party.tarta.lineIds[0],
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+    });
+    let entered!: () => void;
+    let release!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const request = new Request(`http://localhost/api/parties/${party.partyId}/groups/fire-line`, {
+      method: "POST",
+      headers: { cookie: venue.cookie, "content-type": "application/json" },
+      body: text,
+    });
+    request.text = async () => {
+      entered();
+      await resume;
+      return text;
+    };
+    const before = await stored(party);
+    const pending = venue.app.request(request);
+    try {
+      await reading;
+      await inTx(venue, async (tx) => {
+        if (kind === "ended session")
+          await tx
+            .update(sessions)
+            .set({ endedAt: "2026-10-17T10:00:00.000Z" })
+            .where(eq(sessions.id, session!.id));
+        if (kind === "disabled device")
+          await tx.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId));
+        if (kind === "removed action")
+          await tx
+            .update(deviceProfiles)
+            .set({
+              capabilities: (profile!.capabilities as string[]).filter(
+                (cap) => cap !== "take-orders",
+              ),
+            })
+            .where(eq(deviceProfiles.id, profile!.id));
+        if (kind === "removed admission")
+          await setProfileAdmission(tx, profile!.id, {
+            personExceptions: [{ personId: venue.operatorId, admitted: false }],
+          });
+      });
+      release();
+      const answer = await pending;
+      expect(answer.status).toBe(status);
+      expect(await answer.json()).toMatchObject({ error: { code } });
+      expect(await stored(party)).toEqual(before);
+    } finally {
+      release();
+      await pending;
+      await inTx(venue, async (tx) => {
+        await tx.update(sessions).set({ endedAt: null }).where(eq(sessions.id, session!.id));
+        await tx.update(devices).set({ active: true }).where(eq(devices.id, venue.deviceId));
+        await tx
+          .update(deviceProfiles)
+          .set({ capabilities: profile!.capabilities })
+          .where(eq(deviceProfiles.id, profile!.id));
+        await setProfileAdmission(tx, profile!.id, { personExceptions: [] });
+      });
+    }
   });
 });

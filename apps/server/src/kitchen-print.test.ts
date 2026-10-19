@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
@@ -40,14 +41,15 @@ import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
-import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
+import { createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import {
   listStationNotices,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
   setStationToday,
 } from "@waitron/venue-service";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
@@ -79,7 +81,7 @@ import {
   tableAt,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { moveGuests } from "./table-actions.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import "./errors.js";
 import {
   setupVenue,

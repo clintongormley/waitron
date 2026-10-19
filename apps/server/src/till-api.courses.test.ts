@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -268,6 +269,7 @@ async function tabWithSopaAndFilete(): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
       groups: [
@@ -279,6 +281,13 @@ async function tabWithSopaAndFilete(): Promise<string> {
   expect(round.status).toBe(200);
   expect(((await round.json()) as { tabId: string }).tabId).toBe(tabId);
   return tabId;
+}
+
+async function billBody(tabId: string, body: object): Promise<string> {
+  return JSON.stringify({
+    ...body,
+    expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
+  });
 }
 
 describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => {
@@ -393,7 +402,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     const move = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ courseId: entCourseId }),
+      body: await billBody(tabId, { courseId: entCourseId }),
     });
     expect(move.status).toBe(200);
     expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(entCourseId);
@@ -402,13 +411,13 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     const clear = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ courseId: null }),
+      body: await billBody(tabId, { courseId: null }),
     });
     expect(clear.status).toBe(200);
     expect((await queueItemsByName(tabId, station)).get(FILETE)!.course).toBeNull();
   });
 
-  it("an empty {} body (courseId key absent) clears the course cleanly (200), never a 500", async () => {
+  it("an omitted courseId clears the course cleanly (200), never a 500", async () => {
     // An omitted `courseId` means "clear the course": the route coerces it to null
     // (`body.courseId ?? null`) so `undefined` never reaches setLineCourse.
     const tabId = await tabWithSopaAndFilete();
@@ -418,7 +427,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     const res = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
+      body: await billBody(tabId, {}),
     });
     expect(res.status).toBe(200);
     expect((await queueItemsByName(tabId, station)).get(FILETE)!.course).toBeNull();
@@ -455,7 +464,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
     const recall = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lineNos: [1] }),
+      body: await billBody(tabId, { lineNos: [1] }),
     });
     expect(recall.status).toBe(200);
   }
@@ -469,7 +478,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
     const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lineNos: [1] }),
+      body: await billBody(tabId, { lineNos: [1] }),
     });
     expect(res.status).toBe(200);
     expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
@@ -484,7 +493,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
     const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
+      body: await billBody(tabId, {}),
     });
     expect(res.status).toBe(200);
     const after = await queueItemsByName(tabId, station);
@@ -525,7 +534,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lineNos: [1] }),
+      body: await billBody(tabId, { lineNos: [1] }),
     });
     expect(res.status).toBe(200);
     // Recalled → fired_at cleared, so the line greys back to held on the station display.
@@ -549,7 +558,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lineNos: [1] }),
+      body: await billBody(tabId, { lineNos: [1] }),
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
@@ -564,7 +573,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
+      body: await billBody(tabId, {}),
     });
     expect(res.status).toBe(200);
     expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();

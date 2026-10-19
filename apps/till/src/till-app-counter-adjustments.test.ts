@@ -285,6 +285,7 @@ async function previewComp(el: TillApp): Promise<void> {
 }
 
 const ask = {
+  expectedEdit: null,
   expectedRevision: 4,
   lineId: "l-2",
   reasonId: "r-complaint",
@@ -475,12 +476,37 @@ describe("till-app: counter station choice", () => {
     const el = await retrieved({
       listStations: vi.fn().mockResolvedValue(stations),
       seatTable: vi.fn(() => seating.promise),
+      listDrafts: vi.fn().mockResolvedValue({
+        drafts: [],
+        billEdits: [
+          {
+            billId: "table-order",
+            editorId: null,
+            editorName: null,
+            editorVersion: 0,
+            draftId: null,
+            draftRevision: null,
+          },
+        ],
+      }),
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 1,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [],
+      }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
     inBasket(el, '[data-make-at="1"]')!.click();
     await flush(el);
     emit(counter(el), "open-table", { tableId: "t-1", seated: false, guestCount: 2 });
-    emit(counter(el), "move-station", {
+    seating.resolve({ tabId: "table-order", partyId: "party-1", revision: 1 });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-table-order-screen")!, "move-station", {
       workingOrderId: "table-order",
       lineId: "table-line",
       name: "Bravas",
@@ -811,6 +837,29 @@ describe("till-app: counter station choice", () => {
 });
 
 describe("till-app: giving away a dish on a stored counter order", () => {
+  it.each([false, true])(
+    "identifies a counter Hold as having no table editor, changed lines=%s",
+    async (changed) => {
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 5 });
+      const setWorkingOrderLabel = vi.fn().mockResolvedValue({ revision: 5 });
+      const el = await retrieved({ updateWorkingOrder, setWorkingOrderLabel });
+      if (changed) counter(el).store.addProduct(product("cana", "Caña", "2.50"), "1");
+      emit(counter(el), "park-order", { label: "Ana" });
+      await flush(el);
+      const sent = changed ? updateWorkingOrder : setWorkingOrderLabel;
+      expect(sent).toHaveBeenCalledOnce();
+      expect(sent.mock.calls[0]![1]).toHaveProperty("expectedEdit", null);
+    },
+  );
+
+  it("identifies a counter adjustment as having no table editor in preview and apply", async () => {
+    const el = await retrieved();
+    await previewComp(el);
+    expect(vi.mocked(api.previewAdjustment).mock.calls[0]![1]).toHaveProperty("expectedEdit", null);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(vi.mocked(api.applyAdjustment).mock.calls[0]![1]).toHaveProperty("expectedEdit", null);
+  });
+
   it("offers the adjustments once the order's lines are read, Cancel only on what the kitchen has", async () => {
     const el = await retrieved();
 
@@ -839,7 +888,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     emit(counter(el), "place-order");
     await flush(el);
 
-    expect(api.placeOrder).toHaveBeenCalledWith("wo-9");
+    expect(api.placeOrder).toHaveBeenCalledWith("wo-9", null);
     expect(offered(el)).toBe(0);
   });
 
@@ -866,7 +915,11 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     expect(banner(el)).toBeNull();
     // Acting again starts from the order as it is now.
     await previewComp(el);
-    expect(api.previewAdjustment).toHaveBeenLastCalledWith("wo-9", { ...ask, expectedRevision: 5 });
+    expect(api.previewAdjustment).toHaveBeenLastCalledWith("wo-9", {
+      ...ask,
+      expectedRevision: 5,
+      expectedEdit: null,
+    });
   });
 
   it("cancels a dish the kitchen has with a reason", async () => {
@@ -882,6 +935,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
       reasonId: "r-complaint",
       action: "cancel",
       note: null,
+      expectedEdit: null,
     });
   });
 

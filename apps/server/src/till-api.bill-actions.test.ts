@@ -1,10 +1,11 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrders } from "@waitron/db";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -16,9 +17,9 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { openTillSession } from "./testing/session-device.js";
-import { addTabRound } from "./working-order.js";
+
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
+import { billActionBody, splitBill } from "./testing/bill-action-fixture.js";
 
 // The HTTP surface of split, merge and transfer between a party's bills (table actions plan,
 // Task 5): the session guard, the id and body screens, the answers and the status of each code.
@@ -87,8 +88,14 @@ async function twoBills(): Promise<{ partyId: string; main: string; second: stri
   return { partyId, main: tabId, second: checkId };
 }
 
-function post(path: string, body: unknown, cookie = venue.cookie) {
-  return send(venue.app, cookie, "POST", path, body);
+async function post(path: string, body: unknown, cookie = venue.cookie) {
+  return send(
+    venue.app,
+    cookie,
+    "POST",
+    path,
+    await inTx(venue, (tx) => billActionBody(tx, path, body)),
+  );
 }
 
 const ROUTES = ["split", "merge", "transfer"] as const;

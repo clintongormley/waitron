@@ -11,8 +11,15 @@ afterEach(async () => {
 });
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
+  {
+    id: "c1",
+    name: "Starters",
+    displayOrder: 0,
+    active: true,
+    inUse: false,
+    heldUntilFired: false,
+  },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true, heldUntilFired: true },
 ];
 function stubApi(state: State): DashboardApi {
   return {
@@ -81,6 +88,13 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
     await settle(el);
     const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
     if (state === "load failed") expect(q("[role=alert]")).not.toBeNull();
+    if (state === "populated") {
+      const switches = el.shadowRoot!.querySelectorAll("wt-switch");
+      expect(switches).toHaveLength(2);
+      expect(switches[0]!.shadowRoot!.querySelector("input")!.checked).toBe(false);
+      expect(switches[1]!.shadowRoot!.querySelector("input")!.checked).toBe(true);
+    }
+
     if (state === "renaming, refused blank") {
       q('[data-test="name-c1"]').click();
       await settle(el);

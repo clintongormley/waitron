@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   newId,
   nowIso,
@@ -291,6 +291,16 @@ export async function splitPartyAllergies(
   await tx
     .insert(partyAllergy)
     .values({ partyId: into, answer: source.answer, changedBy: operatorId, changedAt: nowIso() });
+  await copyGuestsAndBillTicks(tx, source.guests, into, billId, 0);
+}
+
+async function copyGuestsAndBillTicks(
+  tx: Transaction,
+  guests: PartyAllergySnapshot["guests"],
+  into: string,
+  billId: string | null,
+  offset: number,
+): Promise<void> {
   const moving =
     billId === null
       ? []
@@ -298,21 +308,65 @@ export async function splitPartyAllergies(
           .select({ id: workingOrderLines.id })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, billId));
-  for (const guest of source.guests) {
+  const drafts =
+    billId === null
+      ? []
+      : await tx
+          .select({ id: orderDraftLines.id })
+          .from(orderDraftLines)
+          .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+          .where(and(eq(orderDrafts.billId, billId), eq(orderDrafts.state, "open")));
+  for (const [position, guest] of guests.entries()) {
     const id = newId();
-    await tx.insert(partyAllergyGuests).values({ ...guest, id, partyId: into });
-    if (moving.length > 0)
+    await tx
+      .insert(partyAllergyGuests)
+      .values({ ...guest, id, partyId: into, position: offset + position });
+    if (moving.length > 0 || drafts.length > 0)
       await tx
         .update(allergyLineTicks)
         .set({ guestId: id })
         .where(
           and(
             eq(allergyLineTicks.guestId, guest.id),
-            inArray(
-              allergyLineTicks.workingLineId,
-              moving.map((line) => line.id),
+            or(
+              inArray(
+                allergyLineTicks.workingLineId,
+                moving.map((line) => line.id),
+              ),
+              inArray(
+                allergyLineTicks.draftLineId,
+                drafts.map((line) => line.id),
+              ),
             ),
           ),
         );
   }
+}
+
+export async function moveBillAllergies(
+  tx: Transaction,
+  from: string,
+  into: string,
+  billId: string,
+  operatorId: string,
+): Promise<void> {
+  if (from === into) return;
+  const source = await readPartyAllergy(tx, from);
+  if (source.answer !== "allergies") return;
+  const target = await readPartyAllergy(tx, into);
+  await tx
+    .insert(partyAllergy)
+    .values({ partyId: into, answer: "allergies", changedBy: operatorId, changedAt: nowIso() })
+    .onConflictDoUpdate({
+      target: partyAllergy.partyId,
+      set: { answer: "allergies", changedBy: operatorId, changedAt: nowIso() },
+    });
+  // The source keeps its guests; both tick kinds follow only the bill that leaves.
+  await copyGuestsAndBillTicks(
+    tx,
+    source.guests,
+    into,
+    billId,
+    (target.guests.at(-1)?.position ?? -1) + 1,
+  );
 }

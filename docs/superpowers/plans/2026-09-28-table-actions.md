@@ -1,5 +1,23 @@
 # Tables, parties and bills: the till's table actions — Implementation Plan
 
+> **2026-10-19, A773-1:** the approved
+> [bill contract](../specs/2026-10-16-a773-courses-and-groups-design.md#4-bills) replaces this plan's
+> Send to choice, New orders tag and automatic main-bill destination for new table orders.
+> The [ownership amendment](../specs/2026-10-17-a773-one-editor-design.md) replaces personal draft
+> selection with one saved New order and editor per bill. Follow the
+> [active implementation plan](2026-10-16-a773-1-unsent-list.md) for those changes, preserving
+> other `main_bill_id` consumers. This historical body is retained; A773-1 remains unlanded.
+
+2026-10-19: A773-1's direct Send all and arriving-bill checks cover the replacement course rule
+described below; the [decision and test pointers](../../backlog/kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80)
+are retained in the kitchen notes. A773-1 remains unlanded, with cancellation/Finish and final
+acceptance still open. The dated integration status below describes the earlier checkpoint.
+
+2026-10-17: [A773](../specs/2026-10-16-a773-courses-and-groups-design.md#1-courses)
+replaces the arriving-dish rule for no course, a switched-off course and a course that is not held:
+those dishes fire on arrival. The earliest-course holding rules below describe this plan's older
+design. A773-1's active screen integration remains in progress.
+
 2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
 with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
 interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and

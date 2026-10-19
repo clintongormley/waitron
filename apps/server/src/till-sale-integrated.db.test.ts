@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -65,13 +67,10 @@ import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.j
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
 import {
-  addTabRound,
   createOpenOrder,
   listStationQueue,
   listTablesWithState,
   parkOrder,
-  placeOrder,
-  updateOrderLine,
 } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -79,7 +78,7 @@ import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import type { IntegratedPayDeps, IntegratedPayOutcome } from "./till-sale.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";

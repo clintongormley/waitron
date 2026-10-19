@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -8,11 +10,12 @@ import { workingOrderLines, workingOrders } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { listPassMonitor, listPassScreen } from "./pass-board.js";
 import {
   OPERATOR,
@@ -30,8 +33,6 @@ import {
   listExpoQueue,
   listHeldOrders,
   listStationQueues,
-  placeOrder,
-  updateHeldOrder,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -158,6 +159,7 @@ async function cancelLine(billId: string, name: string) {
       tx,
       v.cfg,
       {
+        expectedEdit: await readBillEditState(tx, billId),
         orderId: billId,
         submissionId: randomUUID(),
         expectedRevision: bill!.revision,

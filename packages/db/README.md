@@ -104,6 +104,11 @@ in `delivery_table_label` with every other column unchanged. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 
+`0177_paid_line_service_group.sql` lets a paid (`settled`) line change only its kitchen group;
+all other columns must stay unchanged in that write. The existing served-mark and first-sent-stamp
+exceptions remain separate. `scripts/behavioural-triggers.test.ts` checks the allowed group change
+and rejects a group change combined with any other column change.
+
 The **append-only** triggers are not in any of these files. They are installed at runtime by
 `installAppendOnlyTriggers` (`@waitron/store`), called by `applyMigrations`, from the
 `appendOnlyTables` each set hands it, which a `migrationOptionsFor(...)` result always carries; a

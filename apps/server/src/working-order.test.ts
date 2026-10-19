@@ -1,3 +1,12 @@
+import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+  updateOrderLine,
+  placeOrder,
+} from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -51,8 +60,6 @@ import {
 } from "@waitron/shared";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
-  abandonHeldOrder,
-  addTabRound,
   advanceTicket,
   advanceTicketItem,
   bumpCourseReady,
@@ -66,16 +73,10 @@ import {
   listStationQueue,
   markCourseAway,
   parkOrder,
-  placeOrder,
   readStoredOrder,
   priceStoredOrderForIssuance,
   readTabLines,
-  recallLines,
-  sendLines,
   sendToPrep,
-  setLineCourse,
-  updateHeldOrder,
-  updateOrderLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -105,7 +106,8 @@ import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 const LOCALE = "es-ES";

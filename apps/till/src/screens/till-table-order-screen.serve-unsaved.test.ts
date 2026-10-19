@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { resized } from "./till-table-order-screen.test-helpers.js";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
-import type { WtDialog } from "@waitron/ui";
+import type { WtDialog, WtRowActions } from "@waitron/ui";
+import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -37,7 +39,10 @@ class ServeLeaveApp extends LitElement {
 }
 customElements.define("serve-leave-test-app", ServeLeaveApp);
 beforeEach(() => setLocale("en"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  vi.restoreAllMocks();
+});
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -47,11 +52,46 @@ async function mount(undo = false) {
   const { el: app } = await mountWidget<ServeLeaveApp>("serve-leave-test-app", {});
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   await screen.updateComplete;
-  await click(screen, "[data-open-drawer]");
-  await click(screen, `[data-${undo ? "unserve" : "serve"}-row="dish"]`);
+  screen.style.width = "1280px";
+  await resized(screen);
+  await openServing(screen, undo);
   const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-serve-dialog]")!;
   await dialog.updateComplete;
   return { app, screen, dialog };
+}
+async function openServing(screen: TillTableOrderScreen, undo = false) {
+  const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
+  if (toggle.getAttribute("aria-expanded") === "false") {
+    expect(toggle.checkVisibility(), "Sent toggle is visible").toBe(true);
+    await userEvent.click(toggle);
+    await panel.updateComplete;
+  }
+  const served = panel.shadowRoot!.querySelector<HTMLElement>("[data-served-toggle]")!;
+  if (undo && served.getAttribute("aria-expanded") === "false") {
+    await userEvent.click(served);
+    await panel.updateComplete;
+  }
+  const info = panel.shadowRoot!.querySelector<HTMLElement>(
+    `[data-${undo ? "served" : "fired"}-line="dish"] [data-sent-info]`,
+  )!;
+  expect(info.checkVisibility(), "Sent dish information is visible").toBe(true);
+  await userEvent.click(info);
+  await screen.updateComplete;
+  if (undo) {
+    const more = screen.shadowRoot!.querySelector<WtRowActions>(
+      "[data-sent-line-dialog] wt-row-actions",
+    )!;
+    await more.updateComplete;
+    await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+  }
+  const action = screen.shadowRoot!.querySelector<HTMLElement>(
+    `[data-sent-line-${undo ? "unserve" : "serve"}]`,
+  )!;
+  expect(action.checkVisibility(), "Sent serving action is visible").toBe(true);
+  await userEvent.click(action);
+  await screen.updateComplete;
 }
 async function click(screen: TillTableOrderScreen, selector: string) {
   screen.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
@@ -88,7 +128,7 @@ for (const undo of [false, true]) {
       await expect.poll(() => dialog.open).toBe(false);
       expect(app.commands).toEqual([]);
       expect(unload()).toBe(false);
-      await click(screen, `[data-${undo ? "unserve" : "serve"}-row="dish"]`);
+      await openServing(screen, undo);
       expect(count(screen)).toBe("2");
     });
   }
@@ -127,7 +167,7 @@ it("a confirmed count makes an old Discard inert", async () => {
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   await click(screen, "[data-serve-confirm]");
   await expect.poll(() => q.open).toBe(false);
-  await click(screen, '[data-serve-row="dish"]');
+  await openServing(screen);
   discard.click();
   await screen.updateComplete;
   expect(dialog.open).toBe(true);
@@ -207,14 +247,39 @@ it("changing the shown bill aborts an old serving question without a command", a
   expect(app.commands).toEqual([]);
 });
 it("a clean asynchronous Back cannot dismiss a replacement serving choice", async () => {
-  const { screen, dialog } = await mount();
+  const { app, screen, dialog } = await mount();
+  const realRequest = app.leave.coordinator.request.bind(app.leave.coordinator);
+  let release!: () => void;
+  const answer = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(app.leave.coordinator, "request").mockImplementationOnce(async (request) => {
+    const outcome = await realRequest(request);
+    await answer;
+    return outcome;
+  });
+  const close = vi.spyOn(dialog, "requestClose");
   screen.shadowRoot!.querySelector<HTMLElement>("[data-serve-dismiss]")!.click();
-  screen.shadowRoot!.querySelector<HTMLElement>('[data-serve-row="dish"]')!.click();
+  expect(close).toHaveBeenCalledExactlyOnceWith("cancel");
+  const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  panel.dispatchEvent(
+    new CustomEvent("sent-line-info", {
+      detail: { lineId: "dish", workingOrderId: "wo-4", kind: "fired" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await screen.updateComplete;
+  const info = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+  await info.updateComplete;
+  await userEvent.click(info.querySelector<HTMLElement>("[data-sent-line-serve]")!);
+  release();
+  expect(await close.mock.results[0]!.value).toBe(false);
   await screen.updateComplete;
   await dialog.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 30));
   expect(dialog.open).toBe(true);
   expect(count(screen)).toBe("2");
+  expect(app.commands).toEqual([]);
 });
 
 it("an untouched count closes directly without warning or command", async () => {

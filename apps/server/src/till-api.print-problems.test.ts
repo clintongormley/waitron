@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -7,7 +8,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
-import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  send as rawGroupSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import "./errors.js";
 
 // The HTTP layer of `GET /api/parties/:id/print-problems`; what counts as a problem is pinned in
@@ -122,3 +128,5 @@ describe("GET /api/parties/:id/print-problems", () => {
     },
   );
 });
+
+const send = observedGroupSender(() => venue.db, rawGroupSend);

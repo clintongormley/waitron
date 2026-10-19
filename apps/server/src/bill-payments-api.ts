@@ -1,3 +1,4 @@
+import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
@@ -74,7 +75,11 @@ function parseLines(value: unknown): { lineNo: number; quantity?: string }[] {
 function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
   const kind = oneOf(body.kind, ["items", "contribution", "share"] as const, "kind");
   const method = oneOf(body.method, ["cash", "card"] as const, "method");
-  const ask: BillPaymentAsk = { kind, method };
+  const ask: BillPaymentAsk = {
+    kind,
+    method,
+    expectedEdit: body.expectedEdit == null ? null : parseBillEditExpected(body.expectedEdit),
+  };
   if (kind === "items") ask.lines = parseLines(body.lines);
   else if (body.lines !== undefined) throw invalid("lines");
   if (kind === "contribution") ask.amount = moneyField(body.amount, "amount");
@@ -215,7 +220,7 @@ export function mountBillPaymentsApi(
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
       const ask = parseAsk(asObject(await readRawJsonBody<unknown>(c)));
-      return c.json(await previewBillPayment(fiscal, cfg, id, ask));
+      return c.json(await previewBillPayment(fiscal, cfg, id, ask, session.personId));
     }),
   );
 

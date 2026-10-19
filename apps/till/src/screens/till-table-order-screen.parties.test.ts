@@ -113,7 +113,10 @@ function capture(el: TillTableOrderScreen, type: string): unknown[] {
 }
 
 beforeEach(() => setLocale("en"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 describe("till-table-order-screen: the party's bills", () => {
   it("lists every bill with what it came to and what is still to pay, and the table's total", async () => {
@@ -153,13 +156,13 @@ describe("till-table-order-screen: the party's bills", () => {
     );
   });
 
-  it("marks the bill new orders go to, and no other", async () => {
+  it.each(["en", "es"] as const)("shows no New orders tag on any bill in %s", async (locale) => {
+    setLocale(locale);
     const el = await mountScreen();
 
-    expect(bill(el, "wo-check")!.querySelector("[data-bill-main]")!.textContent!.trim()).toBe(
-      t("table.bill_main"),
-    );
+    expect(bill(el, "wo-check")!.querySelector("[data-bill-main]")).toBeNull();
     expect(bill(el, "wo-tab")!.querySelector("[data-bill-main]")).toBeNull();
+    expect(bills(el).textContent).not.toContain(locale === "en" ? "New orders" : "Pedidos nuevos");
   });
 
   it("marks no bill when the party has no main bill until its next order", async () => {

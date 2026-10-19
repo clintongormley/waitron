@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { configureZone, createDepartment, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -14,22 +16,16 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { mergeBills, splitBill } from "./bill-actions.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
+import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { createCourse } from "./kitchen.js";
-import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
-import { finishTable } from "./parties.js";
-import { moveGuests } from "./table-actions.js";
+import { bumpGroupReady, markGroupAway } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { finishTable } from "./testing/party-close-fixture.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { switchOff } from "./testing/live-table.js";
-import {
-  addTabRound,
-  createOpenOrder,
-  listHeldOrders,
-  markServed,
-  parkOrder,
-  placeOrder,
-} from "./working-order.js";
+import { createOpenOrder, listHeldOrders, markServed, parkOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   OPERATOR,

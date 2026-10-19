@@ -1,13 +1,17 @@
+import type { TillSentOrders } from "./widgets/sent-orders.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
+import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import { userEvent } from "vitest/browser";
-import type { WtCombobox } from "@waitron/ui";
+import { page, userEvent } from "vitest/browser";
+import type { WtCombobox, WtRowActions } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
   adjustmentStubs,
   cancelThroughDialog,
   cleanupWidgets,
+  expectNoA11yViolations,
   draftServer,
   mountWidget,
   servedMenus,
@@ -15,7 +19,7 @@ import {
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, grossOf } from "@waitron/shared";
 import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -271,7 +275,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     seatTable: vi
       .fn()
       .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
-    getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+    getPartyBills: vi.fn(async (partyId: string) =>
+      partyId === "v7" || partyId === "v9"
+        ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
+        : [tabBill, checkBill],
+    ),
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markTableCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
@@ -297,7 +305,13 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     reprint: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
-    listDrafts: drafts.listDrafts,
+    listDrafts: vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      const billId = partyId === "v7" ? "wo-7" : partyId === "v9" ? "wo-9" : null;
+      return billId === null
+        ? snapshot
+        : { ...snapshot, billEdits: snapshot.billEdits.filter((edit) => edit.billId === billId) };
+    }),
     saveDraft: drafts.saveDraft,
     submitDraft: drafts.submitDraft,
     ...overrides,
@@ -366,6 +380,13 @@ async function flush(el: TillApp, rounds = 3): Promise<void> {
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    type === "change-line" &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -377,18 +398,56 @@ const floor = (el: TillApp) =>
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
-/** The party's groups as the open order's Tab drawer lists them. */
-const heldGroupsList = (el: TillApp) =>
-  [...(tableOrder(el)?.shadowRoot?.querySelectorAll<HTMLElement>("[data-group]") ?? [])].map(
-    (row) => ({
-      position: row.querySelector("[data-group-position]")!.textContent!.trim(),
-      state: row.dataset.groupState,
-      summary: row.querySelector("[data-group-summary]")!.textContent!.trim(),
-      lines: [...row.querySelectorAll(".group-line-name")].map((name) =>
-        name.textContent!.replace(/\s+/g, " ").trim(),
-      ),
-    }),
-  );
+async function heldGroupsList(el: TillApp) {
+  const order = tableOrder(el)!;
+  if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await flush(el);
+  }
+  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  if (review?.checkVisibility()) {
+    await userEvent.click(review);
+    await flush(el);
+  }
+  const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
+    if (toggle?.getAttribute("aria-expanded") === "false") {
+      await userEvent.click(toggle);
+      await panel.updateComplete;
+    }
+  }
+  const groups = [...order.groups].sort((a, b) => a.position - b.position);
+  expect(
+    [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")].map(
+      (group) => group.dataset.heldGroup,
+    ),
+  ).toEqual(groups.filter((group) => group.state === "held").map((group) => group.id));
+  return groups.map((group) => {
+    const held = panel.shadowRoot!.querySelector(`[data-held-group="${group.id}"]`);
+    if (order.currentOrders !== null) expect(held !== null).toBe(group.state === "held");
+    return {
+      position:
+        held?.querySelector("[data-group-drag]")?.textContent!.split(" · ")[0] ??
+        `Group ${group.displayNumber}`,
+      state: group.state,
+      summary: group.summary,
+      lines:
+        held !== null
+          ? [...held.querySelectorAll("[data-held-line] .what, [data-companion] .what")].map(
+              (what) => what.textContent!.replace(/\s+/g, " ").trim(),
+            )
+          : group.lineIds.map((id) => {
+              const what = panel.shadowRoot!.querySelector(
+                `[data-${group.state === "held" ? "held" : "fired"}-line="${id}"] .what`,
+              );
+              expect(what, `Sent dish ${id}`).not.toBeNull();
+              return what!.textContent!.replace(/\s+/g, " ").trim();
+            }),
+    };
+  });
+}
 
 async function toFloor(el: TillApp): Promise<TillFloorScreen> {
   await flush(el);
@@ -406,9 +465,15 @@ async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScre
   return tableOrder(el)!;
 }
 
+const closingEdits = [
+  { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+  { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+];
+
 beforeEach(() => {
   setLocale("en");
   drafts = draftServer();
+  for (const billId of ["wo-7", "wo-9"]) drafts.bills.add(billId);
 });
 afterEach(cleanupWidgets);
 
@@ -465,13 +530,14 @@ describe("till-app: seating a party", () => {
 
     emit(order, "finish-table", {});
     await flush(el);
-    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0);
+    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0, []);
 
     emit(tableOrder(el)!, "join-tables", { tableId: "t4", bills: "merge" });
     await flush(el);
     expect(api.joinTables).toHaveBeenCalledWith("v-new", "t4", "merge", {
       expectedPartyRevision: 0,
       otherPartyId: null,
+      expectedEdits: [],
     });
   });
 
@@ -654,7 +720,6 @@ describe("till-app: seating a party", () => {
   });
 });
 
-/** The open bill's total and amount to pay, and the party's still to pay, as the drawer shows them. */
 function figures(el: TillApp) {
   const screen = tableOrder(el)!.shadowRoot!;
   const shown = screen.querySelector('[data-bill="wo-4"]')!;
@@ -702,7 +767,7 @@ describe("till-app: the party's bills and Finish table", () => {
     emit(order, "finish-table", {});
     await flush(el);
 
-    expect(api.finishTable).toHaveBeenCalledWith("v1", 3);
+    expect(api.finishTable).toHaveBeenCalledWith("v1", 3, closingEdits);
     expect(tableOrder(el)).toBeNull();
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
@@ -729,6 +794,12 @@ describe("till-app: the party's bills and Finish table", () => {
       [],
       { method: "cash", amount: "30.00" },
       "wo-check",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
     );
   });
 
@@ -1470,7 +1541,7 @@ describe("till-app: the party on a handheld", () => {
     emit(card, "finish-table", {});
     await flush(el);
 
-    expect(api.finishTable).toHaveBeenCalledWith("v1", 3);
+    expect(api.finishTable).toHaveBeenCalledWith("v1", 3, closingEdits);
     expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
   });
 
@@ -1571,7 +1642,7 @@ describe("till-app: the party on a handheld", () => {
       await flush(el);
       await selectTab(el, "order");
 
-      expect(call).toHaveBeenCalledWith("v1", 3);
+      expect(call).toHaveBeenCalledWith("v1", 3, closingEdits);
       expect(orderCard(el)!.party).toBeNull();
       expect(orderCard(el)!.orderId).toBeUndefined();
     });
@@ -1986,6 +2057,10 @@ describe("till-app: table actions on the party", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(readsBefore);
     expect(tableOrder(el)!.party).toEqual(atNine.party);
@@ -2015,6 +2090,11 @@ describe("till-app: table actions on the party", () => {
       expectedPartyRevision: 3,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(tableOrder(el)!.party).toEqual(combined.party);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
@@ -2083,11 +2163,20 @@ describe("till-app: table actions on the party", () => {
     expect(api.joinTables).toHaveBeenNthCalledWith(1, "v1", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(api.joinTables).toHaveBeenNthCalledWith(2, "v1", "t7", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -2104,7 +2193,13 @@ describe("till-app: table actions on the party", () => {
     emit(order, "move-guests", { toTableId: "t5", bills: "merge" });
     await flush(el);
 
-    expect(api.moveGuests).toHaveBeenCalledWith("v1", "t5", "merge", { expectedPartyRevision: 3 });
+    expect(api.moveGuests).toHaveBeenCalledWith("v1", "t5", "merge", {
+      expectedPartyRevision: 3,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
+    });
   });
 
   it("splits a table off with the chosen bill, or none, and stays with the party at its other table", async () => {
@@ -2130,12 +2225,19 @@ describe("till-app: table actions on the party", () => {
     emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
     await flush(el);
 
-    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3, guests);
+    expect(api.splitTable).toHaveBeenCalledWith(
+      "v1",
+      "t5",
+      "wo-check",
+      3,
+      [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
+      guests,
+    );
     expect(tableOrder(el)!.party).toEqual(afterSplit[0]!.party);
 
     emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guests });
     await flush(el);
-    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, guests);
+    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, [], guests);
   });
 
   it("passes the guests the waiter gave each side of a split to the split", async () => {
@@ -2167,7 +2269,10 @@ describe("till-app: table actions on the party", () => {
     });
     await flush(el);
 
-    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, { staying: 3, leaving: 2 });
+    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, [], {
+      staying: 3,
+      leaving: 2,
+    });
     expect(tableOrder(el)!.party?.guestCount).toBe(3);
   });
 
@@ -2191,7 +2296,14 @@ describe("till-app: table actions on the party", () => {
         emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
         await flush(el);
 
-        expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3, guests);
+        expect(api.splitTable).toHaveBeenCalledWith(
+          "v1",
+          "t5",
+          "wo-check",
+          3,
+          [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
+          guests,
+        );
         expect(tableOrder(el)!.splitRefusal).toEqual({
           tableId: "t5",
           billId: "wo-check",
@@ -3154,7 +3266,12 @@ describe("till-app: moving a bill", () => {
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(setMakeAt).toHaveBeenCalledWith("wo-check", 3, { "line-1": "kitchen" });
+    expect(setMakeAt).toHaveBeenCalledWith(
+      "wo-check",
+      3,
+      { "line-1": "kitchen" },
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(moveBill).toHaveBeenCalledOnce();
   });
 
@@ -3215,7 +3332,13 @@ describe("till-app: moving a bill", () => {
       "wo-check",
       { counter: { zoneId: zone.id } },
       "separate",
-      { expectedPartyRevision: 3, partyId: "v1" },
+      {
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      },
     );
   });
 
@@ -3231,6 +3354,7 @@ describe("till-app: moving a bill", () => {
     expect(api.moveBill).toHaveBeenCalledWith("wo-4", { counter: { zoneId: null } }, "merge", {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
     });
   });
 
@@ -3352,6 +3476,7 @@ describe("till-app: moving a bill", () => {
       expectedPartyRevision: 3,
       partyId: "v1",
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(tableOrder(el)!.party).toEqual(mesa4.party);
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -3376,6 +3501,10 @@ describe("till-app: moving a bill", () => {
       partyId: "v1",
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
   });
@@ -3401,6 +3530,10 @@ describe("till-app: moving a bill", () => {
       partyId: "v1",
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -3560,7 +3693,13 @@ describe("till-app: paying a bill by its state", () => {
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
     await flush(el);
 
-    expect(api.collectOrder).toHaveBeenCalledWith("wo-check", { method: "cash", amount: "30.00" });
+    expect(api.collectOrder).toHaveBeenCalledWith(
+      "wo-check",
+      { method: "cash", amount: "30.00" },
+      undefined,
+      undefined,
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(api.recordSale).not.toHaveBeenCalled();
     emit(el.shadowRoot!.querySelector("till-ticket-view")!, "new-sale");
     await flush(el);
@@ -3572,7 +3711,7 @@ describe("till-app: paying a bill by its state", () => {
     expect(reopened.bills.map((bill) => bill.status)).toEqual(["settled", "settled"]);
     emit(reopened, "finish-table", {});
     await flush(el);
-    expect(api.finishTable).toHaveBeenLastCalledWith("v1", 3);
+    expect(api.finishTable).toHaveBeenLastCalledWith("v1", 3, closingEdits);
     expect(tableOrder(el)).toBeNull();
   });
 
@@ -3596,8 +3735,20 @@ describe("till-app: paying a bill by its state", () => {
     await flush(el);
 
     expect(collectOrder.mock.calls).toEqual([
-      ["wo-check", { method: "cash", amount: "30.00" }],
-      ["wo-check", { method: "cash", amount: "30.00" }],
+      [
+        "wo-check",
+        { method: "cash", amount: "30.00" },
+        undefined,
+        undefined,
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
+      [
+        "wo-check",
+        { method: "cash", amount: "30.00" },
+        undefined,
+        undefined,
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     ]);
     expect(api.recordSale).not.toHaveBeenCalled();
   });
@@ -3690,7 +3841,17 @@ describe("till-app: paying a bill by its state", () => {
     emit(order, "pay-tab", { method: "cash", amount: "14.00" });
     await flush(el);
 
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "14.00" }, "wo-4");
+    expect(api.recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "14.00" },
+      "wo-4",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
 });
@@ -3768,13 +3929,37 @@ describe("till-app: every table move sends the party revision it last read", () 
       "move-guests",
       { toTableId: "t9", bills: "merge" },
       "moveGuests",
-      ["v1", "t9", "merge", { expectedPartyRevision: 3, otherPartyId: null }],
+      [
+        "v1",
+        "t9",
+        "merge",
+        {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
     [
       "join-tables",
       { tableId: "t9", bills: "merge" },
       "joinTables",
-      ["v1", "t9", "merge", { expectedPartyRevision: 3, otherPartyId: null }],
+      [
+        "v1",
+        "t9",
+        "merge",
+        {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
   ] as const)("%s", async (type, detail, method, args) => {
     const { el } = await mountApp();
@@ -3793,19 +3978,50 @@ describe("till-app: every table move sends the party revision it last read", () 
       "merge-bills",
       { fromBillId: "wo-check" },
       "mergeBills",
-      ["wo-4", "wo-check", { expectedPartyRevision: 3, partyId: "v1" }],
+      [
+        "wo-4",
+        "wo-check",
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
     [
       "transfer-lines",
       { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
       "transferItems",
-      ["wo-4", "wo-check", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }],
+      [
+        "wo-4",
+        "wo-check",
+        [{ lineNo: 1 }],
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
     [
       "split-lines",
       { transfers: [{ lineNo: 1 }] },
       "splitBill",
-      ["wo-4", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }],
+      [
+        "wo-4",
+        [{ lineNo: 1 }],
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        },
+      ],
     ],
   ] as const)("%s sends the party revision it last read", async (type, detail, method, args) => {
     const { el } = await mountApp();
@@ -3872,6 +4088,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
   });
@@ -3891,6 +4108,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
   });
 
@@ -3927,6 +4145,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
   });
 
@@ -3963,13 +4182,21 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.transferItems).toHaveBeenCalledWith("wo-4", "wo-check", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
   });
 
   it("leaves an unpaid split-off bill listed when the waiter leaves it and comes back, and merges nothing (decision 8)", async () => {
     const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+      getPartyBills: vi.fn(async (partyId: string) =>
+        partyId === "v7" || partyId === "v9"
+          ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
+          : [tabBill, checkBill],
+      ),
     });
     const order = await openMesa(el);
     emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
@@ -3993,6 +4220,7 @@ describe("till-app: every table move sends the party revision it last read", () 
   });
 
   it("moves a party whose tab has been paid, from the paid tab", async () => {
+    drafts.bills.add("wo-paid");
     const paid = seated(
       { hasOpenTab: false, tabLineCount: undefined, tabTotal: undefined },
       { outstanding: "0.00", mainBillId: null },
@@ -4016,6 +4244,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-paid", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(banner(el)).toBeNull();
   });
@@ -4437,6 +4666,10 @@ describe("till-app: another device changed the table first", () => {
     expect(moveGuests).toHaveBeenLastCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 5,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -4581,8 +4814,11 @@ describe("till-app: the order's groups", () => {
 
   function groupOf(id: string, position: number, state: OrderGroup["state"]): OrderGroup {
     return {
+      courseIds: [],
       id,
       position,
+      displayNumber: position,
+      numberPartyId: "v1",
       state,
       firedAt: state === "fired" ? "2026-09-27T10:00:00.000Z" : null,
       remindAt: null,
@@ -4630,7 +4866,6 @@ describe("till-app: the order's groups", () => {
     await flush(el);
   }
 
-  /** A confirmed preview's `submit-draft` for the first `count` of {@link roundLines}, as rung. */
   function roundDetail(
     order: TillTableOrderScreen,
     groups: { release: "fire" | "hold"; lineIndexes: number[] }[],
@@ -4693,6 +4928,7 @@ describe("till-app: the order's groups", () => {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
         draftRevision: 1,
+        expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
         groups: [
           { release: "fire", lineIds: [expect.any(String)] },
           { release: "hold", lineIds: [expect.any(String)] },
@@ -4761,10 +4997,9 @@ describe("till-app: the order's groups", () => {
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
   });
 
-  it("sends the round to the bill chosen in Send to after a refresh shows that bill presented", async () => {
+  it("refuses this bill's round after a refresh shows it presented, without sending to another open bill", async () => {
     let finish!: (value: unknown) => void;
     const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
       updateOrderLine: vi.fn(
         () =>
           new Promise((resolve) => {
@@ -4782,25 +5017,21 @@ describe("till-app: the order's groups", () => {
       revision: 0,
     });
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
-    await flush(el);
-    const choice = order.shadowRoot!.querySelector<HTMLInputElement>(
-      'input[name="billId"][value="wo-check"]',
-    )!;
-    choice.click();
-    await flush(el);
-    expect(choice.checked).toBe(true);
     vi.mocked(api.getTablesState).mockResolvedValue([seated({}, { revision: 5 }), mesa7, mesa9]);
-    vi.mocked(api.getPartyBills).mockResolvedValue([tabBill, { ...checkBill, status: "placed" }]);
-
+    vi.mocked(api.getPartyBills).mockResolvedValue([{ ...tabBill, status: "placed" }, checkBill]);
     finish({ revision: 1, party: { id: "v1", revision: 4 } });
     await flush(el);
-    expect(order.bills[1]!.status).toBe("placed");
-    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    expect(order.bills[0]!.status).toBe("placed");
+    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
     await flush(el);
-
-    expect(api.submitDraft).toHaveBeenCalledOnce();
-    expect(vi.mocked(api.submitDraft).mock.calls[0]![2]).toHaveProperty("billId", "wo-check");
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(order.orderId).toBe("wo-4");
+    expect(partyDraft(order).lines.map((line) => [line.product.id, line.quantity])).toEqual([
+      ["flan", "1"],
+      ["pan", "2"],
+    ]);
+    expect(order.bills[1]!.workingOrderId).toBe("wo-check");
+    expect(order.bills[1]!.status).toBe("open");
   });
 
   it("sends the revision the submission answered with on the party's next command", async () => {
@@ -4817,6 +5048,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 4,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -4906,6 +5141,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 4,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -4936,6 +5175,7 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v7", "t9", "merge", {
       expectedPartyRevision: 9,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
     });
   });
 
@@ -5041,6 +5281,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 4,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
+      ],
     });
   });
 
@@ -5107,6 +5351,7 @@ describe("till-app: the order's groups", () => {
   });
 
   it("sends a round from a party just seated when the floor could not be read after seating", async () => {
+    drafts.bills.add("wo-new");
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
@@ -5165,6 +5410,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 5,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -5207,11 +5456,14 @@ describe("till-app: the order's groups", () => {
         dish("line-fish", 4, "Fish", "1.000", "g3"),
         dish("line-flan", 5, "Flan", "1.000", "g4"),
       ];
-      const groups: { id: string; position: number; state: OrderGroup["state"] }[] = [
-        { id: "g1", position: 1, state: "fired" },
-        { id: "g2", position: 2, state: "held" },
-        { id: "g3", position: 3, state: "held" },
-        { id: "g4", position: 4, state: "held" },
+      const groups: Pick<
+        OrderGroup,
+        "id" | "position" | "displayNumber" | "numberPartyId" | "state"
+      >[] = [
+        { id: "g1", position: 1, displayNumber: 1, numberPartyId: "v1", state: "fired" },
+        { id: "g2", position: 2, displayNumber: 2, numberPartyId: "v1", state: "held" },
+        { id: "g3", position: 3, displayNumber: 3, numberPartyId: "v1", state: "held" },
+        { id: "g4", position: 4, displayNumber: 4, numberPartyId: "v1", state: "held" },
       ];
       const listed = (): OrderGroup[] =>
         groups
@@ -5224,6 +5476,7 @@ describe("till-app: the order's groups", () => {
               firedAt: group.state === "fired" ? at : null,
               remindAt: null,
               lineIds: own.map((line) => line.id),
+              courseIds: [],
               summary: own.map((line) => `${Number(line.quantity)} × ${line.name}`).join(", "),
             };
           });
@@ -5246,6 +5499,49 @@ describe("till-app: the order's groups", () => {
           editSentLines: true,
         })),
         listGroups: vi.fn(async () => ({ revision, groups: listed() })),
+        readCurrentOrders: vi.fn(async (): Promise<CurrentOrders> => ({
+          revision,
+          hasGroups: listed().length > 0,
+          nextDisplayNumber: Math.max(0, ...groups.map((group) => group.displayNumber)) + 1,
+          retainedCourses: [],
+          reminder: null,
+          ungrouped: [],
+          groups: listed().map((group) => ({
+            ...group,
+            sentAt: at,
+            sentBy: "Ana",
+            rows: lines
+              .filter((line) => line.groupId === group.id)
+              .map((line) => ({
+                billStatus: "open",
+                netAmount: grossOf(line.unitPriceGross, line.quantity),
+                readyAt: null,
+                firedAt: line.firedAt,
+                lineId: line.id,
+                workingOrderId: "wo-4",
+                lineNo: line.lineNo,
+                courseId: line.courseId,
+                name: line.name!,
+                quantity: line.quantity,
+                unitPrecision: line.unitPrecision!,
+                servedQuantity: "0.000",
+                servedAt: line.servedAt,
+                released: group.state === "fired",
+                kitchen:
+                  line.state === null
+                    ? null
+                    : {
+                        stationId: line.stationId,
+                        movable: line.movable,
+                        state: line.state,
+                        firedAt: line.firedAt,
+                        awayAt: null,
+                      },
+                note: line.note,
+                extras: [],
+              })),
+          })),
+        })),
         fireGroup: vi.fn(
           async (_partyId: string, groupId: string, command: { expectedPartyRevision: number }) => {
             check(command);
@@ -5293,7 +5589,13 @@ describe("till-app: the order's groups", () => {
             let targetId: string;
             if (target === "new") {
               targetId = `g${groups.length + 1}`;
-              groups.push({ id: targetId, position: groups.length + 1, state: "held" });
+              groups.push({
+                id: targetId,
+                position: groups.length + 1,
+                displayNumber: groups.length + 1,
+                numberPartyId: "v1",
+                state: "held",
+              });
             } else targetId = held(target.groupId).id;
             for (const { lineId, quantity } of moves) {
               const line = lines.find((each) => each.id === lineId)!;
@@ -5330,6 +5632,83 @@ describe("till-app: the order's groups", () => {
       await flush(el);
     }
 
+    async function openSent(el: TillApp) {
+      const order = tableOrder(el)!;
+      if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
+        await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+        await flush(el);
+      }
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await flush(el);
+      }
+      const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await panel.updateComplete;
+      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+        if (toggle.getAttribute("aria-expanded") === "false") {
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+        }
+      }
+      return panel;
+    }
+
+    async function fireFromSent(el: TillApp, id: string) {
+      const panel = await openSent(el);
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>(`[data-group-fire="${id}"]`)!,
+      );
+      await flush(el);
+    }
+
+    async function groupMenu(el: TillApp, id: string) {
+      const panel = await openSent(el);
+      const more = panel.shadowRoot!.querySelector<WtRowActions>(`[data-group-more="${id}"]`)!;
+      await more.updateComplete;
+      await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+      return more;
+    }
+
+    async function reopenDrawer(el: TillApp) {
+      const order = tableOrder(el)!;
+      if (order.shadowRoot!.querySelector("[data-drawer]") === null) {
+        await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+        await flush(el);
+      }
+    }
+
+    async function reorderFromSent(el: TillApp, id: string, direction: "earlier" | "later") {
+      const more = await groupMenu(el, id);
+      await userEvent.click(more.querySelector<HTMLElement>(`[data-group-${direction}]`)!);
+      await flush(el);
+      await reopenDrawer(el);
+    }
+
+    async function requestHeldMove(
+      el: TillApp,
+      lineId: string,
+      quantity: string,
+      target: { groupId: string } | "new",
+    ) {
+      const screen = tableOrder(el)!;
+      emit(screen, "move-group-line", {
+        lineId,
+        quantity,
+        target,
+        expectedEdits: screen.billEdit === null ? null : [{ ...screen.billEdit }],
+      });
+      await flush(el);
+    }
+    function requestHeldSplit(el: TillApp, quantity: string) {
+      emit(tableOrder(el)!, "split-group-line", {
+        lineId: "line-steak",
+        groupId: "g3",
+        quantity,
+      });
+    }
+
     const command = (revision: number) => ({
       submissionId: expect.any(String),
       expectedPartyRevision: revision,
@@ -5342,14 +5721,15 @@ describe("till-app: the order's groups", () => {
       const lineReads = server.getTabLines.mock.calls.length;
       const groupReads = server.listGroups.mock.calls.length;
 
-      await press(el, '[data-group-fire="g3"]');
+      await fireFromSent(el, "g3");
       expect(server.fireGroup).not.toHaveBeenCalled();
       await press(el, "[data-fire-confirm]");
+      await reopenDrawer(el);
 
       expect(server.fireGroup.mock.calls).toEqual([["v1", "g3", command(3)]]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(server.listGroups).toHaveBeenCalledTimes(groupReads + 1);
-      expect(heldGroupsList(el).map((group) => group.state)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.state)).toEqual([
         "fired",
         "held",
         "fired",
@@ -5362,6 +5742,10 @@ describe("till-app: the order's groups", () => {
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
+        expectedEdits: [
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       });
     });
 
@@ -5370,10 +5754,10 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
 
-      await press(el, '[data-group-down="g2"]');
+      await reorderFromSent(el, "g2", "later");
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g3", "g2", "g4"], command(3)]]);
-      expect(heldGroupsList(el).map((group) => group.summary)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.summary)).toEqual([
         "1 × Beer",
         "2 × Steak, 1 × Fish",
         "1 × Croquetas",
@@ -5381,36 +5765,54 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
-    it("moves a whole line to another held group", async () => {
+    it("the retained move command moves a whole line to another held group", async () => {
       const server = editServer();
       const { el } = await mountApp(server);
       await openGroups(el);
 
-      await press(el, '[data-move-line="line-flan"]');
-      await press(el, '[data-move-target="g2"]');
+      await requestHeldMove(el, "line-flan", "1.000", { groupId: "g2" });
 
       expect(server.moveLinesToGroup.mock.calls).toEqual([
-        ["v1", [{ lineId: "line-flan", quantity: "1.000" }], { groupId: "g2" }, command(3)],
+        [
+          "v1",
+          [{ lineId: "line-flan", quantity: "1.000" }],
+          { groupId: "g2" },
+          {
+            ...command(3),
+            expectedEdits: [
+              { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            ],
+          },
+        ],
       ]);
-      expect(heldGroupsList(el).map((group) => group.lines)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.lines)).toEqual([
         ["Beer ×1"],
         ["Croquetas ×1", "Flan ×1"],
         ["Steak ×2", "Fish ×1"],
       ]);
     });
 
-    it("moves a whole line into a new held group at the end", async () => {
+    it("the retained move command moves a whole line into a new held group at the end", async () => {
       const server = editServer();
       const { el } = await mountApp(server);
       await openGroups(el);
 
-      await press(el, '[data-move-line="line-fish"]');
-      await press(el, '[data-move-target="new"]');
+      await requestHeldMove(el, "line-fish", "1.000", "new");
 
       expect(server.moveLinesToGroup.mock.calls).toEqual([
-        ["v1", [{ lineId: "line-fish", quantity: "1.000" }], "new", command(3)],
+        [
+          "v1",
+          [{ lineId: "line-fish", quantity: "1.000" }],
+          "new",
+          {
+            ...command(3),
+            expectedEdits: [
+              { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            ],
+          },
+        ],
       ]);
-      expect(heldGroupsList(el).map((group) => group.lines)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.lines)).toEqual([
         ["Beer ×1"],
         ["Croquetas ×1"],
         ["Steak ×2"],
@@ -5420,24 +5822,37 @@ describe("till-app: the order's groups", () => {
     });
 
     it.each([2, 3, 4])(
-      "splits Steak ×%s with one command and keeps the resulting rows separate",
+      "the retained split command splits Steak ×%s once and keeps the resulting rows separate",
       async (quantity) => {
         const server = editServer(`${quantity}.000`);
         const { el } = await mountApp(server);
         await openGroups(el);
-        await press(el, '[data-split-group-line="line-steak"]');
+        requestHeldSplit(el, `${quantity}.000`);
+        await flush(el);
         expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
-          ["v1", "line-steak", command(3)],
+          [
+            "v1",
+            "line-steak",
+            {
+              ...command(3),
+              expectedEdit: {
+                billId: "wo-4",
+                editorVersion: 0,
+                draftId: null,
+                draftRevision: null,
+              },
+            },
+          ],
         ]);
         expect(server.moveLinesToGroup).not.toHaveBeenCalled();
-        expect(heldGroupsList(el)[2]!.lines).toEqual([
+        expect((await heldGroupsList(el))[2]!.lines).toEqual([
           ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
         ]);
         expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
         expect(banner(el)).toBeNull();
-        await press(el, '[data-group-up="g3"]');
-        expect(heldGroupsList(el)[1]!.lines).toEqual([
+        await reorderFromSent(el, "g3", "earlier");
+        expect((await heldGroupsList(el))[1]!.lines).toEqual([
           ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
         ]);
@@ -5446,6 +5861,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 5,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       },
     );
@@ -5457,10 +5876,20 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
       const lineReads = server.getTabLines.mock.calls.length;
-      await press(el, '[data-split-group-line="line-steak"]');
-      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      requestHeldSplit(el, "4.000");
+      await flush(el);
+      expect(split.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
+      expect((await heldGroupsList(el))[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
       expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
     });
 
@@ -5472,8 +5901,9 @@ describe("till-app: the order's groups", () => {
       const lineReads = server.getTabLines.mock.calls.length;
       const groupReads = server.listGroups.mock.calls.length;
 
-      await press(el, '[data-group-fire="g3"]');
+      await fireFromSent(el, "g3");
       await press(el, "[data-fire-confirm]");
+      await reopenDrawer(el);
 
       expect(server.fireGroup).toHaveBeenCalledOnce();
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
@@ -5508,6 +5938,10 @@ describe("till-app: the order's groups", () => {
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
+        expectedEdits: [
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       });
     });
 
@@ -5522,11 +5956,21 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
-      await press(el, '[data-split-group-line="line-steak"]');
-      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      requestHeldSplit(el, "4.000");
+      await flush(el);
+      expect(split.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(banner(el)!.textContent).toContain(t("table.error"));
-      expect(heldGroupsList(el)[2]!.lines).toEqual([
+      expect((await heldGroupsList(el))[2]!.lines).toEqual([
         "Steak ×1",
         "Steak ×1",
         "Steak ×1",
@@ -5538,6 +5982,10 @@ describe("till-app: the order's groups", () => {
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
+        expectedEdits: [
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       });
     });
 
@@ -5549,27 +5997,39 @@ describe("till-app: the order's groups", () => {
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
       const lineReads = server.getTabLines.mock.calls.length;
-      await press(el, '[data-split-group-line="line-steak"]');
-      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      requestHeldSplit(el, "4.000");
+      await flush(el);
+      expect(split.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
+      expect((await heldGroupsList(el))[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
     });
 
-    it("two presses of ↑ in one turn move the group once, and show no message", async () => {
+    it("two presses of Move earlier in one turn move the group once, and show no message", async () => {
       const server = editServer();
       const { el } = await mountApp(server);
       await openGroups(el);
-      const up = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-group-up="g4"]')!;
+      const more = await groupMenu(el, "g4");
+      const up = more.querySelector<HTMLElement>("[data-group-earlier]")!;
 
       up.click();
       up.click();
       await flush(el);
+      await reopenDrawer(el);
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g2", "g4", "g3"], command(3)]]);
       expect(banner(el)).toBeNull();
-      expect(heldGroupsList(el).map((group) => group.summary)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.summary)).toEqual([
         "1 × Beer",
         "1 × Croquetas",
         "1 × Flan",
@@ -5577,21 +6037,31 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
-    it("two presses of Split quantity in one turn split the line once, and show no message", async () => {
+    it("two retained split commands in one turn split the line once, and show no message", async () => {
       const server = editServer("3.000");
       const { el } = await mountApp(server);
       await openGroups(el);
-      const split = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(
-        '[data-split-group-line="line-steak"]',
-      )!;
-
-      split.click();
-      split.click();
+      requestHeldSplit(el, "3.000");
+      requestHeldSplit(el, "3.000");
       await flush(el);
 
-      expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(banner(el)).toBeNull();
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Steak ×1", "Fish ×1"]);
+      expect((await heldGroupsList(el))[2]!.lines).toEqual([
+        "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
+        "Fish ×1",
+      ]);
     });
 
     const handheldOrder = (el: TillApp) =>
@@ -5640,16 +6110,28 @@ describe("till-app: the order's groups", () => {
         });
         const { el } = await mountApp({ ...server, ...over });
         const order = await open(el);
-        const disabled = () =>
-          ['[data-group-up="g4"]', '[data-group-fire="g4"]', '[data-move-line="line-flan"]'].map(
-            (selector) =>
-              order.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector)!
-                .disabled,
-          );
+        await groupMenu(el, "g4");
+        await reopenDrawer(el);
+        const disabled = () => {
+          const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+          return [
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-group-more="g4"] [data-group-earlier]',
+            )!.disabled,
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-group-fire="g4"]',
+            )!.disabled,
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-sent-info="line-flan"]',
+            )!.disabled,
+          ];
+        };
         expect(disabled()).toEqual([false, false, false]);
 
-        order.shadowRoot!.querySelector<HTMLElement>('[data-group-down="g2"]')!.click();
+        const more = await groupMenu(el, "g2");
+        await userEvent.click(more.querySelector<HTMLElement>("[data-group-later]")!);
         await flush(el);
+        await reopenDrawer(el);
         expect(disabled()).toEqual([true, true, true]);
 
         answer();
@@ -5664,7 +6146,12 @@ describe("till-app: the order's groups", () => {
       ["reorder-groups", { heldGroupIds: ["g3", "g2", "g4"] }, "reorderGroups"],
       [
         "move-group-line",
-        { lineId: "line-flan", quantity: "1.000", target: { groupId: "g2" } },
+        {
+          lineId: "line-flan",
+          quantity: "1.000",
+          target: { groupId: "g2" },
+          expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
+        },
         "moveLinesToGroup",
       ],
       [
@@ -5687,7 +6174,26 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(refused).toHaveBeenCalledOnce();
-        expect(refused.mock.calls[0]!.at(-1)).toEqual(command(3));
+        expect(refused.mock.calls[0]!.at(-1)).toEqual(
+          type === "split-group-line"
+            ? {
+                ...command(3),
+                expectedEdit: {
+                  billId: "wo-4",
+                  editorVersion: 0,
+                  draftId: null,
+                  draftRevision: null,
+                },
+              }
+            : type === "move-group-line"
+              ? {
+                  ...command(3),
+                  expectedEdits: [
+                    { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+                  ],
+                }
+              : command(3),
+        );
         expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
         expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
         expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
@@ -5904,6 +6410,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 4,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
 
@@ -5959,6 +6469,10 @@ describe("till-app: the order's groups", () => {
           expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
             expectedPartyRevision: 4,
             otherPartyId: null,
+            expectedEdits: [
+              { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+              { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+            ],
           });
         },
       );
@@ -5991,6 +6505,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 4,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 3, draftId: "draft-4", draftRevision: 1 },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
 
@@ -6010,6 +6528,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
     });
@@ -6018,11 +6540,11 @@ describe("till-app: the order's groups", () => {
 
 describe("till-app: submitting the draft", () => {
   const serviceCourses = [
-    { id: "drinks", name: "Drinks", displayOrder: 0 },
-    { id: "cold", name: "Cold starters", displayOrder: 1 },
-    { id: "warm", name: "Warm starters", displayOrder: 2 },
-    { id: "mains", name: "Mains", displayOrder: 3 },
-    { id: "desserts", name: "Desserts", displayOrder: 4 },
+    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+    { id: "cold", name: "Cold starters", displayOrder: 1, heldUntilFired: true },
+    { id: "warm", name: "Warm starters", displayOrder: 2, heldUntilFired: true },
+    { id: "mains", name: "Mains", displayOrder: 3, heldUntilFired: true },
+    { id: "desserts", name: "Desserts", displayOrder: 4, heldUntilFired: true },
   ];
   const dish = (id: string, name: string, courseId: string): TillProduct => ({
     id,
@@ -6058,16 +6580,21 @@ describe("till-app: submitting the draft", () => {
         if (submission.expectedPartyRevision !== revision)
           throw { code: "party.out_of_date", partyId: "v1" };
         const taken = drafts.apply(partyId, draftId, submission);
-        for (const group of drafts.sentGroups(submission)) {
+        for (const [index, group] of drafts.sentGroups(submission).entries()) {
           const ids = group.lines.map(() => `line-${++lineIds}`);
-          const joined = groups.find((held) => held.id === submission.joinGroupId);
+          const joined = groups.find(
+            (held) => held.id === (submission.groups[index]!.joinGroupId ?? submission.joinGroupId),
+          );
           if (joined !== undefined) {
             joined.lineIds.push(...ids);
             continue;
           }
           groups.push({
+            courseIds: [],
             id: `g${groups.length + 1}`,
             position: groups.length + 1,
+            displayNumber: groups.length + 1,
+            numberPartyId: "v1",
             state: group.release === "fire" ? "fired" : "held",
             firedAt: group.release === "fire" ? "2026-09-27T10:00:00.000Z" : null,
             remindAt: null,
@@ -6083,6 +6610,20 @@ describe("till-app: submitting the draft", () => {
 
   const withCourses = () => ({
     getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses }),
+  });
+  const firstOrderHistory = () => ({
+    readCurrentOrders: vi
+      .fn()
+      .mockRejectedValue({ code: "server.internal" })
+      .mockResolvedValueOnce({
+        revision: 3,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [],
+      }),
   });
 
   const draftOf = (order: TillTableOrderScreen) =>
@@ -6100,11 +6641,21 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
   }
 
-  async function act(el: TillApp, order: TillTableOrderScreen, kind: string): Promise<void> {
+  async function act(
+    el: TillApp,
+    order: TillTableOrderScreen,
+    kind: "send-all" | "fire-selected",
+  ): Promise<void> {
     order.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!.click();
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+  }
+
+  async function fireAll(el: TillApp, order: TillTableOrderScreen): Promise<void> {
+    for (const tick of order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")) {
+      if (tick.getAttribute("aria-pressed") !== "true") tick.click();
+    }
     await flush(el);
+    await act(el, order, "fire-selected");
   }
 
   const toast = (el: TillApp) =>
@@ -6114,7 +6665,7 @@ describe("till-app: submitting the draft", () => {
 
   it("files the spec's five groups from one draft, then returns to the floor saying what it did", async () => {
     const server = groupsServer();
-    const { el } = await mountApp({ ...withCourses(), ...server });
+    const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     const order = await openMesa(el);
     await ring(el, order, beer, salad, croquetas, steak, flan);
 
@@ -6122,8 +6673,6 @@ describe("till-app: submitting the draft", () => {
     await act(el, order, "fire-selected");
     await toggle(el, tableOrder(el)!, "Salad");
     await act(el, tableOrder(el)!, "fire-selected");
-    await toggle(el, tableOrder(el)!, "Croquetas");
-    await act(el, tableOrder(el)!, "send-selected");
     expect(tableOrder(el)).not.toBeNull();
     expect(toast(el)?.open ?? false).toBe(false);
     await act(el, tableOrder(el)!, "send-all");
@@ -6141,7 +6690,7 @@ describe("till-app: submitting the draft", () => {
       { position: 4, state: "held", summary: "1 × offer-steak" },
       { position: 5, state: "held", summary: "1 × offer-flan" },
     ]);
-    expect(api.submitDraft).toHaveBeenCalledTimes(4);
+    expect(api.submitDraft).toHaveBeenCalledTimes(3);
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();
     expect(toast(el)!.open).toBe(true);
@@ -6153,13 +6702,21 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
-    expect(heldGroupsList(el).map(({ position, state }) => ({ position, state }))).toEqual([
+    expect(
+      tableOrder(el)!.groups.map(({ displayNumber, state }) => ({
+        position: `Group ${displayNumber}`,
+        state,
+      })),
+    ).toEqual([
       { position: "Group 1", state: "fired" },
       { position: "Group 2", state: "fired" },
       { position: "Group 3", state: "held" },
       { position: "Group 4", state: "held" },
       { position: "Group 5", state: "held" },
     ]);
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-sent-unread]")!.textContent).toContain(
+      t("table.current_orders_unread"),
+    );
   });
 
   it("shows the notice over the floor without moving it, so a tap as it closes lands where it was aimed", async () => {
@@ -6167,7 +6724,7 @@ describe("till-app: submitting the draft", () => {
     const { el } = await mountApp({ ...withCourses(), ...server });
     const order = await openMesa(el);
     await ring(el, order, beer, steak);
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     expect(toast(el)!.open).toBe(true);
     const withNotice = floor(el)!.getBoundingClientRect().top;
 
@@ -6193,22 +6750,30 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)?.open ?? false).toBe(false);
   });
 
-  describe("a partial submission that lands on the party's next bill", () => {
-    const toNextBill = (over: Record<string, unknown> = {}) => ({
+  describe("a partial submission after the party's main bill changes", () => {
+    const onRecordedBill = (over: Record<string, unknown> = {}) => ({
       ...withCourses(),
-      submitDraft: answering({ tabId: "wo-next", revision: 4, groups: [] }),
+      submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
       ...over,
     });
     const partyOnNextBill = () =>
       vi
         .mocked(api.getTablesState)
         .mockResolvedValue([seated({}, { revision: 4, mainBillId: "wo-next" }), mesa7, mesa9]);
-    const courseOf = (order: TillTableOrderScreen, index: number) =>
-      order.shadowRoot!.querySelector<WtCombobox>(`[data-round-course="${index}"]`)!.value;
+    const courseOf = async (order: TillTableOrderScreen, index: number) => {
+      const form = await openDraftLine(order, index);
+      const value = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!.value;
+      form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+      await order.updateComplete;
+      return value;
+    };
 
     const firedGroup = (id: string, summary: string): OrderGroup => ({
+      courseIds: [],
       id,
       position: 1,
+      displayNumber: 1,
+      numberPartyId: "v1",
       state: "fired",
       firedAt: "2026-09-27T10:00:00Z",
       remindAt: null,
@@ -6216,22 +6781,26 @@ describe("till-app: submitting the draft", () => {
       summary,
     });
 
-    it("keeps the rest of a first order a first order, with its course choice and its count, on the bill it follows, though the party now has a group", async () => {
+    it("keeps the rest of a first order a first order, with its course choice and its count, on its recorded bill, though the party now has a group", async () => {
       const { el } = await mountApp(
-        toNextBill({
+        onRecordedBill({
+          ...firstOrderHistory(),
           submitDraft: vi.fn(async (...args: SubmitArgs) => {
             vi.mocked(api.listGroups).mockResolvedValue({
               revision: 4,
               groups: [firedGroup("g1", "1 × Beer")],
             });
-            return { ...drafts.apply(...args), tabId: "wo-next", revision: 4, groups: [] };
+            return { ...drafts.apply(...args), tabId: "wo-4", revision: 4, groups: [] };
           }),
         }),
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
-      const steakCourse = order.shadowRoot!.querySelector<WtCombobox>('[data-round-course="1"]')!;
+      const form = await openDraftLine(order, 1);
+      const steakCourse = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
       await chooseOption(steakCourse, "desserts");
+      await form.updateComplete;
+      form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       await flush(el);
       partyOnNextBill();
 
@@ -6239,9 +6808,9 @@ describe("till-app: submitting the draft", () => {
       await act(el, order, "fire-selected");
 
       const next = tableOrder(el)!;
-      expect(next.orderId).toBe("wo-next");
+      expect(next.orderId).toBe("wo-4");
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
-      expect(courseOf(next, 0)).toBe("desserts");
+      expect(await courseOf(next, 0)).toBe("desserts");
       expect(next.shadowRoot!.querySelector('[data-draft-action="send-all"]')).not.toBeNull();
       expect(next.shadowRoot!.querySelector("[data-destination-choice]")).toBeNull();
 
@@ -6258,30 +6827,33 @@ describe("till-app: submitting the draft", () => {
     it("keeps a later addition's rest a later addition", async () => {
       const prior = firedGroup("g-prior", "1 × Coffee");
       const { el } = await mountApp(
-        toNextBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
+        onRecordedBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
       partyOnNextBill();
 
       await toggle(el, order, "Beer");
-      await act(el, order, "submit");
+      await act(el, order, "fire-selected");
 
       const next = tableOrder(el)!;
-      expect(next.orderId).toBe("wo-next");
+      expect(next.orderId).toBe("wo-4");
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
-      expect(next.shadowRoot!.querySelector("[data-destination-choice]")).not.toBeNull();
+      expect(next.shadowRoot!.querySelector("[data-destination-choice]")).toBeNull();
+      expect(draftOf(next).lines[0]!.place).toEqual({ kind: "fire" });
     });
 
     it("keeps a later addition's chosen destination and held group for its rest", async () => {
       const held = (id: string, position: number): OrderGroup => ({
         ...firedGroup(id, `1 × ${id}`),
         position,
+        displayNumber: position,
+        numberPartyId: "v1",
         state: "held",
         firedAt: null,
       });
       const { el } = await mountApp(
-        toNextBill({
+        onRecordedBill({
           listGroups: vi
             .fn()
             .mockResolvedValue({ revision: 3, groups: [held("g-a", 1), held("g-b", 2)] }),
@@ -6289,22 +6861,21 @@ describe("till-app: submitting the draft", () => {
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
-      order.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
-      await flush(el);
-      order.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g-b"]')!.click();
+      draftOf(order).setLinePlaces([0, 1], { kind: "join", groupId: "g-b" });
       await flush(el);
       partyOnNextBill();
 
       await toggle(el, order, "Beer");
-      await act(el, order, "submit");
+      await act(el, order, "fire-selected");
 
       const next = tableOrder(el)!;
-      const pressed = (selector: string) =>
-        next.shadowRoot!.querySelector(selector)!.getAttribute("aria-pressed");
-      expect(next.orderId).toBe("wo-next");
-      expect(vi.mocked(api.submitDraft).mock.calls[0]![2].joinGroupId).toBe("g-b");
-      expect(pressed('[data-destination="add-to-held"]')).toBe("true");
-      expect(pressed('[data-held-group="g-b"]')).toBe("true");
+      expect(next.orderId).toBe("wo-4");
+      expect(drafts.sentGroups(vi.mocked(api.submitDraft).mock.calls[0]![2])).toEqual([
+        { release: "fire", lines: [{ menuItemId: "offer-beer", quantity: "1" }] },
+      ]);
+      expect(draftOf(next).lines.map((line) => [line.product.id, line.place])).toEqual([
+        ["steak", { kind: "join", groupId: "g-b" }],
+      ]);
     });
   });
 
@@ -6319,7 +6890,7 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
 
     await ring(el, order, flan);
-    await act(el, order, "submit");
+    await act(el, order, "send-all");
 
     expect(server.groups).toHaveLength(2);
     expect(toast(el)!.message).toBe("Fired: 1 group.");
@@ -6330,7 +6901,7 @@ describe("till-app: submitting the draft", () => {
     const { el } = await mountApp({ ...withCourses(), ...server });
     const order = await openMesa(el);
     await ring(el, order, beer, steak);
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     expect(toast(el)!.message).toBe("Fired: 1 group.");
   });
 
@@ -6342,14 +6913,14 @@ describe("till-app: submitting the draft", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       await ring(el, order, beer);
-      await act(el, order, "fire-all");
+      await fireAll(el, order);
       expect(toast(el)!.message).toBe("Fired: 1 group.");
 
       await vi.advanceTimersByTimeAsync(600);
       emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
       await flush(el);
       await ring(el, tableOrder(el)!, flan);
-      await act(el, tableOrder(el)!, "submit");
+      await act(el, tableOrder(el)!, "send-all");
       expect(server.groups).toHaveLength(2);
       expect(toast(el)!.message).toBe("Fired: 1 group.");
       expect(toast(el)!.open).toBe(true);
@@ -6366,7 +6937,7 @@ describe("till-app: submitting the draft", () => {
 
   it("does not count a draft added to a held group as a new group", async () => {
     const server = groupsServer();
-    const { el } = await mountApp({ ...withCourses(), ...server });
+    const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     let order = await openMesa(el);
     await ring(el, order, steak);
     await act(el, order, "send-all");
@@ -6374,16 +6945,16 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
     order = tableOrder(el)!;
     await ring(el, order, flan);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
+    draftOf(order).setLinePlaces([0], { kind: "join", groupId: "g1" });
     await flush(el);
-    await act(el, order, "submit");
+    await act(el, order, "send-all");
 
     expect(vi.mocked(api.submitDraft).mock.calls[1]![2]).toEqual({
       submissionId: expect.any(String),
       expectedPartyRevision: 4,
       draftRevision: expect.any(Number),
-      joinGroupId: "g1",
-      groups: [{ release: "hold", lineIds: [expect.any(String)] }],
+      expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: "draft-3", draftRevision: 1 },
+      groups: [{ release: "hold", lineIds: [expect.any(String)], joinGroupId: "g1" }],
     });
     expect(drafts.sentGroups(vi.mocked(api.submitDraft).mock.calls[1]![2])).toEqual([
       { release: "hold", lines: [{ menuItemId: "offer-flan", quantity: "1" }] },
@@ -6409,7 +6980,7 @@ describe("till-app: submitting the draft", () => {
     const card =
       tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
     await ring(el, card, beer);
-    await act(el, card, "fire-all");
+    await fireAll(el, card);
 
     expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
     expect(toast(el)!.message).toBe("Fired: 1 group.");
@@ -6431,7 +7002,7 @@ describe("till-app: submitting the draft", () => {
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledOnce();
@@ -6444,7 +7015,6 @@ describe("till-app: submitting the draft", () => {
   });
 
   it("refuses to add to a held group while the groups could not be read, and reads them again", async () => {
-    // A preview opened before a read failed still names the group it joins.
     const listGroups = vi.fn().mockRejectedValue(new TypeError("offline"));
     const { el } = await mountApp({ ...withCourses(), listGroups });
     const order = await openMesa(el);
@@ -6474,7 +7044,7 @@ describe("till-app: submitting the draft", () => {
     });
     const order = await openMesa(el);
     await ring(el, order, beer);
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(banner(el)).toBeNull();
   });
@@ -6650,21 +7220,30 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
   });
 });
 
-// The shared stub has no `readCurrentOrders`, so every other suite here sees the read fail and the
-// groups fall back to this bill's lines.
 describe("till-app: Current orders", () => {
   const noCurrentOrders = () => ({
-    readCurrentOrders: vi
-      .fn()
-      .mockResolvedValue({ revision: 3, reminder: null, groups: [], ungrouped: [] }),
+    readCurrentOrders: vi.fn().mockResolvedValue({
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      revision: 3,
+      reminder: null,
+      groups: [],
+      ungrouped: [],
+    }),
   });
   const orders: CurrentOrders = {
+    hasGroups: true,
+    nextDisplayNumber: 2,
+    retainedCourses: [],
     revision: 3,
     reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
     groups: [
       {
         id: "g1",
         position: 1,
+        displayNumber: 1,
+        numberPartyId: "v1",
         state: "fired",
         firedAt: "2026-09-28T19:50:00.000Z",
         remindAt: null,
@@ -6672,9 +7251,14 @@ describe("till-app: Current orders", () => {
         sentBy: "Luis",
         rows: [
           {
+            billStatus: "open",
+            netAmount: "30.00",
+            readyAt: null,
+            firedAt: "2026-09-28T19:50:00.000Z",
             lineId: "line-1",
             workingOrderId: "wo-4",
             lineNo: 1,
+            courseId: null,
             name: "Vino",
             quantity: "1.000",
             unitPrecision: 0,
@@ -6697,6 +7281,248 @@ describe("till-app: Current orders", () => {
 
     expect(api.readCurrentOrders).toHaveBeenCalledWith("v1");
     expect(order.currentOrders).toEqual(orders);
+  });
+
+  it.each([
+    ["wo-4", 0],
+    ["wo-check", 8],
+  ] as const)(
+    "splits a held party dish using its own bill %s observation",
+    async (billId, editorVersion) => {
+      const current = structuredClone(orders);
+      current.groups[0]!.state = "held";
+      current.groups[0]!.rows[0]!.workingOrderId = billId;
+      const split = vi.fn().mockResolvedValue({ revision: 4 });
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        splitHeldLineIntoUnits: split,
+        listDrafts: vi.fn(async (partyId: string) => {
+          const snapshot = await drafts.listDrafts(partyId);
+          snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 8;
+          return snapshot;
+        }),
+      });
+      const order = await openMesa(el);
+      emit(order, "split-group-line", { lineId: "line-1" });
+      await flush(el);
+      expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedEdit: { billId, editorVersion, draftId: null, draftRevision: null },
+      });
+      expect(order.orderId).toBe("wo-4");
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["editor version", "draft identity", "draft revision", "API replacement"])(
+    "does not renew a held split's observation after %s while its kitchen note saves",
+    async (changed) => {
+      const current = structuredClone(orders);
+      current.groups[0]!.state = "held";
+      if (changed === "draft identity" || changed === "draft revision")
+        drafts.save("v1", {
+          billId: "wo-4",
+          draftId: null,
+          revision: 0,
+          lines: [
+            {
+              menuItemId: "retired-offer",
+              quantity: "1",
+              variantId: null,
+              menuVersionId: null,
+              courseId: null,
+              makeAt: null,
+              slot: 0,
+              joinGroupId: null,
+              afterGroupId: null,
+              note: null,
+              options: [],
+              extras: [],
+              noMerge: false,
+            },
+          ],
+        });
+      let changeObservation = false;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await drafts.listDrafts(partyId);
+        if (changeObservation) {
+          const edit = snapshot.billEdits.find((row) => row.billId === "wo-4")!;
+          if (changed === "editor version") edit.editorVersion = 2;
+          if (changed === "draft identity") {
+            snapshot.drafts[0]!.id = "new-draft";
+            edit.draftId = "new-draft";
+            edit.editorVersion += 1;
+          }
+          if (changed === "draft revision") {
+            snapshot.drafts[0]!.revision = 5;
+            edit.draftRevision = 5;
+          }
+        }
+        return snapshot;
+      });
+      let finish!: () => void;
+      const split = vi.fn().mockResolvedValue({ revision: 5 });
+      const setKitchenNote = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = () =>
+              resolve({
+                scope: { partyId: "v1" },
+                revision: 1,
+                ownerRevision: 4,
+                note: "Together",
+              });
+          }),
+      );
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        splitHeldLineIntoUnits: split,
+        listDrafts,
+        setKitchenNote,
+      });
+      const order = await openMesa(el);
+      const editor = order.shadowRoot!.querySelector("till-order-kitchen-note")!;
+      emit(editor, "save-kitchen-note", {
+        scopeKey: "party:v1",
+        revision: 0,
+        visit: editor.visit,
+        note: "Together",
+      });
+      await flush(el);
+      expect(setKitchenNote).toHaveBeenCalledOnce();
+      emit(order, "split-group-line", { lineId: "line-1" });
+      await flush(el);
+      expect(split).not.toHaveBeenCalled();
+      try {
+        if (changed === "API replacement") el.api = stubApi({ ...api });
+        else {
+          changeObservation = true;
+          const reads = listDrafts.mock.calls.length;
+          window.dispatchEvent(new Event("focus"));
+          await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+        }
+        await flush(el, 6);
+        if (changed === "editor version") expect(order.billEdit?.editorVersion).toBe(2);
+        if (changed === "draft identity") expect(order.billEdit?.draftId).toBe("new-draft");
+        if (changed === "draft revision") expect(order.billEdit?.draftRevision).toBe(5);
+      } finally {
+        finish();
+      }
+      await flush(el, 6);
+      expect(split).not.toHaveBeenCalled();
+      expect(order.groupCommandBusy).toBe(false);
+      expect(order.orderId).toBe("wo-4");
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the held split's original bill observation when only another bill changes", async () => {
+    const current = structuredClone(orders);
+    current.groups[0]!.state = "held";
+    let changed = false;
+    let finish!: () => void;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((row) => row.billId === "wo-check")!.editorVersion = 8;
+      return snapshot;
+    });
+    const split = vi.fn().mockResolvedValue({ revision: 5 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(current),
+      splitHeldLineIntoUnits: split,
+      listDrafts,
+      setKitchenNote: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = () =>
+              resolve({
+                scope: { partyId: "v1" },
+                revision: 1,
+                ownerRevision: 4,
+                note: "Together",
+              });
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    const editor = order.shadowRoot!.querySelector("till-order-kitchen-note")!;
+    emit(editor, "save-kitchen-note", {
+      scopeKey: "party:v1",
+      revision: 0,
+      visit: editor.visit,
+      note: "Together",
+    });
+    await flush(el);
+    emit(order, "split-group-line", { lineId: "line-1" });
+    await flush(el);
+    expect(split).not.toHaveBeenCalled();
+    try {
+      changed = true;
+      const reads = listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el, 6);
+    } finally {
+      finish();
+    }
+    await flush(el, 6);
+    expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 4,
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+    });
+    expect(order.groupCommandBusy).toBe(false);
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps another bill's newer observation when a refresh reports a lower version", async () => {
+    const current = structuredClone(orders);
+    current.groups[0]!.rows[0]!.workingOrderId = "wo-check";
+    let reads = 0;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion =
+        ++reads === 1 ? 8 : 2;
+      return snapshot;
+    });
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(current),
+      splitHeldLineIntoUnits: split,
+      listDrafts,
+    });
+    const order = await openMesa(el);
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    expect(listDrafts).toHaveBeenCalledTimes(2);
+    emit(order, "split-group-line", { lineId: "line-1" });
+    await flush(el);
+    expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+      expectedEdit: { billId: "wo-check", editorVersion: 8, draftId: null, draftRevision: null },
+    });
+  });
+
+  it("sends no split without an observation for the dish's bill", async () => {
+    const current = structuredClone(orders);
+    current.groups[0]!.rows[0]!.workingOrderId = "wo-missing";
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(current),
+      splitHeldLineIntoUnits: split,
+    });
+    const order = await openMesa(el);
+    emit(order, "split-group-line", { lineId: "line-1" });
+    await flush(el);
+    expect(split).not.toHaveBeenCalled();
+    expect(order.orderId).toBe("wo-4");
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
   });
 
   it("opens the order with no Current orders when their read fails", async () => {
@@ -6824,14 +7650,803 @@ describe("till-app: Current orders", () => {
     expect(tableOrder(el)!.currentOrders).toEqual(orders);
   });
 
-  it("moves a held row on another open bill of the party from Current orders", async () => {
+  it("offers Undo only after serving succeeds and reverses the exact confirmed quantities", async () => {
+    let accept!: (answer: { revision: number }) => void;
+    const markServed = vi.fn(
+      () =>
+        new Promise<{ revision: number }>((resolve) => {
+          accept = resolve;
+        }),
+    );
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(orders),
+      markServed,
+    });
+    const order = await openMesa(el);
+    const items = [{ lineId: "line-1", quantity: "0.5" }];
+    const notice = () => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]");
+
+    emit(order, "serve-lines", { items });
+    await flush(el);
+    expect(markServed).toHaveBeenCalledOnce();
+    expect(notice()?.open ?? false).toBe(false);
+    // The caller's array is not the command receipt.
+    items[0]!.quantity = "9";
+    accept({ revision: 4 });
+    await flush(el);
+
+    expect(notice()?.open).toBe(true);
+    expect(notice()?.message).toContain("Vino");
+    notice()!.querySelector<HTMLElement>("[data-undo-served]")!.click();
+    await flush(el);
+    expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      [{ lineId: "line-1", quantity: "0.5" }],
+      { submissionId: expect.any(String), expectedPartyRevision: 4 },
+    );
+    expect(notice()?.open ?? false).toBe(false);
+  });
+
+  describe("native Sent panel integration", () => {
+    for (const formFactor of ["till", "phone-portrait"] as const) {
+      it.each(["row", "all", "fire"] as const)(
+        `native ${formFactor} repeated Sent %s presses wait for the accepted reply`,
+        async (action) => {
+          const state = structuredClone(orders);
+          state.reminder = null;
+          state.groups[0]!.rows[0]!.quantity = "2.000";
+          state.groups[0]!.rows[0]!.servedQuantity = "1.000";
+          state.groups.push({
+            ...state.groups[0]!,
+            id: "g2",
+            position: 2,
+            displayNumber: 2,
+            state: action === "fire" ? "held" : "fired",
+            firedAt: action === "fire" ? null : state.groups[0]!.firedAt,
+            rows: [
+              {
+                ...state.groups[0]!.rows[0]!,
+                lineId: "line-2",
+                lineNo: 2,
+                name: "Steak",
+                quantity: action === "fire" ? "2.000" : "3.000",
+                servedQuantity: action === "fire" ? "0.000" : "1.000",
+                firedAt: action === "fire" ? null : state.groups[0]!.firedAt,
+                released: action !== "fire",
+              },
+            ],
+          });
+          let accept!: () => void;
+          const pending = new Promise<{ revision: number }>((resolve) => {
+            accept = () => {
+              state.revision = 4;
+              if (action === "fire") {
+                state.groups[1]!.state = "fired";
+                state.groups[1]!.rows[0]!.released = true;
+              } else {
+                state.groups[0]!.rows[0]!.servedQuantity = "2.000";
+                if (action === "all") state.groups[1]!.rows[0]!.servedQuantity = "3.000";
+              }
+              resolve({ revision: 4 });
+            };
+          });
+          const send = vi.fn(() => pending);
+          const { el } = await mountApp({
+            getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+            readCurrentOrders: vi.fn(async () => structuredClone(state)),
+            listGroups: vi.fn(async () => ({
+              revision: state.revision,
+              groups: state.groups.map((group) => ({
+                ...group,
+                courseIds: [],
+                lineIds: group.rows.map((row) => row.lineId),
+                summary: group.rows[0]!.name,
+              })),
+            })),
+            [action === "fire" ? "fireGroup" : "markServed"]: send,
+          });
+          const order = await openMesa(el);
+          const panel = await visiblePanel(order);
+          const before = structuredClone(order.currentOrders);
+          const control = (selector: string) =>
+            panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+          const native = (element: HTMLElement) =>
+            element instanceof HTMLButtonElement
+              ? element
+              : element.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+          try {
+            let target: HTMLButtonElement;
+            if (action === "fire") {
+              await userEvent.click(control("[data-held-toggle]"));
+              await panel.updateComplete;
+              await userEvent.click(control('[data-group-fire="g2"]'));
+              await flush(el);
+              expect(send).not.toHaveBeenCalled();
+              target = native(order.shadowRoot!.querySelector<HTMLElement>("[data-fire-confirm]")!);
+            } else {
+              target = native(
+                control(action === "row" ? '[data-serve-line="line-1"]' : "[data-serve-all]"),
+              );
+            }
+            await userEvent.dblClick(target);
+            await flush(el);
+            expect(send).toHaveBeenCalledExactlyOnceWith(
+              "v1",
+              action === "fire"
+                ? "g2"
+                : action === "row"
+                  ? [{ lineId: "line-1", quantity: "1" }]
+                  : [
+                      { lineId: "line-1", quantity: "1" },
+                      { lineId: "line-2", quantity: "2" },
+                    ],
+              { submissionId: expect.any(String), expectedPartyRevision: 3 },
+            );
+            expect(order.currentOrders).toEqual(before);
+            expect(
+              el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")?.open ?? false,
+            ).toBe(false);
+            for (const button of panel.shadowRoot!.querySelectorAll<HTMLElement>(
+              "[data-serve-line],[data-serve-all],[data-group-fire]",
+            )) {
+              expect(native(button).disabled).toBe(true);
+            }
+            await userEvent.click(native(control('[data-serve-line="line-1"]')), { force: true });
+            await flush(el);
+            expect(send).toHaveBeenCalledOnce();
+            expect(api.fireGroup).toHaveBeenCalledTimes(action === "fire" ? 1 : 0);
+            expect(api.markServed).toHaveBeenCalledTimes(action === "fire" ? 0 : 1);
+
+            accept();
+            await flush(el, 6);
+            expect(order.currentOrders!.revision).toBe(4);
+            expect(order.currentOrders!.groups).toEqual(state.groups);
+            if (action === "all") {
+              const toast = el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+              expect(toast.open).toBe(true);
+              await userEvent.click(toast.querySelector<HTMLElement>("[data-undo-served]")!);
+              await flush(el);
+              expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+                "v1",
+                [
+                  { lineId: "line-1", quantity: "1" },
+                  { lineId: "line-2", quantity: "2" },
+                ],
+                { submissionId: expect.any(String), expectedPartyRevision: 4 },
+              );
+            } else {
+              const mark = vi.mocked(api.markServed);
+              mark.mockResolvedValue({ revision: 5 });
+              await userEvent.click(native(control('[data-serve-line="line-2"]')));
+              await flush(el);
+              expect(mark).toHaveBeenCalledTimes(action === "row" ? 2 : 1);
+              expect(mark).toHaveBeenLastCalledWith("v1", [{ lineId: "line-2", quantity: "2" }], {
+                submissionId: expect.any(String),
+                expectedPartyRevision: 4,
+              });
+            }
+            expect(banner(el)).toBeNull();
+            expect(drafts.saveDraft).not.toHaveBeenCalled();
+            expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+          } finally {
+            accept();
+            await flush(el);
+          }
+        },
+      );
+    }
+
+    describe.each(["light", "dark"] as const)("native partial serving in %s", (theme) => {
+      it.each([
+        ["en", 390],
+        ["es", 390],
+        ["en", 1280],
+        ["es", 1280],
+      ] as const)(
+        "confirms and undoes only the chosen quantity in %s at %i",
+        async (locale, width) => {
+          const oldWidth = innerWidth,
+            oldHeight = innerHeight;
+          await page.viewport(width, 900);
+          const state = structuredClone(orders);
+          state.reminder = null;
+          const row = state.groups[0]!.rows[0]!;
+          row.quantity = "4.000";
+          row.servedQuantity = "1.000";
+          let accept!: () => void;
+          const pending = new Promise<{ revision: number }>((resolve) => {
+            accept = () => {
+              row.servedQuantity = "3.000";
+              state.revision = 4;
+              resolve({ revision: 4 });
+            };
+          });
+          const markServed = vi.fn(() => pending);
+          const unmarkServed = vi.fn(async () => {
+            row.servedQuantity = "1.000";
+            state.revision = 5;
+            return { revision: 5 };
+          });
+          try {
+            const { el, host } = await mountApp({
+              getTill: vi.fn().mockResolvedValue({
+                ...till,
+                formFactor: width === 390 ? "phone-portrait" : "till",
+              }),
+              readCurrentOrders: vi.fn(async () => structuredClone(state)),
+              markServed,
+              unmarkServed,
+            });
+            host.setAttribute("data-theme", theme);
+            await toFloor(el);
+            setLocale(locale);
+            await flush(el);
+            emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+            await flush(el);
+            const order = tableOrder(el)!;
+            await expect
+              .poll(
+                () =>
+                  order
+                    .shadowRoot!.querySelector<HTMLElement>("[data-review-open]")
+                    ?.checkVisibility() ?? false,
+              )
+              .toBe(width === 390);
+            const panel = await visiblePanel(order);
+            await userEvent.click(
+              panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
+            );
+            await flush(el);
+            await userEvent.click(
+              order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-serve]")!,
+            );
+            await flush(el);
+            const dialog = order.shadowRoot!.querySelector<HTMLElement>("[data-serve-dialog]")!;
+            const count = () => dialog.querySelector("[data-serve-count]")!.textContent!.trim();
+            const control = (name: string) =>
+              dialog
+                .querySelector<HTMLElement>(`[data-serve-${name}]`)!
+                .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+            expect(innerWidth).toBe(width);
+            expect(dialog.hasAttribute("open")).toBe(true);
+            expect(count()).toBe("3");
+            expect(control("inc").disabled).toBe(true);
+            for (const name of ["inc", "dec", "dismiss", "confirm"]) {
+              const button = control(name);
+              const rect = button.getBoundingClientRect();
+              expect(button.checkVisibility()).toBe(true);
+              expect(rect.width).toBeGreaterThanOrEqual(44);
+              expect(rect.height).toBeGreaterThanOrEqual(44);
+              expect(rect.left).toBeGreaterThanOrEqual(0);
+              expect(rect.right).toBeLessThanOrEqual(width);
+            }
+            await userEvent.click(control("dec"));
+            await flush(el);
+            expect(count()).toBe("2");
+            expect(control("inc").disabled).toBe(false);
+            await userEvent.click(control("inc"));
+            await flush(el);
+            expect(count()).toBe("3");
+            await userEvent.click(control("dec"));
+            await flush(el);
+            expect(count()).toBe("2");
+            await expect
+              .element(control("confirm"))
+              .toHaveAccessibleName(locale === "es" ? "Marcar 2 servidos" : "Mark 2 served");
+            await expectNoA11yViolations(dialog);
+            await page.screenshot({
+              path: `__screenshots__/a773-partial-serve-${locale}-${theme}-${width}.png`,
+            });
+            await userEvent.dblClick(control("confirm"));
+            await expect.poll(() => markServed.mock.calls.length).toBe(1);
+            await flush(el);
+            expect(markServed).toHaveBeenCalledExactlyOnceWith(
+              "v1",
+              [{ lineId: "line-1", quantity: "2" }],
+              { submissionId: expect.any(String), expectedPartyRevision: 3 },
+            );
+            expect(order.currentOrders!.groups[0]!.rows[0]!.servedQuantity).toBe("1.000");
+            const toast = () => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+            expect(toast().open).toBe(false);
+            expect(unmarkServed).not.toHaveBeenCalled();
+            accept();
+            await expect.poll(() => toast().open).toBe(true);
+            await flush(el);
+            expect(order.currentOrders!.revision).toBe(4);
+            expect(order.currentOrders!.groups[0]!.rows[0]!.servedQuantity).toBe("3.000");
+            const undo = toast()
+              .querySelector<HTMLElement>("[data-undo-served]")!
+              .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+            await expect.element(undo).toHaveAccessibleName(locale === "es" ? "Deshacer" : "Undo");
+            await userEvent.dblClick(undo);
+            await flush(el, 6);
+            expect(unmarkServed).toHaveBeenCalledExactlyOnceWith(
+              "v1",
+              [{ lineId: "line-1", quantity: "2" }],
+              { submissionId: expect.any(String), expectedPartyRevision: 4 },
+            );
+            expect(order.currentOrders!.revision).toBe(5);
+            expect(order.currentOrders!.groups[0]!.rows[0]!.servedQuantity).toBe("1.000");
+            expect(toast().open).toBe(false);
+            expect(markServed).toHaveBeenCalledOnce();
+            expect(drafts.saveDraft).not.toHaveBeenCalled();
+            expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+            expect(banner(el)).toBeNull();
+          } finally {
+            accept();
+            cleanupWidgets();
+            setLocale("en");
+            await page.viewport(oldWidth, oldHeight);
+          }
+        },
+      );
+    });
+
+    async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
+      await order.updateComplete;
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await order.updateComplete;
+      }
+      const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await panel.updateComplete;
+      const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
+      if (toggle.getAttribute("aria-expanded") === "false") {
+        await userEvent.click(toggle);
+        await panel.updateComplete;
+      }
+      return panel;
+    }
+    it.each(["till", "phone-portrait"] as const)(
+      "a native %s held-heading reorder sends every bill's groups once and refreshes their positions",
+      async (formFactor) => {
+        let moved = false;
+        const held = (id: string, position: number, displayNumber: number, billId: string) => ({
+          ...orders.groups[0]!,
+          id,
+          position,
+          displayNumber,
+          state: "held" as const,
+          firedAt: null,
+          rows: orders.groups[0]!.rows.map((row) => ({
+            ...row,
+            lineId: `${id}-food`,
+            workingOrderId: billId,
+            released: false,
+            firedAt: null,
+          })),
+        });
+        const read = (): CurrentOrders => ({
+          ...orders,
+          revision: moved ? 4 : 3,
+          reminder: null,
+          nextDisplayNumber: 32,
+          groups: [
+            held("g2", moved ? 3 : 2, 12, "wo-4"),
+            held("g3", moved ? 2 : 3, 31, "wo-check"),
+            held("g4", 4, 4, "wo-4"),
+          ],
+        });
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+          readCurrentOrders: vi.fn(async () => read()),
+          listGroups: vi.fn(async () => ({
+            revision: read().revision,
+            groups: read().groups.map((group) => ({
+              ...group,
+              courseIds: [],
+              lineIds: group.rows.map((row) => row.lineId),
+              summary: group.rows[0]!.name,
+            })),
+          })),
+          reorderGroups: vi.fn(async () => {
+            moved = true;
+            return { revision: 4 };
+          }),
+        });
+        const order = await openMesa(el);
+        const panel = await visiblePanel(order);
+        await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
+        await panel.updateComplete;
+        const more = panel.shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<unknown> }
+        >('[data-group-more="g2"]')!;
+        await more.updateComplete;
+        await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+        await userEvent.click(more.querySelector<HTMLElement>("[data-group-later]")!);
+        await flush(el);
+        expect(api.reorderGroups).toHaveBeenCalledExactlyOnceWith("v1", ["g3", "g2", "g4"], {
+          submissionId: expect.any(String),
+          expectedPartyRevision: 3,
+        });
+        expect(tableOrder(el)!.currentOrders!.revision).toBe(4);
+        expect(
+          tableOrder(el)!.groups.map((group) => [group.id, group.position, group.displayNumber]),
+        ).toEqual([
+          ["g2", 3, 12],
+          ["g3", 2, 31],
+          ["g4", 4, 4],
+        ]);
+        expect(banner(el)).toBeNull();
+      },
+    );
+    it.each(["till", "phone-portrait"] as const)(
+      "a native %s row tap serves once and Undo sends that accepted quantity",
+      async (formFactor) => {
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+          readCurrentOrders: vi.fn().mockResolvedValue(orders),
+        });
+        const order = await openMesa(el);
+        const panel = await visiblePanel(order);
+        const target = panel.shadowRoot!.querySelector<HTMLElement>('[data-serve-line="line-1"]')!;
+        expect(target.checkVisibility()).toBe(true);
+        await userEvent.click(target);
+        await flush(el);
+        expect(api.markServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 3 },
+        );
+        const toast = el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+        expect(toast.open).toBe(true);
+        await userEvent.click(toast.querySelector<HTMLElement>("[data-undo-served]")!);
+        await flush(el);
+        expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 4 },
+        );
+        expect(toast.open).toBe(false);
+      },
+    );
+    it("a held-group native Fire reaches the API only after its table confirmation", async () => {
+      const held = {
+        ...orders.groups[0]!,
+        id: "g2",
+        state: "held" as const,
+        firedAt: null,
+        rows: orders.groups[0]!.rows.map((row) => ({ ...row, released: false })),
+      };
+      const group: OrderGroup = { ...held, courseIds: [], lineIds: ["line-1"], summary: "Vino ×1" };
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue({ ...orders, reminder: null, groups: [held] }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [group] }),
+      });
+      const order = await openMesa(el);
+      const panel = await visiblePanel(order);
+      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
+      await panel.updateComplete;
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g2"]')!,
+      );
+      await flush(el);
+      expect(api.fireGroup).not.toHaveBeenCalled();
+      const dialog = order.shadowRoot!.querySelector<HTMLElement>("[data-fire-dialog]")!;
+      expect(dialog.hasAttribute("open")).toBe(true);
+      expect(dialog.textContent).toContain("Vino ×1");
+      await userEvent.click(dialog.querySelector<HTMLElement>("[data-fire-confirm]")!);
+      await flush(el);
+      expect(api.fireGroup).toHaveBeenCalledExactlyOnceWith("v1", "g2", {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+      });
+    });
+    it("reopens ready food on re-entering the same bill after it was manually folded", async () => {
+      const ready = {
+        ...orders,
+        reminder: null,
+        groups: orders.groups.map((group) => ({
+          ...group,
+          rows: group.rows.map((row) => ({ ...row, readyAt: "2026-09-28T20:14:00Z" })),
+        })),
+      };
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(ready) });
+      const first = await openMesa(el);
+      const panel = await visiblePanel(first);
+      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
+      await panel.updateComplete;
+      expect(
+        panel.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded"),
+      ).toBe("false");
+      emit(first, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const reopened = tableOrder(el)!;
+      await reopened.updateComplete;
+      const next = reopened.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await next.updateComplete;
+      expect(
+        next.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded"),
+      ).toBe("true");
+      expect(api.markServed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("serve Undo", () => {
+    const notice = (el: TillApp) => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+    const undo = (el: TillApp) => notice(el).querySelector<HTMLElement>("[data-undo-served]")!;
+    const items = [{ lineId: "line-1", quantity: "1" }];
+    async function served(over: Record<string, unknown> = {}) {
+      const { el, host } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(orders),
+        ...over,
+      });
+      const order = await openMesa(el);
+      emit(order, "serve-lines", { items });
+      await flush(el);
+      expect(notice(el).open).toBe(true);
+      return { el, order, host };
+    }
+
+    it("never offers success feedback for a refused serve", async () => {
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(orders),
+        markServed: vi
+          .fn()
+          .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 4 }),
+      });
+      const order = await openMesa(el);
+      emit(order, "serve-lines", { items });
+      await flush(el);
+      expect(api.markServed).toHaveBeenCalledOnce();
+      expect(notice(el).open).toBe(false);
+      expect(banner(el)?.textContent).toContain(t("party.changed").replace("{table}", "4"));
+      expect(api.unmarkServed).not.toHaveBeenCalled();
+    });
+
+    it("preserves the accepted receipt when its refresh fails", async () => {
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+      const order = await openMesa(el);
+      vi.mocked(api.readCurrentOrders).mockRejectedValue(new TypeError("offline"));
+      emit(order, "serve-lines", { items });
+      await flush(el);
+      expect(api.markServed).toHaveBeenCalledOnce();
+      expect(tableOrder(el)!.currentOrdersUnread).toBe(true);
+      expect(notice(el).open).toBe(true);
+      undo(el).click();
+      await flush(el);
+      expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith("v1", items, {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 4,
+      });
+    });
+
+    it("undoes a multi-line command once and cannot reuse its retained button", async () => {
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+      const order = await openMesa(el);
+      const all = [
+        { lineId: "line-1", quantity: "0.5" },
+        { lineId: "line-9", quantity: "2" },
+      ];
+      emit(order, "serve-lines", { items: all });
+      await flush(el);
+      expect(notice(el).open).toBe(true);
+      const button = undo(el);
+      button.click();
+      button.click();
+      await flush(el);
+      button.click();
+      await flush(el);
+      expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith("v1", all, {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 4,
+      });
+      expect(notice(el).open).toBe(false);
+    });
+
+    it("retains a refused Undo for retry while the receipt is still current", async () => {
+      const unmarkServed = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
+        .mockResolvedValue({ revision: 6 });
+      const { el } = await served({ unmarkServed });
+      undo(el).click();
+      await flush(el);
+      expect(unmarkServed).toHaveBeenCalledOnce();
+      expect(notice(el).open).toBe(true);
+      expect(banner(el)?.textContent).toContain(t("party.changed").replace("{table}", "4"));
+      undo(el).click();
+      await flush(el);
+      expect(unmarkServed).toHaveBeenCalledTimes(2);
+      expect(notice(el).open).toBe(false);
+    });
+
+    it("expires after five seconds, including a stale button held beyond the deadline", async () => {
+      vi.useFakeTimers();
+      try {
+        const { el } = await served();
+        const button = undo(el);
+        await vi.advanceTimersByTimeAsync(4_999);
+        await el.updateComplete;
+        expect(notice(el).open).toBe(true);
+        await vi.advanceTimersByTimeAsync(1);
+        await el.updateComplete;
+        expect(notice(el).open).toBe(false);
+        button.click();
+        await flush(el);
+        expect(api.unmarkServed).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("a later accepted serve replaces both the command and the deadline", async () => {
+      vi.useFakeTimers();
+      try {
+        const { el, order } = await served();
+        const old = undo(el);
+        await vi.advanceTimersByTimeAsync(3_000);
+        emit(order, "serve-lines", { items: [{ lineId: "line-1", quantity: "0.25" }] });
+        await flush(el);
+        old.click();
+        await flush(el);
+        expect(api.unmarkServed).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(2_000);
+        await el.updateComplete;
+        expect(notice(el).open).toBe(true);
+        undo(el).click();
+        await flush(el);
+        expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "0.25" }],
+          {
+            submissionId: expect.any(String),
+            expectedPartyRevision: 4,
+          },
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.each(["floor", "bill", "api", "detach"] as const)(
+      "cannot undo after leaving through %s",
+      async (where) => {
+        const { el, order } = await served();
+        const button = undo(el);
+        const original = api;
+        if (where === "floor") emit(order, "back-to-floor");
+        else if (where === "bill") emit(order, "take-payment", { workingOrderId: "wo-check" });
+        else if (where === "api") el.api = stubApi();
+        else el.remove();
+        await flush(el);
+        button.click();
+        await flush(el);
+        expect(original.unmarkServed).not.toHaveBeenCalled();
+        expect(notice(el).open).toBe(false);
+      },
+    );
+
+    it.each(["floor", "bill", "api", "logout", "detach"] as const)(
+      "does not publish a late successful serve after %s",
+      async (where) => {
+        let accept!: (answer: { revision: number }) => void;
+        const markServed = vi.fn(
+          () =>
+            new Promise<{ revision: number }>((resolve) => {
+              accept = resolve;
+            }),
+        );
+        const { el } = await mountApp({
+          readCurrentOrders: vi.fn().mockResolvedValue(orders),
+          markServed,
+        });
+        const order = await openMesa(el);
+        emit(order, "serve-lines", { items });
+        await flush(el);
+        expect(markServed).toHaveBeenCalledOnce();
+        if (where === "floor") emit(order, "back-to-floor");
+        else if (where === "bill") emit(order, "take-payment", { workingOrderId: "wo-check" });
+        else if (where === "api") el.api = stubApi();
+        else if (where === "logout") emit(order, "logout");
+        else el.remove();
+        await flush(el);
+        accept({ revision: 44 });
+        await flush(el);
+        expect(notice(el).open).toBe(false);
+        expect(order.party?.revision).not.toBe(44);
+      },
+    );
+
+    it("cannot undo through an API replaced during its pre-command wait", async () => {
+      const { el } = await served();
+      const original = api;
+      undo(el).click();
+      const replacement = stubApi();
+      el.api = replacement;
+      await flush(el);
+      expect(original.unmarkServed).not.toHaveBeenCalled();
+      expect(replacement.unmarkServed).not.toHaveBeenCalled();
+      expect(notice(el).open).toBe(false);
+    });
+
+    it("closing its success notice dismisses Undo without changing service", async () => {
+      const { el } = await served();
+      const button = undo(el);
+      notice(el).shadowRoot!.querySelector<HTMLButtonElement>(".close")!.click();
+      await flush(el);
+      expect(notice(el).open).toBe(false);
+      button.click();
+      await flush(el);
+      expect(api.unmarkServed).not.toHaveBeenCalled();
+    });
+
+    describe.each(["light", "dark"] as const)("accessibility in %s", (theme) => {
+      it.each([
+        ["en", 390],
+        ["es", 390],
+        ["en", 1280],
+        ["es", 1280],
+      ] as const)("uses readable controls and a native Undo in %s at %s", async (locale, width) => {
+        const oldWidth = innerWidth,
+          oldHeight = innerHeight;
+        await page.viewport(width, 844);
+        try {
+          const { el, host } = await served();
+          host.setAttribute("data-theme", theme);
+          document.body.style.background = getComputedStyle(host).backgroundColor;
+          document.documentElement.style.background = getComputedStyle(host).backgroundColor;
+          setLocale(locale);
+          await flush(el);
+          const toast = notice(el);
+          await toast.updateComplete;
+          const button = undo(el);
+          const native = button.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+          const close = toast.shadowRoot!.querySelector<HTMLButtonElement>(".close")!;
+          expect(innerWidth).toBe(width);
+          expect(close.getAttribute("aria-label")).toBe(locale === "es" ? "Cerrar" : "Close");
+          await expect.element(native).toHaveAccessibleName(locale === "es" ? "Deshacer" : "Undo");
+          expect(toast.message).toBe(locale === "es" ? "Vino · Servido" : "Vino · Served");
+          const rect = toast.getBoundingClientRect();
+          expect(rect.left).toBeGreaterThanOrEqual(0);
+          expect(rect.right).toBeLessThanOrEqual(width);
+          expect(native.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+          expect(native.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+          await expectNoA11yViolations(toast);
+          await userEvent.click(native);
+          await flush(el);
+          expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith("v1", items, {
+            submissionId: expect.any(String),
+            expectedPartyRevision: 4,
+          });
+          expect(notice(el).open).toBe(false);
+        } finally {
+          setLocale("en");
+          await page.viewport(oldWidth, oldHeight);
+        }
+      });
+    });
+
+    it("does not serve through an API replaced during the pre-command wait", async () => {
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+      const order = await openMesa(el);
+      const original = api;
+      emit(order, "serve-lines", { items });
+      const replacement = stubApi();
+      el.api = replacement;
+      await flush(el);
+      expect(original.markServed).not.toHaveBeenCalled();
+      expect(replacement.markServed).not.toHaveBeenCalled();
+      expect(notice(el).open).toBe(false);
+    });
+  });
+
+  it("the retained held-line command uses the source bill after switching to it", async () => {
     const heldOnCheck: CurrentOrders = {
+      hasGroups: true,
+      nextDisplayNumber: 2,
+      retainedCourses: [],
       revision: 3,
       reminder: null,
       groups: [
         {
           id: "g1",
           position: 1,
+          displayNumber: 1,
+          numberPartyId: "v1",
           state: "held",
           firedAt: null,
           remindAt: null,
@@ -6839,9 +8454,14 @@ describe("till-app: Current orders", () => {
           sentBy: "Ana",
           rows: [
             {
+              billStatus: "open",
+              netAmount: "12.00",
+              readyAt: null,
+              firedAt: null,
               lineId: "line-9",
               workingOrderId: "wo-check",
               lineNo: 1,
+              courseId: null,
               name: "Pulpo",
               quantity: "1.000",
               unitPrecision: 0,
@@ -6864,8 +8484,11 @@ describe("till-app: Current orders", () => {
         revision: 3,
         groups: [
           {
+            courseIds: [],
             id: "g1",
             position: 1,
+            displayNumber: 1,
+            numberPartyId: "v1",
             state: "held",
             firedAt: null,
             remindAt: null,
@@ -6876,21 +8499,38 @@ describe("till-app: Current orders", () => {
       }),
       moveLinesToGroup,
     });
-    const order = await openMesa(el);
-    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    let order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
-    order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="line-9"]')!.click();
+    expect(order.shadowRoot!.querySelector('[data-move-line="line-9"]')).toBeNull();
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-bill="wo-check"] [data-take-payment]')!,
+    );
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
+    order = tableOrder(el)!;
+    expect(order.orderId).toBe("wo-check");
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    expect(order.shadowRoot!.querySelector('[data-move-line="line-9"]')).toBeNull();
+    emit(order, "move-group-line", {
+      lineId: "line-9",
+      quantity: "1.000",
+      target: "new",
+      expectedEdits: [{ ...order.billEdit! }],
+    });
     await flush(el);
 
     expect(moveLinesToGroup).toHaveBeenCalledExactlyOnceWith(
       "v1",
       [{ lineId: "line-9", quantity: "1.000" }],
       "new",
-      { submissionId: expect.any(String), expectedPartyRevision: 3 },
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedEdits: [
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      },
     );
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)).toBeNull();
@@ -7049,6 +8689,7 @@ describe("till-app: recording an unpaid departure", () => {
       .trim();
 
   it("leaves out a presented bill whose credit notes cancel its invoice, and its amount from the total", async () => {
+    drafts.bills.add("wo-credited");
     const { el } = await openDeparture({
       getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-credited", "0.00")]),
     });
@@ -7062,6 +8703,7 @@ describe("till-app: recording an unpaid departure", () => {
   });
 
   it("shows a partly credited presented bill at what its invoice still owes", async () => {
+    drafts.bills.add("wo-part");
     const { el } = await openDeparture({
       getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-part", "15.58")]),
     });
@@ -7094,7 +8736,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(api.recordUnpaidDeparture).toHaveBeenCalledOnce();
     expect(vi.mocked(api.recordUnpaidDeparture).mock.calls[0]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, reason: "Ran off" },
+      { expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
     ]);
     expect(dialog(el)).toBeNull();
     expect(tableOrder(el)).toBeNull();
@@ -7119,7 +8761,12 @@ describe("till-app: recording an unpaid departure", () => {
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
     expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, reason: "Ran off", override: { personId: "sup-1", pin: "4321" } },
+      {
+        expectedPartyRevision: 3,
+        expectedEdits: closingEdits,
+        reason: "Ran off",
+        override: { personId: "sup-1", pin: "4321" },
+      },
     ]);
     expect(approval(el)).toBeNull();
     expect(dialog(el)).toBeNull();
@@ -7201,6 +8848,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
     expect(recordUnpaidDeparture.mock.calls[1]![1]).toEqual({
       expectedPartyRevision: 3,
+      expectedEdits: closingEdits,
       reason: "Ran off after the dessert was cancelled",
     });
     expect(tableOrder(el)).toBeNull();
@@ -7252,7 +8900,7 @@ describe("till-app: recording an unpaid departure", () => {
     await confirmDeparture(el);
     expect(recordUnpaidDeparture).toHaveBeenLastCalledWith(
       "v1",
-      { expectedPartyRevision: 5, reason: "Ran off" },
+      { expectedPartyRevision: 5, expectedEdits: closingEdits, reason: "Ran off" },
       expect.anything(),
     );
   });
@@ -7339,6 +8987,7 @@ describe("till-app: recording an unpaid departure", () => {
   });
 
   it("leaves out of the dialog a bill with nothing left to pay", async () => {
+    drafts.bills.add("wo-empty");
     const empty: PartyBill = {
       ...checkBill,
       workingOrderId: "wo-empty",
@@ -7417,7 +9066,7 @@ describe("till-app: recording an unpaid departure", () => {
     await confirmDeparture(el);
     expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, reason: "Ran off" },
+      { expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
     ]);
     expect(question.open).toBe(false);
     expect(dialog(el)).toBeNull();
@@ -7968,5 +9617,1986 @@ describe("till-app: a box update while a bill request still waits for the server
 
     expect(reload).not.toHaveBeenCalled();
     expect(updateBar(el)).not.toBeNull();
+  });
+});
+
+describe("one held dish Fire now app command", () => {
+  it("fires only the named dish and refreshes the party revision", async () => {
+    const fireHeldLine = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({ fireHeldLine });
+    const order = await openMesa(el);
+    emit(order, "fire-held-line", { lineId: "line-steak" });
+    await flush(el);
+    expect(fireHeldLine).toHaveBeenCalledExactlyOnceWith("v1", "line-steak", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+    });
+    expect(tableOrder(el)!.party?.revision).toBe(4);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("refreshes a raced party but never fires a second time", async () => {
+    const fireHeldLine = vi.fn().mockRejectedValue({ code: "party.out_of_date" });
+    const { el } = await mountApp({ fireHeldLine });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+    emit(order, "fire-held-line", { lineId: "line-steak" });
+    await flush(el);
+    expect(fireHeldLine).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+  });
+});
+
+describe("till-app: bill composition editing observations", () => {
+  const edits = [
+    { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+    { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
+  ];
+  const commands = [
+    { event: "merge-bills", detail: { fromBillId: "wo-check" }, method: "mergeBills" },
+    {
+      event: "transfer-lines",
+      detail: { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
+      method: "transferItems",
+    },
+    { event: "split-lines", detail: { transfers: [{ lineNo: 1 }] }, method: "splitBill" },
+  ] as const;
+
+  function observations(missing?: string) {
+    return vi.fn(async () => ({
+      drafts: [],
+      billEdits: [...edits, { ...edits[0]!, billId: "unrelated", editorVersion: 99 }]
+        .filter((edit) => edit.billId !== missing)
+        .reverse()
+        .map((edit) => ({ ...edit, editorId: null, editorName: null })),
+    }));
+  }
+
+  it.each(commands)("$method sends only the affected bill observations", async (command) => {
+    const { el } = await mountApp({ listDrafts: observations() });
+    const order = await openMesa(el);
+    emit(order, command.event, command.detail);
+    await flush(el);
+    const call = vi.mocked(api[command.method]).mock.calls[0]!;
+    expect(call.at(-1)).toEqual({
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      ...(command.method === "splitBill" ? { expectedEdit: edits[0] } : { expectedEdits: edits }),
+    });
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it.each(commands)("$method refreshes editing metadata after " + outcome, async (command) => {
+      const listDrafts = observations();
+      const sending = vi.fn(async () => {
+        if (outcome === "refusal") throw { code: "bill.presented" };
+        return { billId: "wo-check" };
+      });
+      const { el } = await mountApp({ listDrafts, [command.method]: sending });
+      const order = await openMesa(el);
+      const reads = listDrafts.mock.calls.length;
+      emit(order, command.event, command.detail);
+      await flush(el, 5);
+      expect(sending).toHaveBeenCalledOnce();
+      expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    });
+  }
+
+  it.each(commands)("$method refuses a missing affected observation", async (command) => {
+    const missing = command.method === "splitBill" ? "wo-4" : "wo-check";
+    const { el } = await mountApp({ listDrafts: observations(missing) });
+    const order = await openMesa(el);
+    emit(order, command.event, command.detail);
+    await flush(el);
+    expect(api[command.method]).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(commands.filter((command) => command.method !== "mergeBills"))(
+    "$method keeps the shown observation while the different-people confirmation is open",
+    async (command) => {
+      let newer = false;
+      const read = observations();
+      const listDrafts = vi.fn(async () => {
+        const answer = await read();
+        if (newer) answer.billEdits.find((edit) => edit.billId === "wo-4")!.editorVersion = 8;
+        return answer;
+      });
+      const { el } = await mountApp({
+        listDrafts,
+        getPartyBills: vi.fn().mockResolvedValue([{ ...tabBill, total: "3500.00" }, checkBill]),
+      });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).not.toBeNull();
+      newer = true;
+      const reads = listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-confirm-different-people] [data-confirm]",
+        )!,
+      );
+      await flush(el);
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it.each(commands)("$method ignores a replaced API's late " + outcome, async (command) => {
+      let resolve!: (value: { billId: string }) => void;
+      let reject!: (reason: unknown) => void;
+      const pending = new Promise<{ billId: string }>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      const sending = vi.fn(() => pending);
+      const { el } = await mountApp({ listDrafts: observations(), [command.method]: sending });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await expect.poll(() => sending.mock.calls.length).toBe(1);
+      const replacement = stubApi();
+      el.api = replacement;
+      await flush(el);
+      const error = banner(el)?.textContent ?? null;
+      const active = tableOrder(el)?.orderId ?? null;
+      const tables = vi.mocked(replacement.getTablesState).mock.calls.length;
+      const bills = vi.mocked(replacement.getPartyBills).mock.calls.length;
+      if (outcome === "success") resolve({ billId: "wo-check" });
+      else reject({ code: "bill.presented" });
+      await pending.catch(() => undefined);
+      await flush(el, 5);
+      expect(banner(el)?.textContent ?? null).toEqual(error);
+      expect(tableOrder(el)?.orderId ?? null).toBe(active);
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(tables);
+      expect(replacement.getPartyBills).toHaveBeenCalledTimes(bills);
+    });
+  }
+});
+
+describe("till-app: split-table editing observations", () => {
+  const edit = { billId: "wo-check", editorVersion: 5, draftId: null, draftRevision: null };
+  const guests = { staying: 2, leaving: 1 };
+  const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+  const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+
+  function observations(missing = false) {
+    return vi.fn(async () => ({
+      drafts: [],
+      billEdits: [
+        { billId: "wo-4", editorVersion: 8, draftId: null, draftRevision: null },
+        ...(missing ? [] : [edit]),
+      ].map((value) => ({ ...value, editorId: null, editorName: null })),
+    }));
+  }
+
+  it.each(["wo-check", null])("sends exactly the moved bill observation for %s", async (billId) => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      listDrafts: observations(),
+    });
+    emit(await openMesa(el), "split-table", { tableId: "t5", billId, guests });
+    await flush(el);
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "t5",
+      billId,
+      3,
+      billId === null ? [] : [edit],
+      guests,
+    );
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("refuses to move a bill whose editing observation is missing", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      listDrafts: observations(true),
+    });
+    emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
+    await flush(el);
+    expect(api.splitTable).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["success", "refusal"])("refreshes bill editing metadata after %s", async (outcome) => {
+    const listDrafts = observations();
+    const splitTable = vi.fn(async () => {
+      if (outcome === "refusal") throw { code: "draft.out_of_date" };
+      return { partyId: "v-split", mainBillId: "wo-check" };
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      listDrafts,
+      splitTable,
+    });
+    const order = await openMesa(el);
+    const reads = listDrafts.mock.calls.length;
+    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
+    await flush(el, 5);
+    expect(splitTable).toHaveBeenCalledOnce();
+    expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+    if (outcome === "refusal")
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  for (const change of ["API", "bill", "party"] as const) {
+    it.each(["success", "refusal", "guest refusal"])(
+      "ignores a late %s after changing " + change,
+      async (outcome) => {
+        const pending = held();
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+          listDrafts: observations(),
+          splitTable: pending.call,
+        });
+        emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
+        await expect.poll(() => pending.call.mock.calls.length).toBe(1);
+        let current = api;
+        if (change === "API") {
+          current = stubApi();
+          el.api = current;
+        } else if (change === "bill") {
+          emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+        } else {
+          emit(tableOrder(el)!, "back-to-floor");
+          await flush(el);
+          emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+        }
+        await flush(el);
+        const before = {
+          bill: tableOrder(el)?.orderId,
+          party: tableOrder(el)?.party?.id,
+          error: banner(el)?.textContent ?? null,
+          splitRefusal: tableOrder(el)?.splitRefusal,
+          tables: vi.mocked(current.getTablesState).mock.calls.length,
+          bills: vi.mocked(current.getPartyBills).mock.calls.length,
+        };
+        if (outcome === "success")
+          pending.answer.settle({ partyId: "v-split", mainBillId: "wo-check" });
+        else
+          pending.answer.refuse(
+            outcome === "guest refusal"
+              ? { code: "management.request_invalid", field: "guests.leaving" }
+              : { code: "draft.out_of_date" },
+          );
+        await flush(el, 5);
+        expect({
+          bill: tableOrder(el)?.orderId,
+          party: tableOrder(el)?.party?.id,
+          error: banner(el)?.textContent ?? null,
+          splitRefusal: tableOrder(el)?.splitRefusal,
+          tables: vi.mocked(current.getTablesState).mock.calls.length,
+          bills: vi.mocked(current.getPartyBills).mock.calls.length,
+        }).toEqual(before);
+      },
+    );
+  }
+});
+
+describe("till-app: Split a table retains the guests prompt observation", () => {
+  const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+  const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+
+  async function prompt(el: TillApp, billId = "wo-check") {
+    const order = tableOrder(el)!;
+    if (order.shadowRoot!.querySelector("[data-move-split]") === null) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await flush(el);
+    }
+    for (const selector of [
+      "[data-move-split]",
+      '[data-action="split-table"]',
+      '[data-target="t5"]',
+      `[data-target="${billId}"]`,
+    ]) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
+      await flush(el);
+    }
+    const dialog = order.shadowRoot!.querySelector("till-split-guests-dialog")!;
+    expect(dialog).not.toBeNull();
+    await dialog.updateComplete;
+    return dialog;
+  }
+
+  async function confirm(el: TillApp, dialog: HTMLElementTagNameMap["till-split-guests-dialog"]) {
+    await userEvent.click(
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!,
+    );
+    await flush(el);
+  }
+
+  for (const change of ["owner", "draft", "revision"] as const) {
+    it("refuses a refreshed " + change + " while the guests prompt stays open", async () => {
+      let changed = false;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await drafts.listDrafts(partyId);
+        const edit = snapshot.billEdits.find((value) => value.billId === "wo-check")!;
+        if (change === "revision") {
+          edit.draftId = "saved-draft";
+          edit.draftRevision = changed ? 2 : 1;
+        } else if (changed) {
+          if (change === "owner") edit.editorVersion = 2;
+          else {
+            edit.draftId = "new-draft";
+            edit.draftRevision = 1;
+          }
+        }
+        return snapshot;
+      });
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+        listDrafts,
+      });
+      await openMesa(el);
+      const dialog = await prompt(el);
+      const reads = listDrafts.mock.calls.length;
+      changed = true;
+      window.dispatchEvent(new Event("focus"));
+      await flush(el);
+      expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      expect(tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")).toBe(dialog);
+      await confirm(el, dialog);
+      expect(api.splitTable).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    });
+  }
+
+  it("keeps missing metadata at prompt opening from becoming permission after refresh", async () => {
+    let missing = true;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (missing)
+        snapshot.billEdits = snapshot.billEdits.filter((edit) => edit.billId !== "wo-check");
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+    });
+    await openMesa(el);
+    const dialog = await prompt(el);
+    missing = false;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    await confirm(el, dialog);
+    expect(api.splitTable).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["wo-check", "none"])("allows %s when only an unrelated bill changed", async (billId) => {
+    let changed = false;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-4")!.editorVersion = 2;
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+    });
+    await openMesa(el);
+    const dialog = await prompt(el, billId);
+    changed = true;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    await confirm(el, dialog);
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "t5",
+      billId === "none" ? null : billId,
+      3,
+      billId === "none"
+        ? []
+        : [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
+      { staying: 3, leaving: null },
+    );
+  });
+
+  it("refuses a guests prompt carried across a bill switch", async () => {
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    const order = await openMesa(el);
+    const dialog = await prompt(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    await confirm(el, dialog);
+    expect(api.splitTable).not.toHaveBeenCalled();
+  });
+
+  it("allows a new prompt after cancelling and refreshing its bill", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 2;
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+    });
+    await openMesa(el);
+    const first = await prompt(el);
+    const closed = new Promise<void>((resolve) =>
+      first.addEventListener("split-guests-cancel", () => resolve(), { once: true }),
+    );
+    await userEvent.click(
+      first.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-cancel]")!,
+    );
+    await closed;
+    await flush(el);
+    changed = true;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    const second = await prompt(el);
+    await confirm(el, second);
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "t5",
+      "wo-check",
+      3,
+      [{ billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null }],
+      { staying: 3, leaving: null },
+    );
+  });
+
+  it("retains the original observation when a refused guest count is corrected", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 2;
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+      splitTable: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+    });
+    await openMesa(el);
+    await confirm(el, await prompt(el));
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    const retry = tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")!;
+    expect(retry).not.toBeNull();
+    await retry.updateComplete;
+    expect(retry.leavingRefusal).toBe(t("seat.guest_count_invalid"));
+    const input = retry
+      .shadowRoot!.querySelector<HTMLElement>('wt-input[name="leavingGuests"]')!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(input, "1");
+    changed = true;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    await confirm(el, retry);
+    expect(api.splitTable).toHaveBeenCalledTimes(1);
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it("does not send an old guests prompt to a replacement API", async () => {
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    await openMesa(el);
+    const dialog = await prompt(el);
+    const original = api;
+    const replacement = stubApi({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    el.api = replacement;
+    await flush(el);
+    await confirm(el, dialog);
+    expect(original.splitTable).not.toHaveBeenCalled();
+    expect(replacement.splitTable).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-app: table relocation editing observations", () => {
+  const sourceEdits = [
+    { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+    { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
+  ];
+  const destinationEdits = [
+    { billId: "wo-7", editorVersion: 5, draftId: null, draftRevision: null },
+    { billId: "wo-empty", editorVersion: 2, draftId: null, draftRevision: null },
+  ];
+  const commands = [
+    { event: "move-guests", method: "moveGuests", detail: { toTableId: "t7", bills: "separate" } },
+    { event: "join-tables", method: "joinTables", detail: { tableId: "t7", bills: "separate" } },
+    {
+      event: "move-bill",
+      method: "moveBill",
+      detail: { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "separate" },
+    },
+  ] as const;
+
+  function observations(missing?: string) {
+    return vi.fn(async (partyId: string) => ({
+      drafts: [],
+      billEdits: (partyId === "v7"
+        ? destinationEdits
+        : [
+            ...sourceEdits,
+            { billId: "unrelated", editorVersion: 99, draftId: null, draftRevision: null },
+          ]
+      )
+        .filter((edit) => edit.billId !== missing)
+        .reverse()
+        .map((edit) => ({ ...edit, editorId: null, editorName: null })),
+    }));
+  }
+
+  it.each(commands)(
+    "$method includes the complete affected set, including empty destinations",
+    async (command) => {
+      const listDrafts = observations();
+      const { el } = await mountApp({ listDrafts });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el, 6);
+      expect(api[command.method]).toHaveBeenCalledOnce();
+      expect(vi.mocked(api[command.method]).mock.calls[0]!.at(-1)).toEqual({
+        expectedPartyRevision: 3,
+        ...(command.method === "moveBill" ? { partyId: "v1" } : {}),
+        otherPartyId: "v7",
+        expectedOtherPartyRevision: 9,
+        expectedEdits:
+          command.method === "moveBill"
+            ? [sourceEdits[0], ...destinationEdits]
+            : [sourceEdits[0], destinationEdits[0], sourceEdits[1], destinationEdits[1]],
+      });
+      expect(listDrafts).toHaveBeenCalledWith("v7");
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(commands)("$method refuses missing source metadata", async (command) => {
+    const { el } = await mountApp({ listDrafts: observations("wo-4") });
+    const order = await openMesa(el);
+    emit(order, command.event, command.detail);
+    await flush(el, 6);
+    expect(api[command.method]).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(commands)(
+    "$method refuses an unreadable destination without sending",
+    async (command) => {
+      const read = observations();
+      const { el } = await mountApp({
+        listDrafts: vi.fn(async (partyId: string) => {
+          if (partyId === "v7") throw new Error("offline");
+          return read(partyId);
+        }),
+      });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el, 6);
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(t("table.reread_failed"));
+    },
+  );
+
+  it("Move bill to the counter sends only that bill's observation", async () => {
+    const { el } = await mountApp({ listDrafts: observations() });
+    const order = await openMesa(el);
+    emit(order, "move-bill", { to: { counter: true }, bills: "separate" });
+    await flush(el, 6);
+    expect(api.moveBill).toHaveBeenCalledWith("wo-4", { counter: { zoneId: "z1" } }, "separate", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      expectedEdits: [sourceEdits[0]],
+    });
+  });
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it.each(commands)("$method ignores a replaced API's late " + outcome, async (command) => {
+      let resolve!: (value: object) => void;
+      let reject!: (reason: unknown) => void;
+      const pending = new Promise<object>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      const sending = vi.fn(() => pending);
+      const { el } = await mountApp({ listDrafts: observations(), [command.method]: sending });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await expect.poll(() => sending.mock.calls.length).toBe(1);
+      const original = api;
+      const replacement = stubApi({ listDrafts: observations() });
+      el.api = replacement;
+      await flush(el, 6);
+      const floorReads = vi.mocked(replacement.getTablesState).mock.calls.length;
+      const billReads = vi.mocked(replacement.getPartyBills).mock.calls.length;
+      if (outcome === "success")
+        resolve({ partyId: "v7", billId: "wo-7", mainBillId: "wo-7", merged: false });
+      else reject({ code: "draft.taken_over" });
+      await pending.catch(() => undefined);
+      await flush(el, 6);
+      expect(original[command.method]).toHaveBeenCalledOnce();
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(floorReads);
+      expect(replacement.getPartyBills).toHaveBeenCalledTimes(billReads);
+      expect(tableOrder(el)?.orderId).toBe("wo-4");
+      expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("draft.taken_over"));
+    });
+  }
+  async function relocationPrompt(el: TillApp, verb: string) {
+    const order = tableOrder(el)!;
+    if (order.shadowRoot!.querySelector("[data-move-split]") === null) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await flush(el);
+    }
+    for (const selector of ["[data-move-split]", `[data-action="${verb}"]`, '[data-target="t7"]']) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
+      await flush(el);
+    }
+    const dialog = order.shadowRoot!.querySelector("till-bill-choice-dialog")!;
+    expect(dialog).not.toBeNull();
+    await dialog.updateComplete;
+    return dialog;
+  }
+
+  const verbs = [
+    { verb: "move", method: "moveGuests" },
+    { verb: "join", method: "joinTables" },
+    { verb: "move-bill", method: "moveBill" },
+  ] as const;
+
+  it.each(verbs)(
+    "$method keeps its source observation while the bill choice is open",
+    async ({ verb, method }) => {
+      let changed = false;
+      const read = observations();
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await read(partyId);
+        if (changed && partyId === "v1")
+          snapshot.billEdits.find((edit) => edit.billId === "wo-4")!.editorVersion = 8;
+        return snapshot;
+      });
+      const { el } = await mountApp({ listDrafts });
+      await openMesa(el);
+      const dialog = await relocationPrompt(el, verb);
+      changed = true;
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      emit(dialog, "bill-choice-confirm", { bills: "separate" });
+      await flush(el, 6);
+      expect(api[method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it.each(verbs)(
+    "$method sends the destination observation read before opening the bill choice",
+    async ({ verb, method }) => {
+      const listDrafts = observations();
+      let readsAtSend = -1;
+      const sending = vi.fn(async () => {
+        readsAtSend = listDrafts.mock.calls.filter(([id]) => id === "v7").length;
+        return { partyId: "v1", billId: "wo-7", mainBillId: "wo-4", merged: false };
+      });
+      const { el } = await mountApp({ listDrafts, [method]: sending });
+      await openMesa(el);
+      const dialog = await relocationPrompt(el, verb);
+      expect(listDrafts).toHaveBeenCalledWith("v7");
+      const reads = listDrafts.mock.calls.filter(([id]) => id === "v7").length;
+      emit(dialog, "bill-choice-confirm", { bills: "separate" });
+      await flush(el, 6);
+      expect(api[method]).toHaveBeenCalledOnce();
+      expect(readsAtSend).toBe(reads);
+      expect(vi.mocked(api[method]).mock.calls[0]!.at(-1)).toMatchObject({
+        expectedEdits:
+          method === "moveBill"
+            ? [sourceEdits[0], ...destinationEdits]
+            : [sourceEdits[0], destinationEdits[0], sourceEdits[1], destinationEdits[1]],
+      });
+    },
+  );
+  for (const code of ["draft.taken_over", "draft.out_of_date"] as const) {
+    it.each(commands)(
+      "$method preserves the " + code + " refusal and refreshes editing metadata",
+      async (command) => {
+        const listDrafts = observations();
+        const sending = vi.fn().mockRejectedValue({ code });
+        const { el } = await mountApp({ listDrafts, [command.method]: sending });
+        const order = await openMesa(el);
+        const reads = listDrafts.mock.calls.filter(([id]) => id === "v1").length;
+        emit(order, command.event, command.detail);
+        await flush(el, 6);
+        expect(sending).toHaveBeenCalledOnce();
+        expect(banner(el)?.textContent).toContain(codeMessage(code));
+        expect(listDrafts.mock.calls.filter(([id]) => id === "v1").length).toBeGreaterThan(reads);
+        expect(drafts.saveDraft).not.toHaveBeenCalled();
+        expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+      },
+    );
+  }
+
+  it.each(commands)(
+    "$method cannot send after switching bill while reading the destination",
+    async (command) => {
+      const read = observations();
+      let resolve!: () => void;
+      const pending = new Promise<void>((done) => {
+        resolve = done;
+      });
+      let started = false;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        if (partyId === "v7") {
+          started = true;
+          await pending;
+        }
+        return read(partyId);
+      });
+      const { el } = await mountApp({ listDrafts });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await expect.poll(() => started).toBe(true);
+      emit(order, "take-payment", { workingOrderId: "wo-check" });
+      await flush(el, 6);
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+      resolve();
+      await pending;
+      await flush(el, 6);
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+    },
+  );
+
+  for (const refused of [null, undefined]) {
+    it.each(commands)(
+      "$method preserves a generic relocation refusal for " + String(refused),
+      async (command) => {
+        const { el } = await mountApp({
+          listDrafts: observations(),
+          [command.method]: vi.fn().mockRejectedValue(refused),
+        });
+        const order = await openMesa(el);
+        emit(order, command.event, command.detail);
+        await flush(el, 6);
+        expect(api[command.method]).toHaveBeenCalledOnce();
+        expect(banner(el)?.textContent).toContain(t("table.error"));
+      },
+    );
+  }
+});
+
+describe("till-app: closing editing observations", () => {
+  const edits: import("./api/client.js").BillEditExpected[] = [
+    { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+    { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
+  ];
+  function observations(missing?: string) {
+    return vi.fn(async () => ({
+      drafts: [],
+      billEdits: [...edits, { ...edits[0]!, billId: "unrelated", editorVersion: 99 }]
+        .filter((edit) => edit.billId !== missing)
+        .reverse()
+        .map((edit) => ({ ...edit, editorId: null, editorName: null })),
+    }));
+  }
+  async function mountClosing(overrides: Record<string, unknown> = {}) {
+    return mountApp({
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
+      ...overrides,
+    });
+  }
+  async function openDeparture(el: TillApp) {
+    emit(tableOrder(el)!, "record-unpaid-departure", {});
+    await flush(el);
+    return el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>("till-unpaid-departure-dialog");
+  }
+  async function confirmDeparture(el: TillApp) {
+    const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+      "till-unpaid-departure-dialog",
+    )!;
+    emit(dialog, "unpaid-departure-continue", { reason: "Guests left" });
+    await flush(el, 5);
+  }
+
+  it("Finish sends every family bill observation in bill-ID order, including settled bills", async () => {
+    const { el } = await mountClosing({
+      listDrafts: observations(),
+      getPartyBills: vi.fn().mockResolvedValue([checkBill, { ...tabBill, status: "settled" }]),
+    });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 3, edits);
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("unpaid departure sends the shown family's observations without saving or taking over", async () => {
+    const { el } = await mountClosing({
+      listDrafts: observations(),
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
+    });
+    await openMesa(el);
+    expect(await openDeparture(el)).not.toBeNull();
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledWith(
+      "v1",
+      {
+        expectedPartyRevision: 3,
+        expectedEdits: edits,
+        reason: "Guests left",
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["finish-table", "record-unpaid-departure"])(
+    "%s refuses missing metadata for another bill",
+    async (event) => {
+      const { el } = await mountClosing({ listDrafts: observations("wo-check") });
+      const order = await openMesa(el);
+      emit(order, event, {});
+      await flush(el);
+      expect(api.finishTable).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-unpaid-departure-dialog")).toBeNull();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it.each(["editorVersion", "draftRevision"] as const)(
+    "unpaid departure retains its opening %s after a focus refresh",
+    async (field) => {
+      let changed = false;
+      const read = observations();
+      const listDrafts = vi.fn(async () => {
+        const snapshot = await read();
+        if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")![field] = 9;
+        return snapshot;
+      });
+      const { el } = await mountClosing({ listDrafts });
+      await openMesa(el);
+      await openDeparture(el);
+      changed = true;
+      const reads = listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el);
+      await confirmDeparture(el);
+      expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it("unpaid departure retains its opening party revision after a guest-count update", async () => {
+    let changed = false;
+    const { el } = await mountClosing({
+      listDrafts: observations(),
+      getTablesState: vi.fn(async () => [
+        changed ? seated({}, { revision: 4 }) : mesa4,
+        mesa7,
+        mesa9,
+      ]),
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
+    });
+    await openMesa(el);
+    await openDeparture(el);
+    changed = true;
+    emit(tableOrder(el)!, "guests-party", { guestCount: 4 });
+    await flush(el);
+    expect(tableOrder(el)!.party!.revision).toBe(4);
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledWith(
+      "v1",
+      {
+        expectedPartyRevision: 3,
+        expectedEdits: edits,
+        reason: "Guests left",
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "Finish ignores a late %s after API replacement",
+    async (outcome) => {
+      const pending = held();
+      const { el } = await mountClosing({ listDrafts: observations(), finishTable: pending.call });
+      emit(await openMesa(el), "finish-table", {});
+      await flush(el);
+      const replacement = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+      el.api = replacement;
+      await flush(el);
+      const reads = vi.mocked(replacement.getTablesState).mock.calls.length;
+      if (outcome === "success") pending.answer.settle({ state: "closed" });
+      else pending.answer.refuse({ code: "draft.taken_over" });
+      await flush(el);
+      expect(tableOrder(el)?.party?.id).toBe("v1");
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(reads);
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it("unpaid departure refuses a confirmation after API replacement", async () => {
+    const { el } = await mountClosing({ listDrafts: observations() });
+    await openMesa(el);
+    await openDeparture(el);
+    const replacement = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+    el.api = replacement;
+    await flush(el);
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+    expect(replacement.recordUnpaidDeparture).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "unpaid departure ignores a late %s after API replacement",
+    async (outcome) => {
+      const pending = held();
+      const { el } = await mountClosing({
+        listDrafts: observations(),
+        recordUnpaidDeparture: pending.call,
+      });
+      await openMesa(el);
+      await openDeparture(el);
+      await confirmDeparture(el);
+      expect(pending.call).toHaveBeenCalledOnce();
+      const replacement = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+      el.api = replacement;
+      await flush(el);
+      const reads = vi.mocked(replacement.getTablesState).mock.calls.length;
+      if (outcome === "success") pending.answer.settle({ state: "closed", departures: [] });
+      else pending.answer.refuse({ code: "draft.taken_over" });
+      await flush(el);
+      expect(tableOrder(el)?.party?.id).toBe("v1");
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(reads);
+      expect(banner(el)).toBeNull();
+      const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+        "till-unpaid-departure-dialog",
+      )!;
+      expect(dialog.busy).toBe(true);
+      expect(dialog.refusal).toBeNull();
+    },
+  );
+  it.each(["success", "refusal"] as const)(
+    "unpaid departure ignores a late approver-read %s after API replacement",
+    async (outcome) => {
+      const authorizers = held();
+      const { el } = await mountClosing({
+        listDrafts: observations(),
+        recordUnpaidDeparture: vi
+          .fn()
+          .mockRejectedValue({ code: "authorization.not_permitted", status: 403 }),
+        listUnpaidDepartureAuthorizers: authorizers.call,
+      });
+      await openMesa(el);
+      await openDeparture(el);
+      await confirmDeparture(el);
+      expect(authorizers.call).toHaveBeenCalledOnce();
+      el.api = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+      await flush(el);
+      if (outcome === "success")
+        authorizers.answer.settle([{ personId: "sup-1", displayName: "Luis" }]);
+      else authorizers.answer.refuse(new Error("Read failed"));
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-departure-approval]")).toBeNull();
+      const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+        "till-unpaid-departure-dialog",
+      )!;
+      expect(dialog.busy).toBe(true);
+      expect(dialog.refusal).toBeNull();
+    },
+  );
+  for (const code of ["draft.out_of_date", "draft.taken_over"] as const) {
+    it.each(["finish", "departure"] as const)(
+      "%s retains the " + code + " refusal while refreshing bill metadata",
+      async (command) => {
+        const listDrafts = observations();
+        const sending = vi.fn().mockRejectedValue({ code, status: 409 });
+        const { el } = await mountClosing({
+          listDrafts,
+          [command === "finish" ? "finishTable" : "recordUnpaidDeparture"]: sending,
+        });
+        const order = await openMesa(el);
+        if (command === "departure") await openDeparture(el);
+        const reads = listDrafts.mock.calls.length;
+        if (command === "finish") emit(order, "finish-table", {});
+        else await confirmDeparture(el);
+        await flush(el, 5);
+        expect(sending).toHaveBeenCalledOnce();
+        expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+        if (command === "finish") expect(banner(el)?.textContent).toContain(codeMessage(code));
+        else {
+          const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+            "till-unpaid-departure-dialog",
+          )!;
+          expect(dialog.refusal?.code).toBe(code);
+          expect(
+            dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+              .error,
+          ).toBe(codeMessage(code));
+        }
+        expect(drafts.saveDraft).not.toHaveBeenCalled();
+        expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+      },
+    );
+  }
+});
+
+describe("till-app: Finish table confirms paid unserved dishes", () => {
+  type Dish = import("./api/finish-table-types.js").UnservedDish;
+  type Consent = import("./api/line-cancel-types.js").CancellationRead;
+  type FinishDialog = HTMLElementTagNameMap["till-finish-table-dialog"];
+  const cash = {
+    tenderId: "cash-1",
+    method: "cash",
+    manual: false,
+    last4: null,
+    appliedRemaining: "30.00",
+    tipRemaining: "2.00",
+    pendingRefundId: null,
+  };
+  function dish(lineId = "line-1", billId = "wo-4"): Dish {
+    return {
+      billId,
+      billRevision: 0,
+      lineId,
+      name: lineId === "line-1" ? "Flan" : "Water",
+      quantity: "1.000",
+      context: {
+        billStatus: "settled",
+        stage: "not_started",
+        components: [
+          {
+            id: `ticket-${lineId}`,
+            lineId,
+            state: "queued",
+            firedAt: null,
+            quantity: "2.000",
+            kitchenQuantity: "2.000",
+            servedQuantity: "1.000",
+            cancelledQuantity: "0.000",
+          },
+        ],
+      },
+    };
+  }
+  function consent(row = dish()): Consent {
+    return {
+      billId: row.billId,
+      billRevision: row.billRevision,
+      revision: 3,
+      context: structuredClone(row.context),
+      saleId: `sale-${row.billId}`,
+      refundValue: { quantity: "2.000", gross: "11.00" },
+    };
+  }
+  const refusal = (rows = [dish()]) => ({
+    code: "party.unserved_dishes",
+    partyId: "v1",
+    dishes: rows,
+  });
+  const finishDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<FinishDialog>("till-finish-table-dialog");
+  const approval = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>("[data-finish-approval]");
+  async function mountFinish(overrides: Record<string, unknown> = {}) {
+    return mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
+      finishTable: vi.fn().mockRejectedValueOnce(refusal()).mockResolvedValue({ state: "closed" }),
+      getPartyBills: vi.fn().mockResolvedValue(
+        [tabBill, checkBill].map((row) => ({
+          ...row,
+          status: "settled",
+          outstanding: "0.00",
+          hasPayments: true,
+        })),
+      ),
+      getCancellation: vi.fn(async (_party: string, lineId: string) =>
+        consent(dish(lineId, lineId === "line-1" ? "wo-4" : "wo-check")),
+      ),
+      getRefundableTenders: vi.fn().mockResolvedValue([cash]),
+      getTransactionReceipt: vi.fn().mockResolvedValue(saleResult),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m1", displayName: "Marta" }]),
+      refundTransaction: vi.fn(),
+      ...overrides,
+    });
+  }
+  async function openFinish(el: TillApp) {
+    emit(await openMesa(el), "finish-table");
+    await flush(el, 8);
+    return finishDialog(el);
+  }
+  async function choose(el: TillApp, refund = false) {
+    const dialog = finishDialog(el)!;
+    expect(dialog).not.toBeNull();
+    await dialog.updateComplete;
+    emit(dialog.shadowRoot!.querySelector('wt-combobox[name="reason"]')!, "wt-change", {
+      value: "r-cancel",
+    });
+    await dialog.updateComplete;
+    if (!refund)
+      for (const input of dialog.shadowRoot!.querySelectorAll<HTMLInputElement>(
+        'input[name="refund"]',
+      )) {
+        if (input.checked) await userEvent.click(input);
+      }
+    await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+  }
+
+  it("opens the paid-food dialog with the authoritative filed remainder and no guessed reason", async () => {
+    const { el } = await mountFinish();
+    const dialog = await openFinish(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.dishes).toEqual([dish()]);
+    expect(dialog!.refunds).toEqual({ "line-1": "5.50" });
+    expect(dialog!.defaultReasonId).toBe("");
+    expect(dialog!.reasons?.map((row) => row.id)).toEqual(["r-cancel"]);
+    expect(api.getCancellation).toHaveBeenCalledWith(
+      "v1",
+      "line-1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(api.getRefundableTenders).toHaveBeenCalledWith(
+      "sale-wo-4",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it("cancels the complete observed set and closes with every family editing observation", async () => {
+    const { el } = await mountFinish();
+    await openFinish(el);
+    await choose(el);
+    expect(api.finishTable).toHaveBeenCalledTimes(2);
+    const call = vi.mocked(api.finishTable).mock.calls[1]!;
+    expect(call.slice(0, 3)).toEqual(["v1", 3, closingEdits]);
+    expect(call[3]).toEqual({
+      submissionId: expect.any(String),
+      cancellations: [
+        {
+          lineId: "line-1",
+          quantity: "1.000",
+          expectedBillRevision: 0,
+          expectedContext: dish().context,
+          reasonId: "r-cancel",
+        },
+      ],
+    });
+    expect(call[4]).toEqual({ signal: expect.any(AbortSignal) });
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["none", "pending", "tip-only"])(
+    "shows no Refund tick for %s principal on this device",
+    async (kind) => {
+      const { el } = await mountFinish(
+        kind === "none"
+          ? {
+              getTill: vi.fn().mockResolvedValue(till),
+            }
+          : {
+              getRefundableTenders: vi.fn().mockResolvedValue([
+                {
+                  ...cash,
+                  ...(kind === "pending"
+                    ? { pendingRefundId: "pending" }
+                    : { appliedRemaining: "0.00" }),
+                },
+              ]),
+            },
+      );
+      const dialog = await openFinish(el);
+      expect(dialog).not.toBeNull();
+      expect(dialog!.refunds).toEqual({});
+      expect(dialog!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+      expect(dialog!.refundAtTill).toBe(kind === "none");
+      await choose(el);
+      expect(vi.mocked(api.finishTable).mock.calls[1]![3]!.cancellations[0]).not.toHaveProperty(
+        "refundHandoff",
+      );
+      expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["getCancellation", "getRefundableTenders"])(
+    "retries a failed %s rather than assuming no refund",
+    async (method) => {
+      const read = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(method === "getCancellation" ? consent() : [cash]);
+      const { el } = await mountFinish({
+        [method]: read,
+        finishTable: vi.fn().mockRejectedValue(refusal()),
+      });
+      await openFinish(el);
+      expect(finishDialog(el)).toBeNull();
+      expect(banner(el)).not.toBeNull();
+      emit(tableOrder(el)!, "finish-table");
+      await flush(el, 8);
+      expect(finishDialog(el)).not.toBeNull();
+      expect(finishDialog(el)!.refunds).toEqual({ "line-1": "5.50" });
+    },
+  );
+
+  it("retains a failed reason read and retries it in the dialog", async () => {
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([]);
+    const { el } = await mountFinish({ listAdjustmentReasons: reasons });
+    const dialog = await openFinish(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.reasons).toBeNull();
+    expect(dialog!.refusal).toBe(t("adjust.reasons_error"));
+    emit(dialog!, "finish-table-reasons");
+    await flush(el);
+    expect(finishDialog(el)!.reasons).toEqual([]);
+    expect(finishDialog(el)!.refusal).toBe("");
+  });
+
+  it.each(["getCancellation", "getRefundableTenders", "listAdjustmentReasons"])(
+    "drops late %s answers after API replacement",
+    async (method) => {
+      const pending = held();
+      const { el } = await mountFinish({ [method]: pending.call });
+      await openFinish(el);
+      el.api = stubApi();
+      await flush(el);
+      pending.answer.settle(
+        method === "getCancellation" ? consent() : method === "getRefundableTenders" ? [cash] : [],
+      );
+      await flush(el, 6);
+      expect(finishDialog(el)).toBeNull();
+      expect(approval(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it("keeps the finish action single while the first dish is being read", async () => {
+    const pending = held();
+    const { el } = await mountFinish({ getCancellation: pending.call });
+    await openFinish(el);
+    emit(tableOrder(el)!, "finish-table");
+    await flush(el);
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    pending.answer.settle(consent());
+    await flush(el, 6);
+    expect(finishDialog(el)).not.toBeNull();
+  });
+
+  it("opens the independent public refund only after the table closes", async () => {
+    const pending = held();
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockImplementation(() => pending.call());
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el, true);
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    pending.answer.settle({ state: "closed" });
+    await flush(el, 10);
+    expect(tableOrder(el)).toBeNull();
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith(
+      "sale-wo-4",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-tender-refund-dialog"]>(
+        "till-tender-refund-dialog",
+      )!.attempt,
+    ).toBeNull();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("asks refund approval from the main action and keeps a wrong PIN retryable without storing it", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "pin.invalid" })
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)?.authorizers).toEqual([{ personId: "m1", displayName: "Marta" }]);
+    expect(approval(el)?.approverRole).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    const first = finish.mock.calls[1]![3];
+    expect(first.cancellations[0].refundHandoff).toBe(true);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "1111" });
+    await flush(el, 8);
+    expect(approval(el)?.error).toBe("pin.invalid");
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+    await flush(el, 10);
+    expect(finish.mock.calls[3]![3]).toEqual({
+      ...first,
+      approver: { personId: "m1", pin: "7777" },
+    });
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    for (const storage of [localStorage, sessionStorage])
+      for (const key of Object.keys(storage)) expect(storage.getItem(key)).not.toContain("7777");
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the chosen fields when approval is cancelled", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)).not.toBeNull();
+    emit(approval(el)!, "override-cancel");
+    await flush(el);
+    expect(approval(el)).toBeNull();
+    const dialog = finishDialog(el)!;
+    expect(dialog.busy).toBe(false);
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLInputElement>('input[name="refund"]')!.checked,
+    ).toBe(true);
+    expect(dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.value).toBe(
+      "r-cancel",
+    );
+  });
+
+  it("retries an approver read failure from the retained main action", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+      listRefundAuthorizers: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue([]),
+    });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)).toBeNull();
+    expect(finishDialog(el)!.busy).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(codeMessage("server.internal"));
+    await userEvent.click(
+      finishDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!,
+    );
+    await flush(el, 8);
+    expect(approval(el)?.authorizers).toEqual([]);
+  });
+
+  it("drops a late approver read after closing the paid-food dialog", async () => {
+    const people = held();
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+      listRefundAuthorizers: people.call,
+    });
+    await openFinish(el);
+    await choose(el, true);
+    emit(finishDialog(el)!, "finish-table-close");
+    await flush(el);
+    people.answer.settle([{ personId: "old", displayName: "Old" }]);
+    await flush(el, 8);
+    expect(finishDialog(el)).toBeNull();
+    expect(approval(el)).toBeNull();
+  });
+
+  it("re-prompts a raced kitchen set without confirming its new facts automatically", async () => {
+    const changed = {
+      ...dish(),
+      quantity: "0.500",
+      context: { ...dish().context, stage: "started" as const },
+    };
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce(refusal([changed]))
+      .mockResolvedValue({ state: "closed" });
+    const read = vi.fn().mockResolvedValueOnce(consent()).mockResolvedValue(consent(changed));
+    const { el } = await mountFinish({ finishTable: finish, getCancellation: read });
+    await openFinish(el);
+    await choose(el);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(tableOrder(el)).not.toBeNull();
+    expect(finishDialog(el)!.dishes).toEqual([changed]);
+    expect(
+      finishDialog(el)!.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.value,
+    ).toBe("");
+    expect(
+      finishDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="refund"]')!
+        .checked,
+    ).toBe(false);
+    await choose(el);
+    expect(finish.mock.calls[2]![3].cancellations[0].quantity).toBe("0.500");
+    expect(finish.mock.calls[2]![3].submissionId).not.toBe(finish.mock.calls[1]![3].submissionId);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it.each(["bill", "party", "kitchen"])(
+    "refuses an opening %s observation that changed during its reads",
+    async (kind) => {
+      const value = consent();
+      if (kind === "bill") value.billRevision++;
+      if (kind === "party") value.revision++;
+      if (kind === "kitchen") value.context.stage = "started";
+      const { el } = await mountFinish({ getCancellation: vi.fn().mockResolvedValue(value) });
+      await openFinish(el);
+      expect(finishDialog(el)).toBeNull();
+      expect(api.finishTable).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(codeMessage("tab.cancel_context_changed"));
+    },
+  );
+
+  it("keeps a changed editing observation from reaching the Finish command", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async () => {
+      const snapshot = await drafts.listDrafts("v1");
+      if (changed) snapshot.billEdits.find((row) => row.billId === "wo-check")!.editorVersion++;
+      return snapshot;
+    });
+    const { el } = await mountFinish({ listDrafts });
+    await openFinish(el);
+    changed = true;
+    const count = listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(count);
+    await flush(el, 6);
+    await choose(el);
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    expect(finishDialog(el)!.busy).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["missing", "extra", "refund"])(
+    "rejects a synthetic %s cancellation choice",
+    async (fault) => {
+      const { el } = await mountFinish(
+        fault === "refund" ? { getTill: vi.fn().mockResolvedValue(till) } : {},
+      );
+      await openFinish(el);
+      const cancellation = {
+        lineId: "line-1",
+        quantity: "1.000",
+        expectedBillRevision: 0,
+        expectedContext: dish().context,
+        reasonId: "r-cancel",
+        ...(fault === "refund" ? { refundHandoff: true } : {}),
+      };
+      emit(finishDialog(el)!, "finish-table-choice", {
+        cancellations:
+          fault === "missing"
+            ? []
+            : fault === "extra"
+              ? [cancellation, { ...cancellation, lineId: "other" }]
+              : [cancellation],
+      });
+      await flush(el, 6);
+      expect(api.finishTable).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("deduplicates receipt reads and allocates remaining principal across two dishes on one sale", async () => {
+    const rows = [dish(), dish("line-2")];
+    const { el } = await mountFinish({
+      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
+      getCancellation: vi.fn(async (_p: string, id: string) =>
+        consent(rows.find((row) => row.lineId === id)!),
+      ),
+      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, appliedRemaining: "8.00" }]),
+    });
+    const dialog = await openFinish(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.refunds).toEqual({ "line-1": "5.50", "line-2": "2.50" });
+    expect(api.getRefundableTenders).toHaveBeenCalledOnce();
+  });
+
+  it("offers every selected paid bill after closing instead of losing the second receipt", async () => {
+    const rows = [dish(), dish("line-2", "wo-check")];
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal(rows))
+        .mockResolvedValue({ state: "closed" }),
+    });
+    await openFinish(el);
+    await choose(el, true);
+    expect(tableOrder(el)).toBeNull();
+    const choices = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-finish-refund]")];
+    expect(choices.map((row) => row.getAttribute("data-finish-refund"))).toEqual([
+      "sale-wo-4",
+      "sale-wo-check",
+    ]);
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    await userEvent.click(choices[1]!);
+    await flush(el, 10);
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith(
+      "sale-wo-check",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    emit(el.shadowRoot!.querySelector("till-tender-refund-dialog")!, "tender-refund-close");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-ticket-view")!, "back-to-find-bill");
+    await flush(el, 8);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-finish-refund]")].map((row) =>
+        row.getAttribute("data-finish-refund"),
+      ),
+    ).toEqual(["sale-wo-4"]);
+  });
+
+  it("reuses the exact command identity when an unanswered write is resent", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el);
+    await expect.poll(() => finish.mock.calls.length).toBe(3);
+    expect(finish.mock.calls[2]!.slice(0, 4)).toEqual(finish.mock.calls[1]!.slice(0, 4));
+    await flush(el, 8);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("locks an unanswered choice and retries the same body after all automatic resends fail", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el);
+    await expect
+      .poll(() => finishDialog(el)?.refusal, { timeout: 5000 })
+      .toBe(t("adjust.unconfirmed"));
+    const command = finish.mock.calls[1]![3];
+    const dialog = finishDialog(el)!;
+    expect(
+      dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.disabled,
+    ).toBe(true);
+    await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+    expect(finish.mock.calls[4]![3]).toEqual(command);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("asks the same approver again without retaining the PIN when an approved answer is lost", async () => {
+    let approved = 0;
+    const finish = vi.fn(async (...args: unknown[]) => {
+      if (args[3] === undefined) throw refusal();
+      const command = args[3] as { approver?: { personId: string; pin: string } };
+      if (command.approver === undefined) throw { code: "authorization.not_permitted" };
+      if (++approved <= 3) throw new TypeError("Failed to fetch");
+      return { state: "closed" };
+    });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el, true);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+    await expect
+      .poll(() => finishDialog(el)?.refusal, { timeout: 5000 })
+      .toBe(t("adjust.unconfirmed"));
+    expect(approval(el)).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    vi.mocked(api.listRefundAuthorizers).mockResolvedValue([
+      { personId: "m1", displayName: "Marta" },
+      { personId: "m2", displayName: "Other" },
+    ]);
+    const sends = finish.mock.calls.length;
+    await userEvent.click(
+      finishDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!,
+    );
+    await flush(el, 8);
+    expect(finish).toHaveBeenCalledTimes(sends);
+    expect(approval(el)?.authorizers).toEqual([{ personId: "m1", displayName: "Marta" }]);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "8888" });
+    await flush(el, 10);
+    expect((finish.mock.calls.at(-1)![3] as { submissionId: string }).submissionId).toBe(
+      (finish.mock.calls[2]![3] as { submissionId: string }).submissionId,
+    );
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    for (const storage of [localStorage, sessionStorage])
+      for (const key of Object.keys(storage)) {
+        expect(storage.getItem(key)).not.toContain("7777");
+        expect(storage.getItem(key)).not.toContain("8888");
+      }
+  });
+
+  it("ignores a late receipt after a new table is opened following Finish", async () => {
+    const receipt = held();
+    const { el } = await mountFinish({ getTransactionReceipt: receipt.call });
+    await openFinish(el);
+    await choose(el, true);
+    expect(receipt.call).toHaveBeenCalledOnce();
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el, 8);
+    receipt.answer.settle(saleResult);
+    await flush(el, 10);
+    expect(tableOrder(el)?.party?.id).toBe("v7");
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+  });
+
+  it("reveals a newly required note beside the field and retains the paid choices for retry", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce({ code: "adjustment.note_required" })
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el);
+    const dialog = finishDialog(el)!;
+    const note =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="note"]');
+    expect(note).not.toBeNull();
+    expect(note!.required).toBe(true);
+    expect(note!.error).toBe(codeMessage("adjustment.note_required"));
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    emit(note!, "wt-change", { value: "Guests left" });
+    await flush(el);
+    expect(note!.error).toBe("");
+    await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+    expect(finish.mock.calls[2]![3].cancellations[0]).toMatchObject({
+      reasonId: "r-cancel",
+      note: "Guests left",
+    });
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("places a refused reason under its field and clears it when another reason is selected", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValueOnce({ code: "adjustment.reason_inactive" })
+        .mockResolvedValue({ state: "closed" }),
+    });
+    await openFinish(el);
+    await choose(el);
+    const dialog = finishDialog(el)!;
+    const field = dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!;
+    expect(field.error).toBe(codeMessage("adjustment.reason_inactive"));
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    emit(field, "wt-change", { value: "r-cancel" });
+    await flush(el);
+    expect(field.error).toBe("");
+  });
+
+  it("rereads a changed party after confirmation and requires a fresh Finish action", async () => {
+    let changed = false;
+    const finish = vi.fn(async (...args: unknown[]) => {
+      if (args[3] === undefined) throw refusal();
+      changed = true;
+      throw { code: "party.out_of_date", partyId: "v1", revision: 4 };
+    });
+    const { el } = await mountFinish({
+      finishTable: finish,
+      getTablesState: vi.fn(async () =>
+        changed ? [seated({}, { revision: 4 }), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+      ),
+    });
+    await openFinish(el);
+    await choose(el);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)?.party?.revision).toBe(4);
+    expect(banner(el)).not.toBeNull();
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns to Take payment when a family bill becomes outstanding before confirmation", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValueOnce({ code: "party.bill_outstanding" }),
+    });
+    await openFinish(el);
+    await choose(el);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)?.finishRefused).toBe(true);
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed reason retry open and allows a later successful read", async () => {
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([]);
+    const { el } = await mountFinish({ listAdjustmentReasons: reasons });
+    await openFinish(el);
+    emit(finishDialog(el)!, "finish-table-reasons");
+    await flush(el, 6);
+    expect(finishDialog(el)!.reasons).toBeNull();
+    expect(finishDialog(el)!.reasonsLoading).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(t("adjust.reasons_error"));
+    emit(finishDialog(el)!, "finish-table-reasons");
+    await flush(el, 6);
+    expect(finishDialog(el)!.reasons).toEqual([]);
+    expect(finishDialog(el)!.refusal).toBe("");
+    expect(api.finishTable).toHaveBeenCalledOnce();
+  });
+
+  it("keeps only one reason retry in flight and ignores its answer after closing", async () => {
+    const pending = held();
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockImplementation(() => pending.call());
+    const { el } = await mountFinish({ listAdjustmentReasons: reasons });
+    await openFinish(el);
+    const dialog = finishDialog(el)!;
+    emit(dialog, "finish-table-reasons");
+    emit(dialog, "finish-table-reasons");
+    await flush(el);
+    expect(reasons).toHaveBeenCalledTimes(2);
+    expect(finishDialog(el)!.reasonsLoading).toBe(true);
+    emit(dialog, "finish-table-close");
+    pending.answer.settle([]);
+    await flush(el, 8);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.finishTable).toHaveBeenCalledOnce();
+  });
+
+  it.each(["sale", "value", "quantity"] as const)(
+    "offers cancellation without a guessed refund when the filed %s is missing or empty",
+    async (missing) => {
+      const value = consent();
+      if (missing === "sale") delete value.saleId;
+      if (missing === "value") delete value.refundValue;
+      if (missing === "quantity") value.refundValue!.quantity = "0.000";
+      const { el } = await mountFinish({ getCancellation: vi.fn().mockResolvedValue(value) });
+      await openFinish(el);
+      expect(finishDialog(el)!.refunds).toEqual({});
+      expect(finishDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+      if (missing !== "quantity") expect(api.getRefundableTenders).not.toHaveBeenCalled();
+      await choose(el);
+      expect(vi.mocked(api.finishTable).mock.calls[1]![3]!.cancellations).toEqual([
+        {
+          lineId: "line-1",
+          quantity: "1.000",
+          expectedBillRevision: 0,
+          expectedContext: dish().context,
+          reasonId: "r-cancel",
+        },
+      ]);
+      expect(tableOrder(el)).toBeNull();
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rereads a family payment refusal without closing or opening a refund", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValueOnce({ code: "bill.payments_received" }),
+    });
+    await openFinish(el);
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+    await choose(el, true);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(banner(el)?.textContent).toContain(t("table.finish_bill_holds_money"));
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "ignores a late Finish confirmation %s after another table opens",
+    async (outcome) => {
+      const pending = held();
+      const { el } = await mountFinish({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal())
+          .mockImplementation(() => pending.call()),
+      });
+      await openFinish(el);
+      await choose(el, true);
+      emit(tableOrder(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el, 8);
+      expect(tableOrder(el)?.party?.id).toBe("v7");
+      if (outcome === "success") pending.answer.settle({ state: "closed" });
+      else pending.answer.refuse({ code: "party.bill_outstanding" });
+      await flush(el, 8);
+      expect(tableOrder(el)?.party?.id).toBe("v7");
+      expect(finishDialog(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains a failed receipt choice after closing and opens it on an explicit retry", async () => {
+    const receipt = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(saleResult);
+    const { el } = await mountFinish({ getTransactionReceipt: receipt });
+    await openFinish(el);
+    await choose(el, true);
+    expect(tableOrder(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    const choice = el.shadowRoot!.querySelector<HTMLElement>('[data-finish-refund="sale-wo-4"]')!;
+    expect(choice).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("find_bill.invoice_load_failed"));
+    await userEvent.click(choice);
+    await flush(el, 10);
+    expect(receipt).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-finish-refund]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each(["back", "close"] as const)(
+    "dismisses the remaining receipt choices with %s without initiating a refund",
+    async (action) => {
+      const { el } = await mountFinish({ getTransactionReceipt: vi.fn().mockRejectedValue({}) });
+      await openFinish(el);
+      await choose(el, true);
+      const choice = el.shadowRoot!.querySelector<HTMLElement>("[data-finish-refund]")!;
+      const dialog = choice.closest("wt-dialog")!;
+      expect(dialog).not.toBeNull();
+      if (action === "close") emit(dialog, "wt-close");
+      else await userEvent.click(dialog.querySelector<HTMLElement>('[slot="cancel"]')!);
+      await flush(el, 6);
+      expect(el.shadowRoot!.querySelector("[data-finish-refund]")).toBeNull();
+      expect(tableOrder(el)).toBeNull();
+      expect(api.getTransactionReceipt).toHaveBeenCalledOnce();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+    },
+  );
+
+  for (const locale of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280]) {
+        it(`paid Finish is accessible in ${locale}/${theme}/${width}`, async () => {
+          const previousWidth = innerWidth,
+            previousHeight = innerHeight;
+          const bodyBackground = document.body.style.background;
+          const documentBackground = document.documentElement.style.background;
+          await page.viewport(width, 844);
+          try {
+            const rows = [dish(), dish("line-2", "wo-check")];
+            const finish = vi
+              .fn()
+              .mockRejectedValueOnce(refusal(rows))
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue({ state: "closed" });
+            const { el, host } = await mountFinish({ finishTable: finish });
+            host.setAttribute("data-theme", theme);
+            document.body.style.background = getComputedStyle(host).backgroundColor;
+            document.documentElement.style.background = getComputedStyle(host).backgroundColor;
+            await openMesa(el);
+            setLocale(locale);
+            await flush(el);
+            emit(tableOrder(el)!, "finish-table");
+            await flush(el, 8);
+            const dialog = finishDialog(el)!;
+            expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+              locale === "es" ? "2 platos sin servir" : "2 dishes not served",
+            );
+            await expectNoA11yViolations(dialog);
+            expect(innerWidth).toBe(width);
+            for (const selector of ["[data-confirm]", "[data-close]"]) {
+              const button =
+                dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
+              const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+              expect(bounds.left).toBeGreaterThanOrEqual(0);
+              expect(bounds.right).toBeLessThanOrEqual(width);
+              expect(bounds.top).toBeGreaterThanOrEqual(0);
+              expect(bounds.bottom).toBeLessThanOrEqual(844);
+            }
+            await page.screenshot({
+              path: `__screenshots__/a773-finish-app/dishes-${locale}-${theme}-${width}.png`,
+            });
+            await choose(el, true);
+            expect(approval(el)).not.toBeNull();
+            await expectNoA11yViolations(approval(el)!);
+            await page.screenshot({
+              path: `__screenshots__/a773-finish-app/approval-${locale}-${theme}-${width}.png`,
+            });
+            emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+            await flush(el, 10);
+            expect([...el.shadowRoot!.querySelectorAll("[data-finish-refund]")]).toHaveLength(2);
+            const chooser = el
+              .shadowRoot!.querySelector("[data-finish-refund]")!
+              .closest("wt-dialog")!;
+            await expectNoA11yViolations(chooser);
+            for (const button of chooser.querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
+              "wt-button",
+            )) {
+              const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+              expect(bounds.left).toBeGreaterThanOrEqual(0);
+              expect(bounds.right).toBeLessThanOrEqual(width);
+            }
+            await page.screenshot({
+              path: `__screenshots__/a773-finish-app/receipts-${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale("en");
+            document.body.style.background = bodyBackground;
+            document.documentElement.style.background = documentBackground;
+            await page.viewport(previousWidth, previousHeight);
+          }
+        });
+      }
+
+  it("returns a changed editing refusal from the PIN prompt without sending stale authority", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async () => {
+      const snapshot = await drafts.listDrafts("v1");
+      if (changed) snapshot.billEdits.find((row) => row.billId === "wo-check")!.editorVersion++;
+      return snapshot;
+    });
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValue({ code: "authorization.not_permitted" });
+    const { el } = await mountFinish({ finishTable: finish, listDrafts });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)).not.toBeNull();
+    changed = true;
+    const count = listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(count);
+    await flush(el, 6);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+    await flush(el, 6);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(approval(el)).toBeNull();
+    expect(finishDialog(el)!.busy).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(codeMessage("draft.out_of_date"));
   });
 });

@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -14,9 +16,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { createCourse, listCourses, requireCourse, updateCourse } from "./kitchen.js";
 import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
-
-import { addTabRound } from "./working-order.js";
-import { saveDraft } from "./order-drafts.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -103,6 +102,7 @@ describe("permanent course deletion", () => {
         if (reference === "draft") {
           await inTx(v, (tx) =>
             saveDraft(tx, v.cfg, partyId, OPERATOR, {
+              billId: tabId,
               draftId: null,
               revision: 0,
               lines: [
@@ -223,7 +223,7 @@ describe("permanent course deletion", () => {
         inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active, name: "Changed" } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
       expect(await inTx(v, (tx) => listCourses(tx, v.cfg))).toEqual([
-        { id, name: "Live", displayOrder: 0, active: true },
+        { id, name: "Live", displayOrder: 0, active: true, heldUntilFired: true },
       ]);
     },
   );

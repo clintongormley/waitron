@@ -1,3 +1,6 @@
+import { observedClosingBody } from "./testing/party-close-fixture.js";
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -34,23 +37,17 @@ import {
   workingLineContexts,
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import {
-  abandonHeldOrder,
-  parkOrder,
-  issueUnpaidInvoice,
-  priceForIssuance,
-  placeOrder,
-} from "./working-order.js";
+import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order.js";
 import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   collectOrderOrchestration as collectOrder,
   settleIssuedOwingNothing,
-} from "./till-sale.js";
-import { takeBillPayment } from "./bill-payments.js";
-import { closeParty, openParty } from "./parties.js";
-import { mergeCheckedBills } from "./bill-actions.js";
-import { takeIntoParty } from "./move-bill.js";
+} from "./testing/whole-payment-fixture.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { closeParty, openParty } from "./testing/party-close-fixture.js";
+import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
+import { takeIntoParty } from "./testing/move-bill-fixture.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { decimal } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
@@ -171,7 +168,7 @@ async function post(cookie: string, path: string, body: unknown = {}) {
   const response = await app.request(path, {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await observedClosingBody(suite.db, path, body)),
   });
   const text = await response.text();
   return { status: response.status, body: text.startsWith("{") ? JSON.parse(text) : text };
@@ -1541,7 +1538,9 @@ describe("department transfer tab lifecycle", () => {
       return party.partyId;
     });
     const id = await pendingPartyFixture(f);
-    await withTransaction(suite.db, (tx) => mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab));
+    await withTransaction(suite.db, (tx) =>
+      mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab, { operatorId: personId }),
+    );
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);
   });

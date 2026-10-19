@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { courseDeleteCopy } from "./course-delete-copy.js";
@@ -92,6 +93,19 @@ export class CourseList extends LitElement {
       .open-name:hover {
         opacity: var(--wt-opacity-hover);
       }
+      .held-control {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+      }
+      .held-note {
+        color: var(--wt-color-text-muted);
+      }
+      th.held-heading {
+        text-align: start;
+        padding-inline: var(--wt-space-2);
+      }
       .empty {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -119,6 +133,7 @@ export class CourseList extends LitElement {
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   readonly #writes = new ListWriteQueue();
+  readonly #heldPending = new Map<string, boolean>();
   /** Moves shown on screen but not yet answered: a list read meanwhile would put their rows back. */
   #movesOut = 0;
   /** A list read arrived while moves were out, so what it carried has not been shown yet. */
@@ -462,6 +477,28 @@ export class CourseList extends LitElement {
     });
   }
 
+  #setHeld(course: Course, heldUntilFired: boolean): void {
+    if (this.readOnly || this.#heldPending.has(course.id)) return;
+    this.#heldPending.set(course.id, heldUntilFired);
+    this.#showError(null);
+    this.requestUpdate();
+    this.#writes.run(SCOPE, async () => {
+      try {
+        await this.api.updateCourse(course.id, { heldUntilFired });
+      } catch (error) {
+        this.#heldPending.delete(course.id);
+        this.#showError(codeOf(error));
+        this.requestUpdate();
+        return;
+      }
+      this.courses = this.courses.map((row) =>
+        row.id === course.id ? { ...row, heldUntilFired } : row,
+      );
+      this.#heldPending.delete(course.id);
+      await this.#load();
+    });
+  }
+
   #actions(course: Course): TemplateResult {
     return html`<td class="actions-cell">
       <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}>
@@ -505,6 +542,26 @@ export class CourseList extends LitElement {
               </button>`
         }
       </td>
+      <td>
+        <div class="held-control">
+          <wt-switch
+            name="heldUntilFired"
+            label=${`${t("courses.held_until_fired")}: ${course.name}`}
+            hide-label
+            .checked=${this.#heldPending.get(course.id) ?? course.heldUntilFired}
+            .disabled=${this.#heldPending.has(course.id)}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              this.#setHeld(course, event.detail.checked);
+            }}
+          ></wt-switch>
+          ${
+            !(this.#heldPending.get(course.id) ?? course.heldUntilFired)
+              ? html`<span class="held-note">${t("courses.goes_to_fire_now")}</span>`
+              : nothing
+          }
+        </div>
+      </td>
       ${this.#actions(course)}
     </tr>`;
   }
@@ -545,7 +602,13 @@ export class CourseList extends LitElement {
   #table(adding: Edit | null): TemplateResult {
     if (this.readOnly)
       return html`<ul>
-        ${this.courses.map((course) => html`<li data-course=${course.id}>${course.name}</li>`)}
+        ${this.courses.map(
+          (course) =>
+            html`<li data-course=${course.id}>
+              ${course.name} ·
+              ${t(course.heldUntilFired ? "courses.held_until_fired" : "courses.goes_to_fire_now")}
+            </li>`,
+        )}
       </ul>`;
     return html`<div
       class="table-wrap"
@@ -558,6 +621,7 @@ export class CourseList extends LitElement {
           <tr>
             <th scope="col"><span class="visually-hidden">${t("kitchen.reorder_course")}</span></th>
             <th scope="col"><span class="visually-hidden">${t("kitchen.course_name")}</span></th>
+            <th scope="col" class="held-heading">${t("courses.held_until_fired")}</th>
             <th scope="col"><span class="visually-hidden">${t("kitchen.course_actions")}</span></th>
           </tr>
         </thead>
@@ -574,6 +638,7 @@ export class CourseList extends LitElement {
                 <tr data-course=${NEW}>
                   <td class="handle-cell"></td>
                   <td>${this.#nameField(adding, t("kitchen.new_course"))}</td>
+                  <td></td>
                   <td class="actions-cell"></td>
                 </tr>
               </tfoot>`

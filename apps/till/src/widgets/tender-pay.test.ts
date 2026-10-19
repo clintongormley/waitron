@@ -96,6 +96,75 @@ const click = (el: TillTenderPay, selector: string) =>
 afterEach(cleanupWidgets);
 
 describe("till-tender-pay", () => {
+  it.each([undefined, null, 4])(
+    "keeps an unanswered payment's guests %s while the receipt default changes",
+    async (guests) => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        asksGuests: true,
+        receiptGuests: 9,
+        confirmation: {
+          tender: { method: "cash", amount: "150.00" },
+          outstanding: "120.00",
+          ...(guests === undefined ? {} : { guests }),
+        },
+      });
+      const confirm = vi.fn();
+      el.addEventListener("confirm-payment", (event) => confirm((event as CustomEvent).detail));
+      const field =
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>('[name="guests"]');
+      if (guests === undefined) expect(field).toBeNull();
+      else {
+        await field!.updateComplete;
+        expect(field!.shadowRoot!.querySelector("input")!.value).toBe(guests === null ? "" : "4");
+        expect(field!.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+      }
+      el.receiptGuests = 12;
+      await el.updateComplete;
+      click(el, ".confirm");
+      expect(confirm).toHaveBeenCalledWith({
+        method: "cash",
+        amount: "150.00",
+        ...(guests === undefined ? {} : { guests }),
+      });
+    },
+  );
+
+  it("fences an unanswered confirmation's busy and superseded buttons", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      confirmation: {
+        tender: { method: "card", amount: "120.00", externalRef: "old" },
+        outstanding: "120.00",
+      },
+    });
+    const confirm = vi.fn();
+    el.addEventListener("confirm-payment", (event) => confirm((event as CustomEvent).detail));
+    const old = query(el, ".confirm") as HTMLElement;
+    el.busy = true;
+    old.click();
+    await el.updateComplete;
+    expect(old.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    el.busy = false;
+    el.confirmation = {
+      tender: { method: "cash", amount: "25.00" },
+      outstanding: "20.00",
+      guests: null,
+    };
+    old.click();
+    expect(confirm).not.toHaveBeenCalled();
+    await el.updateComplete;
+    click(el, ".confirm");
+    expect(confirm).toHaveBeenCalledExactlyOnceWith({
+      method: "cash",
+      amount: "25.00",
+      guests: null,
+    });
+  });
+
   it("waits for a counter cash question before opening amount entry and stays idle on cancel", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "1");

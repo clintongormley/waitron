@@ -1,3 +1,4 @@
+import { billActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -180,7 +181,14 @@ async function transferBody(
     .from(workingOrders)
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(eq(workingOrders.id, from));
-  return JSON.stringify({ ...body, expectedPartyRevision: row?.revision ?? 0 });
+  return JSON.stringify(
+    await withTransaction(suite.db, (tx) =>
+      billActionBody(tx, `/api/bills/${from}/transfer`, {
+        ...body,
+        expectedPartyRevision: row?.revision ?? 0,
+      }),
+    ),
+  );
 }
 
 describe("POST /api/bills/:id/transfer", () => {

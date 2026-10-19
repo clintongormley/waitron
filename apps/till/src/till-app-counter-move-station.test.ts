@@ -1,3 +1,4 @@
+import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -146,6 +147,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([]),
     listStatuses: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue(stations),
+    getFindBill: vi.fn(async (workingOrderId: string) => ({
+      workingOrderId,
+      partyId: null,
+      edit: null,
+    })),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     logout: vi.fn().mockResolvedValue(undefined),
     ...waitingServer(),
@@ -272,6 +278,67 @@ describe("till-app: moving a paid counter order to another station", () => {
     expect(dialog(el)!.currentStationId).toBeNull();
   });
 
+  it("A773 cancels an unanswered bill observation and allows a later destination choice", async () => {
+    const getFindBill = vi.fn(
+      (_id: string, options?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Timed out", "AbortError")),
+            { once: true },
+          ),
+        ),
+    );
+    const el = await signedIn({ getFindBill });
+    try {
+      vi.useFakeTimers();
+      moveButton(el)!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getFindBill).toHaveBeenCalledExactlyOnceWith("wo-paid", {
+        signal: expect.any(AbortSignal),
+      });
+      const signal = getFindBill.mock.calls[0]![1]!.signal!;
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+      expect(signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    vi.mocked(api.getFindBill).mockResolvedValue({
+      workingOrderId: "wo-paid",
+      partyId: null,
+      edit: null,
+    } as Awaited<ReturnType<TillApi["getFindBill"]>>);
+    moveButton(el)!.click();
+    await expect.poll(() => dialog(el)).not.toBeNull();
+  });
+
+  it("A773 reads and retains a waiting table bill's editing observation", async () => {
+    const expectedEdit = {
+      billId: "wo-paid",
+      editorVersion: 6,
+      draftId: null,
+      draftRevision: null,
+    };
+    const getFindBill = vi.fn().mockResolvedValue({
+      workingOrderId: "wo-paid",
+      partyId: "party-1",
+      edit: { ...expectedEdit, editorId: null, editorName: null },
+    });
+    const el = await openMove({ getFindBill });
+    await choose(el, "grill");
+    await expect.poll(() => vi.mocked(api.moveDishStation).mock.calls.length).toBe(1);
+    expect(getFindBill).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.moveDishStation).mock.calls[0]![1]).toEqual({
+      submissionId: expect.any(String),
+      lineIds: ["line-1", "line-2"],
+      stationId: "grill",
+      expectedEdit,
+    });
+  });
+
   it("sends one move naming every dish the list holds that is not already at the chosen station, then closes", async () => {
     const el = await openMove();
     listNow(el, [
@@ -293,6 +360,7 @@ describe("till-app: moving a paid counter order to another station", () => {
         submissionId: expect.stringMatching(UUID),
         lineIds: ["line-2", "line-3"],
         stationId: "grill",
+        expectedEdit: null,
       },
       { signal: expect.any(AbortSignal) },
     );

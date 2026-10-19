@@ -1910,16 +1910,22 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown }>(c);
+      const body = await readJsonBody<{
+        name?: unknown;
+        displayOrder?: unknown;
+        heldUntilFired?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
       if (typeof body.name !== "string")
         throw new AppError("management.request_invalid", { field: "name" });
+      if (body.heldUntilFired !== undefined && typeof body.heldUntilFired !== "boolean")
+        throw new AppError("management.request_invalid", { field: "heldUntilFired" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
-      const { name } = body;
+      const { name, heldUntilFired } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createCourse(tx, cfg, { name, displayOrder }),
+        createCourse(tx, cfg, { name, displayOrder, heldUntilFired }),
       );
       return c.json(result, 201);
     }),
@@ -1939,15 +1945,18 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown; active?: unknown }>(
-        c,
-      );
+      const body = await readJsonBody<{
+        name?: unknown;
+        displayOrder?: unknown;
+        active?: unknown;
+        heldUntilFired?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
       if (Object.hasOwn(body, "active"))
         throw new AppError("management.request_invalid", { field: "active" });
-      const patch: { name?: string; displayOrder?: number } = {};
+      const patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
           throw new AppError("management.request_invalid", { field: "name" });
@@ -1955,6 +1964,11 @@ export function mountManagementApi(
       }
       if (body.displayOrder !== undefined) {
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
+      }
+      if (body.heldUntilFired !== undefined) {
+        if (typeof body.heldUntilFired !== "boolean")
+          throw new AppError("management.request_invalid", { field: "heldUntilFired" });
+        patch.heldUntilFired = body.heldUntilFired;
       }
       await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, cfg, id, patch));
       return c.body(null, 204);

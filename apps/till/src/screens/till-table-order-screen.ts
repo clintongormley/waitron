@@ -1,16 +1,26 @@
+import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
+import { groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import {
   nutritionIcons,
   nutritionIconStyles,
   nutritionDietLabels,
 } from "../widgets/nutrition-icons.js";
-import type { LineNutrition } from "../api/client.js";
+import type { BillEditExpected, LineNutrition } from "../api/client.js";
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
-import { ContentLanguageController, inNumberOrder, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  ContentLanguageController,
+  formatDecimalInput,
+  Gestures,
+  inNumberOrder,
+  leaveCoordinatorFor,
+} from "@waitron/ui";
+import { pointerElementsAt, scrollAncestors } from "@waitron/ui/src/reorder-table.js";
+import type { TillBasket } from "../widgets/basket.js";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import {
   LitElement,
@@ -25,18 +35,19 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
-import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
+import "../widgets/sent-orders.js";
+import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
+import { sentPanel, type SentSlice } from "../state/sent-panel.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   addDecimal,
   compareDecimal,
   decimal,
   formatMoney,
-  multiplyDecimal,
   subtractDecimal,
-  perDishOptionQuantity,
   type Decimal,
 } from "@waitron/shared";
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
@@ -45,20 +56,8 @@ import type { StringKey } from "../i18n/strings.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import {
-  WorkingOrderStore,
-  type LineSelection,
-  type OrderLine,
-  type SelectedExtra,
-} from "../state/working-order.js";
-import { deriveExtraSelections } from "../state/held-extras.js";
-import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
-import {
-  offeredListsOf,
-  toWireLineExtras,
-  toWireModifiers,
-  toWireProductIdentity,
-} from "../state/order-line.js";
+import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -82,16 +81,13 @@ import {
 import { billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
 import { receiptLanguageLabel, shownReceiptLanguage } from "../widgets/receipt-language.js";
 import {
-  LINE_ADJUSTMENTS,
   billGross,
   isStarted,
   lineAdjustTarget,
   listedGross,
-  moreThanOneWholeUnit,
   tabLineGross,
 } from "../state/adjust-target.js";
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
-import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
 import "../widgets/party-guests-dialog.js";
 import "../widgets/split-guests-dialog.js";
@@ -100,7 +96,6 @@ import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
 import type { SplitGuestsDetail } from "../widgets/split-guests-dialog.js";
-import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
   BillBalance,
   CurrentOrderGroup,
@@ -124,20 +119,20 @@ import type {
   TillZoneMenu,
   PartyBill,
 } from "../api/client.js";
-import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
+import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
-import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
-import {
-  draftPreview,
-  draftSections,
-  draftSubmission,
-  itemCount,
-  type DraftAction,
-  type DraftEntry,
-  type DraftGroup,
-  type DraftPreview,
-} from "../state/draft-groups.js";
+import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
+import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
+import type { Place } from "../state/draft-place.js";
+import {
+  draftLayout,
+  fireGroups,
+  panelTotal,
+  sendAllGroups,
+  type LayoutGroup,
+  type SubmitGroup,
+} from "../state/draft-layout.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
@@ -157,17 +152,11 @@ export type { TableServiceStatus };
  * Narrower, the draft opens on its own Review view. */
 export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
 
-/**
- * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
- * `lines`. The draft stays in `store` until the app has the server's answer: the `sent` lines (the
- * ones `lines` was built from, in order) leave it once they are added, and a refused submission is
- * kept (D9). `joinGroupId` adds the one held group's lines to that existing group. `billId` names
- * the bill the person chose under Send to; it is absent when they chose none, or chose a new bill,
- * and the server then puts the lines on the party's main bill, making one when there is none.
- */
+/** Group `lineIndexes` refer to `sent`, which may be only part of `store.lines`. */
 export interface SubmitDraftDetail {
+  /** Fresh offers only; recalled rows are identified by `sent` and the saved draft. */
   lines: GroupLine[];
-  groups: DraftGroup[];
+  groups: (DraftGroup & Pick<SubmitGroup, "joinGroupId" | "afterGroupId">)[];
   joinGroupId?: string;
   billId?: string;
   store: WorkingOrderStore;
@@ -183,8 +172,6 @@ export interface Draft {
   readonly tally: { fired: number; held: number; joined: number };
 }
 
-/** Another person's open draft on the party, shown read-only. `takenFromYou`: its latest take-over
- * was from the signed-in person, so it is headed by who holds it now. */
 export interface OtherDraft {
   id: string;
   revision: number;
@@ -200,13 +187,16 @@ export interface TakeOverDraftDetail {
   revision: number;
 }
 
+export interface SplitDraftSourceDetail {
+  store: WorkingOrderStore;
+  line: OrderLine;
+}
+
 /** A dish the table's offers no longer hold has no name to show, so it reads as not offered. */
 function shownName(product: TillProduct): string {
   return lineProductName(product) || t("basket.not_offered");
 }
 
-/** A draft line no action sends: the till's own check, the server's last answer, or a dish the
- * table's offers no longer hold says it cannot be sold now. */
 function flagged(line: OrderLine): boolean {
   return (
     line.blocked !== undefined || line.unavailableOnServer === true || line.notOffered === true
@@ -217,25 +207,6 @@ function flagged(line: OrderLine): boolean {
 function countsWholeUnits(line: OrderLine): boolean {
   return soldByTheUnit(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
 }
-
-/** How many lines an action leaves in the draft, naming them when there are only a few. */
-function leftOutText(lines: readonly OrderLine[]): string {
-  if (lines.length > LEFT_OUT_NAMED)
-    return t("table.left_out_unnamed").replace("{n}", String(lines.length));
-  const names = lines
-    .map((line) => `${shownName(line.product)}\u00a0×${trimQuantity(line.quantity)}`)
-    .join(", ");
-  return countText(lines.length, "table.left_out", "table.left_out_one").replace(
-    "{names}",
-    () => names,
-  );
-}
-
-/** Beyond this many, the left-out message counts the lines without naming them. */
-const LEFT_OUT_NAMED = 3;
-
-/** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
-type Destination = "fire-now" | "add-to-held" | "add-as-new";
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
@@ -252,12 +223,21 @@ interface ActionDraft {
 export interface MoveBillDetail {
   to: { tableId: string; seated: SeatedRead } | { counter: true };
   bills: BillChoiceDetail["bills"];
+  prompt?: object;
+}
+
+export interface TableRelocationOpenDetail {
+  verb: TableVerb;
+  table: TableState | null;
+  prompt: object;
+  ready: () => void;
 }
 
 export interface SplitTableDetail {
   tableId: string;
   billId: string | null;
   guests: SplitGuestsDetail;
+  prompt?: object;
 }
 
 /** The app's answer to a split whose count for one side the server refused: what was sent, and
@@ -269,52 +249,21 @@ export interface SplitRefusal {
   leaving: string;
   field: "staying" | "leaving";
   message: string;
+  prompt?: object;
 }
 
-/** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
- * leaves in the draft. */
-interface PendingDraft {
-  preview: DraftPreview;
-  join?: { group: OrderGroup; index: number };
-  detail: SubmitDraftDetail;
-  leftOut: readonly OrderLine[];
-  action: DraftAction;
-  checking: boolean;
-  deadEnds?: {
-    rows: ReadonlyMap<OrderLine, DeadEndAnswer["deadEnds"][number]>;
-    stations: DeadEndAnswer["stations"];
-  };
-}
-
-/** A held row whose Move to… is open, on whichever bill of the party it sits. */
-interface MovePending {
-  lineId: string;
-  name: string;
-  quantity: string;
-  group: OrderGroup;
-}
-
-/** What a group's row offers while its group is held: Move always, Split only for `splits`. */
-interface HeldRow {
-  lineId: string;
-  name: string;
-  quantity: string;
-  splits: boolean;
+interface DraftMoveOpening {
+  scope: string;
+  groups: string;
+  api: TillApi | undefined;
+  epoch: number;
+  selected: readonly OrderLine[];
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
-}
-
-/** A held group as the picker names it: `index` is its place among the party's held groups. */
-function heldGroupLabel(group: OrderGroup, index: number): string {
-  return index === 0
-    ? t("table.held_next").replace("{summary}", () => group.summary)
-    : t("table.held_group")
-        .replace("{n}", String(group.position))
-        .replace("{summary}", () => group.summary);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
@@ -329,6 +278,7 @@ export interface ReorderGroupsDetail {
 
 /** `move-group-line`: a whole held line into another held group, or a new one at the end. */
 export interface MoveGroupLineDetail {
+  expectedEdits: BillEditExpected[] | null;
   lineId: string;
   quantity: string;
   target: { groupId: string } | "new";
@@ -363,12 +313,8 @@ export interface UnsnoozeGroupDetail {
   groupId: string;
 }
 
-/** How far one press of Snooze puts a release reminder off. */
-export const SNOOZE_MINUTES = 5;
-
-/** `adjust`: Cancel, Give away or Discount pressed on a dish or an extra, or Discount on the bill on
- * screen. */
 export interface AdjustDetail {
+  combined?: true;
   kind: AdjustKind;
   target: AdjustTarget;
   /** Opened by the app's Cancel offer, so the message saying why stays on screen. */
@@ -388,6 +334,7 @@ export interface BillPayDetail {
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
+  expectedEdit: BillEditExpected | null;
   lineNo: number;
   /** The line's staff name, for a message about the change shown once another order is open. */
   lineName: string;
@@ -555,26 +502,6 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .line {
-        display: grid;
-
-        grid-template-columns: 1fr auto auto auto;
-        align-items: center;
-        gap: var(--wt-space-3);
-        padding: var(--wt-space-2) 0;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      /* The line's actions take a row of their own: Change, Recall and Cancel together do not fit
-         beside the name in the drawer at phone width. */
-      .line-actions {
-        grid-column: 1 / -1;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
-
       /* Three buttons do not fit on one line of the dialog at phone width, so they wrap rather than
          squeeze their labels onto two lines each. */
       .cancel-actions {
@@ -582,33 +509,6 @@ export class TillTableOrderScreen extends LitElement {
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--wt-space-2);
-      }
-      .draft-preview .cancel-actions {
-        inline-size: 100%;
-        justify-content: space-between;
-      }
-
-      .served-line {
-        color: var(--wt-color-text-muted);
-      }
-
-      /* A CHILD extras row belongs to the dish above it, and a waiter must be able to see that at a
-         glance: three of a €12.50 cheese is a pick on a burger, not three portions of cheese. Same
-         shape the basket gives a pick (the .option rule in ../widgets/basket.ts) — indented and muted —
-         with the smaller type the screen already uses for a line's subordinate text. */
-      .child-line {
-        padding-left: var(--wt-space-4);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      /* A tab line's course: a dropdown on a held line, a muted read-only label on a fired one. Capped
-         so a long course name never crowds out the line total. */
-      .line-course {
-        min-width: 0;
-        max-width: 8rem;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
       }
 
       .qty {
@@ -663,6 +563,43 @@ export class TillTableOrderScreen extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      .sent-fallback {
+        border: var(--wt-field-line-width) solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        padding: var(--wt-space-3);
+        margin-bottom: var(--wt-space-3);
+      }
+
+      .sent-fallback ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .sent-fallback li ul {
+        padding-inline-start: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .sent-fallback-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--wt-space-3);
+        padding-block: var(--wt-space-2);
+      }
+
+      .sent-fallback-name {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .sent-fallback-price {
+        flex: 0 0 auto;
+        font-variant-numeric: tabular-nums;
+      }
+
       .bill {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -680,41 +617,10 @@ export class TillTableOrderScreen extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
-      .bill-main {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
       .bill-invoice {
         display: block;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .send-to {
-        margin: var(--wt-space-3) 0 0;
-        padding: 0;
-        border: none;
-      }
-
-      .send-to legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-2);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .send-to-option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-        overflow-wrap: anywhere;
-      }
-
-      .send-to-option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
       }
 
       .bill-state {
@@ -810,10 +716,54 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .draft-section-name {
+      .draft-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .draft-group-name {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
         margin: 0;
         font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .draft-select,
+      [data-draft-drag-heading] {
+        touch-action: none;
+        user-select: none;
+      }
+
+      [data-draft-dragging] {
+        outline: 2px solid var(--wt-color-primary);
+        outline-offset: 2px;
+      }
+
+      .draft-drop-gap {
+        min-height: var(--wt-space-3);
+      }
+
+      [data-draft-drag-active] .draft-drop-gap {
+        border-block-end: 2px dashed var(--wt-color-primary);
+      }
+
+      .draft-group-select {
+        flex: 1;
+        min-width: 0;
+        text-align: start;
+        min-height: var(--wt-tap-min);
+        overflow-wrap: anywhere;
+      }
+
+      .draft-section-name {
+        margin: 0;
+        padding: var(--wt-space-2);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
       }
 
       /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
@@ -825,6 +775,34 @@ export class TillTableOrderScreen extends LitElement {
 
       .draft-line-name {
         overflow-wrap: anywhere;
+      }
+
+      .draft-family-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        text-align: start;
+        overflow-wrap: anywhere;
+      }
+
+      .draft-unit-chevron {
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        align-self: stretch;
+        border: 0;
+        border-inline-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        font: inherit;
+        font-size: var(--wt-font-size-xl);
+        cursor: pointer;
+      }
+
+      .draft-unit-chevron:disabled {
+        color: var(--wt-color-text-muted);
+        cursor: default;
       }
 
       .draft-bar {
@@ -842,134 +820,10 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .group-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-      }
-
-      .group {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        padding-bottom: var(--wt-space-3);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .group-head,
-      .group-line {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-      }
-
-      .group-name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .group[data-group-state="fired"] {
-        color: var(--wt-color-text-muted);
-      }
-
-      .group-state,
-      .group-summary {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .group-actions,
-      .group-line-actions {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
-
-      .group-line-name {
-        overflow-wrap: anywhere;
-      }
-
       .group-sent {
         margin-inline-end: auto;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      /* Stays at the trailing edge when it wraps below the name. */
-      .group-head .group-state {
-        margin-inline-start: auto;
-      }
-
-      .ungrouped {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        padding-top: var(--wt-space-3);
-      }
-
-      .ungrouped h3 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      /* A name is never broken to fit the buttons beside it: they wrap to a line of their own,
-         still at the row's end. */
-      .row-what {
-        flex: 1 1 auto;
-        max-width: 100%;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .row-what .group-line-name {
-        overflow-wrap: break-word;
-      }
-
-      .current-row .group-line-actions {
-        margin-inline-start: auto;
-      }
-
-      .row-extra,
-      .current-row .line-note,
-      .row-facts {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .row-facts {
-        display: flex;
-        flex-wrap: wrap;
-        column-gap: var(--wt-space-3);
-      }
-
-      /* Words first, so the reminder never rests on the warning colour. */
-      .group-reminder {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        margin: 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .group-reminder > .group-actions {
-        margin-inline-start: auto;
-      }
-
-      .group-reminder.due {
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-warning);
-        color: var(--wt-color-on-warning);
-        font-weight: var(--wt-font-weight-bold);
       }
 
       .round-bar {
@@ -978,21 +832,30 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      .draft-routing-warning {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-2);
+      }
+      .draft-routing-warning > span {
+        color: var(--wt-color-warning);
+      }
+      .draft-routing-warning till-dead-ends-section {
+        flex: 1;
+        min-width: 0;
+      }
       .draft-line-tools {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: flex-end;
+        flex-direction: column;
+        align-items: stretch;
         gap: var(--wt-space-2);
         padding-bottom: var(--wt-space-2);
         min-width: 0;
         max-width: 100%;
       }
 
-      /* Cut to the line, so a long chosen course ends in the dropdown's own ellipsis. */
-      .draft-line-tools > wt-combobox {
-        min-width: 0;
-        max-width: 100%;
+      [data-flag-warning] {
+        color: var(--wt-color-warning);
       }
 
       .flag-choice {
@@ -1187,10 +1050,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) stations: Station[] = [];
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
-  /** The party's Current orders; null until read, or when the read failed, which leaves the groups
-   * showing this bill's rows and nothing to mark served. */
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
-  /** The read of Current orders failed, which the screen says where the list would be. */
   @property({ type: Boolean }) currentOrdersUnread = false;
   /** The party's kitchen tickets that have not printed; they never hold up ordering. */
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
@@ -1199,6 +1059,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) reprintSent: string[] = [];
   /** Injectable clock for a fired group's age; unset reads the ticking clock. */
   @property({ attribute: false }) now?: number;
+  @property({ type: Number }) serviceVisit = 0;
   @property() fireControl: FireControlMode = "waiter";
   @property() orderId?: string;
   @property() kitchenNote: string | null = null;
@@ -1206,6 +1067,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) loading = false;
+  @property({ attribute: false }) paymentConfirmation?: RetainedTender;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
   /** See the tender card's `takesCash`. */
@@ -1237,6 +1099,13 @@ export class TillTableOrderScreen extends LitElement {
   /** The visible half of the app's guard against a second group command while one runs. */
   @property({ type: Boolean }) groupCommandBusy = false;
 
+  @state() private sentLinePending: {
+    info: SentLineInfo;
+    api: TillApi | undefined;
+    partyId: string | null;
+    billId: string | undefined;
+    visit: number;
+  } | null = null;
   @state() private drawerOpen = false;
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
@@ -1251,8 +1120,9 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The revision {@link lines} was read at. */
   @property({ attribute: false }) revision = 0;
-  /** The venue's setting. When off, the server refuses to change or recall a sent line that has a
-   * ticket item, so those lines offer Cancel instead. */
+  @property({ attribute: false }) billEdit: BillEditExpected | null = null;
+  @property({ attribute: false }) routingRevision: number | null = null;
+  @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
   @property({ attribute: false }) editSentLines = true;
   /** Set by the app when a change was refused because the kitchen had started the line: that line's
    * Cancel opens. */
@@ -1260,11 +1130,22 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The held group whose Fire waits for confirmation. */
   @state() private fireGroupPending: OrderGroup | null = null;
-  /** The held line whose Move to… picker is open, with the group it is in. */
-  @state() private movePending: MovePending | null = null;
+  #fireAuthority?: {
+    api: TillApi | undefined;
+    partyId: string | null;
+    billId: string | undefined;
+    visit: number;
+  };
   /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. */
   @state() private servePending: { row: CurrentOrderRow; undo: boolean; count: Decimal } | null =
     null;
+
+  #serveAuthority?: {
+    api: TillApi | undefined;
+    partyId: string | null;
+    billId: string | undefined;
+    visit: number;
+  };
 
   readonly #serveId = {};
   #serveScope?: DraftScope<Decimal>;
@@ -1321,13 +1202,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** The line open in the Change editor. */
-  @state() private changeLine: TabLine | null = null;
-  /** Built once when the editor opens, not per render: the picker seeds from these once. */
-  #changeProduct?: TillProduct;
-  #changeSelection?: LineSelection;
-  #changeRevision = 0;
-
   @state() private actionStep:
     | "closed"
     | "menu"
@@ -1340,7 +1214,9 @@ export class TillTableOrderScreen extends LitElement {
   /** The table Split a table takes away, once chosen. */
   @state() private splitTableId: string | null = null;
   /** A move or join to a table another party holds, waiting for the bill choice. */
-  @state() private billChoice: { verb: TableVerb; table: TableState } | null = null;
+  @state() private billChoice: { verb: TableVerb; table: TableState; prompt?: object } | null =
+    null;
+  #relocationPrompt: object | null = null;
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
   @state() private counting: { value: string; refusal: string } | null = null;
@@ -1351,6 +1227,7 @@ export class TillTableOrderScreen extends LitElement {
     staying: string;
     leaving: string;
     refusal: { field: "staying" | "leaving"; message: string } | null;
+    prompt?: object;
   } | null = null;
   @state() private transferToBillId: string | null = null;
   /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
@@ -1433,14 +1310,14 @@ export class TillTableOrderScreen extends LitElement {
     this.#actionLeave = undefined;
   }
 
-  /** The party's draft for the signed-in person, owned by the app; null until the app has read it and
-   * the party's groups. Unset, the screen keeps a draft of its own. */
   @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
 
   readonly #ownDraft = new WorkingOrderStore();
 
-  /** The other people's open drafts on the party, oldest first. */
   @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
+  @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
+  @property({ type: Boolean }) candidateReviewAllowed = false;
+  @property({ type: Boolean }) candidateReviewBusy = false;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
   /** The draft whose take-over has just answered, until its dialog has closed. */
@@ -1462,18 +1339,20 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The draft this screen re-renders on. */
   #watchedDraft?: { store: WorkingOrderStore | null; stop: () => void };
-  /** The last draft shown. A later addition's destination belongs to it, so it survives an order
-   * that shows no draft for a moment, as while the app follows the party onto its next bill. */
-  #shownDraft?: WorkingOrderStore;
 
   #watchDraft(): void {
     const store = this.#draftStore;
     if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
-    if (store !== null && store !== this.#shownDraft) {
-      if (this.#shownDraft !== undefined) this.#resetDestination();
-      this.#shownDraft = store;
-    }
+    this.#draftEpoch++;
+    this.#endDraftDrag();
+    this.#cancelAutomaticRouting();
+    this.#routingChecked = undefined;
+    this.#selected = new WeakSet();
+    this.#kept.clear();
+    this.#routingRows = new WeakMap();
+    this.draftMoveStore = null;
+    this.#draftMoveOpening = undefined;
     if (store === null) {
       this.#watchedDraft = { store, stop: () => {} };
       return;
@@ -1482,6 +1361,18 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = {
       store,
       stop: store.subscribe(() => {
+        this.#draftEpoch++;
+        this.#endDraftDrag();
+        this.#cancelAutomaticRouting();
+        if (store.sending) {
+          this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
+        }
+        if (store.editsLocked) {
+          this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
+          this.#selected = new WeakSet();
+        }
         this.#noteDraftStart(store);
         this.requestUpdate();
       }),
@@ -1502,27 +1393,32 @@ export class TillTableOrderScreen extends LitElement {
   #noteDraftStart(store: WorkingOrderStore): void {
     if (store.lineCount === 0) {
       this.#drafts.delete(store);
-      this.#resetDestination();
     } else {
       this.#draftOf(store);
     }
   }
 
-  #resetDestination(): void {
-    this.destination = "fire-now";
-    this.joinTarget = null;
-  }
-
   override connectedCallback(): void {
     super.connectedCallback();
+    this.addEventListener("pointerdown", this.#pressDraft, true);
+    this.addEventListener("click", this.#draftClick, true);
+    this.addEventListener("keydown", this.#draftKey, true);
+    this.#draftGestures = new Gestures(this, {
+      holdStart: () => {
+        if (this.#draftPressCurrent()) {
+          this.#suppressDraftClick = true;
+          this.draftDragging = true;
+        }
+      },
+      holdDrop: ({ x, y }) => this.#dropDraft(x, y),
+      longPress: () => this.#openHeldDraftLine(),
+      pan: ({ dy }) => this.#panDraft(dy),
+      cancel: () => this.#endDraftDrag(),
+    });
     this.requestUpdate();
     this.#watchDraft();
     this.#measure(this.getBoundingClientRect().width);
-    if (this.hasUpdated) {
-      this.#observeWidth();
-      // Its reminder's timer stopped while it was off the page; a time already past fires at once.
-      this.#watchReminder();
-    }
+    if (this.hasUpdated) this.#observeWidth();
   }
 
   override firstUpdated(): void {
@@ -1540,22 +1436,28 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.removeEventListener("pointerdown", this.#pressDraft, true);
+    this.removeEventListener("click", this.#draftClick, true);
+    this.removeEventListener("keydown", this.#draftKey, true);
+    this.#draftGestures?.disconnect();
+    this.#draftGestures = undefined;
+    this.#endDraftDrag();
+    this.draftMoveStore = null;
+    this.#draftMoveOpening = undefined;
     super.disconnectedCallback();
     this.#serveScope?.dispose();
     this.#serveScope = undefined;
     this.#serveLeave = undefined;
-    this.#previewScope?.dispose();
-    this.#previewScope = undefined;
-    this.#previewLeave = undefined;
     this.#actionOpening++;
     this.#actionScope?.dispose();
     this.#actionScope = undefined;
     this.#actionLeave = undefined;
+    this.#cancelAutomaticRouting();
+    this.#routingChecked = undefined;
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
     this.#resizing = undefined;
-    clearTimeout(this.#reminderTimer);
   }
 
   /** Side by side has no Review view, so one left open is closed rather than kept for a later
@@ -1567,84 +1469,370 @@ export class TillTableOrderScreen extends LitElement {
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
-  /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
-  #kept = new WeakSet<OrderLine>();
-  @state() private destination: Destination = "fire-now";
-  /** The held group Add to held group joins; the first held group when unset or gone. */
-  @state() private joinTarget: string | null = null;
-  @state() private pendingDraft: PendingDraft | null = null;
-  readonly #previewId = {};
-  #previewScope?: DraftScope<{ value: string; label: string } | null>;
-  #previewLeave?: LeaveCoordinator;
-  #previewOpening = 0;
-  readonly #beforePreviewClose = async (reason: LeaveReason): Promise<boolean> => {
-    const opening = this.#previewOpening;
-    const outcome = await this.#previewLeave!.request({
-      scopes: [this.#previewId],
-      reason,
-      proceed() {},
-    });
-    return outcome === "proceeded" && opening === this.#previewOpening;
+  #draftGestures?: Gestures;
+  #draftEpoch = 0;
+  @state() private draftDragging = false;
+  #suppressDraftClick = false;
+  #draftPress?: {
+    store: WorkingOrderStore;
+    lines: readonly OrderLine[];
+    chosen: readonly OrderLine[];
+    generation: number;
+    control: HTMLElement;
+    group: LayoutGroup | undefined;
+    api: TillApi | undefined;
+    scope: string;
+    groups: string;
   };
 
-  #watchPreview(): void {
-    if (this.pendingDraft === null) {
-      this.#previewScope?.dispose();
-      this.#previewScope = undefined;
+  #draftArrangementScope(): string {
+    const edit = this.billEdit;
+    return JSON.stringify([
+      this.orderId,
+      this.party?.id,
+      this.serviceVisit,
+      edit === null ? null : [edit.billId, edit.editorVersion, edit.draftId, edit.draftRevision],
+    ]);
+  }
+
+  #draftDragGroups(): string {
+    return JSON.stringify([
+      this.currentOrders?.revision,
+      this.groups.map(({ id, state, position }) => [id, state, position]),
+    ]);
+  }
+
+  readonly #pressDraft = (event: PointerEvent): void => {
+    this.#endDraftDrag();
+    this.#suppressDraftClick = false;
+    if (event.button !== 0) return;
+    const store = this.#draftStore;
+    if (store === null) return;
+    const path = event.composedPath();
+    if (path.some((node) => node instanceof HTMLElement && node.localName === "wt-row-actions"))
+      return;
+    const control = path.find(
+      (node): node is HTMLElement =>
+        node instanceof HTMLElement &&
+        (node.hasAttribute("data-draft-select") || node.hasAttribute("data-draft-drag-heading")),
+    );
+    if (control === undefined) return;
+    const group = this.#draftLayout(store).find(
+      (group) => group.key === control.dataset.draftDragHeading,
+    );
+    const line = store.lines[Number(control.dataset.draftSelect)];
+    const chosen =
+      group === undefined
+        ? line === undefined
+          ? []
+          : this.#selected.has(line)
+            ? store.lines.filter((candidate) => this.#selected.has(candidate))
+            : [line]
+        : group.sections.flatMap(({ indexes }) => indexes.map((index) => store.lines[index]!));
+    if (chosen.length === 0) return;
+    this.#draftPress = {
+      store,
+      lines: [...store.lines],
+      chosen,
+      generation: store.loadGeneration,
+      control,
+      group,
+      api: this.api,
+      scope: this.#draftArrangementScope(),
+      groups: this.#draftDragGroups(),
+    };
+  };
+
+  #canDragDraft(store: WorkingOrderStore): boolean {
+    return (
+      this.isConnected &&
+      store === this.#draftStore &&
+      !store.editsLocked &&
+      !store.sending &&
+      !this.busy &&
+      !this.groupCommandBusy &&
+      !this.currentOrdersUnread &&
+      this.orderingAllowed
+    );
+  }
+
+  #draftPressCurrent(): boolean {
+    const press = this.#draftPress;
+    return (
+      press !== undefined &&
+      this.#canDragDraft(press.store) &&
+      press.api === this.api &&
+      press.scope === this.#draftArrangementScope() &&
+      press.groups === this.#draftDragGroups() &&
+      press.generation === press.store.loadGeneration &&
+      press.lines.length === press.store.lines.length &&
+      press.lines.every((line, index) => line === press.store.lines[index])
+    );
+  }
+
+  readonly #draftClick = (event: MouseEvent): void => {
+    if (!this.#suppressDraftClick) return;
+    if (
+      event
+        .composedPath()
+        .some(
+          (node) =>
+            node instanceof HTMLElement &&
+            (node.hasAttribute("data-draft-select") ||
+              node.hasAttribute("data-draft-group-select")),
+        )
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+
+  readonly #draftKey = (event: KeyboardEvent): void => {
+    this.#suppressDraftClick = false;
+    if (event.key === "Escape") this.#endDraftDrag();
+  };
+
+  #endDraftDrag(): void {
+    this.#draftPress = undefined;
+    this.draftDragging = false;
+  }
+
+  #panDraft(dy: number): void {
+    const press = this.#draftPress;
+    if (press === undefined) return;
+    this.#suppressDraftClick = true;
+    for (const target of [...scrollAncestors(press.control).slice(1), document.scrollingElement]) {
+      if (!(target instanceof HTMLElement)) continue;
+      if (
+        target !== document.scrollingElement &&
+        !/auto|scroll/.test(getComputedStyle(target).overflowY)
+      )
+        continue;
+      const before = target.scrollTop;
+      target.scrollTop -= dy;
+      if (target.scrollTop !== before) break;
+    }
+  }
+
+  #openHeldDraftLine(): void {
+    const press = this.#draftPress;
+    if (press !== undefined && press.group === undefined && this.#draftPressCurrent()) {
+      const index = Number(press.control.dataset.draftSelect);
+      const basket = [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")].find(
+        (basket) => basket.lineIndexes?.includes(index),
+      );
+      basket?.shadowRoot?.querySelector<HTMLElement>(`[data-line-detail="${index}"]`)?.click();
+    }
+    this.#endDraftDrag();
+  }
+
+  #dropDraft(x: number, y: number): void {
+    const press = this.#draftPress;
+    if (press === undefined || !this.draftDragging || !this.#draftPressCurrent()) {
+      this.#endDraftDrag();
       return;
     }
-    if (this.#previewScope) return;
-    this.#previewLeave = leaveCoordinatorFor(this);
-    if (!this.#previewLeave) return;
-    this.#previewScope = this.#previewLeave.register({
-      id: this.#previewId,
-      parent: this,
-      current: () => this.sendTo,
-      snapshot: (value) => (value === null ? null : { ...value }),
-      equal: (a, b) => a?.value === b?.value,
-      restore: (value) => (this.sendTo = value),
-    });
-    this.#previewScope.commit(null);
-  }
-
-  #previewClosed(event: Event): void {
-    event.stopPropagation();
-    if (event.target !== event.currentTarget || !this.isConnected || !this.pendingDraft) return;
-    this.#dismissPreview();
-  }
-
-  #requestPreviewClose(): void {
-    if (!this.isConnected || !this.pendingDraft) return;
-    if (this.#previewScope) {
-      void this.renderRoot.querySelector<WtDialog>("[data-draft-preview]")!.requestClose("cancel");
-    } else {
-      this.#dismissPreview();
+    const path = pointerElementsAt(x, y);
+    if (!path.includes(this)) {
+      this.#endDraftDrag();
+      return;
     }
+    const gap = path.find((node) => node.hasAttribute("data-draft-gap")) as HTMLElement | undefined;
+    const target = path.find((node) => node.hasAttribute("data-draft-group")) as
+      HTMLElement | undefined;
+    const held = path.find((node) => node.hasAttribute("data-held-group")) as
+      HTMLElement | undefined;
+    const layout = this.#draftLayout(press.store);
+    const group = layout.find((group) => group.key === target?.dataset.draftGroup);
+    const indexes = press.chosen.map((line) => press.store.lines.indexOf(line));
+    if (press.group !== undefined) {
+      const slots = layout.filter((group) => group.kind === "new");
+      const from = slots.findIndex((group) => group.key === press.group!.key);
+      let to = slots.findIndex((entry) => entry.key === group?.key);
+      if (to >= 0 && target !== undefined) {
+        const rect = target.querySelector("h3")!.getBoundingClientRect();
+        if (y >= rect.y + rect.height / 2) to++;
+      } else if (gap !== undefined) {
+        to =
+          gap.dataset.draftGap === "end"
+            ? slots.length
+            : slots.findIndex((entry) => entry.key === gap.dataset.draftGap);
+      }
+      if (to >= 0 && from >= 0) {
+        to -= from < to ? 1 : 0;
+        if (slots[to] !== undefined) press.store.moveSlot(press.group.slot!, slots[to]!.slot!);
+      }
+    } else if (gap !== undefined) {
+      const next =
+        gap.dataset.draftGap === "end"
+          ? layout.length
+          : layout.findIndex((group) => group.key === gap.dataset.draftGap);
+      const previous = layout[next - 1];
+      const first = layout[next];
+      const sourcePlace =
+        previous === undefined
+          ? undefined
+          : press.store.lines[previous.sections[0]!.indexes[0]!]!.place;
+      const afterGroupId =
+        previous?.kind === "join"
+          ? previous.groupId!
+          : sourcePlace?.kind === "new"
+            ? sourcePlace.afterGroupId
+            : undefined;
+      const slot =
+        previous?.kind === "new"
+          ? previous.slot! + 1
+          : previous?.kind === "join"
+            ? Math.max(0, ...layout.map((group) => group.slot ?? 0)) + 1
+            : first?.kind === "new"
+              ? first.slot!
+              : 1;
+      if (next >= 0)
+        press.store.setLinePlaces(
+          indexes,
+          {
+            kind: "new",
+            slot,
+            ...(afterGroupId === undefined ? {} : { afterGroupId }),
+          },
+          { from: slot },
+        );
+    } else if (group !== undefined && !group.invalidTarget) {
+      const place = press.store.lines[group.sections[0]!.indexes[0]!]!.place ?? { kind: "fire" };
+      press.store.setLinePlaces(indexes, place);
+    } else if (
+      held !== undefined &&
+      this.groups.some((group) => group.id === held.dataset.heldGroup && group.state === "held")
+    ) {
+      press.store.setLinePlaces(indexes, { kind: "join", groupId: held.dataset.heldGroup! });
+    }
+    this.#endDraftDrag();
+  }
+  #routingRows = new WeakMap<
+    OrderLine,
+    { row: DeadEndAnswer["deadEnds"][number]; stations: DeadEndAnswer["stations"] }
+  >();
+  @state() private draftMoveStore: WorkingOrderStore | null = null;
+  #draftMoveOpening?: DraftMoveOpening;
+  /** Saved ids survive rebuilds; a local line keeps its object key until its id is assigned. */
+  #kept = new Map<OrderLine | string, string>();
+  #keptScope?: string;
+
+  #flagKey(line: OrderLine): string {
+    return JSON.stringify([line.blocked ?? null, !!line.unavailableOnServer, !!line.notOffered]);
+  }
+
+  #refreshKept(): void {
+    const store = this.#draftStore;
+    const scope = JSON.stringify([
+      this.orderId,
+      this.party?.id,
+      this.serviceVisit,
+      store?.id,
+      this.billEdit?.editorVersion,
+    ]);
+    if (scope !== this.#keptScope) this.#kept.clear();
+    this.#keptScope = scope;
+    const lines = new Map((store?.lines ?? []).map((line) => [line.draftLineId ?? line, line]));
+    const kept = new Map<OrderLine | string, string>();
+    for (const [previous, warning] of this.#kept) {
+      const key = typeof previous === "string" ? previous : (previous.draftLineId ?? previous);
+      const line = lines.get(key);
+      if (line !== undefined && flagged(line) && this.#flagKey(line) === warning)
+        kept.set(key, warning);
+    }
+    this.#kept = kept;
+  }
+  #routingTimer?: ReturnType<typeof setTimeout>;
+  #routingChecked?: string;
+  #automaticRouting?: {
+    checkId: number;
+    store: WorkingOrderStore;
+    sent: readonly OrderLine[];
+    key: string;
+    api: TillApi | undefined;
+  };
+
+  #routingKey(): string | undefined {
+    const edit = this.billEdit;
+    if (
+      this.routingRevision === null ||
+      edit === null ||
+      edit.billId !== this.orderId ||
+      edit.draftId === null ||
+      edit.draftRevision !== this.routingRevision
+    )
+      return undefined;
+    return JSON.stringify([edit.billId, edit.editorVersion, edit.draftId, edit.draftRevision]);
+  }
+
+  #cancelAutomaticRouting(): void {
+    clearTimeout(this.#routingTimer);
+    this.#routingTimer = undefined;
+    this.#automaticRouting = undefined;
+  }
+
+  #automaticRoutingCurrent(): boolean {
+    const check = this.#automaticRouting;
+    return (
+      check !== undefined &&
+      this.isConnected &&
+      check.store === this.#draftStore &&
+      check.key === this.#routingKey() &&
+      check.api === this.api &&
+      !check.store.sending &&
+      !check.store.editsLocked &&
+      !this.groupCommandBusy &&
+      check.sent.length === check.store.lines.length &&
+      check.sent.every((line, index) => line === check.store.lines[index])
+    );
+  }
+
+  #watchAutomaticRouting(): void {
+    const store = this.#draftStore;
+    const key = this.#routingKey();
+    if (
+      !this.isConnected ||
+      store === null ||
+      store.lineCount === 0 ||
+      key === undefined ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy
+    ) {
+      this.#cancelAutomaticRouting();
+      return;
+    }
+    if (this.#routingChecked === key || this.#automaticRouting?.key === key) return;
+    this.#cancelAutomaticRouting();
+    const check = { checkId: ++this.#checkId, store, sent: [...store.lines], key, api: this.api };
+    this.#automaticRouting = check;
+    this.#routingTimer = setTimeout(() => {
+      this.#routingTimer = undefined;
+      if (!this.#automaticRoutingCurrent()) return;
+      this.#routingChecked = key;
+      this.dispatchEvent(
+        new CustomEvent("check-dead-ends", {
+          detail: { sent: check.sent, checkId: check.checkId, automatic: true },
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+    }, 400);
   }
 
   #checkId = 0;
-  #lastPreview?: { store: WorkingOrderStore; action: DraftAction };
-  /** The bill the waiter chose in the open preview, under the name it had then; null sends no
-   * bill, so the lines go on the party's main bill as the server finds it when it takes the
-   * request. */
-  @state() private sendTo: { value: string; label: string } | null = null;
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
-  /** Built with {@link products}, so each line's Change lookup is not a scan. */
-  #productsByOffer?: Map<string, TillProduct>;
-  #productsById = new Map<string, TillProduct>();
-  /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
   /** The party's bill on screen, when {@link bills} lists it. */
   #shownBill: PartyBill | undefined;
   /** Built with {@link groups}: every group, and the held ones, in position order. */
   #groupsInOrder: OrderGroup[] = [];
   #heldInOrder: OrderGroup[] = [];
-  /** Built with {@link lines}, for the held-groups list. */
-  #lineById = new Map<string, TabLine>();
   #lineByNo = new Map<number, TabLine>();
-  #dishesWithExtras = new Set<number>();
 
   constructor() {
     super();
@@ -1655,7 +1843,22 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
+    if (this.sentLinePending !== null && this.#sentLine() === undefined)
+      this.sentLinePending = null;
     this.#watchDraft();
+    this.#refreshKept();
+    if (this.#draftPress !== undefined && !this.#draftPressCurrent()) this.#endDraftDrag();
+    const move = this.#draftMoveOpening;
+    if (
+      move !== undefined &&
+      (move.scope !== this.#draftArrangementScope() ||
+        move.groups !== this.#draftDragGroups() ||
+        move.api !== this.api ||
+        move.epoch !== this.#draftEpoch)
+    ) {
+      this.draftMoveStore = null;
+      this.#draftMoveOpening = undefined;
+    }
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
       this.#takeOverAnswered = this.takeOverPending?.id;
       this.takeOverSent = null;
@@ -1670,23 +1873,17 @@ export class TillTableOrderScreen extends LitElement {
         billGross(this.lines, (line) => this.#lineGross(line)),
         this.lines.length,
       );
-      this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
-      this.#dishesWithExtras = new Set(this.lines.flatMap((line) => line.parentLineNo ?? []));
     }
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
-      this.#closeChange();
       this.fireGroupPending = null;
-      this.movePending = null;
       this.servePending = null;
-      this.pendingDraft = null;
       this.reviewing = false;
       this.#browsingScroll = undefined;
     }
     this.#watchServe();
-    this.#watchPreview();
     this.#watchActions();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
@@ -1695,16 +1892,6 @@ export class TillTableOrderScreen extends LitElement {
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
       this.#heldInOrder = this.#groupsInOrder.filter((group) => group.state === "held");
     }
-    if (changed.has("products") || this.#productsByOffer === undefined) {
-      this.#productsByOffer = new Map();
-      this.#productsById = new Map();
-      for (const product of this.products) {
-        if (product.menuItemId !== undefined && !this.#productsByOffer.has(product.menuItemId))
-          this.#productsByOffer.set(product.menuItemId, product);
-        if (!this.#productsById.has(product.id)) this.#productsById.set(product.id, product);
-      }
-    }
-    this.#reminderDue = reminderDueAt(this.currentOrders?.reminder) <= (this.now ?? Date.now());
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
     }
@@ -1712,8 +1899,8 @@ export class TillTableOrderScreen extends LitElement {
       this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
     }
     if (changed.has("splitRefusal") && this.splitRefusal !== null) {
-      const { tableId, billId, staying, leaving, field, message } = this.splitRefusal;
-      this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message } };
+      const { tableId, billId, staying, leaving, field, message, prompt } = this.splitRefusal;
+      this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message }, prompt };
     }
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
@@ -1741,7 +1928,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The app clears its offer on this event, so a screen mounted later (a handheld's Order tab coming
    * back) does not open it again. Taken even when the line is gone, for the same reason. */
   override updated(): void {
-    this.#watchReminder();
+    this.#watchAutomaticRouting();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
     const offered = this.#offeredCancel;
@@ -1755,28 +1942,12 @@ export class TillTableOrderScreen extends LitElement {
   #offerTaken = false;
   #offeredCancel: TabLine | undefined;
 
-  /** Whether the party's release reminder is due, as of this render. */
-  #reminderDue = false;
-  #reminderTimer?: ReturnType<typeof setTimeout>;
-
-  /** On the screen's own clock, a reminder not yet due is drawn again the moment it falls due. */
-  #watchReminder(): void {
-    clearTimeout(this.#reminderTimer);
-    const dueAt = reminderDueAt(this.currentOrders?.reminder);
-    if (this.now !== undefined || this.#reminderDue || dueAt === Number.POSITIVE_INFINITY) return;
-    this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(dueAt));
-  }
-
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
   }
 
   #pending(): TabLine[] {
     return this.lines.filter((line) => line.servedAt === null);
-  }
-
-  #served(): TabLine[] {
-    return this.lines.filter((line) => line.servedAt !== null);
   }
 
   /** The STAFF label the server froze onto the line, falling back to the live catalogue, then to the raw
@@ -1803,11 +1974,8 @@ export class TillTableOrderScreen extends LitElement {
 
   #draftEntries(lines: readonly OrderLine[]): DraftEntry[] {
     return lines.map((line) => ({
-      courseId: this.#selectedCourseId(line) || null,
-      ...(line.course === undefined ? {} : { course: line.course }),
       quantity: line.quantity,
       wholeUnits: countsWholeUnits(line),
-      flagged: flagged(line),
     }));
   }
 
@@ -1822,345 +1990,43 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  #isLaterAddition(store: WorkingOrderStore): boolean {
-    return this.#drafts.get(store)?.laterAddition === true;
-  }
-
-  #effectiveDestination(): Destination {
-    return this.destination === "add-to-held" && this.#heldInOrder.length === 0
-      ? "fire-now"
-      : this.destination;
-  }
-
-  #joinGroup(): OrderGroup | undefined {
-    const held = this.#heldInOrder;
-    return held.find((group) => group.id === this.joinTarget) ?? held[0];
-  }
-
-  #laterAction(): DraftAction {
-    switch (this.#effectiveDestination()) {
-      case "fire-now":
-        return { kind: "fire-now" };
-      case "add-as-new":
-        return { kind: "add-as-new" };
-      case "add-to-held":
-        return { kind: "add-to-held", groupId: this.#joinGroup()!.id };
-    }
-  }
-
-  /**
-   * The preview is counted from the submission, and Confirm sends the submission kept here, so it is
-   * exactly what the preview named. An unoverridden line OMITS
-   * `courseId`, so the server applies the product's default course. The answers name lists, products
-   * and labels by id alone: the server takes every price, VAT class and name from the published offer.
-   */
-  #openPreview(
-    store: WorkingOrderStore,
-    action: DraftAction,
-    check = true,
-    deadEnds?: PendingDraft["deadEnds"],
-  ): void {
-    this.#previewOpening++;
-    this.#previewScope?.dispose();
-    this.#previewScope = undefined;
-    const checkId = ++this.#checkId;
-    this.#lastPreview = { store, action };
-    const lines = store.lines;
-    const entries = this.#draftEntries(lines);
-    const selected = this.#selectedIndexes(lines);
-    const submission = draftSubmission(action, entries, this.courses, selected);
-    const preview = draftPreview(submission, entries);
-    const order = submission.groups.flatMap((group) => group.lineIndexes);
-    const place = new Map(order.map((index, position) => [index, position]));
-    const sent = order.map((index) => lines[index]!);
-    const detail: SubmitDraftDetail = {
-      lines: sent.map((line) => {
-        const wire: GroupLine = {
-          ...toWireProductIdentity(line.product),
-          quantity: line.quantity,
-          ...toWireLineExtras(line),
-          ...toWireModifiers(line),
-        };
-        if (line.courseId !== undefined) wire.courseId = line.courseId;
-        return wire;
-      }),
-      groups: submission.groups.map((group) => ({
-        release: group.release,
-        lineIndexes: group.lineIndexes.map((index) => place.get(index)!),
-      })),
-      ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
-      store,
-      sent,
-      draft: this.#draftOf(store),
-    };
-    const held = this.#heldInOrder;
-    const index = held.findIndex((group) => group.id === submission.joinGroupId);
-    this.sendTo = null;
-    this.pendingDraft = {
-      preview,
-      ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
-      detail,
-      leftOut: (submission.leftOut ?? []).map((at) => lines[at]!),
-      action,
-      checking: check && sent.length > 0,
-      ...(deadEnds === undefined ? {} : { deadEnds }),
-    };
-    this.#watchPreview();
-    const dialog = this.renderRoot.querySelector<WtDialog>("[data-draft-preview]");
-    if (dialog) dialog.open = true;
-    if (check && sent.length > 0) {
-      const request = new CustomEvent("check-dead-ends", {
-        detail: { sent, checkId },
-        bubbles: true,
-        composed: true,
-        cancelable: true,
-      });
-      this.dispatchEvent(request);
-      if (!request.defaultPrevented) this.answerDeadEnds(sent, undefined, checkId);
-    }
-  }
-
-  reopenDraftPreview(sent: readonly OrderLine[]): void {
-    const last = this.#lastPreview;
-    if (last === undefined || sent.some((line) => !last.store.lines.includes(line))) return;
-    this.#openPreview(last.store, last.action);
+  refreshDraftRouting(store: WorkingOrderStore, sent: readonly OrderLine[]): void {
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      sent.some((line) => !store.lines.includes(line))
+    )
+      return;
+    this.#cancelAutomaticRouting();
+    this.#routingChecked = undefined;
+    this.requestUpdate();
   }
 
   currentDeadEndsCheck(checkId: number): boolean {
-    return this.pendingDraft !== null && this.#checkId === checkId;
+    return this.#automaticRouting?.checkId === checkId && this.#automaticRoutingCurrent();
   }
 
   answerDeadEnds(sent: readonly OrderLine[], answer?: DeadEndAnswer, checkId?: number): void {
     if (checkId !== undefined && !this.currentDeadEndsCheck(checkId)) return;
-    const pending = this.pendingDraft;
-    if (
-      pending === null ||
-      pending.detail.sent.length !== sent.length ||
-      pending.detail.sent.some((line, index) => line !== sent[index])
-    )
+    const automatic = this.#automaticRouting;
+    if (automatic !== undefined && automatic.checkId === checkId) {
+      if (answer === undefined) return;
+      const rows = answer.deadEnds.flatMap((row) => {
+        const line = sent[Number(row.key)];
+        return line === undefined ? [] : [[line, row] as const];
+      });
+      for (const line of sent) this.#routingRows.delete(line);
+      for (const [line, row] of rows) {
+        if (
+          line.makeAt !== undefined &&
+          !answer.stations.some((station) => station.id === line.makeAt)
+        )
+          automatic.store.setLineMakeAt(automatic.store.lines.indexOf(line), undefined);
+        this.#routingRows.set(line, { row, stations: answer.stations });
+      }
+      this.requestUpdate();
       return;
-    const deadEnds =
-      answer === undefined
-        ? undefined
-        : {
-            rows: new Map(
-              answer.deadEnds.flatMap((row) => {
-                const line = sent[Number(row.key)];
-                if (
-                  line?.makeAt !== undefined &&
-                  !answer.stations.some((station) => station.id === line.makeAt)
-                )
-                  pending.detail.store.setLineMakeAt(
-                    pending.detail.store.lines.indexOf(line),
-                    undefined,
-                  );
-                return line === undefined ? [] : [[line, row] as const];
-              }),
-            ),
-            stations: answer.stations,
-          };
-    this.pendingDraft = {
-      ...pending,
-      checking: false,
-      ...(deadEnds === undefined ? {} : { deadEnds }),
-    };
-  }
-
-  beginDeadEndsQuestion(sent: readonly OrderLine[], checkId?: number): void {
-    if (checkId !== undefined && !this.currentDeadEndsCheck(checkId)) return;
-    const pending = this.pendingDraft;
-    if (
-      pending === null ||
-      pending.detail.sent.length !== sent.length ||
-      pending.detail.sent.some((line, index) => line !== sent[index])
-    )
-      return;
-    this.pendingDraft = { ...pending, checking: true };
-  }
-
-  #previewMakeAt(event: Event): void {
-    const pending = this.pendingDraft;
-    if (pending === null) return;
-    const { key, stationId } = (event as CustomEvent<{ key: string; stationId: string }>).detail;
-    const line = pending.detail.sent[Number(key)];
-    if (line === undefined) return;
-    pending.detail.store.setLineMakeAt(
-      pending.detail.store.lines.indexOf(line),
-      stationId || undefined,
-    );
-    this.requestUpdate();
-  }
-
-  #previewRemove(event: Event): void {
-    const pending = this.pendingDraft;
-    if (pending === null) return;
-    const { key } = (event as CustomEvent<{ key: string }>).detail;
-    const line = pending.detail.sent[Number(key)];
-    if (line === undefined) return;
-    const store = pending.detail.store;
-    const sendTo = this.sendTo;
-    store.removeLine(store.lines.indexOf(line));
-    const answer = pending.deadEnds;
-    const deadEnds =
-      answer === undefined
-        ? undefined
-        : {
-            stations: answer.stations,
-            rows: new Map([...answer.rows].filter(([item]) => item !== line)),
-          };
-    this.#openPreview(store, pending.action, false, deadEnds);
-    this.sendTo = sendTo;
-    this.#previewScope?.changed();
-  }
-
-  #confirmPreview(): void {
-    const pending = this.pendingDraft;
-    if (!this.isConnected || pending === null) return;
-    if (pending.checking || [...(pending.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt))
-      return;
-    this.pendingDraft = null;
-    this.#watchPreview();
-    this.renderRoot.querySelector<WtDialog>("[data-draft-preview]")!.closeAfter("saved");
-    // Sent by id even when it is the main bill: the server refuses a chosen bill that is no longer
-    // open, where sending none would put the order on the party's main bill as it stands then, or
-    // on a new one.
-    const chosen = this.sendTo;
-    this.#dispatch(
-      "submit-draft",
-      chosen === null ? pending.detail : { ...pending.detail, billId: chosen.value },
-    );
-  }
-
-  /**
-   * Where the open preview can send: the party's open bills, and first a new bill when the party has
-   * no open main bill. A chosen bill stays listed and checked after it stops being an open bill of
-   * the party, marked as such, because Confirm still sends it. `checked` is the value shown chosen;
-   * null when there is only one place to send to.
-   */
-  #sendToChoices(): {
-    choices: { value: string; label: string; main: boolean; closed: boolean }[];
-    checked: string;
-  } | null {
-    const party = this.party;
-    if (party === null) return null;
-    const chosen = this.sendTo;
-    const choices = this.#shownBills().flatMap((bill, index) =>
-      bill.partyId === party.id && (bill.status === "open" || bill.workingOrderId === chosen?.value)
-        ? [
-            {
-              value: bill.workingOrderId,
-              label: this.#billName(index),
-              main: bill.workingOrderId === party.mainBillId,
-              closed: bill.status !== "open",
-            },
-          ]
-        : [],
-    );
-    if (chosen !== null && !choices.some((choice) => choice.value === chosen.value)) {
-      choices.push({ ...chosen, main: false, closed: true });
     }
-    const openMain = this.#shownBills().find(
-      (bill) =>
-        bill.workingOrderId === party.mainBillId &&
-        bill.partyId === party.id &&
-        bill.status === "open",
-    );
-    if (openMain === undefined) {
-      choices.unshift({ value: "", label: t("table.send_to_new"), main: false, closed: false });
-    }
-    if (choices.length < 2) return null;
-    return { choices, checked: chosen?.value ?? openMain?.workingOrderId ?? "" };
-  }
-
-  #sendToChoice(): TemplateResult | typeof nothing {
-    const offered = this.#sendToChoices();
-    if (offered === null) return nothing;
-    return html`<fieldset class="send-to" data-send-to>
-      <legend>${t("table.send_to")}</legend>
-      ${offered.choices.map(
-        (choice) =>
-          html`<label class="send-to-option">
-            <input
-              type="radio"
-              name="billId"
-              .value=${choice.value}
-              .checked=${offered.checked === choice.value}
-              @change=${(event: Event) => {
-                event.stopPropagation();
-                if (
-                  !this.isConnected ||
-                  !this.pendingDraft ||
-                  !(event.currentTarget as HTMLElement).isConnected
-                )
-                  return;
-                this.sendTo =
-                  choice.value === "" ? null : { value: choice.value, label: choice.label };
-                this.#previewScope?.changed();
-              }}
-            />
-            <span
-              >${choice.label}${
-                choice.main
-                  ? html` <span class="bill-main">${t("table.bill_main")}</span>`
-                  : nothing
-              }${choice.closed ? ` ${t("table.send_to_not_open")}` : nothing}</span
-            >
-          </label>`,
-      )}
-    </fieldset>`;
-  }
-
-  #dismissPreview(): void {
-    this.pendingDraft = null;
-    this.#watchPreview();
-  }
-
-  #selectedCourseId(line: OrderLine): string {
-    return line.courseId ?? line.product.courseId ?? "";
-  }
-
-  /** The empty row's meaning is the CALLER's: "use the product default" for a draft line (never sent
-   * as a course), "no course" for a tab line (the explicit `null`). A dropdown shows no row's text for
-   * the empty value, so that row's text is also the placeholder. */
-  #coursePicker(
-    attrs: { lineCourse?: number; roundCourse?: number },
-    lineName: string,
-    selected: string,
-    empty: string,
-    onPick: (courseId: string) => void,
-    retainedCourse?: TillCourse,
-  ): TemplateResult {
-    const options: ComboboxOption[] = [
-      { value: "", label: empty },
-      ...this.courses.map((course) => ({ value: course.id, label: course.name })),
-    ];
-    return html`<wt-combobox
-      class=${attrs.lineCourse === undefined ? nothing : "line-course"}
-      data-line-course=${attrs.lineCourse ?? nothing}
-      data-round-course=${attrs.roundCourse ?? nothing}
-      name="course"
-      label=${`${t("table.course_label")} · ${lineName}`}
-      hide-label
-      search="auto"
-      searchPlaceholder=${t("form.combobox_search")}
-      noResultsLabel=${t("form.combobox_no_results")}
-      placeholder=${retainedCourse?.id === selected && !this.courses.some((course) => course.id === selected) ? retainedCourse.name : empty}
-      .options=${options}
-      .value=${live(selected)}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        onPick(event.detail.value);
-      }}
-    ></wt-combobox>`;
-  }
-
-  /** The course goes on the line, so the draft saves it. */
-  #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
-    store.setLineCourse(
-      store.lines.indexOf(line),
-      courseId === "" ? undefined : courseId,
-      this.courses.find((course) => course.id === courseId),
-    );
   }
 
   #makeAtPicker(
@@ -2183,12 +2049,13 @@ export class TillTableOrderScreen extends LitElement {
       data-make-at=${index}
       name="make-at"
       label=${`${t("move_station.make_at")} · ${name}`}
-      hide-label
+      ?disabled=${!this.#canEditDraftLine(store, line)}
       search="never"
       .options=${options}
       .value=${this.stations.some((station) => station.id === line.makeAt) ? line.makeAt! : rules}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
+        if (!this.#canEditDraftLine(store, line)) return;
         store.setLineMakeAt(
           store.lines.indexOf(line),
           event.detail.value === rules ? undefined : event.detail.value,
@@ -2197,156 +2064,29 @@ export class TillTableOrderScreen extends LitElement {
     ></wt-combobox>`;
   }
 
-  #setLineCourse(lineNo: number, courseId: string | null): void {
-    this.dispatchEvent(
-      new CustomEvent("set-line-course", {
-        detail: { lineNo, courseId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  /** Sent and still holding a ticket item, with the venue's setting off: the server refuses to change
-   * or recall it (`ticket.already_fired`), so it offers Cancel in their place. */
-  #lockedBySetting(line: TabLine): boolean {
-    return !this.editSentLines && line.sentAt !== null && line.state !== null;
-  }
-
-  /** The live product a Change edits against: the offer the line was sold under, else its product (a
-   * variant line's parent). */
-  #liveProduct(line: TabLine): TillProduct | undefined {
-    const byOffer =
-      line.menuItemId === null ? undefined : this.#productsByOffer?.get(line.menuItemId);
-    const productId = line.parentProductId ?? line.productId;
-    return byOffer ?? (productId === null ? undefined : this.#productsById.get(productId));
-  }
-
-  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item once
-   * it was sent, or while its group is held, because a held line outside one keeps Send alone. */
-  #canChange(line: TabLine): boolean {
-    if (this.#isChild(line) || isStarted(line) || this.#lockedBySetting(line)) return false;
-    if (line.state !== null && line.sentAt === null && !inHeldGroup(line, this.#heldGroupIds!))
-      return false;
-    return this.#liveProduct(line) !== undefined;
-  }
-
   #canRecall(line: TabLine): boolean {
+    const served = (row: CurrentOrderRow) =>
+      row.lineId === line.id && compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
+    if (
+      this.currentOrders?.ungrouped.some(served) ||
+      this.currentOrders?.groups.some((group) => group.rows.some(served))
+    )
+      return false;
     return (
+      this.editSentLines &&
       !this.#isChild(line) &&
-      line.firedAt !== null &&
-      line.state === "queued" &&
-      !this.#lockedBySetting(line)
+      line.servedAt === null &&
+      !isStarted(line) &&
+      (this.#shownBill === undefined || this.#shownBill.status === "open") &&
+      !this.lines.some((extra) => extra.parentLineNo === line.lineNo && isStarted(extra)) &&
+      (line.sentAt !== null || inHeldGroup(line, this.#heldGroupIds!))
     );
-  }
-
-  /** Every sent line with a ticket item, a fired one, and every dish in a held group, a no-route one
-   * included: whatever else a line offers, cancelling it always has a button. A held line outside a
-   * group keeps Send alone. An extra without its own ticket item follows its dish. */
-  #canCancel(line: TabLine): boolean {
-    if (this.#isChild(line) && line.state === null) {
-      const dish = this.#lineByNo.get(line.parentLineNo!);
-      return dish !== undefined && this.#canCancel(dish);
-    }
-    if (inHeldGroup(line, this.#heldGroupIds!)) return true;
-    const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
-    return isStarted(line) || queued;
-  }
-
-  /** An extras row offers only Cancel, Give away and Discount, which take it on its own. */
-  #lineActions(line: TabLine): TemplateResult | typeof nothing {
-    const name = this.#adjustName(line);
-    const label = (key: StringKey) => `${t(key)} · ${name}`;
-    const actions: TemplateResult[] = [];
-    if (sendsAlone(line, this.#heldGroupIds!))
-      actions.push(
-        html`<wt-button
-          class="line-send"
-          size="sm"
-          variant="primary"
-          data-send-line=${line.lineNo}
-          aria-label=${label("table.send_line")}
-          @click=${() => this.#sendLine(line.lineNo)}
-        >
-          ${t("table.send_line")}
-        </wt-button>`,
-      );
-    if (this.#canChange(line))
-      actions.push(
-        html`<wt-button
-          class="line-change"
-          size="sm"
-          variant="secondary"
-          data-change-line=${line.lineNo}
-          aria-label=${label("table.change_line")}
-          @click=${() => this.#openChange(line)}
-        >
-          ${t("table.change_line")}
-        </wt-button>`,
-      );
-    if (this.#canRecall(line))
-      actions.push(
-        html`<wt-button
-          class="line-recall"
-          size="sm"
-          variant="secondary"
-          data-recall-line=${line.lineNo}
-          aria-label=${label("table.recall_line")}
-          @click=${() => this.#recallLine(line.lineNo)}
-        >
-          ${t("table.recall_line")}
-        </wt-button>`,
-      );
-    if (line.movable && this.orderId !== undefined)
-      actions.push(
-        this.#moveStationButton(line.lineNo, {
-          workingOrderId: this.orderId,
-          lineId: line.id,
-          name,
-          stationId: line.stationId,
-        }),
-      );
-    if (this.#canCancel(line))
-      actions.push(
-        html`<wt-button
-          class="line-cancel"
-          size="sm"
-          variant="danger"
-          data-cancel-line=${line.lineNo}
-          aria-label=${label("table.cancel_line")}
-          @click=${() => this.#adjust("cancel", this.#lineTarget(line))}
-        >
-          ${t("table.cancel_line")}
-        </wt-button>`,
-      );
-    actions.push(...this.#adjustActions(line));
-    return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
   /** A bill with no party is adjusted from the counter's basket, not from this screen. */
   #adjustable(): boolean {
     return (
       this.party !== null && (this.#shownBill === undefined || this.#shownBill.status === "open")
-    );
-  }
-
-  /** Give away and Discount on a dish, which cover its extras, and on an extra alone. */
-  #adjustActions(line: TabLine): TemplateResult[] {
-    if (!this.#adjustable()) return [];
-    const name = this.#adjustName(line);
-    return LINE_ADJUSTMENTS.map(
-      ({ kind, label }) =>
-        html`<wt-button
-          class="line-adjust"
-          size="sm"
-          variant="secondary"
-          data-comp-line=${kind === "comp" ? line.lineNo : nothing}
-          data-discount-line=${kind === "discount" ? line.lineNo : nothing}
-          aria-label=${`${t(label)} · ${name}`}
-          @click=${() => this.#adjust(kind, this.#lineTarget(line))}
-        >
-          ${t(label)}
-        </wt-button>`,
     );
   }
 
@@ -2378,7 +2118,6 @@ export class TillTableOrderScreen extends LitElement {
     const name = index === -1 ? t("adjust.whole_bill") : this.#billName(index);
     return html`<div class="bill-adjust">
       <wt-button
-        size="sm"
         variant="secondary"
         data-discount-bill
         @click=${() =>
@@ -2399,16 +2138,6 @@ export class TillTableOrderScreen extends LitElement {
     return lineTotal(listedGross(line), this.#lineGross(line));
   }
 
-  #sendLine(lineNo: number): void {
-    this.dispatchEvent(
-      new CustomEvent("send-lines", {
-        detail: { lineNos: [lineNo] },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
   #recallLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("recall-lines", {
@@ -2419,155 +2148,11 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #moveStationButton(
-    lineNo: number,
-    detail: { workingOrderId: string; lineId: string; name: string; stationId: string | null },
-  ): TemplateResult {
-    return html`<wt-button
-      size="sm"
-      variant="secondary"
-      data-move-station=${lineNo}
-      aria-label=${`${t("table.move_station")} · ${detail.name}`}
-      @click=${() => this.dispatchEvent(new CustomEvent("move-station", { detail, bubbles: true, composed: true }))}
-      >${t("table.move_station")}</wt-button
-    >`;
-  }
-
-  #openChange(line: TabLine): void {
-    const live = this.#liveProduct(line)!;
-    const offered = offeredListsOf(live);
-    const sendsExtras = offered.some((entry) => entry.kind === "extras");
-    const extras: SelectedExtra[] = [];
-    for (const child of this.lines.filter((row) => row.parentLineNo === line.lineNo)) {
-      const held = {
-        productId: child.productId,
-        listId: child.listId,
-        name: this.#nameForLine(child),
-        price: child.unitPriceGross,
-        quantity: perDishOptionQuantity(
-          child.quantity,
-          multiplyDecimal(decimal(line.quantity), decimal(child.priceQuantity ?? "1")),
-        ),
-      };
-      const [kept] = deriveExtraSelections(offered, [held]).extras;
-      // A pick no offered list carries still stands on the line. When the edit sends extras it would
-      // drop it, so it goes in as a stale pick, which the picker names and keeps Save shut on.
-      if (kept !== undefined) extras.push(kept);
-      else if (sendsExtras)
-        extras.push({ ...held, listId: held.listId ?? "", productId: held.productId ?? "" });
-    }
-    this.#changeProduct = {
-      ...live,
-      name: this.#nameForLine(line),
-      unitPrice: line.unitPriceGross,
-      // An edit cannot move a line to another variant.
-      variants: [],
-    };
-    this.#changeSelection = {
-      extras,
-      options: deriveOptionSelections(offered, line.optionSnapshots).options,
-      ...(line.note === null ? {} : { note: line.note }),
-    };
-    this.#changeRevision = this.revision;
-    this.changeLine = line;
-  }
-
-  #closeChange(): void {
-    this.changeLine = null;
-    this.#changeProduct = undefined;
-    this.#changeSelection = undefined;
-  }
-
-  /** `options` and `extras` go only when the till offers the dish a list of that kind
-   * (`offeredListsOf`): either, sent, replaces the line's whole set, so an absent one keeps what the
-   * line holds. `options` goes only when the answers differ from those the editor opened with: the
-   * editor holds no answer to a list the dish no longer offers, so sending an unchanged set would
-   * drop that answer. */
-  #confirmChange(detail: ModifierConfirmDetail): void {
-    const line = this.changeLine!;
-    const offered = offeredListsOf(this.#changeProduct!);
-    const opened = this.#changeSelection!.options ?? [];
-    this.#closeChange();
-    const patch: OrderLinePatch = { note: detail.note ?? null };
-    const options = detail.options ?? [];
-    if (offered.some((entry) => entry.kind === "options") && !sameOptionSelections(options, opened))
-      patch.options = options;
-    if (offered.some((entry) => entry.kind === "extras"))
-      patch.extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
-    const change: ChangeLineDetail = {
-      lineNo: line.lineNo,
-      lineName: this.#nameForLine(line),
-      patch,
-      revision: this.#changeRevision,
-      saleLine: {
-        menuItemId: line.menuItemId ?? undefined,
-        ...(line.parentProductId === null || line.productId === null
-          ? {}
-          : { variantId: line.productId }),
-        quantity: patch.quantity ?? line.quantity,
-        options: detail.options ?? [],
-        extras: toWireModifiers({ extras: detail.extras }).extras ?? [],
-        ...(detail.note ? { note: detail.note } : {}),
-      },
-    };
-    this.dispatchEvent(
-      new CustomEvent("change-line", { detail: change, bubbles: true, composed: true }),
-    );
-  }
-
-  #changeEditor(): TemplateResult | typeof nothing {
-    const line = this.changeLine;
-    if (line === null) return nothing;
-    return html`<till-modifier-picker
-      class="change-editor"
-      withNote
-      .product=${this.#changeProduct}
-      .quantity=${this.#displayQty(line.quantity)}
-      .initialSelections=${this.#changeSelection}
-      @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
-        event.stopPropagation();
-        this.#confirmChange(event.detail);
-      }}
-      @wt-modifier-cancel=${(event: Event) => {
-        event.stopPropagation();
-        this.#closeChange();
-      }}
-    ></till-modifier-picker>`;
-  }
-
   #courseName(courseId: string | null, retainedCourse?: TillCourse): string {
     if (courseId === null) return t("table.course_none");
     return (
       this.courses.find((course) => course.id === courseId)?.name ??
       (retainedCourse?.id === courseId ? retainedCourse.name : courseId)
-    );
-  }
-
-  #courseValue(value: string): string | null {
-    return value === "" ? null : value;
-  }
-
-  /** A FIRED line shows its course READ-ONLY: the server refuses to move it (`ticket.already_fired`). A
-   * CHILD extras row has no course of its own, so it has no picker. */
-  #lineCourse(line: TabLine): TemplateResult | typeof nothing {
-    if (
-      (this.courses.length === 0 &&
-        (line.course === undefined || line.course.id !== line.courseId)) ||
-      this.#isChild(line)
-    )
-      return nothing;
-    if (line.firedAt !== null) {
-      return html`<span class="line-course" data-line-course-static=${line.lineNo}
-        >${this.#courseName(line.courseId, line.course)}</span
-      >`;
-    }
-    return this.#coursePicker(
-      { lineCourse: line.lineNo },
-      this.#nameForLine(line),
-      line.courseId ?? "",
-      t("table.course_none"),
-      (courseId) => this.#setLineCourse(line.lineNo, this.#courseValue(courseId)),
-      line.course,
     );
   }
 
@@ -2611,7 +2196,7 @@ export class TillTableOrderScreen extends LitElement {
     if (this.menuSelectionRequired && menu === undefined) return html``;
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${store.sending || !this.orderingAllowed}
+      ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}
@@ -2703,13 +2288,18 @@ export class TillTableOrderScreen extends LitElement {
           }}
         ></till-order-kitchen-note>
         <div class="layout">
-          ${draft === null ? nothing : this.#ordering(draft)}
-          ${this.drawerOpen ? this.#drawer(pending) : nothing}
+          ${
+            draft === null
+              ? html`<section class="draft-pane" data-draft-pane>
+                  ${this.#sentOrders()} ${this.#orderSummary(null)}
+                </section>`
+              : this.#ordering(draft)
+          }
+          ${this.drawerOpen ? this.#drawer() : nothing}
         </div>
-        ${this.#previewDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
-        ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
-        ${this.#billChoiceDialog()} ${this.#nameDialog()} ${this.#guestsDialog()}
-        ${this.#splitGuestsDialog()}
+        ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
+        ${this.#takeOverDialog()} ${this.#billChoiceDialog()} ${this.#nameDialog()}
+        ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -2760,6 +2350,7 @@ export class TillTableOrderScreen extends LitElement {
         aria-labelledby="draft-title"
         ?hidden=${separate && !reviewing}
       >
+        ${this.#sentOrders()}
         <div class="draft-head">
           <h2 class="draft-title" id="draft-title" tabindex="-1">${t("table.draft_title")}</h2>
           ${
@@ -2774,9 +2365,476 @@ export class TillTableOrderScreen extends LitElement {
               : nothing
           }
         </div>
-        ${this.#roundControl(draft, entries)} ${this.#otherDraftPanels(draft)}
+        ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
+        ${this.#orderSummary(draft)}
       </section>
     </div>`;
+  }
+
+  #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
+    return html`<div class="total-row" data-order-summary>
+        <span class="label">${t("label.total")}</span>
+        <span class="amount" data-order-total
+          >${this.#money(
+            panelTotal(
+              this.#payStore!.total,
+              this.otherDrafts.length === 0
+                ? (draft?.lines ?? [])
+                : this.otherDrafts.flatMap((other) => other.lines),
+            ),
+          )}</span
+        >
+      </div>
+      <div data-bill-actions>
+        ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
+      </div>`;
+  }
+
+  #sentOrders(): TemplateResult {
+    const billId = this.orderId ?? "";
+    const scope = JSON.stringify([this.serviceVisit, this.party?.id ?? null]);
+    const api = this.api;
+    const bills = shownBills(this.bills);
+    return html`<div data-sent-orders>
+      ${
+        this.currentOrdersUnread
+          ? html`<p role="status" data-sent-unread>${t("table.current_orders_unread")}</p>`
+          : nothing
+      }
+      ${this.currentOrders === null ? this.#sentFallback() : nothing}
+      <till-sent-orders
+        .scope=${scope}
+        .billId=${billId}
+        .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
+        .billLabels=${new Map(bills.map((bill, index) => [bill.workingOrderId, billName(this.party?.displayName ?? "", index)]))}
+        .busy=${this.busy || this.groupCommandBusy}
+        .now=${this.now}
+        @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {
+          event.stopPropagation();
+          const { expected, heldGroupIds } = event.detail;
+          const held = this.groups
+            .filter((group) => group.state === "held")
+            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+            .map((group) => group.id);
+          if (
+            !this.isConnected ||
+            this.busy ||
+            this.groupCommandBusy ||
+            this.currentOrdersUnread ||
+            this.api !== api ||
+            this.orderId !== billId ||
+            JSON.stringify([this.serviceVisit, this.party?.id ?? null]) !== expected.scope ||
+            this.currentOrders?.revision !== expected.revision ||
+            held.length !== expected.ids.length ||
+            held.some((id, index) => id !== expected.ids[index])
+          )
+            return;
+          this.#dispatch("reorder-groups", { heldGroupIds } satisfies ReorderGroupsDetail);
+        }}
+        @sent-line-info=${(event: CustomEvent<SentLineInfo>) => {
+          event.stopPropagation();
+          if (!this.isConnected || this.busy || this.groupCommandBusy) return;
+          this.sentLinePending = {
+            info: event.detail,
+            api: this.api,
+            partyId: this.party?.id ?? null,
+            billId: this.orderId,
+            visit: this.serviceVisit,
+          };
+        }}
+        @fire-group=${(event: CustomEvent<FireGroupDetail>) => {
+          event.stopPropagation();
+          if (this.busy || this.groupCommandBusy) return;
+          const group = this.#heldInOrder.find((group) => group.id === event.detail.groupId);
+          if (group !== undefined) this.#requestFireGroup(group);
+        }}
+      ></till-sent-orders>
+    </div>`;
+  }
+
+  #sentFallback(): TemplateResult | typeof nothing {
+    const recalled = new Set(
+      [
+        ...(this.#draftStore?.lines ?? []),
+        ...this.otherDrafts.flatMap((draft) => draft.lines),
+      ].flatMap((line) => (line.source === undefined ? [] : [line.source.line.id])),
+    );
+    const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
+    if (dishes.length === 0) return nothing;
+    // Bill lines lack partial serving quantities, so this fallback offers no actions.
+    return html`<section class="sent-fallback" data-sent-fallback>
+      <h2>${t("table.sent_title")}</h2>
+      <ul>
+        ${dishes.map(
+          (dish) =>
+            html`<li data-sent-fallback-line=${dish.id}>
+              ${this.#sentFallbackLine(dish)}
+              <ul>
+                ${this.lines.filter((line) => line.parentLineNo === dish.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra)}</li>`)}
+              </ul>
+            </li>`,
+        )}
+      </ul>
+    </section>`;
+  }
+
+  #sentFallbackLine(line: TabLine): TemplateResult {
+    return html`<div class="sent-fallback-row">
+      <span class="sent-fallback-name"
+        >${this.#nameForLine(line)}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}
+        ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
+        ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
+        ${this.#paidMark(line.lineNo, line.quantity)}
+      </span>
+      <span class="sent-fallback-price" data-sent-fallback-price>${this.#lineTotal(line)}</span>
+    </div>`;
+  }
+
+  #sentCourse(
+    courseId: string | null,
+    retainedCourse?: TillCourse,
+  ): TemplateResult | typeof nothing {
+    if (
+      this.courses.length === 0 &&
+      (retainedCourse === undefined || retainedCourse.id !== courseId)
+    )
+      return nothing;
+    return html`<span data-sent-course>${this.#courseName(courseId, retainedCourse)}</span>`;
+  }
+
+  #sentLine(): SentSlice | undefined {
+    const pending = this.sentLinePending;
+    if (
+      pending === null ||
+      this.currentOrders === null ||
+      this.currentOrdersUnread ||
+      pending.api !== this.api ||
+      pending.partyId !== (this.party?.id ?? null) ||
+      pending.billId !== this.orderId ||
+      pending.visit !== this.serviceVisit
+    )
+      return;
+    const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
+    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)].find(
+      (slice) =>
+        slice.row.lineId === pending.info.lineId &&
+        slice.kind === pending.info.kind &&
+        slice.row.workingOrderId === pending.info.workingOrderId,
+    );
+  }
+
+  #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean): void {
+    if (
+      pending === null ||
+      pending !== this.sentLinePending ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy
+    )
+      return;
+    const slice = this.#sentLine();
+    if (
+      slice === undefined ||
+      slice.kind !== (undo ? "served" : "fired") ||
+      (!undo && !slice.row.released) ||
+      (undo && !this.#sentBillOpen(slice.row))
+    )
+      return;
+    this.sentLinePending = null;
+    this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    this.#requestServe(slice.row, undo);
+  }
+
+  #sentBillOpen(row: CurrentOrderRow): boolean {
+    const bill = this.bills.find((bill) => bill.workingOrderId === row.workingOrderId);
+    return row.billStatus === "open" && (bill === undefined || bill.status === "open");
+  }
+
+  #sentOrderLine(slice: SentSlice): TabLine | undefined {
+    if (
+      slice.kind === "cancelled_charged" ||
+      !this.#sentBillOpen(slice.row) ||
+      this.#draftStore?.editsLocked ||
+      this.#draftStore?.sending
+    )
+      return;
+    return this.lines.find(
+      (line) =>
+        line.id === slice.row.lineId &&
+        line.lineNo === slice.row.lineNo &&
+        line.parentLineNo == null,
+    );
+  }
+
+  #canRecallSent(slice: SentSlice): boolean {
+    const line = this.#sentOrderLine(slice);
+    return (
+      line !== undefined &&
+      this.#canRecall(line) &&
+      (slice.row.kitchen === null || slice.row.kitchen.state === "queued")
+    );
+  }
+
+  #canMoveSent(slice: SentSlice): boolean {
+    const store = this.#draftStore;
+    const locked = store instanceof DraftStore ? store.compositionLocked : store?.editsLocked;
+    const line = this.lines.find((line) => line.id === slice.row.lineId);
+    const bill = this.bills.find((bill) => bill.workingOrderId === slice.row.workingOrderId);
+    return (
+      slice.kind !== "cancelled_charged" &&
+      (slice.row.billStatus === "open" || slice.row.billStatus === "placed") &&
+      (bill === undefined || bill.status === "open" || bill.status === "placed") &&
+      !locked &&
+      !store?.sending &&
+      (line === undefined ||
+        (line.lineNo === slice.row.lineNo &&
+          line.parentLineNo == null &&
+          line.movable &&
+          !isStarted(line))) &&
+      slice.row.kitchen?.movable === true &&
+      slice.row.kitchen.state === "queued"
+    );
+  }
+
+  #canFireSent(slice: SentSlice): boolean {
+    if (slice.kind !== "held") return false;
+    const group = this.currentOrders?.groups.find((group) =>
+      group.rows.some((row) => row.lineId === slice.row.lineId),
+    );
+    return (
+      group !== undefined && this.groups.find((known) => known.id === group.id)?.state !== "fired"
+    );
+  }
+
+  #canVoidSent(slice: SentSlice): boolean {
+    const store = this.#draftStore;
+    const locked = store instanceof DraftStore ? store.compositionLocked : store?.editsLocked;
+    const bill = this.bills.find((bill) => bill.workingOrderId === slice.row.workingOrderId);
+    return (
+      slice.kind !== "cancelled_charged" &&
+      slice.row.billStatus !== "abandoned" &&
+      bill?.status !== "abandoned" &&
+      !locked &&
+      !this.#draftStore?.sending
+    );
+  }
+
+  #actOnSentLine(
+    pending: typeof this.sentLinePending,
+    action: "fire" | "recall" | "station" | "void" | "comp",
+  ): void {
+    if (
+      pending === null ||
+      pending !== this.sentLinePending ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy
+    )
+      return;
+    const slice = this.#sentLine();
+    if (
+      slice === undefined ||
+      (action === "fire" && !this.#canFireSent(slice)) ||
+      (action === "recall" && !this.#canRecallSent(slice)) ||
+      (action === "station" && !this.#canMoveSent(slice)) ||
+      (action === "void" && !this.#canVoidSent(slice)) ||
+      (action === "comp" && this.#sentOrderLine(slice) === undefined)
+    )
+      return;
+    this.sentLinePending = null;
+    this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
+    else if (action === "recall") this.#recallLine(slice.row.lineNo);
+    else if (action === "comp") {
+      const line = this.#sentOrderLine(slice)!;
+      const target = lineAdjustTarget(line, this.lines, this.#adjustName(line));
+      target.extras = this.lines
+        .filter(
+          (row) =>
+            row.parentLineNo === line.lineNo && compareDecimal(tabLineGross(row), decimal("0")) > 0,
+        )
+        .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)));
+      this.#dispatch("adjust", { kind: "comp", combined: true, target });
+    } else if (action === "void") this.#dispatch("cancel-item", { lineId: slice.row.lineId });
+    else
+      this.#dispatch("move-station", {
+        workingOrderId: slice.row.workingOrderId,
+        lineId: slice.row.lineId,
+        name: slice.row.name,
+        stationId: slice.row.kitchen!.stationId,
+      });
+  }
+
+  #sentLineMore(slice: SentSlice | undefined): TemplateResult | typeof nothing {
+    if (slice === undefined) return nothing;
+    const fire = this.#canFireSent(slice);
+    const recall = this.#canRecallSent(slice);
+    const station = this.#canMoveSent(slice);
+    const unserve = slice.kind === "served" && this.#sentBillOpen(slice.row);
+    const comp = this.#sentOrderLine(slice) !== undefined;
+    const canVoid = this.#canVoidSent(slice);
+    if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
+    const pending = this.sentLinePending;
+    const disabled = this.busy || this.groupCommandBusy;
+    return html`<wt-row-actions label=${t("shell.more")}>
+      ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
+      ${recall ? html`<wt-button variant="secondary" data-sent-line-recall ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "recall")}>${t("table.recall_line")}</wt-button>` : nothing}
+      ${station ? html`<wt-button variant="secondary" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
+      ${comp ? html`<wt-button variant="secondary" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+      ${canVoid ? html`<wt-button variant=${disabled ? "secondary" : "danger"} data-sent-line-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
+      ${unserve ? html`<wt-button variant="secondary" data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
+    </wt-row-actions>`;
+  }
+
+  #sentBillLine(
+    row: CurrentOrderRow,
+    extra?: CurrentOrderRow["extras"][number],
+  ): TabLine | undefined {
+    return row.workingOrderId === this.orderId
+      ? this.lines.find(
+          (line) =>
+            line.id === (extra?.lineId ?? row.lineId) &&
+            (extra === undefined
+              ? line.lineNo === row.lineNo && line.parentLineNo == null
+              : line.parentLineNo === row.lineNo),
+        )
+      : undefined;
+  }
+
+  #sentDetails(
+    row: CurrentOrderRow,
+    extra?: CurrentOrderRow["extras"][number],
+  ): TemplateResult | typeof nothing {
+    const line = this.#sentBillLine(row, extra);
+    if (line === undefined) return nothing;
+    return html`${extra === undefined ? nothing : this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${extra === undefined ? nothing : this.#lineNote(line)}`;
+  }
+
+  #sentPrice(
+    row: CurrentOrderRow,
+    amount: Decimal,
+    extra?: CurrentOrderRow["extras"][number],
+  ): TemplateResult {
+    const line = this.#sentBillLine(row, extra);
+    const before =
+      line?.listUnitPriceGross === undefined
+        ? amount
+        : listedGross({ ...line, quantity: extra?.quantity ?? row.quantity });
+    return lineTotal(before, amount);
+  }
+
+  #sentLineDialog(): TemplateResult {
+    const pending = this.sentLinePending;
+    const slice = this.#sentLine();
+    const row = slice?.row;
+    const disabled = this.busy || this.groupCommandBusy;
+    const group =
+      row === undefined
+        ? undefined
+        : this.currentOrders?.groups.find((group) =>
+            group.rows.some(
+              (member) =>
+                member.lineId === row.lineId && member.workingOrderId === row.workingOrderId,
+            ),
+          );
+    const partlyServed =
+      row !== undefined &&
+      row.servedAt === null &&
+      compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
+    const extraTotal =
+      row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
+      decimal("0");
+    const station = this.stations.find((station) => station.id === row?.kitchen?.stationId);
+    const status =
+      slice?.kind === "cancelled_charged"
+        ? t("table.cancelled_charged")
+        : slice?.kind === "held"
+          ? t("table.group_held")
+          : row === undefined
+            ? nothing
+            : this.#rowState(row);
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-sent-line-dialog
+      .open=${row !== undefined}
+      .heading=${t("table.sent_info")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget && !(event.currentTarget as WtDialog).open)
+          this.sentLinePending = null;
+      }}
+    >
+      ${
+        row === undefined
+          ? nothing
+          : html`
+              <p class="move-dish">
+                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
+                ${this.#sentDetails(row)}
+              </p>
+              ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
+              <div class="total-row">
+                <span>${row.name}</span
+                ><span class="amount" data-sent-line-amount
+                  >${this.#sentPrice(row, subtractDecimal(decimal(row.netAmount), extraTotal))}</span
+                >
+              </div>
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, decimal(extra.netAmount), extra)}</span></div>`)}
+              ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
+              ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
+              <p data-sent-line-status>
+                ${station === undefined ? nothing : html`${station.name} · `}${status}
+              </p>
+              ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
+              ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
+              <div class="total-row">
+                <span>${t("label.total")}</span
+                ><span class="amount">${this.#money(row.netAmount)}</span>
+              </div>
+            `
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-sent-line-close
+          @click=${() => {
+            this.sentLinePending = null;
+          }}
+          >${t("table.submitted_close")}</wt-button
+        >
+        ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
+        ${this.#sentLineMore(slice)}
+      </div>
+    </wt-dialog>`;
+  }
+
+  #retainedDraftPanel(): TemplateResult | typeof nothing {
+    const candidate = this.retainedDraft;
+    if (candidate === null) return nothing;
+    return html`<section
+      class="other-draft"
+      data-draft-candidate
+      aria-labelledby="draft-candidate-title"
+    >
+      <h3 class="other-draft-title" id="draft-candidate-title">${t("unsaved.message")}</h3>
+      <ul class="other-draft-lines">
+        ${candidate.lines.map((line) => html`<li class="other-draft-line" data-candidate-line>${this.#lineSummary(line, "other-draft-name")}</li>`)}
+      </ul>
+      <wt-button
+        variant="secondary"
+        data-candidate-discard
+        ?disabled=${this.candidateReviewBusy}
+        @click=${() => this.#dispatch("resolve-draft-candidate", { candidate, apply: false })}
+        >${t("unsaved.discard")}</wt-button
+      >
+      <wt-button
+        variant=${this.candidateReviewAllowed ? "primary" : "secondary"}
+        data-candidate-apply
+        ?disabled=${!this.candidateReviewAllowed || this.candidateReviewBusy}
+        @click=${() => this.#dispatch("resolve-draft-candidate", { candidate, apply: true })}
+        >${t("basket_refresh.confirm")}</wt-button
+      >
+    </section>`;
   }
 
   /** Read-only: nothing in a panel changes or sends another person's lines but taking them over. */
@@ -2943,9 +3001,8 @@ export class TillTableOrderScreen extends LitElement {
    * table's offers no longer hold has no name to show, so it reads as not offered. */
   #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
     const name = shownName(line.product);
-    return html`<span class=${nameClass}
-        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
-      >
+    const quantity = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
+    return html`<span class=${nameClass}>${name}${this.#nutrition(line)} ×${quantity}</span>
       ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
         (answer) => html`<span class="modifier-answer">${answer}</span>`,
       )}
@@ -3027,11 +3084,21 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #roundControl(draft: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
+  #roundControl(draft: WorkingOrderStore): TemplateResult {
     return html`${
         draft.sending
           ? html`<p class="round-sending" role="status" data-round-sending>
-              ${this.takeOverSent === null ? t("table.round_sending") : t("table.taking_over")}
+              ${
+                this.takeOverSent !== null
+                  ? t("table.taking_over")
+                  : draft.busyAction === "split"
+                    ? t("table.split_group_line")
+                    : draft.busyAction === "cancel"
+                      ? t("adjust.cancel_title")
+                      : draft.busyAction === "recall"
+                        ? t("table.recall_line")
+                        : t("table.round_sending")
+              }
             </p>`
           : nothing
       }
@@ -3041,9 +3108,16 @@ export class TillTableOrderScreen extends LitElement {
             this.orderId,
             draft.lineCount === 0
               ? html`<till-basket .hideKitchenNote=${true} .store=${draft}></till-basket>`
-              : this.#draftSections(draft, entries),
+              : this.#draftSections(draft),
           )}
-          ${this.#draftBar(draft)}
+          ${this.#draftBar(draft)} ${this.#draftMoveDialog(draft)}
+          <wt-button
+            data-discard-draft
+            variant="secondary"
+            ?disabled=${draft.lineCount === 0 || draft.sending || draft.editsLocked || this.groupCommandBusy}
+            @click=${() => this.dispatchEvent(new CustomEvent("discard-draft", { bubbles: true, composed: true }))}
+            >${t("held.discard")}</wt-button
+          >
         </div>
       </div>`;
   }
@@ -3089,100 +3163,360 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #draftSections(store: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
-    const lines = store.lines;
-    const sections = draftSections(entries, this.courses);
-    return html`<div class="draft-sections" data-draft-sections>
+  #draftLayout(store: WorkingOrderStore): LayoutGroup[] {
+    return draftLayout({
+      lines: store.lines,
+      courses: this.courses,
+      groups: this.groups,
+      locale: currentLocale(),
+      nextDisplayNumber: Math.max(0, ...this.groups.map((group) => group.displayNumber)) + 1,
+    });
+  }
+
+  #draftGroupName(group: LayoutGroup): string {
+    const target =
+      group.kind === "join" ? this.groups.find((held) => held.id === group.groupId) : undefined;
+    const number =
+      target === undefined ? String(group.displayNumber ?? "?") : groupNumberText(target);
+    const name =
+      group.kind === "fire"
+        ? t("table.destination_fire_now")
+        : t(group.kind === "join" ? "table.draft_joins_group" : "table.group_n").replace(
+            "{n}",
+            () => number,
+          );
+    return [name, ...group.courseNames].join(" · ");
+  }
+
+  #draftGroupMenu(store: WorkingOrderStore, group: LayoutGroup) {
+    const slots = this.#draftLayout(store).filter((group) => group.kind === "new");
+    const index = slots.findIndex((slot) => slot.key === group.key);
+    if (index < 0 || slots.length < 2 || store.editsLocked) return nothing;
+    const epoch = this.#draftEpoch;
+    const scope = this.#draftArrangementScope();
+    const groups = this.#draftDragGroups();
+    const api = this.api;
+    const move = (by: number) => {
+      if (
+        !this.#canDragDraft(store) ||
+        epoch !== this.#draftEpoch ||
+        scope !== this.#draftArrangementScope() ||
+        groups !== this.#draftDragGroups() ||
+        api !== this.api
+      )
+        return;
+      const target = slots[index + by];
+      if (target !== undefined) store.moveSlot(group.slot!, target.slot!);
+    };
+    return keyed(
+      JSON.stringify([epoch, scope, groups]),
+      html`<wt-row-actions
+        data-draft-group-more=${group.key}
+        label=${`${t("shell.more")} · ${this.#draftGroupName(group)}`}
+        align="end"
+      >
+        ${
+          index === 0
+            ? nothing
+            : html`<wt-button
+                data-draft-earlier
+                variant="secondary"
+                ?disabled=${!this.#canDragDraft(store)}
+                @click=${() => move(-1)}
+                >${t("table.group_earlier")}</wt-button
+              >`
+        }
+        ${
+          index === slots.length - 1
+            ? nothing
+            : html`<wt-button
+                data-draft-later
+                variant="secondary"
+                ?disabled=${!this.#canDragDraft(store)}
+                @click=${() => move(1)}
+                >${t("table.group_later")}</wt-button
+              >`
+        }
+      </wt-row-actions>`,
+    );
+  }
+
+  #draftSections(store: WorkingOrderStore): TemplateResult {
+    return html`<div
+      class="draft-sections"
+      data-draft-sections
+      ?data-draft-drag-active=${this.draftDragging}
+    >
       ${repeat(
-        sections,
-        (section) => section.course?.id ?? "",
-        (section) =>
-          html`<section
-            class="draft-section"
-            data-draft-section=${section.course?.id ?? ""}
-            aria-label=${section.course?.name ?? nothing}
-          >
-            ${
-              section.course === null
-                ? nothing
-                : html`<h3 class="draft-section-name">${section.course.name}</h3>`
-            }
-            <till-basket
-              .hideKitchenNote=${true}
-              stacked
-              .store=${store}
-              .lineIndexes=${section.lineIndexes}
-            >
-              ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
-            </till-basket>
-          </section>`,
+        this.#draftLayout(store),
+        (group) => group.key,
+        (group) => {
+          const indexes = group.sections.flatMap((section) => section.indexes);
+          const selected = indexes.filter((index) =>
+            this.#selected.has(store.lines[index]!),
+          ).length;
+          const checked = selected === 0 ? "false" : selected === indexes.length ? "true" : "mixed";
+          const name = this.#draftGroupName(group);
+          return html`${group.kind === "fire" ? nothing : html`<div class="draft-drop-gap" data-draft-gap=${group.key} aria-hidden="true"></div>`}
+            <section class="draft-group" data-draft-group=${group.key} aria-label=${name}>
+              <h3
+                class="draft-group-name"
+                data-draft-group-name
+                data-draft-drag-heading=${group.kind === "new" ? group.key : nothing}
+                ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group?.key === group.key}
+              >
+                ${
+                  store.editsLocked
+                    ? name
+                    : html`<button
+                        type="button"
+                        class="option draft-group-select"
+                        role="checkbox"
+                        data-draft-group-select=${group.key}
+                        aria-checked=${checked}
+                        ?disabled=${store.sending || this.groupCommandBusy}
+                        @click=${() => {
+                          if (store.editsLocked || store.sending || this.groupCommandBusy) return;
+                          for (const index of indexes) {
+                            const line = store.lines[index]!;
+                            if (checked === "true") this.#selected.delete(line);
+                            else this.#selected.add(line);
+                          }
+                          this.requestUpdate();
+                        }}
+                      >
+                        <span aria-hidden="true"
+                          >${checked === "true" ? "☑" : checked === "mixed" ? "▣" : "☐"}</span
+                        >
+                        ${name}
+                      </button>`
+                }
+                ${this.#draftGroupMenu(store, group)}
+              </h3>
+              ${repeat(
+                group.sections,
+                (section) => section.course?.id ?? "",
+                (section) =>
+                  html`<section
+                    class="draft-section"
+                    data-draft-section=${section.course?.id ?? ""}
+                  >
+                    ${
+                      section.heading && section.course !== null
+                        ? html`<h4 class="draft-section-name">${section.course.name}</h4>`
+                        : nothing
+                    }
+                    <till-basket
+                      .hideKitchenNote=${true}
+                      .lineDetails=${true}
+                      .draftParent=${this}
+                      .courses=${this.courses}
+                      .orderInFlight=${this.groupCommandBusy}
+                      stacked
+                      .store=${store}
+                      .lineIndexes=${section.indexes}
+                    >
+                      ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
+                    </till-basket>
+                  </section>`,
+              )}
+            </section>`;
+        },
       )}
+      <div class="draft-drop-gap" data-draft-gap="end" aria-hidden="true"></div>
     </div>`;
   }
 
-  /** A draft line's slotted controls in its basket row. */
   #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
+    const scope = this.#draftArrangementScope();
+    const api = this.api;
+    const current = () =>
+      this.#canEditDraftLine(store, line) &&
+      !this.busy &&
+      scope === this.#draftArrangementScope() &&
+      api === this.api;
     const name = lineProductName(line.product);
+    const quantity = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
     const selected = this.#selected.has(line);
-    const splits = soldByTheUnit(line.product) && Number(line.quantity) > 1;
+    const family = store.splitFamily(line);
+    const splits =
+      soldByTheUnit(line.product) &&
+      Number.isInteger(Number(line.quantity)) &&
+      Number(line.quantity) > 1;
     const isFlagged = flagged(line);
-    if (!isFlagged) this.#kept.delete(line);
     const tools = [
-      ...(this.courses.length === 0 &&
-      (line.course === undefined || line.course.id !== line.courseId)
-        ? []
-        : [
-            this.#coursePicker(
-              { roundCourse: index },
-              name,
-              this.#selectedCourseId(line),
-              t("table.course_default"),
-              (courseId) => this.#pickCourse(store, line, courseId),
-              line.course,
-            ),
-          ]),
       ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
-      ...(splits
-        ? [
-            html`<wt-button
-              variant="secondary"
-              data-split-draft-line=${index}
-              aria-label=${`${t("table.split_group_line")} · ${name}`}
-              @click=${() => store.splitLine(index)}
-            >
-              ${t("table.split_group_line")}
-            </wt-button>`,
-          ]
-        : []),
-      ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
+      ...(isFlagged && line.source === undefined ? [this.#flagChoice(store, line, index)] : []),
+      this.#draftRoutingWarning(store, line, index, true),
     ];
-    return html`<button
+    if (store.editsLocked)
+      return html`<span slot=${`lead-${index}`} class="draft-line-name"
+        >${name}${this.#nutrition(line)} ×${quantity}</span
+      >`;
+    return html`${
+        family?.[0] === line
+          ? html`<button
+              type="button"
+              slot=${`before-${index}`}
+              class="option draft-family-header"
+              data-fold-draft-family
+              aria-expanded="true"
+              ?disabled=${!current()}
+              @click=${() => {
+                if (current()) this.#foldDraftFamily(store, line);
+              }}
+            >
+              <span
+                >${name}
+                ×${this.#displayQty(family.reduce((total, member) => addDecimal(total, decimal(member.quantity)), decimal("0")))}</span
+              >
+              <span aria-hidden="true">⌃</span>
+            </button>`
+          : nothing
+      }
+      <button
         slot=${`lead-${index}`}
         type="button"
         class="option draft-select"
         data-draft-select=${index}
+        ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group === undefined && this.#draftPress?.chosen.includes(line)}
         aria-pressed=${selected}
-        @click=${() => this.#toggleSelected(line)}
+        ?disabled=${store.editsLocked || store.sending}
+        @click=${() => {
+          if (!store.editsLocked && !store.sending) this.#toggleSelected(line);
+        }}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
-        <span class="draft-line-name"
-          >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
-        >
+        <span class="draft-line-name">${name}${this.#nutrition(line)} ×${quantity}</span>
       </button>
+      ${
+        splits
+          ? html`<button
+              type="button"
+              slot=${`end-${index}`}
+              class="draft-unit-chevron"
+              data-split-draft-line=${index}
+              aria-label=${`${t("table.split_group_line")} · ${name}`}
+              ?disabled=${!current()}
+              @click=${() => {
+                if (current()) this.#splitDraftLine(store, line);
+              }}
+            >
+              <span aria-hidden="true">›</span>
+            </button>`
+          : nothing
+      }
       ${
         tools.length === 0
           ? nothing
-          : html`<span slot=${`after-${index}`} class="draft-line-tools">${tools}</span>`
-      }`;
+          : html`<div slot=${`detail-${index}`} class="draft-line-tools" data-draft-line-details>
+              ${tools}
+            </div>`
+      }
+      ${isFlagged && line.source === undefined ? html`<span slot=${`after-${index}`} data-flag-warning aria-hidden="true">⚠</span>` : nothing}
+      ${this.#draftRoutingWarning(store, line, index)}`;
   }
 
-  /** A line that cannot be sold now asks whether it goes or stays; kept, it says it stays. Its
-   * reason shows beside its name, in the basket's words. */
+  #draftRoutingWarning(
+    store: WorkingOrderStore,
+    line: OrderLine,
+    index: number,
+    detail = false,
+  ): TemplateResult | typeof nothing {
+    const routing = this.#routingRows.get(line);
+    if (routing === undefined || line.makeAt !== undefined) return nothing;
+    if (!detail)
+      return html`<div
+        slot=${`after-${index}`}
+        class="draft-routing-warning"
+        data-draft-routing-warning
+      >
+        <span aria-hidden="true">⚠</span>
+        ${t(routing.row.why === "closed" ? "dead_end.closed" : "dead_end.disabled").replace("{station}", () => routing.row.stationName)}
+      </div>`;
+    const current = () =>
+      this.isConnected &&
+      store === this.#draftStore &&
+      this.#routingRows.get(line) === routing &&
+      store.lines.includes(line) &&
+      !store.editsLocked &&
+      !store.sending &&
+      !this.groupCommandBusy;
+    return html`<div class="draft-routing-detail" data-draft-routing-detail>
+      <span aria-hidden="true">⚠</span>
+      <till-dead-ends-section
+        .answer=${{ sends: true, deadEnds: [{ ...routing.row, key: String(index), quantity: line.quantity }], stations: routing.stations }}
+        .allowRemove=${true}
+        ?inert=${store.sending || store.editsLocked || this.groupCommandBusy}
+        @make-at=${(event: CustomEvent<{ key: string; stationId: string }>) => {
+          event.stopPropagation();
+          if (
+            !current() ||
+            !routing.stations.some((station) => station.id === event.detail.stationId)
+          )
+            return;
+          store.setLineMakeAt(store.lines.indexOf(line), event.detail.stationId);
+          this.#routingRows.delete(line);
+          this.requestUpdate();
+        }}
+        @remove=${(event: Event) => {
+          event.stopPropagation();
+          if (!current()) return;
+          store.removeLine(store.lines.indexOf(line));
+          this.requestUpdate();
+        }}
+      ></till-dead-ends-section>
+    </div>`;
+  }
+
+  #splitDraftLine(store: WorkingOrderStore, line: OrderLine): void {
+    const index = store.lines.indexOf(line);
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      index < 0 ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy ||
+      !soldByTheUnit(line.product) ||
+      !Number.isInteger(Number(line.quantity)) ||
+      Number(line.quantity) <= 1
+    )
+      return;
+    if (line.source === undefined) store.splitLine(index);
+    else this.#dispatch("split-draft-source", { store, line } satisfies SplitDraftSourceDetail);
+  }
+
+  #foldDraftFamily(store: WorkingOrderStore, line: OrderLine): void {
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy
+    )
+      return;
+    const family = store.splitFamily(line);
+    if (family === undefined) return;
+    const selected = family.every((member) => this.#selected.has(member));
+    store.foldSplitFamily(line);
+    if (
+      store.lines.includes(family[0]!) &&
+      family.slice(1).every((member) => !store.lines.includes(member))
+    ) {
+      for (const member of family) this.#selected.delete(member);
+      if (selected) this.#selected.add(family[0]!);
+      this.requestUpdate();
+    }
+  }
+
   #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
-    if (this.#kept.has(line))
-      return html`<span class="flag-kept" data-flag-kept>${t("table.flag_kept")}</span>`;
+    if (this.#kept.has(line.draftLineId ?? line))
+      return html`<span class="flag-kept" data-flag-kept tabindex="-1"
+        >${t("table.flag_kept")}</span
+      >`;
     const name = shownName(line.product);
-    const busy = store.sending || this.takeOverSent !== null;
+    const busy = !this.#canEditDraftLine(store, line);
     return html`<span class="flag-choice" role="group" aria-label=${name}>
       <wt-button
         variant="secondary"
@@ -3205,262 +3539,298 @@ export class TillTableOrderScreen extends LitElement {
     </span>`;
   }
 
+  #canEditDraftLine(store: WorkingOrderStore, line: OrderLine): boolean {
+    return (
+      this.isConnected &&
+      store === this.#draftStore &&
+      store.lines.includes(line) &&
+      !store.sending &&
+      !store.editsLocked &&
+      !this.groupCommandBusy &&
+      this.takeOverSent === null &&
+      this.orderingAllowed
+    );
+  }
+
   /** The line's row goes with it, so focus goes to the order's heading. */
   async #removeFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    if (!this.#canEditDraftLine(store, line)) return;
     store.removeLine(store.lines.indexOf(line));
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
   }
 
-  /** The buttons go, so focus goes to the line itself. */
+  /** The replaced choice keeps focus inside the line window. */
   async #keepFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
-    this.#kept.add(line);
+    if (!this.#canEditDraftLine(store, line)) return;
+    this.#kept.set(line.draftLineId ?? line, this.#flagKey(line));
     this.requestUpdate();
     await this.updateComplete;
     this.renderRoot
-      .querySelector<HTMLElement>(`[data-draft-select="${store.lines.indexOf(line)}"]`)
+      .querySelector<HTMLElement>(`[slot="detail-${store.lines.indexOf(line)}"] [data-flag-kept]`)
       ?.focus();
   }
 
-  /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
-   * selected now with a selection. A later addition: its destination, then one Send. Firing now is
-   * offered under every `fireControl`: the kitchen and the pass cannot fire a held group of lines
-   * with no course. */
+  #draftSendable(line: OrderLine): boolean {
+    return (
+      (line.source !== undefined || !flagged(line)) &&
+      (this.#routingRows.get(line) === undefined || line.makeAt !== undefined)
+    );
+  }
+
+  #submitArrangement(store: WorkingOrderStore, selectedOnly: boolean): void {
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy ||
+      !this.orderingAllowed
+    )
+      return;
+    const lines = this.#draftLayout(store).flatMap((group) =>
+      group.sections.flatMap((section) => section.indexes.map((index) => store.lines[index]!)),
+    );
+    const sendable = (index: number) => this.#draftSendable(lines[index]!);
+    const groups = selectedOnly
+      ? fireGroups(lines, this.#selectedIndexes(lines), sendable)
+      : sendAllGroups(lines, this.groups, sendable);
+    const indexes = groups.flatMap((group) => group.indexes);
+    if (indexes.length === 0) return;
+    const sent = indexes.map((index) => lines[index]!);
+    const positions = new Map(indexes.map((index, position) => [index, position]));
+    const detail: SubmitDraftDetail = {
+      lines: sent.flatMap((line) =>
+        line.source !== undefined
+          ? []
+          : [
+              {
+                ...toWireProductIdentity(line.product),
+                quantity: line.quantity,
+                ...toWireLineExtras(line),
+                ...toWireModifiers(line),
+                ...(line.courseId === undefined ? {} : { courseId: line.courseId }),
+              },
+            ],
+      ),
+      groups: groups.map(({ indexes, ...group }) => ({
+        ...group,
+        lineIndexes: indexes.map((index) => positions.get(index)!),
+      })),
+      store,
+      sent,
+      draft: this.#draftOf(store),
+    };
+    this.#dispatch("submit-draft", detail);
+  }
+
   #draftBar(store: WorkingOrderStore): TemplateResult {
-    const disabled = store.lineCount === 0 || store.sending;
-    const button = (
-      action: DraftAction,
-      key: StringKey,
-      variant: "primary" | "secondary",
-      name: string = action.kind,
-    ) => {
-      const selectedOnly = action.kind === "send-selected" || action.kind === "fire-selected";
-      const expired = store.lines.every(
-        (line) => line.blocked === "period_ended" || (selectedOnly && !this.#selected.has(line)),
-      );
+    const busy =
+      store.sending || store.editsLocked || this.groupCommandBusy || !this.orderingAllowed;
+    const sendable = store.lines.filter((line) => this.#draftSendable(line));
+    const button = (selectedOnly: boolean, key: StringKey, name: string) => {
+      const disabled = busy || !sendable.some((line) => !selectedOnly || this.#selected.has(line));
       return html`<wt-button
         class="draft-action"
         data-draft-action=${name}
-        variant=${expired ? "secondary" : variant}
+        variant=${disabled ? "secondary" : "primary"}
         size="lg"
-        ?disabled=${disabled || expired}
-        @click=${() => this.#openPreview(store, action)}
-      >
-        ${t(key)}
-      </wt-button>`;
+        ?disabled=${disabled}
+        @click=${() => this.#submitArrangement(store, selectedOnly)}
+        >${t(key)}</wt-button
+      >`;
     };
-    if (this.#isLaterAddition(store)) {
-      return html`<div class="draft-bar">
-        ${this.#destinationChoice()}
-        <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
-          ${button(this.#laterAction(), "table.draft_submit", "primary", "submit")}
-        </div>
-      </div>`;
-    }
-    const anySelected = store.lines.some((line) => this.#selected.has(line));
     return html`<div class="draft-bar">
+      ${this.#draftMoveButton(store)}
       <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
-        ${
-          anySelected
-            ? html`${button({ kind: "send-selected" }, "table.draft_send_selected", "secondary")}
-              ${button({ kind: "fire-selected" }, "table.draft_fire_selected", "primary")}`
-            : html`${button({ kind: "send-all" }, "table.draft_send_all", "secondary")}
-              ${button({ kind: "fire-all" }, "table.draft_fire_all", "primary")}`
-        }
+        ${button(true, "table.group_fire", "fire-selected")}
+        ${button(false, "table.draft_send_all", "send-all")}
       </div>
     </div>`;
   }
 
-  #destinationChoice(): TemplateResult {
-    const chosen = this.#effectiveDestination();
-    const held = this.#heldInOrder;
-    const options: [Destination, StringKey][] = [
-      ["fire-now", "table.destination_fire_now"],
-      ...(held.length === 0
-        ? []
-        : [["add-to-held", "table.destination_add_to_held"] as [Destination, StringKey]]),
-      ["add-as-new", "table.destination_add_as_new"],
-    ];
-    const joining = this.#joinGroup();
-    return html`<div
-        class="destination"
-        role="group"
-        aria-label=${t("table.destination_label")}
-        data-destination-choice
-      >
-        ${options.map(
-          ([kind, key]) =>
-            html`<button
-              type="button"
-              class="option"
-              data-destination=${kind}
-              aria-pressed=${chosen === kind}
-              @click=${() => (this.destination = kind)}
-            >
-              ${t(key)}
-            </button>`,
-        )}
-      </div>
-      ${
-        chosen === "add-to-held"
-          ? html`<div
-              class="destination held-picker"
-              role="group"
-              aria-label=${t("table.held_picker_label")}
-              data-held-picker
-            >
-              ${held.map(
-                (group, index) =>
-                  html`<button
-                    type="button"
-                    class="option"
-                    data-held-group=${group.id}
-                    aria-pressed=${group.id === joining?.id}
-                    @click=${() => (this.joinTarget = group.id)}
-                  >
-                    ${heldGroupLabel(group, index)}
-                  </button>`,
-              )}
-            </div>`
-          : nothing
-      }`;
+  #draftMoveButton(store: WorkingOrderStore): TemplateResult {
+    const disabled =
+      !this.#canDragDraft(store) || !store.lines.some((line) => this.#selected.has(line));
+    return html`<wt-button
+      data-draft-move
+      variant=${disabled ? "secondary" : "primary"}
+      ?disabled=${disabled}
+      @click=${() => {
+        if (disabled || !this.#canDragDraft(store)) return;
+        this.#draftMoveOpening = {
+          scope: this.#draftArrangementScope(),
+          groups: this.#draftDragGroups(),
+          api: this.api,
+          epoch: this.#draftEpoch,
+          selected: store.lines.filter((line) => this.#selected.has(line)),
+        };
+        this.draftMoveStore = store;
+      }}
+      >${t("table.move_line")}</wt-button
+    >`;
   }
 
-  #previewDialog(): TemplateResult {
-    const pending = this.pendingDraft;
-    const preview = pending?.preview;
-    const deadEnds =
-      pending?.deadEnds === undefined
-        ? undefined
-        : {
-            sends: true,
-            stations: pending.deadEnds.stations,
-            deadEnds: pending.detail.sent.flatMap((line, index) => {
-              const row = pending.deadEnds!.rows.get(line);
-              return row === undefined ? [] : [{ ...row, key: String(index) }];
-            }),
-          };
-    const waiting =
-      pending?.checking === true ||
-      [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt);
+  #moveDraftSelection(
+    store: WorkingOrderStore,
+    target: Place | "new",
+    opening: DraftMoveOpening | undefined,
+  ): void {
+    if (
+      opening === undefined ||
+      opening !== this.#draftMoveOpening ||
+      !this.#canDragDraft(store) ||
+      store !== this.draftMoveStore ||
+      opening.scope !== this.#draftArrangementScope() ||
+      opening.groups !== this.#draftDragGroups() ||
+      opening.api !== this.api ||
+      opening.epoch !== this.#draftEpoch
+    )
+      return;
+    const indexes = [...this.#selectedIndexes(store.lines)];
+    if (
+      indexes.length === 0 ||
+      indexes.length !== opening.selected.length ||
+      indexes.some((index, at) => store.lines[index] !== opening.selected[at])
+    )
+      return;
+    if (target === "new") {
+      const layout = this.#draftLayout(store);
+      const newlyHeld = layout.filter((group) => group.kind === "new");
+      const anchorOf = (group: LayoutGroup): string | undefined => {
+        const index = group.sections[0]!.indexes[0]!;
+        const place = store.lines[index]!.place;
+        return place?.kind === "new" ? place.afterGroupId : undefined;
+      };
+      const heldIds = new Set(this.#heldInOrder.map((group) => group.id));
+      const inFiringOrder = [
+        ...layout.filter((group) => group.kind === "fire"),
+        ...this.#heldInOrder.flatMap((held) => [
+          ...layout.filter((group) => group.groupId === held.id),
+          ...newlyHeld.filter((group) => anchorOf(group) === held.id),
+        ]),
+        ...newlyHeld.filter((group) => !heldIds.has(anchorOf(group) ?? "")),
+        ...layout.filter((group) => group.kind === "join" && !heldIds.has(group.groupId!)),
+      ];
+      const chosen = new Set(indexes);
+      const source = inFiringOrder
+        .reverse()
+        .find((group) =>
+          group.sections.some((section) => section.indexes.some((index) => chosen.has(index))),
+        );
+      if (source === undefined) return;
+      const afterGroupId = source.kind === "join" ? source.groupId! : anchorOf(source);
+      const slot =
+        source.kind === "new"
+          ? source.slot! + 1
+          : source.kind === "fire"
+            ? 1
+            : (newlyHeld.find((group) => anchorOf(group) === afterGroupId)?.slot ??
+              Math.max(0, ...newlyHeld.map((group) => group.slot!)) + 1);
+      store.setLinePlaces(
+        indexes,
+        {
+          kind: "new",
+          slot,
+          ...(afterGroupId === undefined ? {} : { afterGroupId }),
+        },
+        { from: slot },
+      );
+    } else {
+      if (target.kind === "join" && !this.#heldGroupIds?.has(target.groupId)) return;
+      if (
+        target.kind === "new" &&
+        !store.lines.some(
+          ({ place }) =>
+            place?.kind === "new" &&
+            place.slot === target.slot &&
+            place.afterGroupId === target.afterGroupId,
+        )
+      )
+        return;
+      store.setLinePlaces(indexes, target);
+    }
+    this.draftMoveStore = null;
+    this.#draftMoveOpening = undefined;
+  }
+
+  #draftMoveDialog(store: WorkingOrderStore): TemplateResult {
+    const opening = this.#draftMoveOpening;
+    const layout = this.#draftLayout(store);
+    const option = (key: string, label: string, place: Place | "new") =>
+      html`<wt-button
+        variant="secondary"
+        data-draft-move-to=${key}
+        @click=${() => this.#moveDraftSelection(store, place, opening)}
+        >${label}</wt-button
+      >`;
     return html`<wt-dialog
       ${trackDialog()}
-      class="draft-preview"
-      data-draft-preview
-      .open=${pending !== null}
-      .heading=${t("table.preview_title")}
-      .beforeClose=${this.#previewScope ? this.#beforePreviewClose : undefined}
-      @wt-close=${(event: Event) => this.#previewClosed(event)}
+      data-draft-move-dialog
+      .heading=${t("table.move_line")}
+      .open=${this.draftMoveStore === store && !store.editsLocked && !store.sending}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget) {
+          this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
+        }
+      }}
     >
-      <div class="preview-body" data-preview-body>
-        ${
-          pending !== null && pending.detail.sent.length === 0
-            ? html`<p data-preview-nothing>${t("table.nothing_sent")}</p>`
-            : nothing
-        }
-        ${
-          preview === undefined
-            ? nothing
-            : html`${
-                preview.fireItems > 0
-                  ? html`<p data-preview-fire>
-                      ${countText(preview.fireItems, "table.preview_fire", "table.preview_fire_one")}
-                    </p>`
-                  : nothing
-              }
-              ${
-                pending!.join !== undefined
-                  ? html`<p data-preview-join>
-                      ${countText(
-                        preview.holdItems,
-                        "table.preview_join",
-                        "table.preview_join_one",
-                      ).replace("{group}", () =>
-                        heldGroupLabel(pending!.join!.group, pending!.join!.index),
-                      )}
-                    </p>`
-                  : preview.holdGroups > 0
-                    ? html`<p data-preview-hold>
-                        ${countText(preview.holdGroups, "table.preview_hold", "table.preview_hold_one")}
-                      </p>`
-                    : nothing
-              }`
-        }
-        ${
-          pending === null || pending.leftOut.length === 0
-            ? nothing
-            : html`<p data-preview-left-out>${leftOutText(pending.leftOut)}</p>`
-        }
-        ${pending === null || pending.detail.sent.length === 0 ? nothing : this.#sendToChoice()}
-        ${
-          deadEnds?.deadEnds.length
-            ? html`<till-dead-ends-section
-                .answer=${deadEnds}
-                .choices=${new Map(
-                  deadEnds.deadEnds.flatMap((row) => {
-                    const stationId = pending?.detail.sent[Number(row.key)]?.makeAt;
-                    return stationId === undefined ? [] : [[row.key, stationId] as const];
-                  }),
-                )}
-                .allowRemove=${true}
-                @make-at=${(event: Event) => this.#previewMakeAt(event)}
-                @remove=${(event: Event) => this.#previewRemove(event)}
-              ></till-dead-ends-section>`
-            : nothing
-        }
+      <div class="action-options">
+        ${option("fire", t("table.destination_fire_now"), { kind: "fire" })}
+        ${layout
+          .filter((group) => group.kind === "new")
+          .map((group) => {
+            const place = store.lines[group.sections[0]!.indexes[0]!]!.place!;
+            return option(group.key, this.#draftGroupName(group), place);
+          })}
+        ${this.#heldInOrder.map((group) =>
+          option(
+            `join:${group.id}`,
+            t("table.draft_joins_group").replace("{n}", groupNumberText(group)),
+            { kind: "join", groupId: group.id },
+          ),
+        )}
+        ${option("new", `+ ${t("table.move_new_group")}`, "new")}
       </div>
-      <div slot="footer" class="cancel-actions">
-        <wt-button
-          class="preview-back"
-          variant="secondary"
-          data-draft-dismiss
-          @click=${() => this.#requestPreviewClose()}
-        >
-          ${t("action.back")}
-        </wt-button>
-        ${
-          pending !== null && pending.detail.sent.length === 0
-            ? nothing
-            : html`<wt-button
-                class="preview-confirm"
-                variant=${waiting ? "secondary" : "primary"}
-                data-draft-confirm
-                ?disabled=${waiting}
-                @click=${() => this.#confirmPreview()}
-              >
-                ${t("table.preview_confirm")}
-              </wt-button>`
-        }
-      </div>
+      <wt-button
+        slot="footer"
+        variant="secondary"
+        @click=${() => {
+          this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
+        }}
+        >${t("action.back")}</wt-button
+      >
     </wt-dialog>`;
   }
 
-  #drawer(pending: TabLine[]): TemplateResult {
+  #drawer(): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#groupsSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total
             >${formatMoney(this.#payStore!.total, currentLocale())}</span
           >
         </div>
-        ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         ${this.#billsSection()} ${this.#statusSection()} ${this.#actionSection()}
       </aside>
     `;
   }
 
-  /** The bill on screen can take a payment unless the party's bills say it is paid or abandoned; a
-   * presented bill is collected. */
   #chargeable(): boolean {
     const shown = this.#shownBill;
-    return shown === undefined || owing(shown);
+    return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
   }
 
   #paySection(): TemplateResult {
     const shown = this.#shownBill;
-    const partlyPaid = shown !== undefined && paidInPart(shown) ? shown : undefined;
+    const partlyPaid =
+      this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
+        ? shown
+        : undefined;
     if (partlyPaid === undefined)
       return html`<section
         class="pay"
@@ -3475,8 +3845,9 @@ export class TillTableOrderScreen extends LitElement {
           .fullInvoices=${this.fullInvoices}
           .asksGuests=${shown?.invoiceType !== "F1"}
           .receiptGuests=${defaultReceiptGuests(this.party)}
+          .confirmation=${this.paymentConfirmation}
         ></till-tender-pay>
-        ${this.#billChoices(shown)} ${this.#payWays()}
+        ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)} ${this.#payWays()}` : nothing}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
@@ -3512,7 +3883,6 @@ export class TillTableOrderScreen extends LitElement {
         this.fullInvoices
           ? html`<wt-button
               variant="secondary"
-              size="sm"
               data-choose-bill-invoice
               .disabled=${this.busy}
               @click=${() => this.#dispatch("choose-bill-invoice", target)}
@@ -3524,7 +3894,6 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<wt-button
               variant="secondary"
-              size="sm"
               data-choose-bill-language
               .disabled=${this.busy}
               @click=${() => this.#dispatch("choose-bill-receipt-language", target)}
@@ -3548,7 +3917,6 @@ export class TillTableOrderScreen extends LitElement {
         ({ way, label }) =>
           html`<wt-button
             variant="secondary"
-            size="sm"
             data-open-bill-pay=${way}
             .disabled=${this.busy}
             @click=${() => this.#payPart(way)}
@@ -3692,12 +4060,7 @@ export class TillTableOrderScreen extends LitElement {
       aria-current=${shown ? "true" : nothing}
     >
       <span
-        ><span class="bill-name">${this.#billName(index)}</span>${
-          bill.workingOrderId === this.party?.mainBillId
-            ? html` <span class="bill-main" data-bill-main>${t("table.bill_main")}</span>`
-            : nothing
-        }
-        ${
+        ><span class="bill-name">${this.#billName(index)}</span> ${
           bill.invoiceType === "F1" && bill.recipient !== null
             ? html`<span class="bill-invoice" data-invoice-choice
                 >${t("invoice.full")} · ${bill.recipient.legalName} · ${bill.recipient.taxId}</span
@@ -3755,19 +4118,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("take-payment", { workingOrderId: bill.workingOrderId });
   }
 
-  #pendingSection(pending: TabLine[]): TemplateResult {
-    return html`<section class="pending">
-      <h2>${t("table.pending_title")}</h2>
-      ${
-        pending.length === 0
-          ? html`<p class="empty">${t("table.none_pending")}</p>`
-          : html`<ul>
-              ${pending.map((line) => this.#pendingLine(line))}
-            </ul>`
-      }
-    </section>`;
-  }
-
   #lineNote(line: TabLine): TemplateResult | typeof nothing {
     return line.note === null
       ? nothing
@@ -3788,170 +4138,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #pendingLine(line: TabLine): TemplateResult {
-    const name = this.#nameForLine(line);
-    return html`<li class="line pending-line${this.#isChild(line) ? " child-line" : ""}">
-      <span class="name"
-        >${name}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
-      >
-      <span class="qty">${this.#displayQty(line.quantity)}</span>
-      ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#lineActions(line)}
-    </li>`;
-  }
-
-  /** A served dish can still be given away or discounted. */
-  #servedActions(line: TabLine): TemplateResult | typeof nothing {
-    const actions = this.#adjustActions(line);
-    return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
-  }
-
-  #servedSection(): TemplateResult {
-    const served = this.#served();
-    return html`<section class="served">
-      <h2>${t("table.served_title")}</h2>
-      ${
-        served.length === 0
-          ? html`<p class="empty">${t("table.none_served")}</p>`
-          : html`<ul>
-              ${served.map(
-                (line) =>
-                  html`<li class="line served-line${this.#isChild(line) ? " child-line" : ""}">
-                    <span class="name"
-                      >${this.#nameForLine(line)}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
-                    >
-                    <span class="qty">${this.#displayQty(line.quantity)}</span>
-                    ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#servedActions(line)}
-                  </li>`,
-              )}
-            </ul>`
-      }
-    </section>`;
-  }
-
-  /**
-   * Current orders: every group of the party in position order, then the rows in no group. A held
-   * group can be moved among the held ones, have its rows moved or split, and be fired where
-   * `fireControl` gives the waiter the release. With {@link currentOrders} read, each group lists the
-   * party's rows on every bill, with what is known of each, and released rows can be marked served;
-   * without it, a group lists only this bill's lines and the server's summary.
-   */
-  #groupsSection(): TemplateResult | typeof nothing {
-    const ungrouped = this.currentOrders?.ungrouped ?? [];
-    if (this.groups.length === 0 && ungrouped.length === 0 && !this.currentOrdersUnread)
-      return nothing;
-    return html`<section class="groups" data-groups>
-      <h2>${t("table.groups_title")}</h2>
-      ${
-        this.currentOrdersUnread
-          ? html`<p class="empty" data-current-orders-unread>
-              ${t("table.current_orders_unread")}
-            </p>`
-          : nothing
-      }
-      <ol class="group-list">
-        ${this.#groupsInOrder.map((group) => this.#groupRow(group))}
-      </ol>
-      ${
-        ungrouped.length === 0
-          ? nothing
-          : html`<section class="ungrouped" data-ungrouped>
-              <h3>${t("table.ungrouped_title")}</h3>
-              <ul class="group-lines">
-                ${ungrouped.map((row) => this.#currentRow(row, null))}
-              </ul>
-            </section>`
-      }
-    </section>`;
-  }
-
-  #groupRow(group: OrderGroup): TemplateResult {
-    const held = this.#heldInOrder;
-    const isHeld = group.state === "held";
-    const name = t("table.group_n").replace("{n}", String(group.position));
-    const label = (key: StringKey) => `${t(key)} · ${name}`;
-    const place = held.indexOf(group);
-    const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
-    const current = this.currentOrders === null ? null : (shown?.rows ?? []);
-    const reminder = isHeld ? this.#reminderOf(group, shown) : nothing;
-    // A due reminder brings its own Fire.
-    const fires = this.fireControl === "waiter" && !(reminder !== nothing && this.#reminderDue);
-    const servesWhole =
-      !isHeld &&
-      current !== null &&
-      current.every((row) => row.released) &&
-      current.some((row) => row.servedAt === null);
-    return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
-      <div class="group-head">
-        <span class="group-name" data-group-position>${name}</span>
-        ${shown === undefined ? nothing : this.#sentOf(shown)}
-        <span class="group-state" data-group-kitchen>${this.#groupProgress(group, current)}</span>
-      </div>
-      ${
-        current === null
-          ? html`<p class="group-summary" data-group-summary>${group.summary}</p>`
-          : nothing
-      }
-      ${reminder}
-      ${
-        isHeld
-          ? html`<div class="group-actions">
-              <wt-button
-                variant="secondary"
-                data-group-up=${group.id}
-                aria-label=${label("table.group_up")}
-                ?disabled=${this.groupCommandBusy || place === 0}
-                @click=${() => this.#reorderHeld(held, place, place - 1)}
-              >
-                <span aria-hidden="true">↑</span>
-              </wt-button>
-              <wt-button
-                variant="secondary"
-                data-group-down=${group.id}
-                aria-label=${label("table.group_down")}
-                ?disabled=${this.groupCommandBusy || place === held.length - 1}
-                @click=${() => this.#reorderHeld(held, place, place + 1)}
-              >
-                <span aria-hidden="true">↓</span>
-              </wt-button>
-              ${
-                fires
-                  ? html`<wt-button
-                      variant="primary"
-                      data-group-fire=${group.id}
-                      aria-label=${label("table.group_fire")}
-                      ?disabled=${this.groupCommandBusy}
-                      @click=${() => (this.fireGroupPending = group)}
-                    >
-                      ${t("table.group_fire")}
-                    </wt-button>`
-                  : nothing
-              }
-            </div>`
-          : servesWhole
-            ? html`<div class="group-actions">
-                <wt-button
-                  variant="secondary"
-                  data-serve-group=${group.id}
-                  aria-label=${label("table.serve_group")}
-                  ?disabled=${this.groupCommandBusy}
-                  @click=${() =>
-                    this.#dispatch("serve-group", { groupId: group.id } satisfies ServeGroupDetail)}
-                >
-                  ${t("table.serve_group")}
-                </wt-button>
-              </div>`
-            : nothing
-      }
-      <ul class="group-lines">
-        ${
-          current === null
-            ? this.#billLinesOf(group).map((line) => this.#groupLine(line, isHeld ? group : null))
-            : current.map((row) => this.#currentRow(row, isHeld ? group : null))
-        }
-      </ul>
-    </li>`;
-  }
-
   #sentOf(group: CurrentOrderGroup): TemplateResult {
     const time = clockTime(Date.parse(group.sentAt));
     const [withName, unnamed] =
@@ -3962,162 +4148,6 @@ export class TillTableOrderScreen extends LitElement {
     return html`<span class="group-sent" data-group-sent
       >${named(group.sentBy ?? "", at(withName), at(unnamed))}</span
     >`;
-  }
-
-  /** This bill's dish lines of `group`, for want of Current orders. */
-  #billLinesOf(group: OrderGroup): TabLine[] {
-    return group.lineIds.flatMap((id) => {
-      const line = this.#lineById.get(id);
-      return line === undefined || this.#isChild(line) ? [] : [line];
-    });
-  }
-
-  /** Only what a person recorded: a group nobody marked ready reads how long ago it was fired, and
-   * one reads served only once every row of it was marked served. */
-  #groupProgress(group: OrderGroup, rows: CurrentOrderRow[] | null): string | TemplateResult {
-    if (group.state === "held") return t("table.group_held");
-    if (rows !== null && rows.length > 0 && rows.every((row) => row.servedAt !== null))
-      return t("table.row_served");
-    if (group.away) return t("table.group_away");
-    if (group.ready) return t("table.group_ready");
-    if (group.firedAt === null) return t("table.group_fired");
-    return html`<till-fired-ago .firedAt=${group.firedAt} .now=${this.now}></till-fired-ago>`;
-  }
-
-  /** The held group waiting for release: when it is to be fired, and once that time has come,
-   * Snooze and (where the waiter fires) Fire. While it is snoozed, Clear snooze too, due or not.
-   * Nothing while it has no time. */
-  #reminderOf(
-    group: OrderGroup,
-    shown: CurrentOrderGroup | undefined,
-  ): TemplateResult | typeof nothing {
-    const reminder = this.currentOrders?.reminder;
-    // A time that cannot be read is no time.
-    if (reminder?.groupId !== group.id || reminderDueAt(reminder) === Number.POSITIVE_INFINITY)
-      return nothing;
-    const name = t("table.group_n").replace("{n}", String(group.position));
-    const snoozed = shown?.remindAt;
-    const clear =
-      snoozed === null || snoozed === undefined
-        ? nothing
-        : html`<wt-button
-            variant="secondary"
-            data-reminder-unsnooze
-            aria-label=${`${t("table.reminder_clear_snooze")} · ${name}`}
-            ?disabled=${this.groupCommandBusy}
-            @click=${() =>
-              this.#dispatch("unsnooze-group", { groupId: group.id } satisfies UnsnoozeGroupDetail)}
-          >
-            ${t("table.reminder_clear_snooze")}
-          </wt-button>`;
-    if (!this.#reminderDue) {
-      const time = clockTime(reminderDueAt(reminder));
-      return html`<div class="group-reminder" data-group-reminder="waiting">
-        <span class="group-reminder-text"
-          >${t("table.reminder_at").replace("{time}", () => time)}</span
-        >
-        ${clear === nothing ? nothing : html`<span class="group-actions">${clear}</span>`}
-      </div>`;
-    }
-    return html`<div class="group-reminder due" data-group-reminder="due">
-      <span class="group-reminder-text">${t("table.reminder_due")}</span>
-      <span class="group-actions">
-        ${clear}
-        <wt-button
-          variant="secondary"
-          data-reminder-snooze
-          aria-label=${`${t("table.reminder_snooze").replace("{n}", String(SNOOZE_MINUTES))} · ${name}`}
-          ?disabled=${this.groupCommandBusy}
-          @click=${() =>
-            this.#dispatch("snooze-group", {
-              groupId: group.id,
-              minutes: SNOOZE_MINUTES,
-            } satisfies SnoozeGroupDetail)}
-        >
-          ${t("table.reminder_snooze").replace("{n}", String(SNOOZE_MINUTES))}
-        </wt-button>
-        ${
-          this.fireControl === "waiter"
-            ? html`<wt-button
-                variant="primary"
-                data-reminder-fire
-                aria-label=${`${t("table.group_fire")} · ${name}`}
-                ?disabled=${this.groupCommandBusy}
-                @click=${() => (this.fireGroupPending = group)}
-              >
-                ${t("table.group_fire")}
-              </wt-button>`
-            : nothing
-        }
-      </span>
-    </div>`;
-  }
-
-  /** A row of Current orders. `held` is its group while that group is held, when the row offers Move
-   * and Split; otherwise it says what is known of it and, once released, offers Mark served. */
-  #currentRow(row: CurrentOrderRow, held: OrderGroup | null): TemplateResult {
-    const state = held === null ? this.#rowState(row) : nothing;
-    const served = decimal(row.servedQuantity);
-    const partly = compareDecimal(served, decimal("0")) > 0 && row.servedAt === null;
-    return html`<li class="group-line current-row" data-group-line=${row.lineId}>
-      <span class="row-what">
-        <span class="group-line-name"
-          >${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}</span
-        >
-        ${row.extras.map(
-          (extra) =>
-            html`<span class="row-extra">${extra.name} ×${this.#displayQty(extra.quantity)}</span>`,
-        )}
-        ${
-          row.note === null
-            ? nothing
-            : html`<span class="line-note">${t("line.note.label")}: ${row.note}</span>`
-        }
-        ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
-        ${
-          state === nothing && !partly
-            ? nothing
-            : html`<span class="row-facts">
-                ${state === nothing ? nothing : html`<span data-row-state>${state}</span>`}
-                ${partly ? html`<span data-row-served>${this.#servedOf(row)}</span>` : nothing}
-              </span>`
-        }
-      </span>
-      ${
-        held === null
-          ? html`${this.#serveActions(row)}${
-              row.kitchen?.movable && !this.#pending().some((line) => line.id === row.lineId)
-                ? this.#moveStationButton(row.lineNo, {
-                    workingOrderId: row.workingOrderId,
-                    lineId: row.lineId,
-                    name: row.name,
-                    stationId: row.kitchen.stationId,
-                  })
-                : nothing
-            }`
-          : !this.#billOpen(row.workingOrderId)
-            ? nothing
-            : this.#heldRowActions(
-                {
-                  lineId: row.lineId,
-                  name: row.name,
-                  quantity: row.quantity,
-                  splits:
-                    row.unitPrecision === 0 &&
-                    compareDecimal(decimal(row.quantity), decimal("1")) > 0 &&
-                    row.extras.length === 0,
-                },
-                held,
-              )
-      }
-    </li>`;
-  }
-
-  /** A bill the party's bills name as open, or the bill on screen when they do not name it. Held
-   * work moves only between open bills: the server refuses a line on a paid one. */
-  #billOpen(workingOrderId: string): boolean {
-    const bill = this.bills.find((candidate) => candidate.workingOrderId === workingOrderId);
-    return bill === undefined ? workingOrderId === this.orderId : bill.status === "open";
   }
 
   /** What was recorded of a row, and nothing more: no kitchen item means no kitchen state. */
@@ -4138,49 +4168,31 @@ export class TillTableOrderScreen extends LitElement {
       .replace("{quantity}", this.#displayQty(row.quantity));
   }
 
-  #serveActions(row: CurrentOrderRow): TemplateResult | typeof nothing {
-    const serves = row.released && row.servedAt === null;
-    const undoes = compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
-    if (!serves && !undoes) return nothing;
-    const label = (key: StringKey) => `${t(key)} · ${row.name}`;
-    return html`<span class="group-line-actions">
-      ${
-        undoes
-          ? html`<wt-button
-              variant="secondary"
-              data-unserve-row=${row.lineId}
-              aria-label=${label("table.unserve")}
-              ?disabled=${this.groupCommandBusy}
-              @click=${() => this.#requestServe(row, true)}
-            >
-              ${t("table.unserve")}
-            </wt-button>`
-          : nothing
-      }
-      ${
-        serves
-          ? html`<wt-button
-              variant="primary"
-              data-serve-row=${row.lineId}
-              aria-label=${label("table.serve")}
-              ?disabled=${this.groupCommandBusy}
-              @click=${() => this.#requestServe(row, false)}
-            >
-              ${t("table.serve")}
-            </wt-button>`
-          : nothing
-      }
-    </span>`;
-  }
-
   /** The most a press can mark served (what is left), or take back (what is served). */
   #mostToServe(row: CurrentOrderRow, undo: boolean): Decimal {
     const served = decimal(row.servedQuantity);
-    return decimal(trimQuantity(undo ? served : subtractDecimal(decimal(row.quantity), served)));
+    return decimal(
+      trimQuantity(
+        undo
+          ? served
+          : subtractDecimal(
+              subtractDecimal(decimal(row.quantity), decimal(row.cancelledQuantity ?? "0")),
+              served,
+            ),
+      ),
+    );
   }
 
   /** More than one whole unit asks how many; anything else, a weighed dish included, goes whole. */
   #requestServe(row: CurrentOrderRow, undo: boolean): void {
+    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    if (undo && !this.#sentBillOpen(row)) return;
+    this.#serveAuthority = {
+      api: this.api,
+      partyId: this.party?.id ?? null,
+      billId: this.orderId,
+      visit: this.serviceVisit,
+    };
     const most = this.#mostToServe(row, undo);
     if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
       this.#serveOpening++;
@@ -4197,6 +4209,41 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sendServe(row: CurrentOrderRow, undo: boolean, quantity: Decimal): void {
+    const authority = this.#serveAuthority;
+    this.#serveAuthority = undefined;
+    if (
+      authority === undefined ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy ||
+      this.currentOrdersUnread
+    )
+      return;
+    if (
+      authority.api !== this.api ||
+      authority.partyId !== (this.party?.id ?? null) ||
+      authority.billId !== this.orderId ||
+      authority.visit !== this.serviceVisit
+    )
+      return;
+    const current =
+      this.currentOrders === null
+        ? undefined
+        : [
+            ...this.currentOrders.ungrouped,
+            ...this.currentOrders.groups.flatMap((group) => group.rows),
+          ].find(
+            (candidate) =>
+              candidate.lineId === row.lineId && candidate.workingOrderId === row.workingOrderId,
+          );
+    if (
+      current === undefined ||
+      (undo && !this.#sentBillOpen(current)) ||
+      (!undo && !current.released) ||
+      compareDecimal(quantity, decimal("0")) <= 0 ||
+      compareDecimal(quantity, this.#mostToServe(current, undo)) > 0
+    )
+      return;
     this.#dispatch(undo ? "unserve-lines" : "serve-lines", {
       items: [{ lineId: row.lineId, quantity: trimQuantity(quantity) }],
     } satisfies ServeLinesDetail);
@@ -4251,7 +4298,6 @@ export class TillTableOrderScreen extends LitElement {
                 <span>${t("table.split_quantity")}</span>
                 <wt-button
                   variant="ghost"
-                  size="sm"
                   data-serve-dec
                   aria-label=${`${t("basket.decrease")} ${pending.row.name}`}
                   ?disabled=${count <= 1}
@@ -4262,7 +4308,6 @@ export class TillTableOrderScreen extends LitElement {
                 <span class="split-count" data-serve-count>${count}</span>
                 <wt-button
                   variant="ghost"
-                  size="sm"
                   data-serve-inc
                   aria-label=${`${t("basket.increase")} ${pending.row.name}`}
                   ?disabled=${
@@ -4289,137 +4334,64 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a
-   * dish sold by the unit, of more than one, with no extras: the server refuses to split a dish with
-   * extras. */
-  #groupLine(line: TabLine, group: OrderGroup | null): TemplateResult {
-    const name = this.#nameForLine(line);
-    return html`<li class="group-line" data-group-line=${line.id}>
-      <span class="group-line-name"
-        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
-      >
-      ${this.#paidMark(line.lineNo, line.quantity)}
-      ${
-        group === null
-          ? nothing
-          : this.#heldRowActions(
-              {
-                lineId: line.id,
-                name,
-                quantity: line.quantity,
-                splits: moreThanOneWholeUnit(line) && !this.#dishesWithExtras.has(line.lineNo),
-              },
-              group,
-            )
-      }
-    </li>`;
-  }
-
-  #heldRowActions(row: HeldRow, group: OrderGroup): TemplateResult {
-    const label = (key: StringKey) => `${t(key)} · ${row.name}`;
-    return html`<span class="group-line-actions">
-      <wt-button
-        variant="secondary"
-        data-move-line=${row.lineId}
-        aria-label=${label("table.move_line")}
-        ?disabled=${this.groupCommandBusy}
-        @click=${() =>
-          (this.movePending = {
-            lineId: row.lineId,
-            name: row.name,
-            quantity: row.quantity,
-            group,
-          })}
-      >
-        ${t("table.move_line")}
-      </wt-button>
-      ${
-        row.splits
-          ? html`<wt-button
-              variant="secondary"
-              data-split-group-line=${row.lineId}
-              aria-label=${label("table.split_group_line")}
-              ?disabled=${this.groupCommandBusy}
-              @click=${() =>
-                this.#dispatch("split-group-line", {
-                  lineId: row.lineId,
-                  groupId: group.id,
-                  quantity: row.quantity,
-                } satisfies SplitGroupLineDetail)}
-            >
-              ${t("table.split_group_line")}
-            </wt-button>`
-          : nothing
-      }
-    </span>`;
-  }
-
-  #reorderHeld(held: OrderGroup[], from: number, to: number): void {
-    const ids = held.map((group) => group.id);
-    [ids[from], ids[to]] = [ids[to]!, ids[from]!];
-    this.#dispatch("reorder-groups", { heldGroupIds: ids } satisfies ReorderGroupsDetail);
-  }
-
-  #moveTo(target: MoveGroupLineDetail["target"]): void {
-    const pending = this.movePending;
-    if (pending === null) return;
-    this.movePending = null;
-    this.#dispatch("move-group-line", {
-      lineId: pending.lineId,
-      quantity: pending.quantity,
-      target,
-    } satisfies MoveGroupLineDetail);
-  }
-
-  #moveDialog(): TemplateResult {
-    const pending = this.movePending;
-    const held = this.#heldInOrder;
-    return html`<wt-dialog
-      ${trackDialog()}
-      class="move-line-dialog"
-      data-move-dialog
-      .open=${pending !== null}
-      .heading=${t("table.move_line")}
-      @wt-close=${() => (this.movePending = null)}
-    >
-      ${
-        pending === null
-          ? nothing
-          : html`<p class="move-dish">${pending.name} ×${this.#displayQty(pending.quantity)}</p>
-              <div class="action-options">
-                ${held.map((group, index) =>
-                  group.id === pending.group.id
-                    ? nothing
-                    : html`<wt-button
-                        variant="secondary"
-                        data-move-target=${group.id}
-                        @click=${() => this.#moveTo({ groupId: group.id })}
-                      >
-                        ${heldGroupLabel(group, index)}
-                      </wt-button>`,
-                )}
-                <wt-button
-                  variant="secondary"
-                  data-move-target="new"
-                  @click=${() => this.#moveTo("new")}
-                >
-                  ${t("table.move_new_group")}
-                </wt-button>
-              </div>`
-      }
-      <div slot="footer" class="cancel-actions">
-        <wt-button variant="secondary" data-move-dismiss @click=${() => (this.movePending = null)}>
-          ${t("action.back")}
-        </wt-button>
-      </div>
-    </wt-dialog>`;
+  #requestFireGroup(group: OrderGroup): void {
+    if (!this.isConnected || this.busy || this.groupCommandBusy) return;
+    this.#fireAuthority = {
+      api: this.api,
+      partyId: this.party?.id ?? null,
+      billId: this.orderId,
+      visit: this.serviceVisit,
+    };
+    this.fireGroupPending = group;
   }
 
   #confirmFireGroup(): void {
     const group = this.fireGroupPending;
-    if (group === null) return;
+    const authority = this.#fireAuthority;
     this.fireGroupPending = null;
+    this.#fireAuthority = undefined;
+    if (
+      group === null ||
+      authority === undefined ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy
+    )
+      return;
+    if (
+      authority.api !== this.api ||
+      authority.partyId !== (this.party?.id ?? null) ||
+      authority.billId !== this.orderId ||
+      authority.visit !== this.serviceVisit
+    )
+      return;
+    if (!this.groups.some((current) => current.id === group.id && current.state === "held")) return;
     this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
+  }
+
+  #fireGroupSummary(group: OrderGroup): string {
+    const rows = this.currentOrders?.groups.find((current) => current.id === group.id)?.rows;
+    const byId = new Map(rows?.map((row) => [row.lineId, row]));
+    if (group.lineIds.length === 0 || !group.lineIds.every((id) => byId.has(id)))
+      return group.summary;
+    const counts = new Map<string, Decimal>();
+    for (const id of group.lineIds) {
+      const row = byId.get(id)!;
+      const quantity = subtractDecimal(
+        decimal(row.quantity),
+        decimal(row.cancelledQuantity ?? "0"),
+      );
+      counts.set(row.name, addDecimal(counts.get(row.name) ?? decimal("0"), quantity));
+    }
+    const quantities = [...counts].map(
+      ([name, quantity]) => [name, trimQuantity(quantity)] as const,
+    );
+    // The two reads can arrive separately; a stale row must not change what Fire confirms.
+    if (quantities.map(([name, quantity]) => `${quantity} × ${name}`).join(", ") !== group.summary)
+      return group.summary;
+    return quantities
+      .map(([name, quantity]) => `${formatDecimalInput(quantity, currentLocale())} × ${name}`)
+      .join(", ");
   }
 
   #fireGroupDialog(): TemplateResult {
@@ -4436,7 +4408,7 @@ export class TillTableOrderScreen extends LitElement {
         group === null
           ? nothing
           : html`<p data-fire-summary>
-              ${t("table.fire_group_body").replace("{summary}", () => group.summary)}
+              ${t("table.fire_group_body").replace("{summary}", () => this.#fireGroupSummary(group))}
             </p>`
       }
       <div slot="footer" class="cancel-actions">
@@ -4544,6 +4516,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #closeActions(): void {
+    this.#relocationPrompt = null;
     this.#retireActions();
     this.actionStep = "closed";
     this.actionVerb = null;
@@ -4560,6 +4533,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #chooseVerb(verb: ActionVerb): void {
+    this.#relocationPrompt = null;
     this.actionVerb = verb;
     if (verb === "split") {
       this.splitQuantities = new Map();
@@ -4569,37 +4543,66 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchActions();
   }
 
-  /** A table another party holds asks about the bills first; any other goes at once. */
+  #prepareRelocation(
+    verb: TableVerb,
+    table: TableState | null,
+    proceed: (prompt: object) => void,
+  ): void {
+    const prompt = {};
+    this.#relocationPrompt = prompt;
+    const ready = () => {
+      if (!this.isConnected || this.#relocationPrompt !== prompt || this.actionVerb !== verb)
+        return;
+      proceed(prompt);
+    };
+    const opening = new CustomEvent<TableRelocationOpenDetail>("table-relocation-open", {
+      detail: { verb, table, prompt, ready },
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    if (this.dispatchEvent(opening)) ready();
+  }
+
   #pickTable(table: TableState): void {
     const verb: TableVerb =
       this.actionVerb === "move" || this.actionVerb === "move-bill" ? this.actionVerb : "join";
-    const other = table.party !== null && table.party.id !== this.party?.id;
-    if (other) {
-      this.billChoice = { verb, table };
-      return;
-    }
-    this.#sendTableAction(verb, table, "merge");
+    this.#prepareRelocation(verb, table, (prompt) => {
+      const other = table.party !== null && table.party.id !== this.party?.id;
+      if (other) this.billChoice = { verb, table, prompt };
+      else this.#sendTableAction(verb, table, "merge", prompt);
+    });
   }
 
-  /** `table` as the picker showed it: Move this bill sends who was seated there. */
-  #sendTableAction(verb: TableVerb, table: TableState, bills: BillChoiceDetail["bills"]): void {
+  #sendTableAction(
+    verb: TableVerb,
+    table: TableState,
+    bills: BillChoiceDetail["bills"],
+    prompt?: object,
+  ): void {
     const tableId = table.id;
-    if (verb === "move") this.#dispatch("move-guests", { toTableId: tableId, bills });
+    const observation = prompt === undefined ? {} : { prompt };
+    if (verb === "move")
+      this.#dispatch("move-guests", { toTableId: tableId, bills, ...observation });
     else if (verb === "move-bill")
       this.#dispatch("move-bill", {
         to: { tableId, seated: seatedRead(table) },
         bills,
+        ...observation,
       } satisfies MoveBillDetail);
-    else this.#dispatch("join-tables", { tableId, bills });
+    else this.#dispatch("join-tables", { tableId, bills, ...observation });
     this.#closeActions();
   }
 
   #moveBillToCounter(): void {
-    this.#dispatch("move-bill", {
-      to: { counter: true },
-      bills: "merge",
-    } satisfies MoveBillDetail);
-    this.#closeActions();
+    this.#prepareRelocation("move-bill", null, (prompt) => {
+      this.#dispatch("move-bill", {
+        to: { counter: true },
+        bills: "merge",
+        prompt,
+      } satisfies MoveBillDetail);
+      this.#closeActions();
+    });
   }
 
   #onBillChoice(event: Event): void {
@@ -4607,7 +4610,7 @@ export class TillTableOrderScreen extends LitElement {
     const choice = this.billChoice;
     if (choice === null) return;
     const { bills } = (event as CustomEvent<BillChoiceDetail>).detail;
-    this.#sendTableAction(choice.verb, choice.table, bills);
+    this.#sendTableAction(choice.verb, choice.table, bills, choice.prompt);
   }
 
   #billChoiceDialog(): TemplateResult | typeof nothing {
@@ -4772,12 +4775,15 @@ export class TillTableOrderScreen extends LitElement {
 
   #splitTable(tableId: string, billId: string | null): void {
     this.#closeActions();
+    const prompt = {};
+    this.#dispatch("split-table-open", { tableId, billId, prompt });
     this.splitGuests = {
       tableId,
       billId,
       staying: this.#savedGuests(),
       leaving: "",
       refusal: null,
+      prompt,
     };
   }
 
@@ -4804,6 +4810,7 @@ export class TillTableOrderScreen extends LitElement {
           tableId: splitting.tableId,
           billId: splitting.billId,
           guests: (event as CustomEvent<SplitGuestsDetail>).detail,
+          ...(splitting.prompt === undefined ? {} : { prompt: splitting.prompt }),
         } satisfies SplitTableDetail);
       }}
       @split-guests-cancel=${(event: Event) => {

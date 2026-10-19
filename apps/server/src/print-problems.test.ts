@@ -1,3 +1,4 @@
+import { recallLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -38,7 +39,7 @@ import { createTable } from "./testing/live-table.js";
 import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
-import { listStationQueue, recallLines } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
 import { readPartyBills, seatTable } from "./parties.js";
 import {
   fireGroup,
@@ -47,15 +48,15 @@ import {
   submitGroups,
   type GroupLine,
   type GroupRelease,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { writePrintHeldWork } from "@waitron/venue-service";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
-import { joinTables } from "./table-actions.js";
-import { moveBill } from "./move-bill.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
+import { joinTables } from "./testing/table-action-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
@@ -1044,7 +1045,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       table,
       expect.any(String),
       TIME,
-      "GROUP 1",
+      expect.stringMatching(/^GROUP 1 · Mesa (4, 5|5, 4)$/),
       `1.000 x ${DISHES.fish.kitchen}`,
       "*** REPRINT ***",
       "*** HOLD ***",
@@ -1052,7 +1053,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       table,
       expect.any(String),
       TIME,
-      "GROUP 2",
+      "GROUP 1 · Mesa 4",
       `1.000 x ${DISHES.burger.kitchen}`,
     ]);
     await setJob(reprint.id, { status: "done" });

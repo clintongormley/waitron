@@ -1,3 +1,4 @@
+import { groupName } from "./group-name.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
@@ -964,7 +965,7 @@ export class TillStationQueue extends LitElement {
     section: GroupSection,
   ): TemplateResult {
     const sent = section.group;
-    const name = sent === null ? "" : t("table.group_n").replace("{n}", String(sent.position));
+    const name = sent === null ? "" : groupName(sent);
     return html`<div class="course" data-group-section=${sent?.id ?? "none"}>
       ${
         sent === null

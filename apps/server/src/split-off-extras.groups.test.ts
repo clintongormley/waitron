@@ -15,7 +15,7 @@ import {
   markGroupAway,
   moveLinesToGroup,
   placeGroups,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import { readBillSignals } from "./table-signals.js";
 import { advanceTicketItem } from "./working-order.js";
 import "./errors.js";
