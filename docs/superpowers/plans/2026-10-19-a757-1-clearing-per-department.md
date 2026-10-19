@@ -31,12 +31,25 @@ item 1.
 - A table whose zone has no `zone_service_policies` row reads **off** (spec §3.1 "expected: off").
 - The department set is resolved **once for all the leaving tables**, never a query per table.
 - A department reads off until switched on: `flag("needs_clearing").notNull().default(false)`.
-- Product text, as short as the meaning allows (owner):
+- Product text, quoted from the approved picture, not paraphrased (owner: concise product text,
+  quote approved mock-ups): A757 picture 10 (`docs/backlog/mockups/a757-table-states/10-service-steps.png`)
+  draws the Service tab's section `Table states`, the switch `Needs clearing`, and under it
+  `A table stays “Needs clearing” after the party leaves, until marked cleared.` So:
   EN section `Table states`, switch `Needs clearing`, hint
-  `When a party leaves, its table shows Needs clearing until someone taps Mark cleared.`
+  `A table stays “Needs clearing” after the party leaves, until marked cleared.`
   ES section `Estados de la mesa`, switch `Por recoger`, hint
-  `Cuando un grupo se va, su mesa aparece Por recoger hasta que alguien toca Marcar recogida.`
-  ("Por recoger" and "Marcar recogida" are the till's own words, `apps/till/src/i18n/strings.ts:2442-2443`.)
+  `Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.`
+  ("Por recoger" and "recogida" are the till's own words, `apps/till/src/i18n/strings.ts:2442-2443`;
+  “…” in English and «…» in Spanish as the till's strings quote, `apps/till/src/i18n/strings.ts:1181,2730`.)
+  **Why picture 10 and not A756's mock-up 03.** Mock-up 03
+  (`docs/backlog/mockups/a756-kitchen-settings/03-department-service-tab.png`, committed 2026-10-16
+  with the owner's A756 queue) draws a `Tables` section with the switch "A table needs clearing after
+  a party leaves", and says under it "Other optional table states arrive here once the table
+  lifecycle review settles them" — it hands the section to A757. Picture 10 was drawn for A757's
+  revision on 2026-10-17 (commit 0ae96792a), and the owner agreed that revised design with Q29–Q34
+  all A at about 15:50 the same day (`~/waitron-campaign-shared/watcher-handoff.md`, "OWNER A757
+  Q29–Q34 all A", "design agreed"); A757 §3.1 and §8 also name the section "Table states". Picture
+  10 is the later, owner-agreed picture, so its words are used as drawn.
 - Coverage bars 98/98/98/95 hold in every package touched.
 - **Changing an existing test assertion is a stop** unless this slice's spec changes what it checks.
   Every assertion this plan changes is listed in its task under "Assertions changed"; anything else
@@ -50,12 +63,23 @@ item 1.
 
 1. **Home: a column on `departments`** (`packages/venue-service/src/schema/service.ts:25-48`), not on
    `department_sale_policies`, which the A756 plan suggested ("`department_sale_policies` is the
-   natural home", `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md:627`). Why: every
-   department has a `departments` row, while a sale-policy row exists only once something upserts it
-   (`saveDepartmentEditSettings`, `packages/venue-service/src/operations.ts:749-772`); the sale policy
-   type is copied into every zone's `effective` value (`client.ts:35-42`), so a field there would
-   spread into every zone fixture; and Needs clearing is a table state, not a sale rule. See Open
-   question 1.
+   natural home", `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md:627`). Why: Needs
+   clearing is a table state, not a sale rule; and the model reads `department_sale_policies` with a
+   bare `select()` and sends each row as it is (`listSalePolicies`,
+   `packages/venue-service/src/operations.ts:661-670`), so a column there would appear in every
+   `salePolicies.departments` row of the model and in every dashboard fixture typed
+   `DepartmentSalePolicy` (`packages/venue-service/src/dashboard/client.ts:25-34`), while
+   `listDepartments` names its columns (`operations.ts:71-78`) and the `departments` column reaches
+   only the code this plan writes. (Corrected in plan review: every department does get a sale-policy
+   row — `createDepartment` inserts one, `operations.ts:205-207`, as provisioning does,
+   `provisioning.ts:70` — so the row's existence is not a reason; a zone's `effective` value is built
+   field by field, `operations.ts:682-687`, so it would not spread there either.)
+   **What A756 PR 4 does instead:** its reminder minutes go on `departments` beside `needs_clearing`
+   as one ADD COLUMN with **no CHECK** — a CHECK on `departments` makes drizzle rebuild it, and
+   foreign keys in venue-service's and staffing's schemas point at `departments.id`
+   (`git grep -n "foreignColumns: \[departments\.id\]" -- packages`; CLAUDE.md §3 rebuild trap) — range-checked at
+   the route as `requireReleaseReminderMinutes` does today; or PR 4's plan says why another table.
+   Task 6 Step 6b writes this into the A756 plan's PR 4 note.
 2. **One generation, no table rebuild.** Measured 2026-10-19 in this worktree (then reverted): with
    the column added to `departments` and `clearingWorkflow` removed from `serviceSettings`,
    `packages/venue-service/node_modules/.bin/drizzle-kit generate --name probe` wrote `0061_probe.sql`
@@ -71,6 +95,18 @@ item 1.
    boolean column. Nothing else names `clearing_workflow` in SQL: `git grep clearing_workflow -- '*.sql'`
    finds only `0002_clearing_workflow.sql` and `0006_kitchen_ticket_grouping_check.sql`.
    Task 1 generates the ADD alone; Task 3 regenerates the two statements as one migration (see Task 3).
+   **Re-run in plan review, 2026-10-19,** in a scratch copy (`cp -c -R` of this worktree, its `.git`
+   pointer removed, deleted after): the same generate wrote the same two statements; the seven root
+   guards printed `Tests 407 passed (407)` and venue-service's schema conformance `68 passed`.
+   **Why the DROP COLUMN survives the change feed:** `service_settings` is a change-feed source
+   (`VENUE_SERVICE_CHANGE_SOURCES` maps every classified table, `packages/venue-service/src/classification.ts:54-55`),
+   and the feed's update trigger names every column (`packages/db/src/change-feed.ts:116-129`).
+   Control, Node v26.11.1 `node:sqlite`: a table with such a trigger refused
+   `alter table s drop column a` ("error in trigger t after drop column: no such column: new.a") and
+   accepted it once the trigger was dropped. `scripts/migration-upgrade.test.ts` installs the feed
+   before each step (`:272-285`), so its pass shows `applyMigrations` removed the feed before
+   `clearing_workflow` was dropped. No migration SQL names `service_settings` or `departments` in a
+   trigger (`git grep -n -i trigger -- 'packages/*/drizzle/*.sql'`).
 3. **How a table maps to a department.** Every leaving table id is a `dining_tables.id` (callers:
    `parties.ts:730` via `memberTables`, `table-actions.ts:111` and `:288`,
    `floor-today-split-group.ts:116`). `dining_tables.zone_id` is `notNull`
@@ -110,8 +146,19 @@ item 1.
    departments that exist by then: `setupPartyVenue` gives its tables zone a department
    (`testing/zone-offers.ts:113-132`), `tableServiceZone` copies it (`testing/floor-today-venue.ts:53-69`),
    `createZone` reuses the first active one (`testing/service-zone.ts:5-18`), and
-   `party-move-bill.test.ts:103-108` adds "Comedor", which "every department" also covers. Two files
-   switch before any department exists and reorder two lines (Task 2). A helper keyed by table would
+   `party-move-bill.test.ts:103-108` adds "Comedor", which "every department" also covers. Three
+   cases switch before the department their table ends up in exists, and each moves its switch line
+   below the table's creation (Task 2 Step 4). **Measured in plan review, 2026-10-19,** in a scratch
+   copy of this worktree with a throwaway join in `leaveForClearing` and this helper: the fifteen
+   files with only the two reorders first planned printed `Tests 2 failed | 624 passed (626)` —
+   `booking-seat.test.ts` threw the helper's "no department yet", and `floor-catch-up.test.ts`'s
+   "with clearing on, a table shows Needs clearing first and Needs moving once cleared" read
+   `readyToMove: true` because its table's department is created inside `threeSeatedAcrossDinner()`,
+   after the switch (a logged run: the switch saw one department, the leaving table's was another).
+   With the third reorder: `Test Files 15 passed (15)`, `Tests 626 passed (626)`; and the same files
+   filtered to `-t "[Cc]lear"`, so each clearing case runs without the cases before it, `Tests 51
+   passed | 575 skipped`. `till-api.parties.test.ts`'s reorder is needed only in isolation: its
+   "POST /api/tables/:id/cleared frees it with a 204…" run alone threw "no department yet". A helper keyed by table would
    need the tables first, which most call sites create after switching, so it would move more lines in
    files lane G's branch also edits.
 9. **The configuration fixture `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`
@@ -219,6 +266,9 @@ item 1.
 **Files:**
 - Modify: `apps/server/src/parties.ts:653-669` (`leaveForClearing` and its comment only — leave the
   closing brace and everything after it untouched; lane G's branch edits from line 672)
+- Modify: `apps/server/src/table-actions.ts:73-74` (the comment only: "the tables left behind need
+  clearing where the venue's setting says so" → "…where their department has Needs clearing on";
+  lane G's hunks in this file start at its lines 58 and 117, not here)
 - Create: `apps/server/src/testing/needs-clearing.ts`
 - Create: `apps/server/src/leave-for-clearing.test.ts`
 - Modify: `apps/server/src/configuration-transfer.test.ts` (one new case)
@@ -248,9 +298,12 @@ item 1.
   - `"leaves a table whose zone has no department free, even with every department on"` → `null`.
   - `"asks venue-service once for all the leaving tables"` — `vi.spyOn(VENUE_SERVICE, "readTablesNeedingClearing")`;
     one call, with `[a, b, c]`.
-  - `"keeps a table marked after its department is switched off, until Mark cleared"` — seat, finish
-    with A on (`finishTable`), switch A off → `condition` still `needs_clearing` and `seatTable` refused
-    `table.needs_clearing`; after `markTableCleared` → `free`.
+  - `"keeps a table marked after its department is switched off, until Mark cleared"` — with A on,
+    `leaveForClearing(tx, [a], at)`; switch A off → `condition` still `needs_clearing` and `seatTable`
+    refused `table.needs_clearing`; after `markTableCleared` → `free`. Not through `finishTable`:
+    lane G's `feat/a773-1-unsent-list` adds a required `expectedEdits` to `finishTable` and routes
+    tests through `apps/server/src/testing/party-close-fixture.ts`, so a new caller here would break
+    whichever branch lands second.
   In `configuration-transfer.test.ts`, modelled on `"leaves a table's clearing state behind"`
   (`:2610-2646`) and the import case above it: `"carries a department's Needs clearing switch to the importing venue"`
   — source venue gets a department via `createDepartment`, switched on; build, import into a second
@@ -265,10 +318,13 @@ item 1.
   `table-signals.test.ts` keep `writeReleaseReminderMinutes` on the old import; in
   `floor-today-state.test.ts` drop the name from its multi-line import) and each
   `writeClearingWorkflow(` with `setNeedsClearingInEveryDepartment(`, arguments unchanged.
-  `floor-catch-up.test.ts:1111` keeps its local `clearingWorkflow` name; only its body changes. Two
-  reorders, because no department exists yet at the old call: `booking-seat.test.ts:214` moves after
-  the `createTable(...)` in the same transaction; in `till-api.parties.test.ts:712-722`
-  (`finishedWithClearing`) the switch moves after `await seat()`. Reword the claims that name the
+  `floor-catch-up.test.ts:1111` keeps its local `clearingWorkflow` name; only its body changes. Three
+  reorders, because the table's department does not exist yet at the old call (measured, Decision 8):
+  `booking-seat.test.ts:214` moves after the `createTable(...)` in the same transaction; in
+  `till-api.parties.test.ts:712-722` (`finishedWithClearing`) the switch moves inside the `try`,
+  after `await seat()`; in `floor-catch-up.test.ts:1153-1156` ("with clearing on, a table shows
+  Needs clearing first and Needs moving once cleared") `await clearingWorkflow(true)` moves inside
+  the `try`, after `const z = await threeSeatedAcrossDinner();`. Reword the claims that name the
   venue's switch: test names `parties.test.ts:558` → `"frees the tables at once when their department has Needs clearing off (P8)"`,
   `"frees the tables at once in a venue with no service settings row"` → `"frees the tables at once in a department that never switched Needs clearing on"`,
   `party-table-actions.test.ts:302` → `"leaves the tables behind free when their department has Needs clearing off"`,
@@ -282,8 +338,8 @@ item 1.
 - [ ] **Step 6:** typecheck `@waitron/server`, prettier, commit —
   `"Each table a party leaves follows its own department's Needs clearing switch (A757 slice 1)"`.
 
-**Assertions changed:** none. Setup changed in the fifteen files above as listed; four test names and
-three comments reworded.
+**Assertions changed:** none. Setup changed in the fifteen files above as listed (three reorders);
+four test names and three test comments reworded, and one code comment in `table-actions.ts`.
 
 ### Task 3: the venue switch goes from the server and the data
 
@@ -365,8 +421,14 @@ cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list.
 - Modify: `packages/venue-service/src/dashboard/department-settings.ts` (`fieldTab` `needsClearing: "service"`;
   `equal`; `source` in `willUpdate` reads `this.model!.needsClearingDepartmentIds.includes(row.id)`;
   the refusal field list; a `<section aria-label=…><h3>…</h3>` after "Orders and payment" in the
-  Service panel, holding `<wt-switch name="needsClearing" label=… .description=${hint} .checked=… ?disabled=…>`,
-  a visible `<p class="hint">` and the field's error line as `collectionNumber` draws it)
+  Service panel, holding `<wt-switch name="needsClearing" label=… .description=${hint} .checked=… ?disabled=…
+  aria-invalid=${errors.needsClearing ? "true" : nothing}>`, a visible `<p class="hint">` and, when
+  refused, `<p class="error" data-field-error="needsClearing">` under it as the receipt editor draws a
+  switch's error (`apps/dashboard/src/screens/department-receipt-editor.ts:656-667`). The
+  `aria-invalid` is what lets `showFirstInvalid` focus it: `wt-switch` has no `error` property and
+  marks nothing itself (`packages/ui/src/components/wt-switch.ts:113-122`), and `focusFirstInvalid`
+  focuses only an element carrying `aria-invalid="true"` (`packages/ui-core/src/interactive.ts:52-66`)
+  — read, not run; the refusal case in Step 1 is the check.)
 - Modify: `packages/venue-service/src/dashboard/strings.ts` — keys `venue.table_states`,
   `venue.needs_clearing`, `venue.needs_clearing_hint`, EN and ES as in Global constraints
 - Modify (one line each, `clearingWorkflow: false` → `needsClearingDepartmentIds: []`): every model
@@ -385,7 +447,8 @@ cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list.
     `primary`; the write's body `toMatchObject({ needsClearing: true })`.
   - `"a refusal naming the switch, sent while Details shows, brings back Service and marks it"` —
     PUT answers 400 `management.request_invalid` `{ field: "needsClearing" }` → tab `service`,
-    marked, error text under the switch, the switch focused.
+    marked, error text under the switch, the switch focused (the switch's `shadowRoot.activeElement`
+    is its `input[role=switch]`), and Save not disabled by the refusal alone.
   - `"follows a change another dashboard makes while the form is clean, and keeps a draft while it is not"` —
     model update listing d1 → checked; after a local toggle, a model update leaves the draft.
   - `"reads in Spanish"` — `Estados de la mesa`, `Por recoger`, the Spanish hint.
@@ -413,7 +476,8 @@ cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list.
 
 **Files:** `docs/superpowers/specs/2026-10-17-a757-table-states-design.md`, `docs/backlog.md`,
 `docs/backlog/till.md`, `docs/developers/design-system.md:5013-5015`,
-`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md:162,170`
+`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md:162,170`,
+`docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` (PR 4's note, Step 6b)
 
 - [ ] **Step 1: The spec.** Keep the status line; add under it a dated line:
   "**2026-10-19:** Q29–Q34 were all answered A by the owner on 2026-10-17, and the build depends only
@@ -451,6 +515,15 @@ cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list.
 - [ ] **Step 6: The A664 audit** is a dated reading of the `0055` snapshots and is not rewritten. Add
   dated pointers in the two cells: `departments` R gains "`needs_clearing` (added 2026-10-19, A757
   slice 1)"; `service_settings` R's `clearing_workflow` gains "(dropped 2026-10-19, A757 slice 1)".
+- [ ] **Step 6b: The A756 plan's PR 4 note.** In `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`
+  → "Parts that wait" → PR 4, which says the reminder minutes go "on the same venue-service table
+  A757 slice 1 gives the clearing switch (coordinate; `department_sale_policies` is the natural
+  home)", add one dated line after that paragraph: "**2026-10-19 (A757 slice 1):** the clearing
+  switch went on `departments` (`needs_clearing`), not `department_sale_policies` — see
+  `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`, Decision 1. Put
+  `release_reminder_minutes` beside it as an ADD COLUMN with no CHECK (a CHECK makes drizzle rebuild
+  `departments`, which other tables' foreign keys point at), range-checked at the route, or say why
+  another table."
 - [ ] **Step 7: Check for missed claims.**
   `git grep -n -i -E "clearing (setting|workflow|switch)|whole venue|venue-wide" -- docs/backlog.md docs/backlog docs/developers apps/server/src/guide`
   — every remaining hit about Needs clearing is either rewritten here or is history inside a dated
@@ -484,11 +557,11 @@ cases listed in Step 1; `dashboard-app.test.ts`'s Tables panel list.
 
 1. **Where the switch lives.** The A756 plan named `department_sale_policies`
    (`2026-10-18-a756-kitchen-tab-split.md:627`) and expects A756 PR 4's reminder minutes on "the same
-   table A757 slice 1 gives the clearing switch". **Default: `departments`** (Decision 1); A756 PR 4
-   then puts its reminder there too, or says why not.
-2. **The switch's words.** A756's mock-up 03 draws a "Tables" section with the switch "A table needs
-   clearing after a party leaves" (`docs/backlog/mockups/a756-kitchen-settings/03-department-service-tab.png`);
-   A757 §3.1 names the section "Table states". **Default: "Table states" and "Needs clearing"**, the
-   state's own name on the till, with the hint carrying the sentence.
+   table A757 slice 1 gives the clearing switch". **Default: `departments`** (Decision 1); Task 6
+   Step 6b tells A756 PR 4 to put its reminder there too, with no CHECK, or say why not. A storage
+   choice inside the build, so not put to the owner.
+2. **The switch's words — settled in plan review, not open.** The owner-agreed A757 picture 10 is
+   quoted as drawn: section "Table states", switch "Needs clearing", hint "A table stays “Needs
+   clearing” after the party leaves, until marked cleared." Reasoning under Global constraints.
 3. **Shown for every department.** A counter-only department still shows the section. **Default:
    yes** — a zone can start orders at tables even when its department does not (`zone_sale_policies.order_start`).
