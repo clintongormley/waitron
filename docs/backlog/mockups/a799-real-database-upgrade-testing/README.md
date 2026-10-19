@@ -1,3 +1,41 @@
+## 2026-10-19 precedence addendum: B answered; store choice C proposed
+
+The owner's A799 answer at approximately 16:02 on 2026-10-19 selects **OLDEST + PREVIOUS**:
+before publishing imagined R5, required upgrade checks start from oldest supported R1 and previous
+retained R4. **Keep every frozen release and its independently frozen expectations**, including
+R2/R3; R1/R4 results give no passing evidence for R2/R3. B selects required checks only, without
+retiring support or selecting custody, storage, access or retention policy. A already approves
+an invented venue written by a frozen older image through normal product paths, without private
+venue data. Only those precise A/B choices are approved; complete design/plan/build remain open.
+This addendum overrides conflicting wording below; all earlier bytes remain historical.
+
+**Next question C:** should frozen invented-venue bundles and their independently frozen
+expectations live in a dedicated release-artifact store with a checksum index in Git (recommended),
+or directly in Git? The separate store avoids adding binary bundles to Git history; Git offers
+sources and inputs in one checkout but grows history. R1/R4 must be retrievable for the required
+R5 runs, while R2/R3 stay kept. Under either option, check disposable inputs against committed
+hashes and compare results with original expectations; never recreate history from the candidate.
+The proposed contract forbids replacing published inputs in place, retains history, withholds
+upload/delete credentials from untrusted candidate code, and blocks required runs on retrieval,
+missing-input or corruption failures instead of skipping or substituting current seeds.
+
+No store or provider is selected. Ordinary CI availability/access/authentication/permissions,
+support/retirement, issued-F1 coverage and capture IDs/time remain later decisions. Fixed test
+credentials still need custody constraints. C approves no secrets, account changes or paid service.
+Read the [current design addendum](../../../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md#2026-10-19-precedence-addendum-oldest-plus-previous-approved-store-choice-c-proposed).
+Read the [eight static EN/ES light/dark boards at 390/1280 px, PNG with SVG
+sources](revision-b-and-artifact-store/README.md). These review drawings are not runtime evidence. Earlier boards remain historical.
+
+The imagined releases share the supported post-A760 history; A760 retains separate execution/reset
+authority. Optional-module-off proposals and endpoint deduplication remain. Same-image runs without
+pending migrations are restart-only; actual pending-migration coverage still needs a distinct later
+candidate. Raw fiscal bytes and node/SIF/series identity, no new fiscal writer, and unchanged golden
+huella/`inmutabilidad` remain boundaries. An unpaid recipient-bearing order does not cover issued
+F1; that completion dependency remains. No fixture existence or successful upgrade is claimed;
+original source reads remain historical and **UNVERIFIED at runtime**.
+
+---
+
 ## 2026-10-19 precedence addendum: invented source approved; B remains open
 
 The owner's A799 answer at approximately 05:15 on 2026-10-19 approves **only an invented venue

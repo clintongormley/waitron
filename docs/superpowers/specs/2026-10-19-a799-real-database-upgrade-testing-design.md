@@ -1,3 +1,70 @@
+## 2026-10-19 precedence addendum: oldest plus previous approved; store choice C proposed
+
+**Only A and B's precise scope is approved.** In the A799 owner answer recorded at approximately
+16:02 on 2026-10-19 in Lane F's `questions.md`, the owner chose **OLDEST + PREVIOUS**: before
+publishing, required upgrade checks start from the oldest supported release and the previous
+retained release. **Every frozen release and its independently frozen expectations are kept.**
+A already selects an invented venue created and written by a frozen older image through normal
+product paths, without private venue data. The complete design, plan and build remain unapproved.
+This addendum takes precedence over conflicting approval, matrix and storage wording below;
+all pre-existing text, including the earlier addendum, remains verbatim as a historical suffix.
+
+Imagine qualified frozen releases R1, R2, R3 and R4, with candidate R5, all in the same migration
+history after A760's separately authorised squash/reset. Required checks are **R1 to R5 and
+R4 to R5**. R2/R3 and their original expectations remain kept; passing R1/R4 supplies no passing
+evidence for R2/R3. B selects required checks only. It neither retires support nor selects custody,
+storage, access or retention policy. Exact support/retirement rules remain open. Deduplicate
+identical endpoints. Same-image/no-pending-migration runs are restart-only; a later candidate
+without pending migrations supplies restart/preservation evidence only. The actual upgrade
+requirement still needs a distinct later candidate whose normal boot applies pending migrations.
+The proposed optional-module-off cases remain unchanged for each selected source.
+
+### Next owner question C: where should the frozen inputs live?
+
+**Should frozen invented-venue bundles and their independently frozen expectations live in a
+dedicated release-artifact store with a checksum index in Git (recommended), or directly in Git?**
+
+Recommend the separate store so binary bundles need not enter Git history. The committed index
+would identify each original bundle and expectation set by checksum, a fingerprint of its bytes.
+Keeping everything directly in Git gives you sources and inputs in one checkout, but adds those
+binary inputs to Git history. Neither option is selected, and no provider is proposed here.
+
+In the R1/R2/R3/R4 to R5 example, R1 and R4 must be retrievable for the required runs. R2 and R3
+stay kept with their own original expectations even though they are not selected for those runs.
+Under either storage option, check each disposable candidate input copy against committed hashes,
+then compare the candidate's result with that source release's independently frozen expectations.
+Never rebuild old history from the candidate, replace expectations with its output or supply
+current seeds when a historical input is unavailable.
+
+**Proposed storage contract, still unapproved:** published bundles and expectation sets cannot be
+replaced in place; retain their history. Corrections need a new version and independent review,
+keeping the original. No upload/delete credentials go to untrusted candidate code. Retrieval
+failure, a missing required input or corruption blocks the required run; it never skips to success.
+These are requirements to implement and verify, not claims about any platform's capabilities,
+timing or security. Fixed test credentials are not production data, but still need agreed custody
+constraints. Ordinary CI availability, access, authentication and permissions remain later
+decisions. C asks only where the inputs live; it approves no secrets, account changes or paid service.
+
+### Boundaries and evidence remain unchanged
+
+A760 retains its separate execution/reset authority. Supported baselines begin only after its
+separately authorised squash/reset within the resulting history; this addendum authorises no
+capture, reset, migration or compatibility work. Preserve raw fiscal bytes and node/SIF/series
+identity, original product-path transcripts and independently frozen facts. No new fiscal writer
+is approved; golden huella and `inmutabilidad` remain unchanged. Preservation and a separate new
+sale remain distinct checks. The issued-F1 completion dependency remains open: an unpaid order
+with recipient details does not cover an issued F1. Capture IDs/time and all remaining design,
+plan and build decisions remain open.
+
+R1 through R5 are imagined labels, not existing fixtures or observed upgrade results. Original
+source observations remain historical reads at `87f19d4bc98d2fb7925e886228430cabfc490a9b`,
+**UNVERIFIED at runtime**. No capture, boot, migration, preservation or new-sale run was performed
+for this revision. Read the [eight static EN/ES light/dark review boards at
+390/1280 px, as PNGs with SVG sources](../../backlog/mockups/a799-real-database-upgrade-testing/revision-b-and-artifact-store/README.md).
+These drawings accompany question C; they are not runtime evidence.
+
+---
+
 ## 2026-10-19 precedence addendum: source answered; release checks proposed
 
 **Only the fixture-source decision is approved.** The owner answered the first A799 question on
