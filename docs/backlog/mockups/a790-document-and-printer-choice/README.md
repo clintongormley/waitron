@@ -1,3 +1,82 @@
+# A790: I approved; J proposed, 2026-10-19, after the 16:10 answer
+
+**A–I retain only their precise answered scope. J alone is proposed next; full design,
+plan and build remain unapproved.** This brief and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting text/boards. Every old README byte remains an exact
+historical suffix, including former questions and inspection statements.
+
+I authority: the owner's **“KEEP AFTER REOPENING”** answer at the end of lane F's
+`questions.md`, 2026-10-19 about 16:10. The dashboard browser keeps accepted printer choices
+after all its windows close and it is reopened; **clearing site data forgets them**.
+This settles ordinary behavior only, choosing no technical storage or extra expiry/reset
+policy. It claims no existing persistence support, reliable close detection or guarantee
+for private/unusual lifecycles or errors.
+
+Show I in the **same normal browser with site data retained**: Ana's Harbour `F/1042`
+Receipt request on **Patio receipt** is accepted before all browser windows close. Luis
+reopens that browser and signs in; Patio remains preselected while eligible to him.
+Bar and Patio are both active and eligible here. Clearing site data removes the remembered
+choice. H shares memory across logins; E keeps Harbour's Invoice on **Office · A4** and
+Hillside separate. Reopening, login, reads, selection and folding never print or update
+memory. F requires server acceptance of the print request, not paper output.
+
+**J, proposal only: On a newly opened device-free dashboard print form with no usable
+remembered printer and SEVERAL eligible printers, should you choose a printer yourself
+(recommended), or should the form preselect the first printer by name?** Recommend explicit
+choice so name ordering does not decide the destination. Both retain named final confirmation;
+neither prints implicitly. J is unapproved and concerns only newly opened fallback,
+not mid-form selection replacement or submitted-request rerouting.
+
+Show Harbour's `F/1042` Receipt: remembered **Bar receipt** is disabled. **Office · A4**
+and **Patio receipt** are both active and eligible to Luis for Receipt; Office comes first
+by name. Two choices prevent G's sole-printer rule from masking J's difference.
+
+| J alternative                | Initial state and deliberate choice                                                                                                                    | Named final action when server-designated as a copy                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Explicit choice, recommended | Explain the previous printer is unavailable; show **Choose a printer** and a quiet, disabled Print action until selection. Luis chooses Patio receipt. | **Print a copy on Patio receipt**                                                                 |
+| Preselect first by name      | Explain the previous printer is unavailable; preselect Office · A4. Luis can explicitly choose Patio instead.                                          | **Print a copy on Office · A4** initially, or **Print a copy on Patio receipt** after that choice |
+
+Office is valid for Receipt under B; A4 paper changes no document identity. Portable
+printers remain eligible subject to unresolved receipt holding. First use with several
+printers and no memory follows the chosen J rule without a fabricated prior-printer warning.
+Opening, preselection and selection update no memory; F alone sets the trigger.
+
+A–H remain unchanged: same recorded invoice/customer details; inline foldable Invoice row;
+direct Receipt for simplified `S/318` (€14.50, Spanish, one guest), retaining facts/language;
+every active sale-venue printer for both dashboard documents, A4/portable included, bypassing
+profile lists and excluding disabled/deleted/other-venue equipment. Retain current-person
+permissions, Orders visibility, current offers, sale venue and accompanying-device restrictions;
+memory grants no access and reveals no inaccessible equipment. No profile step, borrowed till
+identity or dashboard Equipment update. G preselects only a sole eligible printer on a newly
+opened form with no usable memory, explaining an unavailable earlier choice without a first-use
+warning. Invalid open-form selections require explicit reselection/confirmation. F leaves
+memory alone on cancel before submission or refusal; later paper failure does not undo
+acceptance. Unknown outcomes need reconciliation of the **same request identity**.
+
+Device role lists and the phone's **one Equipment receipt setting** remain unchanged, with
+no separate receipt memory/storage. [A796 Revision 4](../../../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)
+continues to own phone scope, save/concurrency handling and overridable defaults. Do not
+re-ask A–I/A796. Q1–Q6 otherwise remain, subject to explicit A–I overrides; Q4 adds no
+exclusive invoice-role holder check.
+
+J, zero eligible behavior, technical storage/expiry/manual reset/errors/private or unusual
+lifecycles, concurrent/late intents and account transitions, device Invoice memory, portable
+receipt holding, wider steps, A790 integration and full design/plan/build stay open.
+Fix sale/document/printer/language/context under request identity; recheck authorization
+and sale location in the reservation transaction. Reconcile uncertain/late outcomes against
+that same identity before fresh work; close/reopen or login resolves no unanswered request.
+Separate successful write from failed refresh. Keep server-derived original/copy, shared F1
+delivery guard and closed public F1. No implicit print, rerouting or new fiscal/payment/drawer effects.
+
+[Eight static I/J boards](revision-i-and-several-printers/README.md)
+cover EN/ES, light/dark, at 390/1280 px. Each final PNG was rendered in headless Chromium
+and individually inspected; native SVG text boxes were checked within each drawing. Earlier conflicting boards remain history; the source map stays historical
+and runtime-unverified. This docs-only update supplies no runtime, test, accessibility,
+legal or physical-output evidence.
+
+---
+
 # A790: H approved; I proposed, 2026-10-19, after the 14:20 answer
 
 **A–H retain only their precise answered scope. I alone is proposed next; full design,

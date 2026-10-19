@@ -1,3 +1,95 @@
+# A790: I approved; J proposed, 2026-10-19, after the 16:10 answer
+
+**A–I are approved only in their precise answered scope. J alone is proposed next;
+full design, plan and build remain unapproved.** This addendum takes precedence over
+conflicting text and boards below. Every old byte follows as an exact historical suffix,
+including former questions and inspection statements.
+
+I authority: the owner's **“KEEP AFTER REOPENING”** answer at the end of
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 about 16:10.
+The dashboard browser keeps accepted printer choices after all its windows close and it
+is reopened. **Clearing site data forgets them.** I settles ordinary close/reopen behavior,
+choosing no technical storage or additional expiry/reset policy. It claims no existing
+persistence support, reliable close detection or guarantee for private/unusual lifecycles
+or errors; those details remain open.
+
+Worked I example, **same normal browser with site data retained**: Ana explicitly prints
+Harbour's `F/1042` Receipt on **Patio receipt**, accepted before all browser windows close.
+Reopen that browser and let Luis sign in: Patio remains preselected while eligible to him.
+Bar receipt and Patio receipt both remain active and eligible in this example. Clearing
+site data removes the remembered choice. H shares memory across logins in this browser;
+E keeps Harbour's Invoice choice, **Office · A4**, and Hillside's choices separate.
+Reopening, login, reads, selection and folding never print or update memory. F alone
+sets the update trigger: an accepted print request.
+
+## J: the sole next owner question, proposal only
+
+**On a newly opened device-free dashboard print form with no usable remembered printer
+and SEVERAL eligible printers, should you choose a printer yourself (recommended), or
+should the form preselect the first printer by name?**
+
+Recommend explicit choice so printer name ordering does not decide the destination.
+Both alternatives retain named final confirmation and never print implicitly. **J is
+unapproved** and concerns only newly opened fallback, not a mid-form selection change
+or rerouting of a submitted request.
+
+Worked J case: Harbour's `F/1042` Receipt remembers **Bar receipt**, now disabled.
+**Office · A4** and **Patio receipt** are both active and eligible to Luis for Receipt;
+Office comes first by name. Two eligible printers keep G from masking this choice.
+
+| J alternative                | Newly opened Receipt form                                                                                                                          | Final action when server-designated as a copy                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Explicit choice, recommended | Explain the previous printer is unavailable. Show **Choose a printer**, with Print quiet and disabled until selection. Luis selects Patio receipt. | **Print a copy on Patio receipt**                                                                |
+| Preselect first by name      | Explain the previous printer is unavailable. Preselect Office · A4. Luis can explicitly choose Patio instead.                                      | **Print a copy on Office · A4** initially; **Print a copy on Patio receipt** if he selects Patio |
+
+Both printers are valid under B: A4 paper does not invalidate Office for Receipt or change
+the recorded invoice. Portable printers also stay eligible under B, subject to unresolved
+receipt-holder design. First use with several eligible printers and no memory follows
+whichever J rule is chosen, without fabricating a previous-printer warning. Selection
+updates no memory; only server acceptance does so.
+
+A–H remain unchanged. A retains the same recorded full invoice and customer details through
+Receipt and Invoice. B offers every active sale-venue printer for both dashboard documents,
+including A4 and portable printers, bypassing profile lists; exclude disabled, deleted
+and other-venue printers. Retain current-person authorization, Orders visibility, current
+offers and accompanying-device restrictions. Memory grants no access and reveals no
+inaccessible equipment. No profile step, borrowed till identity or dashboard Equipment update.
+C keeps Invoice's printer row inline and foldable with its named final button, matching
+Receipt/payment. D opens Receipt directly for simplified `S/318` (€14.50, Spanish, one guest),
+retaining recorded facts and offered language. E separates memory by sale venue/document;
+H shares it across logins in this browser. F changes memory only on server acceptance:
+cancel before submission or refusal leaves it alone; later paper failure does not undo
+acceptance, which establishes no physical output. Unknown outcomes need reconciliation
+against the **same request identity**, never a presumed result or fresh print.
+G preselects the sole eligible printer only on a newly opened form with no usable memory,
+explaining an unavailable earlier choice without inventing a first-use warning. G settles
+neither several/zero fallback nor open-form selection replacement. An invalid selection
+still requires explicit reselection and confirmation.
+
+Device role lists remain unchanged. The phone retains its **one Equipment receipt setting**,
+with no separate receipt memory or new receipt-preference storage. [A796 Revision 4](2026-10-19-a796-handheld-payments-design.md)
+continues to own phone scope, save/concurrency handling and overridable defaults unchanged.
+Do not re-ask A–I or A796. Q1–Q6 otherwise remain settled, subject to explicit A–I overrides;
+Q4 adds no exclusive invoice-role holder check.
+
+Still open: J; zero eligible behavior; technical storage, expiry, manual reset, errors and
+private/unusual lifecycles; concurrent/late accepted intents and account transitions;
+device Invoice memory; portable receipt holding; wider document steps; A790 integration;
+and full design/plan/build agreement. I settles ordinary reopening and clearing site data
+only. Fix sale/document/printer/language/context under request identity; recheck authorization
+and sale location in the reservation transaction. Preserve uncertain/late outcomes and
+same-identity reconciliation before fresh work, successful-write versus failed-refresh,
+server-derived original/copy, shared full-invoice (F1) delivery guard and closed public F1.
+No implicit print, rerouting or new fiscal, payment or drawer effects are authorized.
+
+[Eight static I/J boards](../../backlog/mockups/a790-document-and-printer-choice/revision-i-and-several-printers/README.md)
+cover EN/ES, light/dark, at 390/1280 px. Each final PNG was rendered in headless Chromium
+and individually inspected; native SVG text boxes were checked within each drawing. Earlier conflicting boards remain history; the source map
+remains historical and runtime-unverified. This docs-only update supplies no runtime,
+test, accessibility, legal or physical-output evidence.
+
+---
+
 # A790: H approved; I proposed, 2026-10-19, after the 14:20 answer
 
 **A–H are approved only in their precise answered scope. I alone is proposed next;
