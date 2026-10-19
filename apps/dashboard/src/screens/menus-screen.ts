@@ -225,6 +225,15 @@ function ownedKeys(nodes: readonly MenuStructureNode[], parent = ""): string[] {
   });
 }
 
+/** The ids of the sections the menu owns among `nodes` and below them. */
+function ownedSectionIds(nodes: readonly MenuStructureNode[]): string[] {
+  return nodes.flatMap((node) =>
+    node.ref.kind === "section" && !node.includedMenuId
+      ? [node.ref.sectionId, ...ownedSectionIds(node.children ?? [])]
+      : [],
+  );
+}
+
 /** Every section the menu owns, once each, by the path to its first row, in tree order. */
 function ownedSections(
   nodes: readonly MenuStructureNode[],
@@ -2764,21 +2773,24 @@ export class MenusScreen extends LitElement {
   }
 
   /** Each section the selected rows name, once however many places show it, with how many of the
-   * menu's own sections sit below it. */
+   * menu's own sections sit below it. A section another listed one holds is left out: deleting
+   * the outer one deletes it too. */
   #selectedSections(keys: readonly string[]) {
     const seen = new Set<string>();
-    return keys.flatMap((key) => {
+    const listed = keys.flatMap((key) => {
       const node = nodeAt(this.structure, key.split("/"));
       if (node?.ref.kind !== "section" || seen.has(node.ref.sectionId)) return [];
       seen.add(node.ref.sectionId);
-      return [
-        {
-          id: node.ref.sectionId,
-          name: memberName(node.ref, NO_NAMES, this.#sectionNames),
-          below: this.#ownedDescendants(node.children ?? []),
-        },
-      ];
+      return [{ id: node.ref.sectionId, node }];
     });
+    const held = new Set(listed.flatMap(({ node }) => ownedSectionIds(node.children ?? [])));
+    return listed
+      .filter(({ id }) => !held.has(id))
+      .map(({ id, node }) => ({
+        id,
+        name: memberName(node.ref, NO_NAMES, this.#sectionNames),
+        below: this.#ownedDescendants(node.children ?? []),
+      }));
   }
 
   async #deleteSelected(): Promise<void> {
@@ -3486,6 +3498,8 @@ export class MenusScreen extends LitElement {
 
   #renderDeleteSelected() {
     const sections = this.#selectedSections(this.deletingSelected ?? []);
+    const note =
+      sections.length === 1 ? "menus.delete_sections_note_one" : "menus.delete_sections_note";
     return this.#formModal({
       test: "delete-selected",
       open: this.deletingSelected !== null,
@@ -3507,7 +3521,7 @@ export class MenusScreen extends LitElement {
               </li>`,
           )}
         </ul>
-        <p data-test="delete-selected-note">${t("menus.delete_sections_note")}</p>`,
+        <p data-test="delete-selected-note">${t(note)}</p>`,
       save: "delete-selected-save",
       saveLabel: t("action.delete"),
       saveVariant: "danger",

@@ -484,8 +484,11 @@ function emptyHome(homeSectionId = "home-dinner"): MenuHome {
 }
 
 /** A menu's top level the fake keeps, so a move is visible in what the next read answers. */
-function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
-  let root = lunchNodes();
+function api(
+  overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
+  nodes: MenuStructureNode[] = lunchNodes(),
+) {
+  let root = nodes;
   const client = {
     listCatalogues: vi.fn().mockResolvedValue(menus),
     listLibraryProducts: vi.fn().mockResolvedValue(products),
@@ -4763,6 +4766,19 @@ describe("the Structure tree", () => {
         mountLunch(
           api({ getMenuStructure: vi.fn(async () => lunchWith([...lunchNodes(), wines])) }),
         );
+      /** Desserts sits at the top level only, inside no other section. */
+      const desserts: MenuStructureNode = {
+        memberId: "m-desserts",
+        ref: { kind: "section", sectionId: "s-desserts" },
+        internalName: "Desserts",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children: [],
+      };
+      const withDesserts = (overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) =>
+        api(overrides, [...lunchNodes(), desserts]);
 
       async function select(el: MenusScreen, selected: string[]): Promise<void> {
         emit(structure(el), "wt-selection-change", { selected });
@@ -4882,11 +4898,11 @@ describe("the Structure tree", () => {
         );
 
       it("deletes two of the menu's own sections in one request after a confirm, and both are gone", async () => {
-        const client = api();
+        const client = withDesserts();
         const el = await mountLunch(client);
         await pressSelect(el);
-        await tick(el, "m-drinks");
         await tick(el, "m-fav");
+        await tick(el, "m-desserts");
         await openDelete(el);
         const dialog = modal(el, "delete-selected");
         expect(dialog.getAttribute("size")).toBe("compact");
@@ -4899,7 +4915,7 @@ describe("the Structure tree", () => {
         expect(text(confirm)).toBe("Delete");
         confirm.click();
         await vi.waitFor(() =>
-          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-drinks", "s-fav"]),
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-fav", "s-desserts"]),
         );
         expect(writeCalls(client)).toEqual(["deleteSections"]);
         await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
@@ -4909,6 +4925,7 @@ describe("the Structure tree", () => {
         expect(topLevelKeys(el)).toEqual(["m-burger"]);
         expect(rowOf(el, "m-drinks")).toBeNull();
         expect(rowOf(el, "m-fav")).toBeNull();
+        expect(rowOf(el, "m-desserts")).toBeNull();
         expect(structure(el).selected).toEqual([]);
         expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
         expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
@@ -4932,14 +4949,66 @@ describe("the Structure tree", () => {
         );
       });
 
-      it("names how many of the menu's own sections sit below each listed section", async () => {
-        const el = await mountLunch();
-        await toggleRow(el, "m-drinks");
+      it("leaves out a ticked section that another ticked section holds, which goes with it", async () => {
+        const client = api();
+        const el = await mountLunch(client);
         await pressSelect(el);
-        await tick(el, "m-drinks/m-beer");
+        await tick(el, "m-drinks");
         await tick(el, "m-fav");
         await openDelete(el);
-        expect(deleteLines(el)).toEqual(["Beer", "Favourites and the 2 sections below it"]);
+        const dialog = modal(el, "delete-selected");
+        expect(dialog.getAttribute("heading")).toBe("Delete 1 section?");
+        expect(deleteLines(el)).toEqual(["Favourites and the 2 sections below it"]);
+        expect(text(dialog.querySelector('[data-test="delete-selected-note"]'))).toBe(
+          "Its products stay.",
+        );
+        confirmDelete(el).click();
+        await vi.waitFor(() =>
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-fav"]),
+        );
+      });
+
+      it("leaves out a section ticked inside a ticked section", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await toggleRow(el, "m-drinks");
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-drinks/m-beer");
+        await openDelete(el);
+        expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 1 section?");
+        expect(deleteLines(el)).toEqual(["Drinks and the section below it"]);
+        confirmDelete(el).click();
+        await vi.waitFor(() =>
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-drinks"]),
+        );
+      });
+
+      it("closes the confirm when a live update takes its ticked section away, though a product ticked inside it is still shown", async () => {
+        const live = new LiveData();
+        const client = api({ liveData: live });
+        const el = await mountLunch(client);
+        await toggleRow(el, "m-drinks");
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-drinks/m-lager");
+        await openDelete(el);
+        expect(deleteLines(el)).toEqual(["Drinks and the section below it"]);
+        client.getMenuStructure.mockResolvedValue(
+          lunchWith(lunchNodes().filter((node) => node.memberId !== "m-drinks")),
+        );
+        live.invalidate([{ type: "section_members" }]);
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
+        expect(client.deleteSections).not.toHaveBeenCalled();
+      });
+
+      it("names how many of the menu's own sections sit below each listed section", async () => {
+        const el = await mountLunch(withDesserts());
+        await pressSelect(el);
+        await tick(el, "m-fav");
+        await tick(el, "m-desserts");
+        await openDelete(el);
+        expect(deleteLines(el)).toEqual(["Favourites and the 2 sections below it", "Desserts"]);
         inModal(el, "delete-selected", '[data-test="delete-selected-cancel"]').click();
         await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
         await afterDialogCloses(el);
@@ -4972,25 +5041,88 @@ describe("the Structure tree", () => {
         expect(structure(el).selected).toEqual(["m-drinks"]);
       });
 
-      it("trims the open confirm when a live update takes a section away, and closes it once none is left", async () => {
-        const live = new LiveData();
-        const client = api({ liveData: live });
+      it("opens again after a refusal and Cancel without the refusal's message", async () => {
+        const client = api({
+          deleteSections: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
+        });
         const el = await mountLunch(client);
         await pressSelect(el);
         await tick(el, "m-drinks");
+        await openDelete(el);
+        confirmDelete(el).click();
+        await vi.waitFor(() =>
+          expect(bottom(el, "delete-selected")).resolves.toBe(
+            codeMessage("menu_section.not_found"),
+          ),
+        );
+        inModal(el, "delete-selected", '[data-test="delete-selected-cancel"]').click();
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
+        await afterDialogCloses(el);
+        await openDelete(el);
+        expect(await bottom(el, "delete-selected")).toBe("");
+      });
+
+      it("treats a delete that saved but could not then be reloaded as a load failure, not a failed delete", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await openDelete(el);
+        client.getMenuStructure.mockRejectedValue(new Error("down"));
+        confirmDelete(el).click();
+        await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
+        expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-drinks"]);
+        expect(modal(el, "delete-selected").open).toBe(false);
+        expect(await bottom(el, "delete-selected")).toBe("");
+        await settleStructure(el);
+        expect(structure(el).selected).toEqual([]);
+        expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+      });
+
+      it("keeps the open confirm on a ticked section whose row a live update moves", async () => {
+        const live = new LiveData();
+        const client = api({ liveData: live });
+        const el = await mountLunch(client);
+        await toggleRow(el, "m-drinks");
+        await pressSelect(el);
+        await tick(el, "m-drinks/m-beer");
+        await openDelete(el);
+        expect(deleteLines(el)).toEqual(["Beer"]);
+        client.getMenuStructure.mockResolvedValue(
+          lunchWith(lunchNodes().filter((node) => node.memberId !== "m-drinks")),
+        );
+        live.invalidate([{ type: "section_members" }]);
+        await vi.waitFor(() => expect(rowOf(el, "m-drinks")).toBeNull());
+        await settleStructure(el);
+        expect(structure(el).selected).toEqual(["m-fav/m-fav-drinks/m-beer"]);
+        expect(modal(el, "delete-selected").open).toBe(true);
+        expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 1 section?");
+        expect(deleteLines(el)).toEqual(["Beer"]);
+        confirmDelete(el).click();
+        await vi.waitFor(() =>
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-beer"]),
+        );
+      });
+
+      it("trims the open confirm when a live update takes a section away, and closes it once none is left", async () => {
+        const live = new LiveData();
+        const client = withDesserts({ liveData: live });
+        const el = await mountLunch(client);
+        await pressSelect(el);
         await tick(el, "m-fav");
+        await tick(el, "m-desserts");
         await openDelete(el);
         expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 2 sections?");
 
-        const [burger, , favourites] = lunchNodes();
-        client.getMenuStructure.mockResolvedValue(lunchWith([burger!, favourites!]));
+        const [burger, drinks, favourites] = lunchNodes();
+        client.getMenuStructure.mockResolvedValue(lunchWith([burger!, drinks!, favourites!]));
         live.invalidate([{ type: "section_members" }]);
         await vi.waitFor(() =>
           expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 1 section?"),
         );
         expect(deleteLines(el)).toEqual(["Favourites and the 2 sections below it"]);
 
-        client.getMenuStructure.mockResolvedValue(lunchWith([burger!]));
+        client.getMenuStructure.mockResolvedValue(lunchWith([burger!, drinks!]));
         live.invalidate([{ type: "section_members" }]);
         await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
         expect(client.deleteSections).not.toHaveBeenCalled();
@@ -4998,14 +5130,13 @@ describe("the Structure tree", () => {
 
       it("asks in Spanish, naming what stays", async () => {
         setLocale("es");
-        const el = await mountLunch();
-        await toggleRow(el, "m-drinks");
+        const el = await mountLunch(withDesserts());
         await pressSelect(el);
-        await tick(el, "m-drinks/m-beer");
         await tick(el, "m-fav");
+        await tick(el, "m-desserts");
         await openDelete(el);
         expect(modal(el, "delete-selected").getAttribute("heading")).toBe("¿Eliminar 2 secciones?");
-        expect(deleteLines(el)).toEqual(["Beer", "Favourites y las 2 secciones debajo"]);
+        expect(deleteLines(el)).toEqual(["Favourites y las 2 secciones debajo", "Desserts"]);
         expect(
           text(modal(el, "delete-selected").querySelector('[data-test="delete-selected-note"]')),
         ).toBe("Sus productos se conservan.");
@@ -5016,6 +5147,9 @@ describe("the Structure tree", () => {
         await openDelete(el);
         expect(modal(el, "delete-selected").getAttribute("heading")).toBe("¿Eliminar 1 sección?");
         expect(deleteLines(el)).toEqual(["Drinks y la sección debajo"]);
+        expect(
+          text(modal(el, "delete-selected").querySelector('[data-test="delete-selected-note"]')),
+        ).toBe("Sus productos se conservan.");
       });
     });
 
