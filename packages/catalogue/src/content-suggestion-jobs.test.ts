@@ -80,6 +80,14 @@ it("starts a run as one submitting job holding the body and what it sent", async
   expect((await app(readActiveSuggestionJob))?.id).toBe(jobs[0]!.id);
 });
 
+it("a new job has no collect position and nothing accounted for", async () => {
+  await seedSuggestionVenue(suite.db);
+  await app((tx) => startSuggestionRun(tx, context, at));
+  const [job] = await app(allJobs);
+  expect(job!.collectCursor).toBe(null);
+  expect(job!.collectedRefs).toEqual([]);
+});
+
 it("counts a variant but not its complete product, which travels only as context", async () => {
   await seedTenant(suite.db);
   const { water, small } = await app(async (tx) => {
