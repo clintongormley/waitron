@@ -32,6 +32,9 @@ Plan review folded in: `/Users/clintongormley/waitron-campaign/item-a795-plan-re
 Worktree: `/Users/clintongormley/workspace/worktrees/waitron-feat-a795-aeat-certificate-after-setup`,
 branch `feat/a795-aeat-certificate-after-setup`, cut from `main` at `79c190c98`.
 
+> **Pointer, 2026-10-19:** the owner approved landing A795 before these checks ran; they run after
+> landing (backlog A888).
+
 **Landing condition (design §8, owner lands it):** the PR is parked needs-owner-review. Its
 description opens with the §8 real-certificate checks listed as NOT RUN, to be run by the owner with
 Task 11's harness before landing; if any answers differently from the design, the affected part is

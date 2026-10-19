@@ -438,12 +438,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
   slip. [Detail](backlog/fiscal.md#one-original-per-invoice-structurally)
 
-- **A888. Before landing A795: the owner's checks with real certificates** (left open by A795).
-  A landing condition, run with the operator harness `apps/server/src/aeat-certificate-check.preprod.test.ts`:
+- **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The
+  owner approved landing A795 on 2026-10-19 before these ran. Run with the operator harness `apps/server/src/aeat-certificate-check.preprod.test.ts`:
   production and `www10` consultas, each type at the other's address, an expired certificate, where
   the tax ID sits, RC2 in real exports, a non-ASCII passphrase, and where AEAT puts its error number.
-  If any answers differently from the design, that part is redesigned before landing.
-  [Detail](backlog/fiscal.md#a888-before-landing-a795-the-owners-checks-with-real-certificates)
+  If any answers differently from the design, that part is redesigned in a follow-up.
+  [Detail](backlog/fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
 
 - **A889. A box set up before A795 shows "Installed: not recorded"** (left open by A795). Its
   certificate has no install record, so the card shows no details and the expiry alert and emails

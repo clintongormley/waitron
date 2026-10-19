@@ -850,10 +850,10 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   no-printer-at-issuance path that queues it later; its F2 control still queues three originals.
   **Remaining:** contain repeated F2 requests per sale, with the invoice number on the slip.
 
-## A888. Before landing A795: the owner's checks with real certificates
+## A888. After A795 lands: the owner's checks with real certificates
 
-- **Left open by A795.** A landing condition: A795 does not land until these have been run with the
-  owner's real certificates. Each is a question the
+- **Left open by A795.** These were A795's landing condition until the owner approved landing it on
+  2026-10-19 before they ran; the owner runs them with real certificates afterwards. Each is a question the
   [design](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md) (§8) and
   [plan](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md) (§3, decision 11)
   could not answer from a source or a test server.
@@ -879,8 +879,8 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   - where an AEAT error number arrives in a refused consulta. This decides whether the design's
     "AEAT refused this certificate for {taxpayerNif} ({codigo})" sentence is built; today a SOAP
     fault is shown with the code and reason AEAT sent (plan decision 11).
-- If any of them answers differently from the design, the affected part is redesigned before
-  landing, not shipped on assumption.
+- If any of them answers differently from the design, the affected part is redesigned in a
+  follow-up.
 
 ## A889. A box set up before A795 shows "Installed: not recorded"
 
