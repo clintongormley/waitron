@@ -1294,14 +1294,19 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
     `offeredListsOf`, so only the server's `extras.unsupported_product` stops it, and the till
     offers no way to drop just the extras. Read, not run.
 
-- **A821 — one test: an extra on a dish sold in millilitres is refused** (owner, 2026-10-17). The
-  owner's rule: extras go only on dishes sold in whole portions. Today's check (`soldByTheUnit`,
-  `apps/server/src/working-order.ts`; its twin in `apps/till/src/widgets/product-name.ts`) refuses
-  with `extras.unsupported_product` only a dish whose unit has a scale or allows decimal places,
-  and a unit records nothing else about what it counts, so by reading a 250 ml dish whose unit has
-  no decimals keeps its extras today (read, not run). Order an extra on such a dish: if it is
-  refused, delete this entry; if not, a unit needs a way to say it is a measure rather than a
-  portion, and the check refuses extras on one. Left open by A663 Part 2d (#1779).
+- **A821 — an extra on a dish sold in millilitres is accepted and billed once per millilitre**
+  (owner rule, 2026-10-17: extras go only on dishes sold in whole portions). Tried 2026-10-19 in
+  `apps/server/src/working-order.test.ts` with the `ml` unit as provisioning seeds it (precision 0,
+  no scale, `packages/catalogue/src/provisioning.ts`): `parkOrder` of 250 ml of a dish with one
+  1,00 € extra was ACCEPTED, and the extra's line was stored as quantity 250 at 1,00 €, a 250,00 €
+  line. The check (`soldByTheUnit`, `apps/server/src/working-order.ts`; its twin in
+  `apps/till/src/widgets/product-name.ts`, which decides whether the till draws an extras list)
+  refuses only a unit with a scale or decimal places, and a unit records nothing else about what it
+  counts, so `ml` looks exactly like `each`. **Fix:** a unit says whether it is a measure (ml, l, g…)
+  or a portion, the seeded measures say measure, and both checks refuse extras on a measure. That
+  is a column on `units`, so a migration, and a field on the Units screen
+  (`apps/dashboard/src/screens/units-screen.ts`). Owner question open: how a manager marks a
+  unit as a measure.
 
 - **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
