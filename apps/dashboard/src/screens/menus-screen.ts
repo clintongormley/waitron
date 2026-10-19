@@ -3164,8 +3164,12 @@ export class MenusScreen extends LitElement {
     return html`<span class="live" data-test="menu-status">(${words})</span>`;
   }
 
+  /** A menu never published has none of it live, so it is marked as well. */
   #hasUnpublishedChanges(): boolean {
-    return !this.statusError && this.status?.state === "changed";
+    return (
+      !this.statusError &&
+      (this.status?.state === "changed" || this.status?.state === "unpublished")
+    );
   }
 
   /** On the Prices tab the clash words stay plain words, since a link would only open it again. */

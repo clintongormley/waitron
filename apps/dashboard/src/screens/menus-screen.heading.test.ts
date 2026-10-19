@@ -352,11 +352,6 @@ describe("the menu editor's heading", () => {
       async (): Promise<MenuStatus> => ({ ...CHANGED, state: "current" }),
       `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
     ],
-    [
-      "never published",
-      async (): Promise<MenuStatus> => ({ state: "unpublished", clashes: 0 }),
-      "(Unpublished)",
-    ],
     ["still being checked", never, "(Checking…)"],
     [
       "not checkable",
@@ -370,6 +365,22 @@ describe("the menu editor's heading", () => {
     expect(previewTab(el).querySelector(".mark")).toBeNull();
     expect(previewTab(el).hasAttribute("aria-label")).toBe(false);
     expect(text(previewTab(el))).toBe("Preview");
+  });
+
+  it.each([
+    ["holding products and sections", nodes],
+    ["holding nothing at all", []],
+  ])("marks the Preview tab with a star on a menu never published, %s", async (_, held) => {
+    const client = api(async () => ({ state: "unpublished", clashes: 0 }));
+    vi.mocked(client.getMenuStructure).mockResolvedValue({
+      ...(await client.getMenuStructure("menu-lunch")),
+      nodes: held,
+    });
+    const el = await mount(client);
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
+    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
+    expect(text(previewTab(el))).toBe("Preview*");
+    expect(previewTab(el).getAttribute("aria-label")).toBe("Preview, unpublished changes");
   });
 
   it("keeps the star on the Preview tab while it is the tab shown", async () => {

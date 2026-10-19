@@ -860,12 +860,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   states.
   [Detail](backlog/catalogue.md#a-menus-structure-tab-is-one-tree-w88-1209-not-checked)
 
-- **A814 — a menu never published shows "Preview*" on its Preview tab** (owner, 2026-10-17: none of
-  it is live, so it gets the star). Today only a menu whose working copy differs from a live version
-  is marked (`#hasUnpublishedChanges`, `apps/dashboard/src/screens/menus-screen.ts`). Done when a
-  test opens a menu that has never been published and finds its Preview tab marked. Left open by
-  A335 (#1457).
-
 - **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
   shows only when something is scheduled** (owner, 2026-10-12). Wanted: the two buttons on one
   line, Publish later first; the heading and table drawn only while at least one version is queued.
