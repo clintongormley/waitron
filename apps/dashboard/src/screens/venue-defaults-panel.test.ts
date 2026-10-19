@@ -619,6 +619,53 @@ it.each(["success", "refusal"] as const)(
   },
 );
 
+it("a save in flight when the card turns read-only shows its answer once it succeeds", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "defaultProductVatClass", "zero");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  expect(q(el, "form")).toBeNull();
+  pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
+  expect(q(el, "form")).toBeNull();
+});
+
+it("a save that succeeds after the card turned read-only and back leaves the new clean draft open on its answer", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mountWithLeave(r.api);
+  await edit(el);
+  await pick(el, "defaultProductVatClass", "zero");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  el.readOnly = false;
+  await flush(el);
+  await edit(el);
+  pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(q(el, "form")).not.toBeNull();
+  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
+  expect(saveButton(el).disabled).toBe(true);
+  expect(saveButton(el).loading).toBe(false);
+  expect(unload()).toBe(false);
+});
+
 it("in Edit the content warning follows the staged language and goes once its content is enabled", async () => {
   setLocale("en-GB");
   const r = rig(MADRID, { defaultLanguage: "es", languages: ["es"] });

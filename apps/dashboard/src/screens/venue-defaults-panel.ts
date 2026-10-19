@@ -230,10 +230,11 @@ export class VenueDefaultsPanel extends LitElement {
     this.actionError = "";
     try {
       const answer = await this.api.putVenueDefaults(changes(this.#expected, this.draft));
-      if (generation !== this.#generation || scope !== this.#scope) return;
+      if (generation !== this.#generation) return;
       this.#writes++;
       this.model = answer;
-      this.#cancel();
+      if (scope === this.#scope) this.#cancel();
+      else this.#adopt(answer);
     } catch (error) {
       if (generation !== this.#generation || scope !== this.#scope) return;
       const code = codeOf(error);
@@ -349,7 +350,7 @@ export class VenueDefaultsPanel extends LitElement {
   override render() {
     const model = this.model;
     const fixed = model?.fixedReceiptLanguage;
-    const editing = Boolean(this.draft && !this.readOnly);
+    const editing = Boolean(this.draft);
     return html`${
       this.readError
         ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
