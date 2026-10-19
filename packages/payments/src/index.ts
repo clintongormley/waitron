@@ -74,6 +74,7 @@ export type { HoldOutcome, OpenHold } from "./holds.js";
 export { refreshHeldAlert } from "./held-alert.js";
 export type { HeldAlertSink } from "./held-alert.js";
 export {
+  appendReaderToProfiles,
   clearUnlistedReaderChoice,
   readProfileReaderList,
   readReaderEquipment,

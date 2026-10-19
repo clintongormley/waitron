@@ -34,6 +34,7 @@ import {
   nodeId as brandNodeId,
 } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
+import { DEFAULT_DEVICE_PROFILES } from "@waitron/layouts";
 import { mountPaymentsApi } from "./payments-api.js";
 import { deleteDevice } from "./device-delete.js";
 import { systemClock } from "./till-backend.js";
@@ -1368,6 +1369,116 @@ describe("reader adoption and local management", () => {
       { readerId: id },
     );
     expect(removed).toEqual([]);
+  });
+
+  /** The three seeded profiles, plus a retired copy of the till's, its readers listing `r0` as default. */
+  async function seededProfiles() {
+    const ids: Record<string, string> = {};
+    for (const profile of DEFAULT_DEVICE_PROFILES) {
+      const [row] = await suite.db
+        .insert(deviceProfiles)
+        .values({
+          name: nextName(profile.nameByLocale.es!),
+          formFactor: profile.formFactor,
+          capabilities: profile.capabilities,
+        })
+        .returning({ id: deviceProfiles.id });
+      ids[profile.formFactor] = row!.id;
+    }
+    const [retired] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: nextName("Retirado"),
+        formFactor: "till",
+        capabilities: ["integrated-card-payment"],
+        retiredAt: nowIso(),
+      })
+      .returning({ id: deviceProfiles.id });
+    const [r0] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stripe", providerRef: nextRef(), name: "Existing" })
+      .returning({ id: cardReaders.id });
+    await suite.db.insert(deviceProfileCardReaders).values({
+      deviceProfileId: ids.till!,
+      readerId: r0!.id,
+      position: 0,
+      isDefault: true,
+    });
+    return {
+      till: ids.till!,
+      kds: ids.kds!,
+      handheld: ids["phone-portrait"]!,
+      retired: retired!.id,
+      r0: r0!.id,
+    };
+  }
+
+  async function listsOf(profileId: string) {
+    return suite.db
+      .select({
+        readerId: deviceProfileCardReaders.readerId,
+        position: deviceProfileCardReaders.position,
+        isDefault: deviceProfileCardReaders.isDefault,
+      })
+      .from(deviceProfileCardReaders)
+      .where(eq(deviceProfileCardReaders.deviceProfileId, profileId))
+      .orderBy(deviceProfileCardReaders.position);
+  }
+
+  async function expectJoinedTakingProfiles(
+    p: Awaited<ReturnType<typeof seededProfiles>>,
+    id: string,
+  ) {
+    expect(await listsOf(p.till)).toEqual([
+      { readerId: p.r0, position: 0, isDefault: true },
+      { readerId: id, position: 1, isDefault: false },
+    ]);
+    expect(await listsOf(p.handheld)).toEqual([{ readerId: id, position: 0, isDefault: false }]);
+    expect(await listsOf(p.kds)).toEqual([]);
+    expect(await listsOf(p.retired)).toEqual([]);
+  }
+
+  it("adopting a new reader joins every live profile that takes reader payments, never as default", async () => {
+    const venue = await seedVenue();
+    const p = await seededProfiles();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const res = await send(app, "POST", `${base}/readers/adopt`, {
+      cookie: venue.managerCookie,
+      body: adoption,
+    });
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    await expectJoinedTakingProfiles(p, id);
+  });
+
+  it("a reader added through the add route joins every live profile that takes reader payments, never as default", async () => {
+    const venue = await seedVenue();
+    const p = await seededProfiles();
+    const app = mountApp(venue);
+    await connectStripe(app, venue);
+    const res = await addReader(app, venue, nextRef(), "Barra");
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    await expectJoinedTakingProfiles(p, id);
+  });
+
+  it("re-adopting a disabled reader joins no list a manager took it off", async () => {
+    const venue = await seedVenue();
+    const p = await seededProfiles();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    const first = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    const { id } = (await first.json()) as { id: string };
+    await suite.db
+      .delete(deviceProfileCardReaders)
+      .where(eq(deviceProfileCardReaders.readerId, id));
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    const again = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(await again.json()).toEqual({ id, status: "paired" });
+    expect(await listsOf(p.till)).toEqual([{ readerId: p.r0, position: 0, isDefault: true }]);
+    expect(await listsOf(p.handheld)).toEqual([]);
   });
 
   it("adopting a deleted reader's provider id creates a new reader and leaves the deleted row as it was", async () => {

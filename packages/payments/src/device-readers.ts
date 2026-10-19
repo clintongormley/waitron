@@ -85,6 +85,41 @@ export async function setProfileReaderList(
   return { ok: true };
 }
 
+/**
+ * Puts the reader at the end of each named profile's list, never as its default, skipping a
+ * profile that already lists it. Acquires nothing: no device on a profile was using it.
+ */
+export async function appendReaderToProfiles(
+  tx: Transaction,
+  readerId: string,
+  profileIds: readonly string[],
+): Promise<void> {
+  if (profileIds.length === 0) return;
+  const existing = await tx
+    .select({
+      profileId: deviceProfileCardReaders.deviceProfileId,
+      readerId: deviceProfileCardReaders.readerId,
+      position: deviceProfileCardReaders.position,
+    })
+    .from(deviceProfileCardReaders)
+    .where(inArray(deviceProfileCardReaders.deviceProfileId, [...profileIds]));
+  const next = new Map<string, number>();
+  const listing = new Set<string>();
+  for (const row of existing) {
+    next.set(row.profileId, Math.max(next.get(row.profileId) ?? 0, row.position + 1));
+    if (row.readerId === readerId) listing.add(row.profileId);
+  }
+  const rows = [...new Set(profileIds)]
+    .filter((profileId) => !listing.has(profileId))
+    .map((profileId) => ({
+      deviceProfileId: profileId,
+      readerId,
+      position: next.get(profileId) ?? 0,
+      isDefault: false,
+    }));
+  if (rows.length > 0) await tx.insert(deviceProfileCardReaders).values(rows);
+}
+
 /** The device holding the reader, or `null` when nobody does. */
 export async function readerHeldBy(tx: Transaction, readerId: string): Promise<string | null> {
   const [row] = await tx
