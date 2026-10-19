@@ -735,7 +735,8 @@ describe("deleting several sections", () => {
     const before = await rootMembers(f);
     const missing = crypto.randomUUID();
     // Caught inside the transaction, against the outside-the-call habit (conventions-data.md, "The
-    // test corollary"), so these reads see any write before the rollback hides it.
+    // test corollary"): caught outside it, the rollback would hide from these reads any write the
+    // refused call made.
     await app(async (tx) => {
       await expect(deleteSections(tx, [a.id, missing, b.id])).rejects.toMatchObject({
         code: "menu_section.not_found",

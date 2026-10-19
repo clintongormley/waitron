@@ -1439,9 +1439,10 @@ first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Each sen
 `packages/catalogue/src/sections.ts`) and `POST /management-api/sections/:id/members/move-in`,
 which moves the member rows themselves, so a moved product keeps the menu's price for it and an
 included menu keeps its folder setting (`moveMembersInto`, `packages/catalogue/src/sections.ts`).
-A bulk change answered after another menu has been opened moves no focus and clears nothing there,
-and a refusal then shows as "Your change to Lunch Menu was not saved." and the reason, since its
-confirm has closed (`#sendSelected`, `apps/dashboard/src/screens/menus-screen.ts`).
+A Move to section…, Remove from menu or Delete answered after another menu has been opened moves no
+focus there, and its refusal shows as "Your change to <menu> was not saved." and the reason, naming
+the menu it was sent from, since opening the other menu closed its confirm (`#sendSelected`,
+`apps/dashboard/src/screens/menus-screen.ts`).
 Copying products into another section is not built.
 
 The grips show only in Select mode, alongside the checkboxes. Done leaves both selection and
