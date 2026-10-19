@@ -363,7 +363,7 @@ describe("removing a live table the master no longer has", () => {
 
 describe("what a removed table's delete waits on", () => {
   const LETS_GO: Record<string, string> = {
-    "bookings.table_id": "BOOKINGS_TABLE_REMOVAL.release, passed only while bookings is on (A838)",
+    "bookings.table_id": "BOOKINGS_TABLE_REMOVAL.release, passed when bookings has been installed",
     "floor_reset_tables.table_id": "removeLiveTables deletes it",
     "floor_today_join_tables.table_id": "leaveMerges",
     "floor_today_split_parts.joined_table_id": "deleteWithItsSplit",

@@ -1551,7 +1551,9 @@ async function bootServer(
     incidents: recordIncidentOnce,
   });
   const tillClock = systemClock();
-  const tableRemovals = enabledTableRemovals(setsToMigrate);
+  const tableRemovals = enabledTableRemovals(
+    ALL_MODULES.filter((module) => (appliedModuleVersions[module.name] ?? 0) > 0),
+  );
   const workforceEnabled =
     !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");
   const attendanceRecorder = workforceEnabled ? recordAttendanceFact : undefined;

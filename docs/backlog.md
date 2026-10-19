@@ -2661,12 +2661,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     writer makes two live tables follow one master table today); the delivery-release trigger
     accepts an empty label.
 
-- **A838. A booking left from before bookings was switched off stops a removed table's delete
-  (2026-10-19; raised by the owner 2026-10-17, left open by A429 slice 1, #1493).** With bookings
-  off, nothing clears a booking's `bookings.table_id`, so a table the master plan drops stays and
-  its reset row keeps waiting. Next: decide whether a switched-off module's release still runs.
-  [Detail](backlog/till.md#a838-a-booking-left-from-before-bookings-was-switched-off-stops-a-removed-tables-delete)
-
 - **A phone's Chrome drew a white page for the box (2026-10-08; watch, not a job yet).** Quitting
   and reopening Chrome fixed it; what to capture if it recurs is in the detail.
   [Detail](backlog/till.md#a-phones-chrome-drew-a-white-page-for-the-box-watch-not-a-job-yet)

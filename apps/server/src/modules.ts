@@ -24,7 +24,6 @@ export function enabledFloorAnnotators(
   return modules.flatMap((m) => (m.floorAnnotations ? [m.floorAnnotations] : []));
 }
 
-/** Every ENABLED module's table-removal seat: a disabled module's tables are not migrated. */
 export function enabledTableRemovals(modules: readonly WaitronModule[]): readonly TableRemoval[] {
   return modules.flatMap((m) => (m.tableRemoval ? [m.tableRemoval] : []));
 }

@@ -1499,27 +1499,16 @@ reader table, [plan](../superpowers/plans/2026-10-18-a878-leave-it-here.md)). It
 while 4 and 5 needed moving, so Leave it here only makes it last until the next reset. Next: decide
 whether those reads should follow today's map once a group is left.
 
-## A838. A booking left from before bookings was switched off stops a removed table's delete
-
-**A838 (2026-10-19; raised by the owner 2026-10-17, left open by A429 slice 1, #1493).** In trading
-mode boot builds the table-removal steps from the enabled modules only
-(`enabledTableRemovals(setsToMigrate)`, `apps/server/src/boot.ts`) and gives that one list to the
-till routes, the management routes and the modules' core services, while a switched-off module's
-tables and rows stay on disk. So with `"bookings": false` in `modules.json`,
-`BOOKINGS_TABLE_REMOVAL.release` (`packages/bookings/src/table-removal.ts`), the only code that
-clears `bookings.table_id`, never runs: a booking naming a table makes the database refuse that
-table's delete, and `removeLiveTables` puts its reset row back for the next catch-up.
-
-Tried without a real boot. The finish-branch review of A838's test branch created and cancelled a
-booking, switched bookings off through the module-config parser, saved the plan without the table,
-reset and ran three catch-ups: the table and its reset row (`remove: true, pending: true`) stayed,
-and the same sequence with bookings on removed it. On 2026-10-19 the helpers in
-`apps/server/src/table-removal.test.ts`, called without the bookings release, gave the same result
-for one cancelled booking after a reset and two catch-ups. Only cancelled bookings were tried.
-
-Next: decide whether a switched-off module's release still runs, or what else lets go of its rows.
-
 ## Decisions and deliberate limits
+
+### Installed modules release removed tables (A894, owner decision 2026-10-19)
+
+Removing a table uses the table-removal contributions of modules whose schemas have been installed,
+including a module switched off later. A module never installed contributes no table-removal step.
+The boot cases in `apps/server/src/boot.table-removal.test.ts` cover enabled bookings, retained
+cancelled bookings with bookings switched off, and a venue with no bookings table.
+A future booking still keeps its table when bookings is switched off; the management deletion
+preview names that booking as a refusal.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 
