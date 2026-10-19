@@ -118,6 +118,7 @@ Decided section's Q29, Q30 and Q31. Picture
      foreignKey({ columns: [t.departmentId], foreignColumns: [departments.id], name: "service_steps_department_fk" }),
      foreignKey({ columns: [t.courseId], foreignColumns: [kitchenCourses.id], name: "service_steps_course_fk" }),
      index("service_steps_department_position_idx").on(t.departmentId, t.position),
+     index("service_steps_course_idx").on(t.courseId), // added 2026-10-19 at finish: kitchen.remove-course.test.ts requires an index on every course reference
      check("service_steps_start_ck", enumCheck(t.start)),
      check("service_steps_course_ck", sql`(${t.start} = 'course_served') = (${t.courseId} is not null)`),
      check("service_steps_minutes_ck",
