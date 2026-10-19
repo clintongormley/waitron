@@ -5365,6 +5365,13 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **A891: retain input and timer timing if the missing product-information window recurs.**
+  A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
+  held release before its overdue timer. Main run `39180066136` retained no such trace, so its
+  exact cause remains unverified. On recurrence, keep pointer timestamps, hold-callback timing,
+  selection count and the screenshot before retrying.
+  [Reproduction](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, the slowest server file by
   far (run 39068745456; the next was 99 s), so it sets a floor under whichever shard holds it.
   Profile it and split it or find its cost, as A528 did for `boot.test.ts`. Left open by A801.

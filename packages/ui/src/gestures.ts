@@ -54,6 +54,7 @@ export class Gestures {
   /** Pointers pressed during a pinch or once it is spent: they take no part, but keep it active. */
   readonly #extras = new Set<number>();
   #pressId!: number;
+  #pressStartedAt!: number;
   #target!: EventTarget | null;
   #pointerType!: string;
   #start!: Spot;
@@ -99,6 +100,7 @@ export class Gestures {
       this.#state = "pressed";
       this.#pointers.set(e.pointerId, spot);
       this.#pressId = e.pointerId;
+      this.#pressStartedAt = e.timeStamp;
       this.#target = e.composedPath()[0] as EventTarget;
       this.#pointerType = e.pointerType;
       this.#start = { ...spot };
@@ -136,8 +138,14 @@ export class Gestures {
     spot.x = event.clientX;
     spot.y = event.clientY;
     if (e.type === "pointermove") this.#onMove(spot);
-    else if (e.type === "pointerup") this.#onUp(event.pointerId, spot);
-    else this.#onCancel(event.pointerId);
+    else if (e.type === "pointerup") {
+      // Queued input can arrive before an overdue hold timer.
+      if (this.#state === "pressed" && event.timeStamp - this.#pressStartedAt >= LONG_PRESS_MS) {
+        this.#clearHold();
+        this.#onHold();
+      }
+      this.#onUp(event.pointerId, spot);
+    } else this.#onCancel(event.pointerId);
   };
 
   #onMove(spot: Spot): void {

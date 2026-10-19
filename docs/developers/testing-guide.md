@@ -1381,6 +1381,22 @@ the page's own callbacks that still holds its lock. That wait moves to the next 
 from #1342's review: it counts only this page's own lock holders, so a lock another page held and
 never gave back would keep `flush` waiting until the test's timeout.
 
+## A held press can reach pointer-up before its hold timer runs
+
+A891's main CI failure (`39180066136`, c55a1a6ad) occurred before Escape: the held press
+left no `till-product-info`, and attaching its close listener threw. That run retained no
+pointer or timer trace, so the mechanism below is a reproduction, not a measurement of that run.
+
+Measured 2026-10-19 in real Chromium through Vitest 4.1.11 on macOS: a 650 ms native press,
+with 500 ms of synchronous renderer work starting 400 ms after pointer-down, reproduced that
+missing window in three of three diagnostic cases. Pointer-up's event timestamps were 652–667 ms
+after pointer-down, but its handler ran before the overdue hold callback; the dish was added once.
+`Gestures` now checks the input event timestamps at release when the hold timer has not run.
+The gesture boundary tests cover 499, 500 and 650 ms without running the timer. The nutrition
+suite keeps every Escape assertion with and without busy rendering, and checks a queued short
+press still adds once. Run `pnpm --filter @waitron/ui exec vitest run src/gestures.test.ts` and
+`pnpm --filter @waitron/till exec vitest run src/widgets/menu-browser.nutrition.test.ts`.
+
 ## A browser test waits for a dialog's close event, not a timer
 
 `wt-dialog` (`packages/ui/src/components/wt-dialog.ts`) sends `wt-close` only from the browser's own

@@ -59,6 +59,21 @@ function info(el: TillMenuBrowser): HTMLElement | null {
   return el.shadowRoot!.querySelector("till-product-info");
 }
 
+function busyDuringPress(button: HTMLElement, after: number, duration: number): void {
+  button.addEventListener(
+    "pointerdown",
+    () => {
+      setTimeout(() => {
+        const until = performance.now() + duration;
+        while (performance.now() < until) {
+          // Keep input queued while the renderer cannot run the hold timer.
+        }
+      }, after);
+    },
+    { once: true },
+  );
+}
+
 describe("product nutrition on the menu", () => {
   it.each([
     { name: "allergen", allergens: { milk: {} }, dietaryDeclarations: [], marked: true },
@@ -145,6 +160,16 @@ describe("product nutrition on the menu", () => {
     const mark = button.querySelector<HTMLElement>('wt-icon[name="allergies"]');
     expect(mark).not.toBeNull();
     await userEvent.click(mark!);
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.quantity).toBe("1");
+    expect(info(el)).toBeNull();
+  });
+
+  it("a short press queued behind busy rendering adds once without opening information", async () => {
+    const { el, store, button } = await mount();
+    busyDuringPress(button, 50, 600);
+    await userEvent.click(button, { delay: 100 });
+    await el.updateComplete;
     expect(store.lines).toHaveLength(1);
     expect(store.lines[0]!.quantity).toBe("1");
     expect(info(el)).toBeNull();
@@ -268,30 +293,34 @@ describe("product nutrition on the menu", () => {
     expect(info(el)).toBeNull();
   });
 
-  it("Escape closes held-product information once without adding or leaking its dialog event", async () => {
-    const { el, host, store, button } = await mount();
-    const closedProducts: string[] = [];
-    const leakedEvents: Event[] = [];
-    host.addEventListener("wt-close", (event) => leakedEvents.push(event));
-    await userEvent.click(button, { delay: 650 });
-    await el.updateComplete;
-    const productInfo = info(el)!;
-    productInfo.addEventListener("close-info", (event) => {
-      closedProducts.push((event as CustomEvent<TillProduct>).detail.id);
-    });
-    const dialog = productInfo.shadowRoot!.querySelector("wt-dialog")!;
-    await vi.waitFor(() => expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true));
-    const closed = new Promise<void>((resolve) => {
-      dialog.addEventListener("wt-close", () => resolve(), { once: true });
-    });
-    await userEvent.keyboard("{Escape}");
-    await closed;
-    await el.updateComplete;
-    expect(info(el)).toBeNull();
-    expect(store.lines).toHaveLength(0);
-    expect(closedProducts).toEqual(["dish"]);
-    expect(leakedEvents).toEqual([]);
-  });
+  it.each([false, true])(
+    "Escape closes held-product information once without adding or leaking its dialog event (busy: %s)",
+    async (busy) => {
+      const { el, host, store, button } = await mount();
+      if (busy) busyDuringPress(button, 400, 500);
+      const closedProducts: string[] = [];
+      const leakedEvents: Event[] = [];
+      host.addEventListener("wt-close", (event) => leakedEvents.push(event));
+      await userEvent.click(button, { delay: 650 });
+      await el.updateComplete;
+      const productInfo = info(el)!;
+      productInfo.addEventListener("close-info", (event) => {
+        closedProducts.push((event as CustomEvent<TillProduct>).detail.id);
+      });
+      const dialog = productInfo.shadowRoot!.querySelector("wt-dialog")!;
+      await vi.waitFor(() => expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true));
+      const closed = new Promise<void>((resolve) => {
+        dialog.addEventListener("wt-close", () => resolve(), { once: true });
+      });
+      await userEvent.keyboard("{Escape}");
+      await closed;
+      await el.updateComplete;
+      expect(info(el)).toBeNull();
+      expect(store.lines).toHaveLength(0);
+      expect(closedProducts).toEqual(["dish"]);
+      expect(leakedEvents).toEqual([]);
+    },
+  );
 
   it("Enter still selects after a held press was closed", async () => {
     const { el, store, button } = await mount();

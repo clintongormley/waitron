@@ -173,6 +173,37 @@ describe("Gestures", () => {
     expect(gestures.active).toBe(false);
   });
 
+  it.each([
+    { duration: 499, held: false },
+    { duration: 500, held: true },
+    { duration: 650, held: true },
+  ])("classifies a $duration ms press before a queued hold timer runs", ({ duration, held }) => {
+    const pointerAt = (type: string, timeStamp: number) => {
+      const event = new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+      });
+      Object.defineProperty(event, "timeStamp", { value: timeStamp });
+      b.dispatchEvent(event);
+    };
+    pointerAt("pointerdown", 1000);
+    expect(handlers.holdStart).not.toHaveBeenCalled();
+    pointerAt("pointerup", 1000 + duration);
+    expect(handlers.holdStart).toHaveBeenCalledTimes(held ? 1 : 0);
+    expect(handlers.longPress).toHaveBeenCalledTimes(held ? 1 : 0);
+    expect(handlers.tap).toHaveBeenCalledTimes(held ? 0 : 1);
+    expect(gestures.active).toBe(false);
+    vi.runAllTimers();
+    expect(handlers.holdStart).toHaveBeenCalledTimes(held ? 1 : 0);
+    expect(handlers.longPress).toHaveBeenCalledTimes(held ? 1 : 0);
+    expect(called(["holdStart", "longPress", "tap"])).toEqual([]);
+  });
+
   it("the hold is placed where the pointer is when it fires", () => {
     down(1, 10, 10);
     move(1, 13, 14);
