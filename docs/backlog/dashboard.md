@@ -1113,7 +1113,7 @@ help about anything you want very quickly."
   Availability column; the account menu's Account settings and a variant's Keep carry a badge.
   The owner's answer to Q41 (B): signed in, the language choices are in the account menu after
   Theme, and the banner's controls add no height to it. Slice 2 is complete: 2a #1848, 2b #1851.
-- **Slice 3 landed (#NNNN, NNNN-NN-NN).** The guides moved from `docs/` to
+- **Slice 3 landed (#1871, 2026-10-19).** The guides moved from `docs/` to
   `apps/server/src/guide/en/`, with a `{#id}` on every section, and gained Spanish twins of all
   three in `apps/server/src/guide/es/`. `apps/server/src/guide-markdown.ts` renders the small subset
   they use, refuses the other shapes it checks for, and lets the rest through unrefused; `apps/server/src/guide-catalogue.ts` lists the
@@ -1133,6 +1133,9 @@ help about anything you want very quickly."
     a till needs a hook to open its sheet instead, such as a cancelable `wt-*` event on the link's
     click.
   - Products' VAT and Availability badges have no guide link.
+  - `apps/server/src/guide-markdown.ts` takes `escapeHtml` from `recovery-surface.ts`, so the
+    renderer loads that module's imports too (Hono, `@waitron/db`, the login locale). Moving
+    `escapeHtml` to a file of its own would end that; a reviewer called it optional.
   - The failed-start recovery page (started from `apps/server/src/node-entry.ts`, outside
     `bootServer`) does not serve the guides.
   - The first half of the Languages and photos guide, before "Add a photograph once", has not been

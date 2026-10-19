@@ -3892,7 +3892,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   help on table columns and tabs, in `packages/ui`); its dashboard half landed (#1851: the
   "?" in the banner, help on Products and in two menus, the five existing "?" shown only in help
   mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
-  in). Slice 3 landed (#NNNN: the box serves the guides at `/help/<en|es>/<page>`, in English and
+  in). Slice 3 landed (#1871: the box serves the guides at `/help/<en|es>/<page>`, in English and
   Spanish, and three Products badges link to their sections). Next: slices 4–5, in the design's §8
   order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
