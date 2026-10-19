@@ -101,7 +101,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible table with a product's variants open, a clash", async () => {
+  it("accessible table with a product's variants open and a clash", async () => {
     const { el, host } = await mount(theme, {
       rows: [{ ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } }, rows[1]!],
     });

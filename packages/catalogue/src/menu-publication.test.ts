@@ -2154,7 +2154,7 @@ it("lists direct and indirect parents beside an included menu's own price edit e
 });
 
 describe("the management prices read", () => {
-  it("gives an Active row of the management prices the combined decisions a till's offer has", async () => {
+  it("gives each row of the management prices the combined decisions a till's offer has", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
@@ -2190,11 +2190,7 @@ describe("the management prices read", () => {
     const offers = await app((tx) => operations.listMenuOffers(tx, [f.dinner]));
     for (const offer of offers) {
       const row = prices.find(({ productId }) => productId === offer.productId)!;
-      const active = new Set(row.variants.map((v) => v.variantId));
-      expect({
-        ...row.combined,
-        variants: row.combined.variants.filter((v) => active.has(v.variantId)),
-      }).toEqual(offer.combined);
+      expect(row.combined).toEqual(offer.combined);
     }
   });
 

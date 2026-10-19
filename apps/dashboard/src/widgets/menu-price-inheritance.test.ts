@@ -263,7 +263,7 @@ describe("productInherited", () => {
     expect(productInherited(variantOwnOverClash)).toEqual(range("2.20", "3.40"));
   });
 
-  it("is a clash when an Active variant's own price clashes", () => {
+  it("is a clash when a variant's own price clashes", () => {
     expect(productInherited(variantLevelClash)).toEqual(CLASH);
   });
 });
@@ -381,7 +381,7 @@ describe("variantsInheritedFrom", () => {
 });
 
 describe("followsClash", () => {
-  it("is true when an Active variant with no price of its own follows the product's clash", () => {
+  it("is true when a variant with no price of its own follows the product's clash", () => {
     expect(followsClash(productClash)).toBe(true);
   });
 
@@ -401,7 +401,7 @@ describe("followsClash", () => {
 });
 
 describe("variantClash", () => {
-  it("is true when an Active variant clashes at variant level and no Active variant follows a product clash", () => {
+  it("is true when a variant clashes at variant level and no variant follows a product clash", () => {
     expect(variantClash(variantLevelClash)).toBe(true);
   });
 

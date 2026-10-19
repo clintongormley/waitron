@@ -3375,7 +3375,7 @@ it("names its variants' clash on a product whose own clashing price is never sol
       },
     ],
   });
-  // Its own price is never sold: each Active variant's price comes from its variant's own sources.
+  // Its own price is never sold: each variant's price comes from its variant's own sources.
   expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].variants);
   expect(override(el, "mi-lemonade").placeholder).toBe("—");
   await allPrices(el);
@@ -4636,7 +4636,7 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     });
   });
 
-  it("(ii) an Active variant's clash: counted, its product and variant marked and under Clashes", async () => {
+  it("(ii) a variant's clash: counted, its product and variant marked and under Clashes", async () => {
     await check([burger, shapes.ii()], {
       count: 1,
       marked: ["mi-lemonade", "mi-lemonade:v-small"],
@@ -4644,7 +4644,7 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     });
   });
 
-  it("(iii) a product whose own price clashes but every Active variant is priced at variant level: nothing", async () => {
+  it("(iii) a product whose own price clashes but every variant is priced at variant level: nothing", async () => {
     await check([burger, shapes.iii()], { count: 0, marked: [], underClashes: [] });
   });
 

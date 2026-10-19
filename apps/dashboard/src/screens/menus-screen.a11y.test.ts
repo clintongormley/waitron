@@ -245,7 +245,6 @@ function api(state: State): DashboardApi {
         placements: [["s-drinks"]],
         override: "1.80",
         effectivePrice: "1.80",
-        active: true,
         available: true,
         variants: [],
       },

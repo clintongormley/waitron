@@ -1040,7 +1040,6 @@ describe("DashboardApi routes", () => {
       placements: [[]],
       override: null,
       effectivePrice: "3.00",
-      active: true,
       available: true,
       variants: [],
     };

@@ -332,7 +332,7 @@ export class MenuPricesTable extends LitElement {
   #lines: Line[] = [];
   #lineOf: ReadonlyMap<string, Line> = new Map();
   #columns: DataTableColumn<Line>[] = [];
-  /** Per product, what it charges with its field blank and where each Active variant's price comes
+  /** Per product, what it charges with its field blank and where each variant's price comes
    * from, neither of which typing changes. */
   #productInheritance: ReadonlyMap<
     MenuPriceRow,
