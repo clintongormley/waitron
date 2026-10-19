@@ -365,6 +365,26 @@ function expectUnwritten(
   expect(observed.credits).toEqual([]);
 }
 
+/** A received cash payment on a placed bill, written directly: the payment route needs an open bill. */
+function receivePayment(billId: string) {
+  return inTx(venue, (tx) =>
+    tx.insert(billPayments).values({
+      workingOrderId: billId,
+      submissionId: randomUUID(),
+      fingerprint: "test",
+      kind: "contribution",
+      method: "cash",
+      applied: 100,
+      tendered: 100,
+      state: "received",
+      receivedAt: new Date().toISOString(),
+      requestedBy: venue.operatorId,
+      source: venue.cfg.origin.source,
+      deviceId: venue.cfg.origin.deviceId,
+    }),
+  );
+}
+
 const negate = (amount: string) => negateDecimal(decimal(amount));
 
 describe("cancelling a placed order whose invoice was issued", () => {
@@ -707,6 +727,18 @@ describe("cancelling a placed order whose invoice was issued", () => {
       status: 409,
       code: "bill.payments_received",
     });
+  });
+
+  it("refuses an operator without sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+
+    const answer = cancel(id, venue.cookie);
+    await expectRefusedUnwritten(id, answer, {
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
   it("refuses a second cancel, leaving exactly one credit note", async () => {
@@ -1240,6 +1272,43 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     ]);
   });
 
+  it("refuses the PIN of someone who does not hold sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+    const answer = cancelWith({ personId: venue.operatorId, pin: "5555" })(id);
+
+    await expectRefusedUnwritten(id, answer, { status: 403, code: "authorization.not_permitted" });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+  });
+
+  it("refuses a wrong PIN on a bill holding a payment as pin.invalid, and counts it: after four even the right one is 429", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+    const { app } = throttledApp();
+    const withPin = (pin: string) =>
+      cancelWith({ personId: supervisorId, pin }, venue.cookie, app)(id);
+
+    for (let i = 0; i < 4; i += 1) {
+      await expectRefusedUnwritten(id, withPin("0000"), { status: 401, code: "pin.invalid" });
+    }
+
+    await expectRefusedUnwritten(id, withPin(SUPERVISOR_PIN), {
+      status: 429,
+      code: "pin.throttled",
+    });
+  });
+
+  it("refuses a sale.rectify holder's PIN on a bill holding a payment as bill.payments_received, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    await receivePayment(id);
+
+    await expectRefusedUnwritten(
+      id,
+      cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(id),
+      { status: 409, code: "bill.payments_received" },
+    );
+  });
+
   it("lets a refused cancel that never reaches the PIN check leave the wrong-PIN count to go idle", async () => {
     const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
     expect(
@@ -1516,6 +1585,20 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(recovered.status).toBe(200);
     expect(venue.card.collectCalls.length).toBe(calls);
     expect(await statusOf(venue, id)).toBe("settled");
+  });
+
+  it("refuses an operator without sale.rectify as not permitted while a captured card has not settled the invoice, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    venue.card.crashNextCollect("captured");
+    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    expect(lost.status).toBe(500);
+
+    const answer = cancel(id, venue.cookie);
+    await expectRefusedUnwritten(id, answer, {
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
   it("refuses while the card is at a reader that has written no payment yet, and the card then settles the invoice", async () => {

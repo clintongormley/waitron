@@ -764,12 +764,6 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   an R5 corrective invoice, by differences, for the whole invoice. The PIN override is B33
   (#1041). The owner dropped the dashboard Orders screen's "Invoice not credited" mark
   (2026-10-02 ~12:05): such a bill is to show as Cancelled with its credit note. Open:
-  - **A845: the cancel checks the permission after its payment refusals** (owner decision
-    2026-10-17: permission first; the job is A845 in `docs/backlog.md`). A bill holding a payment,
-    or with a card payment in flight, is refused for that before `sale.rectify` or an override is
-    looked at — the order C126 built, which B33 kept. So someone without the permission is told
-    about the payment rather than "not permitted", and a PIN sent with that request is neither
-    checked nor counted. The drawer, refund and unpaid-departure routes check the permission first.
   - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — landed as #1055.**
     The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
     shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
@@ -799,8 +793,8 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
       of giving a placed counter order a bill payment were tried while building B34 and both were
       refused: taking the payment on the placed order (`working_order.not_open`), and placing an
       order already holding one (`bill.payments_received`). Other ways were not looked for. If an
-      order does hold one, the cancel refuses it with `bill.payments_received` and the dialog says
-      so.
+      order does hold one, the cancel refuses it with `bill.payments_received`, after the
+      `sale.rectify` check (A845), and the dialog says so.
   - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
     Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
     `cash.drawer`, so its cases cannot tell which of those it reads.
@@ -976,7 +970,7 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 - **Owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as the
   drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and counted)
-  comes before any payment refusal. The build is A845.
+  comes before any payment refusal. Built by A845.
 
 - **A741, owner decision 2026-10-15: one large-bill limit of €3,000** (#1774). A sale of exactly
   €3,000.00 is accepted and one of €3,000.01 refused (`simplifiedInvoiceLimit`,

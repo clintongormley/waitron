@@ -6248,13 +6248,12 @@ export async function markOrderPlaced(
  * `abandoned` and is refused `working_order.not_placed`.
  *
  * An order whose invoice was issued has the whole invoice credited, under the request's device, and
- * settled owing nothing in the same transaction ({@link creditWholeInvoice}). It is refused,
+ * settled owing nothing in the same transaction ({@link creditWholeInvoice}). The credit needs
+ * `sale.rectify` from the operator or from `override`, checked before any payment refusal; only when
+ * the operator lacks it is the override's PIN checked, under `operator.attempts`. It is then refused,
  * writing nothing, while its bill holds a payment, or while a card payment of the invoice is
  * unresolved or captured and not yet filed. Any placed order is refused while an integrated card
  * collection of it runs in this process.
- *
- * The credit needs `sale.rectify` from the operator or from `override`. Only when the operator lacks
- * it is the override's PIN checked, under `operator.attempts`, before the credit.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -6302,8 +6301,11 @@ async function cancelPlaced(
     }
 
     const invoice = await readOrderInvoice(tx, id);
-    // Before the in-flight check, so the answer names the money already on the bill.
-    if (invoice !== undefined) await refuseBillWithPayments(tx, id);
+    if (invoice !== undefined) {
+      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
+      // Before the in-flight check, so the answer names the money already on the bill.
+      await refuseBillWithPayments(tx, id);
+    }
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.
     if (
@@ -6312,10 +6314,7 @@ async function cancelPlaced(
     ) {
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
-    if (invoice !== undefined) {
-      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      await creditWholeInvoice(tx, deps, cfg, invoice, authz);
-    }
+    if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
