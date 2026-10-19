@@ -360,8 +360,10 @@ four test names and three test comments reworded, and one code comment in `table
 - [ ] **Step 2: Drop the column and regenerate ONE migration for the slice.** Reset venue-service's
   migrations to the branch base and regenerate (CLAUDE.md §3: regenerate, never hand-edit
   `_journal.json` or snapshots):
-  `git checkout $(git merge-base HEAD origin/main) -- packages/venue-service/drizzle && git clean -fd packages/venue-service/drizzle`,
-  then the generate command from Task 1. The new file must hold exactly the two `ALTER TABLE`
+  `BASE=$(git merge-base HEAD origin/main) && git rm -r -q packages/venue-service/drizzle && git checkout $BASE -- packages/venue-service/drizzle && git clean -fd packages/venue-service/drizzle`,
+  then the generate command from Task 1. **2026-10-19:** this step first said
+  `git checkout <base> -- … && git clean -fd …`, which keeps committed files the base lacks: it left
+  Task 1's `0061` files, and drizzle generated only the DROP. `git rm -r` first removes them. The new file must hold exactly the two `ALTER TABLE`
   statements of Decision 2; anything else is a stop.
 - [ ] **Step 3: Delete the old code** (functions, seat, route, the two GET fields, imports).
 - [ ] **Step 4: Run.** `pnpm --filter @waitron/venue-service exec vitest run src/kitchen-notices.test.ts src/routes.test.ts src/service.test.ts src/table-clearing.test.ts`

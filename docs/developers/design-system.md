@@ -5008,9 +5008,9 @@ The sidebar returns to the bare list. An editor's deep link keeps that list unde
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
 Edit department is tabbed. Details holds name and trading name. Service holds one section per
-topic, each under its own heading; today the one section is “Orders and payment”, with the service
-settings and the zones that differ. Receipts, between Service and Transfers, holds the department's
-receipt editor, and is offered only to someone with `layout.configure`. Transfers holds the allowed
+topic, each under its own heading; two sections: “Orders and payment”, with the service settings
+and the zones that differ, and “Table states”, with the Needs clearing switch. Receipts, between
+Service and Transfers, holds the department's receipt editor, and is offered only to someone with `layout.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are
 active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
 never changes its width. Details, Service and Transfers share one draft and one Save, in a row

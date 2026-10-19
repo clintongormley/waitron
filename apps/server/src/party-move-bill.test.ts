@@ -1532,7 +1532,7 @@ describe("two tills at once", () => {
 });
 
 describe("the guests take their only unpaid bill to the counter (Review Focus 2)", () => {
-  it("lets the party finish, its tables follow the clearing setting, and the counter bill is paid once", async () => {
+  it("lets the party finish, its tables follow their departments' Needs clearing switch, and the counter bill is paid once", async () => {
     const mesa = await v.table("Mesa se van");
     const ana = await seat(v, mesa);
     await order(v, ana.tabId, "Burger");

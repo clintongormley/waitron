@@ -2083,12 +2083,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   state (the waiter fired it; the pass has not yet); the held mark counts it. **Owner answered
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
-  and whole-table status on the map; the design is revised and six new questions, Q29–Q34, are
-  open.** The build waits for those answers (A756's department Service tab, which it builds on, landed
-  in #1852).
+  and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
+  2026-10-17.** Slice 1, Needs clearing per department, is on `feat/a757-1-clearing-per-department`;
+  slices 2–8 are left (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)
+
+- **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
+  Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
+  settle the two suggestions in the detail. Waits for A757 slices 3–5.
+  [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
   answered all eight questions on 2026-10-17: two kinds of reason, Void and Comp (a 100% comp is
