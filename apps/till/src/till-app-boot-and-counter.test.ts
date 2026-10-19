@@ -5950,7 +5950,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     Object.assign(el, {
       tabGroups: groups,
       stations,
-      selectedDiet: "vegetarian",
+      selectedFilters: { diets: ["vegetarian"], exclude: {} },
       orderParty: party,
       activeTabId: "wo-1",
     });
@@ -5962,7 +5962,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
         canSettle: boolean;
         groups: unknown;
         stations: unknown;
-        selectedDiet: string;
+        selectedFilters: { diets: string[]; exclude: object };
         receiptLanguages: string[];
         kitchenNote: string | null;
         kitchenNoteRevision: number;
@@ -5971,7 +5971,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     expect(order).not.toBeNull();
     expect(order.embedded).toBe(true);
     expect(order.canSettle).toBe(true);
-    expect(order.selectedDiet).toBe("vegetarian");
+    expect(order.selectedFilters).toEqual({ diets: ["vegetarian"], exclude: {} });
     expect(order.groups).toBe(groups);
     expect(order.stations).toBe(stations);
     expect(order.receiptLanguages).toBe(receiptLanguages);

@@ -340,6 +340,7 @@ export interface TillProduct {
   name: string;
   /** The product's customer-facing text, locale -> text; null or blank falls back to {@link name}. */
   customerName?: Record<string, string> | null;
+  description?: Record<string, string> | null;
   unit?: {
     id: string;
     name: Record<string, string>;
@@ -489,6 +490,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     image: offer.image,
     name: offer.name,
     customerName: offer.customerName,
+    description: offer.description,
     kitchenName: offer.kitchenName,
     unit: offer.unit,
     // No `pricingUnit`: `productUnit()` consults it only when `unit` is absent, and an offer always

@@ -9,7 +9,7 @@ import { heldViews, placeFor } from "./state/draft-place.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
-import { type DietPredicate } from "./menu-filter.js";
+import { EMPTY_MENU_FILTERS, activeFilterCount, type MenuFilters } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -2564,7 +2564,7 @@ export class TillApp extends LitElement {
   readonly #polledDefaults = new Map<string, string | null>();
   #counterOfferRequest = 0;
   @state() private selectedCatalogueId = "";
-  @state() private selectedDiet: DietPredicate | null = null;
+  @state() private selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
   @state() private operatorName = "";
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
@@ -4281,7 +4281,7 @@ export class TillApp extends LitElement {
       this.#counterDefaultMenuId,
     );
     if (retainedZone === undefined) this.#selectMenu(menuId);
-    this.#selectDiet(null);
+    this.#selectFilters(EMPTY_MENU_FILTERS);
     this.operatorName = displayName;
     this.#loginPending = false;
     this.operatorPersonId = personId;
@@ -4643,12 +4643,12 @@ export class TillApp extends LitElement {
     this.#rememberZoneMenu(this.#tableZoneId, this.tableService, id);
   }
 
-  #selectDiet(predicate: DietPredicate | null): void {
+  #selectFilters(filters: MenuFilters): void {
     if (!this.isConnected) return;
-    this.selectedDiet = predicate;
+    this.selectedFilters = filters;
     try {
-      if (predicate === null) sessionStorage.removeItem("waitron.dietFilter");
-      else sessionStorage.setItem("waitron.dietFilter", predicate);
+      if (activeFilterCount(filters) === 0) sessionStorage.removeItem("waitron.dietFilter");
+      else sessionStorage.setItem("waitron.dietFilter", JSON.stringify(filters));
     } catch {
       // Filtering remains available when browser storage is blocked.
     }
@@ -15538,7 +15538,7 @@ export class TillApp extends LitElement {
             : this.profileServiceZones
         }
         .selectedServiceZoneId=${this.counterServiceZoneId}
-        .selectedDiet=${this.selectedDiet}
+        .selectedFilters=${this.selectedFilters}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
@@ -15626,7 +15626,7 @@ export class TillApp extends LitElement {
       .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
       .selectedMenuId=${this.tableSelectedCatalogueId}
       .menuSelectionRequired=${true}
-      .selectedDiet=${this.selectedDiet}
+      .selectedFilters=${this.selectedFilters}
       .courses=${this.courses}
       .stations=${this.stations}
       .fireControl=${this.fireControl}
@@ -15758,7 +15758,7 @@ export class TillApp extends LitElement {
           .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
           .selectedMenuId=${this.tableSelectedCatalogueId}
           .menuSelectionRequired=${true}
-          .selectedDiet=${this.selectedDiet}
+          .selectedFilters=${this.selectedFilters}
           .courses=${this.courses}
           .stations=${this.stations}
           .fireControl=${this.fireControl}
@@ -16143,8 +16143,8 @@ export class TillApp extends LitElement {
           if (e.detail.code === currentLocale()) return;
           this.#requestLeave(() => this.#onLocaleSelected(e));
         }}
-        @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-          this.#selectDiet(e.detail.predicate)}
+        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) =>
+          this.#selectFilters(e.detail.filters)}
         @counter-zone-selected=${(event: Event) => this.#requestLeave(() => this.#onCounterZoneSelected(event))}
         @keep-open-changed=${(e: CustomEvent<{ zoneId: string }>) => {
           e.stopPropagation();

@@ -14599,10 +14599,17 @@ describe("remembered dietary filters", () => {
   const listProducts = () =>
     vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [salad, mixed] });
   const filter = (screen: HTMLElement) => screen.shadowRoot!.querySelector("till-diet-filter")!;
-  const pick = (screen: HTMLElement, predicate: string) =>
-    filter(screen)
+  const pick = async (screen: HTMLElement, predicate: string) => {
+    const widget = filter(screen) as HTMLElement & { updateComplete: Promise<unknown> };
+    widget.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!.click();
+    await widget.updateComplete;
+    widget
       .shadowRoot!.querySelector<HTMLElement>(`[data-test="diet-filter-${predicate}"]`)!
       .click();
+    await widget.updateComplete;
+    widget.shadowRoot!.querySelector<HTMLElement>("wt-dialog [slot=footer]:last-child")!.click();
+    await widget.updateComplete;
+  };
   const pressed = (screen: HTMLElement, predicate: string) =>
     filter(screen)
       .shadowRoot!.querySelector(`[data-test="diet-filter-${predicate}"]`)!
@@ -14622,7 +14629,7 @@ describe("remembered dietary filters", () => {
       c.store.addProduct(mixed, "1");
       const push = vi.spyOn(history, "pushState");
       const path = location.href;
-      pick(c, predicate);
+      await pick(c, predicate);
       await flush(el);
       expect(names(el)).toEqual(["Ensalada"]);
       expect(push).not.toHaveBeenCalled();
@@ -14634,7 +14641,9 @@ describe("remembered dietary filters", () => {
       expect(pressed(counter(el)!, predicate)).toBe("true");
       expect(names(el)).toEqual(["Ensalada"]);
       expect(counter(el)!.store.lines[0]!.product.id).toBe("mixed");
-      expect(sessionStorage.getItem("waitron.dietFilter")).toBe(predicate);
+      expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
+        JSON.stringify({ diets: [predicate], exclude: {} }),
+      );
       emit(counter(el)!, "logout");
       await flush(el);
       await toCounter(el);
@@ -14651,14 +14660,14 @@ describe("remembered dietary filters", () => {
       listZones: vi.fn().mockResolvedValue([floorZone]),
     });
     const c = await toCounter(el);
-    pick(c, "vegetarian");
+    await pick(c, "vegetarian");
     await flush(el);
     selectTab(el, "floor");
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false });
     await flush(el);
     expect(pressed(tableOrder(el)!, "vegetarian")).toBe("true");
-    pick(tableOrder(el)!, "vegetarian");
+    await pick(tableOrder(el)!, "vegetarian");
     await flush(el);
     selectTab(el, "counter");
     await flush(el);
@@ -14677,14 +14686,14 @@ describe("remembered dietary filters", () => {
     try {
       const { el } = await mountApp({ listProducts: listProducts() });
       const c = await toCounter(el);
-      pick(c, "vegan");
+      await pick(c, "vegan");
       await flush(el);
       selectTab(el, "floor");
       await flush(el);
       selectTab(el, "counter");
       await flush(el);
       expect(names(el)).toEqual(["Ensalada"]);
-      pick(counter(el)!, "vegan");
+      await pick(counter(el)!, "vegan");
       await flush(el);
       expect(names(el)).toEqual(["Ensalada", "Mixto"]);
     } finally {
@@ -14707,19 +14716,112 @@ describe("remembered dietary filters", () => {
     el.remove();
     const { el: live } = await mountApp({ listProducts: listProducts() });
     const c = await toCounter(live);
-    pick(c, "vegetarian");
+    await pick(c, "vegetarian");
     await flush(live);
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe("vegetarian");
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
+      JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
+    );
     resolve({ menus: [defaultMenu], products: [salad, mixed] });
     await flush(el);
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe("vegetarian");
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
+      JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
+    );
     expect(names(live)).toEqual(["Ensalada"]);
+  });
+
+  it("A738 shares filters across Counter and table Order without changing the basket or history", async () => {
+    const almond = { ...salad, allergens: { nuts: { kinds: ["almonds"] } } };
+    const walnut = {
+      ...salad,
+      id: "walnut",
+      menuItemId: "menu-item-walnut",
+      name: "Walnut salad",
+      allergens: { nuts: { kinds: ["walnuts"] } },
+    };
+    const { el } = await mountApp({
+      listProducts: vi
+        .fn()
+        .mockResolvedValue({ menus: [defaultMenu], products: [almond, walnut, mixed] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Next",
+        revision: 3,
+        lines: [{ menuItemId: mixed.menuItemId, productId: mixed.id, quantity: "1.000" }],
+      }),
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(mixed, "1");
+    const before = c.store.lines.map((line) => ({
+      name: line.product.name,
+      quantity: line.quantity,
+    }));
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    await pick(c, "vegan");
+    await pick(c, "no-fish");
+    const widget = filter(c);
+    widget.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!.click();
+    await widget.updateComplete;
+    await userEvent.click(widget.shadowRoot!.querySelector<HTMLElement>('[data-allergen="nuts"]')!);
+    await userEvent.click(
+      widget.shadowRoot!.querySelector<HTMLElement>('[data-test="kind-walnuts"]')!,
+    );
+    await flush(el);
+    expect(names(el)).toEqual(["Ensalada"]);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(
+      c.store.lines.map((line) => ({ name: line.product.name, quantity: line.quantity })),
+    ).toEqual(before);
+    widget.shadowRoot!.querySelector<HTMLElement>("wt-dialog [slot=footer]:last-child")!.click();
+    await flush(el);
+    const chosen = { diets: ["vegan", "no-fish"], exclude: { nuts: ["walnuts"] } };
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(JSON.stringify(chosen));
+    selectTab(el, "floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false });
+    await flush(el);
+    expect(filter(tableOrder(el)!).selected).toEqual(chosen);
+    selectTab(el, "counter");
+    await flush(el);
+    expect(filter(counter(el)!).selected).toEqual(chosen);
+    expect(names(el)).toEqual(["Ensalada"]);
+    const oldOrder = counter(el)!.store.id;
+    emit(counter(el)!, "park-order", { label: "Next" });
+    await flush(el);
+    expect(counter(el)!.store.id).not.toBe(oldOrder);
+    expect(counter(el)!.store.lineCount).toBe(0);
+    expect(filter(counter(el)!).selected).toEqual(chosen);
+    emit(counter(el)!, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(
+      counter(el)!.store.lines.map((line) => ({
+        product: line.product.id,
+        quantity: line.quantity,
+      })),
+    ).toEqual([{ product: "mixed", quantity: "1" }]);
+    expect(filter(counter(el)!).selected).toEqual(chosen);
+    emit(counter(el)!, "logout");
+    await flush(el);
+    await toCounter(el);
+    expect(filter(counter(el)!).selected).toEqual({ diets: [], exclude: {} });
+    expect(names(el)).toEqual(["Ensalada", "Walnut salad", "Mixto"]);
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
   });
 
   it("keeps a filter through payment, new orders and parked orders", async () => {
     const { el } = await mountApp({ listProducts: listProducts() });
     const c = await toCounter(el);
-    pick(c, "vegan");
+    await pick(c, "vegan");
     c.store.addProduct(salad, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);

@@ -345,9 +345,9 @@ describe("till-counter-screen", () => {
     diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
   };
 
-  it("shows NO diet filter when no product carries a published diet", async () => {
+  it("offers Filter without a published diet so allergen exclusions stay reachable", async () => {
     const { el } = await mount(); // cafe only — no diet
-    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-diet-filter")).not.toBeNull();
   });
 
   it("shows the diet filter when some product carries a diet, and narrows the grid to the picked lens", async () => {
@@ -360,7 +360,11 @@ describe("till-counter-screen", () => {
         .products.map((p) => p.id)
         .sort(),
     ).toEqual(["meat", "vegan"]);
-    filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
+    await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!);
+    await filter.updateComplete;
+    await userEvent.click(
+      filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!,
+    );
     await el.updateComplete;
     await body(el)!.updateComplete;
     const browser = body(el)!.shadowRoot!.querySelector<HTMLElement & { products: TillProduct[] }>(
@@ -377,12 +381,15 @@ describe("till-counter-screen", () => {
     const { el } = await mount({
       menus,
       selectedMenuId: "lunch",
-      selectedDiet: "vegan",
+      selectedFilters: { diets: ["vegan"], exclude: {} },
       handheld: true,
     });
     expect(menuBrowser(el).menus).toBe(menus);
     expect(menuBrowser(el).menu!.id).toBe("lunch");
-    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-diet-filter")!.selected).toEqual({
+      diets: ["vegan"],
+      exclude: {},
+    });
     expect(menuBrowser(el).products).toEqual([]);
     expect(menuBrowser(el).handheld).toBe(true);
   });

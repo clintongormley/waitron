@@ -7,7 +7,12 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
+import {
+  type MenuFilters,
+  EMPTY_MENU_FILTERS,
+  memoVisibleProducts,
+  shownMenu,
+} from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
@@ -106,8 +111,7 @@ export class TillCounterScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .menu-controls till-menu-switcher::part(options),
-      .menu-controls till-diet-filter::part(options) {
+      .menu-controls till-menu-switcher::part(options) {
         margin-bottom: 0;
       }
 
@@ -215,8 +219,7 @@ export class TillCounterScreen extends LitElement {
   @property() operatorName = "";
   @property() invoiceLocale = "es-ES";
 
-  /** null shows every dish in the selected menu. */
-  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
+  @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
   /** A sale or order is being sent: the visible half of the app's guard against a second send. */
   @property({ type: Boolean }) busy = false;
   /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
@@ -272,12 +275,8 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("show-expo", { bubbles: true, composed: true }));
   }
 
-  #pickDiet(predicate: DietPredicate | null): void {
-    this.selectedDiet = predicate;
-  }
-
-  #hasDietData(): boolean {
-    return hasDietData(this.products);
+  #pickFilters(filters: MenuFilters): void {
+    this.selectedFilters = filters;
   }
 
   #menuControls(): TemplateResult {
@@ -291,16 +290,6 @@ export class TillCounterScreen extends LitElement {
               .menus=${this.menus}
               .selectedId=${this.selectedMenuId}
             ></till-menu-switcher>`
-          : nothing
-      }
-      ${
-        this.service?.open === true && this.service.zoneOpen && this.#hasDietData()
-          ? html`<till-diet-filter
-              class="diet-filter"
-              .selected=${this.selectedDiet}
-              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-                this.#pickDiet(e.detail.predicate)}
-            ></till-diet-filter>`
           : nothing
       }
     `;
@@ -317,13 +306,18 @@ export class TillCounterScreen extends LitElement {
     );
     return html`<till-menu-browser
       .menu=${menu}
-      .products=${this.#browserProducts(this.products, menu.id, this.selectedDiet)}
-      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, null)}
+      .products=${this.#browserProducts(this.products, menu.id, this.selectedFilters)}
+      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, EMPTY_MENU_FILTERS)}
       .menus=${this.menus}
-      .servedProducts=${this.#searchProducts(served, "", this.selectedDiet)}
-      .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", null)}
+      .servedProducts=${this.#searchProducts(served, "", this.selectedFilters)}
+      .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
       .handheld=${this.handheld}
+      ><till-diet-filter
+        slot="filters"
+        .selected=${this.selectedFilters}
+        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
+      ></till-diet-filter
     ></till-menu-browser>`;
   }
 

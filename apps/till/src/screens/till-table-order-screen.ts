@@ -53,7 +53,12 @@ import {
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
+import {
+  type MenuFilters,
+  EMPTY_MENU_FILTERS,
+  memoVisibleProducts,
+  shownMenu,
+} from "../menu-filter.js";
 import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
@@ -1097,8 +1102,7 @@ export class TillTableOrderScreen extends LitElement {
   /** Where browsing was scrolled when Review opened, put back on Back. */
   #browsingScroll?: { scroller: Element; top: number };
 
-  /** null shows every dish in the selected menu. */
-  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
+  @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
 
   /** The revision {@link lines} was read at. */
   @property({ attribute: false }) revision = 0;
@@ -2146,18 +2150,14 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("back-to-floor", { bubbles: true, composed: true }));
   }
 
-  #pickDiet(predicate: DietPredicate | null): void {
-    this.selectedDiet = predicate;
+  #pickFilters(filters: MenuFilters): void {
+    this.selectedFilters = filters;
   }
 
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
   readonly #unfilteredSearchProducts = memoVisibleProducts();
-
-  #hasDietData(): boolean {
-    return hasDietData(this.products);
-  }
 
   /** The browser gets the products through the diet lens; a tab line's name still resolves against
    * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
@@ -2174,26 +2174,31 @@ export class TillTableOrderScreen extends LitElement {
       class="round-control"
       ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
-      .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
-      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}
+      .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
+      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}
       .menus=${this.menus}
       .servedProducts=${this.#searchProducts(
         this.products.filter((product) =>
           this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
         ),
         "",
-        this.selectedDiet,
+        this.selectedFilters,
       )}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(
         this.products.filter((product) =>
           this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
         ),
         "",
-        null,
+        EMPTY_MENU_FILTERS,
       )}
       .store=${store}
       .handheld=${this.handheld}
       weighs
+      ><till-diet-filter
+        slot="filters"
+        .selected=${this.selectedFilters}
+        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
+      ></till-diet-filter
     ></till-menu-browser>`;
   }
 
@@ -3046,16 +3051,7 @@ export class TillTableOrderScreen extends LitElement {
         .menus=${this.menus}
         .selectedId=${this.selectedMenuId}
       ></till-menu-switcher>
-      ${
-        this.#hasDietData()
-          ? html`<till-diet-filter
-              class="diet-filter"
-              .selected=${this.selectedDiet}
-              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-                this.#pickDiet(e.detail.predicate)}
-            ></till-diet-filter>`
-          : nothing
-      }
+
       ${keyed(this.orderId, this.#menuBrowser(draft))}
     </div>`;
   }

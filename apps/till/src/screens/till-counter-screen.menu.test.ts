@@ -155,7 +155,7 @@ describe("fixed Counter menu browser", () => {
   });
 
   it("hides a product the diet lens rejects, and greys in place a section it leaves with nothing", async () => {
-    const { browser } = await mountBrowser({ selectedDiet: "vegan" });
+    const { browser } = await mountBrowser({ selectedFilters: { diets: ["vegan"], exclude: {} } });
     expect(browser().products).toEqual([salad]);
     expect(browser().unfilteredProducts).toEqual([salad, steak]);
     expect(shownNames(browser(), "structure")).toEqual(["Salad", "lunch mains"]);
@@ -224,7 +224,7 @@ describe("fixed Counter menu browser", () => {
         "Steak",
         "lunch mains",
       ]);
-      el.selectedDiet = "vegan";
+      el.selectedFilters = { diets: ["vegan"], exclude: {} };
       await el.updateComplete;
       await browser().updateComplete;
       expect(groups(browser()).find((group) => group.menu === "lunch")?.names).toEqual([
@@ -242,7 +242,7 @@ describe("fixed Counter menu browser", () => {
 it("A461 Counter forwards unfiltered served offers through both menu diet results", async () => {
   const meatyBeer = { ...beer, diet: meaty };
   const { browser } = await mountBrowser({
-    selectedDiet: "vegan",
+    selectedFilters: { diets: ["vegan"], exclude: {} },
     products: [salad, steak, wine, meatyBeer],
   });
   const source = browser() as TillMenuBrowser & { unfilteredServedProducts: TillProduct[] };

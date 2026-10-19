@@ -366,3 +366,38 @@ describe("product nutrition on the menu", () => {
     expect(info(el)).toBeNull();
   });
 });
+
+describe("A738 published product description", () => {
+  it.each([
+    {
+      locale: "en-GB",
+      description: { en: "Slow roasted soup", es: "Sopa a fuego lento" },
+      want: "Slow roasted soup",
+    },
+    {
+      locale: "es-ES",
+      description: { en: "Slow roasted soup", es: "Sopa a fuego lento" },
+      want: "Sopa a fuego lento",
+    },
+    { locale: "en-GB", description: null, want: null },
+    { locale: "en-GB", description: { en: "   ", es: "" }, want: null },
+  ])(
+    "A738 product info shows the published description: $locale $want",
+    async ({ locale, description, want }) => {
+      const { el, button, store } = await mount({ ...dish, description });
+      setLocale(locale);
+      button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+      await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+      await el.updateComplete;
+      const panel = info(el)!;
+      expect(panel).not.toBeNull();
+      const paragraph = panel.shadowRoot!.querySelector("[data-description]");
+      if (want === null) expect(paragraph).toBeNull();
+      else expect(paragraph?.textContent?.trim()).toBe(want);
+      expect(
+        (panel.shadowRoot!.querySelector("wt-dialog") as HTMLElement & { heading: string }).heading,
+      ).toBe("Staff soup");
+      expect(store.lines).toHaveLength(0);
+    },
+  );
+});
