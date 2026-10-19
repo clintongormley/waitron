@@ -304,10 +304,8 @@ describe("offeredListsOf", () => {
   it("keeps every list on a dish sold in whole portions, a ración or Each", () => {
     const racion = { ...cafe, unit: unit(false), offeredModifiers: [extrasList, optionsList] };
     expect(offeredListsOf(racion)).toEqual([extrasList, optionsList]);
-    const { unit: _unit, ...each } = cafe;
-    expect(offeredListsOf({ ...each, offeredModifiers: [extrasList, optionsList] })).toEqual([
-      extrasList,
-      optionsList,
-    ]);
+    const each: TillProduct = { ...cafe, offeredModifiers: [extrasList, optionsList] };
+    delete each.unit;
+    expect(offeredListsOf(each)).toEqual([extrasList, optionsList]);
   });
 });
