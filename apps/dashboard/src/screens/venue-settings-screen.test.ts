@@ -87,9 +87,9 @@ describe("the Venue settings page", () => {
     const query = location.search;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const el = await mount([panel("s", "tables"), panel("k", "kitchen")]);
-    expect(selected(el)).toBe("tables");
-    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
+    const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
+    expect(selected(el)).toBe("venue-details");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
     expect(location.search).toBe(query);
     expect(replace).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();

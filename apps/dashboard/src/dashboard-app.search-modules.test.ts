@@ -452,8 +452,8 @@ it("settings destinations follow the real permitted panels rather than every ena
   session.permissions = ["venue.view", "adjustment.manage"];
   document.dispatchEvent(new Event("visibilitychange"));
   await vi.waitFor(() => expect(result(el, "settings:adjustment-reasons")).not.toBeNull());
-  await search(el, "tables");
+  await search(el, "kitchen");
   expect(
-    el.shadowRoot!.querySelectorAll('[data-search-destination="settings:tables"]'),
+    el.shadowRoot!.querySelectorAll('[data-search-destination="settings:kitchen"]'),
   ).toHaveLength(1);
 });
