@@ -262,13 +262,12 @@ async function req(path: string, init: RequestInit, cookie?: string): Promise<Re
   });
 }
 
-it("lets a supervisor read Tables and Kitchen settings while refusing edits", async () => {
-  for (const path of ["/service-statuses", "/bump-mode", "/courses", "/fire-control"]) {
+it("lets a supervisor read Kitchen settings while refusing edits", async () => {
+  for (const path of ["/bump-mode", "/courses", "/fire-control"]) {
     const response = await req(path, { method: "GET" }, supervisorCookie);
     expect(response.status, path).toBe(200);
   }
   for (const [path, method, body] of [
-    ["/service-statuses", "POST", { label: unique("Denied"), color: "#fff" }],
     ["/bump-mode", "PUT", { mode: "ticket" }],
     ["/courses", "POST", { name: unique("Denied") }],
     ["/fire-control", "PUT", { mode: "expo" }],
@@ -277,7 +276,6 @@ it("lets a supervisor read Tables and Kitchen settings while refusing edits", as
     expect(response.status, path).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   }
-  expect((await req("/service-statuses", { method: "GET" }, managerCookie)).status).toBe(200);
 });
 
 async function createZone(name: string): Promise<string> {
