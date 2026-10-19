@@ -1707,6 +1707,19 @@ tests in two OTHER packages red until an unrelated task ran them. Grep for tests
 run those guards, and verify CI selects every affected consumer. Use a broader local run when
 needed to investigate a failure.
 
+A679's first push, 2026-10-19, found another form of this drift. Retiring the fiscal
+custodian build removed its manifest's relative reference to `scripts/bundle-node.mjs`.
+Two fiscal test helpers still executed that root script, using `../../scripts` from the
+package working directory. `root-scope-consumers.test.mjs` resolves literal references from
+the containing source file, so it saw neither helper as a root-script consumer and refused
+the existing fiscal entry. The full hook reported 7,441 passes and that one failure.
+
+Those helpers now use `fileURLToPath(new URL("../../../scripts/bundle-node.mjs", import.meta.url))`.
+A direct path comparison resolves the same executable before and after; the unchanged consumer
+guard passes all 22 cases and both real bundled-helper suites pass all 10. No list entry or
+assertion was removed. This fixes those literal sites, not the scanner's documented inability
+to trace computed paths or transitive root-script imports.
+
 ### After a rebase, the old-tip..new-tip diff can leave out the branch's own changes
 
 Restacking a dashboard-only branch once printed `all checks passed (@waitron/till + dependents)`.

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -30,7 +31,10 @@ it("leaves an unfinished outside attempt when the process is killed inside its c
     );
     const bundled = spawnSync(
       process.execPath,
-      [resolve("../../scripts/bundle-node.mjs"), `${entry}=${script}`],
+      [
+        fileURLToPath(new URL("../../../scripts/bundle-node.mjs", import.meta.url)),
+        `${entry}=${script}`,
+      ],
       { encoding: "utf8", timeout: 30_000 },
     );
     expect(bundled.stderr).not.toContain("ERROR");

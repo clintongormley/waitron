@@ -3256,3 +3256,23 @@ follow-ups. It also flags the stale root fiscal-summary wording: the detailed re
 current, while RUNNER section7 prohibits changing `CLAUDE.md`'s rules in this campaign. That
 root paragraph is left unchanged for separately authorised instruction housekeeping. Its
 clock-denial wording is not a statement of the approved hour policy.
+
+
+## Push-hook consumer correction, 2026-10-19
+
+The first normal push hook passed sign-offs, frozen install, formatting and lint. Its root
+suite then reported 7,441 passes and one failure: `root-scope-consumers.test.mjs` could no
+longer see the fiscal package's real bundler consumer after the production custodian build
+was retired. The declared consumer list was still correct. The two surviving executable
+references were relative to the package's working directory, while the guard resolves text
+relative to the source file that contains it.
+
+`packages/fiscal-verifactu/src/emergency-attempt-crash.test.ts` and
+`packages/fiscal-verifactu/src/recovery-pdf-node.test.ts` now resolve that same root script
+through `fileURLToPath(new URL("../../../scripts/bundle-node.mjs", import.meta.url))`.
+A direct before/after path experiment prints the same absolute executable for both helpers.
+Every earlier assertion, fixture value and child command's other arguments remain unchanged.
+The unchanged root consumer suite passes 22; the two real helper suites pass all 10.
+This is a test-harness path correction following Task12's normal hook, not a change to fiscal
+behavior or to the guard. The production tree reviewed by both seats remains unchanged.
+The retry still must pass the complete hook and literal-current-head CI.

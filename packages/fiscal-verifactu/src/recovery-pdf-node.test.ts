@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -124,7 +125,10 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
   const output = join(root, "recovery.mjs");
   const build = spawnSync(
     process.execPath,
-    ["../../scripts/bundle-node.mjs", `test/recovery-pdf-node-runner.ts=${output}`],
+    [
+      fileURLToPath(new URL("../../../scripts/bundle-node.mjs", import.meta.url)),
+      `test/recovery-pdf-node-runner.ts=${output}`,
+    ],
     { encoding: "utf8", timeout: 60_000 },
   );
   expect(build.status, build.stderr).toBe(0);
