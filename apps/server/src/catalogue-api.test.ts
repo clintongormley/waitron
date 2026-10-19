@@ -5408,6 +5408,70 @@ describe("mountCatalogueApi — sections", () => {
     expect(await refs(root)).toEqual([section(a), product(juice), section(b)]);
   });
 
+  async function ownedSectionVia(app: Hono, listId: string): Promise<string> {
+    const { id } = await json<{ id: string }>(
+      await send(app, "POST", `/management-api/sections/${listId}/sections`, {
+        body: { internalName: `S ${crypto.randomUUID()}` },
+      }),
+      201,
+    );
+    return id;
+  }
+
+  it("deletes several owned sections in one request and marks the menu revision", async () => {
+    const app = mountApp();
+    const root = await menuRootVia(
+      app,
+      await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`),
+    );
+    const a = await ownedSectionVia(app, root);
+    const b = await ownedSectionVia(app, root);
+    const kept = await ownedSectionVia(app, root);
+    const response = await send(app, "POST", "/management-api/sections/delete", {
+      body: { sectionIds: [a, b] },
+    });
+    expect(response.status).toBe(204);
+    expect(JSON.parse(response.headers.get("x-waitron-menu-revision") ?? "null")).toEqual({
+      epoch: expect.any(String),
+      sequence: expect.any(Number),
+    });
+    for (const id of [a, b]) {
+      const gone = await send(app, "GET", `/management-api/sections/${id}`);
+      expect(gone.status).toBe(404);
+      expect(await gone.json()).toMatchObject({
+        error: { code: "menu_section.not_found", params: { sectionId: id } },
+      });
+    }
+    const left = await json<Member[]>(
+      await send(app, "GET", `/management-api/sections/${root}/members`),
+      200,
+    );
+    expect(left.map(({ ref, position }) => [ref, position])).toEqual([[section(kept), 0]]);
+  });
+
+  it("answers a refused bulk section delete with its code and keeps every section", async () => {
+    const app = mountApp();
+    const root = await menuRootVia(
+      app,
+      await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`),
+    );
+    const a = await ownedSectionVia(app, root);
+    const unknown = crypto.randomUUID();
+    for (const [sectionIds, status, code, params] of [
+      [[a, unknown], 404, "menu_section.not_found", { sectionId: unknown }],
+      [[a, root], 409, "menu_section.wrong_role", { sectionId: root, role: "menu_root" }],
+    ] as const) {
+      const response = await send(app, "POST", "/management-api/sections/delete", {
+        body: { sectionIds },
+      });
+      expect(response.status, code).toBe(status);
+      expect(await response.json()).toEqual({ error: { code, params } });
+      expect(response.headers.get("x-waitron-menu-revision")).toBeNull();
+    }
+    expect((await send(app, "GET", `/management-api/sections/${a}`)).status).toBe(200);
+    expect((await send(app, "GET", `/management-api/sections/${root}`)).status).toBe(200);
+  });
+
   it("answers a refused bulk member write with its code and status", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
@@ -5548,6 +5612,11 @@ describe("mountCatalogueApi — sections", () => {
         ],
         ["PUT", `/management-api/sections/${id}/members/${member}/position`, {}, "to"],
         ["POST", `/management-api/sections/${id}/members/${member}/replace`, {}, "ref"],
+        ["POST", "/management-api/sections/delete", {}, "sectionIds"],
+        ["POST", "/management-api/sections/delete", { sectionIds: "nope" }, "sectionIds"],
+        ["POST", "/management-api/sections/delete", { sectionIds: [uuid, 7] }, "sectionIds"],
+        ["POST", "/management-api/sections/delete", { sectionIds: [] }, "sectionIds"],
+        ["POST", "/management-api/sections/delete", { sectionIds: [uuid, uuid] }, "sectionIds"],
         ...[
           `/management-api/sections/${id}/members/move-in`,
           "/management-api/section-members/remove",
@@ -5623,6 +5692,7 @@ describe("mountCatalogueApi — sections", () => {
         { members: [{ listId: uuid, memberId: "nope" }] },
         "SectionMemberId",
       ],
+      ["POST", "/management-api/sections/delete", { sectionIds: [uuid, "nope"] }, "SectionId"],
     ];
     for (const [method, path, body, kind] of idCases) {
       const response = await send(app, method, path, { body });
@@ -5675,6 +5745,7 @@ describe("mountCatalogueApi — sections", () => {
         "/management-api/section-members/remove",
         { members: [{ listId: id, memberId: member }] },
       ],
+      ["POST", "/management-api/sections/delete", { sectionIds: [id] }],
     ];
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };

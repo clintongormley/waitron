@@ -41,6 +41,7 @@ import {
   createSectionIn,
   updateSection,
   deleteSection,
+  deleteSections,
   addMember,
   addProducts,
   removeMember,
@@ -244,6 +245,14 @@ function membersBody(value: unknown): MemberAt[] {
   });
   if (new Set(members.map(({ memberId }) => memberId)).size !== members.length) throw invalid();
   return members;
+}
+
+/** At least one section id, each named once. */
+function sectionIdsBody(value: unknown): string[] {
+  const ids = idList(value, "sectionIds", "SectionId");
+  if (ids.length === 0 || new Set(ids).size !== ids.length)
+    throw new AppError("management.request_invalid", { field: "sectionIds" });
+  return ids;
 }
 
 function selectionBody(body: Record<string, unknown>): CatalogueSelection {
@@ -670,6 +679,14 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const session = requireManagementSession(c);
       const removed = membersBody((await readJsonBody<{ members?: unknown }>(c)).members);
       await gated(c, session, (tx) => removeMembers(tx, removed));
+      return c.body(null, 204);
+    }),
+  );
+  app.post(`${collection}/delete`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const ids = sectionIdsBody((await readJsonBody<{ sectionIds?: unknown }>(c)).sectionIds);
+      await gated(c, session, (tx) => deleteSections(tx, ids));
       return c.body(null, 204);
     }),
   );

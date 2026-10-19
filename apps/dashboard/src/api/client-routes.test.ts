@@ -995,12 +995,13 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("moves several members into one list and removes several, sending a position only when given", async () => {
+  it("moves several members into one list, removes several and deletes several sections, sending a position only when given", async () => {
     const member = { id: "m1", position: 0, ref: { kind: "product", productId: "p1" } };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([member]))
       .mockResolvedValueOnce(jsonResponse([member]))
+      .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     const members = [
@@ -1011,10 +1012,12 @@ describe("DashboardApi routes", () => {
     await expect(api.moveSectionMembersInto("root", members, 0)).resolves.toEqual([member]);
     await expect(api.moveSectionMembersInto("root", members)).resolves.toEqual([member]);
     await expect(api.removeSectionMembers(members)).resolves.toBeUndefined();
+    await expect(api.deleteSections(["s1", "s2"])).resolves.toBeUndefined();
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/sections/root/members/move-in", "POST", { members, position: 0 }],
       ["/management-api/sections/root/members/move-in", "POST", { members }],
       ["/management-api/section-members/remove", "POST", { members }],
+      ["/management-api/sections/delete", "POST", { sectionIds: ["s1", "s2"] }],
     ]);
   });
 

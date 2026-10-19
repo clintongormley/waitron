@@ -2888,6 +2888,10 @@ export class DashboardApi {
     return this.#request("/management-api/section-members/remove", "POST", { members });
   }
 
+  deleteSections(sectionIds: string[]): Promise<void> {
+    return this.#request("/management-api/sections/delete", "POST", { sectionIds });
+  }
+
   setIncludeFolder(
     listId: string,
     memberId: string,
