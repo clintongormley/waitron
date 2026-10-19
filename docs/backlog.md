@@ -2084,8 +2084,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slice 1, Needs clearing per department, is on `feat/a757-1-clearing-per-department`;
-  slices 2–8 are left (design §11).
+  2026-10-17.** Slice 1, Needs clearing per department, landed (plan
+  `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`); slices 2–8 are left
+  (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)

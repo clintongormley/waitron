@@ -1,13 +1,12 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **revised 2026-10-17 after the owner's answers to Q15–Q20; six new questions, Q29–Q34, are
-open (end of this file).** Nothing is built until they are answered, and the build also waits for
-A756. Backlog entry: `docs/backlog.md` "A757" and
+Status: **answered (Q29–Q34 all A, 2026-10-17); slice 1 built 2026-10-19; slices 2–8 left (§11).**
+Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
 **2026-10-19:** Q29–Q34 were all answered A by the owner on 2026-10-17, and the build depends only
-on A756's first pull request, #1852, which landed; slice 1 is built on
-`feat/a757-1-clearing-per-department`.
+on A756's first pull request, #1852, which landed; slice 1 is built by
+`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`.
 
 Pictures: `docs/backlog/mockups/a757-table-states/` (01–11; 03, 04, 07, 08, 09 and 11 also in dark,
 `-dark.png`). They are drawn in HTML with the till's own colour values, not screenshots of the
@@ -116,6 +115,8 @@ The switch "Needs clearing" is one value for the whole venue, `service_settings.
 (`packages/venue-service/src/schema/settings.ts`), read once each time a party leaves
 (`parties.ts:663`). Switching it off does not clear tables already marked
 (`packages/venue-service/src/kitchen-notices.ts:340-345`).
+**2026-10-19:** slice 1 replaced this with each department's switch, `departments.needs_clearing`
+(§3.1); `kitchen-notices.ts` no longer holds it.
 
 ### 1.2 What is happening at it — signals while seated
 
@@ -518,8 +519,10 @@ and the venue-service panel `venue-service-tables`
 (`packages/venue-service/src/dashboard/index.ts:153-171`). The open note that its colour-field
 labels are clipped to an ellipsis at 390 and 1280 px (`docs/backlog.md:4048-4052`; "C…" in
 `docs/backlog/till.md:1438-1439`) goes with it.
+**2026-10-19:** slice 1 removed `venue-service-tables`; the core `statuses` panel is the tab's only
+content.
 
-## 11. Build slices (after the answers; the build waits for A756)
+## 11. Build slices
 
 Each slice is one pull request one implementer can finish well under ~100 tool calls.
 

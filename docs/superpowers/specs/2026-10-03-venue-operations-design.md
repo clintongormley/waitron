@@ -135,6 +135,8 @@ One page, one tab per group. Each tab's settings are set once and left.
   Reserved, Needs clearing, Bill requested and the kitchen signals), which are not on this tab;
   designing those is A267 (§10). The demo seed's hand-set labels are renamed, because "Free",
   "Occupied" and "Reserved" copy the built-in states' names while driving nothing.
+  (2026-10-19: A757 slice 1 moved Needs clearing to each department's Service tab,
+  `departments.needs_clearing`.)
 - **Adjustment reasons**: the discount and void reasons, and the largest discount on one bill.
 - **Kitchen**: courses; bump mode; fire control; the late-flag defaults (§6.5); the held-course
   reminder; identical dishes on a ticket; printing held courses; allowing changes after sending.

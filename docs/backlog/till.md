@@ -1296,8 +1296,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 **Design (2026-10-17, revised the same day after the owner's answers to Q15–Q20):** [the lifecycle,
 one order of precedence, how each state is shown on the card, the map and the zone tabs, service
 steps, and six new owner questions, Q29–Q34](../superpowers/specs/2026-10-17-a757-table-states-design.md),
-with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-17; slice 1 is on
-`feat/a757-1-clearing-per-department`.
+with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-17; slice 1, Needs clearing per department, landed (plan
+`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`).
 
 Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
