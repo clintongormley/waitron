@@ -111,7 +111,7 @@ async function bodyFor(p: Fixture, overrides: Record<string, unknown> = {}) {
     expectedBillRevision: bill!.revision,
     expectedContext: await readCancellationContext(venue.db, p.partyId, p.parent.id),
     submissionId: randomUUID(),
-    reasonId: venue.reasonId.house,
+    reasonId: venue.reasonId.houseVoid,
     ...overrides,
   };
 }
@@ -142,11 +142,12 @@ async function managerReason() {
     createAdjustmentReason(tx, {
       name: `Cancel-key-${randomUUID()}`,
       names: { en: "Manager reason", es: "Motivo gerente" },
+      kind: "void",
       actions: ["cancel"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRole: "manager",
-      approverRole: "manager",
+      applyRoles: [],
+      approverRoles: [],
       noteRequired: true,
     }),
   );
@@ -622,7 +623,7 @@ describe("the public cancellation read and command", () => {
       expect(after.adjustments.filter((row) => row.workingOrderId === p.billId)).toMatchObject([
         {
           lineId: p.parent.id,
-          reasonId: venue.reasonId.house,
+          reasonId: venue.reasonId.houseVoid,
           action: "cancel",
           reduction: 0,
           beforeAmount: 2400,
@@ -655,7 +656,7 @@ describe("the public cancellation read and command", () => {
       params: { context: await readCancellationContext(venue.db, p.partyId, p.parent.id) },
     });
     expect(await frozen()).toEqual(before);
-    expect((await post(p, await bodyFor(p))).status).toBe(200);
+    expect((await post(p, await bodyFor(p), venue.cookie.supervisor)).status).toBe(200);
   });
 
   it.each(["GET", "POST"])("requires a session for %s", async (method) => {
@@ -890,13 +891,13 @@ describe("the public cancellation read and command", () => {
       );
       expect(payment.status).toBe(200);
       const body = await bodyFor(p);
-      const first = await post(p, body);
+      const first = await post(p, body, venue.cookie.supervisor);
       expect(first.status).toBe(200);
       expect(first.json).toMatchObject({
         madeHere: [{ lineId: p.water.id, quantity: "1.000", name: "Water" }],
       });
       const beforeReplay = await frozen();
-      const second = await post(p, body);
+      const second = await post(p, body, venue.cookie.supervisor);
       expect(second.status).toBe(200);
       expect(second.json).toEqual(first.json);
       expect(await frozen()).toEqual(beforeReplay);

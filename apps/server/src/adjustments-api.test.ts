@@ -729,6 +729,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
   it("applies a staff member's cancel of an unsent dish with no PIN", async () => {
     const { billId, revision } = await billWith(venue, []);
     await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
       revision,
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
       operatorId: venue.staffId,

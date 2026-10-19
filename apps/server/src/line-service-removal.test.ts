@@ -28,6 +28,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 import {
   billWith,
   inTx,
+  PINS,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
@@ -136,12 +137,13 @@ async function ask(order: Fixture, quantity: string | undefined) {
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, order.billId)),
     expectedRevision: bill!.revision,
     lineId: order.parent.id,
-    reasonId: venue.reasonId.house,
+    reasonId: venue.reasonId.houseVoid,
     action: "cancel" as const,
     ...(quantity === undefined ? {} : { quantity }),
     note: null,
     operatorId: venue.staffId,
     submissionId: randomUUID(),
+    approver: { personId: venue.supervisorId, pin: PINS.supervisor },
   };
 }
 

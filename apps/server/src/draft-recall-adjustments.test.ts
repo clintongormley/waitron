@@ -133,7 +133,7 @@ async function post(billId: string, body: Record<string, unknown>, cookie = venu
       submissionId,
       expectedRevision: await billRevision(billId),
       lineId: null,
-      reasonId: venue.reasonId.house,
+      reasonId: body.action === "cancel" ? venue.reasonId.houseVoid : venue.reasonId.house,
       note: null,
       ...body,
     },
@@ -441,6 +441,9 @@ describe("adjusting an owned recalled family", () => {
         quantity: "1",
         submissionId: randomUUID(),
         expectedRevision: await billRevision(p.billId),
+        ...(release === "fire"
+          ? { approver: { personId: venue.supervisorId, pin: PINS.supervisor } }
+          : {}),
       };
       const answer = await post(p.billId, body);
       expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -568,17 +571,18 @@ describe("adjusting an owned recalled family", () => {
   });
 
   it("retains the ordinary required note and manager approval before cancelling a recalled source", async () => {
-    const p = await setup();
+    const p = await setup("fire");
     const [owner] = await venue.db.select().from(persons).where(eq(persons.id, venue.staffId));
     const reason = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
         name: `Recall-${randomUUID()}`,
         names: {},
+        kind: "void",
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "manager",
-        approverRole: "manager",
+        applyRoles: [],
+        approverRoles: [],
         noteRequired: true,
       }),
     );

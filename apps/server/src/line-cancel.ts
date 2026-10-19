@@ -245,8 +245,7 @@ export async function cancelItem(
           throw invalid("reasonId");
         const reason = await findAdjustmentReason(tx, ask.reasonId);
         if (!reason.active) throw new AppError("adjustment.reason_inactive", {});
-        if (!reason.actions.includes("cancel"))
-          throw new AppError("adjustment.action_not_allowed", {});
+        if (reason.kind !== "void") throw new AppError("adjustment.action_not_allowed", {});
         if (reason.noteRequired && (ask.note ?? "").trim().length === 0)
           throw new AppError("adjustment.note_required", {});
         const [actor] = await tx

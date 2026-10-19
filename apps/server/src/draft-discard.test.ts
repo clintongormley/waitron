@@ -86,7 +86,12 @@ async function recall(partyId: string, lineId: string) {
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   return (answer.json as unknown as { draft: Draft }).draft;
 }
-async function setup(paidLast = false, paidWater = false, discounted = false) {
+async function setup(
+  paidLast = false,
+  paidWater = false,
+  discounted = false,
+  release: "hold" | "fire" = "hold",
+) {
   const p = await billWith(
     venue,
     [
@@ -94,7 +99,7 @@ async function setup(paidLast = false, paidWater = false, discounted = false) {
       { name: "Burger", quantity: "3" },
       { name: "Water" },
     ],
-    { release: "hold" },
+    { release },
   );
   const [pizza, extra, burger, water] = await rowsOf(venue, p.billId);
   if (paidLast || paidWater) {
@@ -135,7 +140,7 @@ async function request(
     revision: p.draft.revision,
     expectedRevision: await billRevision(p.billId),
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
-    reasonId: venue.reasonId.house,
+    reasonId: venue.reasonId.houseVoid,
     note: null,
     ...overrides,
   };
@@ -398,11 +403,12 @@ describe("Discard resolves the whole owned draft atomically", () => {
       createAdjustmentReason(tx, {
         name: `Discard-key-${randomUUID()}`,
         names: {},
+        kind: "void",
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "manager",
-        approverRole: "manager",
+        applyRoles: [],
+        approverRoles: [],
         noteRequired: false,
       }),
     );
@@ -420,16 +426,17 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("rejects a wrong approver PIN without partially cancelling", async () => {
-    const p = await setup();
+    const p = await setup(false, false, false, "fire");
     const reason = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
         name: `Discard-pin-${randomUUID()}`,
         names: {},
+        kind: "void",
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "manager",
-        approverRole: "manager",
+        applyRoles: [],
+        approverRoles: [],
         noteRequired: false,
       }),
     );
@@ -598,16 +605,17 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("retains reason, required-note and manager-PIN policy for the whole Discard", async () => {
-    const p = await setup();
+    const p = await setup(false, false, false, "fire");
     const reason = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
         name: `Discard-${randomUUID()}`,
         names: {},
+        kind: "void",
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "manager",
-        approverRole: "manager",
+        applyRoles: [],
+        approverRoles: [],
         noteRequired: true,
       }),
     );

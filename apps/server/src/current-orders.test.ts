@@ -1844,11 +1844,12 @@ describe("a paid held dish fired on its own", () => {
       const reason = await createAdjustmentReason(tx, {
         name: "Held dish discount",
         names: {},
+        kind: "comp",
         actions: ["discount_percent"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "staff",
-        approverRole: "staff",
+        applyRoles: ["staff", "supervisor", "manager", "admin"],
+        approverRoles: ["staff", "supervisor", "manager", "admin"],
         noteRequired: false,
       });
       const [dish] = await tx
