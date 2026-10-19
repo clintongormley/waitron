@@ -11,6 +11,7 @@ import {
   resolveSnapshotText,
   subtractDecimal,
   type ReceiptLogoRaster,
+  type ReceiptPaperWidth,
   type ReceiptPresentation,
 } from "@waitron/shared";
 import {
@@ -44,8 +45,8 @@ export interface ReceiptTrim {
 
 export interface ReceiptDocumentInput {
   surface?: "thermal" | "a4";
-  /** The roll's width; absent (A4, PDF, a raster preview) prints the date in words. */
-  paper?: "58mm" | "80mm";
+  /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
+  paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
   result: Omit<TillSaleResult, keyof ReceiptPresentation>;
   issuer: ReceiptIssuer;
@@ -123,7 +124,7 @@ export function buildReceiptDocument({
   receipt,
   venueAddress = [],
   surface = "thermal",
-  paper,
+  paperWidth,
   invoiceLocale,
   namesLocale = invoiceLocale,
   simulated = false,
@@ -210,14 +211,15 @@ export function buildReceiptDocument({
   row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
   if (simplified && result.operationDate === undefined) {
     const date =
-      paper === "58mm"
+      paperWidth === "58mm"
         ? receiptDateTimeNumeric(result.issuedAt, locale)
         : receiptDateTime(result.issuedAt, locale);
     // Two spaces at least, or the invoice number running into the date reads as one figure.
     row(result.invoiceNumber, date, 0, undefined, 2);
   } else {
     if (simplified) {
-      const heading = paper === "58mm" ? label.simplifiedInvoiceShort : label.simplifiedInvoice;
+      const heading =
+        paperWidth === "58mm" ? label.simplifiedInvoiceShort : label.simplifiedInvoice;
       row(heading, result.invoiceNumber);
     } else {
       row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });

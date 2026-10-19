@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 
 const AT = (time: string) => `2026-01-15T${time}:00.000Z`;
@@ -67,6 +67,22 @@ describe("receiptDateTimeNumeric", () => {
   it("uses the host's zone when no offset is given", () => {
     const local = new Date(2026, 0, 15, 9, 5).toISOString();
     expect(receiptDateTimeNumeric(local, "es-ES")).toBe("15/01/2026 09:05");
+  });
+});
+
+describe("without an offset", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("follows a change of the host's zone made after an earlier print", () => {
+    const iso = "2026-01-15T12:00:00.000Z";
+    vi.stubEnv("TZ", "UTC");
+    expect(receiptDateTime(iso, "es-ES")).toBe("15 ene 2026, 12:00");
+    expect(receiptDateTimeNumeric(iso, "es-ES")).toBe("15/01/2026 12:00");
+    vi.stubEnv("TZ", "Asia/Tokyo");
+    expect(receiptDateTime(iso, "es-ES")).toBe("15 ene 2026, 21:00");
+    expect(receiptDateTimeNumeric(iso, "es-ES")).toBe("15/01/2026 21:00");
   });
 });
 

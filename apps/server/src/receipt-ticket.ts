@@ -66,7 +66,7 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
   const document = buildReceiptDocument({
     ...input,
     surface: "thermal",
-    paper: printer.paperWidth,
+    paperWidth: printer.paperWidth,
   });
   const b = esc(printer);
   const { columns, widthDots } = b.grid;

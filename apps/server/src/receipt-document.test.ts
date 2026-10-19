@@ -962,14 +962,14 @@ describe("the header rows: order, number and date (A754)", () => {
   ): ReceiptElement => ({ kind: "amount", caption, amount: value, indent: 0, ...extra });
 
   it.each([
-    { paper: undefined, date: () => receiptDateTime(ISSUED, "es-ES") },
-    { paper: "80mm" as const, date: () => receiptDateTime(ISSUED, "es-ES") },
-    { paper: "58mm" as const, date: () => receiptDateTimeNumeric(ISSUED, "es-ES") },
-  ])("puts the number and the date on one row on paper $paper", ({ paper, date }) => {
+    { paperWidth: undefined, date: () => receiptDateTime(ISSUED, "es-ES") },
+    { paperWidth: "80mm" as const, date: () => receiptDateTime(ISSUED, "es-ES") },
+    { paperWidth: "58mm" as const, date: () => receiptDateTimeNumeric(ISSUED, "es-ES") },
+  ])("puts the number and the date on one row on paper $paperWidth", ({ paperWidth, date }) => {
     expect(date()).toMatch(
-      paper === "58mm" ? /^1[78]\/08\/2026 \d{2}:34$/u : /ago 2026, \d{2}:34$/u,
+      paperWidth === "58mm" ? /^1[78]\/08\/2026 \d{2}:34$/u : /ago 2026, \d{2}:34$/u,
     );
-    expect(header({ ...SIMPLIFIED, ...(paper ? { paper } : {}) })).toEqual([
+    expect(header({ ...SIMPLIFIED, ...(paperWidth ? { paperWidth } : {}) })).toEqual([
       amount("Mesa 6", "Pedido 41", { gap: 2 }),
       amount("FF/1", date(), { gap: 2 }),
     ]);
@@ -982,16 +982,16 @@ describe("the header rows: order, number and date (A754)", () => {
   });
 
   it.each([
-    { paper: undefined, heading: "Factura simplificada" },
-    { paper: "80mm" as const, heading: "Factura simplificada" },
-    { paper: "58mm" as const, heading: "Fra. simplificada" },
+    { paperWidth: undefined, heading: "Factura simplificada" },
+    { paperWidth: "80mm" as const, heading: "Factura simplificada" },
+    { paperWidth: "58mm" as const, heading: "Fra. simplificada" },
   ])(
-    "captions every row when a simplified receipt carries an operation date, on paper $paper",
-    ({ paper, heading }) => {
+    "captions every row when a simplified receipt carries an operation date, on paper $paperWidth",
+    ({ paperWidth, heading }) => {
       expect(
         header({
           ...SIMPLIFIED,
-          ...(paper ? { paper } : {}),
+          ...(paperWidth ? { paperWidth } : {}),
           result: { ...SIMPLIFIED.result, issuedOffsetMinutes: -480, operationDate: "2026-08-16" },
         }),
       ).toEqual([
@@ -1005,8 +1005,10 @@ describe("the header rows: order, number and date (A754)", () => {
 
   it.each([undefined, "80mm" as const, "58mm" as const])(
     "keeps a full invoice's FACTURA and Fecha on rows of their own on paper %s",
-    (paper) => {
-      expect(header({ ...FULL_INVOICE_DOCUMENT_FIXTURE, ...(paper ? { paper } : {}) })).toEqual([
+    (paperWidth) => {
+      expect(
+        header({ ...FULL_INVOICE_DOCUMENT_FIXTURE, ...(paperWidth ? { paperWidth } : {}) }),
+      ).toEqual([
         amount("Mesa 6", "Pedido 41", { gap: 2 }),
         amount("FACTURA", "FF/1", { style: { bold: true } }),
         amount("Fecha", "18 ago 2026, 00:34"),
