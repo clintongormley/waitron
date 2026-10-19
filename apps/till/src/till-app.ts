@@ -460,13 +460,14 @@ type DraftFollowUp =
 type OpenedDraft = { sync: DraftSync | undefined; read: boolean } | undefined;
 
 /**
- * Sale refusals a retry can never clear: the same basket files the same refused record. Every handler
+ * Sale refusals a retry can never clear: the same basket meets the same refusal. Every handler
  * whose server call reaches `recordSale` checks them. The settle paths show `sale.refused`, because
  * money may already have been taken; `#onPlaceOrder` takes no tender and shows `place.refused`.
  */
 const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
   "fiscal.foreign_recipient_unsupported",
+  "sale.number_reused",
 ]);
 
 /** Table refusals shown in their code's own words. */

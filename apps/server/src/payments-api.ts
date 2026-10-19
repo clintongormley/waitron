@@ -173,6 +173,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.payment_outcome_unconfirmed": 409,
   "payment.not_refundable": 409,
   "payment.refund_exceeds_capture": 422,
+  "sale.number_reused": 409,
   "pin.invalid": 401,
   "pin.throttled": 429,
 };
