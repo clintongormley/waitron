@@ -71,6 +71,8 @@ export {
 export type { NewPaymentResolution } from "./resolutions.js";
 export { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 export type { HoldOutcome, OpenHold } from "./holds.js";
+export { refreshHeldAlert } from "./held-alert.js";
+export type { HeldAlertSink } from "./held-alert.js";
 export {
   clearUnlistedReaderChoice,
   readProfileReaderList,
