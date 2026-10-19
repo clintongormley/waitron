@@ -1053,7 +1053,6 @@ export class TillTableOrderScreen extends LitElement {
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
-  /** The read of Current orders failed, which the screen says where the list would be. */
   @property({ type: Boolean }) currentOrdersUnread = false;
   /** The party's kitchen tickets that have not printed; they never hold up ordering. */
   @property({ attribute: false }) printProblems: PrintProblem[] = [];
@@ -1313,8 +1312,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#actionLeave = undefined;
   }
 
-  /** The party's draft for the signed-in person, owned by the app; null until the app has read it and
-   * the party's groups. Unset, the screen keeps a draft of its own. */
   @property({ attribute: false }) draftStore?: WorkingOrderStore | null;
 
   readonly #ownDraft = new WorkingOrderStore();
