@@ -73,6 +73,18 @@ describe.each(["light", "dark"] as const)("Cancel item accessibility (%s)", (the
       await expectNoA11yViolations(host);
     },
   );
+  it("has no violations when the money must be returned at a till", async () => {
+    const { el, host } = await mount({
+      consent: consent("settled", "started"),
+      refundAvailable: false,
+      refundAtTill: true,
+    });
+    expect(el.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-refund-at-till]")!.textContent).toContain(
+      "Devuelve el dinero en una caja: Devolver un pago, en el recibo.",
+    );
+    await expectNoA11yViolations(host);
+  });
   it("has no violations with a selected money choice", async () => {
     const { el, host } = await mount({ consent: consent("open", "started") });
     await userEvent.click(

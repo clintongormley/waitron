@@ -2260,6 +2260,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   splitting retains the bill observation from before a pending kitchen-note save; it stops after
   that observation or the API client changes. Continue auditing the remaining public ownership
   contracts against their app callers and server checks.
+  Paid Cancel now checks the original payment's remaining principal and this device's payment
+  capabilities before showing Refund; a device that cannot return any available method directs
+  staff to the receipt at a till. Refund approval from the main action and paid Finish-table
+  resolution remain open.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

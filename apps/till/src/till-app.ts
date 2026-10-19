@@ -858,6 +858,7 @@ interface CancellingItem {
   visit: number;
   api: TillApi;
   consent: CancellationRead;
+  refundableTenders: RefundableTender[];
   busy: boolean;
   refusal: string;
   reasons?: AdjustmentReason[];
@@ -8691,7 +8692,8 @@ export class TillApp extends LitElement {
         .consent=${open.consent}
         .reasons=${open.reasons ?? null}
         .reasonsLoading=${open.reasonsLoading === true}
-        .refundAvailable=${open.consent.context.billStatus === "settled" && open.consent.saleId !== undefined && this.#tenderRefundSession !== undefined}
+        .refundAvailable=${this.#cancellationRefundAvailable(open)}
+        .refundAtTill=${!this.#cancellationRefundAvailable(open) && open.refundableTenders.some((row) => this.#cancellationPaymentAvailable(row))}
         .busy=${open.busy || open.approval !== undefined}
         .refusal=${open.refusal}
         .refusalField=${open.refusalField ?? null}
@@ -11329,6 +11331,45 @@ export class TillApp extends LitElement {
     );
   }
 
+  #cancellationPaymentAvailable(row: RefundableTender): boolean {
+    return (
+      (row.method === "cash" || row.method === "card") &&
+      row.pendingRefundId === null &&
+      compareDecimal(decimal(row.appliedRemaining), decimal("0")) > 0
+    );
+  }
+
+  #cancellationRefundAvailable(open: CancellingItem): boolean {
+    return (
+      open.consent.context.billStatus === "settled" &&
+      open.consent.saleId !== undefined &&
+      this.#tenderRefundSession !== undefined &&
+      open.refundableTenders.some(
+        (row) =>
+          this.#cancellationPaymentAvailable(row) &&
+          this.capabilities.includes(
+            row.method === "cash"
+              ? "take-cash"
+              : row.manual
+                ? "hand-keyed-card-payment"
+                : "integrated-card-payment",
+          ),
+      )
+    );
+  }
+
+  async #cancellationTenders(
+    api: TillApi,
+    consent: CancellationRead,
+    signal?: AbortSignal,
+  ): Promise<RefundableTender[]> {
+    return consent.context.billStatus === "settled" &&
+      consent.saleId !== undefined &&
+      this.#tenderRefundSession !== undefined
+      ? api.getRefundableTenders(consent.saleId, { signal })
+      : [];
+  }
+
   #closeCancelItem(): void {
     this.#cancelItemRead?.controller.abort();
     this.#cancelItemRead = undefined;
@@ -11371,6 +11412,12 @@ export class TillApp extends LitElement {
         signal: opening.controller.signal,
       });
       if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
+      const refundableTenders = await this.#cancellationTenders(
+        opening.api,
+        consent,
+        opening.controller.signal,
+      );
+      if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
       if (consent.billId !== opening.billId || !this.#billCompositionUnchanged(opening.bill))
         return;
       this.cancellingItem = {
@@ -11380,6 +11427,7 @@ export class TillApp extends LitElement {
         name: line?.name ?? recorded?.name ?? "",
         unitPrecision: line?.unitPrecision ?? recorded?.unitPrecision ?? 0,
         consent,
+        refundableTenders,
         busy: false,
         refusal: "",
       };
@@ -11522,13 +11570,7 @@ export class TillApp extends LitElement {
     approver?: { personId: string; pin: string },
   ): Promise<void> {
     if (!this.#cancellationReady(open)) return;
-    if (
-      choice.outcome === "refund" &&
-      (open.consent.context.billStatus !== "settled" ||
-        open.consent.saleId === undefined ||
-        this.#tenderRefundSession === undefined)
-    )
-      return;
+    if (choice.outcome === "refund" && !this.#cancellationRefundAvailable(open)) return;
     const command: CancelItemRequest = {
       expectedEdit: open.bill.expectedEdits[0]!,
       quantity: choice.quantity,
@@ -11599,12 +11641,15 @@ export class TillApp extends LitElement {
           signal,
         });
         if (!this.#itemCancellationShown(open)) return;
+        const refundableTenders = await this.#cancellationTenders(open.api, consent, signal);
+        if (!this.#itemCancellationShown(open)) return;
         this.#closeCancelItem();
         if (consent.billId !== open.billId) return;
         this.cancellingItem = {
           ...open,
           id: ++this.#cancelItems,
           consent,
+          refundableTenders,
           approval: undefined,
           busy: false,
           refusal: codeMessage(code),

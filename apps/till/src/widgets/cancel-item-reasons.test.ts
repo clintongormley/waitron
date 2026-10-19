@@ -119,13 +119,36 @@ it("loads reasons only for a charged choice, then requires one before sending", 
   ]);
 });
 
+it("keeps Cancel quiet before any attempt while a required note is empty", async () => {
+  const { el, calls } = await mount();
+  Object.assign(el, { reasons: [house, other] });
+  await click(el, "input[value=keep_charge]");
+  await reason(el, "Other reason");
+  expect(confirm(el).disabled).toBe(true);
+  expect(confirm(el).variant).toBe("secondary");
+  expect(
+    root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=note]")!.error,
+  ).toBe("");
+  expect(calls).toEqual([]);
+  await note(el, "Changed their mind");
+  expect(confirm(el).disabled).toBe(false);
+  await click(el, "[data-confirm]");
+  expect(calls[0]).toMatchObject({
+    outcome: "keep_charge",
+    reasonId: "other",
+    note: "Changed their mind",
+  });
+});
+
 it("marks a required note after an invalid attempt, keeps the action disabled until fixed, and sends the trimmed note", async () => {
   const { el, calls } = await mount();
   Object.assign(el, { reasons: [house, other] });
   await click(el, "input[value=keep_charge]");
   await reason(el, "Other reason");
   await note(el, "   ");
-  await click(el, "[data-confirm]");
+  expect(confirm(el).disabled).toBe(true);
+  confirm(el).click();
+  await el.updateComplete;
   expect(calls).toEqual([]);
   const field = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=note]")!;
   expect(field.required).toBe(true);
@@ -301,7 +324,9 @@ it("requires the inline reason and required note for a started off-bill choice",
   await el.updateComplete;
   await reason(el, "Other reason");
   await note(el, "   ");
-  await click(el, "[data-confirm]");
+  expect(confirm(el).disabled).toBe(true);
+  confirm(el).click();
+  await el.updateComplete;
   expect(calls).toEqual([]);
   expect(
     root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=note]")!.error,

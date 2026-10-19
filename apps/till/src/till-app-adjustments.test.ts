@@ -2927,6 +2927,9 @@ describe("till-app: service cancellation consent", () => {
       apiFor(
         { ...consent("settled"), saleId: "own-sale" },
         {
+          getTill: vi
+            .fn()
+            .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
           getTransactionReceipt: vi.fn().mockResolvedValue(paidReceipt),
           getRefundableTenders: vi.fn().mockResolvedValue([cash]),
           refundTransaction: vi.fn().mockResolvedValue(refunded),
@@ -2964,6 +2967,202 @@ describe("till-app: service cancellation consent", () => {
     afterEach(() => {
       for (const key of Object.keys(localStorage))
         if (key.startsWith("waitron.tender-refund:")) localStorage.removeItem(key);
+    });
+
+    it.each([
+      { method: "cash", manual: false, capability: "take-cash" },
+      { method: "card", manual: true, capability: "hand-keyed-card-payment" },
+      { method: "card", manual: false, capability: "integrated-card-payment" },
+    ] as const)(
+      "offers a paid $method refund only with $capability",
+      async ({ method, manual, capability }) => {
+        const methods = paidMethods({
+          getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [capability] }),
+          getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method, manual }]),
+        });
+        const { el } = await mountApp(methods);
+        await openMesa4(el);
+        await openCancel(el);
+        expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
+        expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
+          "own-sale",
+          expect.any(Object),
+        );
+        expect(methods.cancelItem).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { method: "cash", manual: false, capabilities: ["hand-keyed-card-payment"] },
+      { method: "card", manual: true, capabilities: ["integrated-card-payment"] },
+      { method: "card", manual: false, capabilities: ["hand-keyed-card-payment"] },
+    ] as const)(
+      "keeps paid $method cancellation available without its refund capability ($manual)",
+      async ({ method, manual, capabilities }) => {
+        const methods = paidMethods({
+          getTill: vi.fn().mockResolvedValue({ ...till, capabilities }),
+          getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method, manual }]),
+        });
+        const { el } = await mountApp(methods);
+        await openMesa4(el);
+        await openCancel(el);
+        const widget = cancelDialog(el)!;
+        expect(widget.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+        expect(widget.shadowRoot!.textContent).toContain(
+          "Give the money back at a till: Refund a payment on the receipt.",
+        );
+        await chooseChargedReason(el);
+        expect(widget.shadowRoot!.querySelector("[data-confirm]")!.textContent!.trim()).toBe(
+          "Cancel",
+        );
+        emit(widget, "cancel-item-choice", {
+          lineId: "line-1",
+          quantity: "1",
+          outcome: "refund",
+          consent: widget.consent,
+        });
+        await flush(el);
+        expect(methods.cancelItem).not.toHaveBeenCalled();
+        await clickChoice(el, "[data-confirm]");
+        expect(methods.cancelItem).toHaveBeenCalledOnce();
+        expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ outcome: "keep_charge" });
+        expect(api.refundTransaction).not.toHaveBeenCalled();
+        expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { appliedRemaining: "0.00", tipRemaining: "2.00", pendingRefundId: null },
+      { appliedRemaining: "30.00", tipRemaining: "0.00", pendingRefundId: "already-refunding" },
+    ])(
+      "offers no dish refund from unavailable principal ($appliedRemaining/$pendingRefundId)",
+      async (remaining) => {
+        const methods = paidMethods({
+          getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["take-cash"] }),
+          getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, ...remaining }]),
+        });
+        const { el } = await mountApp(methods);
+        await openMesa4(el);
+        await openCancel(el);
+        expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+        expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
+          "Give the money back at a till",
+        );
+        expect(api.refundTransaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it("can cancel and refund a mixed payment when one method is allowed", async () => {
+      const methods = paidMethods({
+        getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["hand-keyed-card-payment"] }),
+        getRefundableTenders: vi
+          .fn()
+          .mockResolvedValue([
+            cash,
+            { ...cash, tenderId: "manual-card", method: "card", manual: true },
+          ]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
+      expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
+        "Give the money back at a till",
+      );
+    });
+
+    it("retries the cancellation payment read without guessing its refund choices", async () => {
+      const methods = paidMethods({
+        getRefundableTenders: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue([cash]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      expect(cancelDialog(el)).toBeNull();
+      expect(banner(el)?.textContent).toBe(codeMessage("server.internal"));
+      expect(methods.cancelItem).not.toHaveBeenCalled();
+      await openCancel(el);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.getRefundableTenders).toHaveBeenCalledTimes(2);
+    });
+
+    it("retires a cancellation payment read when the API changes", async () => {
+      let answer!: (rows: (typeof cash)[]) => void;
+      const methods = paidMethods({
+        getRefundableTenders: vi.fn().mockImplementation(
+          () =>
+            new Promise<(typeof cash)[]>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      expect(cancelDialog(el)).toBeNull();
+      const oldRead = vi.mocked(api.getRefundableTenders).mock.results[0]!.value;
+      el.api = stubApi(paidMethods());
+      await flush(el);
+      answer([cash]);
+      await oldRead;
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
+      expect(methods.cancelItem).not.toHaveBeenCalled();
+      await openCancel(el);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
+    });
+
+    it("does not reopen old paid cancellation choices after leaving and returning to the bill", async () => {
+      let answer!: (rows: (typeof cash)[]) => void;
+      const methods = paidMethods({
+        getRefundableTenders: vi
+          .fn()
+          .mockImplementationOnce(
+            () =>
+              new Promise<(typeof cash)[]>((resolve) => {
+                answer = resolve;
+              }),
+          )
+          .mockResolvedValue([cash]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      const oldRead = vi.mocked(api.getRefundableTenders).mock.results[0]!.value;
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      answer([cash]);
+      await oldRead;
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
+      await openCancel(el);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
+      expect(methods.cancelItem).not.toHaveBeenCalled();
+    });
+
+    it("reads the remaining payments again when cancellation facts change", async () => {
+      const read = { ...consent("settled"), saleId: "own-sale" };
+      const fresh = structuredClone(read);
+      fresh.context.components[0]!.cancelledQuantity = "0.500";
+      const methods = paidMethods({
+        getCancellation: vi.fn().mockResolvedValueOnce(read).mockResolvedValue(fresh),
+        getRefundableTenders: vi.fn().mockResolvedValueOnce([cash]).mockResolvedValue([]),
+        cancelItem: vi.fn().mockRejectedValue({ code: "tab.cancel_context_changed" }),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(cancelDialog(el)?.consent).toEqual(fresh);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+      expect(api.getRefundableTenders).toHaveBeenCalledTimes(2);
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
     });
 
     it("stops the kitchen once, opens its filed transaction, and refunds only the explicitly confirmed amount", async () => {
@@ -3006,7 +3205,7 @@ describe("till-app: service cancellation consent", () => {
     });
 
     it("offers Refund only when this paid dish maps to a filed sale", async () => {
-      const methods = apiFor({ ...consent("settled"), saleId: "own-sale" });
+      const methods = paidMethods();
       const { el } = await mountApp(methods);
       await openMesa4(el);
       await openCancel(el);
@@ -3204,7 +3403,10 @@ describe("till-app: service cancellation consent", () => {
 
     it("opens the filed receipt without offering money back when no supported tender remains", async () => {
       const methods = paidMethods({
-        getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method: "voucher" }]),
+        getRefundableTenders: vi
+          .fn()
+          .mockResolvedValueOnce([cash])
+          .mockResolvedValue([{ ...cash, method: "voucher" }]),
       });
       const { el } = await mountApp(methods);
       await openMesa4(el);
@@ -3230,7 +3432,10 @@ describe("till-app: service cancellation consent", () => {
       expect(cancelDialog(el)).toBeNull();
       expect(refundForm(el)).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
-      expect(api.getRefundableTenders).not.toHaveBeenCalled();
+      expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
+        "own-sale",
+        expect.any(Object),
+      );
       expect(api.refundTransaction).not.toHaveBeenCalled();
     });
 
@@ -3254,24 +3459,30 @@ describe("till-app: service cancellation consent", () => {
       await flush(el);
       expect(ticket(el)).toBeNull();
       expect(refundForm(el)).toBeNull();
-      expect(api.getRefundableTenders).not.toHaveBeenCalled();
+      expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
+        "own-sale",
+        expect.any(Object),
+      );
       expect(methods.cancelItem).toHaveBeenCalledOnce();
     });
 
     it("does not open an old refund after its tender read completes for a replaced API", async () => {
       let answer!: (rows: (typeof cash)[]) => void;
       const methods = paidMethods({
-        getRefundableTenders: vi.fn().mockImplementation(
-          () =>
-            new Promise<(typeof cash)[]>((resolve) => {
-              answer = resolve;
-            }),
-        ),
+        getRefundableTenders: vi
+          .fn()
+          .mockResolvedValueOnce([cash])
+          .mockImplementation(
+            () =>
+              new Promise<(typeof cash)[]>((resolve) => {
+                answer = resolve;
+              }),
+          ),
       });
       const { el } = await mountApp(methods);
       await openMesa4(el);
       await chooseRefund(el);
-      await expect.poll(() => api.getRefundableTenders).toHaveBeenCalledOnce();
+      await expect.poll(() => api.getRefundableTenders).toHaveBeenCalledTimes(2);
       el.api = stubApi(paidMethods());
       await flush(el);
       answer([cash]);

@@ -201,12 +201,13 @@ it("a paid fired dish retains the answer through the public-refund choice", asyn
   const read = consent();
   read.context.billStatus = "settled";
   read.saleId = "sale";
+  read.refundValue = { quantity: "3.000", gross: "10.00" };
   const { el, calls } = await mount(read);
   el.refundAvailable = true;
   await el.updateComplete;
   expect(confirm(el).disabled).toBe(true);
   await click(el, 'input[name="preparation"][value="no"]');
-  await click(el, 'input[value="refund"]');
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(true);
   await pickReason(el);
   await click(el, "[data-confirm]");
   expect(calls).toEqual([

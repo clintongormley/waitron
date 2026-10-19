@@ -34,6 +34,12 @@ it does not send the dishes. Groups belong to the table and can contain dishes f
 A new payment is refused while its bill has unsent dishes: **Send or remove the unsent dishes
 before paying.** Another bill's unsent dishes do not block this payment.
 
+On a paid bill, **Cancel item…** offers **Refund** only when this device can return an original
+cash or card payment that still has money available toward the bill. The device profile must allow
+that payment method. If you need a different device, the dialog directs you to **Refund a payment**
+on the receipt at a till. Cancelling the dish stops its kitchen work; returning money remains a
+separate step.
+
 The [courses and groups design](../../docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
 and [one-editor-per-bill amendment](../../docs/superpowers/specs/2026-10-17-a773-one-editor-design.md)
 define the table workflow. The [implementation plan](../../docs/superpowers/plans/2026-10-16-a773-1-unsent-list.md)

@@ -166,6 +166,16 @@ it("requires paid keep-payment consent even when refund is unavailable", async (
   await pickReason(el);
   expect(button(el).disabled).toBe(false);
 });
+it("keeps Cancel quiet before any attempt while its quantity is invalid", async () => {
+  const el = await mount();
+  await fill(el, "0");
+  expect(button(el).disabled).toBe(true);
+  expect(button(el).variant).toBe("secondary");
+  expect(root(el).querySelector("wt-number-stepper")!.error).toBe("");
+  await fill(el, "2");
+  expect(button(el).disabled).toBe(false);
+});
+
 it.each(["", "0", "-1", "1.5", "4", "abc", "1e0"])(
   "refuses invalid whole-dish quantity %j without sending",
   async (value) => {
@@ -418,7 +428,9 @@ it.each(["replacement", "in-place"])(
 it("an invalid submission puts focus back in the marked quantity field", async () => {
   const el = await mount();
   await fill(el, "0");
-  await click(el);
+  expect(button(el).disabled).toBe(true);
+  button(el).click();
+  await el.updateComplete;
   const field = root(el).querySelector("wt-number-stepper")!;
   await expect
     .poll(() => field.shadowRoot!.activeElement)

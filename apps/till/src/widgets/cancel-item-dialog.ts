@@ -126,6 +126,7 @@ export class TillCancelItemDialog extends LitElement {
   @property({ type: Number }) unitPrecision: number | null = 0;
   @property({ attribute: false }) consent: CancellationRead | null = null;
   @property({ type: Boolean }) refundAvailable = false;
+  @property({ type: Boolean }) refundAtTill = false;
   @property({ attribute: false }) reasons: AdjustmentReason[] | null = null;
   @property({ type: Boolean }) reasonsLoading = false;
   @property({ type: Boolean }) busy = false;
@@ -431,9 +432,9 @@ export class TillCancelItemDialog extends LitElement {
       this.reasonsLoading ||
       !allowed ||
       unavailable ||
-      invalid ||
+      !this.#quantityValid() ||
       (this.#needsReason() && this.#reason() === undefined) ||
-      noteInvalid;
+      this.#noteInvalid();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -537,6 +538,7 @@ export class TillCancelItemDialog extends LitElement {
                     )}
                   </fieldset>`
         }
+        ${this.consent?.context.billStatus === "settled" && this.refundAtTill ? html`<p data-refund-at-till>${t("cancel_item.refund_at_till")}</p>` : nothing}
         ${
           this.#needsReason()
             ? html`
