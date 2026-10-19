@@ -17,7 +17,7 @@ import {
   sentInRun,
   startSuggestionRun,
 } from "./content-suggestion-jobs.js";
-import { storeSuggestionResults } from "./content-suggestion-store.js";
+import { storeSuggestionPage } from "./content-suggestion-store.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 import {
   addProduct,
@@ -293,10 +293,10 @@ it.each([
   await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);
   await app((tx) =>
-    storeSuggestionResults(
+    storeSuggestionPage(
       tx,
       job.id,
-      { state: "done", results: [], failed: Object.keys(job.sent) },
+      { state: "done", cursor: 0, nextCursor: null, results: [], failed: Object.keys(job.sent) },
       context,
       at,
     ),

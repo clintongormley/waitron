@@ -16,7 +16,7 @@ import type {
   ContentSuggestionPage,
   ContentSuggestionView,
   SuggestionResult,
-  SuggestionResults,
+  SuggestionPage,
 } from "./content-suggestion-types.js";
 import {
   readTranslationSettings,
@@ -79,18 +79,20 @@ function validFix(fix: Fix, missing: readonly string[], languages: readonly stri
  * Stores a finished job's results as suggestions and, in the same transaction, inserts the run's
  * next job, so a run never has a moment with no active job between two of its jobs.
  */
-export async function storeSuggestionResults(
+export type PageStored = "stored" | "complete" | "ended" | "stale";
+
+export async function storeSuggestionPage(
   tx: Transaction,
   jobId: string,
-  results: SuggestionResults,
+  results: SuggestionPage,
   context: TranslationContext,
   now: Date = new Date(),
-): Promise<void> {
+): Promise<PageStored> {
   const [job] = await tx
     .select()
     .from(contentSuggestionJobs)
     .where(eq(contentSuggestionJobs.id, jobId));
-  if (!job || job.state !== "running") return;
+  if (!job || job.state !== "running") return "stale";
   const settings = await readTranslationSettings(tx, context);
   const { languages } = settings.config;
   const failed = new Set(results.failed.filter((key) => Object.hasOwn(job.sent, key)));
@@ -215,6 +217,7 @@ export async function storeSuggestionResults(
     .update(contentSuggestionJobs)
     .set({ runTotal })
     .where(and(eq(contentSuggestionJobs.runId, job.runId), eq(contentSuggestionJobs.position, 1)));
+  return "complete";
 }
 
 const SUGGESTION_PAGE = 100;

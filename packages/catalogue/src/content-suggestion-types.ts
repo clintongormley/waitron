@@ -6,10 +6,13 @@ export interface SuggestionResult {
   placeholder: boolean;
   corrections: { field: string; wrong: string; right: string }[];
 }
-export interface SuggestionResults {
+export interface SuggestionPage {
   state: "done" | "partly_done";
+  /** The cursor this page was fetched with. */
+  cursor: number;
   results: SuggestionResult[];
   failed: string[];
+  nextCursor: number | null;
   /** Copied by the runner from the status reply; collect's reply carries no reason. */
   reason?: "limit_reached" | "provider_failed";
 }

@@ -1,7 +1,7 @@
 import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
 import type {
   SuggestionResult,
-  SuggestionResults,
+  SuggestionPage,
 } from "@waitron/catalogue/src/content-suggestion-types.js";
 import "@waitron/catalogue/src/errors.js";
 import { AppError } from "@waitron/shared";
@@ -274,7 +274,7 @@ export async function collectTranslation(
   jobId: string,
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
-): Promise<SuggestionResults> {
+): Promise<Omit<SuggestionPage, "cursor" | "nextCursor" | "reason">> {
   const v = await exchange(
     state,
     "translation-collect",

@@ -8,9 +8,9 @@ import {
   recordSuggestionJobRefused,
   recordSuggestionJobReleased,
   recordSuggestionJobSubmitted,
-  storeSuggestionResults,
+  storeSuggestionPage,
   type SuggestionJobRow,
-  type SuggestionResults,
+  type SuggestionPage,
   type TranslationContext,
 } from "@waitron/catalogue";
 import type { CloudConnection } from "./cloud-client.js";
@@ -119,12 +119,15 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
       if (status.state === "done" || status.state === "partly_done") {
         const collected = await translation.collect(cloudJobId, signal);
         // Collect's reply carries no reason; the status that finished the job does.
-        const results: SuggestionResults =
+        const page: SuggestionPage = { ...collected, cursor: 0, nextCursor: null };
+        const results: SuggestionPage =
           status.reason === "limit_reached" || status.reason === "provider_failed"
-            ? { ...collected, reason: status.reason }
-            : collected;
+            ? { ...page, reason: status.reason }
+            : page;
         const at = now();
-        await record((tx) => storeSuggestionResults(tx, job.id, results, deps.context, at));
+        await record(async (tx) => {
+          await storeSuggestionPage(tx, job.id, results, deps.context, at);
+        });
         return "again";
       }
       if (status.state === "failed") {

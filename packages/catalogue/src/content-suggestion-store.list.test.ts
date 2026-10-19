@@ -12,7 +12,7 @@ import { recordSuggestionJobReleased, startSuggestionRun } from "./content-sugge
 import {
   discardContentSuggestion,
   listContentSuggestions,
-  storeSuggestionResults,
+  storeSuggestionPage,
   suggestionStale,
 } from "./content-suggestion-store.js";
 import type { ContentSuggestionView } from "./content-suggestion-types.js";
@@ -38,11 +38,13 @@ async function storedVenue(): Promise<SuggestionVenue> {
   const venue = await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);
   await app(async (tx) => {
-    await storeSuggestionResults(
+    await storeSuggestionPage(
       tx,
       job.id,
       {
         state: "done",
+        cursor: 0,
+        nextCursor: null,
         failed: [],
         results: [
           result(

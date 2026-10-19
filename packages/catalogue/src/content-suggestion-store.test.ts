@@ -8,8 +8,8 @@ import { resolveTranslationTargets } from "./content-translation-targets.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { setProductVariants } from "./variants.js";
 import { readSuggestionRun, recordSuggestionJobReleased } from "./content-suggestion-jobs.js";
-import { storeSuggestionResults } from "./content-suggestion-store.js";
-import type { SuggestionResults } from "./content-suggestion-types.js";
+import { storeSuggestionPage } from "./content-suggestion-store.js";
+import type { SuggestionPage } from "./content-suggestion-types.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addOversizedFamily,
@@ -32,10 +32,12 @@ import {
 
 const { suite, app } = suggestionSuite();
 const at = new Date("2026-10-14T09:00:00.000Z");
-const store = (jobId: string, results: SuggestionResults) =>
-  app((tx) => storeSuggestionResults(tx, jobId, results, context, at));
-const done = (results: SuggestionResults["results"], failed: string[] = []): SuggestionResults => ({
+const store = (jobId: string, results: SuggestionPage) =>
+  app((tx) => storeSuggestionPage(tx, jobId, results, context, at));
+const done = (results: SuggestionPage["results"], failed: string[] = []): SuggestionPage => ({
   state: "done",
+  cursor: 0,
+  nextCursor: null,
   results,
   failed,
 });
@@ -366,6 +368,8 @@ it("counts sent items with nothing usable, or not answered, as failed", async ()
   const job = await runningJob(suite.db);
   await store(job.id, {
     state: "partly_done",
+    cursor: 0,
+    nextCursor: null,
     reason: "provider_failed",
     results: [result(ref(venue.bread), { es: "   " })],
     failed: [ref(venue.wine), "product:unknown"],
@@ -444,6 +448,8 @@ it("records a cap-stopped partly done job's failure as limit", async () => {
   const job = await runningJob(suite.db);
   await store(job.id, {
     state: "partly_done",
+    cursor: 0,
+    nextCursor: null,
     reason: "limit_reached",
     results: [result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" })],
     failed: [ref(venue.wine), ref(venue.cheese)],
@@ -470,6 +476,8 @@ it("chains the next job of the run, never including an item the run already sent
   );
   await store(job.id, {
     state: "partly_done",
+    cursor: 0,
+    nextCursor: null,
     reason: "provider_failed",
     results: [
       result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" }),
@@ -567,6 +575,8 @@ it("starts no next job after the month's limit stopped one, and the run finishes
   const [answered, ...rest] = Object.keys(first.sent).sort();
   await store(first.id, {
     state: "partly_done",
+    cursor: 0,
+    nextCursor: null,
     reason: "limit_reached",
     results: translateAll({ [answered!]: first.sent[answered!]! }),
     failed: rest,
@@ -622,7 +632,7 @@ it("puts a placeholder and an internal fix on one row, and drops a placeholder f
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 1, failed: 0, done: 3 });
 });
 
-type Answer = (bread: string) => SuggestionResults["results"][number];
+type Answer = (bread: string) => SuggestionPage["results"][number];
 
 /** Stores `first` for bread in one run, releases it, then stores `second` in a fresh run. */
 async function storeInTwoRuns(first: Answer, second: Answer) {
