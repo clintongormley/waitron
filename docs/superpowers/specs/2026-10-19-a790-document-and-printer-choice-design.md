@@ -1,3 +1,92 @@
+# A790: F approved; G proposed, 2026-10-19, after the 13:48 answer
+
+**A–F are approved only in their precise answered scope. G alone is proposed next;
+the complete design, plan and build remain unapproved.** This addendum takes precedence
+over conflicting text and boards below. Every previous byte remains an exact historical
+suffix, including former questions, memory proposals and evidence statements.
+
+Authority: the owner answer at the end of
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 about 13:48:
+**“WHEN A PRINT IS ACCEPTED”**. On the dashboard without a device profile, remember the
+selected printer after the server accepts the print request. Cancelling the form before
+submission or a refused request leaves the previous choice alone. Acceptance qualifies
+even if physical output later fails; it does not establish that paper printed.
+
+For Harbour's `F/1042` Receipt, select Patio receipt instead of remembered Bar receipt,
+then Cancel: the next form still remembers Bar. Submit explicitly and receive acceptance:
+remember Patio. An unknown response establishes neither acceptance nor refusal; reconcile
+the **same request**, without presuming its result or sending a fresh print. Closing the
+form does not resolve an unanswered submission. How concurrent or late accepted intents
+order memory updates remains open. F settles the trigger, not that ordering or storage.
+
+E keeps separate Receipt and Invoice memories for **each sale venue in this browser**.
+Harbour's Invoice on Office · A4 leaves its Receipt memory alone; Hillside stays separate.
+A retains the same recorded full invoice through both choices, with recorded customer
+details in the compact Receipt. C keeps Invoice's printer row inline and foldable with
+its named final button, matching Receipt/payment. D opens Receipt directly for simplified
+sale `S/318` (€14.50, Spanish, one guest), retaining recorded facts and offered language.
+No new invoice, conversion or email is added by that reprint; paper size changes no identity.
+
+B still offers **every active printer at the sale's venue**, including A4 and portable
+printers for both document choices, bypassing profile printer lists on this device-free dashboard.
+Keep permission, Orders visibility and accompanying-device restrictions; exclude disabled,
+deleted and other-venue equipment. No profile step, till impersonation or dashboard
+Equipment change. Portable receipt-holder enforcement remains **open**; do not silently
+exclude portable printers or take a holder's identity. Q4's invoice role adds no exclusive
+holder check. Q1–Q6 otherwise remain settled, subject to the explicit A–F overrides.
+
+Device paths retain their role lists. The phone keeps its **one Equipment receipt setting**,
+with no separate receipt memory or new receipt-preference storage. [A796 Revision 4](2026-10-19-a796-handheld-payments-design.md)
+owns its save/concurrency design, including its overridable defaults. Do not re-ask A–F or
+A796; A790 integration still needs verification.
+
+## G: the sole next owner question, proposal only
+
+**On opening a dashboard print form with no usable remembered printer and only one
+eligible printer, should it preselect that printer (recommended), or always ask you to
+choose it?**
+
+Worked proposal: Harbour's `F/1042` Receipt remembers **Bar receipt**, now disabled.
+**Patio receipt** is the only eligible printer. On this newly opened form, show Patio
+selected with a clear explanation: “Your previous printer, Bar receipt, is unavailable.
+Patio receipt is the only available printer.” Require **Print a copy on Patio receipt**
+when the server designates a copy. The alternative leaves the field empty until you
+select Patio, then requires the same final action. Recommend preselection to avoid an
+extra choice while retaining named final confirmation. First use follows the same
+no-memory rule, without a previous-printer explanation when none exists.
+
+The example assumes Patio is the only eligible destination across B's entire list.
+An active, eligible Office · A4 also counts for Receipt and would make this a multiple-printer
+case. Invoice's Office memory and Hillside's memories remain separate under E.
+
+**Supporting G proposals, not owner approvals:** with several eligible printers and no
+usable memory, require a choice; never pick an arbitrary first entry. With zero eligible
+printers, explain why printing is unavailable, disable print and allow retry of the offers
+read. Distinguish loading/read failure from zero eligible printers. G applies only on a
+newly opened form. It authorizes no automatic print, rerouting of a submitted request or
+selection change mid-form. If an existing selection becomes invalid, reveal the problem
+and require explicit reselection and confirmation, even when only one option remains.
+Suggesting or selecting Patio updates no memory; F requires an accepted print request.
+
+Storage, expiry/reset/login sharing, concurrent/late-intent memory order, device invoice
+memory, portable receipt holding, wider document-step/fallback and remaining persistence
+choices stay **open**, as do complete design/plan/build agreement. G itself is unapproved.
+
+Retain the design requirements: freeze sale/document/printer/language/context under request
+identity; recheck authorization and sale location in the reservation transaction; reconcile
+unknown and late outcomes before a fresh request. Separate an accepted write from a failed
+refresh. Keep server-derived original/copy, the shared full-invoice (F1) delivery guard and
+closed public F1 gate. No implicit print, rerouting, payment, fiscal or drawer effects.
+
+[Eight static F/G boards](../../backlog/mockups/a790-document-and-printer-choice/revision-f-and-fallback/README.md)
+cover EN/ES, light/dark, at 390/1280 px. The final PNGs were rendered in headless
+Chromium and visually inspected; native SVG text boxes were checked within each drawing.
+Earlier boards remain history where they conflict. The historical source map remains
+runtime-unverified. These static drawings supply no runtime, accessibility, legal, test
+or physical-output evidence.
+
+---
+
 # A790: E approved; F proposed, 2026-10-19, after the 13:32 answer
 
 **A+B+C+D+E are approved only in their precise answered scope. Ask F alone next;
