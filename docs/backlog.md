@@ -891,6 +891,20 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   disabled included menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`).
   Left open by A816 (#1880).
 
+- **A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is
+  being saved.** It is greyed only while a shortcut is added or removed: `#moveShortcut`
+  (`apps/dashboard/src/screens/menus-screen.ts`) leaves the screen's `busy` flag unset so a
+  keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
+  button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
+  be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#1880).
+
+- **A switched-off menu's Home page tab would give every hidden shortcut the wrong reason**: each
+  section reads "Not shown: nothing to order in this section" and each product "Not shown: not on
+  sale on this menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`),
+  measured by finish-branch's worker in a test. Nothing outside tests switches a menu off today
+  (`deactivateCatalogue` has no other caller); revisit when something does. Left open by A816
+  (#1880).
+
 - **Configuration export/import still leaves publications behind.** Reset the venue instead of
   republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
