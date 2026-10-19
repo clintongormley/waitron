@@ -330,6 +330,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
   [changed-check inventory](operations/a679-changed-checks.md).
 
+- **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
+  bypassing that internal stale-reading check survived the hour suites. Add both the refusal
+  and its legitimate-order positive without changing clock policy.
+  [Detail](backlog/fiscal.md#pin-the-clocks-future-finished-sample-refusal).
+
+- **A679 follow-up: pin committed hour preparation's action boundary.** A serial review fault
+  removing its restore/re-register-only check survived the owning suites. Test that internal
+  boundary separately from the real public promotion retry, which already preserves its result.
+  [Detail](backlog/fiscal.md#pin-committed-hour-preparations-action-boundary).
+
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.
   Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,
   with the selected backup’s recovery key and current outside evidence. Depends on A679.

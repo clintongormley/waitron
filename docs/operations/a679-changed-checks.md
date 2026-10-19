@@ -3186,3 +3186,26 @@ package tree; it does not replace the final reviews or current-head CI.
 
 Current operator setup/recovery instructions and the provisioning reference omit branch-review
 status. Qualification and its remaining limits stay in this inventory, the backlog and PR.
+
+
+## First final installed review and triage, 2026-10-19
+
+The first Claude run-it seat reviewed complete candidate
+`29e69433c9ff8903975240ac83e37dfba4016ea2` against captured main
+`fcb1332f999136eae86961673f6680f2c713435a`, with its own frozen install and 7,729
+byte-matched tracked files. Its completed report records no proven material bug, 13 caught
+faults and two surviving faults; its wall time is 1,237 seconds. The two test gaps are retained
+as separate fiscal backlog entries. No production or earlier assertion change follows them.
+
+The second surviving fault concerns the internal committed action boundary, not evidence that
+public promotion retry fails. After reading the entire route to `promoteMirrorToPrimary`, the
+driver ran `pnpm --filter @waitron/server exec vitest run src/hour-promotion.test.ts -t
+"the real mirror boot serves preparation"`: one selected case passes, with 35 intentionally
+unselected cases. That real HTTPS case restarts after promotion, retries at a later hour and
+asserts already-primary, unchanged rows/counters/journal and no second restart request.
+The two internal gaps remain unqualified by that public-case pass.
+
+The seat labels the PDF/manual-reader and publication-only claims unverified by its own
+experiments, rather than adopting the driver's earlier receipts. The second installed review
+must assess those remaining boundaries. No whole-branch approval or CI result is inferred
+from the wrapper's successful exit alone. Its candidate is clean and its scratch probes removed.

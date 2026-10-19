@@ -258,6 +258,27 @@ A732 and A733. Venue-copy adoption and a promotion browser screen remain outside
 The [historical checkpoints](../operations/a679-development-checkpoints.md) retain earlier
 status reports and superseded custody decisions without making them current instructions.
 
+## Pin the clock's future-finished sample refusal
+
+A679's first final installed review replaced
+`sample.monotonicFinishedMs > box.monotonicFinishedMs` with false in `hour-clock.ts`.
+The 548 hour cases still passed. Add a meaningful refusal case for a sample completed after
+its box observation, with the corresponding valid-order positive. Preserve the current
+clock policy. This is a test gap, not a reproduced product defect or a claim that an actual
+host supplies that ordering. The review's other clock faults failed their intended checks.
+
+## Pin committed hour preparation's action boundary
+
+A679's first final installed review removed the restore/re-register-only check in
+`hour-selection.ts`'s committed path. The 548 hour cases and 165 promotion/recovery server
+cases still passed. Test the internal accepted/refused action boundary without changing it.
+
+Public promotion retry is a separate path: the existing real-mirror HTTPS case in
+`hour-promotion.test.ts` promotes once, restarts, retries with later time and checks the same
+rows, counters and hour journal. The driver reran that case after review and it passed;
+`promoteMirrorToPrimary` returns already-primary before invoking its preparation runner.
+Do not change that public outcome to make the internal check execute.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 **2026-10-15 W41s-C3 contract check:** Cloud D62 and local W41s-4/6 have landed. On Cloud
