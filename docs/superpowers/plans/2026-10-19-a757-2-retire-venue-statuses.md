@@ -80,7 +80,8 @@ subscription naming a table that no longer exists. Then the docs, then a look in
    v26.11.1, inside `begin`: with this trigger's text in place, drizzle's create-copy-drop-rename
    of `dining_tables` without `status_id` failed with that same message; with
    `DROP TRIGGER parties_clear_table_status` run first, it committed. That probe was a hand-built
-   three-table schema, not this slice's generated SQL through `applyMigrations`; nobody has run the
+   three-table schema (the round-3 check re-ran one of its own the same day, Node v26.11.1: the
+   same two outcomes), not this slice's generated SQL through `applyMigrations`; nobody has run the
    generated 0181 without the custom 0180 first. The numbers 0180/0181 are what drizzle-kit gave at `811f53619`; if core
    gains a migration before this lands, take the numbers drizzle-kit gives (and regenerate on a
    rebase collision, CLAUDE.md §3).
@@ -92,7 +93,10 @@ subscription naming a table that no longer exists. Then the docs, then a look in
    `floor_reset_tables.table_id`, `floor_today_join_tables.table_id`,
    `floor_today_split_parts.joined_table_id` and `.part_table_id`, `floor_today_tables.table_id`,
    `party_tables.table_id`. (Re-run by the plan review on 2026-10-19 with its own script over the
-   latest snapshot of each of the 15 sets under `packages/*/drizzle`: the same nine keys. A text
+   latest snapshot of each set under `packages/*/drizzle` (15 sets; `fiscal-none` has no snapshot):
+   the same keys, `dining_tables.status_id` into `table_service_statuses` and the eight into
+   `dining_tables` listed above. The round-3 check re-ran it with `jq` over the same snapshots on
+   2026-10-19: the same result.) (A text
    search found no migration file outside core that both creates a trigger and mentions
    `dining_tables`, and no non-test source under `packages/*/src` or `apps/server/src` that does;
    the change feed's triggers are removed by `applyMigrations` before it migrates, CLAUDE.md §2.) None cascades, so the rebuild's `DROP TABLE dining_tables` deletes
@@ -327,8 +331,11 @@ retired `set-status` event as a probe: they emit it and expect `api.setTableStat
 retired; only the probe is. Typecheck forces a change at `:3094`, `:3122`. **Ruling:** replace the
 probe with another table-keyed action the till sends with `activeTableId`, chosen by the
 implementer, keeping `expect(tableOrder(el)!.orderId).toBe("wo-new")` and `expect(…call).toHaveBeenCalledOnce()`
-as they are, and **prove it by a mutation**: make the late answer point the till at the wrong
-table, watch both cases fail on the new probe's table id, restore (Task 3a says where). The
+as they are, and **prove it by a mutation**: make the seating answer point the till at the wrong
+table, watch both cases fail on the new probe's table id, restore (Task 3a says where). Not the
+late Move guests or Finish answer: in both cases that answer lands before the seating answer,
+which sets `activeTableId` again (`till-app.ts:9329`), so a wrong table set there is overwritten —
+measured 2026-10-19 by the round-3 check, see Task 3a. The
 alternative of dropping the probe and keeping only the order check was not taken: it reads the
 order, not the table. The PR's changed-checks list names both cases and the probe.
 
@@ -348,7 +355,7 @@ the status screen's draft they used are. **Ruling: this mapping, line by line.**
   draft" `:436` (twin `:196`, "Kitchen timing protects sidebar, voluntary logout and language
   replacement before their actions"); three are re-pointed at the Kitchen timing draft through the existing
   `editTiming` helper — "ignores repeated tab targets while deciding …" `:300`, "a reverted status lets
-  the real container tab switch without warning" `:311` (revert = fill `5`), "keyboard tab navigation
+  the real container tab switch without warning" `:313` (revert = fill `5`), "keyboard tab navigation
   holds the edited panel until Discard" `:406` (focus Venue details, `{End}` → Kitchen asks). The
   helpers `status`, `field`, `edit` (`:249-262`) go.
 - `dashboard-app.test.ts:2774-2790` ("offers a manager Venue settings …, opening on its first permitted
@@ -370,9 +377,11 @@ exists and Task 5 then retires the tab, keeping the package's typecheck green at
    `setup.configuration_outdated` before staged files are replaced. Task 2's two new rows.
 3. **A till or dashboard tab still running the old bundle during a deploy** calls the retired
    routes — it gets a plain 404, not a 500 or a code with no message. Tasks 1a and 1b's "no longer
-   serves" cases. Read, not run: an old till asks for `/api/statuses` in the same `Promise.all` as
-   its floor read (`apps/till/src/till-app.ts:8928-8936`), so its floor stops refreshing (the
-   last-known floor stays) until the tab reloads. Accepted: not live, no compatibility code.
+   serves" cases. Read, not run: an old till's full floor load (`#loadFloorData`,
+   `apps/till/src/till-app.ts:8924-8941`) asks for `/api/statuses` in the same `Promise.all` as its
+   tables and zones, so that load now applies nothing (its catch keeps the last-known floor); the
+   floor's own refresh and poll (`#refreshFloor`, `:9036`) read tables alone and are untouched. What
+   an old till shows overall was not run. Accepted: not live, no compatibility code.
 4. **A table needing clearing on the map** still shows its Needs clearing chip once `table.status`
    is gone — `apps/till/src/screens/till-floor-screen.needs-moving.test.ts:169-172` already pins
    the map token's description; Task 3b runs it.
@@ -501,12 +510,19 @@ has no `table_service_statuses`.
   sends keyed by `activeTableId` (read `till-app.ts` for one; say which in the handover), checked as
   called with `"t9"`; drop the `setTableStatus` stub from `mountApp`; keep every other line. Run
   `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts` — both pass.
-- [ ] **Step 2: The mutation (Decision 13).** Make each late answer point the till at the wrong
-  table: for Move guests, assign `this.activeTableId = toTableId` straight after `moveGuests`
-  resolves, before the `live()` checks (`till-app.ts:12703-12714`); for Finish, assign the finished
-  party's own table where the answer lands (`:13461`). Run the file: both cases must fail **on the
+- [ ] **Step 2: The mutation (Decision 13).** Make the seating answer point the till at the wrong
+  table: in the open-table path's seat answer, change `this.activeTableId = tableId;`
+  (`till-app.ts:9329`) to `this.activeTableId = "t7";`. Run the file: both cases must fail **on the
   new probe's table id** (a thrown error or a timeout does not count). Restore `till-app.ts`;
   `git diff --stat` shows only the test file. Record both failure lines in the handover.
+  Measured 2026-10-19 by the round-3 check, in a throwaway worktree at `c0e331ac0` with today's
+  `set-status` probe: this mutation failed both cases with `setTableStatus` called with `"t7"`, not
+  `"t9"`. Three mutations in the late answers left both cases passing — `this.activeTableId = toTableId`
+  straight after `moveGuests` resolves; Move guests' `live()` replaced by `() => true`; and
+  `this.activeTableId = party.tableIds[0]` in `#onFinishTable`'s `finally` — because in both cases
+  the late answer lands before the seating answer, which sets `activeTableId` again. So the table
+  check in these two cases does not see a late answer that sets the wrong table; this task does
+  not change that.
 - [ ] **Step 3:** typecheck `@waitron/till`; prettier; commit —
   `"Two till cases watch which table is current through another table action (A757 slice 2)"`.
 
