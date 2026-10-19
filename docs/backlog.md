@@ -1283,29 +1283,36 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   kept for.
 
 - **Loose ends left by A663 Part 2d (#1779).**
-  - The dashboard lets a manager attach an extras list to a product sold in a unit with decimals or
-    on a scale, and the till then offers no extras for it, with no word to the manager. Refuse it,
-    or say so, in the product editor (`writeProductModifiers`,
+  - The dashboard lets a manager attach an extras list to a product sold in a unit with decimals,
+    on a scale or with the measure switch on, and the till then offers no extras for it, with no
+    word to the manager. Refuse it, or say so, in the product editor (`writeProductModifiers`,
     `packages/catalogue/src/product-modifiers.ts`, checks no unit).
-  - A held order or a basket line carrying extras on a dish whose unit has since gained decimals or
-    a scale is not flagged by the till. The held-order rebuild (`apps/till/src/till-app.ts`) and
-    `lineBlock` (`apps/till/src/state/menu-refresh.ts`) still read the raw extras lists rather than
-    `offeredListsOf`, so only the server's `extras.unsupported_product` stops it, and the till
-    offers no way to drop just the extras. Read, not run.
+  - A reopened held order now marks a pick on a dish that no longer takes extras as not offered
+    (A821f). Three other till paths still read a line's extras lists straight from the offer
+    rather than through `offeredListsOf`: `lineBlock` (`apps/till/src/state/menu-refresh.ts:111`)
+    for a basket line after a menu refresh, `adoptLine` (same file, `:149`), and `extraOf`
+    (`apps/till/src/state/draft-lines.ts:171`). So a saved table draft brings a pick on a dish
+    now sold in a measure back as an ordinary pick; the server refuses
+    it with `extras.unsupported_product` when the order is sent, and the Edit button is hidden, so
+    staff can only delete the line. Read, not run.
 
-- **A821 — an extra on a dish sold in millilitres is accepted and billed once per millilitre**
-  (owner rule, 2026-10-17: extras go only on dishes sold in whole portions). Tried 2026-10-19 in
-  `apps/server/src/working-order.test.ts` with the `ml` unit as provisioning seeds it (precision 0,
-  no scale, `packages/catalogue/src/provisioning.ts`): `parkOrder` of 250 ml of a dish with one
-  1,00 € extra was ACCEPTED, and the extra's line was stored as quantity 250 at 1,00 €, a 250,00 €
-  line. The check (`soldByTheUnit`, `apps/server/src/working-order.ts`; its twin in
-  `apps/till/src/widgets/product-name.ts`, which decides whether the till draws an extras list)
-  refuses only a unit with a scale or decimal places, and a unit records nothing else about what it
-  counts, so `ml` looks exactly like `each`. **Fix:** a unit says whether it is a measure (ml, l, g…)
-  or a portion, the seeded measures say measure, and both checks refuse extras on a measure. That
-  is a column on `units`, so a migration, and a field on the Units screen
-  (`apps/dashboard/src/screens/units-screen.ts`). Owner question open: how a manager marks a
-  unit as a measure.
+- **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
+  tap with ±1 steps, the split control turns it into 250 lines, a course group counts it as 250
+  items (`itemCount`, `apps/till/src/state/draft-groups.ts`), and the basket-refresh dialog prices
+  it "each". Whether a measure should ask its quantity as a decimal unit does — which would change
+  the other readers of the till's `soldByTheUnit` (`apps/till/src/widgets/product-name.ts`) — is
+  the owner's call. Its readers: `splitLine` (`apps/till/src/state/working-order.ts`),
+  `countsWholeUnits` and the last-added steps and split control
+  (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
+  (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
+
+- **The Units list does not show which units are measures** (A821f), and switching one on gives no
+  warning that the dishes in that unit lose their extras lists at the next publish.
+
+- **Customer order drafts never look at a dish's unit** (A821f): `unavailable`
+  (`apps/server/src/order-drafts.ts:970`) checks an extras pick against the offer's lists only, so
+  an extra on a dish sold in a measure is flagged only when the draft is priced — as for a dish
+  with decimals or on a scale today. Read, not run.
 
 - **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next

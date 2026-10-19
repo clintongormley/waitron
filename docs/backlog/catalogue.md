@@ -1097,6 +1097,11 @@ From "Extras and Options — deliberate limits, and what is left open"
 - **Extras only on a dish sold by the unit (owner, 2026-10-15; A663 Part 2d).** A dish whose unit
   has a scale or allows decimal places takes no extras, so 1 l of sangría cannot carry one; to sell
   it with extras, sell it in a unit with no decimals (a jug).
+  Owner, 2026-10-19 (A821): a unit can be marked a measure ("Mide una cantidad (ml, g…) — sin
+  extras"), and a dish in a measure takes no extras either. On a newly set-up venue the seeded ml,
+  l, g, kg and mg start with it on; a new unit starts with it off. The switch is frozen into the
+  published menu with the dish's unit, so a change reaches the till and the server at the next
+  publish.
 
 From A344 (#1375, a menu's Price overrides tab shows its clashes):
 
