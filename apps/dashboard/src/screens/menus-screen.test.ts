@@ -3819,6 +3819,82 @@ it("closes an open window without a message when the person goes to another menu
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
+describe("a row's own Delete section confirm and another menu", () => {
+  /** Opens Drinks' Delete section confirm in Lunch and, with `answer` given, presses Delete. */
+  async function confirmDrinksInLunch(answer?: Promise<void>) {
+    const client = api(answer ? { deleteSection: vi.fn(() => answer) } : {});
+    const el = await mountLunch(client);
+    await rowAction(el, "m-drinks", "delete");
+    await vi.waitFor(() => expect(modal(el, "delete-section").open).toBe(true));
+    if (answer) {
+      inModal(el, "delete-section", '[data-test="delete-section-save"]').click();
+      await vi.waitFor(() => expect(client.deleteSection).toHaveBeenCalledOnce());
+    }
+    return { el, client };
+  }
+
+  const refusedInLunch = t("menus.change_not_saved")
+    .replace("{name}", "Lunch Menu")
+    .replace("{reason}", codeMessage("menu_section.not_found"));
+
+  it("shows a refusal in the confirm while its menu is open, and nowhere else", async () => {
+    const answer = deferred<void>();
+    const { el } = await confirmDrinksInLunch(answer.promise);
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() =>
+      expect(bottom(el, "delete-section")).resolves.toBe(codeMessage("menu_section.not_found")),
+    );
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(modal(el, "delete-section").open).toBe(true);
+    expect(
+      inModal<HTMLElementTagNameMap["wt-button"]>(
+        el,
+        "delete-section",
+        '[data-test="delete-section-save"]',
+      ).disabled,
+    ).toBe(false);
+  });
+
+  it("closes when another menu is opened before Delete is pressed", async () => {
+    const { el, client } = await confirmDrinksInLunch();
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    expect(modal(el, "delete-section").open).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(client.deleteSection).not.toHaveBeenCalled();
+  });
+
+  it("names Lunch with a refusal that comes once Dinner is open", async () => {
+    const answer = deferred<void>();
+    const { el } = await confirmDrinksInLunch(answer.promise);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() => expect(text(q(el, '[data-test="member-error"]'))).toBe(refusedInLunch));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    expect(modal(el, "delete-section").open).toBe(false);
+    expect(currentPlace(el)).toBe("Dinner Menu");
+  });
+
+  it.each([
+    ["Dinner is open", [DINNER_PATH]],
+    ["the person has gone to Dinner and back", [DINNER_PATH, LUNCH_PATH]],
+  ])("leaves focus where it is when the delete is saved once %s", async (_, paths) => {
+    const answer = deferred<void>();
+    const { el } = await confirmDrinksInLunch(answer.promise);
+    for (const path of paths)
+      await visit(el, path, path === DINNER_PATH ? "Dinner Menu" : "Lunch Menu");
+    await afterDialogCloses(el);
+    const back = q<HTMLAnchorElement>(el, '[data-test="back"]')!;
+    back.focus();
+    answer.resolve();
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    await settleStructure(el);
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(back);
+    expect(modal(el, "delete-section").open).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+});
+
 it("keeps a picker whose add is out open when the person goes to another menu, marking nothing from that menu, and closes it quietly when the add is saved", async () => {
   const adding = deferred<{ added: number }>();
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
@@ -5061,6 +5137,7 @@ describe("the Structure tree", () => {
             codeMessage("menu_section.not_found"),
           ),
         );
+        expect(q(el, '[data-test="member-error"]')).toBeNull();
         expect(modal(el, "delete-selected").open).toBe(true);
         expect(confirm.disabled).toBe(false);
         expect(confirm.variant).toBe("danger");
@@ -5316,6 +5393,7 @@ describe("the Structure tree", () => {
       await vi.waitFor(() =>
         expect(bottom(el, "remove-selected")).resolves.toBe(codeMessage("menu_section.not_found")),
       );
+      expect(q(el, '[data-test="member-error"]')).toBeNull();
       expect(modal(el, "remove-selected").open).toBe(true);
       expect(confirm.disabled).toBe(false);
       expect(cancel.disabled).toBe(false);
@@ -6276,6 +6354,7 @@ describe("the Structure tree", () => {
             codeMessage("menu_section.member_duplicate"),
           ),
         );
+        expect(q(el, '[data-test="member-error"]')).toBeNull();
         expect(modal(el, "move-selected").open).toBe(true);
         expect(confirm(el).disabled).toBe(false);
         expect(cancel(el).disabled).toBe(false);

@@ -1063,13 +1063,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `primaryCategoryId` always hold the same value.
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
 
-- **A row's own Delete section confirm stays open when another menu is opened while it is sent.**
-  Found by reading in the A817 review, not run: `#select` in
-  `apps/dashboard/src/screens/menus-screen.ts` does not clear `deletingSection`, and `#deleteSection`
-  (`0851df38d`, before A817) has no menu check, so the first menu's confirm, its refusal and an
-  enabled Delete can show over the second. Fix: the shape the bulk actions use (`#sendSelected`).
-  Left open by A817.
-
 - **A682. Translations: every missing name reported, all languages side by side
   (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
   field per enabled language on each row. Translate all and its "Use fix" action use the same editor.

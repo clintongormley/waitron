@@ -1282,6 +1282,7 @@ export class MenusScreen extends LitElement {
     this.removingSelected = null;
     this.deletingSelected = null;
     this.movingSelected = null;
+    this.deletingSection = null;
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
@@ -1758,19 +1759,32 @@ export class MenusScreen extends LitElement {
     });
   }
 
+  /** Answered once another menu has been opened, as `#sendSelected` is: a refusal is named with
+   * the menu it was sent from, and a saved delete moves no focus. */
   async #deleteSection(): Promise<void> {
     const section = this.deletingSection;
     if (!section || this.busy) return;
+    const opened = this.#menuOpenings;
+    const menu = this.#menuName();
+    const returnTo = this.#focusReturn;
+    const here = () => opened === this.#menuOpenings;
+    const stayPut = () => {
+      if (!here() && this.#focusReturn === returnTo) this.#focusReturn = null;
+    };
     this.busy = true;
     this.deleteSectionError = "";
     try {
       await this.api.deleteSection(section.id);
     } catch (error) {
-      this.deleteSectionError = codeMessage(codeOf(error));
+      if (here() && this.deletingSection === section)
+        this.deleteSectionError = codeMessage(codeOf(error));
+      else this.#reportRefused(menu, error);
+      stayPut();
       this.busy = false;
       return;
     }
-    this.deletingSection = null;
+    if (here()) this.deletingSection = null;
+    stayPut();
     await this.#refresh();
     this.busy = false;
   }
