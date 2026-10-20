@@ -8,7 +8,8 @@ owner's answers of 2026-10-20, through the watcher — Q3, one look for the whol
 extra question, colours set by hand are kept — and their request the same night: "Also we should
 allow uploading a new logo" (section 8a); and after their answer to Q4 the same night, with what
 followed it — a text-size slider, text set by hand under Advanced, Advanced folded into sections,
-and saved **custom themes** (sections 5a and 8b). Waiting for the owner's answers to the two logo
+and saved **custom themes** (sections 5a and 8b); then fixed after review round 6 (long words and
+hyphenation, Google's button, rounding, the storage shape, the name dialog). Waiting for the owner's answers to the two logo
 questions, Q5 and Q6, and to the two new questions, Q7 (typefaces) and Q8 (the account menu's
 "Theme" item) (section 19). Backlog: A841 (owner, 2026-10-17).
 Builds on A681 (#1842), the per-browser Light / Dark / Follow device choice. Mock-ups:
@@ -139,8 +140,8 @@ CSS `color-scheme` property (`colors.css:5,127`) so the browser draws its own co
 
 - Table `tenant_themes`, one row pinned to `id = 1`, holding one JSON document `theme` and
   `updated_at` (`packages/db/src/schema/tenant-themes.ts:9-17`); classified `state`
-  (`packages/db/src/classification.ts:146`); copied with a venue's configuration
-  (`packages/db/src/configuration-transfer.ts:77`). Every core table but `change_log` and
+  (`packages/db/src/classification.ts:141`); copied with a venue's configuration
+  (`packages/db/src/configuration-transfer.ts:72`). Every core table but `change_log` and
   `node_sealed_state` is a live-update source (`classification.ts:256-259`), so it already is one.
 - The document is `{ tokens: Record<string, string> }`, checked by `validateThemeOverride`
   against a seven-name allowlist `THEMEABLE_TOKENS` — primary, on-primary, surface, text, danger,
@@ -150,7 +151,7 @@ CSS `color-scheme` property (`colors.css:5,127`) so the browser draws its own co
   `token` (`theme.ts:32-47`; the code is registered at `packages/layouts/src/errors.ts:45`).
 - `getTenantTheme` / `putTenantTheme` (`packages/layouts/src/theme-store.ts:13-35`) behind
   `GET` and `PUT /management-api/theme`, both gated by `layout.configure`
-  (`apps/server/src/management-api.ts:1275-1306`, `theme-store.ts:23-26`), pinned by
+  (`apps/server/src/management-api.ts:1260,1274`, `theme-store.ts:23-26`), pinned by
   `apps/server/src/management-api.canvas-retirement.test.ts:146-229` (six cases: a missing theme
   reads `null`, a round trip, an unknown token, a missing body field, a staff session refused, no
   session refused).
@@ -344,8 +345,10 @@ already use (`theme-store.ts:23-26`). Managers and admins hold `layout.configure
   (18) and `--wt-font-family-google` (20, Google's sign-in button only, by Google's branding
   guidelines, 19) — four sizes, `--wt-font-size-sm|md|lg|xl` at 12, 14, 18 and 22 px (21-24), and
   three weights, `--wt-font-weight-normal|medium|bold` at 400, 500 and 600 (25-27). The only other
-  type token is `--wt-google-button-line-height` (33), Google's button again. `git grep` for a
-  `--wt-font…`, `--wt-line…` or `--wt-weight…` declaration outside `structure.css` found none.
+  type token is `--wt-google-button-line-height` (33), Google's button again. `git grep -nE --
+  '--wt-(font|line|weight)[a-z-]*[[:space:]]*:'` over the `.ts` and `.css` files of `apps` and
+  `packages`, less `structure.css`, found one line, `--wt-line-course-field-height`
+  (`apps/till/src/widgets/modifier-picker.ts:91`), a field's height, not type.
 - How often each is read: `git ls-files 'apps/*.ts' 'packages/*.ts'`, less `*.test.ts`, searched
   for `var(--wt-<token>)`, counted sm 262, md 70, lg 103, xl 30, normal weight 35, medium 13, bold
   261, the typeface 11, mono 7 and Google's 1.
@@ -354,7 +357,11 @@ already use (`theme-store.ts:23-26`). Managers and admins hold `layout.configure
   (`apps/print-agent/src/setup-page.ts:75-79`), the trust page (`apps/server/src/trust-page.ts:100,112`)
   and one on the till, `font-size: 4rem` (`apps/till/src/screens/till-enrol-screen.ts:67`). A line
   height is never a token: the same search for `line-height:` found literal values (`1`, `1.2`,
-  `1.25`, `1.5`) in 9 declarations and token sums in 5.
+  `1.25`, `1.5`) in 9 declarations and token sums in 5. A weight written as a number: the search
+  for `font-weight:` followed by three digits found 7 lines, five on server and print-agent pages
+  the theme does not reach and two on themed screens, the till's bill
+  (`apps/till/src/widgets/basket.ts:293`) and `apps/dashboard/src/screens/payments-screen.ts:215`,
+  both `600` (slice 11 moves those two to tokens).
 - `design-system.md:486-488`: "The type scale is 12px, 14px, 18px and 22px … in each device's own
   system font", and "The only font file any app bundles is Google Sans Medium, which the dashboard
   uses on its Google sign-in button alone".
@@ -554,13 +561,14 @@ Product text, English (Spanish to be written with the strings):
 | Text rows (section 5a) | Typeface · Small text · Normal text · Large text · Largest text · Normal weight · Medium weight · Bold weight |
 | A text value | Worked out · Set by hand · Use worked-out size / Use worked-out typeface / Use worked-out weight · at {n}%: {n} px |
 | Typeface choices (Q7 A) | The device's own · Serif |
-| Too small, under its row | {name}: {n} px is smaller than 12 px, the smallest size that reads easily on a screen. · Use 12 px |
-| Larger than checked, under its row | {name}: {n} px is larger than Waitron checks the tills at; long names may wrap more or be cut off. · Use {n} px |
+| Too small, under its row | {name}: {n} px is smaller than 12 px; text that small is often hard to read. · Use {s} px ({n} px at {step}%) |
+| A text size refused | Enter a whole number from 8 to 40. |
+| Larger than checked, under its row | {name}: {n} px is larger than Waitron checks the tills at; long names may wrap more or be cut off. · Use {s} px ({n} px at {step}%) |
 | Editor, under the heading | Theme in use: {name}. Saving changes every screen. / Not in use. Saving changes no screen until you use it. |
 | Editor, beside Save | Save as new theme… |
 | Themes card (section 8b) | Themes · New theme · Waitron (built in) · In use · {n} hard to read |
 | A theme's row menu | Use on every screen · Edit · Rename · Make a copy · Delete |
-| Advanced, opened | A colour you set here stays as you set it when you change the brand colour, background or corners. Waitron still checks it can be read. |
+| Advanced, opened | A colour you set here stays as you set it when you change the brand colour, background or corners. A text size you set here grows and shrinks with Text size. Waitron still checks both can be read. |
 | Advanced columns | Colour · Light screens · Dark screens |
 | A value | Worked out · Set by hand · Use worked-out colour |
 | Advanced, end | Reset all to worked-out |
@@ -594,7 +602,8 @@ Product text, English (Spanish to be written with the strings):
 | Under the logo (Q5 A) | How it prints on receipts of departments with no receipt logo of their own. · This logo prints blank on receipts. |
 | Name dialog (Save as new theme, Make a copy, Rename, first save of Waitron's) | Name this theme · Name · Use it on every screen now · Back · Save |
 | Name refused | A theme with this name already exists. / "Waitron" is the built-in theme's name. Pick another. |
-| Switch dialog | Use {name} on every screen? · Every dashboard changes now, and every signed-in till within 15 seconds. · Hard to read: {lines} · Back · Use it |
+| Switch dialog | Use {name} on every screen? · Every dashboard changes now, and every signed-in till within 15 seconds. · Text on the tills changes size too. · Hard to read: {lines} · Back · Use it |
+| Name dialog's messages | Enter a name. · Use 60 characters or fewer. · Correct the highlighted fields to continue. |
 | Delete dialog, theme in use | {name} is in use on every screen. Deleting it puts Waitron's theme on every screen. |
 | Account menu and till chooser (Q8 A) | Light or dark (replaces "Theme") |
 
@@ -696,11 +705,11 @@ the owner meant it, it is its own item.
   sizes it gives in whole pixels: "Text on screens: small 14 px · normal 16 px · large 21 px ·
   largest 25 px" at 115%. It scales the four size tokens together (12, 14, 18 and 22 px at 100%,
   `structure.css:21-24`) and nothing else: not spacing, not the 44 px tap minimum, not the product
-  buttons' height. It reaches every till, handheld, kitchen screen and the dashboard, because it is
-  part of the theme (section 12). The control is the existing `wt-slider` (section 3), `min` 100,
+  buttons' height. It reaches every till, handheld, kitchen screen (a kitchen screen in device mode at
+  its next reload, section 12) and the dashboard, because it is part of the theme (section 12). The control is the existing `wt-slider` (section 3), `min` 100,
   `max` 130, `step` 5, `name` `textScale`.
-- **Why no step below 100%.** Small text is already 12 px at 100%, the smallest size Lighthouse
-  calls easy to read (section 9); a smaller step would put every small label under it. The owner's
+- **Why no step below 100%.** Small text is already 12 px at 100%; under 12 px, Lighthouse says,
+  text is "often difficult to read on mobile devices" (section 9); a smaller step would put every small label under it. The owner's
   waiter wanted text bigger, not smaller.
 - **Why the top is 130%: measured.** A throwaway Vitest browser test in `apps/till` (Chromium from
   Playwright 1.64.1, macOS system fonts; deleted after the run, kept outside the repository as
@@ -723,22 +732,57 @@ the owner meant it, it is its own item.
     821 px on an 800 px screen, so the Park button's lower edge falls below it.
 
   At 1024 × 768 the counter stacks the bill under the menu and scrolls at 100% already (page 862
-  px), and at 130% and 150% nothing was cut off. At 390 × 844 the product buttons kept every word
-  whole at all three sizes; the probe's top bar already ran past the 390 px screen at 100% (the page
-  was 737 px wide), so the probe says nothing about the phone's bar. The floor list's table cards
-  wrap "Terraza 4" and "Terraza 10" onto two lines at 100% already, and "Terraza 1" as well at
-  130%, with the seat count wrapping beside it; nothing was cut off at any size, and the map's
-  table names fitted inside their squares at 150%. Pictures `27-text-size-top-step-{light,dark}.png`
-  are that probe's 1280 × 800 counter in Bar Lucía's look at 100% and 130%.
-- **What the design does about it.** The top step stops at 130%, the largest measured size at
-  which the counter kept every word whole and fitted the screen. Going higher needs the bill line
-  laid out differently at large text first (its name column is what breaks), which is a backlog
-  item of its own, not A841. The probe ran on macOS's system font only: Android and Windows tills
-  draw their own fonts, a little wider or narrower, so the build adds layout cases at 130% to the
+  px), and at 130% and 150% the probe reported nothing cut off. Two results in the first run were
+  not measurements, and I withdraw them as such (round 6): the floor screen's check looked for
+  `wt-table-token` elements and found none (it printed `tokens 0 … clipped 0` in every case, so
+  "nothing clipped" was a reading taken where both answers look alike); what I know of the floor
+  comes from looking at its screenshots, in which the list's table cards wrap "Terraza 4" and
+  "Terraza 10" onto two lines at 100% and "Terraza 1" as well at 130%, and the map's names sit
+  inside their squares at 150%. And at 390 × 844 the probe's page was 737 to 905 px wide with
+  122 px product buttons — not the phone layout — so it measured nothing about phones; the till's
+  own 390 px layout cases (below) are what will. Pictures
+  `27-text-size-top-step-{light,dark}.png` are that probe's 1280 × 800 counter in Bar Lucía's look
+  at 100% and 130%.
+- **Long words (round 6).** The first run's longest words had eight letters ("Tortilla",
+  "española"), so "every word whole" said nothing about longer ones. The round-6 reviewer's probe
+  (`a841-review/round6-probe/r6-probe.test.ts`) adds a detector — a word counts as broken when its
+  own text range draws on more than one line — and twelve common dishes with longer words
+  (Hamburguesa, Champiñones al ajillo, Albóndigas, Berenjenas, Ensaladilla rusa …). I re-ran it,
+  extended, as a throwaway test in `apps/till` (deleted; kept with its log as
+  `a841-mockups-src/text-size-probe/round6/`), command `env -u AI_AGENT -u CLAUDECODE gtimeout 400
+  pnpm exec vitest run src/a841d6-probe.test.ts` (16 passed), at 1280 × 800 in Chromium from
+  Playwright 1.64.1 on macOS, in the system sans-serif and in the Serif stack as that Chromium draws
+  it. What the failing case prints: `broken [<word>]`. What it printed:
+  - Plain (today's CSS), system font: no broken word at 100%, 105% and 110%; at 115% and 120%
+    "Hamburguesa" and "Champiñones" broken in their product buttons and in the bill; at 130%
+    "Albóndigas" in the bill as well. The reviewer's 100% run of the same words printed none, the
+    control that the detector does not invent breaks.
+  - Plain, Serif: "Hamburguesa" and "Champiñones" already broken in the product buttons at 105%.
+  - With `hyphens: auto` on the names and `lang="es"` on the screen: words still break at 115% and
+    130% (the detector counts any word on two lines), but the screenshots show every break at a
+    syllable with a hyphen — "Hambur-guesa", "Champi-ñones", "Albóndi-gas" (system, 130%), and
+    "Beren-jenas", "Ensaladi-lla" (Serif, 130%) — where the plain run drew "Tortill / a" and
+    "Cerve / za". It also hyphenates a word that plain CSS would have moved whole to the next line:
+    "Tinto de verano con limón" became "ve-rano" in its button at 115%. The computed `hyphens` read
+    `auto`, so the style reached the names.
+- **What the design does about it** — three ways weighed, with those numbers: (b) a lower top step
+  does not help: the plain Serif run broke words at 105%, and the plain system run at 115%, so the
+  top would have to be 110% in the device's font and 100% in Serif; (c) accepting mid-word breaks
+  leaves "Tortill / a" on a bill at 115%; (a) **chosen: hyphenation**, keeping 130%. The build puts
+  `hyphens: auto` on the product button's name and the bill line's name, and a `lang` on each name
+  saying the language the name is written in (the content language it comes from; `apps/till/index.html`
+  sets no `lang` today, `grep -n 'lang=' apps/till/index.html` printed nothing). What the owner is
+  told: at the top step a long word such as "Hamburguesa" can split across two lines at a syllable,
+  with a hyphen. What this rests on: Spanish only, in Chromium on macOS; English names and the till
+  devices' own browsers were not measured, and a browser that cannot hyphenate a language breaks
+  as today. The 150% result stands: its bill broke short words too, so 130% stays the top. Going
+  higher needs the bill line laid out differently at large text first, which is a backlog item of its
+  own, not A841. The build adds layout cases at 130% to the
   till's own suites — counter at 1280 × 800, 1024 × 768 and 390 × 844, the floor list and map, a
-  bill with "Tinto de verano con limón", a kitchen station's queue — beside today's cases at 100%,
-  and the dashboard's product editor already runs its phone-width cases at raised sizes larger
-  than 130% (`design-system.md:615-623`).
+  bill with "Tinto de verano con limón" and "Champiñones al ajillo", a kitchen station's queue —
+  each asserting no word breaks without a hyphen, beside today's cases at 100%, and the dashboard's
+  product editor already runs its phone-width cases at raised sizes larger than 130%
+  (`design-system.md:615-623`).
 - **The preview** applies the draft's text size to both panels and adds a till product button
   ("Tinto de verano con limón") and a bill line, drawn at the real pixel sizes, so the owner sees
   the wrap before saving (`25-text-size-editor-{light,dark}.png`, phone `26-…`).
@@ -763,7 +807,16 @@ with a single value (type has no light and dark):
 the code typeface `--wt-font-family-mono` (18), because it is used where characters are read one
 by one, such as a key or a log line (`design-system.md:463`), and the only faces that keep that
 working are other monospace faces; Google's typeface and line height (20, 33), which Google's
-branding rules fix, as section 2 leaves Google's button colours alone; line heights and letter
+branding rules fix, as section 2 leaves Google's button colours alone — and, since round 6, the
+Google button's size and weight too. Today that button reads `font-size: var(--wt-font-size-md)`
+and `font-weight: var(--wt-font-weight-medium)` beside Google's own typeface and line height
+(`apps/dashboard/src/screens/login-screen.ts:156-166`), so the slider and the Normal text and Medium
+weight rows would reach it: at 130% its text would be 18.2 px on Google's fixed 20 px line. Google's
+guideline gives the button's type as "Font: #1F1F1F | Google Sans Medium | 14/20" (light and
+neutral buttons; "#E3E3E3" for dark; <https://developers.google.com/identity/branding-guidelines>,
+last updated 2026-07-07, fetched 2026-10-20 with `curl` and read as text). So the build adds
+`--wt-google-button-font-size` (14 px) and `--wt-google-button-font-weight` (500) to
+`structure.css`, outside the theme's list, and the Google button reads them instead; line heights and letter
 spacing, which are not tokens at all (section 3) and would need tokens first; and weights under
 400, whose thin strokes at 12 px would be the hard-to-read text the rest of this design guards
 against. "Serif" is `ui-serif, Georgia, "Times New Roman", serif`; which serif each kind of till
@@ -774,7 +827,7 @@ with a **Set by hand** tag and **Use worked-out size** (or typeface, or weight);
 worked-out** at the end of Advanced puts it back with the colours; a hand-set value is kept when
 a main choice changes (the owner's answer to the extra question, which I extend to text: nothing
 about a brand colour bears on a text size). Each size row also shows the size the slider makes of
-it ("at 115%: 18 px").
+it ("at 115%: 16 px" for Normal text, 14 × 1.15 = 16.1).
 
 **The slider scales a size set by hand too** (my call). A hand-set size is the size at 100%, and
 every row and the line under the slider show the size it becomes. The slider is the one control a
@@ -785,15 +838,24 @@ hand-set size that the slider leaves alone — would let one hand-set row stay s
 everything around it grows, which is the complaint the slider answers.
 
 **Readability for type** (Q2's rule: a warning with a one-press fix, never a refusal; section 9).
-A size the screens would draw under 12 px — the hand-set value times the slider — warns under its
-row: "Small text: 10 px is smaller than 12 px, the smallest size that reads easily on a screen."
-with **Use 12 px**. It counts in the closed lines' "hard to read" and is listed by the Save dialog
-like a colour's. A size above Waitron's own value times 1.3, the largest the tills were measured
-at, gets a note under its row — "Largest text: 32 px is larger than Waitron checks the tills at;
-long names may wrap more or be cut off." with **Use 28 px** — which is not a readability warning:
-it does not count as hard to read and the Save dialog does not list it (my call: big text is easy
-to read; whether it fits is a layout matter, and the owner chose it). A weight or a typeface never
-warns: no rule I have a receipt for says which of them is hard to read.
+**Rounding** (my call): the screens draw whole pixels. The drawn size is the stored size (Waitron's,
+or the hand-set value) times the step, rounded half up to a whole pixel; that whole number is what
+the stylesheet carries, what the line under the slider and each row show, and what every check
+compares. A drawn size under 12 px warns under its row: "Small text: 10 px is smaller than 12 px;
+text that small is often hard to read." with **Use {s} px**, where s is the smallest whole number
+whose drawn size at the current step is at least 12 px. It counts in the closed lines' "hard to
+read" and is listed by the Save dialog like a colour's. A drawn size above the largest the tills were
+measured at — Waitron's own value times 1.3, rounded the same way (16, 18, 23 and 29 px) — gets a note
+under its row: "Largest text: 33 px is larger than Waitron checks the tills at; long names may wrap
+more or be cut off." with **Use {s} px**, where s is the largest whole number whose drawn size at
+the current step is no more than that limit. Both fixes store the size at 100%, and the button says
+what it draws: "Use 22 px (29 px at 130%)". Worked example at 130%: Largest text set by hand to 25
+draws 32.5, rounded to 33 px, above 29; the fix offers 22 (22 × 1.3 = 28.6, drawn 29), since 23
+would draw 29.9, rounded to 30. Small text set by hand to 8 draws 10.4, rounded to 10 px, under 12;
+the fix offers 9 (11.7, drawn 12). The note is not a readability warning: it does not count as hard
+to read and the Save dialog does not list it (my call: big text is easy to read; whether it fits is
+a layout matter, and the owner chose it). A weight or a typeface never warns: no rule I have a
+receipt for says which of them is hard to read.
 
 ### Advanced, in sections
 
@@ -1226,7 +1288,7 @@ nothing and left two holes):
   edited on their own. With a logo the save requires them, as `putReceipt` requires them for the
   venue receipt row (`receipt-store.ts:164-188`). I chose the theme row over the unused
   `tenant_receipts` row so that the pictures travel and disappear with the look: a configuration
-  copy carries `tenant_themes` (`packages/db/src/configuration-transfer.ts:77`) but, since A493, not
+  copy carries the theme table (`tenant_themes` today, `packages/db/src/configuration-transfer.ts:72`; `custom_themes` after slice 2) but, since A493, not
   `tenant_receipts` (`docs/backlog/printers.md:502-505`). Trade-off: the theme document is no longer
   choices only; section 2's anti-goal is about not copying Waitron's default colours, which this
   does not do.
@@ -1311,12 +1373,30 @@ names it. **New theme** opens the editor on Waitron's choices too, as a theme no
 `33-theme-save-and-switch-{light,dark}.png`.
 
 **Names.** A name is 1 to 60 characters after trimming, unique ignoring case, and never "Waitron"
-in any case (the built-in's). A clash is refused under the field: "A theme with this name already
-exists." Names are the venue's own words and are not translated (my call: only managers see them,
-on the dashboard).
+in any case (the built-in's, which is never translated). Names are the venue's own words and are
+not translated (my call: only managers see them, on the dashboard). Uniqueness compares a key the
+one writer computes with JavaScript: the name normalised to NFC, trimmed, then `toLowerCase()`
+(which does not depend on the device's language), so "Lucía" typed with a composed or a decomposed
+accent is one name; SQLite's own `lower()` is never used for it, since it folds only A to Z.
+
+**The name dialog** follows the house form rules (`design-system.md` → Forms): Name is required and
+marked; an empty name says "Enter a name." under the field, more than 60 characters "Use 60
+characters or fewer.", and a name taken by another theme "A theme with this name already exists."
+(the server's `theme.name_taken`, placed by its `field`) or "\"Waitron\" is the built-in theme's
+name. Pick another." — each under the field and, for the browser's own checks, once at the bottom,
+"Correct the highlighted fields to continue.", with Save disabled until the field is fixed; a
+refusal from the server does not disable Save. It takes a draft scope from `draftScopeFor` and has a
+`*.unsaved.test.ts` (CLAUDE.md §3). Rename opens with the current name and Save quiet until it
+changes, as the rule asks. **Exception, stated here as the rule requires:** Make a copy and Save as
+new theme open already savable, with a proposed name — "{name} (copy)", the original shortened so
+the whole fits 60 characters — because the proposal is itself the draft the manager came to save;
+the first save from Waitron's theme opens with the field empty, Save disabled until a name is
+typed. In the editor, **Save as new theme…** is never drawn quiet: it does not save the theme being
+edited, so an unchanged draft is a valid copy (pictures 02 and 03 drew it quiet and are redrawn).
 
 **Switching.** **Use on every screen** asks once: "Use {name} on every screen?" with "Every
-dashboard changes now, and every signed-in till within 15 seconds." and, when the theme has
+dashboard changes now, and every signed-in till within 15 seconds.", "Text on the tills changes
+size too." when the two themes' text sizes differ, and, when the theme has
 warnings, a "Hard to read:" list worded as the Save dialog's (section 9); then **Use it** or
 **Back**. A switch never refuses a theme for being hard to read (Q2), and offers no fix — the
 fixes are in the editor. It stores one thing, which theme is in use (section 11). Rename, Make a
@@ -1377,7 +1457,7 @@ as text or a sufficiently contrasting icon), which helps users identify the pres
 then a border or other indication of the overall boundary of the hit area is not required"
 (<https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html>, "Boundaries"). Waitron keeps
 it because some controls show their state by fill alone — the pressed Theme button is "filled with
-`--wt-color-primary`" (`design-system.md:3272-3274`) — and a switch's track is the same colour.
+`--wt-color-primary`" (`design-system.md:3294-3297`) — and a switch's track is the same colour.
 Waitron's light blue stands 4.33:1 on the page and 4.63:1 on the surface, with white text on it at
 4.63:1 (derive.mjs `ratio`).
 
@@ -1471,7 +1551,7 @@ applied it would be the silent adjustment the owner turned down, and "Save anywa
 mean what it says. A request that skips the screen — a script, or a future tool — gets the same
 warnings back in the answer (section 10), so it is told what the editor would have shown, and the
 read route answers them too, so the saved card shows them to anyone who may open the page. A
-configuration import is the second way to write `tenant_themes` (`configuration-transfer.ts:77`),
+configuration import is the second way to write the theme table (`configuration-transfer.ts:72`),
 and `validateCoreConfiguration` checks no theme row today (`configuration-transfer.ts:5-24`): the
 build adds the same validity check there, and an imported look that is hard to read shows its
 warnings on the card like any other. The stylesheet is built only from the derived values —
@@ -1534,32 +1614,39 @@ zoom still enlarges everything, and the slider's 130% is not 200%.
 
 ## 11. Storage
 
-My call, revised for custom themes (section 8b): **the choices move to a table of themes, one row
-each, and `tenant_themes` keeps its one row, now saying which theme is in use.** Before themes, the
-design reused `tenant_themes`'s one JSON document for the one look; several named themes, each
-renamed, deleted and edited on its own, fit rows better than one document holding them all — two
-managers editing two different themes do not overwrite each other, a name's uniqueness is a unique
-index rather than code, and which theme is in use is a foreign key rather than an id inside JSON
-that no guard reads (CLAUDE.md §3: a column holding another row's id is a foreign key).
+My call, revised for custom themes (section 8b) and again in round 6: **the choices move to a
+table of themes, one row each, with a column marking the one in use; `tenant_themes` is retired.**
+Several named themes, each renamed, deleted and edited on its own, fit rows better than one JSON
+document holding them all — two managers editing two different themes do not overwrite each other,
+and a name's uniqueness is a unique index rather than code. Round 6 replaced the first revision's
+pointer (`tenant_themes.custom_theme_id`, a foreign key that refused deleting the theme it named):
+that key would have made `custom_themes` the target of a restricting child, and by
+`docs/developers/conventions-data.md:1538-1547` a drizzle table rebuild's `DROP TABLE` fails on such
+a child holding rows, so every later rebuild of `custom_themes` would have failed on any box with a
+theme in use.
 
-- **Tables.** Scope: the whole business, not one location or one kind of device (owner, Q3,
+- **The table.** Scope: the whole business, not one location or one kind of device (owner, Q3,
   2026-10-20: "one look for the whole business"; and "And the same look in all devices") — a brand
-  belongs to the business, one database holds one business (`design-system.md:3256-3261`, the
-  banner shows "the deployment tenant's legal name, not a location name"), so neither table has a
-  location key.
-  - **`custom_themes`** (new): `id`, `name` (as typed), `name_key` (the name trimmed and in lower
-    case, written by the one writer, with a unique index declared in the schema — a column rather
-    than an expression index, because drizzle-kit 0.31.11 rewrites an expression index wrongly on a
-    rebuild, CLAUDE.md §3), `theme` (the JSON document below) and `updated_at`. Classified
-    `state`, beside `tenant_themes` (`packages/db/src/classification.ts:146`), and, like every core
-    table but two, a live-update source (section 3).
-  - **`tenant_themes`** (reshaped): still one row pinned to `id = 1` by its check, now holding
-    `custom_theme_id`, a foreign key to `custom_themes(id)` that refuses the deletion of the theme it
-    names (`on delete restrict`), and `updated_at`; its `theme` column goes. Nothing references
-    `tenant_themes` today (`git grep -i 'references.*tenant_themes'` over `apps` and `packages`
-    found no line; `tenantThemes.id` appears only as the upsert's target, `theme-store.ts:32`). No row means Waitron's
-    theme is in use. Deleting the theme in use deletes this row first, in the same transaction
-    (section 8b).
+  belongs to the business, one database holds one business (`design-system.md:3282`, the banner
+  shows "the deployment tenant's legal name, not a location name"), so it has no location key.
+  **`custom_themes`** (new, in the core set, replacing `tenant_themes`): `id`, `name` (as typed),
+  `name_key` (section 8b's key, with a unique index), `in_use` (nullable; a CHECK allows only `1`;
+  `1` on the theme in use and NULL on every other), `theme` (the JSON document below) and
+  `updated_at`. A plain unique index on `in_use` lets at most one row hold `1`, because SQLite's
+  unique index lets NULLs repeat. Measured 2026-10-20 with `node:sqlite` (Node v26.11.1, SQLite
+  3.54.0), a table `t (in_use integer check (in_use = 1))` with a unique index on `in_use`: two NULL
+  inserts succeeded, the first `1` succeeded, the second `1` was refused "UNIQUE constraint failed:
+  t.in_use", and a `2` was refused by the CHECK; the case of section 15 repeats it on the real
+  schema. No row holding `1` means
+  Waitron's theme is in use. Both indexes are on plain columns — no expression index and no partial
+  index — so CLAUDE.md §3's drizzle-kit 0.31.11 trap about rewriting expression indexes on a rebuild
+  does not apply. No foreign key points at `custom_themes` and it points at nothing, so a rebuild
+  deletes no other table's rows. Classified `state`, as `tenant_themes` is today
+  (`packages/db/src/classification.ts:141`), and, like every core table but two, a live-update
+  source (section 3). Switching clears the old row's `in_use` and then sets the new one's, in one
+  transaction, in that order, so the unique index never sees two `1`s (CLAUDE.md §3: rewriting rows
+  one at a time can break a unique index the final state satisfies). Deleting the theme in use
+  deletes its row, which leaves Waitron's in use.
 
   A theme's `theme` document holds the owner's **choices only**: `{
   logo, brandColor, brandFix, background, corners, textScale, handSet, text }` (`logo` is `null`, or `{ light, dark?
@@ -1591,25 +1678,25 @@ that no guard reads (CLAUDE.md §3: a column holding another row's id is a forei
   it works them out now. A release never changes a brand colour or hand-set value as stored, but it
   can make one hard to read that was not: it is then served as stored, and the card and editor show
   the new warning and its fix (section 17).
-- **A migration is needed** (before custom themes none was): one new table in the core set and
-  `tenant_themes` reshaped. The commit states why a new table enters the core set (CLAUDE.md §3):
-  it sits beside `tenant_themes`, which is core, and both serve `/api/theme` to every app, so a
-  module of their own would split one contract. The plan follows CLAUDE.md §3's migration rules: the
-  foreign key and the unique index declared in the TypeScript schema; nothing points at
-  `tenant_themes`, so its rebuild deletes no other table's rows (`grep REFERENCES` first, as the rule
-  asks), and a drizzle-kit generation that rebuilds it does not also add a column to it (dropping
-  `theme` in one generation and adding `custom_theme_id` in the next). The guards it meets are
-  section 14's. The document's shape is still checked in code. A logo is a name inside a theme's
-  document, not a column, so the library's use of it is counted by code: both of the library's
-  usage counters (`images.ts:46-50`) learn a "theme logo" use over every row of `custom_themes`, so
-  the library refuses to delete an image any theme names. Before go-live any installation may be
-  reset (CLAUDE.md §3), so an old `{ tokens }` row is not carried forward (my call).
+- **A migration is needed** (before custom themes none was): `custom_themes` is created and
+  `tenant_themes` dropped. The commit states why a new table enters the core set (CLAUDE.md §3): it
+  replaces `tenant_themes`, which is core, and serves `/api/theme` to every app, so a module of its
+  own would split one contract. What drizzle-kit is expected to generate: a `CREATE TABLE` with the
+  CHECK, two `CREATE UNIQUE INDEX` statements and a `DROP TABLE tenant_themes`; nothing references
+  `tenant_themes` (`git grep -i 'references.*tenant_themes'` over `apps` and `packages` found no
+  line), so the drop deletes no other rows. Slice 2 generates the migration, reads the SQL it wrote
+  rather than assuming it, and runs the guards of section 14. The document's shape is still checked
+  in code. A logo is a name inside a theme's document, not a column, so the library's use of it is
+  counted by code: both of the library's usage counters (`images.ts:46-50`) learn a "theme logo"
+  use over every row of `custom_themes`, so the library refuses to delete an image any theme names.
+  Before go-live any installation may be reset (CLAUDE.md §3), so an old `tenant_themes` row is not
+  carried forward (my call).
 - **Routes:** `GET /management-api/themes` lists every custom theme — id, name, choices,
   worked-out values and warnings (keys only, section 10) — and which one is in use, so the Look
   card, the Themes card and a supervisor's read-only page all show the same warnings. `POST
   /management-api/themes` creates one (New theme's first save, Save as new theme, Make a copy),
   `PUT /management-api/themes/{id}` saves its choices, `PATCH …/{id}` renames it, `DELETE …/{id}`
-  deletes it (the theme in use too, putting Waitron's in use in the same transaction), and `PUT
+  deletes it (the theme in use too, which leaves Waitron's in use), and `PUT
   /management-api/theme-in-use` with `{ customThemeId }` or `null` switches. Today's
   `/management-api/theme` routes go. Gates: section 13. A request naming a theme that is not there
   answers `theme.not_found`.
@@ -1636,11 +1723,12 @@ that no guard reads (CLAUDE.md §3: a column holding another row's id is a forei
 - **Backlog this closes or changes:** the `--wt-color-primary-text` entry (`backlog.md:4504-4510`,
   detail `backlog/dashboard.md:1227-1236`) closes — the theme writes primary text, hover and
   disabled colours; the `tenant_themes` DELETE restriction (`backlog.md:6277-6279`) is answered —
-  switching to Waitron's theme deletes the `tenant_themes` row, so DELETE is an intended path;
+  the table is retired, and deleting a custom theme is an intended path;
   `design-system.md:189-208` is rewritten.
-- **Configuration copy:** the theme already travels (`configuration-transfer.ts:77`); the build adds
-  `custom_themes` to the list, before `tenant_themes`, whose foreign key needs it, and adds the
-  check of every theme's document to `validateCoreConfiguration` (section 9), including that a logo
+- **Configuration copy:** the theme already travels (`configuration-transfer.ts:72`); the build
+  replaces `tenant_themes` in that list with `custom_themes`, and adds to `validateCoreConfiguration`
+  (section 9) the check of every theme's document, at most one row with `in_use`, and each
+  `name_key` recomputed from its `name` rather than taken as sent, including that a logo
   names an image the same copy carries — the library's tables travel too (`packages/media/src/module.ts:21-30`); the
   plan confirms the order in which the two are checked.
 
@@ -1655,12 +1743,13 @@ fetched without holding anything** (B4: I chose the stored copy).
 - **The answer.** `GET /api/theme` with no session (the colours are not secret, and the signed-out
   dashboard and the till's start screen need them) answers `{ hash, css, logo }`: the section-7
   sheet built from the choices of the theme in use by the current release, or an empty `css` while
-  Waitron's theme is in use (no `tenant_themes` row); `logo`,
+  Waitron's theme is in use (no row with `in_use`); `logo`,
   `null` or `{ light, dark }` holding the addresses of the images' "display" renditions (`dark`
   `null` when there is none; section 8a); and `hash`, a SHA-256 of `css` and `logo` together (like
   `setupRevisionOf`, `till-setup.ts:115-117`). A rendition's address names its source and framing
   (`presentation.ts:10-16`), so an edit to the logo in the library changes the hash. A content hash,
-  not a row counter, because Reset deletes the row and a later save could repeat a counter. The
+  not a row counter, because switching to Waitron's theme and back, or deleting and re-creating a
+  theme, could repeat a counter. The
   server keeps the last answer in memory keyed by which theme is in use and its stored document,
   together with, for each logo
   image, what its rendition address is made of: the image's current source file and framing
@@ -1705,8 +1794,8 @@ fetched without holding anything** (B4: I chose the stored copy).
   `/tmp/a841-review/run.mjs`, re-run with its fixture carrying `vite-ignore`, printed
   `href="/api/theme.css"` for development and build at both bases; I did not re-run it without
   `vite-ignore`.)
-- **Open dashboards** watch a theme read that depends on `tenant_themes` and `custom_themes`
-  (every core table is a change source, section 3), and on `media_images`, so an edit to the logo in the library reaches them too
+- **Open dashboards** watch a theme read that depends on `custom_themes` (every core table is a
+  change source, section 3), and on `media_images`, so an edit to the logo in the library reaches them too
   (section 3). It is passive (house rule: automatic reads do not keep a session alive) and open to
   every signed-in person, with no permission; on a new hash the shell replaces the sheet's text.
 - **Signed-in tills** get a `themeHash` field in `readTillSetup`, the same hash as `/api/theme`'s,
@@ -1714,7 +1803,7 @@ fetched without holding anything** (B4: I chose the stored copy).
   `/api/menu-state` runs `readTillSetup` on every poll (section 3);
   `#applyVenueSetup` fetches `/api/theme` and replaces the sheet. A signed-in till therefore follows
   within one menu-state poll (15 s).
-- **Switching and editing.** A switch rewrites `tenant_themes`, which moves the hash, so every
+- **Switching and editing.** A switch rewrites two rows' `in_use`, which moves the hash, so every
   open dashboard repaints and every signed-in till follows within one poll, exactly as after a save
   of the theme in use. Saving, renaming or copying a theme that is not in use changes `custom_themes`
   but not what `/api/theme` answers, so the hash stays and no screen repaints; the dashboards' theme
@@ -1732,12 +1821,14 @@ My call:
 Revised for the move to the Settings section. The rule stays: supervisors see the look; managers
 and administrators change it.
 
-- Reading: `GET /management-api/theme` moves from `layout.configure`
-  (`apps/server/src/management-api.ts:1278-1282`) to `venue.view`, like
+- Reading: the read of the themes (section 11's `GET /management-api/themes`, replacing today's
+  `GET /management-api/theme`, gated by `layout.configure`
+  (`apps/server/src/management-api.ts:1260`) to `venue.view`, like
   `GET /management-api/venue-defaults` (`apps/server/src/location-settings-api.ts:297-302`); a
   supervisor holds `venue.view` but not `layout.configure` (`permissions.ts:46-55`), so the
   read-only card would otherwise be refused.
-- Editing: **stays `layout.configure`**, the permission `PUT /management-api/theme` already checks
+- Editing: **stays `layout.configure`** for every write of section 11, the permission today's
+  `PUT /management-api/theme` checks
   (`packages/layouts/src/theme-store.ts:23-26`). The earlier draft moved it to `venue.configure`
   only because the card sat on Venue settings, whose cards edit under that permission
   (`dashboard-app.ts:1916`). On the Settings section the nearest page is Device profiles, read and
@@ -1790,17 +1881,20 @@ and administrators change it.
 - Type (section 5a): the list `deriveTheme` writes gains the four sizes, the three weights and
   `--wt-font-family`, written as Waitron's values where nothing is set, so every theme keeps one
   shape; `theme-registry.test.ts` checks them declared like the colours, and a case pins that the
-  mono typeface and Google's typeface and line height are outside the list. No guard checks that a
+  mono typeface and Google's typeface, line height, font size and font weight are outside the list;
+  a browser case renders the Google button with a theme at 130% and a hand-set Medium weight of 800
+  and asserts 14 px and 500. No guard checks that a
   screen reads a size token rather than a number (section 3 found seven that do not); the build's
   130% layout cases (section 5a) are what catch a screen that breaks.
-- Custom themes' tables (section 11): `scripts/classification-complete.test.ts` refuses an
-  unclassified `custom_themes`; `scripts/schema-constraints.test.ts` holds the foreign key and the
-  unique index to the TypeScript schema — weaker than its name, it matches a unique index by name
-  (CLAUDE.md §3), so the index's name is fixed in the plan; `scripts/id-columns-are-references.test.ts`
-  sees `custom_theme_id` as an id column, which it is satisfied by because it is a foreign key;
-  `scripts/two-file-foreign-keys.test.ts` has nothing to refuse, both tables being `state`; and
-  `scripts/migrations-match-schema.test.ts` and `scripts/migration-upgrade.test.ts` run the new
-  migration. Nothing guards a theme's name rules but the unique index and the route's cases.
+- Custom themes' table (section 11): `scripts/classification-complete.test.ts` refuses an
+  unclassified `custom_themes` (the `tenant_themes` entry goes with its table);
+  `scripts/schema-constraints.test.ts` holds the two unique indexes to the TypeScript schema —
+  weaker than its name, it matches a unique index by name (CLAUDE.md §3), so the plan fixes both
+  names; `scripts/migrations-match-schema.test.ts` and `scripts/migration-upgrade.test.ts` run the
+  new migration. With no foreign key, `scripts/id-columns-are-references.test.ts` and
+  `scripts/two-file-foreign-keys.test.ts` have nothing new to see. Nothing guards "at most one in
+  use" but the unique index and its case (section 15), nor the name rules but the `name_key` index
+  and the route's cases.
 - The Themes card's row menu column is keyed `actions` and pinned to the end, which
   `scripts/pinned-actions-column.test.ts` holds (weaker than its name: it knows the column only by
   the literal key).
@@ -1836,7 +1930,7 @@ and administrators change it.
   choice from `/api/theme` as picked; refuses without `layout.configure`; a supervisor's `GET` is
   answered and its `PUT` refused; a configuration import with an invalid theme row is refused and
   one that is only hard to read is accepted; `/api/theme` answers empty with no row and the three
-  blocks with one, and the hash changes after Reset then a new save; the till's revision moves when
+  blocks with one, and the hash changes after switching to Waitron's theme and back; the till's revision moves when
   the theme changes. The six existing cases in `management-api.canvas-retirement.test.ts:146-229`
   are rewritten for the new document, keeping their refusal cases.
 - Browser (real Chromium, and WebKit for the start-up probe): the section-7 probe as a test against
@@ -1872,8 +1966,9 @@ and administrators change it.
   not).
 
 - Text size and text set by hand (section 5a). The derivation: each step from 100% to 130% gives
-  the four sizes as Waitron's times the step, a hand-set size times the step too, and nothing else
-  changes; a size the screens would draw under 12 px warns with the fix 12, Waitron's own theme at
+  the four sizes as Waitron's times the step rounded half up to whole pixels, a hand-set size the
+  same way, and nothing else changes; section 5a's worked example at 130% as cases (Use 22 px for a
+  Largest text of 25, Use 9 px for a Small text of 8, each clearing its note or warning); a size the screens would draw under 12 px warns with the fix 12, Waitron's own theme at
   100% does not (the control), and a size above Waitron's times 1.3 gives the note and never a
   warning; weights and typefaces never warn. Server: `textScale` outside 100–130 or off the 5% steps,
   a size outside 8–40, a weight outside the list and an unknown typeface are refused as
@@ -1884,16 +1979,20 @@ and administrators change it.
   slider changes the preview, its line of sizes and nothing outside the preview until Save; Advanced's
   five sections start closed, a section holding an error opens, a section with a warning shows its
   count closed, a section stays as left until the editor closes and starts closed when it opens
-  again; phone width; axe in both themes.
+  again; phone width; axe in both themes. The Google button keeps 14 px and 500 under a theme at 130%
+  (section 5a). The 130% layout cases assert no word breaks without a hyphen, with "Champiñones al
+  ajillo" among the names. The name dialog: its messages under the field and the one at the bottom,
+  Save disabled until fixed, Rename quiet until changed, Make a copy and Save as new theme open
+  savable, a proposed name never over 60 characters, and its `*.unsaved.test.ts`.
 - Custom themes (section 8b). Server: create, save, rename, copy and delete each change only their
   row; a name clash ignoring case is `theme.name_taken` and "waitron" is refused; deleting the theme
-  in use leaves no `tenant_themes` row and `/api/theme` empty, in one transaction (a control: deleting
-  a theme not in use leaves the hash unchanged); the foreign key refuses deleting the theme in use by
-  any other path (a direct delete, asserted by the domain error the route maps it to, CLAUDE.md §4);
+  in use leaves no row with `in_use` and `/api/theme` empty (a control: deleting
+  a theme not in use leaves the hash unchanged); a second row set to `in_use = 1` is refused by the unique index while two NULLs are not
+  (the control);
   switching moves `/api/theme`'s hash and the till's `setupRevision`, and saving a theme not in use
   moves neither; the list answers each theme's warnings, to a supervisor too, whose writes are all
-  refused; a configuration copy carries both tables and is refused when the in-use pointer names a
-  theme it does not carry; the image library refuses to delete an image any theme names and frees it
+  refused; a configuration copy carries `custom_themes`, is refused with two rows in use, and recomputes
+  `name_key`; the image library refuses to delete an image any theme names and frees it
   once no theme does. Browser: the Themes card's row menus per kind of row; the name dialog's switch
   defaulting on for the theme in use and off otherwise; the first save from Waitron's theme asking a
   name; the switch dialog listing a saved warning; the delete dialog's sentence for the theme in use;
@@ -1911,12 +2010,16 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
    `colors.test.ts`, the sweep, the token-list guard. No screen. Hand-set values may be their own
    slice (1b) if this one grows past one implementer: fixed inputs, the settling steps of section 6,
    the hand-set sweep.
-2. **The stored themes and the server.** The migration: `custom_themes` and the reshaped
-   `tenant_themes` (section 11); the theme document, the list, create, save and switch routes and
+2. **The stored themes and the server.** The migration: `custom_themes` created and `tenant_themes`
+   dropped (section 11), generated with drizzle-kit and its SQL read before it is committed; the theme document, the list, create, save and switch routes and
    their read permission (a supervisor reads, and is refused every write), `brandFix`,
    `theme.invalid` with `field` for invalid choices only, `warnings` in the answers, the import
    check over both tables, `/api/theme` serving the theme in use, the till's `themeHash`; retire
-   `THEMEABLE_TOKENS`, `validateThemeOverride`, the till's copy and `/management-api/theme`. If this
+   `THEMEABLE_TOKENS`, `validateThemeOverride`, the till's copy, `/management-api/theme`
+   (`apps/server/src/management-api.ts:1260,1274`), `getTenantTheme` and `putTenantTheme`
+   (`packages/layouts/src/theme-store.ts`, exported at `packages/layouts/src/index.ts:79`) with their
+   tests (`packages/layouts/src/theme-store.test.ts`, and the six cases of
+   `management-api.canvas-retirement.test.ts`, rewritten for the new routes). If this
    grows past one implementer, the migration and the import check are their own slice (2a).
 3. **Delivery.** The stored copy and the fetch in the dashboard's and till's `main.ts`, the
    dashboard's live read, the till's `#applyVenueSetup` swap, the start-up probes in Chromium and
@@ -1948,11 +2051,21 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
    import check; the print paths' fallback to it, for departments with no receipt logo and for
    sales with no department; the ticket view and the preview; its redraw on a library edit; "How it
    prints" and the blank-print line.
-10. **Text size.** `textScale` in the document and in `deriveTheme`'s list with the four sizes; the
-    slider on the Look card, its line of sizes and the preview's till button and bill line; the
-    saved card's row; the equipment label and the recovery sheet keeping Waitron's type; the 130%
-    layout cases in the till's and the dashboard's suites (section 5a).
-11. **Text set by hand.** The `text` part of the document and its validity check; the Text section's
+10. **Text size.** `textScale` in the document and in `deriveTheme`'s list with the four sizes,
+    rounded to whole pixels; the slider on the Look card, its line of sizes and the preview's till
+    button and bill line; the saved card's row; the equipment label and the recovery sheet keeping
+    Waitron's type; the Google button's own `--wt-google-button-font-size` and
+    `--wt-google-button-font-weight`; `hyphens: auto` and a `lang` on the till's product button names
+    and bill line names; the 130% layout cases in the till's and the dashboard's suites (section 5a).
+    `wt-slider` gains what the card needs, with the token-painting and axe cases a changed primitive
+    takes (CLAUDE.md §3): today it shows the bare number in `<span part="value" aria-hidden="true">`
+    and has no unit, hint or `aria-valuetext` (`packages/ui/src/components/wt-slider.ts:52-61,92-96`),
+    so it gains a value format (to show "115%"), a hint below it, and an accessible value text read
+    from the strings ("115 percent"), so a screen reader hears the unit.
+11. **Text set by hand.** The `text` part of the document and its validity check; the two weights
+    written as numbers on themed screens moved to tokens (`font-weight: 600` at
+    `apps/till/src/widgets/basket.ts:293`, the till's bill, and
+    `apps/dashboard/src/screens/payments-screen.ts:215`), so a hand-set Bold weight reaches them; the Text section's
     eight rows, Set by hand, Use worked-out, the too-small warning and its fix, the larger-than-checked
     note; the typeface choices of Q7's answer; the saved card's "Text set by hand" row.
 12. **Advanced in sections.** The five sections, their closed lines and "hard to read" counts, what
@@ -1964,7 +2077,13 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
     the rename, copy and delete routes, the strings in both languages, and the user guide's
     Appearance page.
 14. **The account menu's item (Q8).** The new label for `theme.label` in both apps' strings, English
-    and Spanish, and the cases that pin it.
+    and Spanish, and the cases that pin it; and, in the same change (CLAUDE.md §1: a behaviour change
+    retires every receipt about the old behaviour), the sentences that name the item "Theme":
+    `CLAUDE.md:324` (§3's banner rule, "Account settings, Theme, Language and Log out"),
+    `docs/developers/design-system.md:66`, `:738` (`wt-theme-chooser`'s "Theme: Follow device"),
+    `:3285`, `:3290`, `:3294` (the account menu's "First Theme: one row holding the visible label
+    \"Theme\""), and `:4891-4902` (setup's and the till's Theme chooser). The user guides never name
+    it (`git grep -i theme` over `apps/server/src/guide` found nothing).
 15. **Uploaded fonts — only if Q7 comes back B.** Its own design pass first (section 19, Q7).
 
 The path stays FULL: the new table and the reshaped one are a migration, and switching adds a
@@ -1984,8 +2103,8 @@ permission-gated write (CLAUDE.md's risk triggers).
   (confirmed: "And the same look in all devices"). Custom themes (section 8b) keep that: several
   are saved, one is in use everywhere. Not taken: B, several named looks each chosen by a device
   profile.
-- **Q4** is answered with neither A nor B (2026-10-20): a slider, text set by hand under Advanced,
-  and Advanced in sections (section 5a). Not taken: A (no text size) and B (Standard or Large, about
+- **Q4** is answered with neither A nor B (2026-10-20): a slider (its range, 100% to 130%, is my
+  call), text set by hand under Advanced, and Advanced in sections (section 5a). Not taken: A (no text size) and B (Standard or Large, about
   30% bigger).
 - **Q7 B (uploaded fonts):** slice 15 is added after its own design pass — a font store (the image
   library takes images only, section 3), WOFF2 files only, a per-file size limit, `font-display:
@@ -2046,8 +2165,10 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **With Q5 A, saving a logo changes printed receipts** of every department with no receipt logo
   of its own, from the next receipt. Mitigation: the card says so beside the logo and shows how it
   prints.
-- **Text size was measured on one machine's fonts.** The 130% top rests on a probe in Chromium on
-  macOS (section 5a). Android and Windows tills, and CI's Linux runners, draw other fonts; a wider
+- **Text size was measured on one machine's fonts, in Spanish.** The 130% top, and hyphenation
+  keeping long words readable at it, rest on probes in Chromium on macOS with Spanish names
+  (section 5a). English names and the tills' own browsers were not measured; a browser that cannot
+  hyphenate a language breaks a long word without a hyphen, as at 115% today. Android and Windows tills, and CI's Linux runners, draw other fonts; a wider
   one wraps sooner. Mitigation: the build's 130% layout cases run in CI on every change, and the
   probe's screens are the busiest the till has; screens the probe did not render (dialogs, the
   kitchen screens, the dashboard beyond the product editor) are covered only by those cases.
@@ -2059,6 +2180,13 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **Switching changes every till within 15 seconds**, by one manager's press. Mitigation: the switch
   asks once and says so, and a switch is undone the same way. Deleting the theme in use puts
   Waitron's theme on every screen; its dialog says so.
+- **A switch can change text size under a waiter's finger.** Switching between themes with
+  different text sizes reflows every signed-in till's buttons within one poll, at a moment nobody
+  chose. My call: apply it like every other theme change, not at the till's next idle moment or
+  sign-in. A switch is a rare, deliberate manager action; its dialog says "Text on the tills
+  changes size too." when the sizes differ (section 8b); and holding one change back per till
+  would need a second "pending look" state on every till for one case. The trade-off: a waiter
+  mid-order sees the grid move once.
 - **"Theme" means two things until Q8 is answered**: the account menu's Light / Dark / Follow device
   item and the venue's themes. Q8 proposes a new name for the first.
 - **A stale design-system sentence** (`design-system.md:108-110`), backlog A899, narrowed in round 1:
@@ -2079,7 +2207,10 @@ Look card's "Theme in use", Text size and "Text set by hand" rows, the editor's 
 its slider, the preview's till button and bill line, Save as new theme, Advanced's sections, and the
 Themes card under the saved card; before any change, a rebuild of the unchanged sources into this
 worktree left every picture byte for byte as committed (`git status` clean), and after it 06, 07, 19,
-21 and 22 were still unchanged. Since Q2 every
+21 and 22 were still unchanged. Round 6 redrew 02, 03, 12, 13, 15, 25, 26, 28, 29 and 30: Save as
+new theme is no longer drawn quiet (section 8b), Advanced's opening line says a hand-set text size
+grows with Text size, the text warning's words follow section 9's quote, and the stylesheet carries
+whole pixels (section 5a). Since Q2 every
 picture shows colours as picked; Bar Lucía's saved look has taken the fix for her green on dark
 screens. Pictures 01 to 16 show her look before she uploads a logo; the logo revision (2026-10-20)
 redrew 01 to 05, 12, 13, 15 and 16 to add the Logo row or field and the preview's banner strip, and
@@ -2106,7 +2237,7 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `08-q1-knobs-or-every-colour-light.png` | Q1 options side by side, kept unchanged as the record of what the owner saw when they answered (2026-10-19). Superseded by 02 and 12: its B side says 23 colours and has no Set by hand marks |
 | `09-q2-adjust-or-refuse-light.png` | Retired: Q2's options side by side, kept unchanged as the record of what the owner saw when they answered (2026-10-19), as 08 is. Its A side (silent darkening) and B side (refusal) are both superseded by 04, 05, 15 and 16 |
 | `10-q3-one-theme-or-per-device-light.png` | Q3's options side by side, kept unchanged as the record of what the owner saw when they answered A (2026-10-20) |
-| `11-q4-text-size-light.png` | Q4's options side by side, kept unchanged while Q4 is open (its till bar still shows "Bar Lucía", section 3) |
+| `11-q4-text-size-light.png` | Q4's options side by side, kept as the record of what the owner saw when they answered (2026-10-20; its till bar still shows "Bar Lucía", section 3) |
 | `12-advanced-{light,dark}.png` | Advanced opened, with Page and surfaces opened and the other four sections closed: Bar Lucía's light page set by hand to cream in the draft, marked, beside worked-out colours; her dark page still worked out. The saved look around the card has no cream |
 | `13-advanced-phone-light.png` | The same at 390 px: each row stacks its Light and Dark values |
 | `14-q-hand-kept-or-put-back-light.png` | The extra question: with the cream page saved, the brand changed to burgundy in the draft; the cream page kept (A) or put back (B). On both sides the green's dark fix is dropped with the green, so burgundy warns for dark screens with its fix. Kept unchanged as the record of what the owner saw when they answered A (2026-10-20); its left side is the behaviour now decided |
@@ -2198,7 +2329,8 @@ under Advanced setting the typeface, the four sizes and the three weights by han
 too-small warning; Advanced in five folding sections. Where I read the words differently from the
 watcher's note: "each place we set it" as each named type setting rather than each screen element
 (section 5a says why), and "etc" as weight, leaving line height out because it is not a setting
-today. The typeface's choices are Q7. Picture `11-q4-text-size-light.png` is kept as what the owner
+today. The question file tells the owner that reading in one line, with an example, so they can
+correct it (round 6). The typeface's choices are Q7. Picture `11-q4-text-size-light.png` is kept as what the owner
 saw. The question as asked:
 A waiter at Bar Lucía finds the till's text small. With A, the look changes colours and corners
 only, and bigger text becomes a separate item that can be tested screen by screen. With B, the card
@@ -2232,7 +2364,8 @@ it; and it needs a place to keep fonts, since the image library takes images onl
 design pass and slice after this one. Pictures: `35-q7-typefaces-light.png`.
 
 - **A (recommended):** the device's own fonts only — "The device's own" or "Serif". Nothing to
-  license, nothing to download, and every size this design measured holds.
+  license, nothing to download. The Serif stack, as Chromium on macOS draws it, was measured at 130%
+  with hyphenation (section 5a): long Spanish words broke only at a syllable with a hyphen.
 - **B:** also an uploaded font file, after its own design pass (licence, size, storage, first paint).
 
 **Q8 — What should the account menu's "Theme" be called now?** (asked with the Q4 revision,
