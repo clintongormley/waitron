@@ -9,6 +9,16 @@ export function reminderDueAt(reminder: ReleaseReminder | null | undefined): num
   return Number.isNaN(dueAt) ? Number.POSITIVE_INFINITY : dueAt;
 }
 
+/** The minutes left until `dueAt`, rounded up, so the last minute reads 1. For `dueAt > now` only. */
+export function minutesToFire(dueAt: number, now: number): number {
+  return Math.ceil((dueAt - now) / 60_000);
+}
+
+/** The moment `minutesToFire` next changes: `dueAt` itself in the last minute. */
+export function nextCountdownChange(dueAt: number, now: number): number {
+  return dueAt - (minutesToFire(dueAt, now) - 1) * 60_000;
+}
+
 /**
  * The delay to hand `setTimeout` for a timer due at `dueAt`, capped at the longest it holds: a longer
  * delay overflows the browser's timer, which then fires at once.
