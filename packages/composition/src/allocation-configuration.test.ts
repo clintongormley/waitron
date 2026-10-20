@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "./modules.js";
+import { FISCAL_OPERATIONS as historicalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
+import type { ModuleOperationHost, ModuleRecoveryFacts } from "@waitron/module";
+import * as release from "@waitron/fiscal-verifactu/src/hour-release.js";
+import * as internet from "@waitron/fiscal-verifactu/src/hour-clock-internet.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -143,14 +147,18 @@ beforeEach(async () => {
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: node.nodeId })));
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 function configure(paths: { custodianPath: string; confirmationPath: string }) {
   vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", paths.custodianPath);
   vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", paths.confirmationPath);
   vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", fingerprint);
 }
 async function attempt() {
-  const operations = ALL_MODULES.find((module) => module.name === binding.module)!.operations;
+  const operations = historicalOperations;
   expect(operations).toBeDefined();
   return withOperationAuthority(binding, operatorId, (authority) =>
     operations!.prepare({ binding, authority, input }, (prepared) =>
@@ -158,7 +166,7 @@ async function attempt() {
     ),
   );
 }
-it("selects the independently configured paper source through the production module list", async () => {
+it("reads an independently configured historical paper source without production dispatch", async () => {
   await withFiles(async (paths) => {
     configure(paths);
     const result = await attempt();
@@ -219,5 +227,149 @@ it("reads the current event file again on the next attempt", async () => {
       params: { reason: "event_mismatch" },
     });
     expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
+  });
+});
+
+function hourHost(environment: ModuleOperationHost["environment"] = {}) {
+  let value: unknown = null;
+  const history: unknown[] = [];
+  let held = false;
+  const facts: ModuleRecoveryFacts = {
+    country: "ES",
+    taxId: "89890001K",
+    environment: "preproduction",
+    bases,
+    contextKey: "selected-backup/current-key/sole-recovery",
+    history: [{ reference: "selected-backup", complete: true, records: [] }],
+    oldMachineOffline: true,
+    oldMachineAbsent: false,
+    noParallelRecovery: true,
+    priorActivation: "none",
+  };
+  const host: ModuleOperationHost = {
+    environment,
+    readPublicEvidence: async () => ({ trust: custodian, current: confirmation }),
+    readRecoveryFacts: async () => {
+      if (!held) throw new Error("recovery facts read outside exclusion");
+      return facts;
+    },
+    withPreparationState: async (_binding, run) => {
+      if (held) throw new Error("nested preparation");
+      held = true;
+      try {
+        return await run({
+          get value() {
+            return structuredClone(value);
+          },
+          get history() {
+            return structuredClone(history);
+          },
+          async replace(next) {
+            value = structuredClone(next);
+            history.push(structuredClone(next));
+          },
+        });
+      } finally {
+        held = false;
+      }
+    },
+  };
+  const operations = ALL_MODULES.find((module) => module.name === binding.module)!.operations!
+    .configure!(host);
+  return { operations, history };
+}
+
+it("refuses legacy paper input through unconfigured production composition", async () => {
+  await withFiles(async (paths) => {
+    configure(paths);
+    const operations = ALL_MODULES.find((module) => module.name === binding.module)!.operations!;
+    await withOperationAuthority(binding, operatorId, async (authority) => {
+      await expect(
+        operations.prepare({ binding, authority, input }, async () => "admitted"),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "outside_confirmation_missing" },
+      });
+    });
+    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([]);
+  });
+});
+
+it("refuses legacy paper input through a configured production host without durable hour intent", async () => {
+  await withFiles(async (paths) => {
+    const { operations, history } = hourHost({
+      WAITRON_FISCAL_CUSTODIAN_FILE: paths.custodianPath,
+      WAITRON_FISCAL_CONFIRMATION_FILE: paths.confirmationPath,
+      WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: fingerprint,
+    });
+    await withOperationAuthority(binding, operatorId, async (authority) => {
+      await expect(
+        operations.prepare({ binding, authority, input }, async () => "admitted"),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "clock_stale" },
+      });
+    });
+    expect(history).toEqual([]);
+    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([]);
+  });
+});
+
+it("activates the current hour through production composition without signed-file authority", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  vi.spyOn(release, "readHourRelease").mockReturnValue({
+    instantMs: Date.parse("2026-10-15T00:00:00Z"),
+    sourceCommit: "a".repeat(40),
+    committedAt: "2026-10-15T00:00:00.000Z",
+    generator: "scripts/generate-hour-release.mjs:v1",
+    generatorSha256: "b".repeat(64),
+  });
+  vi.spyOn(internet, "observeInternetHourClock").mockResolvedValue({
+    source: "internet",
+    result: "unavailable",
+    reason: "tls",
+  });
+  const { operations, history } = hourHost();
+  await withOperationAuthority(binding, operatorId, async (authority) => {
+    const operation = { binding, authority };
+    const compared = (await operations.recovery!(operation, {
+      action: "compare-clocks",
+      browser: null,
+    })) as { id: string };
+    await operations.recovery!(operation, { action: "confirm-clock", comparisonId: compared.id });
+    const selected = (await operations.recovery!(operation, {
+      action: "select",
+      answer: "no",
+      installationCodes: ["06RA"],
+    })) as { status: string; input: unknown };
+    expect(selected.status).toBe("selected");
+    expect(history).toHaveLength(1);
+    const selectedHistory = structuredClone(history);
+    const result = await operations.prepare({ ...operation, input: selected.input }, (prepared) =>
+      withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
+    );
+    expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+      { code: "A-06RB", purpose: "standard" },
+      { code: "FF-06RB", purpose: "full" },
+      { code: "R-06RB", purpose: "rectificative" },
+    ]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "06RB" }]);
+    expect(
+      (
+        await suite.db.select({ allocation: fiscalAllocations.allocation }).from(fiscalAllocations)
+      ).map(({ allocation }) => allocation.source),
+    ).toEqual(["hour"]);
+    expect(history).toEqual(selectedHistory);
+    await expect(
+      operations.prepare({ ...operation, input }, async () => "admitted"),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    });
+    expect(history).toEqual(selectedHistory);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "06RB" }]);
   });
 });

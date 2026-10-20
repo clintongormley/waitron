@@ -2561,7 +2561,10 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
         ></dashboard-cloud-services-screen>`;
       case "backup":
-        return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
+        return html`<dashboard-backup-screen
+          .api=${this.api}
+          .canManage=${this.#sessionPermissions.includes("system.manage")}
+        ></dashboard-backup-screen>`;
       case "servers":
         return html`<dashboard-servers-screen .api=${this.api}></dashboard-servers-screen>`;
       case "email":

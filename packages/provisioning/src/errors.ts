@@ -10,6 +10,24 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "setup.configuration_outdated": Record<string, never>;
+    "recovery.passphrase_invalid": Record<string, never>;
+    "backup.artifact_invalid": { reason: string };
+    "backup.archive_invalid": { reason: string };
+    "station.thresholds_invalid": { field: string; stationId?: string; name: string };
+    "email.settings_invalid": { field: string };
+    "setup.provisioning_secret_required": { module: string };
+    "setup.fiscal_test_required": { module: string };
+    "setup.email_required": { field: "email" };
+    "setup.already_provisioned": Record<string, never>;
+    "setup.not_ready": Record<string, never>;
+    "setup.operation_conflict": Record<string, never>;
+    "setup.already_provisioning": Record<string, never>;
+    "password.throttled": { retryAfterSeconds: number };
+    "setup.owner_required": Record<string, never>;
+    "setup.attempt_conflict": Record<string, never>;
+    "setup.attempt_uncertain": Record<string, never>;
+    "setup.attempt_invalid": Record<string, never>;
     "provisioning.initial_input_invalid": Record<string, never>;
     "provisioning.initial_operator_required": Record<string, never>;
     /** Nothing supplied the venue directory: no `--venue-dir`, `WAITRON_VENUE_DIR` unset or empty,

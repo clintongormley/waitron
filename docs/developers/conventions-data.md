@@ -1605,6 +1605,13 @@ tables, caught by hand in review.
 
 ### Retiring configuration tables also retires their export format
 
+Implementation pointer, 2026-10-17: the configuration staging and transfer services now live in
+`packages/provisioning/src/configuration-import.ts` and `configuration-transfer.ts`. Their server
+entry points forward to those implementations. The owned setup command uses the same allowlisted
+transfer inside its venue transaction; a retained artifact must match the frozen digest and target
+module versions before activation. Its command checks are in
+`packages/provisioning/src/first-setup-command-import.test.ts`.
+
 A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
 includes that table key, even when it has no rows. With the format left unchanged, the real setup
 route refused both empty and populated canvas lists as `setup.request_invalid` on `tables`.
@@ -2426,6 +2433,35 @@ lock, not that every writer of the file takes it.
 | `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
 | `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
 
+**First-setup entry, 2026-10-16:** `apps/server/src/first-setup-entry.ts` inspects an existing claim
+through a read-only SQLite connection before the ordinary entry path. Its admission callback holds
+the original anchor venue lock, then the selected target's lock when different, and rereads the
+selection and setup/database admission before staged work or normal boot. An ordinary unclaimed
+workspace keeps the locking path in the table above. `first-setup-resolution.boot.test.ts` removes
+the database or changes the selected workspace after discovery and checks that the callback refuses
+without creating a database. The same suite checks direct, supervised and already-recovery entry.
+
+**First-setup durable replay, 2026-10-16:** on Node v26.11.1, the new
+`first-setup-resolution.durability.test.ts` left an applied record visible after injecting a
+directory-sync failure; retry returned it without another sync. The renamed-backlink and final
+selection cases in `first-setup-workspace.test.ts` reproduced the same early success. Replays now
+sync the existing record or witness directory before returning. The resolution suite also injects
+write, file-sync, rename and directory-sync failures into original chunks, manifests and both
+action phases, then resumes through a new store and compares retained bytes. These are filesystem
+fault injections, not physical power-loss measurements.
+
+**First-setup password recovery audit, 2026-10-16:** the module host’s password recovery takes
+anchor/target exclusion on the older route as well as the inspection-bound route. On Node
+v26.11.1, `first-setup-owner-audit.test.ts` first recovered ownership while a child process held
+`venue.lock`; after the exclusion change it refuses with `provisioning.database_in_use`, leaves
+the state bytes unchanged and writes no audit. Eligible marker repair and ownership recovery
+record prepared/applied actions with retained source bytes and predecessor digests. Their
+owner-approved `register: null` means no consultation and grants no reset or fiscal authority.
+The suite injects failure before/after each action-record rename and the marker/state rename,
+then retries with a new owner service. Changed non-target evidence or a state change beyond the
+recorded recovery refuses reconciliation. These are filesystem fault injections, not physical
+power-loss measurements.
+
 `deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
 not through the store, so it takes no lock and is never refused.
 
@@ -2797,7 +2833,29 @@ venue has ONE node and no failover at all until slice 3 (2026-09-19,
 
 **Provisioning and boot**
 
-## A restore consumes a supplied fiscal identity; the working-time chain continues
+## A restore selects a fresh hour; the working-time chain continues
+
+On the A679 candidate, authenticate with the recovery key matching the selected backup and
+confirm that the former seller is stopped and no parallel recovery is underway. The module
+selects an eligible UTC hour strictly later than its known history. It retains recovered
+invoices and counters, retires recovered active series and activates the fresh complete series
+set. The public production preparation API does not fall back to signed paper, Cloud receipts
+or random emergency identities from environment files. Follow
+[recovery with an hour code](../operations/hour-recovery.md).
+
+Cold restore checks the key saved in the selected backup; live takeover checks the live
+verifier. Keep older named paper keys while their backups remain. The archive password is
+separate. Hour selection does not discover all missing history or stop a returning old seller.
+Archive and bucket input remain mutually exclusive.
+
+The working-time chain continues from the backup's head. Its surviving-fork refusal is checked
+by `packages/workforce/src/restore-continuation.test.ts`; hour naming does not transfer working-
+time rows between nodes.
+
+### Historical signed-allocation restore qualification
+
+The following records the 14 October implementation. A679's hour policy supersedes its naming
+authority and operation-input instructions; preserve these receipts as historical results.
 
 When you restore a filing node from an archive or the bucket, supply its recovery operation and
 node recovery key. The operation carries an outside signed allocation and its matching approval.

@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { ModuleConfig, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -5,6 +8,7 @@ import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 // A test file may name a regime package: `scripts/module-seams.test.ts` skips test files.
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import type { DeploymentEnvironment, VenueDatabase } from "@waitron/db";
+import { openVenueDatabase } from "@waitron/db";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { runCli } from "./cli.js";
@@ -83,6 +87,16 @@ const VENUE_ENV = {
   WAITRON_ADMIN_PIN: "4321",
   WAITRON_ADMIN_PASSWORD: "dashPass123",
 };
+
+it("refuses a selected recovery PDF when no owned setup runtime can deliver it", async () => {
+  const h = harness({ env: VENUE_ENV });
+  expect(
+    await runCli([...VENUE_ARGS, "--yes", "--recovery-pdf", "/tmp/recovery.pdf"], h.deps),
+  ).toBe(1);
+  expect(h.lines).toContain("setup.not_ready {}");
+  expect(h.openVenue).not.toHaveBeenCalled();
+  expect(h.applyVenue).not.toHaveBeenCalled();
+});
 
 interface Harness {
   deps: CliDeps;
@@ -1003,4 +1017,153 @@ describe("the error codes this CLI raises", () => {
     expect(line).toBeDefined();
     expect(line).toContain('"territory":"ES-canary"');
   });
+});
+
+it.each([undefined, "/an/unrelated/state/root"])(
+  "does not ignore the fixed venue claim when WAITRON_STATE_DIR is %s",
+  async (stateDir) => {
+    const root = await mkdtemp(join(tmpdir(), "cli-first-claim-"));
+    const venueDir = join(root, "venue");
+    await mkdir(venueDir);
+    await writeFile(
+      join(venueDir, "first-setup-claim.json"),
+      JSON.stringify({
+        version: 1,
+        attemptId: "11111111-1111-4111-8111-111111111111",
+        venueDir,
+        stateDir: join(root, "real-state"),
+        status: "claiming",
+      }),
+    );
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir } });
+    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+    try {
+      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+      expect(h.lines).toContain("setup.attempt_invalid {}");
+      expect(h.stampEnvironment).not.toHaveBeenCalled();
+      expect(h.applyVenue).not.toHaveBeenCalled();
+      expect(h.openVenue).not.toHaveBeenCalled();
+      expect(h.closes()).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it.each(["claiming", "active"])(
+  "preserves the venue directory before refusing an interrupted %s claim",
+  async (status) => {
+    const root = await mkdtemp(join(tmpdir(), "cli-before-open-"));
+    const venueDir = join(root, "venue");
+    try {
+      await mkdir(venueDir);
+      const markerPath = join(venueDir, "first-setup-claim.json");
+      const marker = JSON.stringify({
+        version: 1,
+        attemptId: "11111111-1111-4111-8111-111111111111",
+        venueDir,
+        stateDir: join(root, "state"),
+        status,
+      });
+      await writeFile(markerPath, marker);
+      const h = harness({ env: VENUE_ENV, openVenue: openVenueDatabase });
+      const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+
+      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+      expect(h.lines).toContain("setup.attempt_invalid {}");
+      expect(await readdir(venueDir)).toEqual(["first-setup-claim.json"]);
+      expect(await readFile(markerPath, "utf8")).toBe(marker);
+      expect(h.stampEnvironment).not.toHaveBeenCalled();
+      expect(h.applyVenue).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it("opens an unclaimed venue through the real store opener", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cli-unclaimed-open-"));
+  const venueDir = join(root, "venue");
+  try {
+    const h = harness({ env: VENUE_ENV, openVenue: openVenueDatabase });
+    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+    expect(await runCli([...args, "--yes"], h.deps)).toBe(0);
+    expect(await readdir(venueDir)).toEqual(expect.arrayContaining(["venue.db", "node.db"]));
+    expect(h.applyVenue).toHaveBeenCalledOnce();
+    const reopened = await openVenueDatabase(venueDir);
+    await reopened.close();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("rechecks a claim that appears while the store is opening", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cli-claim-during-open-"));
+  const venueDir = join(root, "venue");
+  let closed = 0;
+  try {
+    await mkdir(venueDir);
+    const h = harness({
+      env: VENUE_ENV,
+      openVenue: async () => {
+        await writeFile(join(venueDir, "first-setup-claim.json"), "{}");
+        return {
+          venue: {},
+          node: {},
+          close: async () => void (closed += 1),
+        } as VenueDatabase;
+      },
+    });
+    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+    expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+    expect(h.lines).toContain("setup.attempt_invalid {}");
+    expect(h.stampEnvironment).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(closed).toBe(1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("configures the module host for the resolved venue before planning and applying", async () => {
+  const h = harness({ env: VENUE_ENV });
+  const configured = [
+    fakeModule("core"),
+    fakeModule("bound-probe", {
+      provisioning: { seed: { summary: "seed the bound module", run: async () => "bound" } },
+    }),
+  ];
+  const configuredPaths: string[] = [];
+  const deps: CliDeps & {
+    configureVenueModules(directory: string): readonly WaitronModule[];
+  } = {
+    ...h.deps,
+    configureVenueModules: (directory) => {
+      configuredPaths.push(directory);
+      return configured;
+    },
+  };
+  expect(await runCli([...VENUE_ARGS, "--yes"], deps)).toBe(0);
+  expect(configuredPaths).toEqual([VENUE_DIR]);
+  expect(h.lines).toContain("  seed module bound-probe: seed the bound module");
+  const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
+  expect(actions.filter((action) => action.kind === "seed-module")).toEqual([
+    { kind: "seed-module", module: "bound-probe", summary: "seed the bound module" },
+  ]);
+  expect(applyDeps.modules).toEqual(configured);
+});
+
+it("refuses an unavailable command preparation host before opening or stamping the venue", async () => {
+  const h = harness({ env: VENUE_ENV });
+  const deps: CliDeps & { configureVenueModules(): readonly WaitronModule[] } = {
+    ...h.deps,
+    configureVenueModules: () => {
+      throw new AppError("setup.not_ready", {});
+    },
+  };
+  expect(await runCli([...VENUE_ARGS, "--yes"], deps)).toBe(1);
+  expect(h.lines).toContain("setup.not_ready {}");
+  expect(h.openVenue).not.toHaveBeenCalled();
+  expect(h.stampEnvironment).not.toHaveBeenCalled();
+  expect(h.applyVenue).not.toHaveBeenCalled();
 });

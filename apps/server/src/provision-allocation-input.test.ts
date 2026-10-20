@@ -1,3 +1,4 @@
+import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +11,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { persons } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { FISCAL_SLOT, FISCAL_OPERATIONS, ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
+import { FISCAL_SLOT, ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import {
@@ -164,7 +165,7 @@ beforeEach(async () => {
     modules.length,
     fakeModule("fiscal-verifactu", {
       fiscal: FISCAL_SLOT,
-      operations: FISCAL_OPERATIONS,
+      operations: historicalFiscalOperations,
       provisioning: { seed: ALLOCATED_FISCAL_SEED },
     }),
   );
@@ -227,7 +228,7 @@ async function allocatedVenue() {
     await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
   ).toEqual([{ approval }]);
 }
-it("carries the supplied setup identities and signed input through provisionVenue", async () => {
+it("carries the supplied setup identities and signed input through the historical provisionVenue harness", async () => {
   const pending = establish();
   await expect(pending).resolves.toMatchObject({ nodeId: NODE });
   const result = await pending;

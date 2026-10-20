@@ -1357,6 +1357,18 @@ The station printers check reads the multi-select's rendered `aria-selected` opt
 in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “the station editor retains
 printer memberships independently for each station”, rather than relying on the host values alone.
 
+### Wait for the native picker's PDF import
+
+A PDF mismatch check must wait for `RecoveryKeyEntry.importFile` to finish before reading its
+rendered refusal. Track the promise started by the real file-picker event, keeping the real
+reader. A one-second assertion window is not the import's completion signal.
+
+On 19 October, A679's full fiscal run failed the wrong-key-name case with an empty error while
+its helper did not await the import. In an independently installed candidate, a controlled 1.5-second file
+read reproduced that assertion failure; awaiting the same native import passed with the same
+delay and unchanged refusal assertion. The restored full recovery-key file passed 20 cases.
+This control qualifies waiting for the import, not the cause of every slow PDF read.
+
 ## A reopened polling dialog owns a new in-flight gate.
 
 Reset that gate on close and guard its release with the request's generation as well as guarding
@@ -2248,3 +2260,32 @@ refusal must retain the other session's journal; the paired case with no interve
 still releases a fresh refusal. The initial separate freshness read failed that retained-journal
 assertion. Marking creation inside `prepare` passed both cases. This checks that scheduling point,
 not atomic storage across browser tabs.
+
+
+## Fingerprint a WAL database after your inspection opens it
+
+SQLite can keep recent writes in a separate journal file, the WAL. If you fingerprint a closed
+WAL-mode database before inspecting its rows, your own read can invalidate the fingerprint. In A679's built-command retry on Node v26.11.1 (2026-10-17), the first
+read-only inspection created an empty `venue.db-wal`. The next inspection found that file where the
+first had recorded it missing, and password recovery refused with `setup.owner_required`.
+
+The interrupted case in `packages/provisioning/src/cli-owned-entry.test.ts` closes the command after
+its commit, compares two inspections, then starts another command to finish publication. Run it with
+`pnpm --filter @waitron/provisioning exec vitest run src/cli-owned-entry.test.ts -t 'interrupted=true'`.
+Without the ordering change, the comparison reports `venue.db-wal` changing from missing to the hash
+of an empty file. Sample the files after the inspection connection closes; keep the snapshot,
+password and exact-commit checks.
+
+## Pin release metadata beside a built command's fixed clock
+
+A child command fixed to yesterday can refuse today's build before reaching the behavior you want
+to test. When you fix its clock, supply an explicit synthetic release stamp through the shared
+`bundle()` API too. The CLI fixtures below originally bundled the checkout's release metadata
+while fixing only the child clock.
+
+Measured on Node v26.11.1 for A679, 2026-10-19: the checkout stamp at `f01a5d00a` was
+`2026-10-19T05:50:14Z`, while the CLI fixtures ran at `2026-10-18T11:40:00Z`. Running
+`pnpm --filter @waitron/provisioning exec vitest run src/cli-owned-entry.test.ts src/cli-same-hour-entry.test.ts`
+reported five `clock_unconfirmed` failures and one pass. Supplying a synthetic 15 October stamp in
+the two build fixtures passed all six with the original test bodies preserved. Keep tests of real
+build provenance on real build metadata; these fixed-clock fixtures qualify command behavior.

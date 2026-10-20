@@ -1,4 +1,8 @@
+import type { OperationBinding } from "./operation-authority.js";
+import type { InitialSetupContext } from "./initial-setup.js";
 import type { WaitronModule } from "./module.js";
+import type { Database } from "@waitron/db";
+import type { ProvisionedNode } from "./provisioning.js";
 import { AppError } from "@waitron/shared";
 import {
   moduleOperationFor,
@@ -7,7 +11,91 @@ import {
   type ModuleOperations,
 } from "./operation-input.js";
 
+export interface ModuleRecoveryFacts {
+  readonly country: string;
+  readonly taxId: string;
+  readonly environment: "production" | "preproduction";
+  readonly bases: readonly { readonly code: string; readonly purpose: string }[];
+  readonly contextKey: string;
+  readonly history: readonly unknown[];
+  readonly oldMachineOffline: boolean;
+  readonly oldMachineAbsent: boolean;
+  readonly noParallelRecovery: boolean;
+  readonly priorActivation: "none" | "committed";
+}
+
+export interface ModuleOperationHost {
+  readRecoveryFacts?(binding: OperationBinding): Promise<ModuleRecoveryFacts>;
+  readSetupFacts?(binding: OperationBinding): Promise<{
+    readonly context: InitialSetupContext;
+    readonly contextKey: string;
+    /** Pending work survives ownership recovery; selected material keeps the owner-scoped key. */
+    readonly continuationKey?: string;
+    readonly localHistory: unknown;
+  }>;
+  withPreparationState?<T>(
+    binding: OperationBinding,
+    run: (state: {
+      readonly value: unknown;
+      readonly history: readonly unknown[];
+      replace(value: unknown): Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T>;
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  readRetiredSetup?(module: string): Promise<
+    readonly {
+      readonly context: InitialSetupContext;
+      readonly input: unknown;
+      readonly publicEvidence: readonly unknown[];
+    }[]
+  >;
+  readPublicEvidence(
+    binding: OperationBinding,
+  ): Promise<{ trust: unknown; current: unknown } | undefined>;
+}
+
+export function configureModuleOperations(
+  modules: readonly WaitronModule[],
+  host: ModuleOperationHost,
+): readonly WaitronModule[] {
+  return modules.map((module) => {
+    const operations = module.operations?.configure?.(host) ?? module.operations;
+    const initialSetup = module.provisioning?.initialSetup;
+    const configuredSetup = initialSetup?.configure?.(host) ?? initialSetup;
+    if (module.operations?.configure === undefined && initialSetup?.configure === undefined)
+      return module;
+    return {
+      ...module,
+      operations,
+      ...(configuredSetup === initialSetup
+        ? {}
+        : {
+            provisioning: { ...module.provisioning, initialSetup: configuredSetup },
+          }),
+    };
+  });
+}
+
 export interface ModuleOperationPreparation {
+  configure?(host: ModuleOperationHost): ModuleOperationPreparation;
+  readRecoveryHistory?(db: Database): Promise<readonly unknown[]>;
+  readRecoveryState?(
+    db: Database,
+    node: ProvisionedNode,
+    binding: OperationBinding,
+    preparationHistory?: readonly unknown[],
+  ): Promise<
+    Pick<
+      ModuleRecoveryFacts,
+      "country" | "taxId" | "environment" | "bases" | "history" | "priorActivation"
+    >
+  >;
+  recovery?(
+    operation: Pick<ModuleOperationInput, "binding" | "authority">,
+    proposal: unknown,
+  ): Promise<unknown>;
+  /** Rebuild transient admission checks without selecting another identity. */
+  resumeRecovery?(operation: Pick<ModuleOperationInput, "binding" | "authority">): Promise<void>;
   prepare<T>(
     operation: ModuleOperationInput,
     run: (prepared: ModuleOperationInput) => Promise<T>,

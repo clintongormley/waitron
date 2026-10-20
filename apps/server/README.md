@@ -44,10 +44,18 @@ every migration package's `drizzle/` folder beside the bundle (`scripts/copy-mig
 `WAITRON_MIGRATIONS_DIR` defaults to finding there. Running `dist/server.js` without that copy step
 fails loudly at boot with `migrations.set_missing`, not silently.
 
-Every boot failure exits non-zero, but not all of them reach stdout the same way. A port that will
+If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
+API before ordinary database opens or staged restore/reset work. It currently offers inspection,
+original-password recovery, an isolated replacement workspace and publication-only Finish. To finish
+over HTTPS, recover ownership, retrieve the staged publication reference, confirm the current document
+and submit the unchanged publication inputs. An interrupted workspace selection can be inspected and
+resumed over HTTPS with the original password. Retirement and selection have separate linked
+prepared/applied records.
+
+Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will
 not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](#log-events)) and
 exits `1` directly. Bad config, an unloadable key ring, a mismatched deployment environment (see below), a
-failed migration, and a venue directory that cannot be opened instead **throw**, and `bin.ts` has no `try`/`catch` around `startServer` — Node prints the
+failed migration, and a venue directory that cannot be opened instead **throw**, and `bin.ts` has no `try`/`catch` around `startServerOrFirstSetupResolution` — Node prints the
 `AppError`'s stack to **stderr** as an unhandled rejection and exits non-zero, not as a JSON line on
 the stdout stream a log collector reads. (Catching those five in `bin.ts` and logging them
 structurally the same way would be a real improvement; it is not done here — check stderr for those,
@@ -126,6 +134,12 @@ for the empty-setup, both history controls and the real boot refusal that preser
 location, a node, and standard, full and rectificative invoice series — and runs every enabled module's
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
+
+On the A679 candidate, set `WAITRON_STATE_DIR` and choose an absolute `--recovery-pdf`
+destination outside state and venue storage. The command owns the setup attempt, asks about
+clocks and recent taxpayer-wide setups, and requires password and kept-PDF confirmation.
+`--yes` does not answer those questions, and a supplied JSON allocation is not Live authority.
+Follow the [current setup procedure](../../docs/operations/first-live-fiscal-setup.md).
 
 It runs **against a directory something has already migrated**, and stamps that directory itself
 when it carries no stamp (see "What actually writes the stamp" above). Stop the server first: while

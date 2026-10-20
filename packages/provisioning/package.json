@@ -19,24 +19,30 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:shard": "vitest run --coverage --reporter=default --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",
+    "test:merge": "vitest --merge-reports .vitest-reports --coverage"
   },
   "dependencies": {
     "@waitron/composition": "workspace:*",
+    "@waitron/core": "workspace:*",
     "@waitron/country-packs": "workspace:*",
+    "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/layouts": "workspace:*",
+    "@waitron/membership": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/reporting": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
-    "@waitron/core": "workspace:*",
+    "@waitron/catalogue": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/verifactu": "^0.2.1",
     "esbuild": "^0.28.2",

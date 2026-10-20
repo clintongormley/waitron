@@ -317,3 +317,110 @@ Include a plain-English `question.txt` explaining the document, its labels, what
 
 1. **Approve this design — recommended:** permits the driver to replace the implementation plan and build within existing permissions; exact protected-code/assertion exceptions and the later generated-PDF viewing check remain separate.
 2. **Revise before building:** identify what should change; Tasks9–12 remain waiting while the proposal is revised.
+
+## Owner addition, 2026-10-18 at 10:15: keep the prior installation codes
+
+Your recovery sheet also identifies the installation codes the box used. This public context
+helps when your backup predates a later setup. First setup prints its selected code beside the
+node and key name, as **Installation codes** / **Códigos de instalación**. It is also part of the
+PDF attachment and the public document confirmation. Key reissue keeps the selected code; it
+does not allocate another one. A later completed-box export must include that box's known codes.
+
+When you recover or promote a box, enter the codes from the sheet under **Installation codes** /
+**Códigos de instalación**. Separate multiple codes with commas. The operation retains these
+codes alongside its selected hour or pending wait and carries them into its backup evidence.
+They can raise the known-hour floor; they never replace the existing backup and surviving-history
+checks. The box requires a UTC hour strictly later than every reported code.
+
+For example, your backup predates a setup that used `06RC`. Entering `06RC` at 12:40 UTC on
+16 October refuses `sif.allocation_invalid` with reason `hour_not_later`, before any new identity
+is saved or fiscal activation starts. At 13:00, a fresh comparison allows `06RD`. An omitted or
+malformed list does not provide recovery selection authority. This does not discover an unreported
+code or stop an old seller; the existing isolation and taxpayer-wide coordination requirements stay.
+
+The source and focused checks for the first-setup PDF and recovery entry are on the A679 branch.
+Dormant promotion's host preparation and completed-manager reissue remain implementation tasks.
+
+
+## Owner clarification, 2026-10-18 at 12:10: one prefix per purpose
+
+Your box has one configured prefix for receipts (`standard`), one for full invoices (`full`)
+and one for corrections (`rectificative`). Setup, recovery and dormant admission refuse a
+configuration with a missing purpose or more than one prefix for a purpose. The refusal is
+`sif.allocation_invalid` with reason `series_configuration_unsupported`. There is no trading-series
+chooser and no silent choice among prefixes.
+
+A promoted or recovered box combines each configured prefix with its newly selected code.
+For example, `A`, `FF` and `R` with `06RC` become `A-06RC`, `FF-06RC` and `R-06RC`, each starting
+at one. They are the new node's series. Recorded series and counters remain historical evidence;
+reading that evidence checks the spent-hour floor and whether the saved configuration was changed.
+It does not choose an old series for new trading.
+
+This answer supersedes the earlier requirement to support several bases for one purpose,
+including the replacement plan's global constraint and Task 1 example. The lower-level history
+readers still inspect every recorded series, including unsupported historical configurations.
+The new configuration check does not make an altered recorded allocation valid: recovery first
+checks the stored configuration against its allocation and retains its `series_mismatch` refusal.
+
+
+## Owner PDF review, 2026-10-18; presentation checkpoint 2026-10-19
+
+This dated addition supersedes the earlier raw-format label and character-count explanation.
+You see labels and values in two columns, a creation date in the venue's time zone and the
+sheet's language, and the first eight node-ID characters grouped in fours. The backup preview
+shows that same short form; recovery continues to use the full identifier. Generated key names
+retain their existing four-character suffix. The raw192 format marker stays in machine data
+where needed and is omitted from the printed page.
+
+The instructions distinguish what accompanies the recovery key: your Cloud login for a backup
+in Waitron Cloud, or the downloaded archive's own password. Keep those credentials separately
+from this sheet. The sheet carries neither credential.
+
+The owner also requested one short combined key/check field and only the current installation
+code. The requested dependency inspection found that the existing eight-symbol check binds
+the key to taxpayer/node/name, and that recovery reads the sheet's reported-code list to raise
+its hour floor. Those findings and recommended replacements are recorded in Lane E's
+questions under “two PDF revision dependencies”. The check and reported list remain unchanged
+at this presentation checkpoint, pending those answers. The sheet still awaits viewing acceptance.
+See the [changed-check inventory](../../operations/a679-changed-checks.md#recovery-pdf-presentation-revision-2026-10-19)
+for the observed checks and their limits.
+
+## Owner PDF decisions, 2026-10-19
+
+This dated addition supersedes the 18 October installation-code list and the pending dependencies
+in the presentation checkpoint above. The owner approved both replacements through the watcher.
+
+Your sheet prints one recovery key with two trailing typo-check characters in the same field:
+41 characters, or 51 with grouping spaces. The underlying secret remains 192 bits. Manual entry
+checks typing errors; it no longer checks the business, node or key name as you type. Opening the
+selected backup still authenticates the full key. Importing a saved PDF still checks its public
+identification against the selected backup. The older register format remains readable separately.
+
+Your sheet prints only this node's current installation code. Enter that one four-character code
+in the recovery form. Completed-box reissue uses the current SIF identity rather than collecting
+other known codes. Backup and surviving-history checks still provide their own hour floors; the
+sheet no longer reports a newer code used by another box. Existing isolation and coordination
+requirements remain.
+
+The generated EN/ES A4 samples still require the owner's viewing approval before product landing.
+See [the qualification record](../../operations/a679-changed-checks.md#approved-pdf-dependencies-and-launch-checks-2026-10-19).
+
+
+## Owner PDF time-zone decision, 2026-10-19 at 04:50
+
+The Created line uses the venue's local date and time followed by its zone abbreviation:
+CEST for Madrid summer dates, CET in winter, WEST for Canary summer dates and WET in winter.
+The language still controls the date wording. This replaces the spelled-out zone name in the
+18 October presentation addition. The key-name identifier stays unchanged. The revised EN/ES
+Madrid/Canary samples still require viewing approval.
+
+
+## Owner viewing approval, 2026-10-19 at 11:55
+
+The owner viewed all four revised English/Spanish Madrid/Canary sheets through Drive and approved
+them. This completes the viewing check referenced earlier. At 11:58, the owner separately
+approved the exact retained CLI-launch migration patch with SHA-256
+`3b06f60e1c2dc2f46fe16067842238f77360ffcb9710c3004ecc86277891ba3d`.
+The applied patch matches those bytes and the three launch cases pass. These decisions do not
+complete remaining protocol, integration, review or CI gates. See the
+[qualification inventory](../../operations/a679-changed-checks.md).

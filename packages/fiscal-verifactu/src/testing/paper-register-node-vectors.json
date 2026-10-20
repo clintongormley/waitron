@@ -1,0 +1,95 @@
+{
+  "qualification": "Synthetic vectors calculated independently with Python standard base64.b32encode, hashlib.sha256 and lexical-key JSON; no credentials.",
+  "vectors": [
+    {
+      "secret": "a",
+      "encoding": "utf8",
+      "value": "C4",
+      "check": "1EYN G0Q6",
+      "entered": 10,
+      "displayed": 11,
+      "combinedEntered": 30,
+      "combinedDisplayed": 34
+    },
+    {
+      "secret": "ab",
+      "encoding": "utf8",
+      "value": "C5H0",
+      "check": "DTDA YPVR",
+      "entered": 12,
+      "displayed": 13,
+      "combinedEntered": 32,
+      "combinedDisplayed": 36
+    },
+    {
+      "secret": "abc",
+      "encoding": "utf8",
+      "value": "C5H6 6",
+      "check": "CYR8 5ZM0",
+      "entered": 13,
+      "displayed": 15,
+      "combinedEntered": 33,
+      "combinedDisplayed": 38
+    },
+    {
+      "secret": "abcd",
+      "encoding": "utf8",
+      "value": "C5H6 6S0",
+      "check": "BEYZ SDPA",
+      "entered": 15,
+      "displayed": 17,
+      "combinedEntered": 35,
+      "combinedDisplayed": 40
+    },
+    {
+      "secret": "abcde",
+      "encoding": "utf8",
+      "value": "C5H6 6S35",
+      "check": "6JB5 R9PJ",
+      "entered": 16,
+      "displayed": 18,
+      "combinedEntered": 36,
+      "combinedDisplayed": 41
+    },
+    {
+      "secret": "\u0000",
+      "encoding": "utf8",
+      "value": "00",
+      "check": "9MZJ KB0Z",
+      "entered": 10,
+      "displayed": 11,
+      "combinedEntered": 30,
+      "combinedDisplayed": 34
+    },
+    {
+      "secret": "é",
+      "encoding": "utf8",
+      "value": "REMG",
+      "check": "1JD4 2EGV",
+      "entered": 12,
+      "displayed": 13,
+      "combinedEntered": 32,
+      "combinedDisplayed": 36
+    },
+    {
+      "secret": "é",
+      "encoding": "utf8",
+      "value": "CQ68 2",
+      "check": "AMYW YY8K",
+      "entered": 13,
+      "displayed": 15,
+      "combinedEntered": 33,
+      "combinedDisplayed": 38
+    },
+    {
+      "secret": "-_---_---_---_---_---_---_---_--",
+      "encoding": "raw192",
+      "value": "ZFZV XYZZ QVXZ ZFQV ZYZF QZXY ZFZV XYZZ QVXZ ZFG",
+      "check": "K17Y HCMG",
+      "entered": 47,
+      "displayed": 57,
+      "combinedEntered": 67,
+      "combinedDisplayed": 80
+    }
+  ]
+}

@@ -1608,6 +1608,20 @@ export const en = {
   "servers.clear_explanation":
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
+  "recovery_document.title": "Recovery PDF",
+  "recovery_document.intro": "Create a new recovery key and its PDF.",
+  "recovery_document.create": "Create recovery PDF",
+  "recovery_document.keep":
+    "Keep this PDF outside the server. Keep older sheets for older backups.",
+  "recovery_document.download": "Download PDF",
+  "recovery_document.print": "Open to print",
+  "recovery_document.clear": "Clear PDF",
+  "recovery_document.confirm_title": "Replace the recovery key?",
+  "recovery_document.warning":
+    "New backups will use the new key. Older backups still need their matching old key.",
+  "recovery_document.failed": "The recovery PDF could not be created. Try again.",
+  "recovery_document.cancel": "Cancel",
+  "recovery_document.replace": "Replace key",
   "node_pack.create": "Create pack",
   "node_pack.key_error": "The node recovery key is not valid.",
   "node_pack.title": "Node recovery pack",
@@ -4639,6 +4653,20 @@ export const es: Record<StringKey, string> = {
   "servers.clear_explanation":
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
+  "recovery_document.title": "PDF de recuperación",
+  "recovery_document.intro": "Crea una nueva clave de recuperación y su PDF.",
+  "recovery_document.create": "Crear PDF de recuperación",
+  "recovery_document.keep":
+    "Guarda este PDF fuera del servidor. Conserva las hojas anteriores para las copias antiguas.",
+  "recovery_document.download": "Descargar PDF",
+  "recovery_document.print": "Abrir para imprimir",
+  "recovery_document.clear": "Borrar PDF",
+  "recovery_document.confirm_title": "¿Cambiar la clave de recuperación?",
+  "recovery_document.warning":
+    "Las nuevas copias usarán la nueva clave. Las copias antiguas siguen necesitando su clave anterior.",
+  "recovery_document.failed": "No se ha podido crear el PDF de recuperación. Inténtalo de nuevo.",
+  "recovery_document.cancel": "Cancelar",
+  "recovery_document.replace": "Cambiar clave",
   "node_pack.create": "Crear kit",
   "node_pack.key_error": "La clave de recuperación del nodo no es válida.",
   "node_pack.title": "Kit de recuperación del nodo",

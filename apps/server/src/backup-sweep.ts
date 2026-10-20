@@ -48,6 +48,7 @@ export interface BackupSweepDeps {
   environment: DeploymentEnvironment;
   resolvers: Record<string, string>;
   stateDir: string;
+  venueDir?: string;
   recoveryKey: string;
   /** Created each tick; the plaintext copy staged here is removed before the tick returns. */
   stagingDir: string;
@@ -138,6 +139,7 @@ export async function runOnce(
       collectStateParts(
         {
           stateDir: deps.stateDir,
+          venueDir: deps.venueDir,
           modules: deps.modules,
           resolvers: deps.resolvers,
         },

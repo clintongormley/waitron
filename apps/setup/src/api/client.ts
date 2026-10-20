@@ -1,3 +1,17 @@
+import { firstSetupHeaders } from "./first-setup-types.js";
+import type {
+  FirstSetupOwner,
+  FirstSetupState,
+  FirstSetupOwnership,
+  FirstSetupStatus,
+  FirstSetupUpdate,
+  FirstSetupPublicRequest,
+  FirstSetupProvisionBody,
+  FirstSetupInspection,
+  FirstSetupResolutionSnapshot,
+  FirstSetupWorkspaceSelection,
+} from "./first-setup-types.js";
+
 // Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
 // its barrel, and `@waitron/db` through it, into the browser bundle.
 
@@ -71,6 +85,7 @@ export type EmailTestResult =
 
 export interface ProvisionBody {
   mode: "demo" | "prepare" | "live";
+  firstSetup?: { attemptId: string; revision: number };
   configurationImport?: boolean;
   /** Only with `configurationImport`: the venue takes a different tax ID from the export's. */
   newTaxpayer?: boolean;
@@ -139,7 +154,28 @@ export interface RecoveryRestoreCredentials {
     input: unknown;
   };
   nodeRecoverySecret: string;
+  recoveryContext?: {
+    selectedSourceId: string;
+    oldBoxGone: boolean;
+    soleRecovery: boolean;
+  };
 }
+
+export interface RecoveryPreparationRequest {
+  binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
+  context: NonNullable<RecoveryRestoreCredentials["recoveryContext"]>;
+  nodeRecoverySecret: string;
+  proposal: unknown;
+}
+export type RecoveryPreparationSource =
+  | {
+      kind: "archive";
+      artifact: Blob;
+      recoveryKey: string;
+      environment: "production" | "preproduction";
+    }
+  | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
+  | { kind: "cloud"; pointId: string };
 
 export interface BucketRestoreBody {
   /** The recovery kit as pasted or read from its file; as sensitive as the recovery key. */
@@ -149,6 +185,7 @@ export interface BucketRestoreBody {
   venueConfirmed: string | null;
   recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryRestoreCredentials["recoveryContext"];
 }
 
 export interface CloudRecoveryView {
@@ -161,6 +198,12 @@ export interface CloudRecoveryView {
 }
 
 export interface RecoveryBackupPreview {
+  readonly fiscalSelection?: {
+    readonly module: string;
+    readonly country: string;
+    readonly fiscalTerritory: string;
+    readonly timeZone: string;
+  };
   readonly activationSourceId?: string;
   sourceId: string;
   createdAt: string;
@@ -307,6 +350,8 @@ export class SetupApi {
       form.set("oldBoxGone", oldBoxGone ? "1" : "0");
       form.set("recoveryOperation", JSON.stringify(recovery.recoveryOperation));
       form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
+      if (recovery.recoveryContext !== undefined)
+        form.set("recoveryContext", JSON.stringify(recovery.recoveryContext));
       body = form;
     }
     const res = await fetchImpl(this.#baseUrl + "/setup-api/restore", {
@@ -339,6 +384,26 @@ export class SetupApi {
       oldBoxGone,
     });
   }
+  async prepareRecovery(
+    source: RecoveryPreparationSource,
+    preparation: RecoveryPreparationRequest,
+  ): Promise<unknown> {
+    if (source.kind !== "archive")
+      return this.#request("/setup-api/recovery/preparation", "POST", { source, preparation });
+    const { artifact, ...metadata } = source;
+    const form = new FormData();
+    form.set("request", JSON.stringify({ source: metadata, preparation }));
+    form.set("artifact", artifact);
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/setup-api/recovery/preparation", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!response.ok) throw await apiError(response);
+    return response.json() as Promise<unknown>;
+  }
+
   previewCloudRestore(pointId: string): Promise<RecoveryBackupPreview> {
     return this.#request("/setup-api/cloud-recovery/preview", "POST", { pointId });
   }
@@ -403,6 +468,284 @@ export class SetupApi {
     return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
+  firstSetupOfferings(
+    fiscalTerritory: string,
+  ): Promise<{ modules: { module: string; version: string }[] }> {
+    return this.#request("/setup-api/first-setup/offerings", "POST", { fiscalTerritory });
+  }
+
+  firstSetupStatus(owner?: FirstSetupOwner): Promise<FirstSetupStatus> {
+    return this.#request(
+      "/setup-api/first-setup/status",
+      "GET",
+      undefined,
+      owner === undefined ? {} : firstSetupHeaders(owner),
+    );
+  }
+
+  claimFirstSetup(
+    clientClaimNonce: string,
+    venue: ProvisionBody["venue"],
+    locale?: string,
+    intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+  ): Promise<FirstSetupOwnership> {
+    return this.#request(
+      "/setup-api/first-setup/claim",
+      "POST",
+      { clientClaimNonce, venue, ...intent },
+      locale === undefined ? {} : { "accept-language": locale },
+    );
+  }
+
+  resumeFirstSetup(clientClaimNonce: string, password: string): Promise<FirstSetupOwnership> {
+    return this.#request("/setup-api/first-setup/resume", "POST", { clientClaimNonce, password });
+  }
+
+  inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
+    return this.#request("/setup-api/first-setup/resolution", "GET");
+  }
+
+  async inspectFirstSetupWorkspaceSelection(): Promise<FirstSetupWorkspaceSelection | null> {
+    const value = await this.#request<FirstSetupWorkspaceSelection | null>(
+      "/setup-api/first-setup/resolution/selection",
+      "GET",
+    );
+    if (value === null) return null;
+    if (
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      Object.keys(value).length !== 5 ||
+      typeof value.inspectionId !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.inspectionId) ||
+      typeof value.workspaceId !== "string" ||
+      !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.workspaceId) ||
+      ![value.revision, value.ownerGeneration, value.selectionGeneration].every(
+        (number) => Number.isSafeInteger(number) && number > 0,
+      )
+    )
+      throw { code: "setup.attempt_conflict" };
+    return value;
+  }
+
+  resumeFirstSetupWorkspaceSelection(
+    snapshot: FirstSetupWorkspaceSelection,
+    password: string,
+  ): Promise<{ workspaceId: string; selectionGeneration: number; restarting: true }> {
+    return this.#request("/setup-api/first-setup/resolution/resume-selection", "POST", {
+      ...snapshot,
+      password,
+    });
+  }
+
+  recoverFirstSetupOwner(
+    snapshot: FirstSetupResolutionSnapshot,
+    clientClaimNonce: string,
+    password: string,
+  ): Promise<FirstSetupOwnership> {
+    return this.#request("/setup-api/first-setup/resolution/recover", "POST", {
+      ...snapshot,
+      clientClaimNonce,
+      password,
+    });
+  }
+
+  startAgainFirstSetup(
+    snapshot: FirstSetupResolutionSnapshot,
+    owner?: FirstSetupOwner,
+  ): Promise<{ restarting: true }> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/start-again",
+      "POST",
+      snapshot,
+      owner === undefined ? undefined : firstSetupHeaders(owner),
+    );
+  }
+
+  finishFirstSetup(
+    owner: FirstSetupOwner,
+    snapshot: FirstSetupResolutionSnapshot,
+    publication: Omit<FirstSetupProvisionBody, "firstSetup">,
+  ): Promise<ProvisionResult> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/finish",
+      "POST",
+      {
+        ...snapshot,
+        publication,
+      },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  reconfirmFirstSetup(
+    owner: FirstSetupOwner,
+    password: string,
+    purpose: "block-use" | "activation",
+  ): Promise<{ reconfirmation: string }> {
+    return this.#request(
+      "/setup-api/first-setup/reconfirm",
+      "POST",
+      { password, purpose },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupPreparation(
+    owner: FirstSetupOwner,
+    module: string,
+    proposal: unknown,
+  ): Promise<{ state: FirstSetupState; preparation: unknown }> {
+    return this.#request(
+      "/setup-api/first-setup/preparation",
+      "POST",
+      { module, proposal },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupCandidates(
+    owner: FirstSetupOwner,
+    module: string,
+    proposal: unknown,
+    reconfirmation: string,
+  ): Promise<FirstSetupUpdate & { preparation?: unknown }> {
+    return this.#request(
+      "/setup-api/first-setup/candidates",
+      "POST",
+      { module, proposal, reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  reissueFirstSetupNodeKey(
+    owner: FirstSetupOwner,
+    password: string,
+  ): Promise<import("@waitron/module/src/setup-contract.js").InitialSetupNodeKey> {
+    return this.#request(
+      "/setup-api/first-setup/node-key-reissue",
+      "POST",
+      { password },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupNodeKey(
+    owner: FirstSetupOwner,
+    reconfirmation: string,
+  ): Promise<import("@waitron/module/src/setup-contract.js").InitialSetupNodeKey> {
+    return this.#request(
+      "/setup-api/first-setup/node-key",
+      "POST",
+      { reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+  firstSetupRecoveryDocument(
+    owner: FirstSetupOwner,
+    module: string,
+    reference: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference & {
+      statement: unknown;
+    },
+  ): Promise<{ accepted: true }> {
+    return this.#request(
+      "/setup-api/first-setup/recovery-document",
+      "POST",
+      { ...reference, module },
+      firstSetupHeaders(owner),
+    );
+  }
+  firstSetupRecoveryDocumentKept(
+    owner: FirstSetupOwner,
+    module: string,
+    reference: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference,
+    reconfirmation: string,
+  ): Promise<{ accepted: true }> {
+    return this.#request(
+      "/setup-api/first-setup/recovery-document-kept",
+      "POST",
+      { ...reference, module, kept: true, reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+  firstSetupRequest(owner: FirstSetupOwner): Promise<FirstSetupPublicRequest> {
+    return this.#request(
+      "/setup-api/first-setup/request",
+      "GET",
+      undefined,
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupImport(
+    owner: FirstSetupOwner,
+    module: string,
+    input: unknown,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/input",
+      "POST",
+      { module, input },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupEnrol(
+    owner: FirstSetupOwner,
+    module: string,
+    publicKey: unknown,
+    comparison: unknown,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/enrol",
+      "POST",
+      { module, publicKey, comparison },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupConfirm(
+    owner: FirstSetupOwner,
+    module: string,
+    statement: unknown,
+    reconfirmation: string,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/current-master",
+      "POST",
+      { module, statement, reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  abandonFirstSetup(owner: FirstSetupOwner): Promise<FirstSetupUpdate> {
+    return this.#request("/setup-api/first-setup/abandon", "POST", {}, firstSetupHeaders(owner));
+  }
+
+  runFirstSetupEmailTest(
+    owner: FirstSetupOwner,
+    email: EmailSettingsDraft,
+  ): Promise<EmailTestResult> {
+    return this.#request("/setup-api/email-test", "POST", { email }, firstSetupHeaders(owner));
+  }
+
+  runFirstSetupFiscalTest(
+    owner: FirstSetupOwner,
+    body: FirstSetupProvisionBody,
+  ): Promise<FiscalReadinessResult> {
+    return this.#request("/setup-api/fiscal-test", "POST", body, firstSetupHeaders(owner));
+  }
+
+  provisionFirstSetup(
+    owner: FirstSetupOwner,
+    body: FirstSetupProvisionBody,
+    locale?: string,
+  ): Promise<ProvisionResult> {
+    return this.#request("/setup-api/provision", "POST", body, {
+      ...firstSetupHeaders(owner),
+      ...(locale === undefined ? {} : { "accept-language": locale }),
+    });
+  }
+
   async #request<T>(
     path: string,
     method: string,
@@ -412,7 +755,11 @@ export class SetupApi {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
-        ? { method, credentials: "include" }
+        ? {
+            method,
+            credentials: "include",
+            ...(Object.keys(headers).length === 0 ? {} : { headers }),
+          }
         : {
             method,
             credentials: "include",

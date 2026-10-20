@@ -331,17 +331,17 @@ These checked passages describe the identity and field bounds. They do not appro
 
 | Existing piece | Disposition |
 |---|---|
-| Marker repair | **Keep:** only eligible marker repair; strict ordinary readers remain strict. |
+| Marker repair | **Keep:** only eligible marker repair; strict ordinary readers remain strict. **Owner, 2026-10-16:** marker-repair and password ownership-rebind audit records alone may carry `register: null`, meaning not consulted; it grants no reset or fiscal authority. |
 | Password from any browser; ownership rebind | **Keep:** original password over trusted HTTPS, throttling, rotated proof/capability and invalidated grants. |
-| Empty Start again | **Keep:** only positively established unused preactivation empty workspace with no enrolled custodian. |
+| Empty Start again | **Change (owner, 2026-10-16):** also allow password-free Start again when a recovery PDF exists but this box never activated. Prove unused invoice names, no filing or sale, and an empty preactivation database; retain the old attempt untouched and burn its entire name block. Use a fresh block. Missing, unknown or business-bearing databases stay unavailable. |
 | Consumed / Not consumed / Unknown | **Keep:** consult actual current history; Not consumed never clears saved intent; retired allocations remain unavailable. |
 | Missing database, fresh workspace | **Keep:** preserve remnants; missing is not empty; fresh assignment and existing authority boundary. |
 | Exact Finish setup | **Keep:** checked committed result and fresh outside confirmation; publication only. |
 | Retirement audit/workspace selection | **Keep:** permanent evidence, fixed discovery, no fallback to retired roots. |
 | Three resolution entry paths | **Keep:** direct, supervised and already-recovery; no premature database opening or staged mutation. |
-| Fixed EN/ES wording | **Keep:** including interrupted, recover, start again, finish and abandoned outcomes. |
+| Fixed EN/ES wording | **Change (owner, 2026-10-16):** on interruption put Continue with your setup password first and Start again second. Keep interrupted, recover, finish and abandoned outcomes. |
 | A731 backup recovery | **Keep, separate:** matching node/archive keys and existing owner authority; before go-live. |
-| A732 signed fresh deployment | **Keep, separate:** fresh-request custody authorisation, then fresh assignment; old data isolated. Retain the custody signing key. Exact format remains its own approval gate. |
+| A732 fresh deployment | **Change, design only (owner, 2026-10-16):** propose module-owned proof of entitlement and at least one country-independent route, with their network threat limits. Approval gates its build; A679 does not wait. Signing keys remain an option when they require no typing or offline ceremony. |
 | A733 TLS recovery | **Keep, separate:** public HTTP guidance only; secrets over trusted HTTPS; before go-live. |
 | Module boundary/public protocol | **Keep:** generic host, module-owned fiscal rules and canonical signed objects. |
 | Encrypted signing-key file/PBKDF | **Drop from normal flow:** no separate file/passphrase output or reopen gate. Preserve reusable code pending driver disposition. |

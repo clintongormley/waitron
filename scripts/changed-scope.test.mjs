@@ -401,6 +401,7 @@ describe("gateOutputs", () => {
     ["payments_sumup", "@waitron/payments-sumup"],
     ["adjustments", ADJUSTMENTS_PACKAGE],
     ["staffing", STAFFING_PACKAGE],
+    ["provisioning", "@waitron/provisioning"],
   ])(
     "gives a package with its own shard to the %s gate alone, never to a light gate",
     (gate, name) => {
@@ -421,6 +422,7 @@ describe("gateOutputs", () => {
         payments_sumup: "false",
         adjustments: "false",
         staffing: "false",
+        provisioning: "false",
         light_a: "false",
         light_b: "false",
         shared: "false",
@@ -457,6 +459,7 @@ describe("gateOutputs", () => {
       payments_sumup: "false",
       adjustments: "false",
       staffing: "false",
+      provisioning: "false",
       light_a: "true",
       light_b: "false",
       shared: "true",
@@ -528,6 +531,7 @@ describe("SCOPE_GATES", () => {
       "payments_sumup",
       "adjustments",
       "staffing",
+      "provisioning",
       "light_a",
       "light_b",
       "shared",
@@ -555,52 +559,52 @@ describe("the CLI", () => {
 
   it("answers every gate from one pnpm ls result", () => {
     expect(run(ls("@waitron/db", "@waitron/shared")).stdout).toBe(
-      "heavy=true\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=true\nlight_b=false\nshared=true\n",
+      "heavy=true\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=true\nlight_b=false\nshared=true\n",
     );
     expect(run(ls("@waitron/payments")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=true\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=true\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/db", () => {
     expect(run(ls("@waitron/db")).stdout).toBe(
-      "heavy=true\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=true\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/ui", () => {
     expect(run(ls("@waitron/ui")).stdout).toBe(
-      "heavy=false\nui=true\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=true\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/till", () => {
     expect(run(ls("@waitron/till")).stdout).toBe(
-      "heavy=false\nui=false\ntill=true\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=true\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/dashboard", () => {
     expect(run(ls("@waitron/dashboard")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=true\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=true\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/setup", () => {
     expect(run(ls("@waitron/setup")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=true\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=true\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/server", () => {
     expect(run(ls("@waitron/server")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=true\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=true\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
   it("reports fiscal_verifactu work but no light work for a scope that is only @waitron/fiscal-verifactu", () => {
     expect(run(ls("@waitron/fiscal-verifactu")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=true\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=true\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
@@ -608,7 +612,7 @@ describe("the CLI", () => {
   // bytes on stdout, zero on stderr, exit 0 — not `[]`, and no message.
   it("reads an empty pnpm ls result as no work for any gated job", () => {
     expect(run("").stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 
@@ -620,16 +624,16 @@ describe("the CLI", () => {
   // its own rather than falling through to whatever happens to be on stdin.
   it("emits every gate for an unscoped run, ignoring stdin entirely", () => {
     expect(run(ls("@waitron/payments"), "--unscoped").stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nlight_a=true\nlight_b=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nprovisioning=true\nlight_a=true\nlight_b=true\nshared=true\n",
     );
     expect(run("", "--unscoped").stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nlight_a=true\nlight_b=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nprovisioning=true\nlight_a=true\nlight_b=true\nshared=true\n",
     );
   });
 
   it("fails closed to every gate when pnpm ls output cannot be parsed", () => {
     expect(run("No projects matched the filters").stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nlight_a=true\nlight_b=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nprovisioning=true\nlight_a=true\nlight_b=true\nshared=true\n",
     );
   });
 
@@ -639,16 +643,16 @@ describe("the CLI", () => {
   it("fails closed when pnpm reports its own error as JSON on stdout", () => {
     const pnpmError = '{"error":{"code":"pnpm","message":"Unsupported package selector: …"}}';
     expect(run(pnpmError).stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nlight_a=true\nlight_b=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nsetup=true\nvenue_service=true\nserver=true\nfiscal_verifactu=true\nbookings=true\nmedia=true\npayments_stripe=true\npayments_sumup=true\nadjustments=true\nstaffing=true\nprovisioning=true\nlight_a=true\nlight_b=true\nshared=true\n",
     );
   });
 
   it("treats a genuinely empty scope as empty, not as an error", () => {
     expect(run("[]").stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
     expect(run("").stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nlight_a=false\nlight_b=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nsetup=false\nvenue_service=false\nserver=false\nfiscal_verifactu=false\nbookings=false\nmedia=false\npayments_stripe=false\npayments_sumup=false\nadjustments=false\nstaffing=false\nprovisioning=false\nlight_a=false\nlight_b=false\nshared=false\n",
     );
   });
 

@@ -164,6 +164,20 @@ normal hook run the §2 local checks once; let CI run mandatory package tests an
 add a whole-workspace local run solely because the branch is being finished. Verify the current-head
 CI scope and results; the unfiltered `main` merge checks the combined tree when code is in scope.
 
+### First Live setup qualification
+
+For the A679 candidate, follow [first Live setup](../operations/first-live-fiscal-setup.md)
+and [hour-based recovery](../operations/hour-recovery.md). Use an isolated production-shaped
+host when the managed development stack enables dev mode. The owner's 19 October viewing
+approval covers the generated recovery sheet; automated download/entry checks and final branch
+review remain distinct evidence. No physical-paper acceptance exercise remains under the
+approved hour-code design.
+
+Historical qualification, 2026-10-15: the compiled wizard/local host/saved-tool checks covered
+both launch paths and custody choices with synthetic outside responses. Those results describe
+the former signed-custodian route, not hour-based setup. Preserve them without repeating its
+cancelled paper-check requirement.
+
 ## Documentation rules
 
 **`docs/backlog.md` answers "what should I work on?"** — what is in flight, what is next, and why
@@ -297,7 +311,21 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
+### Disposable preproduction setup and owned Live setup
+
+On the A679 candidate, Demo, Preparation and isolated readiness use the fiscal module's
+disposable hour preparation (`hour-throwaway-allocation.ts`). Live setup uses the owned hour flow, including
+on a development host. It selects an eligible hour after clock/history checks and the operator's
+recent-setup answer; signed allocation files do not replace that flow.
+
+Production and preproduction remain separate databases. A disposable preproduction allocation
+is not production authority. Follow the [first Live procedure](../operations/first-live-fiscal-setup.md)
+for ownership, readiness and kept-PDF requirements.
+
 ### A Veri\*Factu venue without a signed allocation
+
+**Historical policy, 2026-10-15.** The following describes the earlier implementation and its measurements. Its S/P naming,
+signer and supplied-allocation instructions are superseded by the hour-code design.
 
 A Veri\*Factu venue's setup has to carry a fiscal allocation: the installation number and invoice
 series a custodian (the person or service that hands out installation numbers and keeps the
@@ -325,6 +353,12 @@ accepts today has one: the route takes its country from `getVenueSetupCountryPac
 (`packages/country-packs/src/registry.ts`), which offers only Spain, and Spain's only supported
 fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). The setup wizard
 has no text of its own for this refusal yet.
+
+**2026-10-15 A679 candidate:** the refusal below describes an unclaimed request. The claimed
+wizard runs its separate preproduction readiness check before collecting email settings or a
+production allocation. Activation still requires both. Follow the [guided first Live procedure](../operations/first-live-fiscal-setup.md)
+for that path; `apps/server/src/first-fiscal-setup.e2e.test.ts` checks readiness before email and
+refusal of production activation without email.
 
 **Live on a real box needs a supplied allocation** (A679). On a box that is not a development box,
 a Live setup that is otherwise complete but has no allocation stops at `setup.fiscal_test_required`

@@ -1,6 +1,8 @@
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import nativeFs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import {
   chmod,
   lstat,
@@ -1027,23 +1029,34 @@ describe("restore hooks (identity phase)", () => {
   });
 
   it("a pre-existing VALID identity is set aside BEFORE the venue file is replaced", async () => {
-    // The venue directory cannot be made (its parent is a file), so nothing after
-    // `restoreDatabase` runs.
     const existing = formatEnvFile({
       ...parseEnvFile(TRADING_ENV),
       WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
     });
     await writeFile(join(stateDir, "trading.env"), existing);
     const blocker = join(stagingDir, "not-a-directory");
-    await writeFile(blocker, "");
+    await mkdir(join(blocker, "venue"), { recursive: true });
     const migrate = vi.fn(async () => {});
-    // No lock: the real one would be refused creating the same folder, before the set-aside.
     const lockVenue = async () => ({ release: () => {} });
-    await expect(
-      restoreFromArtifact(
-        makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate, lockVenue }),
-      ),
-    ).rejects.toThrow(/ENOTDIR|ENOENT/);
+    const realMkdir = nativeFs.mkdir;
+    const placement = vi.spyOn(nativeFs, "mkdir").mockImplementation(async (...args) => {
+      if (String(args[0]) === join(blocker, "venue"))
+        throw Object.assign(new Error("ENOENT: injected placement mkdir refusal"), {
+          code: "ENOENT",
+        });
+      return realMkdir(...args);
+    });
+    syncBuiltinESMExports();
+    try {
+      await expect(
+        restoreFromArtifact(
+          makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate, lockVenue }),
+        ),
+      ).rejects.toThrow(/ENOTDIR|ENOENT/);
+    } finally {
+      placement.mockRestore();
+      syncBuiltinESMExports();
+    }
     expect(migrate).not.toHaveBeenCalled();
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);

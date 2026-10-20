@@ -1,3 +1,9 @@
+import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
+import type {
+  ModuleRecoveryKeyEntry,
+  ModuleRecoveryEntry,
+  ModuleRecoveryPreparationRequest,
+} from "@waitron/module/src/setup-contract.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
@@ -7,7 +13,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { RecoveryBackupPreview, RecoveryRestoreCredentials } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale } from "../i18n/t.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
 export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
@@ -72,12 +78,17 @@ export class SetupRecoveryAllocation extends LitElement {
     `,
   ];
   @property({ attribute: false }) preview?: RecoveryBackupPreview;
+  @property({ attribute: false }) prepare?: (
+    request: ModuleRecoveryPreparationRequest,
+  ) => Promise<unknown>;
   @property() errorMessage?: string;
   @property() refusedField?: string;
   @state() private refusalDismissed = false;
   @state() private draft = empty();
   @state() private attempted = false;
   #scope?: DraftScope<Draft>;
+  #keyEntry?: ModuleRecoveryKeyEntry;
+  #recoveryEntry?: ModuleRecoveryEntry;
   #review?: { text: string; url: string };
   constructor() {
     super();
@@ -85,7 +96,60 @@ export class SetupRecoveryAllocation extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage") || changed.has("refusedField")) this.refusalDismissed = false;
-    if (changed.has("preview")) this.#clear();
+    if (changed.has("preview") || changed.has("prepare")) {
+      this.#clear();
+      const preview = this.preview;
+      const contribution = SETUP_MODULES.find(
+        (module) => module.module === preview?.fiscalSelection?.module,
+      );
+      this.#recoveryEntry =
+        preview?.fiscalSelection && preview.nodeRecoveryKeyName && this.prepare
+          ? contribution?.createRecovery?.({
+              locale: currentLocale() === "es-ES" ? "es" : "en",
+              selection: {
+                ...preview.fiscalSelection,
+                sourceId: preview.sourceId,
+                taxId: preview.taxpayer.taxId,
+                environment: preview.environment,
+                nodeId: preview.nodeId,
+                keyName: preview.nodeRecoveryKeyName,
+              },
+              binding: {
+                module: preview.fiscalSelection.module,
+                action: "restore",
+                eventId: crypto.randomUUID(),
+                sourceId: preview.activationSourceId ?? preview.sourceId,
+                targetNodeId: preview.nodeId,
+              },
+              prepare: this.prepare,
+            })
+          : undefined;
+      this.#keyEntry =
+        !this.#recoveryEntry && preview?.fiscalSelection && preview.nodeRecoveryKeyName
+          ? SETUP_MODULES.find(
+              (module) => module.module === preview.fiscalSelection!.module,
+            )?.createRecoveryKey?.({
+              locale: currentLocale() === "es-ES" ? "es" : "en",
+              selection: {
+                taxId: preview.taxpayer.taxId,
+                environment: preview.environment,
+                nodeId: preview.nodeId,
+                keyName: preview.nodeRecoveryKeyName,
+              },
+            })
+          : undefined;
+    }
+    if (this.#recoveryEntry) {
+      this.#recoveryEntry.locale = currentLocale() === "es-ES" ? "es" : "en";
+      this.#recoveryEntry.errorMessage = this.errorMessage;
+      this.#recoveryEntry.refusedField = this.refusedField;
+    }
+    if (this.#keyEntry) {
+      this.#keyEntry.locale = currentLocale() === "es-ES" ? "es" : "en";
+      this.#keyEntry.errorMessage =
+        this.#refusal("nodeRecoverySecret") ||
+        (this.attempted && this.#keyInvalid ? t("restore.allocation_key_missing") : "");
+    }
     this.#reviewRequest();
     this.#registerScope();
   }
@@ -117,6 +181,8 @@ export class SetupRecoveryAllocation extends LitElement {
   }
   #clear(): void {
     this.#releaseReview();
+    this.#keyEntry?.clear();
+    this.#recoveryEntry?.clear();
     this.draft = empty();
     this.attempted = false;
     this.#scope?.commit(empty());
@@ -212,7 +278,12 @@ export class SetupRecoveryAllocation extends LitElement {
     }
   }
   readCredentials(): RecoveryRestoreCredentials | undefined | null {
-    if (Object.entries(this.draft).every(([, value]) => value === "" || value === false)) return;
+    if (this.#recoveryEntry) return this.#recoveryEntry.readCredentials();
+    if (
+      !this.preview?.fiscalSelection &&
+      Object.entries(this.draft).every(([, value]) => value === "" || value === false)
+    )
+      return;
     this.attempted = true;
     this.refusalDismissed = true;
     this.#notify();
@@ -224,7 +295,10 @@ export class SetupRecoveryAllocation extends LitElement {
     return { recoveryOperation: operation, nodeRecoverySecret: this.draft.nodeKey };
   }
   get #hasDraft(): boolean {
-    return Object.values(this.draft).some((value) => value !== "" && value !== false);
+    return (
+      this.preview?.fiscalSelection !== undefined ||
+      Object.values(this.draft).some((value) => value !== "" && value !== false)
+    );
   }
   get #keyInvalid(): boolean {
     return this.draft.nodeKey === "" || new TextEncoder().encode(this.draft.nodeKey).length > 4096;
@@ -233,6 +307,7 @@ export class SetupRecoveryAllocation extends LitElement {
     return !this.refusalDismissed && this.refusedField === field ? (this.errorMessage ?? "") : "";
   }
   override render() {
+    if (this.#recoveryEntry) return this.#recoveryEntry;
     const recordInvalid = this.attempted && !this.#operation();
     const keyInvalid = this.attempted && this.#keyInvalid;
     const isolatedInvalid = this.attempted && !this.draft.isolated;
@@ -254,21 +329,33 @@ export class SetupRecoveryAllocation extends LitElement {
           this.#edit("record", event.detail.value);
         }}
       ></wt-textarea>
-      <wt-input
-        class="field"
-        name="node-recovery-key"
-        type="password"
-        autocomplete="off"
-        label=${t("restore.allocation_node_key")}
-        data-test="node-key"
-        ?required=${this.#hasDraft}
-        .value=${this.draft.nodeKey}
-        .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+      <div
+        @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
           event.stopPropagation();
-          this.#edit("nodeKey", event.detail.value);
+          this.#edit("nodeKey", event.detail.secret ?? "");
         }}
-      ></wt-input>
+      >
+        ${
+          this.#keyEntry ??
+          html`
+            <wt-input
+              class="field"
+              name="node-recovery-key"
+              type="password"
+              autocomplete="off"
+              label=${t("restore.allocation_node_key")}
+              data-test="node-key"
+              ?required=${this.#hasDraft}
+              .value=${this.draft.nodeKey}
+              .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.#edit("nodeKey", event.detail.value);
+              }}
+            ></wt-input>
+          `
+        }
+      </div>
       ${
         this.#review
           ? html`<section

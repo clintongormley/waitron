@@ -57,7 +57,7 @@
 - A731/A732/A733 remain separate before-go-live work; no repair-page mutations for them here.
 - Paper-to-Cloud import is not required and has no open build dependency. Joining Cloud retains the paper PDF; later paper allocations, including after leaving Cloud, continue the existing S/P register.
 - Unsigned paper machine reporting remains unavailable unless separately decided; this plan authorises no new reporting implementation.
-- No hash, numbering, registros, alta, `registerSif`, `restoreFiscal`, SQL or existing protected assertions change.
+- No hash, numbering, registros, alta, `registerSif`, `restoreFiscal`, SQL or existing protected assertions change. **Owner amendment, 2026-10-16 13:40:** new read-only queries may establish the separate empty-database proof, with the scope and refusals recorded in the repair plan. No existing SQL or database write changes.
 - The owner’s removal covers paper-signature admission semantics, not an exception to H2 or protected assertions.
 - No scanner, QR, image decoding, camera, offline tool, PBKDF gate, ink or loss exercise.
 - No sale-path network, automatic conflict switching, seller-fencing or missing-sales reconstruction.
@@ -324,7 +324,7 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] Observe RED; reuse password derivation outside transactions, `inTurn`, throttling and under-exclusion rereads.
 - [ ] Existence check precedes database opener; inspection creates/migrates/checkpoints nothing.
 - [ ] Preserve missing/corrupt/unreadable/partial/unknown classifications; exceptions never mean empty or no register.
-- [ ] Eligible marker repair needs complete preactivation provenance and successful existing unused reads, without new SQL.
+- [ ] Eligible marker repair needs complete preactivation provenance and the separate positive database proof; read-only inspection is permitted by the owner amendment of 2026-10-16 13:40.
 - [ ] Invalidate all old owner/evidence/delivery grants after rebind; abandoned remains abandoned.
 - [ ] Repeat the command; require counted GREEN and strict-reader positives/refusals.
 - [ ] Commit: `git commit -s -m "feat: inspect and recover unfinished setup ownership without weakening admission"`.
@@ -332,10 +332,10 @@ Node-key format is display metadata, never a replacement secret value.
 ## Task 8: V2 retirement, workspace selection and publication-only finish
 
 **Files:** provisioning resolution/workspace modules/tests; server resolution/entry/API files; bin/node-entry/boot/recovery and CLI/restore admission.
-**Interfaces:** retain V2 `WorkspaceBinding`, `ResolutionRecord` and `RegisterAnswer` shapes; `startAgainFirstSetup(request):Promise<WorkspaceBinding>`; `resolveFirstSetupWorkspace(anchor):Promise<BootTarget>`; `assertFirstSetupBootTarget(target):Promise<void>`; `finishFirstFiscalSetup(request,hold):Promise<VenueResult>`.
+**Interfaces:** retain V2 `WorkspaceBinding` and both `RegisterAnswer` variants. **Owner, 2026-10-16:** `ResolutionRecord.register` may be null only for password-authorised marker-repair/ownership-rebind, meaning not consulted and granting no reset or fiscal authority; `startAgainFirstSetup(request):Promise<WorkspaceBinding>`; `resolveFirstSetupWorkspace(anchor):Promise<BootTarget>`; `assertFirstSetupBootTarget(target):Promise<void>`; `finishFirstFiscalSetup(request,hold):Promise<VenueResult>`.
 
 - [ ] RED: Consumed stays spent; Not consumed never clears saved intent; Unknown leaves old assignment unavailable.
-- [ ] RED: no signing key cannot satisfy no-master; any existing/unknown paper history refuses password-free empty reset.
+- [ ] RED: no signing key cannot satisfy no-master. **Owner, 2026-10-16:** add the unused-enrolled-PDF exception from the design inventory: password-free Start again needs positive never-activated and empty-database evidence, preserves the entire old attempt and burns its whole name block. Existing/unknown business data still refuses. This new exception is not yet implemented by the earlier no-master checks.
 - [ ] RED: missing DB remains missing at the old path; known exact commit finishes publication with zero activation.
 - [ ] RED: restore old roots/marker, lose either selection witness or substitute backlink; refuse before database open.
 - [ ] Run: `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-workspace.test.ts`.

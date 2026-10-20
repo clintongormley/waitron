@@ -1,3 +1,11 @@
+> **Historical protocol, superseded 2026-10-19 on the A679 branch.** The procedures,
+> environment variables and qualification results below describe the earlier register-based
+> implementation. They are retained for original-evidence inspection and historical tests;
+> do not use them to prepare a new setup or recovery. Production composition now selects
+> the hour-based preparation API. Follow [first Live setup](../operations/first-live-fiscal-setup.md)
+> or [recovery with an hour code](../operations/hour-recovery.md). Cloud accounts, backup
+> transport and recovery authentication remain separate from naming authority.
+
 # Pass a Cloud allocation through local recovery
 
 A consumed Cloud receipt records a reserved installation name and its complete invoice-series
@@ -5,10 +13,35 @@ set. To use it on a replacement box, you still authenticate with the node recove
 selected backup and confirm that the former machine is isolated. A Cloud account never supplies
 that local authority.
 
-This adapter is for the explicitly configured recovery path. It does not select production
+The recovery adapter uses explicitly configured outside evidence. It does not select production
 custody, a continuity service, signing-key enrolment policy or subscription policy. Qualify those
 separately before enabling Cloud allocations for a real venue. Paper recovery remains available
 without Cloud.
+
+## First setup
+
+The A679 module path also accepts a signed consumed C receipt for first setup. Keep the exact
+public reserve request: it binds the planned local administrator, setup event, target node, venue,
+operation ID, scope and every series base. Use that request in the Cloud account journey, whose
+full-session, CSRF, origin and independently supplied capability checks remain in Cloud. File
+handoff avoids sending Cloud account cookies to the setup page.
+
+Configure the issuer trust and receipt directory independently with the variables below. First
+setup takes its fresh confirmation from the owner-bound document grant, rather than the recovery
+confirmation file. Its history digest hashes the exact packet bytes (or canonical receipt JSON
+when the input is an object). The kept-document declaration binds that digest and the document
+digest to the frozen input. Initial setup requires absence of an old machine, not a recovery
+isolation declaration. A Cloud account never replaces the planned local administrator.
+
+Joining Cloud requires no paper-history import. Keep the paper PDF and continue its existing S/P
+register for later paper allocations, including after leaving Cloud. Unsigned paper import and
+paper machine reporting remain unavailable. C-only documents create no paper signing key.
+
+Local synthetic tests cover initial C activation, checked replay, receipt reporting and a later P
+allocation from retained paper positions. They do not qualify production custody, first-local-
+operator admission, namespace discovery, continuity or signing adapters, or the joint Cloud
+service journey. The [A679 plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md)
+still requires wizard/PDF integration and owner acceptance.
 
 ## Supply the public operation
 

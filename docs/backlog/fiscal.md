@@ -239,164 +239,49 @@ owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement tha
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
-## A venue without Cloud needs a usable paper-custodian route
+## Finish first Live setup integration
 
-**Owner approval, 2026-10-16 at 14:50:** implement the
-[hour-coded series design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
-through the [replacement plan](../superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
-Four UTC-hour characters replace paper/Cloud name allocation, leaving a recovery-key PDF.
-The earlier plan's Tasks 9–12 are superseded; completed components need qualification against the new policy.
-The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
-rendered keys. Earlier register and physical-check instructions below are historical
-where superseded. No hour-code implementation or generated-PDF acceptance is claimed.
+The owner approved the exact parser replacement on 20 October at approximately 06:18 and
+the exact live-hour retirement bundle at approximately 07:45. Both are applied. The focused
+pair passes all 48 cases. Historical-contribution selection was rejected and remains unapplied.
+The before/after behavior and exact permission hashes are in
+[the changed-check inventory](../operations/a679-changed-checks.md#live-retirement-approval-applied-2026-10-20).
 
-**Owner update, 2026-10-15 at 22:15:** the current
-[design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
-[plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the
-21:30 removal of the paper custody signing key and group each typed field in fours.
-Register continuation takes 20 entered/23 displayed characters; a generated named
-node key takes 47/57; together, 67/80. Paper-to-Cloud import is no longer required
-because S/P and C names are disjoint. Keep your paper PDF when joining Cloud;
-later paper allocations, including after leaving Cloud, continue that existing
-S/P register. No unsigned-import contract or joint import qualification remains
-an open dependency; D74 is dropped. Signed Cloud receipts remain unchanged.
-Paper machine reporting remains unavailable unless separately decided, and no
-new reporting implementation is authorised. Earlier dated proposals and
-import-dependency receipts below are historical where superseded. This update
-qualifies no new runtime behavior.
+PR #1752's earlier published head failed two server shards; no unchanged rerun is a repair.
+Keep both completed installed Claude reviews and the earlier acceptance receipts. The branch
+rebased onto main's `8cf43cfba` to retain its table-label contract. Finish the normal push hook
+and literal final-head CI, including server coverage merge and Linux timings for the 129-case
+recovery-host split, before landing. Preserve the independent fiscal follow-ups below.
 
-**Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
-[two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
-history, the existing C Cloud contract and emergency E, with one setup-page PDF. Currentness is
-an owner declaration from the current record, never a fact proved by a stale PDF signature.
-Repair-v2 core and A731–A733 retain their approved authority. Product work was paused at that
-design checkpoint; the replacement plan below resumes the preserved draft #1752 work. The old 44-step check and FOLLOW-UP remain
-cancelled. The design records the missing Waitron Cloud setup integration and separately owned
-Cloud enablement work; no Cloud service is enabled by this publication. Earlier dated directions
-below are historical where superseded, including the now-withdrawn short N proposal.
+## Pin the clock's future-finished sample refusal
 
-**Replacement plan, 2026-10-15:** the [one-PDF implementation
-plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) follows the completed redesign
-checkpoint and preserves the existing product branch. New C-only documents need no fabricated paper
-master; preactivation key reissue stays in host staging until the node exists. Actual PDF recovery
-and the whole revised candidate still require implementation qualification.
+A679's first final installed review replaced
+`sample.monotonicFinishedMs > box.monotonicFinishedMs` with false in `hour-clock.ts`.
+The 548 hour cases still passed. Add a meaningful refusal case for a sample completed after
+its box observation, with the corresponding valid-order positive. Preserve the current
+clock policy. This is a test gap, not a reproduced product defect or a claim that an actual
+host supplies that ordering. The review's other clock faults failed their intended checks.
 
-**Owner 19:35 typing update, 2026-10-15:** the current design/plan add original-PDF upload and
-typing from the printout, with no scanner dependency. The original PDF has an embedded data
-attachment; missing attachment after a viewer re-save gives an explicit original-file/typing choice.
-A common printed register takes 101 data characters (79 when its custodian ID is already
-independently bound), and a newly generated named node key takes 40, for 141 or 119 together.
-Imported identifiers/keys print their actual length. Typed continuation signs a distinct checkpoint
-burning every earlier S/P name, including unused reservations; it cannot reconstruct missing
-original signatures, qualify Cloud imports or replace the matching backup key. Existing full
-evidence remains intact. Actual Chrome download/upload, changed-resave, typed controls and owner
-print/typing qualification remain to build.
+## Pin committed hour preparation's action boundary
 
-**Superseded dependency, owner 2026-10-15 at 22:15:** the following source-reading receipt remains historical. Its import-build instructions and enablement prerequisites are no longer active requirements.
+A679's first final installed review removed the restore/re-register-only check in
+`hour-selection.ts`'s committed path. The 548 hour cases and 165 promotion/recovery server
+cases still passed. Test the internal accepted/refused action boundary without changing it.
 
-**Paper-to-Cloud admission dependency found during plan review, 2026-10-15 (source reading only):**
-preserved Waitron `cc553697b`, `packages/fiscal-verifactu/src/initial-setup.ts:91–92`, binds the
-signed recipient to `first-setup:<attempt>`. Cloud `2912202e`,
-`packages/fiscal-allocation/src/validation.ts:581`, requires that recipient to be a UUID;
-`paper-import.ts:149–169` refuses transfer of consumed identities and requires their owner to equal
-the Cloud venue. Registration creates a separate Cloud venue ID
-(`packages/registration/src/index.ts:199–204`). A lookup cannot rewrite those original signed facts.
-Keep this import unavailable and add the exact-original rejection/disabled-state tests in Waitron.
-Lane D must supply an independently checked original-recipient admission contract, then the joint
-original-block/consumption acceptance check must pass before enabling this transition. New blocks
-also need pre-sign partitioning within the existing import count/byte limits; old indivisible
-oversized blocks remain intact and explicitly unavailable for import. This records missing
-integration; it authorises no Cloud repository change or new campaign item.
+Public promotion retry is a separate path: the existing real-mirror HTTPS case in
+`hour-promotion.test.ts` promotes once, restarts, retries with later time and checks the same
+rows, counters and hour journal. The driver reran that case after review and it passed;
+`promoteMirrorToPrimary` returns already-primary before invoking its preparation runner.
+Do not change that public outcome to make the internal check execute.
 
-**Owner redesign, 2026-10-15 at about 18:10–18:15:** replace the downloaded tool and separate
-custodian/computer with one PDF made by the setup page. You may download it, print it over the
-ordinary network, or both, and keep it in the restaurant’s office. Offline operation, paper/file
-separation, ink marking, handover drills and print-queue/OS-copy warnings are not requirements.
-The page must not upload the key anywhere on its own; your download or print is the intended delivery. The
-[short replacement design](../superpowers/specs/2026-10-15-a679-simple-pdf-design.md) needs owner
-approval before any more product code or a replacement plan. Preserve reusable work from draft
-PR #1752; the earlier implementation and review results do not qualify this new design. The old
-44-step paper check and FOLLOW-UP are cancelled. The replacement check will open the built PDF
-and, if recovery is part of the approved design, check recovery from a downloaded or printed copy.
-Earlier dated decisions below are historical and superseded where they contradict this direction.
+## Pin the early recovery-source refusal
 
-**Approval and plan update, 2026-10-15:** at about 06:35 the owner approved the complete
-A679 design: **“A — Approve, plan and build”**. This supersedes the historical unanswered
-approval/retention questions below. The [reviewed implementation plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)
-keeps real candidate validation on the host before public request export, custody secrets in the
-offline tool, and readiness separate from production. It specifies durable claim discovery and
-resume, whole-operation exclusion and restart reconciliation before trading. Both custody routes,
-file and actual-paper recovery, handover/loss checks and real wizard qualification remain to build
-and verify. There is no new approval gate or claim of product completion.
-
-You can use fiscal allocations without a Cloud subscription. The current paper route asks your
-custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,
-keep a separate master register and sign allocation evidence. That is not a usable setup route for
-an ordinary restaurant owner. After W41s-4 lands, design a friendly route, such as a dashboard page
-or a printed setup kit, while preserving the separate custodian and outside register. The owner
-requested this follow-up on 2026-10-14; no design or product work belongs in W41s-4.
-
-**A679 update, 2026-10-14, owner decisions at 21:50, 22:00 and 22:05:** BOTH a guided first
-outside paper kit and import from an existing custodian are approved for Live. Demo and
-Preparation need no kit or allocation import. B/A680 owns the automatic, clearly marked
-throwaway preproduction signer in the box, refused in production, with a deletion control;
-A679 adds no second signer. Only Demo is urgent before morning. The
-[Live proposal](../superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) and static
-EN/ES drawings cover the Live route. Finish W41s-6, then build A679 on A680 before W41s-7.
-Full-design/build approval, physical-code versus current local ownership, master retention and
-key format remain open. Live keeps real outside production custody. Its readiness check must
-use A680's throwaway allocation in the retained separate preproduction database, without a real
-preproduction kit; activation needs a distinct real production signed allocation. This is the
-intended joint contract requiring validation, not a claim of landed A680 behavior. Test data and
-counters are never promoted. Cloud fetching remains W41sC3; use paper before then. The driver's
-main `641665e` reproduction remains a development-preproduction observation, not production.
-
-**2026-10-15 landing update:** W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717).
-The owner approved current local-network ownership at 22:35 on 2026-10-14, without a
-physical-code step. Build A679 after A680 and the remaining retention decisions and full-design
-approval; W41s-6 no longer holds that dependency.
-
-**2026-10-15 at 05:10, owner decision:** a NEW guided kit has one writable paper original of
-the current master, kept by its named custodian. Record consumption on that original; every
-other copy is a labelled snapshot. Existing-custodian import retains its current master.
-Private-key retention is the next decision, separately from the register. A680 has also landed
-in [#1718](https://github.com/clintongormley/waitron/pull/1718), so neither it nor W41s-6 blocks
-the design. The Live-readiness allocation, joint qualification and full-design/build approval
-remain open. The paper-register decision does not approve printing a private signing key.
-
-**2026-10-15 at about 05:50, owner decision B:** a NEW guided kit keeps BOTH a
-passphrase-protected signing-key file on the named custodian's separate computer and recoverable
-secret paper for the SAME key. Explicitly save and successfully reopen the file before proceeding;
-check the paper restoration path. Keep both outside the box and venue backups, and the secret paper
-separately from the public master. Say plainly that whoever holds the paper can sign. This supersedes the
-earlier open-retention notes; it is not whole-design/build approval.
-
-**Current A679 custody proposal, 2026-10-15:** the
-[Live proposal](../superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md#custody-and-restoration-acceptance-requirements-proposed-2026-10-15)
-now specifies proposed acceptance requirements for an offline tool with no remote resources,
-explicit encrypted-file save/reopen, and versioned secret paper with the same signing key and full
-public fingerprint. Before proceeding, restore from the ACTUAL printed representation in a separate
-tool session, compare the full fingerprint, then sign/verify a harmless local challenge. Malformed
-or wrong paper refuses before signing. Secrets stay outside the box, backups, logs, browser storage
-and network, with only the explicit encrypted file and secret print as secret outputs. These are
-requirements for approval, not tested crypto or product behavior.
-
-Key recovery continues under the same named custodian and single current paper original; it never
-recovers current consumption or authorises a second master. A change of custodian explicitly hands
-over that original, its records and protected keys, with no invisible second writable master.
-Losing the master or all usable signing copies stops new signing pending explicit outside incident
-resolution. Uncertain currency stops new assignments. No guessed names, automatic fresh master,
-rollback, automatic rotation, new legal policy or recovery guarantee is proposed.
-
-**2026-10-15 dependency/handoff update:** W41s6 #1717, A680 #1718 and W41sC3
-[#1725](https://github.com/clintongormley/waitron/pull/1725) have landed. The earlier instruction
-to wait for C3 is historical. Adapter landing does not build Cloud wizard fetching; keep public
-import for existing custodians, including subscribers, until fetching is separately designed.
-No new Cloud scope belongs here. The source reads and reproduction above remain historical.
-The next owner question is full-design/build
-approval of the complete proposal, including custody and handover checks, rather than another
-retention question. Live readiness allocation and joint qualification remain open; no implementation
-plan is written yet.
+A679's second installed review removed `input.binding.sourceId !== copy.sourceId` from
+`createInteractiveRecoveryPreparation` in `apps/server/src/recovery-preparation.ts:271`.
+All 15 API and 129 host cases still passed. Removing the later source comparison at line118
+failed the assertion rejecting a different artifact; a restored driver selection passes.
+The earlier refusal lacks a distinguishing case. Add that qualification without changing either
+guard or claiming the two checks are equivalent for every input. No combined-fault probe was run.
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
@@ -964,6 +849,18 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+
+### A venue without Cloud needs a usable paper-custodian route
+
+The owner approved the hour-code design on 16 October 2026 at 14:50, replacing paper/Cloud
+allocation and S/P/C/E naming with taxpayer-wide coordination, clock/history checks and one
+recovery-key PDF. The 18 October clarification requires one prefix for each invoice purpose.
+The owner approved the generated PDF and exact retained CLI-launch patch on 19 October.
+The [approved design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
+and [historical decision/checkpoint snapshot](../operations/a679-development-checkpoints.md)
+retain the decisions and their earlier alternatives. No simultaneous-box reservation guarantee
+or conversion of old fiscal records is part of this change.
+
 - **A795, owner decisions 2026-10-18 (design §9, Q1–Q3).** Replacing the AEAT certificate needs the
   existing `system.manage` (managers and admins); no new permission. Warnings go by type, in
   calendar days left: a company seal turns amber at 90 and red at 30, a representative certificate
@@ -1519,3 +1416,31 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
   [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
   (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
   open.
+
+
+## A731. Recover from backup from the first-setup repair page
+
+Required before any venue goes live; owner 2026-10-15 at about 17:15. Connect the repair
+page to existing archive, bucket and managed-Cloud recovery, retaining real owner proof and the
+selected backup’s named node recovery key, archive encryption key where applicable and current
+outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
+Unresolved first-setup guards currently block restore; the page must say this path is not yet
+available until this item lands. Do not expose retained business records without proof.
+
+## A732. Keep old data and start fresh on this box
+
+Required before any venue goes live; owner 2026-10-15 at about 17:15. Support a fresh
+isolated deployment when business data exists or may exist and the old password is lost. Propose
+the exact new custodian-signed authorisation format for owner approval before building. Bind it to
+the box’s fresh recovery request and obtain a fresh signed assignment. Preserve the old workspace
+offline; the new account cannot read it. A possibly activated scope requires an explicit
+recovery/replacement declaration. A public file-check receipt, snapshot or fresh assignment alone
+cannot authorise this action. Until this item lands, explain that it is not yet available.
+
+## A733. Set up secure connection from the first-setup repair page
+
+Required before any venue goes live; owner 2026-10-15 at about 17:15. Guide restoration
+when the box’s certificate is missing or unusable. Preserve old material, prefer the retained CA
+when usable and guide installation/trust of the new public certificate. HTTP serves public
+connection/bootstrap information only and accepts no password or key. Until this item lands,
+explain that secure-connection restoration is not yet available from the repair page.

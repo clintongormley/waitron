@@ -2,13 +2,15 @@ import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { putCredential, type KeyRing } from "@waitron/credentials";
-import { authorizeManager, normalizeAndValidateEmail, persons } from "@waitron/identity";
+import { authorizeManager, persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import type { Logger } from "./logger.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { OnboardingIntent } from "./trading-config.js";
+import { parseEmailSettings } from "@waitron/provisioning";
+export { parseEmailSettings } from "@waitron/provisioning";
 import "./errors.js";
 
 interface EmailSettingsApiDeps {
@@ -16,55 +18,6 @@ interface EmailSettingsApiDeps {
   ring: KeyRing;
   sendTest?: typeof sendSmtpTestMessage;
   config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean };
-}
-
-export function parseEmailSettings(body: Record<string, unknown>): { url: string; from: string } {
-  const invalid = (field: string): never => {
-    throw new AppError("email.settings_invalid", { field });
-  };
-  if (
-    typeof body.server !== "string" ||
-    !body.server.trim() ||
-    /[\s/@?#]/.test(body.server.trim())
-  ) {
-    invalid("server");
-  }
-  if (
-    typeof body.port !== "number" ||
-    !Number.isInteger(body.port) ||
-    body.port < 1 ||
-    body.port > 65535
-  ) {
-    invalid("port");
-  }
-  if (typeof body.encryption !== "string" || !["starttls", "tls"].includes(body.encryption)) {
-    invalid("encryption");
-  }
-  const protocol = body.encryption === "tls" ? "smtps" : "smtp";
-  let url: URL;
-  try {
-    url = new URL(`${protocol}://${(body.server as string).trim()}:${body.port as number}`);
-    if (url.hostname !== (body.server as string).trim().toLowerCase()) invalid("server");
-  } catch {
-    invalid("server");
-  }
-  const user = body.user === undefined ? "" : body.user;
-  const password = body.password === undefined ? "" : body.password;
-  if (typeof user !== "string") invalid("user");
-  if (typeof password !== "string") invalid("password");
-  if (user === "" && password !== "") invalid("user");
-  if (user !== "" && password === "") invalid("password");
-  url!.username = encodeURIComponent(user as string);
-  url!.password = encodeURIComponent(password as string);
-  if (body.encryption === "starttls") url!.searchParams.set("requireTLS", "true");
-  if (typeof body.from !== "string") invalid("from");
-  let from: string;
-  try {
-    from = normalizeAndValidateEmail(body.from as string);
-  } catch {
-    invalid("from");
-  }
-  return { url: url!.href.replace(/\/$/, ""), from: from! };
 }
 
 export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log: Logger): void {

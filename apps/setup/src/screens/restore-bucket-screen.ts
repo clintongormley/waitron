@@ -12,14 +12,13 @@ import {
   dispatchBucketRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
-import { SetupApi, type ApiError } from "../api/client.js";
+import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import { t, format } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
-/** The restored copy's names, from `restore.stream_venue_unconfirmed` (#646). */
 export interface RestoredVenue {
   legalName: string;
   taxId: string;
@@ -82,6 +81,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private venueConfirmed = false;
+  @state() private previewVenue?: RestoredVenue;
   @state() private attempted = false;
   @state() private recoveryInvalid = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
@@ -180,7 +180,13 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #edited(field: BucketField): void {
-    if (field === "kit" || field === "environment") this.#scope?.changed();
+    if (field === "kit" || field === "environment") {
+      this.#scope?.changed();
+      if (this.previewVenue !== undefined) {
+        this.previewVenue = undefined;
+        this.venueConfirmed = false;
+      }
+    }
     if (field === this.previewField) this.previewField = undefined;
     if (field === this.invalidField) this.fieldRefusalDismissed = true;
   }
@@ -204,7 +210,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   get #venue(): RestoredVenue | undefined {
-    return this.#kitReplaced ? undefined : this.venue;
+    return this.previewVenue ?? (this.#kitReplaced ? undefined : this.venue);
   }
 
   #setKit(kit: string): void {
@@ -422,6 +428,20 @@ export class SetupRestoreBucketScreen extends LitElement {
         },
       })}
       <setup-recovery-copy
+        @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
+          event.stopPropagation();
+          const preview = event.detail.preview;
+          if (preview === undefined && this.previewVenue === undefined) return;
+          this.previewVenue =
+            preview === undefined
+              ? undefined
+              : {
+                  legalName: preview.taxpayer.legalName,
+                  taxId: preview.taxpayer.taxId,
+                  locationName: preview.locationName,
+                };
+          this.venueConfirmed = false;
+        }}
         .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {

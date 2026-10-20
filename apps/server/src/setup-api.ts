@@ -1,3 +1,9 @@
+import {
+  mountRecoveryPreparationApi,
+  type PrepareRecovery,
+} from "./setup-recovery-preparation-api.js";
+import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
+import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import type { Context, Hono } from "hono";
 import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -29,7 +35,7 @@ import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
-import { mountSpa } from "./spa-api.js";
+import { mountSetupSpa } from "./setup-spa.js";
 import type { Logger } from "./logger.js";
 import type {
   ActiveSetupOperation,
@@ -37,6 +43,7 @@ import type {
   SetupOperationStore,
 } from "./setup-operation.js";
 import type { ArchiveRestoreRequest } from "./restore-request.js";
+import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import {
   parseRecoveryOperationInput,
@@ -62,16 +69,19 @@ export interface BucketRestoreInput {
   venueConfirmed: string | null;
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryEntryContext;
 }
 
 function recoveryCredentials(
   operation: unknown,
   secret: unknown,
+  context?: unknown,
 ): {
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryEntryContext;
 } {
-  if (operation === undefined && secret === undefined) return {};
+  if (operation === undefined && secret === undefined && context === undefined) return {};
   const parsed = parseRecoveryOperationInput(operation);
   if (
     parsed === null ||
@@ -81,7 +91,13 @@ function recoveryCredentials(
     invalidRequest("recoveryOperation");
   if (typeof secret !== "string" || secret.trim().length === 0 || Buffer.byteLength(secret) > 4096)
     invalidRequest("nodeRecoverySecret");
-  return { recoveryOperation: parsed, nodeRecoverySecret: secret };
+  const selected = context === undefined ? undefined : parseRecoveryEntryContext(context);
+  if (selected === null) invalidRequest("recoveryContext");
+  return {
+    recoveryOperation: parsed,
+    nodeRecoverySecret: secret,
+    ...(selected === undefined ? {} : { recoveryContext: selected }),
+  };
 }
 
 /**
@@ -94,7 +110,10 @@ export interface SetupDeps {
   /** Keeps a developer Live walkthrough on preproduction transports after restart. */
   devMode?: boolean;
   /** Plaintext admin secrets never reach it — the provision route hashes them at the boundary. */
-  provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  provision?: (
+    req: ProvisionRequest,
+    beforeTransaction?: () => Promise<void>,
+  ) => Promise<VenueResult>;
   /** Reconstructs the one venue committed by this persisted request after a process interruption. */
   recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
   readOpeningHours?: (result: VenueResult) => Promise<{ departmentId: string } | undefined>;
@@ -112,10 +131,9 @@ export interface SetupDeps {
    * seat. */
   db?: Database;
   ring?: KeyRing;
-  /** Provision path only. */
   establishIdentity?: (nodeId: string) => Promise<void>;
   /** Mints the venue's term-0 membership document after `establishIdentity` seals the identity key.
-   * Provision path only. */
+   */
   seedMembership?: (nodeId: string) => Promise<void>;
   /** Persists `trading.env` so the next boot enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
@@ -126,13 +144,13 @@ export interface SetupDeps {
   setupAppDir?: string;
   /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
   operations?: SetupOperationStore;
-  /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart.
-   * `oldBoxGone` is the operator's answer to whether the server the backup came from is switched
-   * off for good; it is checked while staging and is not part of the staged request. */
+  firstFiscal?: FirstFiscalHost;
+  firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   stageRestore?: (
     request: ArchiveRestoreRequest,
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
+  prepareRecovery?: PrepareRecovery;
   previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
     input: Omit<BucketRestoreInput, "venueConfirmed">,
@@ -220,6 +238,7 @@ export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.configuration_outdated": 400,
   "setup.request_invalid": 400,
+  "setup.owner_required": 403,
   "setup.provisioning_secret_required": 400,
   "setup.fiscal_test_required": 409,
   // A present-but-malformed `admin.email` (see `parseVenue`).
@@ -600,6 +619,49 @@ function directError(
  * nothing else claimed.
  */
 export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
+  const holds = new WeakMap<Request, FirstSetupHold>();
+  if (deps.firstFiscal !== undefined)
+    mountSetupFirstFiscalApi(
+      app,
+      deps.firstFiscal,
+      log,
+      parseVenue,
+      deps.devMode === true ? "preproduction" : "production",
+      deps,
+    );
+  if (deps.firstSetup !== undefined) {
+    const firstSetup = deps.firstSetup;
+    const boundary = createErrorBoundary(
+      {
+        "setup.attempt_conflict": 409,
+        "setup.attempt_uncertain": 409,
+        "setup.attempt_invalid": 409,
+      },
+      "setup.provision_failed",
+    );
+    app.use("/setup-api/*", async (c, next) => {
+      if (c.req.method !== "POST" || c.req.path.startsWith("/setup-api/first-setup/"))
+        return next();
+      return boundary(c, log, () =>
+        firstSetup.coordinator.run(async (hold) => {
+          await firstSetup.assertOtherAllowed();
+          holds.set(c.req.raw, hold);
+          try {
+            await next();
+            return c.res;
+          } finally {
+            holds.delete(c.req.raw);
+          }
+        }),
+      );
+    });
+  }
+  const runOperation = <T>(
+    request: Request,
+    kind: Parameters<SetupOperationStore["run"]>[0],
+    hash: string,
+    body: (operation: ActiveSetupOperation) => Promise<T>,
+  ): Promise<T> => deps.operations!.run(kind, hash, body, holds.get(request));
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
@@ -669,6 +731,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     deps.sendEmailTest,
     () => provisioning || fiscalTesting || configurationStaging,
   );
+
+  mountRecoveryPreparationApi(app, deps, log, {
+    uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
+    hold: (request) => holds.get(request),
+    busy: () => provisioning || fiscalTesting || configurationStaging || emailTesting(),
+    run: createErrorBoundary(
+      { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503 },
+      "setup.restore_failed",
+    ),
+  });
 
   app.post("/setup-api/fiscal-test", async (c) => {
     if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
@@ -747,6 +819,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         c.req.header("Accept-Language"),
       );
       const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
+      if (
+        mode === "live" &&
+        deps.firstFiscal !== undefined &&
+        deps.firstFiscal.offerings(request.venue.location.fiscalTerritory).length > 0
+      )
+        throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;
       const rawEmail = (parsed as Record<string, unknown>).email;
       if (environment === "production" && rawEmail === undefined) {
@@ -850,7 +928,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const response =
           deps.operations === undefined
             ? await execute()
-            : await deps.operations.run("provision", requestHash, async (operation) => {
+            : await runOperation(c.req.raw, "provision", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { provisioned: true; restarting: true });
                 }
@@ -935,7 +1013,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const response =
           deps.operations === undefined
             ? await execute()
-            : await deps.operations.run("adopt", requestHash, async (operation) => {
+            : await runOperation(c.req.raw, "adopt", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { adopted: true; restarting: true });
                 }
@@ -1035,6 +1113,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           oldBoxGone?: unknown;
           recoveryOperation?: unknown;
           nodeRecoverySecret?: unknown;
+          recoveryContext?: unknown;
         }>(c);
         if (
           typeof body.pointId !== "string" ||
@@ -1044,7 +1123,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
           invalidRequest("oldBoxGone");
         }
-        const credentials = recoveryCredentials(body.recoveryOperation, body.nodeRecoverySecret);
+        const credentials = recoveryCredentials(
+          body.recoveryOperation,
+          body.nodeRecoverySecret,
+          body.recoveryContext,
+        );
         c.header("Cache-Control", "no-store");
         const pointId = body.pointId;
         const oldBoxGone = body.oldBoxGone === true;
@@ -1069,7 +1152,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           .update("\0")
           .update(JSON.stringify(credentials))
           .digest("hex");
-        return await deps.operations.run("restore", requestHash, async (operation) => {
+        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             setTimeout(() => deps.requestRestart!(), 0);
             return c.json({ restoreStaged: true, restarting: true }, 202);
@@ -1207,6 +1290,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             "oldBoxGone",
             "recoveryOperation",
             "nodeRecoverySecret",
+            "recoveryContext",
           ])
             if (form.getAll(field).length > 1) invalidRequest(field);
           const answer = form.get("oldBoxGone");
@@ -1239,6 +1323,17 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const credentials = recoveryCredentials(
           suppliedOperation,
           form?.get("nodeRecoverySecret") ?? undefined,
+          (() => {
+            const raw = form?.get("recoveryContext");
+            if (raw === undefined || raw === null) return undefined;
+            if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
+              invalidRequest("recoveryContext");
+            try {
+              return JSON.parse(raw) as unknown;
+            } catch {
+              return invalidRequest("recoveryContext");
+            }
+          })(),
         );
         const file = form?.get("artifact");
         if (form !== undefined && !(file instanceof Blob)) invalidRequest("artifact");
@@ -1268,7 +1363,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         };
         // Awaited, so a refused staging reaches the catch below and releases the latch.
         if (deps.operations === undefined) return await execute();
-        return await deps.operations.run("restore", requestHash, async (operation) => {
+        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             return c.json({ restoreStaged: true, restarting: true }, 202);
           }
@@ -1303,6 +1398,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           venueConfirmed?: unknown;
           recoveryOperation?: unknown;
           nodeRecoverySecret?: unknown;
+          recoveryContext?: unknown;
         }>(c);
         const kit = asString(body.kit, "kit");
         if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
@@ -1316,7 +1412,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (body.venueConfirmed !== undefined && typeof body.venueConfirmed !== "string") {
           invalidRequest("venueConfirmed");
         }
-        const credentials = recoveryCredentials(body.recoveryOperation, body.nodeRecoverySecret);
+        const credentials = recoveryCredentials(
+          body.recoveryOperation,
+          body.nodeRecoverySecret,
+          body.recoveryContext,
+        );
         c.header("Cache-Control", "no-store");
         const input: BucketRestoreInput = {
           ...credentials,
@@ -1344,7 +1444,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           return response;
         };
         if (deps.operations === undefined) return await execute();
-        return await deps.operations.run("restore", requestHash, async (operation) => {
+        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             return c.json({ restoreStaged: true, restarting: true }, 202);
           }
@@ -1389,25 +1489,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   app.all("/management-api/*", (c) => directError(c, log, "node.reset", 404));
 
-  // Setup has no URL routes. Registered after the API handlers, this redirects missing browser
-  // navigation while preserving missing assets and API responses.
   if (deps.setupAppDir !== undefined) {
-    app.use("*", async (c, next) => {
-      await next();
-      const segments = c.req.path.split("/").filter(Boolean);
-      const first = segments[0] ?? "";
-      if (
-        c.req.method === "GET" &&
-        c.res.status === 404 &&
-        (c.req.header("Accept") ?? "").includes("text/html") &&
-        first !== "assets" &&
-        first !== "api" &&
-        !first.endsWith("-api") &&
-        !segments.some((segment) => segment.includes("."))
-      )
-        c.res = c.redirect("/", 302);
-    });
-    mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
+    mountSetupSpa(app, deps.setupAppDir, log);
   } else {
     app.get("*", (c) =>
       c.html(SETUP_PLACEHOLDER_HTML, 200, { "Cache-Control": REVALIDATE_CACHE_CONTROL }),

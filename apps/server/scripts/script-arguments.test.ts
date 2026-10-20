@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { registerTillFromArgs } from "./register-till.js";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +14,8 @@ import { describe, expect, it } from "vitest";
 // placeholders printed in both usage texts. It does NOT run the scripts and cannot tell you that the
 // names are in the right ORDER, only that there are the right number of them. Ordering is still
 // carried by review.
-const SCRIPTS = ["register-till.ts", "record-one-sale.ts", "settle-invoice-first.ts"] as const;
+// register-till has paired named flags; its parser cases below exercise that contract directly.
+const SCRIPTS = ["record-one-sale.ts", "settle-invoice-first.ts"] as const;
 
 /** Placeholders a usage text spells for POSITIONAL arguments: everything after the `dist/<x>.js`
  * token, minus the ones that describe an environment variable (`<...>`, `<production|preproduction>`). */
@@ -77,3 +81,44 @@ describe.each(SCRIPTS)(
     });
   },
 );
+
+const oldBox = "--confirm-old-box-gone";
+const soleRecovery = "--confirm-sole-recovery";
+function absentOperation() {
+  return join(tmpdir(), `register-till-arguments-${randomUUID()}`, "operation.json");
+}
+
+describe("register-till argument parsing", () => {
+  it.each(
+    [["node"], ["node", oldBox, soleRecovery], ["node", soleRecovery, oldBox]].map((args) => ({
+      args,
+    })),
+  )("accepts the supported argument shape $args", async ({ args }) => {
+    const path = absentOperation();
+    await expect(
+      registerTillFromArgs(args, { WAITRON_RECOVERY_OPERATION_FILE: path }),
+    ).rejects.toMatchObject({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "invalid_operation" },
+    });
+  });
+
+  it.each(
+    [
+      [],
+      ["node", oldBox],
+      ["node", soleRecovery],
+      ["node", oldBox, oldBox],
+      ["node", soleRecovery, soleRecovery],
+      ["node", "--unknown"],
+      ["node", oldBox, soleRecovery, "--extra"],
+    ].map((args) => ({ args })),
+  )("refuses an unsupported argument shape $args", ({ args }) => {
+    expect(() => {
+      const result = registerTillFromArgs(args, {
+        WAITRON_RECOVERY_OPERATION_FILE: absentOperation(),
+      });
+      void result.catch(() => {});
+    }).toThrow("usage:");
+  });
+});

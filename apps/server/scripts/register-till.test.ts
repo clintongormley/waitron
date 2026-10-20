@@ -13,7 +13,7 @@ import { writeAllocationInput } from "../src/testing/allocation-input.js";
 import { registerTill } from "./register-till.js";
 import { provisionTestVenue, type TestVenue } from "./testing/venue.js";
 
-describe("register-till against a real venue directory", () => {
+describe("historical register-till against a real venue directory", () => {
   let workDir: string;
   let venueDir: string;
   let venue: TestVenue;
@@ -127,4 +127,18 @@ describe("register-till against a real venue directory", () => {
       await store.close();
     }
   });
+});
+
+vi.mock("../src/modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/modules.js")>();
+  const { FISCAL_OPERATIONS: historicalFiscalOperations } =
+    await import("@waitron/fiscal-verifactu/src/allocation-configuration.js");
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu"
+        ? { ...module, operations: historicalFiscalOperations }
+        : module,
+    ),
+  };
 });

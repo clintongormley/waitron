@@ -127,8 +127,12 @@ export function createRecoveryRestoreRunner(
     )
   )
     throw new AppError("module.operation_invalid", { module: operation.binding.module });
-  return (context, run) =>
+  const runner: RestoreOperationRunner = (context, run) =>
     withRecoveryModuleOperation({ ...context, modules: owners }, { ...operation, secret }, run);
+  runner.checkBeforePlacement = async (context) => {
+    await runner(context, async () => ({ seriesId: "", reports: [] }));
+  };
+  return runner;
 }
 
 export async function withRecoveryModuleOperation<T>(

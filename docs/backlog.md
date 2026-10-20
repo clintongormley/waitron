@@ -323,14 +323,46 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   attached, before any build.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
-- **A679. First Live setup: one page and one recovery PDF.** Complete the existing First Live setup
-  branch through the [hour-code implementation plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
-  The owner approved the [design](superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
-  on 2026-10-16 at 14:50: four UTC-hour characters replace paper/Cloud name allocation;
-  the PDF keeps only the recovery key. Protected-code and fiscal-assertion restrictions remain.
-  Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
-  recovery-field entry checks remain the driver’s work. Preserve existing branch work.
-  [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
+- **A679. Finish first Live setup integration.** The owner-approved live retirement and
+  parser replacements are applied; the focused pair passes 48 cases. Retain both completed
+  reviews, then qualify the normal push hook, final-head CI coverage and the recovery-host
+  split's Linux timings before landing PR #1752.
+  [Detail](backlog/fiscal.md#finish-first-live-setup-integration).
+
+- **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
+  bypassing that internal stale-reading check survived the hour suites. Add both the refusal
+  and its legitimate-order positive without changing clock policy.
+  [Detail](backlog/fiscal.md#pin-the-clocks-future-finished-sample-refusal).
+
+- **A679 follow-up: pin committed hour preparation's action boundary.** A serial review fault
+  removing its restore/re-register-only check survived the owning suites. Test that internal
+  boundary separately from the real public promotion retry, which already preserves its result.
+  [Detail](backlog/fiscal.md#pin-committed-hour-preparations-action-boundary).
+
+- **A679 follow-up: pin the early recovery-source refusal.** The later selected-source guard
+  catches the review fault; the earlier refusal at `recovery-preparation.ts:271` lacks its own
+  distinguishing case. Preserve both guards while adding that qualification.
+  [Detail](backlog/fiscal.md#pin-the-early-recovery-source-refusal).
+
+- **Align the root fiscal-summary wording with the approved hour policy.** `CLAUDE.md:858–863`
+  still describes outside signed names and denies clock-based naming. The detailed restore
+  topic is current; the campaign runner prohibits editing root rules. Correct that summary in
+  separately authorised instruction housekeeping, preserving key/source/working-time safeguards.
+
+- **A731. Recover from backup from the first-setup repair page.** Required before go-live.
+  Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,
+  with the selected backup’s recovery key and current outside evidence.
+  [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page).
+
+- **A732. Keep old data and start fresh on this box.** Required before go-live. When business
+  data exists or may exist and the password is lost, require a new custodian-signed authorisation
+  for a separate empty workspace, preserving the old data. Propose the exact authorisation format
+  before building. [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
+
+- **A733. Set up secure connection from the first-setup repair page.** Required before go-live.
+  Guide certificate restoration when the box’s certificate is missing or unusable. Keep secrets
+  off HTTP and preserve existing trust material.
+  [Detail](backlog/fiscal.md#a733-set-up-secure-connection-from-the-first-setup-repair-page).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete

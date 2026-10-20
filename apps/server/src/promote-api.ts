@@ -1,11 +1,5 @@
-// `POST /management-api/promote`, the operator's failover trigger. This module decides only WHO may
-// promote; which promote path runs, and the restart, belong to the boot-wired `run` closure.
-//
-// A `breakGlass` secret in the body takes the offline path (`verifyBreakGlass`), for when the node
-// that held the admin's credentials is the one that died; otherwise the admin logs in by person id
-// and needs the admin-only `node.promote`.
 import "./errors.js";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { withTransaction, type Database } from "@waitron/db";
@@ -25,6 +19,8 @@ import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
+import { TLSSocket } from "node:tls";
+import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
 
 /**
  * `restarting` is true only for a real mirror-to-primary promote, which reboots the node; the
@@ -42,6 +38,7 @@ export interface PromoteApiDeps {
   /** Unlocks a stored authenticator secret, so an admin who has one can sign in. */
   credentialKeyRing: TotpKeyRing;
   modules?: readonly WaitronModule[];
+  nodePreparation?: ReturnType<typeof createNodeOperationPreparation>;
   run: (
     attestation: FenceAttestation,
     operation?: PromotionOperationRunner,
@@ -58,13 +55,56 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   ...CHART_MINT_REFUSALS,
 };
 
+function requireNodeOperationHttps(c: Context): void {
+  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+  const origin = c.req.header("Origin"),
+    site = c.req.header("Sec-Fetch-Site");
+  if (
+    !(socket instanceof TLSSocket) ||
+    !socket.encrypted ||
+    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
+    (site !== undefined && !["same-origin", "none"].includes(site))
+  )
+    throw new AppError("authorization.not_permitted", { permission: "node.promote" });
+}
+
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {
   const run = createErrorBoundary(STATUS, "promotion.failed");
+
+  app.post("/management-api/promote/preparation", (c) =>
+    run(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      requireNodeOperationHttps(c);
+      const body = await readJsonBody<{
+        moduleOperation?: unknown;
+        proposal?: unknown;
+        oldNodeNeutralised?: unknown;
+        noParallelRecovery?: unknown;
+        personId?: unknown;
+        password?: unknown;
+        totp?: unknown;
+        breakGlass?: unknown;
+      }>(c);
+      const operation = parseStandbyOperationInput(body.moduleOperation);
+      if (
+        operation === null ||
+        operation.binding.action !== "promote" ||
+        deps.nodePreparation === undefined
+      )
+        throw new AppError("module.operation_invalid", {
+          module: operation?.binding.module ?? "unknown",
+        });
+      return c.json(
+        await deps.nodePreparation.prepare(operation.binding, body, body, body.proposal),
+      );
+    }),
+  );
 
   app.post("/management-api/promote", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{
         oldNodeNeutralised?: unknown;
+        noParallelRecovery?: unknown;
         personId?: string;
         password?: string;
         totp?: string;
@@ -76,6 +116,18 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         const operation = parseStandbyOperationInput(body.moduleOperation);
         if (operation === null)
           throw new AppError("module.operation_invalid", { module: "unknown" });
+        if (deps.nodePreparation !== undefined && body.noParallelRecovery !== undefined) {
+          c.header("Cache-Control", "no-store");
+          requireNodeOperationHttps(c);
+          const result = await deps.nodePreparation.withPromotion(
+            operation,
+            body,
+            body,
+            (_modules, runner) =>
+              deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
+          );
+          return c.json(result);
+        }
         const result = await withPromotionModuleOperation(
           {
             db: deps.appDb,

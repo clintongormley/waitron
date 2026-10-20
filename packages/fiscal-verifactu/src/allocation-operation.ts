@@ -10,10 +10,11 @@ import {
   type ProvisionedNode,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import type { AllocationContext } from "./allocation-envelope.js";
+import { hourAdmissionRefusal, type AllocationContext } from "./allocation-envelope.js";
 import {
   activateAuthenticatedAllocation,
   activateAuthenticatedDormantAllocation,
+  activateAuthenticatedHourStandbyAllocation,
 } from "./allocation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { ActivationResult } from "./schema/allocations.js";
@@ -147,6 +148,7 @@ export async function withCollectedModuleAllocation<T>(
 }
 
 function snapshotAllocationEvidence(evidence: AllocationOperationEvidence) {
+  // Declared admission is scoped by object identity; its token cannot be cloned with public facts.
   return {
     ...evidence,
     requiredBases: evidence.requiredBases?.map((base) => ({ ...base })),
@@ -159,7 +161,9 @@ function snapshotAllocationEvidence(evidence: AllocationOperationEvidence) {
                 ? null
                 : [...evidence.authority.knownIdentities],
           }
-        : structuredClone(evidence.authority),
+        : evidence.authority.kind === "paper-declared" || evidence.authority.kind === "hour"
+          ? { ...evidence.authority, token: evidence.authority.token }
+          : structuredClone(evidence.authority),
   };
 }
 
@@ -205,6 +209,15 @@ export async function activateModuleAllocation(
   };
   const input = snapshotAllocationInput(binding, operation.input);
   const heldEvidence = snapshotAllocationEvidence(evidence);
+  const authoriseHour = (): void => {
+    if (heldEvidence.authority.kind !== "hour") return;
+    const reason = hourAdmissionRefusal(
+      { binding, authority, input },
+      heldEvidence.authority.token,
+    );
+    if (reason !== null) refuse(reason);
+  };
+  authoriseHour();
   if (
     heldEvidence.allocationId !== undefined &&
     (typeof input.allocation !== "object" ||
@@ -215,6 +228,7 @@ export async function activateModuleAllocation(
     return refuse("reservation_mismatch");
   if (
     binding.action === "promote" &&
+    heldEvidence.authority.kind !== "hour" &&
     (typeof input.reservationEventId !== "string" || input.reservationEventId.length === 0)
   )
     return refuse("reservation_missing");
@@ -235,23 +249,35 @@ export async function activateModuleAllocation(
     priorActivation: heldEvidence.priorActivation,
     authority: heldEvidence.authority,
   };
-  if (binding.action === "promote")
-    return activateAuthenticatedDormantAllocation(
-      tx,
-      node,
-      input.reservationEventId as string,
-      input.allocation,
-      input.approval,
-      context,
-      authority,
-    );
-  return activateAuthenticatedAllocation(
-    tx,
-    node,
-    input.allocation,
-    input.approval,
-    context,
-    authority,
-    binding.action,
-  );
+  const result =
+    binding.action === "promote" && heldEvidence.authority.kind === "hour"
+      ? await activateAuthenticatedHourStandbyAllocation(
+          tx,
+          node,
+          input.allocation,
+          input.approval,
+          context,
+          authority,
+        )
+      : binding.action === "promote"
+        ? await activateAuthenticatedDormantAllocation(
+            tx,
+            node,
+            input.reservationEventId as string,
+            input.allocation,
+            input.approval,
+            context,
+            authority,
+          )
+        : await activateAuthenticatedAllocation(
+            tx,
+            node,
+            input.allocation,
+            input.approval,
+            context,
+            authority,
+            binding.action,
+          );
+  authoriseHour();
+  return result;
 }

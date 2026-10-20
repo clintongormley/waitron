@@ -541,3 +541,45 @@ it.each([
     });
   });
 });
+
+it("adapts separately bound public trust/current without reading environment files", async () => {
+  const source = sources.createBoundPaperAllocationSource({
+    environment: {},
+    readPublicEvidence: async () => ({ trust: custodian, current: confirmation }),
+  });
+  await expect(source({ binding, operatorId })).resolves.toMatchObject({
+    binding,
+    operatorId,
+    evidence: {
+      allocationId: "paper-source-42",
+      priorActivation: "none",
+      incidentEvidence: "outside/source-42",
+      requiredBases: bases,
+      authority: { kind: "paper", trust: custodian, currentEntryState: "consumed-for-event" },
+    },
+  });
+});
+it.each(["missing", "untrusted", "extra-current", "wrong-event"])(
+  "refuses %s bound evidence",
+  async (why) => {
+    const source = sources.createBoundPaperAllocationSource({
+      environment: {},
+      readPublicEvidence: async () =>
+        why === "missing"
+          ? undefined
+          : {
+              trust:
+                why === "untrusted" ? { ...custodian, fingerprint: "0".repeat(64) } : custodian,
+              current:
+                why === "extra-current"
+                  ? { ...confirmation, secret: "refused" }
+                  : why === "wrong-event"
+                    ? { ...confirmation, binding: { ...binding, eventId: "other" } }
+                    : confirmation,
+            },
+    });
+    await expect(source({ binding, operatorId })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+    });
+  },
+);

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getCountryPack } from "@waitron/country-packs";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -11,6 +11,12 @@ import { parseModuleConfig } from "@waitron/module";
 import type { InitialVenueInput, VenueRequest } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { provisionVenue, venueModuleConfig, type ProvisionRequest } from "./provision.js";
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
@@ -90,15 +96,15 @@ describe("provisionVenue with a throwaway allocation", () => {
       });
 
       expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
-        { numero_instalacion: "S000001", node_id: result.nodeId },
+        { numero_instalacion: "06RB", node_id: result.nodeId },
       ]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: identity.taxId, environment: "preproduction" },
       ]);
       expect(suite.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-        { code: "A-S000001", purpose: "standard" },
-        { code: "FF-S000001", purpose: "full" },
-        { code: "R-S000001", purpose: "rectificative" },
+        { code: "A-06RB", purpose: "standard" },
+        { code: "FF-06RB", purpose: "full" },
+        { code: "R-06RB", purpose: "rectificative" },
       ]);
       expect(suite.db.all(sql`select tax_id, legal_name from tenants`)).toEqual([
         { tax_id: identity.taxId, legal_name: identity.legalName },

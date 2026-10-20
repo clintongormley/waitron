@@ -30,6 +30,8 @@ old actual-paper procedure and FOLLOW-UP are superseded.
 
 **Spec:** [complete A679 design](../specs/2026-10-14-a679-first-fiscal-setup-design.md), read in full. The owner's **2026-10-15 06:35 “A — Approve, plan and build”** approves its complete scope and native inline implementation. That instruction supersedes the spec/backlog's earlier pending-approval wording. Preserve their dated reproduction; this plan does not rewrite it.
 
+**Repair scope update, 2026-10-15 at about 17:15:** the owner approved the V2 core repair flow inside A679. Follow the [reviewed repair addendum](2026-10-15-a679-first-setup-repair.md), which supersedes the original-tab recovery requirement below. A731, A732 and A733 are separate before-go-live requirements. Actual-paper acceptance remains separate.
+
 ## Global constraints
 
 - BOTH new-kit and existing-custodian routes converge on public import and the same authority checks. Subscribers use public import too; C3 does not supply wizard fetching.
@@ -112,6 +114,7 @@ type InitialSetupContext = {
   attemptId: string; binding: OperationBinding; administratorId: string;
   country: string; taxId: string; environment: "production" | "preproduction";
   recipientVenueId: string; bases: readonly {code: string; purpose: string}[];
+  request?: unknown; // Host-owned frozen public request for import/confirmation/commit lookup.
 };
 type InitialSetupImport = { input: unknown; summary: unknown };
 interface InitialSetupContribution {
@@ -282,3 +285,5 @@ The fiscal `request` value has exact shape `{version:1,kind:"first-fiscal-setup"
 The plan fixes file/schema ownership, crypto format, bounds, bindings and both recovery checks; implementation still needs the acceptance evidence below. **Unqualified risks:** native Ed25519/private-key public derivation and `file:` execution must pass the real Chromium/target-browser checks; the host must validate and freeze the exact public candidates before offline signing; power interruption needs the durable writer/replay controls; browser controls cannot enforce one physical original or exclusive human custody. Dependencies were read as repository source, not installed/executed by this writer. A failed capability/build/physical acceptance check is a concrete finding for the driver/fresh-context reviewer, not permission to drop a requirement or substitute box-side secrets. Any proposed change to these choices must be explicit in that review; existing approval already covers the complete design/build.
 
 **Review status, 2026-10-15:** the driver read the plan against the complete approved spec and incorporated the six fresh-context findings: host candidate validation, venue-directory claim discovery, lost-response resume, one complete-callback coordinator, cross-mode publication reconciliation and fiscal Chromium CI setup. Native inline implementation is next under the existing 06:35 approval. These are source-reviewed implementation requirements, not runtime verification. No wizard, crypto, printer, test, product code or migration was executed or changed in this plan publication.
+
+**Task 1 implementation clarification, 2026-10-15:** `InitialSetupContext.request` carries the host’s frozen request to post-export module checks. Without it, `inspect(context,input)` cannot compare the imported block with the exact validated candidate set. The host supplies its persisted request, never one taken from the upload. Public inspection checks shape and binding; cryptographic signature verification follows independent key enrolment in `confirmation`, before the host may issue a fresh grant. The separate `initial-setup-selection.ts` keeps the context contract type-only. These clarify the approved exact-set and independent-authority requirements; the remaining host/wizard tasks still need their own qualification.

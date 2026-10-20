@@ -76,6 +76,27 @@ it("waits for a file and encryption key before it can review", async () => {
   await fill(el);
   expect(button.disabled).toBe(false);
 });
+it.each(["en-GB", "es-ES"] as const)(
+  "shows the sheet's short grouped node ID in the %s backup preview",
+  async (locale) => {
+    setLocale(locale);
+    const savedNode = "3262bf78-1d78-4b10-bae6-61fda564d5e8";
+    const { el } = await mount(
+      async () => new Response(JSON.stringify({ ...saved, nodeId: savedNode })),
+    );
+    await fill(el);
+    review(el);
+    await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("3262 BF78"));
+    const text = child(el)!.shadowRoot!.textContent!;
+    expect(text).toContain(locale === "en-GB" ? "Node" : "Nodo");
+    expect(text).toContain("Amber Hill");
+    expect(text).not.toContain(savedNode);
+    const allocation = child(el)!.shadowRoot!.querySelector<LitElement & { preview: typeof saved }>(
+      "setup-recovery-allocation",
+    )!;
+    expect(allocation.preview.nodeId).toBe(savedNode);
+  },
+);
 it.each(["file", "key", "environment"])(
   "drops the old copy's preview when its %s changes during the read",
   async (changed) => {

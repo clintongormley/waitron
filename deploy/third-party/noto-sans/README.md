@@ -14,3 +14,8 @@ Both files were compared byte for byte with those pinned upstream URLs on 2026-1
 `OFL.txt` contains the font's copyright notice and SIL Open Font License, Version 1.1.
 The source font lives at `apps/server/src/assets/invoice-noto-sans.ttf`; the server build copies it
 beside its bundles in `dist/assets/`, and the image copies it to `/app/assets/`.
+
+The browser register renderer uses the same unmodified font bytes, copied to
+`packages/fiscal-verifactu/src/assets/register-noto-sans.ttf`. Vite emits this local asset beside
+the web bundle. The register's PDF embeds a subset of the font; this same OFL notice covers the
+copied source. Both source files have the SHA-256 above (`shasum -a 256` on 2026-10-16).

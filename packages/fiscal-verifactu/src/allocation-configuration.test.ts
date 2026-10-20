@@ -47,3 +47,20 @@ it("refuses outside trust fields injected into an otherwise shaped operation", a
     params: { reason: "malformed_allocation" },
   });
 });
+
+it("binds explicit launch settings instead of ambient process variables", async () => {
+  const configured = FISCAL_OPERATIONS.configure!({
+    environment: {},
+    readPublicEvidence: async () => undefined,
+  });
+  await withOperationAuthority(binding, "admin", async (authority) => {
+    for (const input of [{ allocation: {}, approval: {} }, { receipt: {} }, { emergency: {} }]) {
+      await expect(
+        configured.prepare({ binding, authority, input }, async () => "admitted"),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "outside_confirmation_missing" },
+      });
+    }
+  });
+});

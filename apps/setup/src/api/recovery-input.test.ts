@@ -70,3 +70,25 @@ it("preserves the refusal and its field when a multipart recovery is rejected", 
     status: 400,
   });
 });
+
+it("keeps the selected source and isolation declarations in archive multipart recovery", async () => {
+  let submitted: FormData | undefined;
+  const api = new SetupApi("", async (_url, init) => {
+    submitted = init?.body as FormData;
+    return Response.json({ restoreStaged: true, restarting: true }, { status: 202 });
+  });
+  const recoveryContext = {
+    selectedSourceId: "selected-digest",
+    oldBoxGone: true,
+    soleRecovery: true,
+  };
+  await api.restore(new Blob(["encrypted-copy"]), "archive-key", "preproduction", true, {
+    ...credentials,
+    recoveryContext,
+  });
+  expect(submitted?.get("recoveryContext")).toBe(JSON.stringify(recoveryContext));
+  expect(submitted?.get("nodeRecoverySecret")).toBe("node-key-separate");
+  expect(JSON.parse(String(submitted?.get("recoveryOperation")))).toEqual(
+    credentials.recoveryOperation,
+  );
+});

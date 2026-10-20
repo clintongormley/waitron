@@ -5,14 +5,21 @@ import type { Logger } from "./logger.js";
 import { createRecoveryPack } from "./recovery-pack.js";
 import { inTurn } from "./attempt-turns.js";
 import "./errors.js";
+import {
+  mountRecoveryDocumentApi,
+  type RecoveryDocumentEvidence,
+} from "./recovery-document-api.js";
 
 export function mountRecoveryPackApi(
   app: Hono,
   deps: Omit<Parameters<typeof createRecoveryPack>[0], "now" | "authorize"> & {
     readonly now: () => Date;
+    readonly documentEvidence?: RecoveryDocumentEvidence;
   },
   log: Logger,
 ): void {
+  if (deps.documentEvidence !== undefined)
+    mountRecoveryDocumentApi(app, { ...deps, documentEvidence: deps.documentEvidence }, log);
   const run = createErrorBoundary(
     {
       "management_session.required": 401,

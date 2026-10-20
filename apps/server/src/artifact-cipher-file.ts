@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { open, unlink } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
 import { ARTIFACT_HEADER_BYTES, KDF_BY_VERSION, VERSION } from "./artifact-cipher.js";
@@ -44,13 +44,14 @@ export async function decryptArtifactFile(
   artifactPath: string,
   outPath: string,
   passphrase: string,
-): Promise<void> {
+): Promise<string> {
   const input = await open(artifactPath, "r");
   try {
     const size = (await input.stat()).size;
     if (size < ARTIFACT_HEADER_BYTES)
       throw new AppError("backup.artifact_invalid", { reason: "too_short" });
     const header = await readExactly(input, ARTIFACT_HEADER_BYTES, 0);
+    const digest = createHash("sha256").update(header);
     if (!header.subarray(0, 4).equals(Buffer.from("WBK1"))) {
       throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });
     }
@@ -69,6 +70,7 @@ export async function decryptArtifactFile(
           Math.min(FILE_CHUNK_BYTES, size - position),
           position,
         );
+        digest.update(bytes);
         await writeAll(output, decipher.update(bytes));
       }
       let final: Buffer;
@@ -78,6 +80,7 @@ export async function decryptArtifactFile(
         throw new AppError("recovery.passphrase_invalid", {});
       }
       await writeAll(output, final);
+      return digest.digest("hex");
     } catch (error) {
       await unlink(outPath);
       throw error;

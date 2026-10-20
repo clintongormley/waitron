@@ -20,14 +20,15 @@ node packages/provisioning/dist/bin.js <command>
 
 `esbuild` produces `dist/bin.js` and that is the whole build. It used to copy every package's
 `drizzle/` folder to `dist/drizzle` as well, because the bundle migrated: that was `instance`'s job,
-and neither surviving command migrates anything.
+and neither surviving command migrates the venue. With `--test-fiscal`, `venue` migrates a
+separate retained preproduction sample database.
 
 ## The two commands
 
-| Command   | What it needs                                 | How often           |
-| --------- | --------------------------------------------- | ------------------- |
-| `keyring` | nothing at all — no venue directory, no files | once per deployment |
-| `venue`   | a migrated venue directory                    | once per venue      |
+| Command   | What it needs                                       | How often           |
+| --------- | --------------------------------------------------- | ------------------- |
+| `keyring` | nothing at all — no venue directory, no files       | once per deployment |
+| `venue`   | a migrated venue directory and host-state directory | once per venue      |
 
 `venue` creates the taxpayer row, a location, a node and its standard, full and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
@@ -48,11 +49,11 @@ usage: waitron-provision <command> [options]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
            [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
-           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]
+           [--admin-first-names <names>] [--admin-last-names <names>]
+           [--recovery-pdf <absolute external path>] [--yes]
 ```
 
-Most options are prompted for when omitted, so a bare `waitron-provision venue` is a complete
-interactive session. `--full-series-code` defaults to `FF` without a prompt.
+Most venue options are prompted for when omitted. `--full-series-code` defaults to `FF` without a prompt.
 `--admin-first-names` and `--admin-last-names` are read from flags but never prompted for, so a
 script that already drives `venue` non-interactively is not stopped by those questions.
 
@@ -77,14 +78,37 @@ then every composed module's provisioning seed — the fiscal module's registers
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
 
-`venue` opens **one venue directory** — the two SQLite files `openVenueDatabase` opens — and
-writes through its venue file, the one every migration set is applied to. There is no
+You select the **venue directory** holding the two SQLite files `openVenueDatabase` opens.
+`venue` writes its setup through the venue file. There is no
 connection string, no cluster, no role and no grant: the directory IS the database. It takes the
 path from `--venue-dir`, then from `WAITRON_VENUE_DIR` (the same variable `apps/server` reads, so a
 box's own setting is what stands its venue up), then from a prompt.
 
+Set `WAITRON_STATE_DIR` to this node's host-state directory before you run `venue`.
+It holds the owned setup attempt and durable module preparation. Without it, the command
+refuses with `setup.not_ready` before opening the venue directory. For example:
+
+```bash
+WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js venue
+```
+
+The interactive Live flow owns its setup attempt, compares clocks and selects
+an eligible hour for its series. Pass an absolute `--recovery-pdf` destination outside both host
+state and the venue. Confirm the password and that you kept the resulting PDF. `--yes` answers
+neither the clock nor retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
+explains the sequence and limits.
+
+For an accepted production readiness test, set `WAITRON_SETUP_SETTINGS_FILE` to
+your certificate/email JSON and add `--test-fiscal` to the same `venue` invocation. For the bundled
+command, `WAITRON_MIGRATIONS_DIR` points to the packaged migration sets, as it does in the box
+image. The command asks separately before submitting its preproduction sample, even with `--yes`.
+An ordinary invocation uses an existing matching accepted receipt. A rejected or uncertain test
+leaves production unactivated; retrying uses the same isolated sample. Finishing a committed setup
+submits no further sample. See the [checkpoint inventory](../../docs/operations/a679-changed-checks.md#command-owned-readiness-2026-10-17)
+for qualification and remaining A679 work.
+
 The directory must already be **migrated** — boot does that (`apps/server/src/boot.ts` →
-`applyMigrations`), and nothing here does. A directory nothing has migrated is refused
+`applyMigrations`). This command migrates only its separate readiness sample. An unmigrated venue is refused
 (`provisioning.database_unmigrated`), which is also what a mistyped path meets: opening a virgin
 directory SUCCEEDS — it is created — so a read, not the open, is where a wrong path is caught.
 
@@ -102,6 +126,9 @@ directory already stamped for the **other** environment is refused with `deploym
 and nothing is minted, and a directory already stamped for THIS one passes through untouched. It is
 written after the confirmation prompt, never before: a stamp is permanent, so an operator who
 declines leaves the directory exactly as it was found.
+
+**2026-10-17:** the following historical checks predate the required host-state directory and
+owned hour preparation. They do not qualify the current first Live setup flow.
 
 Run against the built bundle on 2026-09-22, each case against its own directory: a virgin one gave
 `provisioning.database_unmigrated`; a migrated, unstamped one printed
@@ -146,7 +173,7 @@ country pack's languages nor against a region that fixes one (Catalonia); the da
 page and setup do. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and any series code outside AEAT's character set or longer than
-the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
+the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
 races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
 taxpayer row names a different country or tax id is refused with `provisioning.foreign_tenant`, and
 refused BEFORE the plan is applied: `venue` reads the stored identity and calls the shared
@@ -162,7 +189,7 @@ between this run's read and its write.
 If your filing seed declares a `series` contribution, it creates the invoice series itself.
 Setup skips the base-series inserts and checks that `series.resolve` returns the complete active
 set for the new node. On retry, setup calls that resolver without running the seed again. The
-resolver must reject requested bases that differ from its allocation.
+resolver must reject requested bases that differ from the active series configuration.
 
 ## Secrets
 
@@ -183,12 +210,13 @@ would put a secret in argv" and "refuses --admin-url as a flag, in both argv for
 that way, the second of those precisely because an operator reaching for the retired flag must not
 have their old connection string quietly ignored.
 
-Set the environment variables for a non-interactive run:
+Supply login secrets through environment variables or private prompts. The Live flow still
+asks for clock, setup-password and kept-PDF confirmation:
 
 ```bash
 WAITRON_VENUE_DIR=/var/lib/waitron/venue \
   WAITRON_ADMIN_PIN=... WAITRON_ADMIN_PASSWORD=... \
-  node dist/bin.js venue --country ES ... --yes
+  node dist/bin.js venue --recovery-pdf /media/recovery/venue.pdf --country ES ... --yes
 ```
 
 If nothing supplies the venue directory — no flag, no variable, and a prompt that answers nothing,
@@ -272,7 +300,13 @@ pnpm --filter @waitron/provisioning test:coverage
 `cli.ts`, which is injected and fully tested. What remains — a tty, a readline, a process exit
 code — is verified by running the built bundle instead.
 
-## Supplied initial allocation input on the Task 4 branch
+## Historical supplied allocation input on the Task 4 branch
+
+**Superseded on the A679 candidate, 2026-10-19.** The CLI refuses
+`WAITRON_INITIAL_VENUE_INPUT` as Live activation authority with
+`provisioning.initial_input_invalid`. The built owned-CLI check now completes hour setup,
+checks all three new series/counters and refuses mismatched state/venue roots without writes.
+The following records the earlier supplied-allocation interface and its qualification context.
 
 To carry identities chosen before signing, set `WAITRON_INITIAL_VENUE_INPUT` to a JSON file holding
 `nodeId`, `administratorId` and an `inputs` array. Each array entry has `module`, `eventId`,

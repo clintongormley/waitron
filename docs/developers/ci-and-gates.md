@@ -541,6 +541,19 @@ appeared in the wrapper's json report with every count zero. On `apps/till`'s tw
 merge and the wrapper printed the same counts. On a Vitest upgrade, run a plain merge over a
 browser package's blobs: if it gives the unsharded totals, delete the wrapper.
 
+### A file-only Vitest list does not apply shard selection
+
+Measured on Vitest 4.1.11, 2026-10-20: `pnpm --filter @waitron/server exec vitest list
+--filesOnly --shard=1/11 --json=<output>` with CI's server exclusions returned all 852 files.
+Every index through 11 returned that same full inventory. Its successful exit is not evidence
+that a file belongs to that shard.
+
+For the A679 split check, the installed `BaseSequencer.shard` ran over that actual inventory,
+using the package root and CI's 11-shard count. Its outputs covered every file once, with 77 or
+78 files per shard. Removing the three added files put the original recovery-host file in shard
+9, matching CI run `39344124324`. Repeating with the CI checkout root kept the new assignment.
+That selector experiment establishes file placement, not test success or runtime in CI.
+
 ### Every package test job prints which file is running
 
 Every `Run the … shard` step, and the stream tests' step, adds the reporter
@@ -884,6 +897,22 @@ cause: a shard holding one slow file (split the file or find why it is slow), to
 package, or slow setup. Never cut what a test checks to save time, and never move coverage or
 mutation out of CI.
 
+**Provisioning, 2026-10-19:** run `39267628062`, job `118111582827`, starts provisioning
+at14:19:38Z and still starts another file at14:28:27Z, before cancellation at14:28:28Z.
+Its log records70 completed files totalling520.5seconds. The largest is
+`first-setup-empty-database.test.ts`,160.9seconds; the next is `cli-first-setup.test.ts`,52.3.
+This is advancing serial work beyond the shared job's budget, not evidence of a stopped socket
+or timer. The underlying cost of the largest file is not profiled by that log.
+
+Provisioning now runs in six shards outside both light bins, with a separate coverage merge.
+Its one-worker setting, test bodies and full coverage thresholds stay unchanged. The changes
+job selects its dedicated gate, and the aggregate refuses a skipped merge when that gate is
+selected. `scripts/ci-workflow.test.mjs` and `scripts/changed-scope.test.mjs` check the partition
+and execute the aggregate refusal. All six local shards pass1,471 cases in73 files; the v8
+merge retains the earlier full counts: S3725/3800, B2789/2884, F692/701 and L3333/3367.
+Individual local shard wall times range from57.75 to134.90seconds, with two processes at a
+time. The new layout still needs its own CI timing measurement.
+
 Measured for A528 over the 42 successful `main` runs that ran the test jobs, up to run
 38177927525 (2026-10-11), minutes from the jobs API:
 
@@ -1211,7 +1240,7 @@ forced kill 10 s later (`PNPM_SETUP_KILL_SECONDS`); the version check has its ow
 (`PNPM_SETUP_VERSION_SECONDS`) with a 2 s kill, and a check that fails or is stopped fails the
 attempt even when it printed the right version. Three attempts, then the step fails. Worst case
 3 × (60 + 10) + 3 × (10 + 2) = 246 s, under the step's 300 s. In the jobs whose own limit is also
-5 minutes (`changes`, `typecheck`, the five `-merge` jobs and `stripe-sandbox`), that job limit
+5 minutes (`changes`, `typecheck`, the `-merge` jobs and `stripe-sandbox`), that job limit
 covers every other step too, so there a setup that needs its third attempt can still end with the
 job cancelled.
 
@@ -1706,6 +1735,19 @@ Adding a member to `migrations.manifest.json`, `GENERIC_PACKAGES` or `OWN_SHARD_
 tests in two OTHER packages red until an unrelated task ran them. Grep for tests that pin the list,
 run those guards, and verify CI selects every affected consumer. Use a broader local run when
 needed to investigate a failure.
+
+A679's first push, 2026-10-19, found another form of this drift. Retiring the fiscal
+custodian build removed its manifest's relative reference to `scripts/bundle-node.mjs`.
+Two fiscal test helpers still executed that root script, using `../../scripts` from the
+package working directory. `root-scope-consumers.test.mjs` resolves literal references from
+the containing source file, so it saw neither helper as a root-script consumer and refused
+the existing fiscal entry. The full hook reported 7,441 passes and that one failure.
+
+Those helpers now use `fileURLToPath(new URL("../../../scripts/bundle-node.mjs", import.meta.url))`.
+A direct path comparison resolves the same executable before and after; the unchanged consumer
+guard passes all 22 cases and both real bundled-helper suites pass all 10. No list entry or
+assertion was removed. This fixes those literal sites, not the scanner's documented inability
+to trace computed paths or transitive root-script imports.
 
 ### After a rebase, the old-tip..new-tip diff can leave out the branch's own changes
 

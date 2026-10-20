@@ -1407,8 +1407,17 @@ export interface VenueServiceContribution {
   readReleaseReminderMinutes(tx: Transaction): Promise<number | null>;
 }
 
-/** A reference to non-DB state a module owns, resolved to a path by the composition root. */
-export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
+export type NonDbSource =
+  | { readonly kind: "content-addressed-dir"; readonly source: string }
+  | {
+      readonly kind: "preparation-history";
+      readonly source: string;
+      /** Select public evidence only; the opaque preparation journal is never an archive entry. */
+      project(input: {
+        readonly preparations: readonly unknown[];
+        readonly retained: readonly unknown[];
+      }): unknown;
+    };
 
 /** A module's backup contribution: the non-DB state it owns, and what it does after a restore. */
 export interface ModuleBackupContribution {
@@ -1426,6 +1435,17 @@ export interface ModuleBackupContribution {
     node: import("./provisioning.js").ProvisionedNode & { readonly venueId: string },
     input: unknown,
   ) => Promise<unknown>;
+  /** Render a transient recovery PDF; the host commits its named verifier only after rendering succeeds. */
+  readonly recoveryDocument?: (
+    tx: Transaction,
+    node: import("./provisioning.js").ProvisionedNode,
+    context: {
+      readonly nodeKey: { readonly nodeId: string; readonly name: string; readonly secret: string };
+      readonly createdAt: string;
+      readonly locale: "en" | "es";
+      readonly evidence: Readonly<Record<string, unknown>>;
+    },
+  ) => Promise<Uint8Array<ArrayBuffer>>;
 }
 
 /** One table whose rows may cross from preparation into a fresh production database. */

@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import type { Hono } from "hono";
 import { createServer } from "node:net";
@@ -36,10 +38,7 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
-import {
-  provisionAllocatedTestVenue as provisionVenue,
-  initialSetupInput,
-} from "./testing/allocated-provision.js";
+import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocated-provision.js";
 import { venueModuleConfig } from "./provision.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
@@ -380,8 +379,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   /** A setup-mode boot over a venue directory, with the restart intercepted and the minted CA
    * trusted; `use` runs while it serves. `extraPortCount` more ports are drawn beside the server's own, so none of
-   * them is the server's port. A first provision gets a supplied allocation added to its body unless
-   * `supplyInitialOperations` is false, which sends the body as the wizard does. */
+   * them is the server's port. Live provisioning uses the owned hour HTTP journey. */
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -395,10 +393,38 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       stateDir: string;
       extraPorts: number[];
     }) => Promise<void>,
-    { extraPortCount = 0, supplyInitialOperations = true } = {},
+    { extraPortCount = 0 } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-10-16T11:40:00Z") });
+    const clockStart = performance.now();
+    vi.spyOn(Date, "now").mockImplementation(
+      () => Date.parse("2026-10-16T11:40:00Z") + Math.trunc(performance.now() - clockStart),
+    );
+    const release = await import("@waitron/fiscal-verifactu/src/hour-release.js");
+    const releaseSpy = vi.spyOn(release, "readHourRelease").mockReturnValue({
+      instantMs: Date.parse("2026-10-15T00:00:00Z"),
+      committedAt: "2026-10-15T00:00:00.000Z",
+      sourceCommit: "a".repeat(40),
+      generator: "scripts/generate-hour-release.mjs:v1",
+      generatorSha256: "b".repeat(64),
+    });
+    const clock = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+    const internetSpy = vi.spyOn(clock, "observeInternetHourClock").mockImplementation(async () => {
+      const now = Date.now(),
+        mono = performance.now();
+      return {
+        source: "internet",
+        result: "usable",
+        instantMs: now,
+        uncertaintyMs: 500,
+        wallStartedMs: now,
+        wallFinishedMs: now,
+        monotonicStartedMs: mono,
+        monotonicFinishedMs: mono,
+      };
+    });
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
@@ -414,28 +440,32 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         try {
           await use({
             post: async (path, init) => {
-              if (
-                supplyInitialOperations &&
-                path === "/setup-api/provision" &&
-                typeof init.body === "string"
-              ) {
+              if (path === "/setup-api/provision" && typeof init.body === "string") {
                 const body = JSON.parse(init.body);
-                const opened = await openVenueDatabase(directory);
-                let committed: boolean;
-                try {
-                  committed = opened.venue.all(sql`select id from locations`).length > 0;
-                } finally {
-                  await opened.close();
-                }
-                if (!committed)
-                  body.initialOperations = await initialSetupInput(
-                    stateDir,
+                if (body.mode === "live") {
+                  const owned = await ownedHourSetup(
+                    (input, options) => fetch(input, { ...options, ...via }),
+                    `https://127.0.0.1:${port}`,
                     body.venue,
-                    body.mode === "live" && env.WAITRON_ENV !== "dev"
-                      ? "production"
-                      : "preproduction",
+                    body.venue.admin.password,
+                    body.configurationImport === true
+                      ? { configurationImport: true, newTaxpayer: body.newTaxpayer === true }
+                      : undefined,
                   );
-                init = { ...init, body: JSON.stringify(body) };
+                  const {
+                    venue: _,
+                    configurationImport: __,
+                    newTaxpayer: ___,
+                    ...publication
+                  } = body;
+                  void _;
+                  void __;
+                  void ___;
+                  const headers = new Headers(init.headers);
+                  for (const [name, value] of Object.entries(owned.headers))
+                    headers.set(name, value);
+                  init = { ...init, headers, body: JSON.stringify(publication) };
+                }
               }
               return fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init });
             },
@@ -450,6 +480,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         }
       });
     } finally {
+      internetSpy.mockRestore();
+      releaseSpy.mockRestore();
+      vi.useRealTimers();
       await rm(stateDir, { recursive: true, force: true });
     }
   }
@@ -602,7 +635,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   /** Cell 12 of the A680 plan's refusal matrix, read from the venue a Demo setup made. */
   function expectThrowawayVenue(db: Database, taxId: string): void {
     expect(db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
-      { numero_instalacion: "S000001" },
+      { numero_instalacion: "06RB" },
     ]);
     expect(
       db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
@@ -614,9 +647,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       },
     ]);
     expect(db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-      { code: "A-S000001", purpose: "standard" },
-      { code: "FF-S000001", purpose: "full" },
-      { code: "R-S000001", purpose: "rectificative" },
+      { code: "A-06RB", purpose: "standard" },
+      { code: "FF-06RB", purpose: "full" },
+      { code: "R-06RB", purpose: "rectificative" },
     ]);
     expect(db.all(sql`select environment from deployment`)).toEqual([
       { environment: "preproduction" },
@@ -642,7 +675,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
           await cp(stateDir, keptStateDir, { recursive: true });
         },
-        { supplyInitialOperations: false },
       );
       expectThrowawayVenue(venue.store.venue, "60000012G");
 
@@ -713,7 +745,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           });
           expect(kills).toEqual([]);
         },
-        { supplyInitialOperations: false },
       );
       for (const table of [
         "deployment",
@@ -1347,7 +1378,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
       await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post, kills }) => {
         const json = { "content-type": "application/json" };
-        const unstaged = await post("/setup-api/provision", { headers: json, body: live(TAX_ID) });
+        const unstaged = await post("/setup-api/first-setup/claim", {
+          headers: json,
+          body: JSON.stringify({
+            venue: provisionVenueBody(TAX_ID),
+            configurationImport: true,
+            clientClaimNonce: randomBytes(32).toString("base64url"),
+          }),
+        });
         expect(unstaged.status).toBe(400);
         expect(await unstaged.json()).toEqual({
           error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
@@ -1363,9 +1401,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(staged.status).toBe(200);
         expect(((await staged.json()) as { venue: { taxId: string } }).venue.taxId).toBe(TAX_ID);
 
-        const otherBusiness = await post("/setup-api/provision", {
+        const otherBusiness = await post("/setup-api/first-setup/claim", {
           headers: json,
-          body: live("60000012G"),
+          body: JSON.stringify({
+            venue: provisionVenueBody("60000012G"),
+            configurationImport: true,
+            clientClaimNonce: randomBytes(32).toString("base64url"),
+          }),
         });
         expect(otherBusiness.status).toBe(400);
         expect(await otherBusiness.json()).toEqual({
@@ -1466,9 +1508,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(staged.status).toBe(200);
 
         // Typed in lower case with a hyphen, the old tax ID still normalises to the bundle's.
-        const sameTaxId = await post("/setup-api/provision", {
+        const sameTaxId = await post("/setup-api/first-setup/claim", {
           headers: json,
-          body: newTaxpayer("60000011-a"),
+          body: JSON.stringify({
+            ...JSON.parse(newTaxpayer("60000011-a")),
+            mode: undefined,
+            clientClaimNonce: randomBytes(32).toString("base64url"),
+          }),
         });
         expect(sameTaxId.status).toBe(400);
         expect(await sameTaxId.json()).toEqual({
@@ -1500,7 +1546,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         target.store.venue.all(
           sql`select code from invoice_series where retired_at is null order by code`,
         ),
-      ).toEqual([{ code: "B-S000001" }, { code: "FB-S000001" }, { code: "RB-S000001" }]);
+      ).toEqual([{ code: "B-06RB" }, { code: "FB-06RB" }, { code: "RB-06RB" }]);
       expect(
         target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);

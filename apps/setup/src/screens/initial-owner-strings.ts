@@ -1,0 +1,74 @@
+export const initialOwnerStrings = {
+  en: {
+    heading: "First setup",
+    waiting: "Saving setup ownership…",
+    resume: "Continue with your setup password",
+    password: "Administrator password",
+    required: "Enter your password.",
+    passwordNotAccepted: "Password not accepted",
+    resumeHelp: "Enter the administrator password you chose during setup.",
+    interrupted: "First setup was interrupted",
+    missingDatabase:
+      "The setup database is missing. Check your backups before starting again. Missing data cannot be recovered by starting again.",
+    uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
+    finish: "Finish setup",
+    finishReview: "Check the saved details.",
+    finishEmail: "Re-enter the email settings used for this setup.",
+    finishHelp: "Re-enter the certificate and email settings used for this setup.",
+    startAgain: "Start again",
+    startAgainHelp:
+      "Keep the old attempt and its files, and begin in a new workspace. Previously selected installation codes stay used.",
+    retireConfirmed: "Keep the old attempt and start again.",
+    cancel: "Cancel",
+    restarting: "The old attempt is retained. Reconnect to continue in the new workspace.",
+    startUnavailable:
+      "Start again without a password is available only when the box can verify an unused, empty setup.",
+    abandon: "Abandon this attempt",
+    replace: "Enter new setup details",
+    retired: "This attempt is abandoned. Its history is retained.",
+    consumed:
+      "This assignment may have been used. Keep it consumed and resolve the incident before starting again.",
+    complete: "Setup is complete. Reconnect to the box.",
+    reconnect: "Reconnect",
+    error: "Reconnect to check the saved result. Do not repeat activation.",
+    scope: "Setup details are frozen. Abandon this attempt before changing them.",
+    fix: "Correct the highlighted field.",
+  },
+  es: {
+    heading: "Primera configuración",
+    waiting: "Guardando titularidad de configuración…",
+    resume: "Continuar con tu contraseña de configuración",
+    password: "Contraseña de administrador",
+    required: "Introduce tu contraseña.",
+    passwordNotAccepted: "Contraseña no aceptada",
+    resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
+    interrupted: "La configuración inicial se interrumpió",
+    missingDatabase:
+      "Falta la base de datos de configuración. Revisa tus copias antes de empezar de nuevo. Empezar de nuevo no recupera los datos perdidos.",
+    uncheckable:
+      "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
+    finish: "Finalizar configuración",
+    finishReview: "Comprueba los datos guardados.",
+    finishEmail: "Vuelve a introducir los ajustes de correo usados en esta configuración.",
+    finishHelp:
+      "Vuelve a introducir el certificado y los ajustes de correo usados en esta configuración.",
+    startAgain: "Empezar de nuevo",
+    startAgainHelp:
+      "Conserva el intento anterior y sus archivos, y empieza en un espacio nuevo. Los códigos de instalación ya elegidos siguen usados.",
+    retireConfirmed: "Conservar el intento anterior y empezar de nuevo.",
+    cancel: "Cancelar",
+    restarting: "El intento anterior se conserva. Reconecta para continuar en el espacio nuevo.",
+    startUnavailable:
+      "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
+    abandon: "Abandonar este intento",
+    replace: "Introducir nuevos datos",
+    retired: "Intento abandonado. Su historial se conserva.",
+    consumed:
+      "Esta asignación puede haberse usado. Consérvala como consumida y resuelve la incidencia antes de empezar de nuevo.",
+    complete: "Configuración completa. Reconecta con el equipo.",
+    reconnect: "Reconectar",
+    error: "Reconecta para comprobar el resultado guardado. No repitas la activación.",
+    scope: "Los datos están fijados. Abandona este intento antes de cambiarlos.",
+    fix: "Corrige el campo señalado.",
+  },
+} as const;

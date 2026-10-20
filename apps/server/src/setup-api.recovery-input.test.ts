@@ -249,3 +249,87 @@ it.each(["archive", "bucket", "cloud"])(
     expect((await app.request(req.path, req.init)).status).toBe(202);
   },
 );
+
+function contextRequest(kind: string, context: unknown) {
+  const req = request(kind);
+  if (req.init.body instanceof FormData)
+    req.init.body.set("recoveryContext", JSON.stringify(context));
+  else
+    req.init.body = JSON.stringify({
+      ...JSON.parse(String(req.init.body)),
+      recoveryContext: context,
+    });
+  return req;
+}
+
+it.each(["archive", "bucket", "cloud"])(
+  "%s recovery validates context before staging and permits a corrected request",
+  async (kind) => {
+    const { app, stageRestore, stageBucketRestore } = setup();
+    for (const context of [
+      null,
+      [],
+      {},
+      { selectedSourceId: "selected-copy-digest", oldBoxGone: true, soleRecovery: "true" },
+      { selectedSourceId: "selected-copy-digest", oldBoxGone: null, soleRecovery: true },
+      { selectedSourceId: "x".repeat(257), oldBoxGone: true, soleRecovery: true },
+    ]) {
+      const req = contextRequest(kind, context);
+      const response = await app.request(req.path, req.init);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field: "recoveryContext" } },
+      });
+    }
+    expect(stageRestore).not.toHaveBeenCalled();
+    expect(stageBucketRestore).not.toHaveBeenCalled();
+    const corrected = contextRequest(kind, {
+      selectedSourceId: "selected-copy-digest",
+      oldBoxGone: false,
+      soleRecovery: false,
+    });
+    expect((await app.request(corrected.path, corrected.init)).status).toBe(202);
+    expect((kind === "bucket" ? stageBucketRestore : stageRestore).mock.calls).toHaveLength(1);
+  },
+);
+
+it.each(["archive", "bucket", "cloud"])(
+  "a completed %s request rejects changed isolation declarations on replay",
+  async (kind) => {
+    const directory = await mkdtemp(join(tmpdir(), "hour-recovery-http-binding-"));
+    try {
+      const operations = createSetupOperationStore(directory);
+      const context = {
+        selectedSourceId: "selected-copy-digest",
+        oldBoxGone: true,
+        soleRecovery: true,
+      };
+      const first = setup(operations);
+      const original = contextRequest(kind, context);
+      expect((await first.app.request(original.path, original.init)).status).toBe(202);
+      const next = setup(operations);
+      for (const altered of [
+        { ...context, oldBoxGone: false },
+        { ...context, soleRecovery: false },
+        { ...context, selectedSourceId: "different-point" },
+      ]) {
+        const req = contextRequest(kind, altered);
+        const response = await next.app.request(req.path, req.init);
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({
+          error: { code: "setup.operation_conflict", params: {} },
+        });
+      }
+      expect(next.stageRestore).not.toHaveBeenCalled();
+      expect(next.stageBucketRestore).not.toHaveBeenCalled();
+      const replay = contextRequest(kind, context);
+      expect((await next.app.request(replay.path, replay.init)).status).toBe(202);
+      expect(await readFile(join(directory, "setup-operation.json"), "utf8")).not.toContain(
+        "node-paper-key",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

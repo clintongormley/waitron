@@ -3,18 +3,36 @@ import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 export default defineConfig({
+  optimizeDeps: {
+    include: [
+      "lit",
+      "lit/decorators.js",
+      "lit/directives/live.js",
+      "axe-core",
+      "pdfkit",
+      "pdfjs-dist",
+      "pdf-lib",
+      "fontkit",
+    ],
+  },
   test: {
     // scripts/fiscal-test-budget.test.ts pins this; outer, never inside a project.
     maxWorkers: 4,
     projects: [
       {
+        extends: true,
         test: {
           name: "node",
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,
           include: ["src/**/*.test.ts"],
-          exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/dashboard/**"],
+          exclude: [
+            ...configDefaults.exclude,
+            "**/.stryker-tmp/**",
+            "src/dashboard/**",
+            "src/**/*.browser.test.ts",
+          ],
           // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times its
           // own beforeAll (packages/db/src/testing/venue-db.ts, default 60s), so what this bounds is
           // that helper's untimed afterEach/afterAll plus any hook a suite writes for itself.
@@ -24,12 +42,15 @@ export default defineConfig({
         },
       },
       {
+        extends: true,
         test: {
           name: "browser",
+          testTimeout: 30_000,
+          hookTimeout: 60_000,
           sequence: { groupOrder: 2 },
           globals: true,
           clearMocks: false,
-          include: ["src/dashboard/**/*.test.ts"],
+          include: ["src/dashboard/**/*.test.ts", "src/**/*.browser.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
           // Vitest 4 fills `browser.fileParallelism` from this project-level key.
           fileParallelism: false,

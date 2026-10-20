@@ -62,6 +62,7 @@ export function createCloudAllocationPreparation(configuration: {
   readonly trust: ReceiptTrust;
   readonly confirmationPath: string;
   readonly receiptDirectory: string;
+  readonly readCurrent?: () => Promise<unknown>;
 }): ModuleOperationPreparation {
   const { confirmationPath, receiptDirectory } = configuration;
   const trust = { issuer: configuration.trust.issuer, keys: new Map(configuration.trust.keys) };
@@ -72,7 +73,7 @@ export function createCloudAllocationPreparation(configuration: {
       if (
         operator === undefined ||
         held.binding.module !== "fiscal-verifactu" ||
-        !["restore", "re-register"].includes(held.binding.action)
+        !["setup", "restore", "re-register"].includes(held.binding.action)
       )
         refuse("reauthentication_required");
       if (!exact(held.input, ["allocation", "approval", "receipt"])) refuse("malformed_allocation");
@@ -84,7 +85,10 @@ export function createCloudAllocationPreparation(configuration: {
         !isDeepStrictEqual(supplied.approval, receipt.payload.approval)
       )
         refuse("reservation_mismatch");
-      const current = await readJson(confirmationPath);
+      const current =
+        configuration.readCurrent === undefined
+          ? await readJson(confirmationPath)
+          : await configuration.readCurrent();
       if (
         !exact(current, [
           "version",
@@ -123,7 +127,7 @@ export function createCloudAllocationPreparation(configuration: {
         taxpayerNif: receipt.payload.allocation.taxpayerNif,
         softwareId: receipt.payload.allocation.softwareId,
         environment: receipt.payload.allocation.environment,
-        mode: "recovery",
+        mode: held.binding.action === "setup" ? "initial-setup" : "recovery",
         ...held.binding,
         operatorId: operator.operatorId,
         incidentEvidence: current.incidentEvidence,
@@ -134,6 +138,8 @@ export function createCloudAllocationPreparation(configuration: {
       };
       const verified = verifyCloudAllocationEvidence(receipt, trust, context);
       if (!verified.ok) refuse(verified.reason);
+      if (held.binding.action === "setup" && verified.approval.oldMachineOffline !== false)
+        refuse("old_machine_absence_unconfirmed");
       const record = {
         version: 1,
         receipt,
@@ -242,7 +248,7 @@ export async function readCloudAllocationReport(
   const approval = receipt.payload.approval!;
   if (
     binding.module !== "fiscal-verifactu" ||
-    !["restore", "re-register"].includes(binding.action as string) ||
+    !["setup", "restore", "re-register"].includes(binding.action as string) ||
     binding.targetNodeId !== node.nodeId ||
     binding.targetNodeId !== approval.targetNodeId ||
     binding.sourceId !== approval.sourceId ||

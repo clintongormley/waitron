@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-a679-hour-coded-series-design.md`, published at `cc5a284539b723c455ebd717bf4ae4cc1500ba2d`, approved by the owner at approximately 14:50 on 2026-10-16.
 
+> **Implementation pointer, 2026-10-17:** the shared preparation journal and its unchanged behavioral suite moved to `packages/provisioning/src/module-preparation-state.ts` and its sibling test. For Task 3's journal check, run `pnpm --filter @waitron/provisioning exec vitest run src/module-preparation-state.test.ts src/setup-preparation-host.test.ts`. The frozen-facts suite moved to `packages/provisioning/src/first-setup-runtime.test.ts` with the shared runtime. The server route checks remain in `@waitron/server`. The original task text below records the planned locations.
+
 ## Authority, baseline and replacement scope
 
 - This plan belongs at `docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md`.
@@ -27,6 +29,12 @@
 - Cloud repository changes belong to Lane D. Do not edit another lane’s files, branch, queue or processes.
 
 ## Global constraints
+
+**Owner clarification, 2026-10-18 at 12:10:** the supported configuration has exactly one prefix
+for each of `standard`, `full` and `rectificative`. This supersedes "multiple bases per purpose"
+below and Task 1's two-standard-base example. Refuse unsupported configurations; do not add a
+trading-series chooser. Keep all historical evidence. See the [dated design addendum](../specs/2026-10-16-a679-hour-coded-series-design.md#owner-clarification-2026-10-18-at-1210-one-prefix-per-purpose).
+
 
 - Epoch: **2026-01-01T00:00:00Z**. Encode elapsed whole UTC hours most-significant first in exactly four symbols.
 - Alphabet: `0123456789ABCDEFGHJKMNPQRSTVWXYZ`; preserve leading zeroes and generate uppercase.
@@ -55,7 +63,7 @@
 - Ordinary reboot/update, exact Finish, download/print and key reissue allocate **zero** identities.
 - Restore preserves historical records and recovered counter values, retires recovered active series and selects a fresh hour before renewed issuance.
 - Standby admission reserves no hour. Promotion selects one when activation occurs.
-- Secrets remain **192 bits**, **47 entered / 57 displayed characters**. Normalise only display entry, never the actual secret or issued names.
+- Secrets remain **192 bits**. The owner's [19 October PDF decisions](../specs/2026-10-16-a679-hour-coded-series-design.md#owner-pdf-decisions-2026-10-19) replace the earlier key/check pair with **41 entered / 51 displayed characters**, including two typo-check characters. The sheet and recovery form carry only this node's current installation code. Normalise only display entry, never the actual secret or issued names.
 - Raw keys and secret PDFs stay transient, outside logs, browser persistence and venue backups. Promise no guaranteed memory erasure.
 - A696’s zone confirmation does not establish that invoice writers use the venue zone. A696 and A731/A732/A733 remain separately scoped.
 - H2 protects hashes, chains, invoice-number allocation, `registros_facturacion`, alta builders, `registerSif`, `restoreFiscal` and existing fiscal assertions.
@@ -141,6 +149,10 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Mark A679 hour implementation still open in backlog; add dated supersession pointers without rewriting historical requirements or receipts.
 - [ ] Resume the existing product branch, reconcile published documents and current main according to overlap rules. Create no second active product feature.
 
+**Task 0 checkpoint, 2026-10-16:** plan published at `275d1d6b702909c101aa99b3f78f51930ac6f834`, after separate high-effort authorship and an independent requirements check. The check corrected history filtering across software IDs and countdown restart semantics. CI `38908709040` and licence/sign-off `38908708463` passed on that exact commit. The product branch rebased from `92a76fb6891e4eb7fb83d5db2f942f67d1656294` to `4094497d8402376f68e9986cc82c6eaa066da930`; conflict resolutions retained the approved A679 backlog paragraph. Of 214 feature code paths, 211 retained identical Git blobs; the other three incorporated main's workflow, boot-test and module-export changes. This is a source comparison, not behavioral qualification.
+
+Focused rebase checks passed: 20 module cases, 20 unchanged protected fiscal cases and 186 CI-workflow cases. `src/boot.test.ts` returned 58 passed and four failed both at the old commit in an independently installed disposable worktree and at the rebased commit. The named failures and messages matched: two static configuration refusals were masked by `setup.attempt_uncertain`, and Demo/Live provision requests returned 400 instead of 200. These failures predate this rebase; their introduction into the feature branch was not measured. Tasks 4, 9 and 10 below own their remaining qualification. No hour implementation, product review, product CI or finish readiness is claimed.
+
 ### Task 1: Hour identity and unchanged-writer feasibility
 
 **Files:** new `vf/hour-identity.ts` and tests; `allocation-identity.ts`, `allocation-envelope.ts`, `allocation-operation.ts`, `reserved-series.ts` only within permitted validation/admission scope.
@@ -216,6 +228,7 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Fix only readiness-target parsing/admission: production keeps certificate requirements; preproduction’s certificate-free contract reaches its intended disposable readiness result.
 - [ ] Keep readiness database, credentials and receipt separate; no network call joins the sale path.
 - [ ] Configure hour preparation through every host, including CLI provisioning. No fallback to ambient paper/Cloud/emergency files.
+- [ ] Qualify the existing Demo provisioning case in `server/boot.test.ts` through the intended automatic preparation path. Retain its assertions on the response, stored venue, environment and restart; do not weaken them to accept a refusal.
 - [ ] Run fiscal disposable tests: `node scripts/run-with-deadline.mjs 240 -- pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/throwaway-allocation.test.ts src/hour-activation.test.ts`.
 - [ ] Preserve old fiscal assertions; enumerate incompatible old policy checks for exact permission rather than silently rewriting them.
 - [ ] Repeat to GREEN; commit `git commit -s -m "feat: apply hour admission across setup modes and readiness"`.
@@ -303,6 +316,7 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Run: `node scripts/run-with-deadline.mjs 420 -- pnpm --filter @waitron/setup exec vitest run src/setup-app-first-fiscal.test.ts src/setup-app-first-fiscal.unsaved.test.ts src/screens/first-setup-resolution-screen.test.ts src/screens/recovery-allocation.test.ts src/screens/recovery-allocation.unsaved.test.ts`.
 - [ ] Run server document checks: `node scripts/run-with-deadline.mjs 300 -- pnpm --filter @waitron/server exec vitest run src/recovery-document-api.test.ts src/first-fiscal-delivery.test.ts src/recovery-pack-api.test.ts --maxWorkers=2`.
 - [ ] Use module-owned UI/explicit browser exports; generic setup does not parse hour/PDF fiscal internals.
+- [ ] Qualify the existing Live provision case in `server/boot.test.ts` with the actual owned preparation/readiness context. Preserve its certificate, environment and successful-response assertions; add required fixture context rather than changing those expected outcomes.
 - [ ] Apply shared required fields, semantic names, hints, caret preservation, draft scopes, field errors and one bottom message. Request refusal alone never disables retry.
 - [ ] Keep HTTP public-only; secrets require actual HTTPS/same-origin/authentication. No A731/A732/A733 mutation or password reset is introduced.
 - [ ] Repeat to GREEN; commit `git commit -s -m "feat: complete hour setup and key-only recovery journeys"`.
@@ -315,6 +329,8 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Assert exact attachment bytes; an actual annotation/resave changes PDF hash while retaining attachment; actual print/export removes attachment and offers manual entry.
 - [ ] Render real PDF pages and enter the **rendered values** through real recovery fields, including lowercase, grouping and look-alikes; authenticate a real selected-backup fixture.
 - [ ] Exercise direct `bin.ts`, supervised `runEntry`, already-recovery listener, raw boot, restore CLI and provisioning CLI with normal and interrupted states.
+- [ ] Preserve the two existing static-configuration refusal cases in `server/boot.test.ts`: bad SPA configuration and an excessive tick budget must report their existing `server.config_invalid` details before first-setup target inspection touches an unopenable path. Trace the startup order before changing it; retain both assertions and the valid-configuration controls.
+- [ ] Run the entire existing boot suite after Tasks 4/9 integration: `node scripts/run-with-deadline.mjs 360 -- pnpm --filter @waitron/server exec vitest run src/boot.test.ts --maxWorkers=2`. Its four recorded failures must be resolved before finish/land.
 - [ ] Fault before/after intent, kept grant, commit, verifier, audit, retirement and selection publication; assert original retention, no old-root open/fallback and no duplicate activation.
 - [ ] Include simultaneous independent No/Yes setups as explicit limit tests: identical hours are possible; copy must require coordination and make no reservation guarantee.
 - [ ] Cover clock rollback/future clock, lost history, stale backup, old box return and clone limits without claiming detection the evidence cannot supply.

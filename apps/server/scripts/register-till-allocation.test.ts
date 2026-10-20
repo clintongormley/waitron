@@ -1,3 +1,4 @@
+import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -16,11 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import {
-  ALLOCATED_FISCAL_SEED,
-  ALLOCATED_FISCAL_RESTORE,
-  FISCAL_OPERATIONS,
-} from "@waitron/fiscal-verifactu";
+import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
@@ -145,7 +142,7 @@ beforeEach(async () => {
     0,
     modules.length,
     fakeModule("fiscal-verifactu", {
-      operations: FISCAL_OPERATIONS,
+      operations: historicalFiscalOperations,
       provisioning: { seed: ALLOCATED_FISCAL_SEED },
     }),
   );
@@ -207,7 +204,7 @@ async function rows() {
     await store.close();
   }
 }
-it("re-registers with the file's signed identity and the current node key", async () => {
+it("re-registers with the file's signed identity and the current node key through the historical harness", async () => {
   const before = await rows();
   const result = registerTill(NODE, env());
   await expect(result).resolves.toEqual([

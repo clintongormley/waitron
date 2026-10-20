@@ -91,12 +91,10 @@ declare module "@waitron/shared" {
      * address, or an edit through PATCH is accepted.
      */
     "printer.office_printer": Record<string, never>;
-    "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
     /** The local capture inbox was requested while email uses SMTP or is not configured. */
     "email.test_inbox_unavailable": Record<string, never>;
-    "email.settings_invalid": { field: string };
     "email.settings_not_allowed": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
@@ -795,8 +793,6 @@ declare module "@waitron/shared" {
     "station.is_default": { stationId: string };
     "station.screen_in_use": { stationId: string; count: number };
     "station.work_in_progress": { stationId: string; count: number };
-    /** The effective late thresholds would be unordered for this station. */
-    "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
      * No kitchen notice with this id in this venue (for a station's own display, at its station).
@@ -989,32 +985,13 @@ declare module "@waitron/shared" {
      * refuses before generating a key.
      */
     "setup.cert_hostnames_empty": Record<string, never>;
-    /**
-     * A setup-mode provision was asked to run on a box that already holds this tenant. A re-run would
-     * add a shop and mint a fresh fiscal chain rather than resume the venue, and a stray chain is
-     * unrecoverable (CLAUDE.md §5), so `provisionVenue` refuses before writing anything.
-     */
-    "setup.already_provisioned": Record<string, never>;
+
     /** A setup or provisioning field cannot be used. Fiscal venue validators and the core and
      * catalogue configuration checks (`packages/db/src/configuration-transfer.ts`,
      * `packages/catalogue/src/configuration-transfer.ts`) also raise this code;
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
-    "setup.configuration_outdated": Record<string, never>;
-    /**
-     * A provision of an environment for which the fiscal regime demands its provisioning secret
-     * (`provisioningSecret.required(environment)`) arrived without it; refused before
-     * `provisionVenue` runs. `module` is the fiscal module's id. The secret itself is never echoed.
-     */
-    "setup.provisioning_secret_required": { module: string };
-    /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
-    "setup.fiscal_test_required": { module: string };
-    "setup.email_required": { field: "email" };
-    /** Another handler currently holds the persistent first-boot operation lease. */
-    "setup.already_provisioning": Record<string, never>;
-    /** A different request owns the box's persisted incomplete first-boot operation. */
-    "setup.operation_conflict": Record<string, never>;
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
      * this node. Adopt has no resume path, and running it again mints a second standby identity, so
@@ -1026,11 +1003,6 @@ declare module "@waitron/shared" {
      * is no saved operation, it is not an adopt, or that adopt never wrote here or finished.
      */
     "setup.reset_unavailable": Record<string, never>;
-    /**
-     * A first-boot setup POST arrived before the box wired the dependencies that action needs; the
-     * box is up but cannot serve it yet.
-     */
-    "setup.not_ready": Record<string, never>;
     /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`
@@ -1165,9 +1137,6 @@ declare module "@waitron/shared" {
     "recovery.passphrase_required": Record<string, never>;
     /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
     "recovery.passphrase_too_short": { min: number };
-    /** Recovery-bundle decryption failed its GCM auth tag — a wrong passphrase OR a tampered
-     * bundle, deliberately indistinguishable (revealing which would help an attacker). */
-    "recovery.passphrase_invalid": Record<string, never>;
     /** A recovery-bundle envelope that is not the expected JSON shape/version, or whose KDF
      * parameters are out of the accepted bounds. `reason` is a coarse cause, never bundle contents. */
     "recovery.bundle_invalid": { reason: string };
@@ -1180,13 +1149,6 @@ declare module "@waitron/shared" {
      * same object was still in flight; the second is refused rather than allowed to interleave its
      * teardown with the first. */
     "backup.reload_in_progress": Record<string, never>;
-    /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
-     * before decryption is even attempted. `reason` is a short machine tag. */
-    "backup.artifact_invalid": { reason: string };
-    /** The backup ARCHIVE container — the inner pack of named entries the encrypted frame decrypts
-     * to — is malformed: bad magic, unsupported version, or a declared length that would read past
-     * the buffer. `reason` is a short machine tag, never the offending bytes. */
-    "backup.archive_invalid": { reason: string };
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
      * artifact), or a recovery kit or archive recovery pack is asked for

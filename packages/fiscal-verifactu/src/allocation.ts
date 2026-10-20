@@ -1,6 +1,6 @@
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   deployment,
@@ -22,8 +22,10 @@ import {
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
+import { currentSif } from "./registro-sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalReservations } from "./schema/reservations.js";
+import { verifyDeclaredDormantReservation } from "./declared-paper-evidence.js";
 import { verifyRetainedPaperReservation } from "./paper-evidence.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 
@@ -180,6 +182,45 @@ function authenticatedContext(context: AllocationContext, authority: unknown, ac
   };
 }
 
+export async function activateAuthenticatedHourStandbyAllocation(
+  tx: Transaction,
+  node: ProvisionedNode,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  authority: unknown,
+): Promise<ActivationResult> {
+  if (context.authority.kind !== "hour")
+    throw new AppError("sif.allocation_invalid", { reason: "source_mismatch" });
+  const target = { ...node };
+  const authorised = authenticatedContext(
+    {
+      ...context,
+      authority: { ...context.authority },
+      requiredBases: structuredClone(context.requiredBases),
+    },
+    authority,
+    "promote",
+  );
+  if (authorised.context.priorActivation !== "committed") {
+    const liveSif = await currentSif(tx, target.nodeId).catch((error: unknown) => {
+      if (isAppError(error) && error.code === "sif.not_registered") return null;
+      throw error;
+    });
+    if (liveSif !== null || (await liveSeriesBases(tx, target)).length !== 0)
+      throw new AppError("sif.allocation_invalid", { reason: "standby_already_active" });
+  }
+  return activate(
+    tx,
+    target,
+    allocation,
+    approval,
+    authorised.context,
+    authorised.context.requiredBases,
+    authorised.check,
+  );
+}
+
 export async function activateAuthenticatedDormantAllocation(
   tx: Transaction,
   node: ProvisionedNode,
@@ -241,45 +282,50 @@ async function activateDormant(
     retained.sourceNodeId !== context.sourceId ||
     retained.eventKey === context.eventId ||
     context.mode !== "recovery" ||
-    context.authority.kind !== "paper"
+    (context.authority.kind !== "paper" && context.authority.kind !== "paper-declared")
   )
     return refuse("reservation_mismatch");
-  const proof = retained.evidence as {
-    block?: unknown;
-    reservation?: { payload?: { operatorId?: unknown; incidentEvidence?: unknown } };
-  } | null;
-  const historical = verifyRetainedPaperReservation(retained.evidence, context.authority.trust, {
-    allocationId: retained.allocationKey,
-    taxpayerNif: retained.taxpayerNif,
-    softwareId: retained.softwareId,
-    environment: retained.environment,
-    recipientVenueId: context.authority.recipientVenueId,
-    generationId: context.authority.generationId,
-    blockId: context.authority.blockId,
-    eventId: retained.eventKey,
-    operatorId:
-      typeof proof?.reservation?.payload?.operatorId === "string"
-        ? proof.reservation.payload.operatorId
-        : "",
-    sourceId: retained.sourceNodeId,
-    targetNodeId: retained.nodeId,
-    incidentEvidence:
-      typeof proof?.reservation?.payload?.incidentEvidence === "string"
-        ? proof.reservation.payload.incidentEvidence
-        : "",
-    requiredBases: retained.bases,
-  });
-  if (!historical.ok) return refuse("reservation_untrusted");
-  const supplied = allocation as { reservationEvidence?: { block?: unknown } } | null;
-  if (
-    historical.allocation.installationIdentity !== retained.installationIdentity ||
-    !isDeepStrictEqual(allocation, {
-      ...historical.allocation,
-      reservationEvidence: supplied?.reservationEvidence,
-    }) ||
-    !isDeepStrictEqual(supplied?.reservationEvidence?.block, proof?.block)
-  )
-    return refuse("reservation_mismatch");
+  if (context.authority.kind === "paper-declared") {
+    if (!verifyDeclaredDormantReservation(retained, context))
+      return refuse("reservation_untrusted");
+  } else {
+    const proof = retained.evidence as {
+      block?: unknown;
+      reservation?: { payload?: { operatorId?: unknown; incidentEvidence?: unknown } };
+    } | null;
+    const historical = verifyRetainedPaperReservation(retained.evidence, context.authority.trust, {
+      allocationId: retained.allocationKey,
+      taxpayerNif: retained.taxpayerNif,
+      softwareId: retained.softwareId,
+      environment: retained.environment,
+      recipientVenueId: context.authority.recipientVenueId,
+      generationId: context.authority.generationId,
+      blockId: context.authority.blockId,
+      eventId: retained.eventKey,
+      operatorId:
+        typeof proof?.reservation?.payload?.operatorId === "string"
+          ? proof.reservation.payload.operatorId
+          : "",
+      sourceId: retained.sourceNodeId,
+      targetNodeId: retained.nodeId,
+      incidentEvidence:
+        typeof proof?.reservation?.payload?.incidentEvidence === "string"
+          ? proof.reservation.payload.incidentEvidence
+          : "",
+      requiredBases: retained.bases,
+    });
+    if (!historical.ok) return refuse("reservation_untrusted");
+    const supplied = allocation as { reservationEvidence?: { block?: unknown } } | null;
+    if (
+      historical.allocation.installationIdentity !== retained.installationIdentity ||
+      !isDeepStrictEqual(allocation, {
+        ...historical.allocation,
+        reservationEvidence: supplied?.reservationEvidence,
+      }) ||
+      !isDeepStrictEqual(supplied?.reservationEvidence?.block, proof?.block)
+    )
+      return refuse("reservation_mismatch");
+  }
   if (context.priorActivation !== "committed") {
     const [activeSif] = await tx
       .select({ id: registroSif.id })

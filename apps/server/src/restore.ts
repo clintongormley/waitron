@@ -1,3 +1,4 @@
+import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -59,6 +60,7 @@ import { errnoOf } from "./errno.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { decryptArtifactFile } from "./artifact-cipher-file.js";
+import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -120,10 +122,17 @@ export interface RestoreHookResult {
 }
 
 // Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
-export type RestoreOperationRunner = (
-  context: { readonly db: Database; readonly node: ProvisionedNode },
-  run: (tx: Transaction, operations: ModuleOperations) => Promise<RestoreHookResult>,
-) => Promise<RestoreHookResult>;
+export interface RestoreOperationRunner {
+  (
+    context: { readonly db: Database; readonly node: ProvisionedNode },
+    run: (tx: Transaction, operations: ModuleOperations) => Promise<RestoreHookResult>,
+  ): Promise<RestoreHookResult>;
+  checkBeforePlacement?(context: {
+    readonly db: Database;
+    readonly node: ProvisionedNode;
+    readonly sourceId: string | undefined;
+  }): Promise<void>;
+}
 
 /** What {@link validateArtifact} reads, and nothing else. */
 export interface ValidationDeps {
@@ -144,6 +153,7 @@ export interface ValidationDeps {
  * when secrets are restored.
  */
 export interface ValidatedArtifact {
+  readonly sourceId?: string;
   readonly manifest: BackupManifest;
   readonly databasePath: string;
   readonly discard: () => Promise<void>;
@@ -151,9 +161,15 @@ export interface ValidatedArtifact {
 }
 
 /** Validate before replacing any destination database, identity or secrets. */
-export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedArtifact> {
-  const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
-  return validateEntries(unpackArchive(plaintext), deps);
+export async function validateArtifact(
+  deps: ValidationDeps,
+): Promise<ValidatedArtifact & { readonly sourceId: string }> {
+  const artifact = Uint8Array.from(deps.artifact);
+  const plaintext = decryptArtifact(artifact, deps.recoveryKey);
+  return {
+    ...(await validateEntries(unpackArchive(plaintext), deps)),
+    sourceId: recoveryArchiveSourceId(artifact),
+  };
 }
 
 export type EntryValidationDeps = Omit<ValidationDeps, "artifact" | "recoveryKey">;
@@ -179,12 +195,18 @@ export async function validateDatabaseEntries(
   entries: readonly ArchiveEntry[],
   databasePath: string,
   deps: EntryValidationDeps,
-): Promise<ValidatedArtifact> {
+): Promise<ValidatedArtifact & { readonly sourceId: string }> {
   const { manifest, secretEntries } = await validateEntryMetadata(
     [...entries, { name: DB_DUMP_NAME, bytes: new Uint8Array() }],
     deps,
   );
-  return { manifest, databasePath, secretEntries, discard: async () => {} };
+  return {
+    manifest,
+    databasePath,
+    secretEntries,
+    discard: async () => {},
+    sourceId: await recoveryStreamSourceId(databasePath, entries),
+  };
 }
 
 async function validateEntryMetadata(
@@ -202,7 +224,11 @@ async function validateEntryMetadata(
   for (const entry of entries) {
     if (entry.name === MANIFEST_NAME) manifestEntry ??= entry;
     else if (entry.name === DB_DUMP_NAME) dumpEntry ??= entry;
-    else if (entry.name.startsWith(SECRETS_PREFIX)) secretEntries.push(entry);
+    else if (
+      entry.name.startsWith(SECRETS_PREFIX) &&
+      !isFirstSetupHostPath(posix.normalize(entry.name.slice(SECRETS_PREFIX.length)))
+    )
+      secretEntries.push(entry);
     else firstUnexpected ??= entry;
   }
 
@@ -257,11 +283,6 @@ async function validateEntryMetadata(
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
   if (deps.resumeOperation !== undefined) {
-    if (
-      deps.skipSecrets ||
-      !lstatSync(join(deps.venueDir, VENUE_FILE), { throwIfNoEntry: false })?.isFile()
-    )
-      throw new AppError("module.operation_invalid", { module: deps.resumeOperation.module });
     const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
     try {
       await assertNotAhead(existing.db, orderedMigrationSets(deps.modules), deps.migrationsRoot);
@@ -318,7 +339,41 @@ export async function writeValidated(
   deps: PlacementDeps,
 ): Promise<void> {
   const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
+  let admissionDirectory: string | undefined;
+  let admitted = validated;
   try {
+    await assertVenueFirstSetupAllowed(deps.venueDir);
+    if (
+      deps.resumeOperation !== undefined &&
+      (deps.skipSecrets ||
+        !lstatSync(join(deps.venueDir, VENUE_FILE), { throwIfNoEntry: false })?.isFile())
+    )
+      throw new AppError("module.operation_invalid", { module: deps.resumeOperation.module });
+    const check = deps.withModuleOperations?.checkBeforePlacement;
+    if (!deps.skipSecrets && check !== undefined) {
+      let directory = deps.venueDir;
+      if (deps.resumeOperation === undefined) {
+        admissionDirectory = await mkdtemp(join(deps.stagingDir, "restore-admission-"));
+        directory = admissionDirectory;
+        const databasePath = join(directory, VENUE_FILE);
+        await copyFile(validated.databasePath, databasePath);
+        admitted = { ...validated, databasePath };
+        await (deps.migrate ?? applyMigrations)(
+          directory,
+          migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+        );
+      }
+      const opened = await (deps.openDb ?? openVenue)(directory);
+      try {
+        await check({
+          db: opened.db,
+          node: readArtifactIdentity(validated.secretEntries).node,
+          sourceId: validated.sourceId,
+        });
+      } finally {
+        await opened.close();
+      }
+    }
     // A restored identity finishes on its first trading start (rebuild-first-start.ts). Written
     // before anything is placed, so a box that trades after this restore finds it; a restore that
     // throws removes it while the lock is still held.
@@ -331,13 +386,18 @@ export async function writeValidated(
       );
     }
     try {
-      await placeValidated(validated, deps);
+      await placeValidated(admitted, deps);
     } catch (error) {
       if (!deps.skipSecrets) await rm(marker, { force: true });
       throw error;
     }
   } finally {
-    lock.release();
+    try {
+      if (admissionDirectory !== undefined)
+        await rm(admissionDirectory, { recursive: true, force: true });
+    } finally {
+      lock.release();
+    }
   }
 }
 
@@ -760,20 +820,22 @@ export type RestoreFileDeps = Omit<RestoreDeps, "artifact"> & { readonly artifac
 export type ValidationFileDeps = Omit<ValidationDeps, "artifact"> & {
   readonly artifactPath: string;
 };
-export async function validateArtifactFile(deps: ValidationFileDeps): Promise<ValidatedArtifact> {
+export async function validateArtifactFile(
+  deps: ValidationFileDeps,
+): Promise<ValidatedArtifact & { readonly sourceId: string }> {
   await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
   const scratch = await mkdtemp(join(deps.stagingDir, "archive-validate-"));
   const discard = () => rm(scratch, { recursive: true, force: true });
   const plaintext = join(scratch, "plaintext");
   try {
-    await decryptArtifactFile(deps.artifactPath, plaintext, deps.recoveryKey);
+    const sourceId = await decryptArtifactFile(deps.artifactPath, plaintext, deps.recoveryKey);
     const inputs = await unpackArchiveFile(plaintext, scratch);
     await rm(plaintext);
     const entries = inputs.map((input) =>
       input.kind === "bytes" ? input.entry : { name: input.name, bytes: new Uint8Array() },
     );
     const { manifest, secretEntries } = await validateEntryMetadata(entries, deps);
-    return { manifest, secretEntries, databasePath: join(scratch, VENUE_FILE), discard };
+    return { manifest, secretEntries, databasePath: join(scratch, VENUE_FILE), discard, sourceId };
   } catch (error) {
     await discard();
     throw error;

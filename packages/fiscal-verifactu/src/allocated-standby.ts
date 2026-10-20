@@ -14,7 +14,9 @@ import {
 import type { AllocationEvidenceRequest } from "./allocation-operation.js";
 import type { PaperReservationContext } from "./paper-evidence.js";
 import { validateStandbyAllocation, establishDormantAllocation } from "./standby-allocation.js";
+import { readPreparedDeclaredStandby } from "./declared-paper-standby.js";
 import { activatePreparedFiscalStandby } from "./allocated-lifecycle.js";
+import { reserveHourDormant, establishHourDormant } from "./hour-dormant-standby.js";
 
 export interface StandbyAllocationEvidence extends Pick<
   PaperReservationContext,
@@ -28,6 +30,7 @@ export interface StandbyAllocationEvidence extends Pick<
   | "currentEntryState"
 > {
   readonly trust: unknown;
+  readonly knownHistory?: unknown;
 }
 export type StandbyAllocationEvidenceSource = (
   request: AllocationEvidenceRequest,
@@ -96,6 +99,7 @@ export function createStandbyAllocationPreparation(
           "currentRegisterConfirmed",
           "reservationConfirmed",
           "currentEntryState",
+          ...(Object.hasOwn(receipt.evidence, "knownHistory") ? ["knownHistory"] : []),
         ])
       )
         return refuse("outside_confirmation_missing");
@@ -124,6 +128,8 @@ function readPrepared(
   action: string,
   target: ProvisionedNode,
 ) {
+  const declared = readPreparedDeclaredStandby(operation, action, target);
+  if (declared !== undefined) return declared;
   if (
     operation === undefined ||
     readOperationAuthority(operation.authority, operation.binding) === undefined
@@ -158,6 +164,8 @@ export const ALLOCATED_FISCAL_STANDBY: StandbyProvisioning = {
   series: "on-activation",
   async reserve(tx, primary, standby, operation) {
     if (standby === undefined) return refuse("node_mismatch");
+    const dormant = await reserveHourDormant(tx, primary, standby, operation);
+    if (dormant !== undefined) return dormant;
     const held = readPrepared(operation, "reserve", standby);
     if (
       primary.nodeId !== held.context.sourceId ||
@@ -196,6 +204,7 @@ export const ALLOCATED_FISCAL_STANDBY: StandbyProvisioning = {
     return { state: { version: 1, evidence: snapshot(held.input) } };
   },
   async establish(tx: Transaction, standby, state, operation) {
+    if (await establishHourDormant(tx, standby, state, operation)) return;
     const held = readPrepared(operation, "establish", standby);
     if (
       !exact(state, ["version", "evidence"]) ||

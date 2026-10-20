@@ -23,7 +23,7 @@ import "@waitron/ui/src/components/wt-number-stepper.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
-import "./node-recovery-panel.js";
+import "./recovery-document-panel.js";
 import type {
   ArchiveRecoveryPackAnswer,
   BackupApplyBody,
@@ -296,6 +296,7 @@ export class BackupScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) canManage = false;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -1298,7 +1299,7 @@ export class BackupScreen extends LitElement {
     const alertKey = this.errorKey ?? this.refreshErrorKey;
     return html`
       <h1 class="title">${t("backup.title")}</h1>
-      <div class="card"><dashboard-node-recovery .api=${this.api}></dashboard-node-recovery></div>
+      ${this.canManage ? html`<div class="card"><dashboard-recovery-document .api=${this.api} .canManage=${this.canManage}></dashboard-recovery-document></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
       <div class="card">

@@ -1,3 +1,11 @@
+> **Historical protocol, superseded 2026-10-19 on the A679 branch.** The procedures,
+> environment variables and qualification results below describe the earlier register-based
+> implementation. They are retained for original-evidence inspection and historical tests;
+> do not use them to prepare a new setup or recovery. Production composition now selects
+> the hour-based preparation API. Follow [first Live setup](../operations/first-live-fiscal-setup.md)
+> or [recovery with an hour code](../operations/hour-recovery.md). Cloud accounts, backup
+> transport and recovery authentication remain separate from naming authority.
+
 # Sign paper allocations outside the venue
 
 A restored venue cannot tell you which paper entries another machine already consumed. Keep one
@@ -15,6 +23,19 @@ the complete Task 11 exercise remains separate. For the container mounts, select
 restore inputs and generated-record handover, follow
 [Recover a filing box](offline-fiscal-restore.md). Its optional host-managed emergency collector
 is described in [Emergency recovery](emergency-recovery.md).
+
+**2026-10-15 A679 candidate:** the feature branch adds a downloadable offline tool and first-Live
+wizard path. Use the candidate [first Live procedure](../operations/first-live-fiscal-setup.md)
+for its separate-computer, file/paper checks, current-original, handover and loss steps. Joint
+wizard/tool checks now cover both launch paths and custody choices with synthetic outside
+responses. Actual-paper acceptance and the final publication gates remain open. The command route below remains separate;
+its dated development status is historical.
+
+**2026-10-16 A679 revision:** browser setup is being replaced by the
+[one-PDF design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md), with unsigned
+owner-declared S/P history. The earlier downloadable-tool description above is historical.
+The signed command route below remains separate; the new wizard and owner acceptance are
+still incomplete.
 
 ## Create the custodian's key
 
@@ -318,10 +339,26 @@ export WAITRON_FISCAL_CONFIRMATION_FILE=/secure/current/setup-event.json
 export WAITRON_FISCAL_CUSTODIAN_FINGERPRINT='<fingerprint compared with the current outside master>'
 ```
 
+If you separately retain version-2 public paper history, the A679 candidate collector also
+accepts `WAITRON_FISCAL_PAPER_HISTORY_FILE`, or `knownHistoryPath` on the internal file source.
+This file contains public history JSON, not a PDF or node secrets. A supplied path is reread
+before each preparation; an unreadable or malformed history refuses collection. Fresh signed
+S/P allocations at or below its burn floor are refused even with a valid signature and fresh
+consumption confirmation. If the current-event file also carries `knownHistory`, the two
+histories must match; reconcile conflicting records before using them. The custodian and
+event files retain their separate 64 KiB limits; the history file has an 8 MiB limit.
+`declared-paper-consumers.test.ts` runs the old-40/burn-42 refusal, fresh-43 control and
+missing-file/conflicting-history cases through the file collector and real activation.
+
 The collector rereads both files for each attempt. Missing or empty settings refuse collection.
 Keep the custodian's private signing key outside the venue; these settings name public evidence.
 The event file's statements remain your confirmation of the outside master, not independent proof
 that an old snapshot is current. Use the formats in the configured-source section above.
+
+**2026-10-15 A679 candidate:** use the [guided first Live procedure](../operations/first-live-fiscal-setup.md)
+for browser setup. Its host freezes the identities and reconstructs `initialOperations`; the
+browser imports public files and supplies no replacement IDs or host paths. The request shape
+below describes the command and unclaimed-request path.
 
 For a setup with a supplied allocation, which Live needs on a box that is not a development box,
 add `initialOperations` to your setup request. Without it, Demo, Preparation and a development

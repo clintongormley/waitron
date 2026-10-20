@@ -33,7 +33,7 @@ export const FISCAL_SLOT: FiscalContribution = {
   id: "verifactu",
   activationReadiness: "accepted-test-submission",
   activationReadinessTarget: (secret) =>
-    aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
+    secret === undefined ? null : aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
   hasNonproductionRecords: async (db) => {
     if (!(await tableExists(db, "registros_facturacion"))) return false;
     const rows = await db

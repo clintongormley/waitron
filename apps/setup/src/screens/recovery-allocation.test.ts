@@ -263,6 +263,13 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
   const acknowledged = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!;
   acknowledged.checked = true;
   acknowledged.dispatchEvent(new Event("change"));
+  if (kind === "bucket") {
+    const confirmed = el.shadowRoot!.querySelector<HTMLInputElement>(
+      "[data-test=venue-confirmed]",
+    )!;
+    confirmed.checked = true;
+    confirmed.dispatchEvent(new Event("change"));
+  }
   const listener = vi.fn();
   el.addEventListener(
     kind === "bucket" ? "bucket-restore-requested" : "cloud-restore-action",
