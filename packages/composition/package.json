@@ -40,6 +40,8 @@
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/migrations": "workspace:*",
+    "@waitron/store": "workspace:*",
+    "drizzle-orm": "^0.45.4",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }

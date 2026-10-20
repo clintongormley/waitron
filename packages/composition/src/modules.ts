@@ -1,4 +1,5 @@
 import { MEDIA_MODULE } from "@waitron/media";
+import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
 import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
 import {
   ADJUSTMENTS_CHANGE_SOURCES,
@@ -254,6 +255,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../credentials/drizzle",
     },
     classification: CREDENTIALS_CLASSIFICATION,
+    backup: { verification: CREDENTIALS_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {

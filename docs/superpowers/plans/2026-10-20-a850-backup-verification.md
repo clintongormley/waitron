@@ -791,3 +791,17 @@ existing writer/golden/immutability files remain unchanged. The exact command lo
 counts and coverage are in Lane E's local Task 8 receipt ledger. This reader alone
 is not artifact qualification: registration/allocation/signature evidence, secrets,
 full module aggregation, placement/cleanup and v2 recovery remain later tasks.
+
+### Task 11 execution checkpoint — 20 October 2026
+
+Captured secrets/trading/optional backup env inputs now share archive-only resolution. The credentials
+owner compares all captured rows and authenticates every stored purpose/key version, including
+deprecated purposes; its private reader returns null only for a missing row. Failed authentication
+and unavailable keys remain unavailable, while authenticated malformed payloads refuse. No rotation,
+reseal, provisioning or application-vault write is part of this reader.
+
+Observed full credentials184PASS, coverage98.42/96.24/100/100; composition75PASS and all four100.
+The latter's JSON summary includes credentials-backup-verification.ts. Root cycle/seam3364PASS.
+These are module foundations, not artifact qualification, placed-key parity or a release handoff.
+The original public-export whole-shape assertion gains five API names; existing entries remain.
+Installed omission controls and final checkpoint receipts are recorded in the campaign ledger.

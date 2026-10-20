@@ -771,6 +771,12 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../store
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.1)
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -892,6 +898,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../store
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment

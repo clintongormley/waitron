@@ -7,6 +7,11 @@ describe("the public surface", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
         "CREDENTIALS_CLASSIFICATION",
+        "CREDENTIALS_BACKUP_POLICY",
+        "BackupCredentialReadError",
+        "resolveBackupKeyInputs",
+        "readBackupCredential",
+        "verifyBackupCredentials",
         "CREDENTIALS_MIGRATIONS",
         "tenantCredentials",
         "PURPOSES",
