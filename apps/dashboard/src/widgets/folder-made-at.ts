@@ -3,7 +3,6 @@ import {
   selectionRulesFromModel,
   selectRoutingCell,
   type MakerChoice,
-  type RouteTarget,
   type RoutingModel,
   type RoutingRules,
 } from "@waitron/venue-service/routing";
@@ -25,23 +24,18 @@ export function isRouted({ maker }: FolderMadeAt): boolean {
   return maker.kind === "station" || maker.kind === "no_preparation";
 }
 
-/** A category row's Every zone route, its station's fallbacks followed the way `chooseMaker`
+/** A category row's Every zone route, a cell's station's fallbacks followed the way `chooseMaker`
  * follows a product's. */
-function categoryChoice(rules: RoutingRules, categoryId: string): MakerChoice {
+function categoryChoice(
+  rules: RoutingRules,
+  categoryId: string,
+): Pick<MakerChoice, "route" | "fallbacks" | "noReplacement"> {
   const { target, decidedBy } = selectRoutingCell(rules, { kind: "category", categoryId }, null);
   if (target?.kind !== "station" || decidedBy?.kind !== "cell")
-    return { route: target, decidedBy, fallbacks: [], noReplacement: false };
-  return { ...targetChoice(rules, target), decidedBy };
-}
-
-/** Where a cell's target sends work, its station's fallbacks followed. */
-function targetChoice(rules: RoutingRules, target: RouteTarget): MakerChoice {
-  if (target.kind !== "station")
-    return { route: target, decidedBy: null, fallbacks: [], noReplacement: false };
+    return { route: target, fallbacks: [], noReplacement: false };
   const { stationId, steps } = followFallbacks(rules, target.stationId, null);
   return {
     route: stationId === null ? null : { kind: "station", stationId },
-    decidedBy: null,
     fallbacks: steps,
     noReplacement: stationId === null,
   };

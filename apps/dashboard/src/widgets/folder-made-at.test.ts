@@ -72,7 +72,7 @@ describe("folderMadeAt — the category's own baseline", () => {
     expect(result.get("drinks")).toEqual({ maker: { kind: "station", stationName: "Bar" } });
   });
 
-  it("inherits a cell from a category two levels up and names that category", () => {
+  it("inherits a cell from a category two levels up", () => {
     const result = madeAt(routing({ cells: [onCategory("drinks", station("bar"))] }));
     expect(result.get("craft")).toEqual({ maker: { kind: "station", stationName: "Bar" } });
   });
@@ -91,11 +91,11 @@ describe("folderMadeAt — the category's own baseline", () => {
     expect(result.get("food")).toEqual({ maker: { kind: "station", stationName: "Kitchen" } });
   });
 
-  it("reads a category's own cell naming the default station, and the default for a category with no cell", () => {
+  it("reads a category's own cell over the default station, and the default for a category with no cell", () => {
     const result = madeAt(
-      routing({ cells: [onCategory("food", station("kitchen"))], defaultStationId: "kitchen" }),
+      routing({ cells: [onCategory("food", station("bar"))], defaultStationId: "kitchen" }),
     );
-    expect(result.get("food")).toEqual({ maker: { kind: "station", stationName: "Kitchen" } });
+    expect(result.get("food")).toEqual({ maker: { kind: "station", stationName: "Bar" } });
     expect(result.get("drinks")).toEqual({ maker: { kind: "station", stationName: "Kitchen" } });
   });
 
@@ -105,7 +105,7 @@ describe("folderMadeAt — the category's own baseline", () => {
     expect(result.get("beer")?.maker).toEqual({ kind: "no_preparation" });
   });
 
-  it("reports nowhere, with no source, when no cell or default covers the category", () => {
+  it("reports nowhere when no cell or default covers the category", () => {
     const result = madeAt(routing());
     expect(result.get("food")).toEqual({ maker: { kind: "nowhere" } });
   });
@@ -151,7 +151,7 @@ describe("folderMadeAt — the category's own baseline", () => {
     expect(result.get("drinks")?.maker).toEqual({ kind: "station", stationName: "Bar" });
   });
 
-  it("a No category cell changes no category's Made at", () => {
+  it("a No category cell changes no category's baseline", () => {
     const result = madeAt(
       routing({
         cells: [
@@ -164,19 +164,17 @@ describe("folderMadeAt — the category's own baseline", () => {
       expect(result.get(id)).toEqual({ maker: { kind: "nowhere" } });
   });
 
-  it("gives every category an entry, and none to an unknown one", () => {
-    const result = madeAt(routing());
-    expect([...result.keys()].sort()).toEqual(["beer", "craft", "drinks", "food"]);
-  });
-});
-
-describe("folderMadeAt — whether the baseline holds for everything inside", () => {
   it("keeps a category's own station as its baseline when a period line sends its dishes elsewhere", () => {
     const lunch = [{ periodId: "lunch", target: station("kitchen") }];
     const result = madeAt(
       routing({ cells: [{ ...onCategory("drinks", station("bar")), periods: lunch }] }),
     );
     expect(result.get("drinks")).toEqual({ maker: { kind: "station", stationName: "Bar" } });
+  });
+
+  it("gives every category an entry, and none to an unknown one", () => {
+    const result = madeAt(routing());
+    expect([...result.keys()].sort()).toEqual(["beer", "craft", "drinks", "food"]);
   });
 });
 
@@ -186,7 +184,7 @@ describe("folderMadeAt — names it cannot find", () => {
     expect(result.get("drinks")?.maker).toEqual({ kind: "no_replacement", stationName: null });
   });
 
-  it("names no category for a cell on a parent the category list does not hold", () => {
+  it("follows a cell on a parent the category list does not hold", () => {
     const result = folderMadeAt(routing({ cells: [onCategory("missing", station("bar"))] }), [
       folder("orphan", "Orphan", "missing"),
     ]);
