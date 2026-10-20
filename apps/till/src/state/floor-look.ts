@@ -239,6 +239,26 @@ export function mapLook(members: readonly TableState[], now: number): MapLook {
   };
 }
 
+export interface PinLook {
+  fill: FloorMapFill;
+  icon: FloorCueIcon | null;
+  text: string;
+}
+
+/**
+ * The order screen's status pin: the map's fill, then the top kind's cue icon and words. It has no
+ * minute timer of its own, so a held course is said without its countdown.
+ */
+export function pinLook(rows: readonly TableState[], now: number): PinLook {
+  const { fill, cue, top } = mapLook(rows, now);
+  if (top === undefined) return { fill, icon: null, text: "" };
+  const text =
+    top === "held"
+      ? heldChip(soonestHeld(rows, now).member.signals, Number.POSITIVE_INFINITY, now)!.text
+      : kindWords(top, rows, now);
+  return { fill, icon: cue?.icon ?? null, text };
+}
+
 /** Each table's minutes to fire, or "due": it changes whenever a look can change with time. */
 export function reminderClock(tables: readonly TableState[], now: number): string {
   return tables

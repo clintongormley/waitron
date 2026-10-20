@@ -1,11 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { type WtToast, baseStyles, floorMapFillStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { readyText, statusPin } from "../state/floor-map.js";
+import { type PinLook, pinLook, readyText } from "../state/floor-look.js";
 import { detailsHeading, groupName, mergeMembersOf, savedNameUnder } from "../state/floor-today.js";
+import { lateBand } from "../state/table-precedence.js";
 import { signalOf } from "../state/table-signals.js";
 import "./table-details-sheet.js";
 
@@ -25,7 +27,7 @@ function flashMessage(rows: readonly TableState[]): string {
   const ready = Math.max(...rows.map((row) => row.readyToServe));
   const parts: string[] = [];
   if (ready > 0) parts.push(readyText(ready));
-  if (rows.some((row) => row.timingBand === "forgotten")) parts.push(t("table.flash_forgotten"));
+  if (rows.some((row) => lateBand(row) === "forgotten")) parts.push(t("table.flash_forgotten"));
   if (rows.some((row) => signalOf(row.signals, "bill_requested")))
     parts.push(t("signal.bill_requested"));
   return parts.join(" · ");
@@ -64,14 +66,6 @@ export class TillTableStatus extends LitElement {
         border-radius: var(--wt-radius-sm);
       }
 
-      .swatch[data-dot="ready"] {
-        background-color: var(--wt-color-success);
-      }
-
-      .swatch[data-dot="forgotten"] {
-        background-color: var(--wt-color-danger);
-      }
-
       /* The equipment toast's place (till-app.ts): over the page, so it moves nothing. */
       .flash-notice {
         position: fixed;
@@ -90,6 +84,7 @@ export class TillTableStatus extends LitElement {
   #judgedPartyId: string | null = null;
   #partyRows: TableState[] = [];
   #message = "";
+  #pin: PinLook | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -107,8 +102,10 @@ export class TillTableStatus extends LitElement {
   }
 
   override willUpdate(): void {
+    const now = Date.now();
     const party = this.party;
     this.#partyRows = party === null ? [] : partyRows(this.tables, party);
+    this.#pin = this.#partyRows.length === 0 ? null : pinLook(this.#partyRows, now);
     this.#message = flashMessage(this.#partyRows);
     if (this.#partyRows.length === 0 || this.#openFor !== party?.id) this.#openFor = null;
   }
@@ -127,7 +124,7 @@ export class TillTableStatus extends LitElement {
     const party = this.party;
     const rows = this.#partyRows;
     if (party === null || rows.length === 0) return nothing;
-    const { fill, dot, text } = statusPin(rows);
+    const { fill, icon, text } = this.#pin!;
     const first = rows[0]!;
     const heading =
       party.name === null && rows.length === 1
@@ -143,8 +140,8 @@ export class TillTableStatus extends LitElement {
         aria-label=${t("table.status_pin").replace("{status}", () => text)}
         @click=${() => this.#setOpen(party.id)}
       >
-        <span class="swatch" data-fill=${fill} data-dot=${dot ?? nothing} aria-hidden="true"></span>
-        ${text}
+        <span class="swatch" data-fill=${fill} aria-hidden="true"></span>
+        ${icon === null ? nothing : html`<wt-icon name=${icon} size="sm"></wt-icon>`} ${text}
       </button>
       <wt-toast
         class="flash-notice"

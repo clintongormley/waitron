@@ -10,6 +10,7 @@ import {
   kindWords,
   mapKinds,
   mapLook,
+  pinLook,
   readyText,
   reminderClock,
 } from "./floor-look.js";
@@ -597,6 +598,192 @@ describe("mapLook's description", () => {
     const clearing = table({ id: "c", ...free, condition: "needs_clearing" });
     expect(words([movingTable, clearing])).toBe(en["floor.needs_clearing"]);
     expect(words([clearing, movingTable])).toBe(en["floor.needs_clearing"]);
+  });
+});
+
+describe("pinLook", () => {
+  const startLocale = currentLocale();
+  afterEach(() => setLocale(startLocale));
+  const pin = (members: TableState[]) => pinLook(members, now);
+  const moving = today({ needsMoving: true });
+
+  it("the pin says the top state, with its icon and the map's fill", () => {
+    expect(pin([table({ signals: [bill], readyToServe: 2 })])).toEqual({
+      fill: "bill",
+      icon: "floor-bill",
+      text: en["signal.bill_requested"],
+    });
+    expect(pin([table({ pendingToServe: 3 })])).toEqual({
+      fill: "calm",
+      icon: "floor-check",
+      text: en["floor.nothing_needed"],
+    });
+    expect(pin([table({ party: due(4), signals: [held(2)] })])).toEqual({
+      fill: "calm",
+      icon: "floor-held",
+      text: en["floor.held"].replace("{n}", "2"),
+    });
+  });
+
+  it("draws the fill the map draws, for every member order", () => {
+    const members = [
+      table({ id: "a", signals: [wait("overdue")] }),
+      table({ id: "b", signals: [bill] }),
+      table({ id: "c", ...free, nextReservation: { time: "22:00" } }),
+    ];
+    for (const order of [members, [...members].reverse()]) {
+      expect(pin(order).fill).toBe(mapLook(order, now).fill);
+      expect(pin(order)).toEqual({
+        fill: "bill",
+        icon: "floor-timer",
+        text: en["signal.wait_overdue"],
+      });
+    }
+  });
+
+  // Carries floor-map.test.ts "a free table is free, a booked free one reserved".
+  it("a free table is free, a booked free one reserved", () => {
+    expect(pin([table(free)])).toEqual({ fill: "free", icon: null, text: en["floor.free"] });
+    expect(pin([table({ ...free, nextReservation: { time: "20:30" } })])).toEqual({
+      fill: "reserved",
+      icon: null,
+      text: `${en["floor.reserved"]} 20:30`,
+    });
+  });
+
+  it("a table with no state says nothing", () => {
+    expect(pin([table({ ...free, state: "open-tab" })])).toEqual({
+      fill: "plain",
+      icon: null,
+      text: "",
+    });
+  });
+
+  // Carries floor-map.test.ts "a party or a delivery on its way makes it seated, even when booked":
+  // a party with nothing to do is now calm, Nothing needed (§9).
+  it("a party is Nothing needed and a delivery seated, even when booked", () => {
+    expect(pin([table({ nextReservation: { time: "20:30" } })])).toEqual({
+      fill: "calm",
+      icon: "floor-check",
+      text: en["floor.nothing_needed"],
+    });
+    expect(pin([table({ ...free, state: "delivery-pending", pendingDeliveries: 2 })])).toEqual({
+      fill: "seated",
+      icon: "floor-step",
+      text: `2 ${en["floor.pending_delivery"]}`,
+    });
+  });
+
+  // Carries floor-map.test.ts "a bill requested beats seated, and needs clearing beats both": Bill
+  // requested is now above Needs clearing (§4 rows 6 and 11).
+  it("a bill beats seated, and beats needs clearing", () => {
+    expect(pin([table({ signals: [bill] })]).text).toBe(en["signal.bill_requested"]);
+    expect(pin([table({ condition: "needs_clearing", signals: [bill] })])).toEqual({
+      fill: "bill",
+      icon: "floor-bill",
+      text: en["signal.bill_requested"],
+    });
+  });
+
+  // Carries floor-map.test.ts "a forgotten order's dot beats ready dishes'" and words "gives the
+  // pin its shortest word" (its Forgotten line); an overdue wait is now a state of its own.
+  it("a forgotten wait beats ready, and an overdue one is said too", () => {
+    expect(pin([table({ readyToServe: 2 })])).toEqual({
+      fill: "ready",
+      icon: "floor-ready",
+      text: readyText(2),
+    });
+    expect(pin([table({ readyToServe: 2, timingBand: "forgotten" })])).toEqual({
+      fill: "danger",
+      icon: "floor-timer",
+      text: en["floor.forgotten"],
+    });
+    expect(pin([table({ signals: [wait("forgotten")], readyToServe: 2 })]).text).toBe(
+      en["floor.forgotten"],
+    );
+    expect(pin([table({ timingBand: "overdue" })])).toEqual({
+      fill: "calm",
+      icon: "floor-timer",
+      text: en["signal.wait_overdue"],
+    });
+  });
+
+  // Carries floor-map.test.ts "a merge shows its most urgent member".
+  it("a merge shows its most urgent member", () => {
+    expect(pin([table({ id: "a", readyToServe: 2 }), table({ id: "b", ...free })]).fill).toBe(
+      "ready",
+    );
+    expect(
+      pin([table({ id: "a", signals: [bill] }), table({ id: "b", timingBand: "forgotten" })]),
+    ).toEqual({ fill: "danger", icon: "floor-timer", text: en["floor.forgotten"] });
+  });
+
+  // Carries floor-map.test.ts "says one ready dish in the singular on the pin".
+  it("says one ready dish in the singular", () => {
+    expect(pin([table({ readyToServe: 1 })]).text).toBe(en["table.flash_ready_one"]);
+    setLocale("es");
+    expect(pin([table({ readyToServe: 1 })]).text).toBe(es["table.flash_ready_one"]);
+    expect(pin([table({ readyToServe: 2 })]).text).toBe(
+      es["table.flash_ready"].replace("{n}", "2"),
+    );
+  });
+
+  // Carries floor-map.test.ts "gives the pin its shortest word": "N to serve" leaves the pin
+  // (Decision 15).
+  it("says Nothing needed, not the dishes to serve, and the bill before them", () => {
+    expect(pin([table({ readyToServe: 2, pendingToServe: 3 })]).text).toBe(readyText(2));
+    expect(pin([table({ pendingToServe: 3 })]).text).toBe(en["floor.nothing_needed"]);
+    expect(pin([table()]).text).toBe(en["floor.nothing_needed"]);
+    expect(pin([table({ ...free, signals: [bill], pendingToServe: 3 })]).text).toBe(
+      en["signal.bill_requested"],
+    );
+  });
+
+  // Carries floor-map.test.ts "takes a merge's pin count from the member that gave the dot, never
+  // summed" and "reads a merge's to-serve count from its seated member with the most, in either
+  // order".
+  it("reads a merge's count from one member, never summed, in either order", () => {
+    const freeTable = table({ id: "b", ...free });
+    const sameParty = [
+      table({ id: "c", readyToServe: 2, pendingToServe: 5 }),
+      table({ id: "d", readyToServe: 2, pendingToServe: 5 }),
+    ];
+    expect(pin([freeTable, ...sameParty]).text).toBe(readyText(2));
+    expect(pin([...sameParty, freeTable]).text).toBe(readyText(2));
+    const fewer = table({ id: "e", readyToServe: 1 });
+    expect(pin([fewer, ...sameParty]).text).toBe(readyText(2));
+    expect(pin([...sameParty, fewer]).text).toBe(readyText(2));
+    expect(pin([freeTable, table({ id: "f", pendingToServe: 5 })]).text).toBe(
+      en["floor.nothing_needed"],
+    );
+  });
+
+  // Carries floor-map.test.ts "takes the clearing fill and reads Needs moving on the pin, even with
+  // a booking to come", "takes the clearing fill while it also needs clearing" and "in a merge
+  // ranks with Needs clearing, above a bill, on the pin": the dashes are the map's alone, and a
+  // bill now ranks above both (§4 rows 6 and 11).
+  it("a table that needs moving says Move's words over the next fill, and a bill beats it", () => {
+    expect(pin([table({ ...free, today: moving })])).toEqual({
+      fill: "free",
+      icon: "floor-move",
+      text: en["floor.needs_moving"],
+    });
+    expect(pin([table({ ...free, today: moving, nextReservation: { time: "20:30" } })])).toEqual({
+      fill: "reserved",
+      icon: "floor-move",
+      text: en["floor.needs_moving"],
+    });
+    expect(pin([table({ ...free, condition: "needs_clearing", today: moving })])).toEqual({
+      fill: "plain",
+      icon: "floor-clear",
+      text: en["floor.needs_clearing"],
+    });
+    const billed = table({ id: "b", signals: [bill] });
+    expect(pin([billed, table({ id: "a", ...free, today: moving })])).toEqual({
+      fill: "bill",
+      icon: "floor-bill",
+      text: en["signal.bill_requested"],
+    });
   });
 });
 

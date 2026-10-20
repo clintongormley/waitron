@@ -1,15 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { describe, expect, it } from "vitest";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
-import {
-  combinedStatus,
-  listedTables,
-  mapTables,
-  pinText,
-  seatsFor,
-  standInStatus,
-  statusPin,
-} from "./floor-map.js";
+import { listedTables, mapTables, seatsFor } from "./floor-map.js";
 import "@waitron/ui/src/components/wt-floor-map.js";
 
 function table(over: Partial<TableState> = {}): TableState {
@@ -71,153 +62,14 @@ function party(id: string): TableParty {
   };
 }
 
-const bill = { kind: "bill_requested" as const, requestedAt: "2026-10-10T20:00:00Z" };
 const seated = (id: string) => ({
   state: "open-tab" as const,
   condition: "held" as const,
   party: party(`P-${id}`),
 });
 
-const startLocale = currentLocale();
-afterEach(() => setLocale(startLocale));
-
-describe("standInStatus", () => {
-  it("a free table is free, a booked free one reserved", () => {
-    expect(standInStatus(table())).toEqual({ fill: "free", dot: null });
-    expect(standInStatus(table({ nextReservation: { time: "20:30" } }))).toEqual({
-      fill: "reserved",
-      dot: null,
-    });
-  });
-
-  it("a party or a delivery on its way makes it seated, even when booked", () => {
-    expect(standInStatus(table({ state: "open-tab" })).fill).toBe("seated");
-    expect(standInStatus(table({ state: "delivery-pending" })).fill).toBe("seated");
-    expect(
-      standInStatus(table({ state: "open-tab", nextReservation: { time: "20:30" } })).fill,
-    ).toBe("seated");
-  });
-
-  it("a bill requested beats seated, and needs clearing beats both", () => {
-    expect(standInStatus(table({ ...seated("t1"), signals: [bill] })).fill).toBe("bill");
-    expect(standInStatus(table({ condition: "needs_clearing", signals: [bill] })).fill).toBe(
-      "clearing",
-    );
-  });
-
-  it("a forgotten order's dot beats ready dishes'", () => {
-    expect(standInStatus(table({ ...seated("t1"), readyToServe: 2 })).dot).toBe("ready");
-    expect(
-      standInStatus(table({ ...seated("t1"), readyToServe: 2, timingBand: "forgotten" })).dot,
-    ).toBe("forgotten");
-    expect(standInStatus(table({ ...seated("t1"), timingBand: "overdue" })).dot).toBeNull();
-  });
-});
-
-describe("combinedStatus", () => {
-  it("a merge shows its most urgent member", () => {
-    expect(
-      combinedStatus([
-        { fill: "seated", dot: "ready" },
-        { fill: "free", dot: null },
-      ]),
-    ).toEqual({ fill: "seated", dot: "ready" });
-    expect(
-      combinedStatus([
-        { fill: "bill", dot: null },
-        { fill: "seated", dot: "forgotten" },
-      ]),
-    ).toEqual({ fill: "bill", dot: "forgotten" });
-    expect(
-      combinedStatus([
-        { fill: "reserved", dot: null },
-        { fill: "clearing", dot: null },
-        { fill: "free", dot: "ready" },
-      ]),
-    ).toEqual({ fill: "clearing", dot: "ready" });
-  });
-});
-
-describe("words", () => {
-  const pin = (over: Partial<TableState>): string => pinText(table(over));
-
-  it("says one ready dish in the singular on the pin", () => {
-    expect(pin({ ...seated("t1"), readyToServe: 1 })).toBe("1 ready");
-    setLocale("es");
-    expect(pin({ ...seated("t1"), readyToServe: 1 })).toBe("1 listo");
-    expect(pin({ ...seated("t1"), readyToServe: 2 })).toBe("2 listos");
-  });
-
-  it("gives the pin its shortest word", () => {
-    expect(pin({ ...seated("t1"), readyToServe: 2, timingBand: "forgotten" })).toBe("Forgotten");
-    expect(pin({ ...seated("t1"), readyToServe: 2, pendingToServe: 3 })).toBe("2 ready");
-    expect(pin({ ...seated("t1"), signals: [bill] })).toBe("Bill requested");
-    expect(pin({ ...seated("t1"), pendingToServe: 3 })).toBe("3 to serve");
-    expect(pin({ ...seated("t1") })).toBe("Seated");
-    expect(pin({ nextReservation: { time: "20:30" } })).toBe("Reserved 20:30");
-    expect(pin({ signals: [bill], pendingToServe: 3 })).toBe("Bill requested");
-  });
-
-  it("takes a merge's pin count from the member that gave the dot, never summed", () => {
-    const free = table({ id: "b" });
-    const shared = party("S");
-    const seatedParty = table({
-      id: "c",
-      ...seated("c"),
-      party: shared,
-      readyToServe: 2,
-      pendingToServe: 5,
-    });
-    const sameParty = table({
-      id: "d",
-      ...seated("d"),
-      party: shared,
-      readyToServe: 2,
-      pendingToServe: 5,
-    });
-    const merged = [free, seatedParty, sameParty];
-    expect(pinText(merged)).toBe("2 ready");
-    expect(pinText([free, table({ id: "e", ...seated("e"), pendingToServe: 5 })])).toBe(
-      "5 to serve",
-    );
-  });
-
-  it("reads a merge's to-serve count from its seated member with the most, in either order", () => {
-    const delivery = table({ id: "a", state: "delivery-pending", pendingToServe: 0 });
-    const party = table({ id: "b", ...seated("b"), pendingToServe: 3 });
-    const other = table({ id: "c", ...seated("c"), pendingToServe: 2 });
-    expect(pinText([delivery, party])).toBe("3 to serve");
-    expect(pinText([party, delivery])).toBe("3 to serve");
-    expect(pinText([other, party, delivery])).toBe("3 to serve");
-  });
-});
-
 describe("a table that needs moving", () => {
   const movingToday = today({ needsMoving: true });
-
-  it("takes the clearing fill and reads Needs moving on the pin, even with a booking to come", () => {
-    const moving = table({ today: movingToday });
-    expect(standInStatus(moving)).toEqual({ fill: "clearing", dot: null });
-    expect(pinText(moving)).toBe("Needs moving");
-    const booked = table({ today: movingToday, nextReservation: { time: "20:30" } });
-    expect(standInStatus(booked).fill).toBe("clearing");
-    expect(pinText(booked)).toBe("Needs moving");
-  });
-
-  it("takes the clearing fill while it also needs clearing", () => {
-    const both = table({ condition: "needs_clearing", today: movingToday });
-    expect(standInStatus(both).fill).toBe("clearing");
-  });
-
-  it("in a merge ranks with Needs clearing, above a bill, on the pin", () => {
-    const moving = table({ id: "a", today: movingToday });
-    const billed = table({ id: "b", ...seated("b"), signals: [bill] });
-    expect(statusPin([billed, moving])).toEqual({
-      fill: "clearing",
-      dot: null,
-      text: "Needs moving",
-    });
-  });
 
   it("is drawn in its old place with the dashed outline over the next fill, and its words", () => {
     const drawn = mapTables([table({ today: movingToday })], now);

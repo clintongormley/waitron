@@ -7,8 +7,9 @@ import { countText, currentLocale, named, t } from "../i18n/t.js";
 import { readyText, seatsFor } from "../state/floor-map.js";
 import { type SheetAction, sheetActions } from "../state/floor-today.js";
 import { reminderDueAt } from "../state/release-reminder.js";
+import { byPrecedence } from "../state/table-precedence.js";
 import { signalOf } from "../state/table-signals.js";
-import { signalChipStyles, signalChips } from "./signal-chips.js";
+import { chipState, signalChipStyles, signalChips } from "./signal-chips.js";
 import { trackDialog } from "./track-dialog.js";
 
 export function unsentText({ billNumber, ownerName, lineCount }: UnsentDraft): string {
@@ -208,7 +209,9 @@ export class TillTableDetailsSheet extends LitElement {
 
   #body(table: TableState): TemplateResult {
     const seats = seatsFor(table);
-    const chips = signalChips(table.signals);
+    const chips = byPrecedence(signalChips(table.signals), (chip) =>
+      chipState(chip, table.signals),
+    );
     const lines = this.#lines(table, chips.length);
     if (seats !== null)
       lines.unshift(
