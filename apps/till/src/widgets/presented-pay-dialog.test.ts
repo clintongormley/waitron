@@ -874,7 +874,10 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
 });
 
 describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foot", () => {
-  afterEach(() => page.viewport(1280, 900));
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await page.viewport(1280, 900);
+  });
 
   const tall = () => ({
     asksGuests: true,
@@ -885,8 +888,8 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     refusal: { code: "order.payment_in_flight" },
   });
 
-  /** `selector` sits in a footer row inside the dialog's visible box, with the body scrolling
-   * above it when `scrolls`. */
+  /** With the body at its top, `selector` sits inside the dialog's visible box, in a row the
+   * dialog shows in its footer, and the body scrolls when `scrolls`. */
   async function expectInView(
     el: TillPresentedPayDialog,
     selector: string,
@@ -898,12 +901,13 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
     expect(window.innerWidth).toBe(390);
     if (scrolls) expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    body.scrollTop = 0;
     const target = root(el).querySelector<HTMLElement>(selector)!;
     const box = target.getBoundingClientRect();
     const frame = native.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(frame.top);
     expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
-    expect(target.closest("wt-form-actions")!.slot).toBe("footer");
+    expect(target.closest("wt-form-actions")!.assignedSlot?.name).toBe("footer");
   }
 
   it("the form's Cobrar, under the reader's refusal and a refusal in Spanish", async () => {
@@ -916,9 +920,10 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     await expectInView(el, "[data-presented-pay-take]");
   });
 
-  // At 900 the locked sheet's body fits; a phone the height of an iPhone SE's screen scrolls it.
+  // At 900 the locked sheet's body fits; at 568, a first iPhone SE's height, it overflows by more
+  // than its padding, so a row left in the body ends below the sheet.
   it("the locked sheet's Confirm payment, under a refusal in Spanish, on a short phone", async () => {
-    await page.viewport(390, 667);
+    await page.viewport(390, 568);
     const el = await mount({
       ...tall(),
       confirmation: {

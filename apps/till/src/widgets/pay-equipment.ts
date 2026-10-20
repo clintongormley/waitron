@@ -82,15 +82,16 @@ export const payNoticeStyles = css`
   }
 `;
 
-/**
- * The camera a pay sheet shows in place of its body after the row's QR: either kind of sticker is
- * read, and `pay-equipment-sticker` carries it to the app, which sends it as an NFC tap.
- */
 /** A pay sheet's view: what scrolls in its body, and the buttons kept in view at its foot. */
 export interface SheetView {
   body: TemplateResult | typeof nothing;
   actions: TemplateResult | typeof nothing;
 }
+
+/**
+ * The camera a pay sheet shows in place of its body after the row's QR: either kind of sticker is
+ * read, and `pay-equipment-sticker` carries it to the app, which sends it as an NFC tap.
+ */
 
 export function payScanView(
   host: HTMLElement,

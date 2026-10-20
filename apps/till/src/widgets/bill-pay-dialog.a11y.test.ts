@@ -1231,7 +1231,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           panelTop: box.top,
           panelBottom: box.bottom,
           bodyScrolls: body.scrollHeight > body.clientHeight,
-          buttonInFooter: shown?.closest("wt-form-actions")?.slot === "footer",
+          buttonInFooter: shown?.closest("wt-form-actions")?.assignedSlot?.name === "footer",
           buttonTop: button?.top ?? null,
           buttonBottom: button?.bottom ?? null,
           footerMessages: dialog.shadowRoot!.querySelectorAll(".footer > .form-message").length,

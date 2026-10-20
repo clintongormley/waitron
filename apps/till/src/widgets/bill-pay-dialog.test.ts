@@ -2959,7 +2959,10 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 });
 
 describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", () => {
-  afterEach(() => page.viewport(1280, 900));
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await page.viewport(1280, 900);
+  });
 
   const received = (n: number): BillPaymentView => ({
     ...pendingCard,
@@ -2980,20 +2983,26 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
       payments: Array.from({ length: 12 }, (_, n) => received(n + 1)),
     });
 
-  /** The body scrolls, and `selector` sits in a footer row inside the dialog's visible box. */
-  async function expectInView(el: TillBillPayDialog, selector: string): Promise<void> {
+  /** With the body at its top, `selector` sits inside the dialog's visible box, in a row the
+   * dialog shows in its footer, and the body scrolls when `scrolls`. */
+  async function expectInView(
+    el: TillBillPayDialog,
+    selector: string,
+    scrolls = true,
+  ): Promise<void> {
     const dialog = root(el).querySelector("wt-dialog")!;
     await dialog.updateComplete;
     const native = dialog.shadowRoot!.querySelector("dialog")!;
     const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
     expect(window.innerWidth).toBe(390);
-    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    if (scrolls) expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    body.scrollTop = 0;
     const target = button(el, selector);
     const box = target.getBoundingClientRect();
     const frame = native.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(frame.top);
     expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
-    expect(target.closest("wt-form-actions")!.slot).toBe("footer");
+    expect(target.closest("wt-form-actions")!.assignedSlot?.name).toBe("footer");
   }
 
   it("the form's Continue, under a long bill and a refusal in Spanish", async () => {
@@ -3057,5 +3066,27 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await el.updateComplete;
 
     await expectInView(el, "[data-pay-next]");
+  });
+
+  it("the camera's Volver", async () => {
+    await page.viewport(390, 900);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      canScan: true,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      equipment: equipmentWith(LECTOR_2),
+    });
+    const equipmentRow = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-pay-equipment",
+    )!;
+    await equipmentRow.updateComplete;
+    equipmentRow.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+    await el.updateComplete;
+
+    await expectInView(el, "[data-pay-scan-back]", false);
   });
 });
