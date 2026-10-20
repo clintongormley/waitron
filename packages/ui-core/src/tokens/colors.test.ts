@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
+import {
+  checkRules,
+  failureLabels,
+  rulesIn,
+  type ContrastGroupId,
+} from "../theme/contrast-rules.js";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 // The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same
 // way, and its header asks these suites to stay free of anything beyond raw DOM and `applyTokens`.
@@ -11,17 +17,16 @@ declare module "vitest/browser" {
   }
 }
 
-const luminance = (hex: string) => {
-  expect(hex).toMatch(/^#[0-9a-f]{6}$/);
-  const [r, g, b] = [1, 3, 5]
-    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
-};
-const ratio = (a: string, b: string) => {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi! + 0.05) / (lo! + 0.05);
-};
+const resolve =
+  (el: HTMLElement) =>
+  (name: string): string => {
+    const value = token(el, name);
+    expect(value, name).toMatch(/^#[0-9a-f]{6}$/);
+    return value;
+  };
+
+const failures = (id: ContrastGroupId, theme: "light" | "dark", el: HTMLElement) =>
+  failureLabels(checkRules(rulesIn(id, theme), resolve(el)));
 
 let host: HTMLElement;
 
@@ -134,27 +139,14 @@ test("a nested theme root does not inherit the outer root's scheme", async () =>
 test("the lifted surface stands apart from every other surface and keeps text readable, in both themes", () => {
   for (const theme of ["light", "dark"] as const) {
     const el = mount(theme);
-    const lifted = token(el, "--wt-color-surface-lifted");
-    for (const surface of ["--wt-color-bg", "--wt-color-surface", "--wt-color-surface-raised"]) {
-      expect(ratio(lifted, token(el, surface)), `${theme}: lifted vs ${surface}`).toBeGreaterThan(
-        1.1,
-      );
-    }
-    for (const text of ["--wt-color-text", "--wt-color-text-muted", "--wt-color-danger"]) {
-      expect(ratio(lifted, token(el, text)), `${theme}: ${text} on lifted`).toBeGreaterThanOrEqual(
-        4.5,
-      );
-    }
+    expect(failures("lifted-surface", theme, el), theme).toEqual([]);
     el.remove();
   }
 });
 
 describe.each(["light", "dark"] as const)("sunken surface (%s)", (theme) => {
   test("text reads at 4.5:1 or more on it", () => {
-    const el = mount(theme);
-    expect(
-      ratio(token(el, "--wt-color-text"), token(el, "--wt-color-surface-sunken")),
-    ).toBeGreaterThanOrEqual(4.5);
+    expect(failures("sunken-surface", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives it the same value as the explicit theme", async () => {
@@ -170,11 +162,7 @@ describe.each(["light", "dark"] as const)("sunken surface (%s)", (theme) => {
 
 describe.each(["light", "dark"] as const)("bar track (%s)", (theme) => {
   test("stands 1.4:1 or more from the page and the surface, and text reads on it", () => {
-    const el = mount(theme);
-    const track = token(el, "--wt-color-track");
-    expect(ratio(track, token(el, "--wt-color-bg"))).toBeGreaterThanOrEqual(1.4);
-    expect(ratio(track, token(el, "--wt-color-surface"))).toBeGreaterThanOrEqual(1.4);
-    expect(ratio(token(el, "--wt-color-text"), track)).toBeGreaterThanOrEqual(4.5);
+    expect(failures("bar-track", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives it the same value as the explicit theme", async () => {
@@ -203,28 +191,7 @@ describe.each(["light", "dark"] as const)("field tokens (%s)", (theme) => {
   });
 
   test("the field's marks meet WCAG on the fill and around it", () => {
-    const el = mount(theme);
-    const fill = token(el, "--wt-color-field-fill");
-    const onFill = (name: string, on = fill) => ratio(token(el, name), on);
-    // Non-text (1.4.11): the bottom line marks the field out, on the fill and on what surrounds it.
-    expect(onFill("--wt-color-field-line")).toBeGreaterThanOrEqual(3);
-    expect(onFill("--wt-color-field-line", token(el, "--wt-color-surface"))).toBeGreaterThanOrEqual(
-      3,
-    );
-    expect(onFill("--wt-color-field-line", token(el, "--wt-color-bg"))).toBeGreaterThanOrEqual(3);
-    expect(onFill("--wt-color-primary")).toBeGreaterThanOrEqual(3);
-    // Small text (1.4.3): label, hint, value, error.
-    for (const name of [
-      "--wt-color-field-label-focus",
-      "--wt-color-text-muted",
-      "--wt-color-text",
-      "--wt-color-danger",
-      "--wt-color-field-value",
-    ])
-      expect(onFill(name), name).toBeGreaterThanOrEqual(4.5);
-    expect(
-      ratio(token(el, "--wt-color-text-muted"), token(el, "--wt-color-field-fill-disabled")),
-    ).toBeGreaterThanOrEqual(4.5);
+    expect(failures("field", theme, mount(theme))).toEqual([]);
   });
 });
 
@@ -251,18 +218,7 @@ test("the OS light preference gives the field tokens the same values as an expli
 describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
   // --wt-color-primary itself is 4.32:1 on the light --wt-color-bg a hovered list row paints.
   test("reads at 4.5:1 or more on the page background, both surfaces and a highlighted row", () => {
-    const el = mount(theme);
-    const text = token(el, "--wt-color-primary-text");
-    for (const surface of [
-      "--wt-color-bg",
-      "--wt-color-surface",
-      "--wt-color-surface-raised",
-      "--wt-color-surface-lifted",
-    ]) {
-      expect(ratio(text, token(el, surface)), `${theme}: on ${surface}`).toBeGreaterThanOrEqual(
-        4.5,
-      );
-    }
+    expect(failures("primary-text", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives it the same value as the explicit theme", async () => {
@@ -276,11 +232,7 @@ describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
 
 describe.each(["light", "dark"] as const)("search highlight (%s)", (theme) => {
   test("its own text and the ordinary text both read at 4.5:1 or more on it", () => {
-    const el = mount(theme);
-    const highlight = token(el, "--wt-color-highlight");
-    for (const text of ["--wt-color-on-highlight", "--wt-color-text"]) {
-      expect(ratio(token(el, text), highlight), `${theme}: ${text}`).toBeGreaterThanOrEqual(4.5);
-    }
+    expect(failures("search-highlight", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives it the same values as the explicit theme", async () => {
@@ -300,23 +252,11 @@ const HOVER_FILLS = [
 
 describe.each(["light", "dark"] as const)("hover fills (%s)", (theme) => {
   test("each keeps its button's text at 4.5:1 or more", () => {
-    const el = mount(theme);
-    for (const [hover, , text] of HOVER_FILLS) {
-      expect(
-        ratio(token(el, text), token(el, hover)),
-        `${theme}: ${text} on ${hover}`,
-      ).toBeGreaterThanOrEqual(4.5);
-    }
+    expect(failures("hover-text", theme, mount(theme))).toEqual([]);
   });
 
   test("each is at least 1.2:1 from its resting fill, so the hover shows", () => {
-    const el = mount(theme);
-    for (const [hover, base] of HOVER_FILLS) {
-      expect(
-        ratio(token(el, hover), token(el, base)),
-        `${theme}: ${hover} vs ${base}`,
-      ).toBeGreaterThanOrEqual(1.2);
-    }
+    expect(failures("hover-shows", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
@@ -337,25 +277,11 @@ const DISABLED_PAIRS = [
 
 describe("disabled button colours", () => {
   test("in dark, each fill stands within 1.5:1 of the surfaces a button sits on", () => {
-    const el = mount("dark");
-    for (const [fill] of DISABLED_PAIRS) {
-      for (const surface of ["--wt-color-surface", "--wt-color-surface-raised"]) {
-        expect(
-          ratio(token(el, fill), token(el, surface)),
-          `dark: ${fill} vs ${surface}`,
-        ).toBeLessThanOrEqual(1.5);
-      }
-    }
+    expect(failures("disabled-fill", "dark", mount("dark"))).toEqual([]);
   });
 
   test("in dark, each text reads at 4.5:1 or more on its fill", () => {
-    const el = mount("dark");
-    for (const [fill, text] of DISABLED_PAIRS) {
-      expect(
-        ratio(token(el, text), token(el, fill)),
-        `dark: ${text} on ${fill}`,
-      ).toBeGreaterThanOrEqual(4.5);
-    }
+    expect(failures("disabled-text", "dark", mount("dark"))).toEqual([]);
   });
 
   test.each(["light", "dark"] as const)(
@@ -401,20 +327,7 @@ describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) =
   });
 
   test("the button's text and line meet WCAG on its fill and on the surfaces around it", () => {
-    const el = mount(theme);
-    const line = token(el, "--wt-color-google-button-line");
-    // Small text (1.4.3).
-    expect(
-      ratio(token(el, "--wt-color-google-button-text"), token(el, "--wt-color-google-button-fill")),
-    ).toBeGreaterThanOrEqual(4.5);
-    // Non-text (1.4.11): the sign-in card is drawn on --wt-color-surface-raised.
-    for (const surface of [
-      "--wt-color-google-button-fill",
-      "--wt-color-surface-raised",
-      "--wt-color-surface",
-      "--wt-color-bg",
-    ])
-      expect(ratio(line, token(el, surface)), surface).toBeGreaterThanOrEqual(3);
+    expect(failures("google-button", theme, mount(theme))).toEqual([]);
   });
 });
 
@@ -445,9 +358,7 @@ const onFill = (fill: string) => fill.replace("--wt-color-", "--wt-color-on-");
 
 describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) => {
   test("each fill has its own text colour, readable on it at 4.5:1 or more", () => {
-    const el = mount(theme);
-    for (const fill of CALENDAR_FILLS)
-      expect(ratio(token(el, onFill(fill)), token(el, fill)), fill).toBeGreaterThanOrEqual(4.5);
+    expect(failures("calendar-text", theme, mount(theme))).toEqual([]);
   });
 
   test("the standard and Closed colours are not in the palette and stand apart from each other", () => {
@@ -456,9 +367,7 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
     expect(new Set(palette).size).toBe(PALETTE.length);
     for (const reserved of ["--wt-color-day-standard", "--wt-color-day-closed"])
       expect(palette, reserved).not.toContain(token(el, reserved));
-    expect(
-      ratio(token(el, "--wt-color-day-standard"), token(el, "--wt-color-day-closed")),
-    ).toBeGreaterThanOrEqual(3);
+    expect(failures("calendar-days", theme, el)).toEqual([]);
   });
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
@@ -481,9 +390,7 @@ const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
 
 describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => {
   test("each fill has its own text colour, readable on it at 4.5:1 or more", () => {
-    const el = mount(theme);
-    for (const fill of TABLE_FILLS)
-      expect(ratio(token(el, onFill(fill)), token(el, fill)), fill).toBeGreaterThanOrEqual(4.5);
+    expect(failures("table-text", theme, mount(theme))).toEqual([]);
   });
 
   test("the five fills are different colours", () => {
@@ -492,9 +399,7 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
   });
 
   test("the dots are readable on the surface ring at 3:1 or more", () => {
-    const el = mount(theme);
-    for (const dot of ["--wt-color-success", "--wt-color-danger"])
-      expect(ratio(token(el, dot), token(el, "--wt-color-surface")), dot).toBeGreaterThanOrEqual(3);
+    expect(failures("table-dots", theme, mount(theme))).toEqual([]);
   });
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
@@ -597,39 +502,17 @@ const STATION_FILLS = [
 
 describe.each(["light", "dark"] as const)("station colours (%s)", (theme) => {
   test("each fill keeps the text, muted text, warning and danger colours at 4.5:1 or more", () => {
-    const el = mount(theme);
-    for (const fill of STATION_FILLS)
-      for (const text of [
-        "--wt-color-text",
-        "--wt-color-text-muted",
-        "--wt-color-warning",
-        "--wt-color-danger",
-      ])
-        expect(
-          ratio(token(el, text), token(el, fill)),
-          `${text} on ${fill}`,
-        ).toBeGreaterThanOrEqual(4.5);
+    expect(failures("station-text", theme, mount(theme))).toEqual([]);
   });
 
   test("each dot stands 3:1 or more from every station fill and from the surface", () => {
-    const el = mount(theme);
-    for (const dot of STATION_FILLS.map((fill) => `${fill}-dot`))
-      for (const ground of [...STATION_FILLS, "--wt-color-surface"])
-        expect(
-          ratio(token(el, dot), token(el, ground)),
-          `${dot} on ${ground}`,
-        ).toBeGreaterThanOrEqual(3);
+    expect(failures("station-dots", theme, mount(theme))).toEqual([]);
   });
 
   // A painted cell keeps its fill when hovered or focused, so its ring is drawn on it; a hovered
   // cell with no station takes the tint.
   test("the focus colour stands 3:1 or more on every station fill and on the hover tint", () => {
-    const el = mount(theme);
-    for (const ground of [...STATION_FILLS, "--wt-color-surface-lifted"])
-      expect(
-        ratio(token(el, "--wt-color-focus"), token(el, ground)),
-        `--wt-color-focus on ${ground}`,
-      ).toBeGreaterThanOrEqual(3);
+    expect(failures("station-focus", theme, mount(theme))).toEqual([]);
   });
 
   test("the fills are different colours, and so are the dots", () => {
@@ -652,6 +535,18 @@ describe.each(["light", "dark"] as const)("station colours (%s)", (theme) => {
     expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
   });
 });
+
+test.each(["light", "dark"] as const)(
+  "Waitron's palette meets Waitron's own button rules (%s)",
+  (theme) => {
+    const el = mount(theme);
+    expect([
+      ...failures("button-text", theme, el),
+      ...failures("button-fill", theme, el),
+      ...failures("focus-ring", theme, el),
+    ]).toEqual([]);
+  },
+);
 
 /** CIELAB under D65, from an sRGB hex colour. */
 const lab = (hex: string): [number, number, number] => {
