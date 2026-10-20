@@ -1507,7 +1507,7 @@ export const en = {
   "bill_pay.unconfirmed":
     "The server did not answer, so this payment may or may not have been taken. Press Check again: it asks about this same payment, and it will not be recorded twice.",
   "bill_pay.unconfirmed_elsewhere":
-    "A payment on this bill got no answer from the server, so it may or may not have been taken. Reopen the bill's payment and press Check again: it will not be recorded twice.",
+    "A payment on this bill got no answer from the server, so it may or may not have been taken. On the bill, press Pay items, then Check again: it will not be recorded twice.",
   "bill_pay.unanswered_title": "No connection to the server",
   "bill_pay.recheck": "Check again",
   "bill_pay.sending_title": "Waiting for the server",
@@ -3187,7 +3187,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.unconfirmed":
     "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Pulsa Comprobar de nuevo: se pregunta por este mismo pago y no se registrará dos veces.",
   "bill_pay.unconfirmed_elsewhere":
-    "Un cobro de esta cuenta no ha tenido respuesta del servidor, así que puede haberse cobrado o no. Vuelve a abrir el cobro de la cuenta y pulsa Comprobar de nuevo: no se registrará dos veces.",
+    "Un pago de esta cuenta no ha tenido respuesta del servidor, así que puede haberse cobrado o no. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo: no se registrará dos veces.",
   "bill_pay.unanswered_title": "Sin conexión con el servidor",
   "bill_pay.recheck": "Comprobar de nuevo",
   "bill_pay.sending_title": "Esperando al servidor",
