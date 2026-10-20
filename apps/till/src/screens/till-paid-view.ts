@@ -106,7 +106,7 @@ export class TillPaidView extends LitElement {
       }
       .ticket-text {
         min-width: 0;
-        flex: 1 1 12em;
+        flex: 1 1 calc(var(--wt-font-size-md) * 12);
       }
       .status {
         font-weight: var(--wt-font-weight-bold);
