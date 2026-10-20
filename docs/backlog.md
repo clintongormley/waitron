@@ -2148,12 +2148,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
   2026-10-17.** Slices 1 (Needs clearing per department), 2 (retire venue-made statuses), 3 (the
-  held mark and its countdown), 4 (the order of precedence, two pulse speeds and the calm card) and
+  held mark and its countdown), 4 (the order of precedence, two pulse speeds and the calm card),
+  a follow-up to slice 4 (the owner's look changes and the Spanish word for held dishes) and
   7 (service steps: the settings) landed (plans
   `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`,
   `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`,
   `docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`,
-  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md` and
+  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`,
+  `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md` and
   `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 5, 6 and 8 are left
   (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),

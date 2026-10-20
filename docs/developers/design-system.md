@@ -139,6 +139,8 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,orange,amber,yellow,lime,green,teal,cyan,sky,blue,indigo,purple,magenta,pink,brown,grey}`, `--wt-color-day-standard` and
 `--wt-color-day-closed`, the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+the list card's calm left edge `--wt-color-table-calm-edge` and the colours a pulsing floor ring
+dims to, `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` (none of the three has a text colour),
 and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
 `--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own
 
@@ -330,6 +332,16 @@ themes, that each text colour is 4.5:1 or more on its fill, that the five fills 
 `--wt-color-success` and `--wt-color-danger` are 3:1 or more on `--wt-color-surface`, and that the
 `prefers-color-scheme` blocks give the same values as the explicit themes.
 
+`--wt-color-table-calm-edge` is the soft left edge of a calm list card: `#8fb7f5` light, `#4d6aa6`
+dark. `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` are the colours a pulsing
+floor ring, and the till bar's Waiting tab border, reach half-way: `#e8bebc` and `#dccbb3` light,
+`#bd9ba0` and `#b9aa94` dark. The "floor ring and calm edge colours" cases in `colors.test.ts` hold,
+in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 or more on
+`--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is
+15 or more by CIEDE2000 from its full colour and no more than 10 CIELAB lightness below it; and
+that the `prefers-color-scheme` blocks give the same values. A further case holds that each light
+dim colour is its full colour at 30% over `--wt-color-surface`.
+
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when some open alert is a warning and none is an error. Text on it uses `--wt-color-on-warning`.
 
@@ -472,7 +484,7 @@ it and its label's line height), `--wt-shadow-1|2`,
 `--wt-help-badge-target` (24px) and `--wt-help-badge-size` (20px) (a help-mode badge's target and
 the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
 `--wt-price-range-field-width` (168px),
-`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-opacity-pulse-dim`, `--wt-duration-fade`,
+`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`,
 `--wt-duration-move`, `--wt-duration-disclosure`, `--wt-duration-pulse-slow`,
 `--wt-duration-pulse-fast`,
 `--wt-field-height`, `--wt-field-line-width`, `--wt-field-line-width-active`,
@@ -501,10 +513,11 @@ and till app suites: one for the app's own text, one for text on the page outsid
 dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 `--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one cycle of a floor
-ring's pulse, which dims it to `--wt-opacity-pulse-dim` (0.3) half-way;
+ring's pulse, which dims it to `--wt-color-danger-pulse-dim` or `--wt-color-warning-pulse-dim`
+half-way, at full opacity — in dark, a fade to grey, not to the card;
 `packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. The kitchen screen's and the pass's
 forgotten flash keep their own keyframes and read the fast duration; the till bar's Waiting tab
-keeps its own and reads the slow one.
+keeps its own keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`.
 
 Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
 their default border reads `--wt-color-primary-text`. If your screen paints the border through
@@ -846,7 +859,7 @@ set. The consuming app registers the `chevron-down` icon.
 On the till's floor screen, the map box follows the cropped zone's aspect ratio, capped in height
 so the surrounding controls and Unplaced tray have room; the cap stays at least six tap heights
 on short windows, where the page can scroll (owner, 2026-10-10, A472). Bill requested
-chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. A table placed on the map shows no held chip yet. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`). On the list card the most urgent decides the one outline — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly; Waiting steady amber; no other state draws one — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge; the first also says “✓ Nothing needed”, unless its party has paid. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the held, fire and check icons. The order pin's swatch follows its displayed signal: ready
+chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. A table placed on the map shows no held chip yet. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`). On the list card the most urgent state that draws an outline decides it — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly, all thick; Waiting a thin steady amber, kept under a state that draws none; no other state draws one — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge, `--wt-color-table-calm-edge`; the first also says “✓ Nothing needed”. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the held, fire and check icons. The order pin's swatch follows its displayed signal: ready
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as {saved name}" /
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after

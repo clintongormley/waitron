@@ -287,6 +287,11 @@ follow it. Waiter called (row 5) is not built and has no place in the ranking ye
 token rings from its own timing band and due reminder only. The map, the zone tabs and the order
 screen's status pin are slice 5's.
 
+**2026-10-20:** a follow-up to slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`),
+on the owner's answer of 2026-10-20: the list card's outline comes from the most urgent state that
+draws one, so Waiting's outline stays under Unavailable, Bill requested, Ready, a service step (Take order)
+and Not sent (Decision 1). On the map the same rule is slice 5's.
+
 ## 5. How each state is shown on the card
 
 ### 5.1 Held dishes and the countdown (Q17)
@@ -337,6 +342,9 @@ the floor read carries a `held` signal with the count; the list card and the unp
 held chip, its countdown and the filled Time to fire chip; `timingBand` counts fired dishes only. The
 pulse is slice 4's, the map's cue slice 5's; requested dishes wait for A773-2.
 
+**2026-10-20:** the Spanish held chip is «2 en espera · marchar en 4 min» (owner, 2026-10-20; plan
+`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
+
 ### 5.2 Two pulse speeds (Q18)
 
 Picture 04.
@@ -376,6 +384,12 @@ for flashing.
 unplaced token ring Overdue and Time to fire slowly, Forgotten fast and Waiting in steady amber;
 the kitchen screen and the pass read the fast token, and the till bar's Waiting tab (A738) the slow one. The map, its dot and the zone tabs are slice
 5's.
+
+**2026-10-20:** a follow-up to slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`):
+Waiting's ring is half as thick as the others, and steady; a pulsing ring dims to
+`--wt-color-danger-pulse-dim` or `--wt-color-warning-pulse-dim` at full opacity instead of fading,
+so in dark it no longer turns brown, and `--wt-opacity-pulse-dim` is retired. A738's Waiting tab
+dims its border to `--wt-color-warning-pulse-dim` instead of to transparent (driver ruling D1).
 
 ### 5.3 Item counts in the order lists (Q19)
 
@@ -551,6 +565,10 @@ cue: a calm table shows "✓", a free one nothing.
 course still counting down, or nothing at all, has a soft left edge, `--wt-color-primary-disabled`
 until slice 5 adds the map's pale blue; the second also says "✓ Nothing needed" ("✓ Nada
 pendiente"), unless its party has paid, which keeps "Paid". The map's pale tint is slice 5's.
+
+**2026-10-20:** a follow-up to slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`):
+the calm edge reads its own token, `--wt-color-table-calm-edge`, so it stays visible in dark; and a
+paid party still seated also says "✓ Nothing needed" beside "Paid" (owner, 2026-10-20).
 
 ## 10. The Tables tab goes
 
