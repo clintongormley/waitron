@@ -2594,7 +2594,7 @@ export class TillApp extends LitElement {
       equipment: await this.api.getDeviceEquipment({ signal }),
     }),
     onEquipment: ({ changed, equipment }) => {
-      if (changed === this.#equipmentChanged && this.equipmentWaiting === 0)
+      if (changed === this.#equipmentChanged && this.#equipmentWaiting === 0)
         this.#holdEquipment(equipment);
     },
   });
@@ -2975,10 +2975,12 @@ export class TillApp extends LitElement {
   }
   /** Equipment changes sent or queued and not yet ended; while any is out a handheld takes no
    * payment. */
-  @state() private equipmentWaiting = 0;
+  #equipmentWaiting = 0;
   /** Reads of the equipment sent because a change's answer was set aside or may be out of date;
    * until one ends, what the device shows may not be what the server holds. */
-  @state() private equipmentRereads = 0;
+  #equipmentRereads = 0;
+  /** Either count above is not zero; the pay sheets hold charging and say saving on it. */
+  @state() private equipmentBusy = false;
   /** The pay sheet's own latest pick, which its field shows as saving. */
   @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
   /** Why the pay sheet's own pick of a field was not saved, shown under that field. */
@@ -9057,20 +9059,30 @@ export class TillApp extends LitElement {
 
   /** Cleared while the read is out, so a second caller does not read too. */
   async #rereadIfStale(): Promise<void> {
-    if (this.equipmentWaiting > 0 || !this.#equipmentStale) return;
+    if (this.#equipmentWaiting > 0 || !this.#equipmentStale) return;
     this.#equipmentStale = false;
-    this.equipmentRereads++;
+    this.#equipmentRereads++;
+    this.#equipmentCounted();
     try {
       if (!(await this.#readEquipmentBounded())) this.#equipmentStale = true;
     } finally {
-      this.equipmentRereads--;
+      this.#equipmentRereads--;
+      this.#equipmentCounted();
       this.#endSavingIfSettled();
     }
   }
 
+  /** While a pay sheet may be drawn, every count redraws it: a change's answer can move the reader
+   * line the sheet shows (#readerLoss), which is not state. */
+  #equipmentCounted(): void {
+    this.equipmentBusy = this.#equipmentWaiting > 0 || this.#equipmentRereads > 0;
+    if (this.billPaying !== null || this.presentedPaying !== null) this.requestUpdate();
+  }
+
   /** Called after any follow-up read has been started, which counts itself before its first await. */
   #endSavingIfSettled(): void {
-    if (this.equipmentWaiting === 0 && this.equipmentRereads === 0) this.payEquipmentSaving = null;
+    if (this.#equipmentWaiting === 0 && this.#equipmentRereads === 0)
+      this.payEquipmentSaving = null;
   }
 
   #holdEquipment(equipment: DeviceEquipment): void {
@@ -9104,7 +9116,7 @@ export class TillApp extends LitElement {
     if (opening !== this.#paySheetOpenings) return;
     // A change out or a pick of the reader made since the opening has the waiter's say instead.
     const id =
-      answered && this.equipmentWaiting === 0 && picks === this.#payEquipmentPicks.card_terminal
+      answered && this.#equipmentWaiting === 0 && picks === this.#payEquipmentPicks.card_terminal
         ? this.#autoPickCandidate()
         : null;
     if (id === null) {
@@ -9337,7 +9349,8 @@ export class TillApp extends LitElement {
     sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
   ): Promise<void> {
     const opening = this.#equipmentOpenings;
-    this.equipmentWaiting++;
+    this.#equipmentWaiting++;
+    this.#equipmentCounted();
     const step = () => this.#switchEquipment(event.detail, opening, nfc, sheet);
     const run = this.#equipmentQueue.then(step, step);
     this.#equipmentQueue = run;
@@ -9356,7 +9369,8 @@ export class TillApp extends LitElement {
       nfc === undefined ||
       (this.isConnected && nfc.session === this.#operatorSession && this.operatorName !== "");
     if (!current()) {
-      this.equipmentWaiting--;
+      this.#equipmentWaiting--;
+      this.#equipmentCounted();
       void this.#rereadIfStale();
       this.#endSavingIfSettled();
       return;
@@ -9447,7 +9461,8 @@ export class TillApp extends LitElement {
         );
     } finally {
       limit.done();
-      this.equipmentWaiting--;
+      this.#equipmentWaiting--;
+      this.#equipmentCounted();
       // The device can keep a choice after its operator leaves; refresh without their notice.
       void this.#rereadIfStale();
       this.#endSavingIfSettled();
@@ -9595,7 +9610,7 @@ export class TillApp extends LitElement {
         .autoPicking=${this.payAutoPicking}
         .readerReason=${reason?.line ?? null}
         .readerHint=${reason?.hint ?? null}
-        .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
+        .equipmentBusy=${this.equipmentBusy}
         .equipmentSaving=${this.payEquipmentSaving}
         .equipmentErrors=${this.payEquipmentErrors}
         @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
@@ -9635,7 +9650,7 @@ export class TillApp extends LitElement {
       .autoPicking=${this.payAutoPicking}
       .readerReason=${reason?.line ?? null}
       .readerHint=${reason?.hint ?? null}
-      .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
+      .equipmentBusy=${this.equipmentBusy}
       .equipmentSaving=${this.payEquipmentSaving}
       .equipmentErrors=${this.payEquipmentErrors}
       .busy=${this.submitting}
