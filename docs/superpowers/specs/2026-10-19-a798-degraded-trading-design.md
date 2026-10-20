@@ -392,10 +392,12 @@ Which failures cross the line, and what the device shows:
 | Clock earlier than the last recorded sale by more than a minute | **Payments stop, by the owner's choice** (question 3) | The record could be written, but with a time earlier than the one before it | Red strip "No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado"; every action that takes or gives back money, or would write a record, refused with `clock.behind_chain`; orders and the kitchen carry on (§4.8, picture 8) |
 | Clock otherwise wrong, but after 28-10-2024 | No | Records are written with the wrong time | Nothing for staff (A364); the manager's bell |
 
-**No card is charged while the line is crossed.** When the disk or the clock is red (before
-28-10-2024, or earlier than the last recorded sale), the box refuses
-at both checks before the reader: `till-sale.ts:1236-1237` for a sale, and `beginBillPayment`
-(`bill-payments.ts:1078`) for a card payment on a bill. So a connected reader is never charged
+**No card is charged while the line is crossed.** When the disk is full or the clock is before
+28-10-2024, the box refuses at both checks before the reader: `till-sale.ts:1236-1237` for a sale,
+and `beginBillPayment` (`bill-payments.ts:1078`) for a card payment on a bill. When the clock reads
+earlier than the last recorded sale, the named check `refuseWhileClockBehind` refuses at the top of
+every route that takes or gives back money, before any branch and so before any reader on every path
+(§4.8 e). So a connected reader is never charged
 for a sale that cannot be recorded; today it is, for a clock before 28-10-2024 (§2.5, §11). A card taken on another machine can still have
 been charged, which is why the clock refusal keeps today's card advice. Two gaps are left. One is a
 clock that goes behind the last recorded sale between the charge and the record, covered in §4.8 e.
@@ -529,8 +531,9 @@ AEAT's certificate and so gets no time from AEAT (A679 forbids switching that ch
 saved AEAT time cannot be carried forward, because a counter that only goes forward restarts when the
 box does; one device "agrees with itself", and a phone set by hand would set invoice dates; and
 stamping only sales would leave payments, working time, the business day and session expiry on the
-wrong clock. Nor can the server set the system clock: Docker's default capability set leaves out
-the clock-setting capability, `deploy/compose.yml` adds none (read: no `cap_add` or `privileged`),
+wrong clock. Nor can the server set the system clock: on Docker Desktop, a container's default
+capability set leaves out the clock-setting capability (measured; not measured on a box's Linux
+Docker), `deploy/compose.yml` adds none (read: no `cap_add` or `privileged`),
 and experiment 6 (§12) printed that ceiling without it on Docker Desktop (§4.8 b).
 
 What the box does instead:
@@ -692,8 +695,8 @@ clock (part b).
 #### b. Who can fix it, and how
 
 What cannot set the clock, each with its source:
-- **The box's own server.** Docker's default capability set leaves out the clock-setting capability
-  (`cap_sys_time`), and `deploy/compose.yml` adds none (read: no `cap_add`, `privileged` or `user:`).
+- **The box's own server.** On Docker Desktop, a container's default capability set leaves out the
+  clock-setting capability (`cap_sys_time`; measured there, not on a box's Linux Docker), and `deploy/compose.yml` adds none (read: no `cap_add`, `privileged` or `user:`).
   Experiment 6 (§12) printed a default container's bounding set — the ceiling on what any process in
   it can ever hold — without that capability, and with it once `--cap-add SYS_TIME` was given. The
   image's own file capability (`setcap cap_net_bind_service`, `deploy/Dockerfile:168`) cannot add one
@@ -738,10 +741,12 @@ What does fix it:
      sending writes no record, so a box with unsent records gets a fresh comparison on the next
      send. With an empty outbox, the box would make a read-only query instead: the library's
      `consultar` (`@waitron/verifactu` 0.2.1, `dist/client.d.ts:18`), which writes nothing. **Its
-     reply's body carries no current time**: its only times belong to the records it lists
-     (`TimestampPresentacion`, `TimestampUltimaModificacion`, `dist/xml/parse-consulta.d.ts`; read),
-     and a "no data" reply lists none. The time would have to come from the HTTP reply's `Date`
-     header. Measured 2026-10-20 with `curl -D -` and no certificate: AEAT's public QR page
+     reply carries no current time**: AEAT's own schema, shipped with the library, gives the reply
+     a header, the period, the paging flag, the result, the records and the next-page key, and no
+     current time (`schemas/RespuestaConsultaLR.xsd:12-20`, `:56-72`; read); its only times belong to
+     the records it lists. The time would have to come from the HTTP reply's `Date` header, and the
+     library returns only the parsed body, so the box would capture the header in the `fetch`
+     function it hands the library (`ClientOptions.fetch`, `dist/client.d.ts:3-15`). Measured 2026-10-20 with `curl -D -` and no certificate: AEAT's public QR page
      (`prewww2.aeat.es/…/ValidarQR`) answered `200` with a `date:` header matching this machine's
      clock to the second; the SOAP endpoint (`prewww1.aeat.es/…/VerifactuSOAP`) answered a `302`
      with no `date:` header. Whether a certificate-authenticated query's reply carries one was not
@@ -780,7 +785,8 @@ What does fix it:
      stay as they are, and the alert is the whole of the response. Whether AEAT wants anything done
      about such records is a question for the asesor (§10).
    - **Where it is kept: a new append-only table** in the Veri*Factu module's own migration set,
-     `clock_stop_restarts`, declared with `appendOnly()` so `applyMigrations` puts a
+     `clock_stop_restarts`, declared with `appendOnly()` in class `ledger`, like
+     `registros_facturacion` (`packages/fiscal-verifactu/src/classification.ts:6`), so `applyMigrations` puts a
      `RAISE(ABORT)` trigger on updates and deletes (CLAUDE.md §3), travelling in both the module's
      migration descriptor and `packages/migrations/migrations.manifest.json`. One row per restart:
      the node, the person, the time on the box's clock, the box's reading and the named record's
@@ -793,7 +799,8 @@ What does fix it:
      The `incidents` table was the revision-5 draft's choice; it is dropped, because its rows can be
      marked handled and the core's reads skip handled rows (`packages/core/src/incidents.ts:82`,
      `:109`), and nothing in the database stops a row being rewritten
-     (`packages/db/src/schema/incidents.ts:14-16`). This is the build's one migration (§7).
+     (`packages/db/src/schema/incidents.ts:14-16`). The table joins the build's one migration (§7)
+     only if question 4 keeps a restart.
    - **The dialog** (picture 9) states only what the box knows: "¿Reanudar los cobros?", then the
      box's clock, the last sale's time, and the proof ("Hacienda: coincide (comprobado 09:13)";
      "Dispositivos: 2 marcan 19/10/2026 09:14"); then "Si reanudas, las ventas siguientes
@@ -857,18 +864,20 @@ What does fix it:
   (`systemClock`, `apps/server/src/till-backend.ts:14`) — with the latest record time in this
   database: the largest `fecha_hora_huso_gen_registro` in `registros_facturacion`, across every
   chain the database holds. More than a minute earlier is stopped. The build adds an index on that
-  column in the same migration as the restarts table, so the read is one index lookup.
+  column (slice 8), so the read is one index lookup.
 - **Why every chain, not only the one this box is writing.** A restored box, or one whose filing
-  identity was registered again, starts a new chain with no records: registering resets this node's
-  chain to empty (`resetChainHead`, `packages/fiscal-verifactu/src/registro-sif.ts:64`, called at
-  `:111` and `:152`), while the database still holds the old chain's sales. Restored or new hardware
+  identity was registered again, starts a new chain with no records: activating the new filing
+  identity empties this node's chain (`packages/fiscal-verifactu/src/allocation.ts:399-405`), while
+  the database still holds the old chain's sales (`apps/server/src/restore-fiscal-e2e.test.ts:410-413`
+  reads the old record after a restore). Restored or new hardware
   is one of the likeliest times for a clock to be behind, and the owner's words were "its last
   recorded sale", not "this chain's".
 - **A database with no fiscal records at all** — a new box before its first sale — has nothing to
   compare, so this check never stops it. The clock-before-28-10-2024 stop (§4.5 item 1) still
   applies, and it is the one that catches a new box whose clock has reset to its factory date.
 - **When it checks.** On every notice read (each signed-in device every 15 seconds, §4.2); in the
-  named check at the top of every money route (part e); inside the chain's append, the one place
+  named check at the top of every money route, before any branch and so before any card reader is
+  asked on every path (part e); inside the chain's append, the one place
   every record kind passes through (`packages/fiscal-verifactu/src/chain.ts:178-180`), so no route can
   write a record past the stop, whoever calls it; and on a one-minute watch that raises the alert
   and sends the email. Every input is on the box, so it works with no internet; it survives a
@@ -895,11 +904,20 @@ is refused; everything else carries on.** Two mechanisms carry it:
   server's `app.post`/`put` routes for payments, refunds, collections, settlements and sales (read):
   - `POST /api/sales` (`apps/server/src/till-api.ts:1689`) — a sale paid in cash or by a card typed
     on another machine;
-  - `POST /api/pay` (`till-api.ts:1731`) → `payWorkingOrderIntegratedOrchestration`
-    (`apps/server/src/till-sale.ts:1076`): placed after the recovery branches, which file a card
-    already captured and must stay open (`:1163-1172`), and **before** the branch for an order whose
-    invoice was already filed, which returns at `:1204` and would otherwise reach the reader at
-    `:1325` without ever meeting the check at `:1236-1237`;
+  - `POST /api/pay` (`till-api.ts:1731`) → `payWorkingOrderIntegrated` (`till-sale.ts:157`) →
+    `payIntegrated` (`apps/server/src/till-sale.ts:1105`): the check goes at the top of
+    `payIntegrated`, **before any branch**. Placed any lower it misses a path: the branch for an
+    order whose invoice was already filed returns at `:1204` and asks the reader at `:1325` without
+    meeting the check at `:1236-1237`; and a counter card sale with no saved order before it skips
+    the whole `if (locked !== undefined)` block (`:1151`), so a check placed inside it is never
+    met. At the top it also refuses the recovery branches (`:1163-1172`), which file a card already
+    captured; that loses nothing, because their record would be refused by the chain's check
+    anyway, and once the clock is fixed Pay files them without charging again. The same
+    `payIntegrated` serves the dashboard's stuck-payment resolve (`payments-api.ts:1080`) and the
+    background card-recovery pass (`pending-card-recovery.ts:72`), both through
+    `payWorkingOrderIntegratedOrchestration` (`till-sale.ts:1076`); that pass repeats
+    (`runPendingCardLoop`, `pending-card-recovery.ts:12-15`), so it files those payments on its
+    first pass after the clock is fixed;
   - `POST /api/working-orders/:id/collect` (`till-api.ts:2595`) → `collectOrder`
     (`till-sale.ts:148`, documented at `:2035`: "files NO second fiscal record");
   - `POST /api/working-orders/:id/payments` (`apps/server/src/bill-payments-api.ts:227`) →
@@ -914,6 +932,16 @@ is refused; everything else carries on.** Two mechanisms carry it:
     `:1401`) and tender refunds (`:1453`, `:1475`). They record what happened to money already
     moved; refusing them only delays the bookkeeping until the clock is fixed, and keeps every
     money date on the right clock.
+
+  Two ways money moves without a till route, each with its decision:
+  - **The Stripe webhook keeps running.** `POST /webhooks/stripe` (`apps/server/src/webhook.ts:122`)
+    records a hosted card payment the provider has already taken and writes no sale
+    (`webhook.ts:56-59`): it takes no new money, and refusing it would leave the box's record behind
+    money already taken.
+  - **The tender-refund recovery loop is paused during the stop.** It sends a refund whose first
+    send never happened (`apps/server/src/tender-refund-recovery.ts:73` → `resumeTenderRefund`), so
+    it gives money back through no route at all; its record would be dated by the wrong clock. It
+    resumes on its next pass once the clock is fixed.
 - **The chain's own check** inside the append, which catches only paths that write a record — the
   backstop for any route the list above misses, and the guard for order edits (below). It does not
   catch a path that moves money without writing a record; that is what the named check is for.
@@ -1102,7 +1130,9 @@ also question 4 (§9), because it departs from "until the clock is fixed".
    is asked, with the chain's own check as the backstop for paths that write a record (§4.8 e).
 5. **Collecting an invoice already filed, refunds, and the dashboard's payment resolutions are
    refused too**, though they write no new record: their money would be dated by the wrong clock.
-   A guest charged twice waits, or is refunded on the card machine and recorded afterwards.
+   A guest charged twice waits, or is refunded on the card machine and recorded afterwards. The
+   tender-refund recovery loop is paused for the same reason; the Stripe webhook keeps recording
+   hosted payments already taken, since it takes no new money.
 6. **An order edit that would complete a part-paid bill, and so file its invoice, is refused as a
    whole**, kitchen send included (§4.8 e); filing it later would change when an invoice is issued,
    which is the tax rules' and the asesor's ground.
@@ -1117,8 +1147,9 @@ also question 4 (§9), because it departs from "until the clock is fixed".
 10. **No "set the clock" action anywhere in Waitron**: a clock a page can set is a way to date sales
     at will. Fixing a wrong clock means the internet (once `waitron.sh install` turns on the host's
     time synchronisation) or whoever installed the box.
-11. **Restarts are kept in a new append-only table**, one row per restarted record, which the stop
-    reads directly — a migration, in the Veri*Factu module's own set (§7).
+11. **Restarts are kept in a new append-only `ledger` table**, one row per restarted record, which
+    the stop reads directly — part of the one migration in the Veri*Factu module's set, if question
+    4 keeps a restart (§7).
 12. **The stop's alert is an error in the "Equipo" area for `system.manage`, and the restart and
     "disproved" alerts show beside it**; `fiscal.clock_drift`, whose words say selling continues, is
     left out of the bell while the stop is on.
@@ -1145,13 +1176,14 @@ asked or held outside the database:
 - The clock checks keep their results in memory, like AEAT's comparison today
   (`time-health.ts:48-58`); the stop reads the latest record time, which is already stored, so it
   survives a restart without a new table.
-- **The migration** (§4.8 b, d): a new table `clock_stop_restarts`, declared with `appendOnly()` in
-  the Veri*Factu module's classification, so `applyMigrations` refuses its updates and deletes; it
+- **The migration** (§4.8 b, d), built in slice 8: an index on
+  `registros_facturacion.fecha_hora_huso_gen_registro`, and, if question 4 keeps a restart, a new
+  table `clock_stop_restarts`, declared with `appendOnly()` in class `ledger` in the Veri*Factu
+  module's classification, so `applyMigrations` refuses its updates and deletes; it
   travels in both the module's migration descriptor and `packages/migrations/migrations.manifest.json`
-  (CLAUDE.md §3); a unique index on the restarted record's id; and, in the same migration, an index
-  on `registros_facturacion.fecha_hora_huso_gen_registro`, so the latest record time is one index
-  lookup. The table is built only if the owner keeps a restart (question 4); the index is wanted
-  either way, so there is one migration whatever the answer.
+  (CLAUDE.md §3), with a unique index on the restarted record's id. The index makes the latest
+  record time one index lookup and is wanted whatever question 4's answer, so there is one
+  migration either way.
 
 ---
 
@@ -1180,12 +1212,18 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    invariants (nudging the drain)._
 8. **The clock-behind stop** (§4.8 a, d, e): `refuseWhileClockBehind` at the top of every money route
    listed in §4.8 e, the chain check inside the append, the comparison with the latest record time
-   across every chain, the `clock.behind_chain` refusal and its till wording, the red notice, the
+   across every chain, the build's one migration (§7: the index, plus the restarts table if
+   question 4 keeps a restart), the `clock.behind_chain` refusal and its till wording, the red notice, the
    alert and email, and leaving `fiscal.clock_drift` out while it is open. Tests, each with the
    clock a day behind the latest record:
    - a card payment on `POST /api/pay` for an order whose invoice was already filed, refused with
      `clock.behind_chain` **and the provider's `collect` never called** (the case that would reach
      the reader at `till-sale.ts:1325` without the named check);
+   - a counter card sale on `POST /api/pay` with no saved order before it, refused with
+     `clock.behind_chain` **and the provider's `collect` never called** (the path that skips the
+     `if (locked !== undefined)` block);
+   - the tender-refund recovery loop sending no refund during the stop, and the Stripe webhook
+     still recording a hosted payment;
    - a cash collection of a filed order on `POST /api/working-orders/:id/collect`, refused, with no
      settlement written;
    - a refund on `POST /api/transactions/:saleId/refunds`, refused, with the provider's refund never
@@ -1199,16 +1237,17 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    - orders, kitchen sends and clock-ins accepted; and a control a minute inside the margin that
      sells.
    _Risk: fiscal invariants (every path that writes a record or moves money), cross-package contract
-   (the seat and a refusal's parameters)._
+   (the seat and a refusal's parameters), migrations (an index, and possibly a new append-only
+   table)._
 9. **Devices report their clock, `clock.disagrees`, the minimum-date checks, and — if question 4
    keeps it — the restart** (§4.5 item 3, §4.8 b): the device reading; AEAT's time from a read-only
    query's `Date` header, measured in pre-production first; the restart route behind
-   `system.manage`, offered only with fresh proof and within 24 hours; the `clock_stop_restarts`
-   migration; the `clock.behind_chain_restarted` and `clock.behind_chain_disproved` alerts; and the
+   `system.manage`, offered only with fresh proof and within 24 hours, writing to the
+   `clock_stop_restarts` table slice 8's migration created; the `clock.behind_chain_restarted` and `clock.behind_chain_disproved` alerts; and the
    Reloj row and dialog on the Box status page. Tests: no proof, no restart; contrary proof, no
    restart; a 25-hour gap, no restart; a second restart of the same record answered with the first;
    marking the bell's alert handled leaves payments running. _Risk: fiscal invariants (lifts the
-   stop), auth (`system.manage`), migrations (a new append-only table)._
+   stop), auth (`system.manage`)._
 10. **Emails for the red conditions and the 2 GB disk warning**, `reader.offline`, the printer notice
     (question 2), and in `deploy/waitron.sh`: deleting old Docker images after an upgrade, and
     switching on the host's time synchronisation at install where the system provides it, printing a
@@ -1311,8 +1350,8 @@ or if a read-only query to AEAT returns the time, which is still to be measured 
   proof, or any proof the other way, or a bigger gap, there is no restart and the stop holds until
   the clock is fixed or real time passes the last sale. The restart is done on the Box status page
   by someone with `system.manage`, recorded with their name and the proof, and never changes a
-  recorded sale, the chain or the box's clock. The next sales carry times earlier than the last one
-  (by up to 24 hours), once. If the clock it accepted later proves wrong, the managers get an alert;
+  recorded sale, the chain or the box's clock. The first sale after the restart steps the chain back
+  by up to 24 hours; later sales carry times earlier than the last sale until real time passes it. If the clock it accepted later proves wrong, the managers get an alert;
   nothing is rewritten.
 - (b) **No restart at all.** The stop always holds until the clock is fixed or real time passes the
   last sale — in the example, until 23:40 on Monday.
@@ -1462,5 +1501,6 @@ All in scratch folders outside the repository (`mktemp -d`); nothing was committ
    `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR` → `HTTP/2 200` and
    `date: Tue, 20 Oct 2026 06:01:14 GMT`, the same second as this machine's `date -u`;
    `https://prewww1.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP` → `HTTP/2 302` and
-   no `date:` line. The second line is the control: a reply with no time printed none. Not measured:
+   no `date:` line. The second line shows the probe prints nothing when the header is absent; it
+   says nothing about a certificate-authenticated reply. Not measured:
    a certificate-authenticated `consultar` reply, which is the one the box would make (§4.8 b).
