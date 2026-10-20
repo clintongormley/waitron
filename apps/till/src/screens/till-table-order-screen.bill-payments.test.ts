@@ -268,6 +268,20 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
   });
 
+  it("keeps the pay card's recovery for an unanswered whole payment", async () => {
+    const confirmation = {
+      tender: { method: "cash" as const, amount: "50.00" },
+      outstanding: "45.00",
+      guests: 3,
+    };
+    const el = await mountScreen({ handheld: true, paymentConfirmation: confirmation });
+
+    const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+    expect(tender).not.toBeNull();
+    expect(tender!.confirmation).toBe(confirmation);
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
+  });
+
   it("draws no Pay without a handheld", async () => {
     const el = await mountScreen();
 

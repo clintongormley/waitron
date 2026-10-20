@@ -135,6 +135,30 @@ describe("till-app: paying a table from a handheld", () => {
     expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: "r2" });
   });
 
+  it("Toda la cuenta on a partly paid bill sends what the bill still owes", async () => {
+    const owed: AllocationPreview = { ...wholeCard, applied: "70.00", charged: "70.00" };
+    const { el } = await mountApp(
+      onPhone({
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([billOf({ outstanding: "70.00", hasPayments: true })]),
+        getBillBalance: vi
+          .fn()
+          .mockResolvedValue(balanceOf({ received: "50.00", outstanding: "70.00" })),
+        previewBillPayment: vi.fn().mockResolvedValue(owed),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    expect(inDialog(el, 'input[name="way"]:checked')).toHaveProperty("value", "whole");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0]).toMatchObject({ kind: "contribution", amount: "70.00" });
+  });
+
   it("a practice venue's phone charges its demo reader, which the row shows fixed", async () => {
     const { el } = await mountApp(
       onPhone(

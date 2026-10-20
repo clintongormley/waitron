@@ -4733,7 +4733,7 @@ describe("till-app: a bill payment on the card reader", () => {
     return el;
   }
 
-  it("charges the card on the reader picked on a handheld whose profile has the reader", async () => {
+  it("charges the card on the reader named in a handheld's equipment when its profile has the reader", async () => {
     const takeBillPayment = vi
       .fn()
       .mockResolvedValue(
