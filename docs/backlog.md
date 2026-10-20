@@ -5653,6 +5653,26 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Other `uses:` steps that fetch over the network have no step time limit, and the runner's
+  own action download at job set-up is bounded only by long limits of its own (left open by
+  A935).** List them with
+  `grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact|download-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml`.
+  On 2026-10-20 most `upload-artifact` steps carried a step `timeout-minutes`; the
+  `setup-node`, `cache`, `download-artifact`, `docker/*` and `codeql-action` steps carried none,
+  and rely on their job's limit alone, as checkout did. The set-up download ("Download action
+  repository …") is retried by the runner, three attempts, each under a 20-minute limit (runner
+  v2.337.0 `src/Runner.Worker/ActionManager.cs` L1647–1658: `retryCount < 3`,
+  `int timeoutSeconds = 20 * 60;`) — longer than most of our jobs' limits, which run from 5 to 50
+  minutes (`grep -h -E '^    timeout-minutes:' .github/workflows/*.yml`) — and a step
+  `timeout-minutes` cannot reach it. Whether the job's own limit covers set-up was not measured.
+  Receipt for the checkout half:
+  [ci-and-gates.md](developers/ci-and-gates.md#every-checkout-is-bounded).
+
+- **Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)**,
+  and in which phase they stalled is unknown: the action passes no `--progress`, so its log is
+  silent while it waits. On a recurrence, read the bounded checkout's log: a low-speed failure
+  (`Operation too slow`) means a transfer stall, a step timeout means a connect or handshake stall.
+
 - **The deployment-status guard mistakes `up` inside a temporary path for a compose action.**
   `scripts/waitron-sh.test.mjs:508` tests raw log text with `compose .*up`; an A738 hook failed
   on `waitron-sh-bupOFl` while every logged compose action was `ps`. Setting an owned temporary

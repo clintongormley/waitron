@@ -1351,6 +1351,245 @@ first version check. The same added case in the full root run failed beside 6,69
 baseline had passed all 6,694 cases, so this probe establishes the short-limit failure mechanism;
 it does not establish why A737's original intermittent first check was delayed.
 
+### Every checkout is bounded
+
+Every `actions/checkout` step in `.github/workflows/*.yml` is three steps in a row:
+
+```yaml
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+```
+
+A site that passes `with:` (for example `fetch-depth: 0`) carries the same `with:` block on both
+attempts. There are two layers of limit:
+
+1. **git's own low-speed limit.** git reads `GIT_HTTP_LOW_SPEED_LIMIT` and `_TIME` from the step's
+   environment, which the action passes to every git it runs. A transfer that moves less than
+   1000 bytes a second for 20 s is ended by git with exit 128, and the action's built-in retry runs
+   the fetch again — three fetches at most, 10–20 s apart. Worst case 3 × 20 + 2 × 20 = 100 s,
+   inside the step's 120 s.
+2. **The step's `timeout-minutes: 2`**, for a stall git's limit cannot see: a TLS handshake that
+   never completes, or a TCP connect to an address that never answers (both measured below).
+   `continue-on-error` lets the job go on; the stop step kills the first attempt's git processes,
+   which the runner leaves running; the second attempt runs under its own 2-minute limit and fails
+   the job if it fails.
+
+Worst case for one checkout: 2 + 2 minutes. The low-speed limit is set on the two checkout steps
+only, so no other git call in a job changes behaviour. Each workflow file carries one pointer
+comment to this section rather than one per site.
+
+A first attempt that fails leaves `##[error]` annotations on a run that still passes. That is the
+trace of the stall, kept on purpose. The steps carry names, so the jobs API reports `Check out the
+code` and `Check out the code, second attempt`, no longer `Run actions/checkout@v7`; nothing in
+this repository read the old name (`grep -rn "Run actions/" scripts/ .github/` found nothing on
+2026-10-20), but a tool outside it that does must use the new names.
+
+#### The stalls (2026-10-20)
+
+| Run / job | What happened |
+| --- | --- |
+| `39446310822`, `test-dashboard (2)` (lane G, `feat/a669-4-kitchen-allergy`) | `git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +157e6fa…:refs/remotes/pull/1919/merge` at 15:15:31.76Z, then nothing until `##[error]The operation was canceled.` at 15:21:25.20Z (353 s). Receipt: `~/waitron-campaign-g/receipts/resume-a669-wording-20261020-164550/checkout-job-log.txt`. The same fetch run locally: 8.534 s, exit 0 (`checkout-probe-result.json`). |
+| `39440790729` attempt 1, `test-server (4)` (lane C, `feat/a757-4b-owner-look-changes`), job `118690011926` | Jobs API (`gh api repos/clintongormley/waitron/actions/runs/39440790729/attempts/1/jobs`): step `Run actions/checkout@v7` started 14:42:12Z, completed 14:52:10Z, `cancelled`; the job `cancelled` at its 10-minute limit. |
+| `39444354037` (a `main` run), `test-till (3)`, job `118702531645` | The fetch started 15:09:30.14Z and printed `* [new ref]` at 15:14:13.00Z — 283 s, then succeeded. `gh run view 39444354037 --log --job 118702531645`. |
+
+All three fell between 14:42 and 15:21 UTC on 2026-10-20. Whether GitHub reported an incident then
+was not checked.
+
+#### What the action does with a stalled fetch
+
+Source of the pinned `actions/checkout@v7` (`3d3c42e5aac5ba805825da76410c181273ba90b1`), fetched
+with `gh api -H 'Accept: application/vnd.github.raw' "repos/actions/checkout/contents/<path>?ref=<sha>"`:
+
+- `src/git-command-manager.ts` L315–317 — the fetch is wrapped in the retry helper:
+  `await retryHelper.execute(async () => { await that.execGit(args) })`
+  (https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/src/git-command-manager.ts#L315-L317).
+- `src/retry-helper.ts` L3–5 and L25–43 — `defaultMaxAttempts = 3`, sleeps 10–20 s, and retries
+  only when the action throws: `try { return await action() } catch (err) { core.info(...) }`
+  (https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/src/retry-helper.ts#L25-L43).
+- `src/git-command-manager.ts` L628–653 — git runs with `env` copied from `process.env` plus the
+  action's own, and `result.exitCode = await exec.exec(\`"${this.gitPath}"\`, args, options)` with
+  no time limit in `options`
+  (https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/src/git-command-manager.ts#L628-L653).
+  So a fetch that never exits is never retried, and a variable on the step's `env:` reaches git.
+- `src/git-directory-helper.ts` L33–46 — a later checkout into the same directory deletes
+  `index.lock` and `shallow.lock` "left by a previously canceled run or crashed git process", and
+  L117–124 deletes the contents when it cannot reuse them.
+
+#### Local measurements
+
+The action's own `dist/index.js` from that SHA, driven by `/tmp/a935-probe/run-action.sh` with
+`GITHUB_SERVER_URL`/`INPUT_GITHUB-SERVER-URL` pointed at a local server (node v26.11.1, git 2.56.0,
+macOS, 2026-10-20). Before each run the failing case was stated: for "the action waits forever" it
+is an exit before the outer limit; for "the low-speed limit ends it" it is exit 124 at the outer
+limit.
+
+| Probe | Printed |
+| --- | --- |
+| A1: silent server (accepts, never answers), no low-speed limit, `gtimeout 150` | `exit=124 seconds=150`; last log line is the `git … fetch` command, the same shape as the CI log |
+| A2: silent server, `GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=10` | `exit=1 seconds=65`; three `Operation too slow. Less than 1000 bytes/sec transferred the last 10 seconds`, with `Waiting 20 seconds` and `Waiting 13 seconds` between |
+| A5: server sending an HTTP 200 head, then one byte every 2 s, same limit | `exit=1 seconds=66` |
+| A3 / A4: github.com, `actions/checkout` at that SHA, with / without the limit | `exit=0 seconds=1` / `exit=0 seconds=2`, HEAD `3d3c42e…` both |
+
+git alone, in `ubuntu:24.04` (git 2.43.0, libcurl 8.5.0 OpenSSL), each under `timeout 60`:
+
+| Probe | Printed |
+| --- | --- |
+| P1 silent, no limit | `exit=124 seconds=60` |
+| P2 silent, limit 1000/10 | `Operation too slow …` `exit=128 seconds=10` |
+| P3 trickle, limit 1000/10 | `exit=128 seconds=10` |
+| P4 `http://10.255.255.1` (no answer to connect), limit 1000/10 | `exit=124 seconds=60` — the low-speed limit did not end it |
+| P5 / P6 github.com, with / without limit | `exit=0 seconds=1` both |
+| P7 `https://` to the silent server (a TLS handshake that never completes), limit 1000/10, under `timeout 400` | `SSL connection timeout` `exit=128 seconds=300` — the low-speed limit did not end it; curl's 300 s connect timeout did |
+
+Margin for a full-history fetch: `git fetch` of all of `clintongormley/waitron` (292 MB `.git`)
+from this Mac took 14 s with limit 1000/20, and 15 s and 13 s with the window cut to 2 s — the
+2-second window never fired.
+
+#### Why the stop step's pattern is not `pgrep -x git`
+
+A fetch runs as three processes: `git fetch`, a `git remote-http` (or `remote-https`) wrapper, and
+its child `git-remote-http` (or `git-remote-https`), which holds the socket. On Linux a process
+name (`comm`) is cut to 15 characters, so both helpers show as `git-remote-http`.
+
+Measured in `ubuntu:24.04`, git 2.43.0, `procps` installed: a `git fetch` started in the background
+against the silent server, then after 3 s `ps -eo pid,comm,args | grep -E ' git(-remote-http)?( |$)'`,
+then a stop loop with `GITHUB_WORKSPACE` set to the fetch's directory. The failing case for "the
+stop step leaves nothing" is a `git-remote-http` line printed after the stop.
+
+- Over `http://`: three processes — `git` (`git -c protocol.version=2 fetch …`), `git`
+  (`/usr/lib/git-core/git remote-http …`) and `git-remote-http`
+  (`/usr/lib/git-core/git-remote-http …`), all three with that directory as their working
+  directory. `pgrep -x git` printed the first two only; `pgrep '^git(-remote-https?)?$'` printed
+  all three.
+- Over `https://`: the same three, the child's `comm` being `git-remote-http` while its command is
+  `/usr/lib/git-core/git-remote-https` (the 15-character cut). Same two pgrep answers.
+- The stop loop with `pgrep -x git`: `stopped git` twice, then the `git-remote-http` line was still
+  printed — over both schemes. With `pgrep '^git(-remote-https?)?$'`: `stopped git` three times,
+  then `no git process left` — over both schemes.
+
+The same split was seen on macOS with git 2.56. The stop step kills only processes whose working
+directory is `$GITHUB_WORKSPACE`. Leaving the leftovers running was rejected: a fetch that resumed
+would write into `.git` while later steps read it.
+
+#### What the runner does (CI probes)
+
+Runner source v2.337.0 (`src/Runner.Worker/StepsRunner.cs` L322–329): a step whose own time limit
+runs out while the job's has not gets `The action '…' has timed out after N minutes.` and
+`TaskResult.Failed`; `ExecutionContext.ApplyContinueOnError` then sets `Outcome = Result` and
+`Result = Succeeded`. Measured on the throwaway branch `probe/a935-checkout-stall`:
+
+- Run `39468071988`, job `outer-bound` (first attempt pointed at a silent local server with
+  `github-server-url`, no low-speed limit, `timeout-minutes: 1`, `continue-on-error: true`):
+  `##[error]The action 'Run actions/checkout@v7' has timed out after 1 minutes.`, then
+  `attempt 1 outcome=failure conclusion=success; attempt 2 outcome=success`, HEAD equal to
+  `GITHUB_SHA`, `status lines: 0`. The first attempt's git outlived the step:
+  `2210 64 /usr/bin/git -c protocol.version=2 fetch …` and the wrapper
+  `2211 64 /usr/lib/git-core/git remote-http origin http://127.0.0.1:18081/…` were still running.
+  That probe's report used `grep '[g]it '`, which cannot match `git-remote-http`, so whether the
+  child was also running was not seen. Both post-job checkout cleanups succeeded.
+- Same run, job `inner-bound` (limit 1000/20, `timeout-minutes: 3`): three
+  `Operation too slow … the last 20 seconds`, `Waiting 10 seconds`, `Waiting 13 seconds`; the first
+  attempt failed after 83 s (17:40:14 → 17:41:37); the second attempt succeeded in 8 s.
+- Same run, normal speed, five of each, `Run actions/checkout@v7` step seconds: bounded shape
+  `fetch-depth: 1` 12, 10, 9, 10, 10 and `fetch-depth: 0` 12, 19, 15, 13, 15; plain checkout
+  `fetch-depth: 1` 5, 10, 11, 9, 10 and `fetch-depth: 0` 19, 15, 15, 15, 24. Every second attempt
+  `skipped`.
+- Run `39469682050`, job `inline-stall`: an earlier stop step (`pgrep -x git`, `$PWD`) printed
+  `stopped 2215` and `stopped 2216` — the fetch and the wrapper; the second attempt then took 6 s
+  with HEAD equal to `GITHUB_SHA`. Whether the child survived was not seen.
+
+Healthy baseline on `main`: the `Run actions/checkout@v7` step over the 10 latest completed
+`ci.yml` runs on `main` (read 2026-10-20 about 17:40 UTC, `gh api …/runs/<id>/jobs`, whole
+seconds), 378 step records: median 10, 90th percentile 17, 99th 24, longest 285 (the `test-till (3)`
+stall above); next longest 37.
+
+TODO(Task 6): the final CI controls — `transfer-stall`, `handshake-stall`, the normal-speed timings
+and the CodeQL run — go here.
+
+#### Why 2 minutes and two attempts
+
+Longest successful job, whole seconds, over the 10 latest green `ci.yml` runs on `main`
+(`39449527877, 39444354037, 39425472781, 39421546551, 39415896185, 39415045602, 39411771855, 39409089053, 39408937593, 39405783763`),
+against the job's limit in `ci.yml`:
+
+| Job | Longest | Limit | Room |
+| --- | --- | --- | --- |
+| typecheck | 144 | 300 | 156 |
+| lint | 283 | 480 | 197 |
+| root-guards | 206 | 480 | 274 |
+| test-server (8) / (9) | 399 / 392 | 600 | 201 / 208 |
+| test-till (3) | 138 healthy (400 was run `39444354037`, the 283 s stall itself) | 600 | 462 |
+| changes, each `-merge` job | 38, at most 46 | 300 | over 250 |
+
+One stall that ends the first attempt at its limit adds at most about 120 s (the healthy ~10 s
+checkout is already inside the figures), which fits every row; the least room is in `typecheck`
+and `test-server (8)`. Two stalls end the job at the second attempt's failure, about 4 minutes in —
+before every job's limit, so the job reports a failed checkout rather than a cancellation. A third
+attempt would push a triple stall past the 5-minute jobs' limits.
+
+The step limit cannot be 90 s: github/docs `workflow-syntax.md` (commit `c67a9362`), under
+`jobs.<job_id>.steps[*].timeout-minutes`: "Fractional values are not supported. `timeout-minutes`
+must be a positive integer." One minute would cut the low-speed retries short (three 20 s windows
+plus two waits need up to 100 s), so 2 minutes it is.
+
+#### Why not another shape
+
+- **A script like `scripts/ci-setup-pnpm.sh`:** the script is in the repository the step is about
+  to check out, so it cannot run before it.
+- **A `./` local composite action:** github/docs `workflow-syntax.md` (commit `c67a9362`): "You
+  must check out your repository before using the action".
+- **A composite action in this repository named by owner and ref** (one file holding the stop and
+  the second attempt): in run `39469682050`, merely naming it made the runner download this whole
+  repository at job set-up even when the step was skipped
+  (`Download action repository 'clintongormley/waitron@32edde19…'`): "Set up job" took 13, 17, 16,
+  14, 12 s against 0, 1, 1, 1, 0 s for a plain checkout job. Also github/docs `metadata-syntax.md`
+  lists `runs.steps[*]` keys `run`, `shell`, `if`, `name`, `id`, `env`, `working-directory`,
+  `uses`, `with`, `continue-on-error` — no `timeout-minutes`, so a composite cannot bound its own
+  first attempt.
+- **YAML anchors to shorten the copies:** every guard in `scripts/ci-workflow.test.mjs` reads text
+  and would see `- *alias` as an empty step; not tried on GitHub.
+- **Step limit only, no low-speed limit:** every silent stall would cost the full 2 minutes before
+  the retry; with the limit, the action ends it itself in about 100 s at worst and retries inside
+  the same step.
+- **Low-speed limit only:** P4 and P7 — a connect or handshake stall is not ended by it, and P7
+  waited 300 s per fetch, three fetches.
+
+#### The guard
+
+The checkout cases in `scripts/ci-workflow.test.mjs` ("the workflows' checkouts"), weaker than
+their name: they read every workflow as TEXT and never run one; a checkout in a composite action,
+a called workflow outside `.github/workflows/`, or written through an anchor or expression is not
+seen; they hold each attempt to at most 2 minutes but do not judge the low-speed numbers, nor
+whether the stop step stops anything.
+
+Deletion proof, 2026-10-20, in a throwaway detached worktree of `79c8459cc`: with the stop step
+deleted from `licence.yml`'s first job, `pnpm exec vitest run scripts/ci-workflow.test.mjs -t
+'bounds and retries every checkout'` printed `Tests  1 failed | 221 skipped (222)` with exactly
+
+```
+"licence.yml: job licence-integrity: leftover git not stopped",
+"licence.yml: job licence-integrity: a stall fails the job",
+```
+
+— the first attempt, and the second attempt judged on its own once no stop step sits between them.
+The same command on the unedited file printed `Tests  1 passed | 221 skipped (222)`.
+
 ### The image build bounds its package installs
 
 A hung package install can consume an image job's whole allowance. The build stage in
