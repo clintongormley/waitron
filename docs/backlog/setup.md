@@ -319,7 +319,13 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack
-supplies. The build is A833 in `docs/backlog.md`.
+supplies.
+
+A833 checked this on 2026-10-20 with a saved French-country draft and a provisioning request in
+Demo, Preparation and Live. The screen marks the native country control invalid and sends no
+venue patch; the request returns `400 setup.request_invalid` naming `country` before setup work.
+Run `pnpm --filter @waitron/setup exec vitest run src/screens/venue-screen.test.ts` and
+`pnpm --filter @waitron/server exec vitest run src/setup-api.test.ts` for these checks.
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it
 shows only on the path where the wizard skipped the connection question, and the question is not

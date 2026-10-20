@@ -776,6 +776,25 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
   });
 
+  it.each(["demo", "prepare", "live"])(
+    "refuses a country with no installed pack before any setup work in %s",
+    async (mode) => {
+      const app = new Hono();
+      const { deps, calls } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body: Record<string, unknown> = { ...demoBody(), mode };
+      asRec(body.venue).country = "FR";
+
+      const res = await postProvision(app, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field: "country" } },
+      });
+      expect(calls).toEqual([]);
+    },
+  );
+
   it("refuses a country pack that is not ready for venue onboarding", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();

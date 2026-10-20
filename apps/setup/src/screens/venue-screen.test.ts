@@ -142,6 +142,38 @@ const EXPECTED_VENUE = {
 
 afterEach(cleanupWidgets);
 
+describe("setup country admission", () => {
+  it.each(["demo", "prepare", "live"] as const)(
+    "refuses a saved country without a setup pack in %s",
+    async (mode) => {
+      const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+        draft: { mode, venue: { ...EXPECTED_VENUE, country: "FR" } },
+      });
+      const events = collect(host);
+      expect(dropdown(el, "country").options.map(({ value }) => value)).toEqual(["ES"]);
+      expect(q(el, "[data-test=defaults-error]")).toBeNull();
+      q(el, "[data-test=next]")!.click();
+      await el.updateComplete;
+      await (dropdown(el, "country") as Dropdown & { updateComplete: Promise<unknown> })
+        .updateComplete;
+      expect(dropdownControl(el, "country").getAttribute("aria-invalid")).toBe("true");
+      expect(dropdown(el, "country").error).not.toBe("");
+      expect(await bottomOf(el)).toContain(t("venue.fix_fields"));
+      expect(q(el, "[data-test=next]")!.hasAttribute("disabled")).toBe(true);
+      expect(events).toEqual([]);
+
+      for (const [field, value] of Object.entries(VALID)) {
+        if (q(el, `[data-test=${field}]`) !== null) await type(el, field, value);
+      }
+      q(el, "[data-test=next]")!.click();
+      await el.updateComplete;
+      expect(dropdownControl(el, "country").getAttribute("aria-invalid")).toBe("false");
+      expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+      expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.country).toBe("ES");
+    },
+  );
+});
+
 describe("setup-venue-screen", () => {
   it("names the countries in the wizard's language", async () => {
     setLocale("es-ES");
