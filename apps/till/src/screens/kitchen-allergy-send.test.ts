@@ -494,6 +494,33 @@ describe("A669 kitchen fire callers", () => {
     },
   );
 
+  it("warns before firing when the only clash is carried by an extra", async () => {
+    const api = fixture("group");
+    const read = view("allergies");
+    read.snapshot.guests = [
+      {
+        id: "guest-1",
+        position: 0,
+        who: "Alex",
+        allergens: { milk: {} },
+        note: null,
+      },
+    ];
+    read.dishes[0]!.extras = [{ name: "Cream", quantity: "1.000", allergens: { milk: {} } }];
+    api.previewPartyAllergy.mockResolvedValue(read);
+    const { el } = await mount("station", "group", api);
+    await fire(el, "group");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await form.updateComplete;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-tick="0:0"]')!);
+    expect(form.shadowRoot!.querySelector("[data-clash]")!.textContent).toContain("Alex");
+    expect(form.shadowRoot!.querySelector("[data-primary]")!.textContent!.trim()).toBe(
+      t("allergy.anyway"),
+    );
+    expect(api.fireGroup).not.toHaveBeenCalled();
+  });
+
   for (const screen of ["station", "expo"] as const)
     for (const language of ["en", "es"] as const)
       for (const theme of ["light", "dark"] as const)

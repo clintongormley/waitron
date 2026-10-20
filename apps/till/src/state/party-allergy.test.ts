@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allergyClashes } from "./party-allergy.js";
+import { allergyClashes, allergensWithExtras } from "./party-allergy.js";
 
 describe("A669 clash codes", () => {
   it("intersects codes in stable order without treating different kinds as an exemption", () => {
@@ -22,5 +22,27 @@ describe("A669 clash codes", () => {
     expect(allergyClashes({ milk: {} }, avoids)).toEqual(["milk"]);
     expect(allergyClashes({ eggs: {} }, avoids)).toEqual(["eggs"]);
     expect(allergyClashes({ fish: {} }, avoids)).toEqual(["fish"]);
+  });
+});
+
+describe("A931 allergens with extras", () => {
+  it("unions the dish's and every extra's allergens, merging kinds and skipping unreviewed maps", () => {
+    expect(
+      allergensWithExtras({ gluten: { kinds: ["wheat"] }, milk: {} }, [
+        { allergens: { gluten: { kinds: ["barley", "wheat"] }, eggs: {} } },
+        { allergens: null },
+        { allergens: { milk: {}, nuts: { kinds: ["almonds"] } } },
+      ]),
+    ).toEqual({
+      gluten: { kinds: ["barley", "wheat"] },
+      milk: {},
+      eggs: {},
+      nuts: { kinds: ["almonds"] },
+    });
+  });
+
+  it("keeps an extra's allergen when the dish itself is not reviewed", () => {
+    expect(allergensWithExtras(null, [{ allergens: { milk: {} } }])).toEqual({ milk: {} });
+    expect(allergensWithExtras(null, [{ allergens: null }])).toEqual({});
   });
 });

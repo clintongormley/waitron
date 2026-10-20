@@ -2396,12 +2396,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **Check an extra-only allergy clash in the table dialog.** Source reading at
-  `party-allergy-dialog.ts:684,720` shows clash/action checks use `dish.allergens` while extras
-  render separately. Run a browser case with an allergen-free parent and an extra containing an
-  avoided allergen; check the red reason and Send anyway. Runtime behavior is unverified.
-  A669-4 covers kitchen warnings for active extras; it does not change the dialog.
-
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
   station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before

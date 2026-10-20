@@ -81,9 +81,13 @@ function view(answer: "allergies" | "none" | null = null): PartyAllergyRead {
     ],
   };
 }
-async function mount(answer: "allergies" | "none" | null = null, mode: "send" | "edit" = "send") {
+async function mount(
+  answer: "allergies" | "none" | null = null,
+  mode: "send" | "edit" = "send",
+  read: PartyAllergyRead = view(answer),
+) {
   const { el } = await mountWidget<TillPartyAllergyDialog>("till-party-allergy-dialog", {
-    view: view(answer),
+    view: read,
     mode,
     scopeKey: "opening-a",
   });
@@ -653,5 +657,65 @@ describe("A669 allergy dialog", () => {
       allergens: { peanuts: {} },
       note: "Severe",
     });
+  });
+});
+
+describe("A931 a clash carried by an extra", () => {
+  type Dish = PartyAllergyRead["dishes"][number];
+  async function mountDish(
+    allergens: Dish["allergens"],
+    extras: Dish["extras"],
+  ): Promise<TillPartyAllergyDialog> {
+    const read = view("allergies");
+    read.dishes = [{ ...read.dishes[0]!, allergens, extras }];
+    return mount("allergies", "send", read);
+  }
+  function clash(el: TillPartyAllergyDialog) {
+    return {
+      section: el.shadowRoot!.querySelector('[data-dish="0"]')!.classList.contains("clash"),
+      reason: el.shadowRoot!.querySelector("[data-clash]")?.textContent ?? null,
+      primary: el.shadowRoot!.querySelector("[data-primary]")!.textContent!.trim(),
+    };
+  }
+
+  it("warns when only an extra carries an allergen the ticked guest avoids, labelled with the extra's kinds", async () => {
+    const el = await mountDish({}, [
+      { name: "Toast", quantity: "1.000", allergens: { gluten: { kinds: ["wheat"] } } },
+    ]);
+    const result = clash(el);
+    expect(result.section).toBe(true);
+    expect(result.reason).toContain("Seat 3");
+    expect(result.reason).toContain("Cereals containing gluten (Wheat)");
+    expect(result.primary).toBe("Send anyway");
+  });
+
+  it("warns when the dish itself carries the allergen", async () => {
+    const el = await mountDish({ milk: {} }, []);
+    const result = clash(el);
+    expect(result.section).toBe(true);
+    expect(result.reason).toContain("Milk");
+    expect(result.primary).toBe("Send anyway");
+  });
+
+  it("does not warn when an extra carries only allergens the ticked guest does not avoid", async () => {
+    const el = await mountDish({}, [
+      { name: "Egg sauce", quantity: "1.000", allergens: { eggs: {} } },
+    ]);
+    expect(clash(el)).toEqual({ section: false, reason: null, primary: "Send" });
+  });
+
+  it("warns on an extra's allergen when the dish itself is not reviewed", async () => {
+    const el = await mountDish(null, [
+      { name: "Cream", quantity: "1.000", allergens: { milk: {} } },
+    ]);
+    const result = clash(el);
+    expect(result.section).toBe(true);
+    expect(result.reason).toContain("Milk");
+    expect(result.primary).toBe("Send anyway");
+  });
+
+  it("adds nothing for an extra that is not reviewed", async () => {
+    const el = await mountDish({}, [{ name: "Garnish", quantity: "1.000", allergens: null }]);
+    expect(clash(el)).toEqual({ section: false, reason: null, primary: "Send" });
   });
 });
