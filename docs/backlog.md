@@ -3088,9 +3088,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   subscription model when it matters.
 
 - **A841. A theme editor (owner, 2026-10-17).** Lets the owner change how Waitron looks by setting
-  the `--wt-*` CSS variables it already reads. Design:
+  the `--wt-*` CSS variables it already reads, and upload the venue's own logo (owner, 2026-10-20),
+  which takes Waitron's place in the dashboard banner and the till's top bar. Design:
   [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
-  Next: the owner's answers to its questions, then a plan.
+  Answered: Q1, Q2, Q3 (one look for the whole business) and the extra question (colours set by
+  hand are kept). Next: the owner's answers to Q4 (text size), Q5 (does the logo also print on
+  receipts) and Q6 (what happens to Waitron's own logo), then a plan.
 
 - **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
   `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file
@@ -3508,8 +3511,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#the-receipts-preview-redraws-the-whole-receipt-once-per-highlighted-part)
 
 - **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
-  Receipt contact length limits are still copied into the dashboard form. A493 removes the live
-  venue-receipt transfer entry; the import follow-up about that entry is retired.
+  A841's design adds the venue's logo as a second image only the app keeps from deletion (its
+  section 8a). Receipt contact length limits are still copied into the dashboard form. A493
+  removes the live venue-receipt transfer entry; the import follow-up about that entry is retired.
   [Detail](backlog/printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
 
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**
