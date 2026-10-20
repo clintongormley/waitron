@@ -2362,8 +2362,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the original frozen blocks in batches. Station and pass screens render those blocks, and station
   notices render the corrected block separately. All five change-set callers now deliver
   station-specific corrections for remaining work, with exact HOLD recipients and notices retained
-  until acknowledgement. Remaining work covers split/recall/rerouting, failure/replay/restart checks
-  and the guides. Kitchen Spanish wording still needs the owner's answer.
+  until acknowledgement. Partial and unit splits now retain copies and assignments; recall/resend
+  and rerouting preserve the original and deliver the current correction to the destination.
+  Failure/replay/restart checks, guides and whole-branch gates remain. Kitchen Spanish wording
+  still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)

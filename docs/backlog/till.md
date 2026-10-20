@@ -2352,10 +2352,13 @@ originals; station notices show the corrected block or removal, through the exis
 acknowledgement path. All five change-set callers now enqueue corrections with the remaining
 service quantity, including proportional extras. A HOLD correction goes only to the exact station
 with a frozen paper copy. Allergy notices remain available across business days and outside the
-ordinary fifty-notice limit until acknowledged.
+ordinary fifty-notice limit until acknowledged. Partial and unit splits copy both kitchen blocks
+and the parent assignment, including routed extras. A recall to a draft starts a new kitchen copy
+on resend; a retained-id recall and a station reroute deliver the current correction beside the
+original. Ordinary reprints and firing HOLD work at its existing station add no new correction.
 
-**Remaining: A669-4.** Finish split, recall/resend and station-rerouting preservation, then exercise
-failure, exact replay and fresh-process persistence. Update the guides and complete the branch
+**Remaining: A669-4.** Exercise failure, exact replay and fresh-process persistence. Update the
+guides and complete the branch
 review, push hook and current-head CI. Obtain the owner's answer for kitchen paper and notice
 wording before landing. Recheck other lanes' reservations before implementation.
 [Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

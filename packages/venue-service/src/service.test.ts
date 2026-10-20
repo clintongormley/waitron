@@ -35,6 +35,7 @@ describe("VENUE_SERVICE", () => {
       "copyLineContext",
       "copyOrderContext",
       "copyProfileKitchenScreens",
+      "copyTicketAllergy",
       "countDeviceKitchenScreens",
       "countDeviceZoneSelections",
       "declineDepartmentTransfer",

@@ -319,3 +319,102 @@ export async function enqueueKitchenAllergyChanges(
     await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
   }
 }
+
+export async function copyAllergyWorkingTick(
+  tx: Transaction,
+  fromLineId: string,
+  toLineId: string,
+): Promise<void> {
+  const [line] = await tx
+    .select({ partyId: workingOrders.partyId })
+    .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(eq(workingOrderLines.id, fromLineId));
+  if (line?.partyId == null) return;
+  const partyId = await survivingParty(tx, line.partyId);
+  const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  const tick = snapshot.ticks.find((item) => item.workingLineId === fromLineId);
+  if (tick !== undefined)
+    await VENUE_SERVICE.setAllergyLineTicks(tx, partyId, [
+      { workingLineId: toLineId, guestId: tick.guestId },
+    ]);
+}
+
+export async function notifyKitchenAllergyDestination(
+  tx: Transaction,
+  cfg: TillConfig,
+  ticketItemIds: readonly string[],
+): Promise<void> {
+  if (ticketItemIds.length === 0) return;
+  const rows = await tx
+    .select({
+      id: ticketItems.id,
+      lineId: workingOrderLines.id,
+      orderId: ticketItems.workingOrderId,
+      stationId: ticketItems.stationId,
+      quantity: workingOrderLines.quantity,
+      firedQuantity: ticketItems.quantity,
+      served: workingOrderLines.servedQuantity,
+      state: ticketItems.state,
+      madeHere: ticketItems.madeHere,
+      status: workingOrders.status,
+      collectedAt: workingOrders.collectedAt,
+      group: orderGroups.displayNumber,
+      firedAt: ticketItems.firedAt,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(
+      and(
+        inArray(ticketItems.id, [...ticketItemIds]),
+        eq(workingOrders.locationId, cfg.locationId),
+      ),
+    );
+  const copies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    rows.map((row) => row.id),
+  );
+  const cancelled = await readLineCancellations(
+    tx,
+    rows.map((row) => row.lineId),
+  );
+  const byOrder = new Map<
+    string,
+    (CorrectionItem & { allergyBlock: KitchenAllergyBlock | null })[]
+  >();
+  for (const row of rows) {
+    const copy = copies.get(row.id);
+    if (
+      copy === undefined ||
+      fingerprint({ block: copy.originalBlock }) === fingerprint({ block: copy.currentBlock })
+    )
+      continue;
+    const quantity = Math.min(
+      row.firedQuantity ?? row.quantity,
+      serviceQuantities(row.quantity, row.served, cancelled.get(row.lineId) ?? 0).remaining,
+    );
+    if (quantity <= 0 || row.madeHere || row.status === "abandoned" || row.collectedAt !== null)
+      continue;
+    const item = {
+      workingOrderLineId: row.lineId,
+      stationId: row.stationId,
+      quantity,
+      wasStarted: row.state !== "queued",
+      allergyBlock: copy.currentBlock,
+      ...(row.firedAt === null && row.group !== null ? { group: row.group } : {}),
+    };
+    await VENUE_SERVICE.recordKitchenNotices(
+      tx,
+      cfg,
+      row.orderId,
+      [{ ...item, quantity: thousandthsToDecimal(quantity) }],
+      copy.currentBlock === null ? "allergy_removed" : "allergy_changed",
+      { allergyBlock: copy.currentBlock },
+    );
+    byOrder.set(row.orderId, [...(byOrder.get(row.orderId) ?? []), item]);
+  }
+  for (const [orderId, items] of byOrder)
+    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+}

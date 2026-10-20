@@ -15,6 +15,8 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   attachKitchenAllergyCopies,
+  copyAllergyWorkingTick,
+  notifyKitchenAllergyDestination,
   freezeKitchenAllergies,
   freezeKitchenAllergyItems,
 } from "./kitchen-allergy.js";
@@ -2545,6 +2547,26 @@ async function finishRelease(
   }
   for (const { from, items } of byOldStation.values())
     await enqueueKitchenTickets(tx, cfg, orderId, items, { from });
+  if (fired.length > 0) {
+    const destinations = await tx
+      .select({ id: ticketItems.id, lineId: workingOrderLines.id, groupState: orderGroups.state })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          fired.map((item) => item.workingOrderLineId),
+        ),
+      );
+    await notifyKitchenAllergyDestination(
+      tx,
+      cfg,
+      destinations
+        .filter((row) => row.groupState !== "held" || rerouted.has(row.lineId))
+        .map((row) => row.id),
+    );
+  }
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
@@ -4605,6 +4627,7 @@ async function carveLines(
         .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
+      if (parentLineId === null) await copyAllergyWorkingTick(tx, row.id, splitRowId);
       return splitRowId;
     };
     for (const partial of partials) {
@@ -4771,6 +4794,7 @@ async function splitTicketItem(
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
   });
+  await VENUE_SERVICE.copyTicketAllergy(tx, ticketItemId, id);
   const passMarks = await tx
     .select()
     .from(passItemMarks)

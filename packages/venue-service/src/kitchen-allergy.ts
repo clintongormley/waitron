@@ -43,3 +43,13 @@ export async function setTicketAllergyCurrent(
     .set({ currentBlock: block })
     .where(eq(ticketItemAllergies.ticketItemId, id));
 }
+
+export async function copyTicketAllergy(
+  tx: Transaction,
+  fromTicketItemId: string,
+  toTicketItemId: string,
+): Promise<void> {
+  const copy = (await readTicketAllergies(tx, [fromTicketItemId])).get(fromTicketItemId);
+  if (copy !== undefined)
+    await recordTicketAllergies(tx, [{ ticketItemId: toTicketItemId, ...copy }]);
+}

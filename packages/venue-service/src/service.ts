@@ -10,6 +10,7 @@ import {
   splitPartyAllergies,
 } from "./party-allergy.js";
 import {
+  copyTicketAllergy,
   recordTicketAllergies,
   readTicketAllergies,
   setTicketAllergyCurrent,
@@ -137,6 +138,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readServiceDay,
   readFloorPlanSets,
   readPartyAllergy,
+  copyTicketAllergy,
   recordTicketAllergies,
   readTicketAllergies,
   setTicketAllergyCurrent,

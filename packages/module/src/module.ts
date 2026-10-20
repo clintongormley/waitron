@@ -1377,6 +1377,11 @@ export interface VenueServiceContribution {
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;
+  copyTicketAllergy(
+    tx: Transaction,
+    fromTicketItemId: string,
+    toTicketItemId: string,
+  ): Promise<void>;
   recordTicketAllergies(
     tx: Transaction,
     rows: readonly ({ ticketItemId: string } & TicketAllergyCopy)[],
