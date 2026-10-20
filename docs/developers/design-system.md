@@ -2152,8 +2152,26 @@ in the page, so a badge that was out of the page shows the current state. It is 
 only: nothing is written to storage, so a reload starts with help off (the "nothing is saved" case
 in `packages/ui/src/help-mode.test.ts`). `wt-help-switch` is the button that turns it on and off;
 the dashboard shows one in its banner and turns help off whenever it returns to the sign-in screen
-(see "Dashboard banner"). No other app shows one yet; the till is to turn help off on lock and on a
-change of person too (A582's later slices).
+(see "Dashboard banner").
+
+On the till, `till-shell` alone draws a `wt-help-switch`, on its bar: on a
+till, first in the bar's session row, before the person's menu and More; on a handheld, after the
+language chooser (or where it stood, once it has moved into More) and before the person's name and
+More. It is never in More, and the kitchen display, kiosk mode (whose shell draws no bar) and the
+lock screen (drawn in the shell's place) have none. On a till at phone width nothing else leaves
+the bar for it, so the tab strip, which already scrolls sideways there, gets narrower: 8 px wide at
+320 px with a long name, pinned as a known limit in `till-shell.help-phone.test.ts` and left to the
+owner in the backlog. Help goes off whenever the till shows its lock screen (`#setScreen` in
+`till-app.ts`): logging out, the idle sign-out, a move to another server and boot all pass
+through it, and a new person signs in only from there, so the next person starts with help off; a
+profile switch and a change of tab keep it as it was. With help on, six menu options carry a badge
+through `wt-menu-row`: Profile, Settings (a till's More), Equipment, Transfers and Pass (a
+handheld's More) and Fix my hours (the person menu). A button on the bar carries none, because a
+till's tab strip scrolls and would cut off a badge hung over its corner. `till-shell`'s `:host` sets
+the till's badge to a 32 px target with a 24 px circle; a menu row's badge
+keeps its `--wt-tap-min` square. Tests: `till-shell.help.test.ts` (where the switch sits),
+`till-shell.help-phone.test.ts` (the bar at phone width), `till-app.help-mode.test.ts` (off on lock)
+and `till-shell.menu-help.test.ts` (the menu badges).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`
@@ -4891,9 +4909,13 @@ header, after the logo; in the dashboard's banner only while nobody is signed in
 Theme chooser with nothing following it (signed in, the languages are a `layout="group"` row in the
 account menu; see "Dashboard banner"); inside More on a signed-in till; on a handheld, in the shell
 bar before the operator's name while that is on the bar, and before More when the bar has it, as in
-the counter screen's own header (which it draws only when not embedded in the shell, and the
-app always embeds it). A till screen with no top bar — the sign-in and join screens, the
-kitchen display and kiosk mode, whose shell draws no bar — holds it at the top right, above the content.
+the counter screen's own header (which it draws only when not embedded in the shell, and the app
+always embeds it); in the shell bar the Help switch sits between them. On a handheld at phone
+width, when the bar does not fit with it, the chooser moves to the end of More, after Theme, as the
+same `layout="group"` row a till's More holds, and comes back to the bar when the screen widens; it
+never moves while More is open. A till screen with no top bar —
+the sign-in and join screens, the kitchen display and kiosk mode, whose shell draws no bar — holds
+it at the top right, above the content.
 
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card
 header, the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the
@@ -4914,7 +4936,7 @@ screen's resolved `color-scheme` rather than `light dark`.
 A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally
 scrollable strip, subject to the device and person's permissions. Parked, Waiting and Transfers
 carry their counts. Waiting draws attention while nonempty and stops when empty; reduced motion
-removes the animation. The operator and More remain reachable while the strip scrolls. Selecting
+removes the animation. The Help switch, the operator and More remain reachable while the strip scrolls. Selecting
 Parked or Waiting changes the Counter menu-side view while keeping its basket. Returning to
 Counter restores the menu. An order already in the basket is excluded from the Parked view and count.
 
@@ -4927,8 +4949,9 @@ a transaction receipt keeps the page's tab, query and server page for its own Ba
 
 A handheld keeps the adaptive bar. On a phone it puts secondary actions in More; wider, it moves
 items there only as needed. Find a bill stays in More. Its action priority remains Pass, Kitchen,
-My schedule, Profile, Equipment and Transfers. The tabs and language chooser stay on the bar while
-items return as room becomes available. Opening More holds its contents steady until it closes.
+My schedule, Profile, Equipment and Transfers. The tabs stay on the bar while items return as room
+becomes available, and so does the language chooser above phone width; at phone width it moves to
+the end of More when the bar does not fit (see the language chooser paragraph above). Opening More holds its contents steady until it closes.
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation

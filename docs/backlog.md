@@ -2099,6 +2099,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
   adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
 
+- **A921. On a narrow till, should the person's name give room to the tab strip? (question for the
+  owner, left open by A582 slice 4a).** Since 4a the till's bar has the Help switch before the
+  person's menu, and nothing else left the bar for it, so at phone width the tab strip, which
+  already scrolls sideways, is 52 px narrower: with a long name at 320 px it is 8 px wide, so its
+  tabs are reached only by scrolling a sliver. One answer: two tap widths for the name instead of
+  three at phone width, which would give back 44 px. That changes A738's look, so it is the owner's
+  call. [Detail](backlog/till.md#a921-on-a-narrow-till-should-the-persons-name-give-room-to-the-tab-strip)
+
+- **A922. Discard on a table's bill from Parked orders fails.** The till sends no bill editor's
+  expectation, and the server refuses a party bill's discard without one (400
+  `management.request_invalid`), leaving the bill open. Found while planning A582 slice 4; not fixed
+  there. [Detail](backlog/till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
+
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design, not built; A773-1 has landed, queued in lane G.
   Six-slice plan: portions and current ticket/receipt grouping; named, stable-numbered bills;
@@ -4081,8 +4094,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   "?" in the banner, help on Products and in two menus, the five existing "?" shown only in help
   mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
   in). Slice 3 landed (#1871: the box serves the guides at `/help/<en|es>/<page>`, in English and
-  Spanish, and three Products badges link to their sections). Next: slices 4–5, in the design's §8
-  order. On the dashboard and on every device — tills, handhelds, and probably the
+  Spanish, and three Products badges link to their sections). Slice 4a landed (#NNNN: the "?" on
+  the till's bar, help off on lock, badges in the till's More and person menus). Next: slice 4b
+  (badges on Counter, Floor and Order, and the guide sheet), then slice 5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
@@ -4649,9 +4663,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
-- **A887. The English guides say "parked order" where the till says "Hold" and "Held orders".**
-  The Spanish guides and till agree on "aparcar". Decide one English word.
-  [Detail](backlog/languages.md#a887-the-english-guides-say-parked-order-where-the-till-says-hold-and-held-orders)
+- **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
+  The guides and the till's Park and Parked orders agree since A738; only Find a bill's "Held" /
+  "En espera" is left.
+  [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)
 
 - **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.** The
   image library says "Disabled product" where the product screens say "Archived", the Spanish

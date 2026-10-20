@@ -11,6 +11,7 @@ import {
 } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
+import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { FormFactor } from "../layout.js";
 import {
@@ -23,6 +24,8 @@ import type { TillClockAction } from "../state/clocking.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
+import "@waitron/ui/src/components/wt-help-switch.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 
@@ -101,6 +104,8 @@ export class TillShell extends LitElement {
         display: flex;
         flex-direction: column;
         height: 100dvh;
+        --wt-help-badge-target: 32px;
+        --wt-help-badge-size: 24px;
       }
 
       .shell {
@@ -411,6 +416,10 @@ export class TillShell extends LitElement {
   /** With More closed and above phone width: 0, everything on the bar; 1, the name hidden; n, the
    * name hidden and the first n − 1 present items of `LEAVE_ORDER` in More. */
   @state() private steps = 0;
+  /** A handheld at phone width whose bar does not fit with the language chooser: it moves to the
+   * end of More. It stays there while More is open, even once the screen widens past phone width;
+   * above phone width it returns to the bar when More closes. */
+  @state() private chooserInMore = false;
   #run = 0;
   #stepBackOwed = false;
   #fittedWidth = 0;
@@ -422,7 +431,10 @@ export class TillShell extends LitElement {
   #held?: ReadonlySet<BarItem>;
   readonly #onPopupToggle = () => {
     this.#release();
-    if (this.#stepBackOwed && !this.#menuOpen()) void this.#fit();
+    if (this.#menuOpen()) return;
+    const chooserBack = !this.phone && this.chooserInMore;
+    if (chooserBack) this.chooserInMore = false;
+    if (this.#stepBackOwed || this.phone || chooserBack) void this.#fit();
   };
 
   /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
@@ -472,6 +484,7 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
+    if (!this.phone && !this.#menuOpen()) this.chooserInMore = false;
     if (this.formFactor !== "till") this.#release();
   }
 
@@ -506,7 +519,7 @@ export class TillShell extends LitElement {
       });
       this.#observer.observe(this);
     }
-    const chooser = this.renderRoot.querySelector(".head wt-language-chooser") ?? undefined;
+    const chooser = this.renderRoot.querySelector(".session > wt-language-chooser") ?? undefined;
     if (chooser !== this.#observedChooser) {
       if (this.#observedChooser) this.#observer.unobserve(this.#observedChooser);
       if (chooser) this.#observer.observe(chooser);
@@ -536,7 +549,7 @@ export class TillShell extends LitElement {
   async #settled(): Promise<void> {
     await this.updateComplete;
     const children = this.renderRoot.querySelectorAll(
-      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge",
+      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge, .head wt-help-switch",
     );
     await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
   }
@@ -553,19 +566,24 @@ export class TillShell extends LitElement {
   async #fit(): Promise<void> {
     const run = ++this.#run;
     await this.#settled();
-    if (
-      run !== this.#run ||
-      this.formFactor === "till" ||
-      this.kiosk ||
-      this.phone ||
-      !this.isConnected
-    )
-      return;
+    if (run !== this.#run || this.formFactor === "till" || this.kiosk || !this.isConnected) return;
     this.#fittedLocale = currentLocale();
     const stale = async (): Promise<boolean> => {
       await this.#settled();
       return run !== this.#run;
     };
+    if (this.phone) {
+      // More draws its popup after the shell has rendered, so its toggle listener is attached here.
+      this.#observe();
+      if (this.#menuOpen()) return;
+      if (this.#stepBackOwed && this.chooserInMore) {
+        this.chooserInMore = false;
+        if (await stale()) return;
+      }
+      this.#stepBackOwed = false;
+      if (this.#wraps()) this.chooserInMore = true;
+      return;
+    }
     if (this.#stepBackOwed && !this.#menuOpen()) {
       // Still owed until it finishes: a newer fit, which may owe none of its own (after a
       // `transferCount` change), finishes it instead.
@@ -602,6 +620,22 @@ export class TillShell extends LitElement {
       : nothing;
   }
 
+  #helpSwitch(): TemplateResult {
+    return html`<wt-help-switch
+      data-test="help-switch"
+      label=${helpText("help.label")}
+    ></wt-help-switch>`;
+  }
+
+  /** A menu option with its help badge beside it; `help` is undefined for an option without one. */
+  #withHelp(option: TemplateResult, help: HelpKey | undefined, label: string): TemplateResult {
+    return help === undefined
+      ? option
+      : html`<wt-menu-row help=${helpText(help)} help-label=${helpBadgeLabel(label)}
+          >${option}</wt-menu-row
+        >`;
+  }
+
   #transferText(): string {
     return this.transferCount === undefined
       ? ""
@@ -624,31 +658,42 @@ export class TillShell extends LitElement {
       cls: string | typeof nothing,
       type: string,
       label: string,
+      help?: HelpKey,
       opensTransfers = false,
     ): TemplateResult =>
-      html`<wt-button
-        class=${cls}
-        ?data-open-transfers=${opensTransfers}
-        variant=${variant}
-        align=${inMore ? "start" : nothing}
-        @click=${() => this.#emit(type)}
-        >${label}</wt-button
-      >`;
-    const affordance = (item: ShellAffordance & BarItem, type: string, label: string) =>
-      here(item) && this.affordances.includes(item) ? button(item, type, label) : nothing;
+      this.#withHelp(
+        html`<wt-button
+          class=${cls}
+          ?data-open-transfers=${opensTransfers}
+          variant=${variant}
+          align=${inMore ? "start" : nothing}
+          @click=${() => this.#emit(type)}
+          >${label}</wt-button
+        >`,
+        inMore ? help : undefined,
+        label,
+      );
+    const affordance = (
+      item: ShellAffordance & BarItem,
+      type: string,
+      label: string,
+      help?: HelpKey,
+    ) =>
+      here(item) && this.affordances.includes(item) ? button(item, type, label, help) : nothing;
     return html`${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
       "expo",
       "show-expo",
       t("expo.open"),
+      "help.more.pass",
     )}${affordance("station", "show-station", t("station.open"))}${affordance(
       "schedule",
       "show-schedule",
       t("schedule.open"),
     )}${
       here("profile") && this.canSwitchProfile
-        ? button("profile", "open-profile", t("profile.open"))
+        ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
         : nothing
-    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open")) : nothing}${
+    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment") : nothing}${
       here("transfers") && this.transferCount !== undefined
         ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
             >${this.#transferText()}</span
@@ -656,7 +701,13 @@ export class TillShell extends LitElement {
         : nothing
     }${
       here("transfers") && this.transferAvailable
-        ? button(nothing, "open-transfers", t("department_transfer.short"), true)
+        ? button(
+            nothing,
+            "open-transfers",
+            t("department_transfer.short"),
+            "help.more.transfers",
+            true,
+          )
         : nothing
     }`;
   }
@@ -739,14 +790,18 @@ export class TillShell extends LitElement {
               @click=${() => this.#emit("my-hours")}
               >${t("hours.mine")}</wt-button
             >
-            <wt-button
-              data-fix-hours
-              variant="secondary"
-              align="start"
-              .disabled=${this.hoursBusy}
-              @click=${() => this.#emit("fix-my-hours")}
-              >${t("attendance.fix_hours")}</wt-button
-            >
+            ${this.#withHelp(
+              html`<wt-button
+                data-fix-hours
+                variant="secondary"
+                align="start"
+                .disabled=${this.hoursBusy}
+                @click=${() => this.#emit("fix-my-hours")}
+                >${t("attendance.fix_hours")}</wt-button
+              >`,
+              "help.person.fix_hours",
+              t("attendance.fix_hours"),
+            )}
           `
         : nothing
     }${
@@ -790,16 +845,20 @@ export class TillShell extends LitElement {
           : nothing
       }
       ${this.#items(moved, true)}
-      ${this.formFactor === "till" ? html`<wt-button class="settings" variant="ghost" align="start" @click=${() => this.#emit("open-settings")}>${t("device_zones.settings")}</wt-button>` : nothing}
       ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
+      ${this.chooserInMore ? this.#chooser("group") : nothing}
     </wt-row-actions>`;
   }
 
   #tillMenu(): TemplateResult {
-    const action = (cls: string, event: string, label: string) =>
-      html`<wt-button class=${cls} variant="ghost" align="start" @click=${() => this.#emit(event)}
-        >${label}</wt-button
-      >`;
+    const action = (cls: string, event: string, label: string, help?: HelpKey) =>
+      this.#withHelp(
+        html`<wt-button class=${cls} variant="ghost" align="start" @click=${() => this.#emit(event)}
+          >${label}</wt-button
+        >`,
+        help,
+        label,
+      );
     return html`<wt-row-actions
       icon="hamburger"
       align="end"
@@ -809,8 +868,9 @@ export class TillShell extends LitElement {
     >
       ${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}
       ${this.affordances.includes("schedule") ? action("schedule", "show-schedule", t("schedule.open")) : nothing}
-      ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open")) : nothing}
-      ${this.#chooser("group")} ${action("settings", "open-settings", t("device_zones.settings"))}
+      ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
+      ${this.#chooser("group")}
+      ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
       ${action("logout", "logout", t("shell.logout"))}
       ${
         this.testingKitchen && this.affordances.includes("station")
@@ -925,7 +985,7 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.#chooser()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.chooserInMore ? nothing : this.#chooser()}${this.#helpSwitch()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
                   </div>
                   ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>

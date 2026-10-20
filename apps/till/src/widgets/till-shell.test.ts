@@ -256,7 +256,11 @@ describe("till-shell", () => {
     await el.updateComplete;
     const profile = el.shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!;
     expect(profile.textContent).toContain(t("profile.open"));
-    expect(profile.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.equipment"));
+    const item = (option: Element) =>
+      option.parentElement?.localName === "wt-menu-row" ? option.parentElement : option;
+    expect(item(profile).nextElementSibling).toBe(
+      item(el.shadowRoot!.querySelector("wt-button.equipment")!),
+    );
     let fired = 0;
     el.addEventListener("open-profile", () => (fired += 1));
     profile.click();
@@ -286,7 +290,9 @@ describe("till-shell", () => {
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(chooser).not.toBeNull();
       expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
-      expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator-menu"));
+      const help = el.shadowRoot!.querySelector('[data-test="help-switch"]')!;
+      expect(chooser.nextElementSibling).toBe(help);
+      expect(help.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator-menu"));
       expect(chooser.getAttribute("active")).toBe(currentLocale());
     } finally {
       await page.viewport(width, height);
@@ -883,7 +889,7 @@ describe("till-shell at phone width", () => {
           ]
             .map((c) => c.getBoundingClientRect())
             .filter((r) => r.width > 0 && r.height > 0);
-          expect(visible.length).toBe(4);
+          expect(visible.length).toBe(5);
           for (const r of visible) {
             expect(r.top).toBeGreaterThanOrEqual(header.top);
             expect(r.bottom).toBeLessThanOrEqual(header.bottom);
@@ -906,6 +912,7 @@ describe("till-shell at phone width", () => {
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       const order = [...menu.children]
         .filter((c) => c.slot !== "badge")
+        .map((c) => (c.localName === "wt-menu-row" ? c.firstElementChild! : c))
         .map(
           (c) =>
             (c.getAttribute("data-test") ??
@@ -964,6 +971,7 @@ describe("till-shell at phone width", () => {
       for (const [index, [selector]] of menuActions.entries()) {
         tabsEls[tabsEls.length - 1]!.focus();
         await userEvent.tab(); // the language chooser
+        await userEvent.tab(); // the Help switch
         await userEvent.tab();
         expect(deepActive()).toBe(triggerOf(el));
         await userEvent.keyboard("{Enter}");
@@ -1127,6 +1135,7 @@ describe("till-shell at phone width", () => {
         "department-transfers",
         "data-open-transfers",
         "wt-language-chooser",
+        "help-switch",
         "operator-menu",
         "more-menu",
       ]);
@@ -1503,6 +1512,7 @@ describe("till-shell above phone width", () => {
       const menu = menuOf(el)!;
       const order = [...menu.children]
         .filter((c) => c.slot !== "badge")
+        .map((c) => (c.localName === "wt-menu-row" ? c.firstElementChild! : c))
         .map(
           (c) =>
             (c.getAttribute("data-test") ??

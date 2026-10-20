@@ -1114,7 +1114,7 @@ help about anything you want very quickly."
 - **Left open by 3:**
   - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
     guide link.
-  - The till's `/help` proxy and the guide sheet belong to slice 4. A guide link opens a new tab;
+  - The till's `/help` proxy and the guide sheet belong to slice 4b. A guide link opens a new tab;
     a till needs a hook to open its sheet instead, such as a cancelable `wt-*` event on the link's
     click.
   - Products' VAT and Availability badges have no guide link.
@@ -1127,17 +1127,25 @@ help about anything you want very quickly."
     checked against the code, because A682 rewrites it. A682 updates
     `apps/server/src/guide/en/content-and-images.md` and `es/content-and-images.md`, and the lines
     about translations in `en/modifiers.md` and `es/modifiers.md`.
-- **Remaining slices** (design §8): **4** tills and handhelds — the bar switch that never leaves the bar (at phone
-  width the language chooser leaves first), the till's More and person menus, badges on Counter,
-  Floor and Order, the guide sheet, off on lock or a change of person; **5** kitchen screens and
-  monitors — the corner switch, off after two minutes without a touch.
+- **Slice 4a landed (#NNNN).** The till's bar has the Help switch (on a till first in the session
+  row, before the person's menu; on a handheld after the language chooser), never in More and never
+  on the kitchen display, kiosk mode or the lock screen. On a handheld at phone width, when the bar
+  does not fit, the language chooser moves to the end of More, after Theme. Help goes off whenever
+  the till shows its lock screen. With help on, six menu options carry a badge: Profile, Settings,
+  Equipment, Transfers, Pass and Fix my hours. The texts are in `apps/till/src/i18n/help-strings.ts`.
+  Plan: [2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md)
+  (PR 4a is Tasks 1–5).
+- **Left open by 4a:** on a till at phone width the "?" leaves the tab strip 8 px wide at 320 px
+  with a long name; whether the person's name should give room is the owner's question, A921.
+- **Remaining slices** (design §8): **4b** — badges on Counter, Floor and Order, the guide sheet;
+  **5** kitchen screens and monitors — the corner switch, off after two minutes without a touch.
 - **Left open by 2b:**
   - Help on a link option in a menu: `wt-menu-row` supports a `wt-button` option only; a link
     inside it would lose the look `wt-row-actions` gives a link (`::slotted(a[href])` styles only a
     direct child). No menu needs it yet.
   - Help on the dashboard's other screens, added as each is next touched; Products is the only
     screen with it.
-- **Slice 4 must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
+- **Slice 4b must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
   overflows `wt-modal`'s 12 px side padding at phone width (the body scrolls sideways: the 390 px
   case in `packages/ui/src/components/wt-help-tooltip.slots.test.ts` shows it with the 32 px
   control) and reaches 4 px above `wt-disclosure`'s 12 px top padding.

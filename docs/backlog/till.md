@@ -2499,3 +2499,41 @@ reach them.
   instead of a half-faded full blue; A417 asked for them to keep blue while sending. Follow the
   owner's 2026-10-08 rule: the pressed button keeps its own colour with a spinner while its request
   is sent, and the other goes quiet.
+
+## A921. On a narrow till, should the person's name give room to the tab strip?
+
+A question for the owner, left open by A582 slice 4a. On a till (not a handheld) the bar's
+session row now holds the Help switch, then the person's menu, then More
+(`till-shell`'s `render`, `apps/till/src/widgets/till-shell.ts`). The plan's decision 3 moved nothing else off the bar for
+it, because A738 put the person's name and More there on purpose, so the "?" takes 52 px from the tab
+strip, which scrolls sideways at every phone width already.
+
+Measured while writing the slice's plan (2026-10-20, `be39179b0`, Vitest 4.1.11 in headless
+Chromium, a throwaway test reading `.till-strip`'s widths; M2 in
+`docs/superpowers/plans/2026-10-20-a582-4-till-help.md`), what the strip gets with the name
+"Alex Morgan Smith Jones", before and after the "?": 60 → 8 px at 320, 100 → 48 at 360, 130 → 78 at
+390. With the name "Ana": 166 → 114, 206 → 154, 236 → 184. `till-shell.help-phone.test.ts` pins the
+long-name widths as a known limit. Re-measured in slice 4a's look (2026-10-20, the branch's head,
+English and Spanish): 8 px at 320 px with the long name.
+
+One answer: at phone width give the name two tap widths instead of three, which M2's numbers say
+gives back 44 px. That changes A738's look, so it waits for the owner.
+
+## A922. Discard on a table's bill from Parked orders fails
+
+Found while writing A582 slice 4's plan. Parked orders' Discard sends
+`abandonWorkingOrder(id, null)` (`apps/till/src/till-app.ts:7622`), and on a party (table) bill the
+server requires a bill editor's expectation (`requireOrderBillEditor`, `apps/server/src/bill-editing.ts:194`,
+which reads it with `parseBillEditExpected`, `:163`).
+
+Run while writing that plan (2026-10-20, on `be39179b0`, not re-run since): a throwaway server test
+provisioned a bill venue as `bill-editing.add-abandon.test.ts` does, opened a table's bill with
+`tabWith`, and sent the till's exact body, `DELETE /api/working-orders/<id>` with
+`{ "expectedEdit": null }`. It answered 400 `management.request_invalid` with
+`{ field: "expectedEdit" }`, and the bill stayed `open`. `bill-editing.add-abandon.test.ts`'s "requires an expectation on
+bodyless party requests" pins the bodyless form of the same refusal. Not run: the till end to end —
+whether the list shows a table's bill at all, and what the person sees when Discard fails.
+
+Out of A582's scope; the slice 4 plan's Parked orders help text (slice 4b) says nothing about a
+table's bill for this reason. Done when the till either sends the bill's expectation or does not
+offer Discard on a table's bill, with a test through the till.
