@@ -349,10 +349,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   with the selected backup’s recovery key and current outside evidence.
   [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page).
 
-- **A732. Keep old data and start fresh on this box.** Required before go-live. When business
-  data exists or may exist and the password is lost, require a new custodian-signed authorisation
-  for a separate empty workspace, preserving the old data. Propose the exact authorisation format
-  before building. [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
+- **A732. Keep old data and start fresh on this box.** Required before go-live. The
+  [proposed design](superpowers/specs/2026-10-21-a732-start-fresh-owner-proof-design.md)
+  awaits approval: module-owned taxpayer proof plus independent recovery approval in every
+  country, preserving old data outside the new account's reach. The owner’s 16 October
+  direction supersedes the custodian-only proposal. No plan or build is approved.
+  [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
 
 - **A733. Set up secure connection from the first-setup repair page.** Required before go-live.
   Guide certificate restoration when the box’s certificate is missing or unusable. Keep secrets

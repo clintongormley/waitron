@@ -1428,13 +1428,22 @@ available until this item lands. Do not expose retained business records without
 
 ## A732. Keep old data and start fresh on this box
 
-Required before any venue goes live; owner 2026-10-15 at about 17:15. Support a fresh
-isolated deployment when business data exists or may exist and the old password is lost. Propose
-the exact new custodian-signed authorisation format for owner approval before building. Bind it to
-the box’s fresh recovery request and obtain a fresh signed assignment. Preserve the old workspace
-offline; the new account cannot read it. A possibly activated scope requires an explicit
-recovery/replacement declaration. A public file-check receipt, snapshot or fresh assignment alone
-cannot authorise this action. Until this item lands, explain that it is not yet available.
+Required before any venue goes live. The owner's 16 October 12:20 direction supersedes the
+15 October custodian-only proposal: the active country/fiscal module supplies its proof seat,
+Spain offers taxpayer-certificate signing with a retained NIF match, and at least one route
+must work in every country without an offline computer ceremony.
+
+The [21 October proposed design](../superpowers/specs/2026-10-21-a732-start-fresh-owner-proof-design.md)
+awaits full owner approval before planning or building. It recommends a narrow direct-taxpayer
+certificate route and a new subscription-free recovery desk with independently verified mandates.
+Representative certificates alone would not suffice initially. The desk, its staffing and issuer
+operation, and runtime isolation are proposals requiring approval and later qualification.
+
+Both routes authorise only a separate empty workspace. Preserve the old workspace offline and
+unreadable by the new account; grant no old login, decryption, restore or fiscal activation.
+Missing or contradictory retained module identity stays unresolved; hardware-only isolation
+cannot clear the later activation hold. Retain used/uncertain hour floors and replacement
+declarations. Until implementation lands, this action remains unavailable from repair.
 
 ## A733. Set up secure connection from the first-setup repair page
 
