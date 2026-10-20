@@ -530,6 +530,8 @@ export class TillBillPayDialog extends LitElement {
   #sharePaying: number | null = null;
   /** The run counts a card still in progress, which may yet be declined. */
   #runHoldsPending = false;
+  /** Take the next was pressed since the payment last taken. */
+  #leftTaken = false;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -734,9 +736,34 @@ export class TillBillPayDialog extends LitElement {
     this.#accept(null);
   }
 
+  /** Whether the sheet still shows the payment last taken as it was answered: Take the next not
+   * pressed, and nothing changed in the form since. */
+  get showsTaken(): boolean {
+    return (
+      this.taken !== null &&
+      !this.#leftTaken &&
+      (this.#entryBaseline === undefined ||
+        this.#comparable(this.#draft()) === this.#comparable(this.#entryBaseline))
+    );
+  }
+
+  /** A card the run counted while it was in progress was not charged after the sheet moved on.
+   * The run ends; the count it lowered goes only while the form is off screen. */
+  cardNotCharged(): void {
+    if (!this.#runHoldsPending) return;
+    if (this.nextOffered && this.#sharesLeft() > 0 && this.people === String(this.#sharesLeft())) {
+      this.people = "";
+      this.#entryBaseline = this.#draft();
+      this.#entry?.commit(this.#entryBaseline);
+    }
+    this.#shareRun = null;
+    this.#runHoldsPending = false;
+  }
+
   /** Only the `taken` that arrives counts toward the run of shares, so the app's own earlier call
    * counts nothing. */
   #accept(taken: PayTaken | null): void {
+    this.#leftTaken = false;
     this.#startAgain();
     if (this.handheld && taken !== null) this.#offerNext(taken);
     this.#entryBaseline = this.#draft();
@@ -1148,27 +1175,29 @@ export class TillBillPayDialog extends LitElement {
   #nextActions(): TemplateResult {
     const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
-    return html`<wt-form-actions>
-      <wt-button
-        slot="cancel"
-        variant="secondary"
-        data-pay-close
-        .disabled=${this.busy}
-        @click=${() => this.#requestClose()}
-      >
-        ${t("bill_pay.close")}
-      </wt-button>
-      <wt-button
-        variant="primary"
-        data-pay-next
-        .disabled=${this.busy}
-        @click=${() => {
-          if (this.isConnected && this.#active && !this.busy) this.nextOffered = false;
-        }}
-      >
-        ${label}
-      </wt-button>
-    </wt-form-actions>`;
+    return html`${this.#notice()}<wt-form-actions>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-pay-close
+          .disabled=${this.busy}
+          @click=${() => this.#requestClose()}
+        >
+          ${t("bill_pay.close")}
+        </wt-button>
+        <wt-button
+          variant="primary"
+          data-pay-next
+          .disabled=${this.busy}
+          @click=${() => {
+            if (!this.isConnected || !this.#active || this.busy) return;
+            this.nextOffered = false;
+            this.#leftTaken = true;
+          }}
+        >
+          ${label}
+        </wt-button>
+      </wt-form-actions>`;
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1252,7 +1281,7 @@ export class TillBillPayDialog extends LitElement {
             </p>`,
         )}
         ${
-          payment.state === "pending"
+          payment.state === "pending" && !(this.handheld && this.taken?.pending !== undefined)
             ? html`<p class="muted" data-payment-pending>${t("bill_pay.pending_where")}</p>`
             : nothing
         }

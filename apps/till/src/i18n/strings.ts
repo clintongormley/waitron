@@ -1528,6 +1528,8 @@ export const en = {
     "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
   "bill_pay.card_pending_manager":
     "If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
+  "bill_pay.late_received": "The earlier card of {amount} was charged.",
+  "bill_pay.late_not_charged": "The earlier card of {amount} was not charged: it is still owed.",
   "bill_pay.read_failed": "The bill's payments could not be read again. Close and reopen this.",
   "bill_pay.paid": "Paid",
   "bill_pay.paid_part": "{paid} of {quantity} paid",
@@ -3197,6 +3199,8 @@ export const es: Record<StringKey, string> = {
     "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",
   "bill_pay.card_pending_manager":
     "Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
+  "bill_pay.late_received": "La tarjeta anterior de {amount} se ha cobrado.",
+  "bill_pay.late_not_charged": "La tarjeta anterior de {amount} no se ha cobrado: sigue por pagar.",
   "bill_pay.read_failed":
     "No se han podido volver a leer los pagos de la cuenta. Cierra y vuelve a abrir.",
   "bill_pay.paid": "Pagado",

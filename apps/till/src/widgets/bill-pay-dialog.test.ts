@@ -2757,6 +2757,120 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     );
   });
 
+  it("a handheld whose card is still in progress names the manager once, not again in its payments row", async () => {
+    const el = await handheld({
+      taken: { change: null, pending: "20.00" },
+      balance: balanceOf({
+        total: "62.40",
+        reserved: "20.00",
+        outstanding: "42.40",
+        payments: [pendingCard],
+      }),
+    });
+
+    expect(root(el).querySelectorAll("[data-pay-pending-manager]")).toHaveLength(1);
+    expect(root(el).querySelector("[data-payment-pending]")).toBeNull();
+    expect(text(root(el).querySelector(`[data-payment="${pendingCard.id}"]`))).toContain(
+      t("bill_pay.state_pending"),
+    );
+  });
+
+  it("a handheld with no warning of its own still says, in the row, where a manager clears another card", async () => {
+    const el = await handheld({
+      balance: balanceOf({
+        total: "62.40",
+        reserved: "20.00",
+        outstanding: "42.40",
+        payments: [pendingCard],
+      }),
+    });
+
+    expect(text(root(el).querySelector("[data-payment-pending]"))).toBe(
+      t("bill_pay.pending_where"),
+    );
+  });
+
+  it("a counter till keeps the row's manager line beside today's sentence for a card in progress", async () => {
+    const el = await mount({
+      taken: { change: null, pending: "20.00" },
+      balance: balanceOf({ reserved: "20.00", outstanding: "100.00", payments: [pendingCard] }),
+    });
+
+    expect(text(root(el).querySelector("[data-payment-pending]"))).toBe(
+      t("bill_pay.pending_where"),
+    );
+  });
+
+  it("still shows the payment taken until Take the next is pressed", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+    expect(el.showsTaken).toBe(true);
+
+    await click(el, "[data-pay-next]");
+
+    expect(el.showsTaken).toBe(false);
+  });
+
+  it("no longer shows the payment taken once its form is changed", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "0.00", { change: null, pending: "20.80" });
+    expect(next(el)).toBeNull();
+    expect(el.showsTaken).toBe(true);
+
+    await type(el, "people", "5");
+
+    expect(el.showsTaken).toBe(false);
+  });
+
+  it("a card in progress not charged after the sheet moved on ends the run, clearing the count the form will open on", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+
+    el.cardNotCharged();
+    await el.updateComplete;
+
+    expect(next(el)).not.toBeNull();
+    await click(el, "[data-pay-next]");
+    expect(field(el, "people")!.value).toBe("");
+  });
+
+  it("a card in progress not charged leaves the count in a form already open", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+    await click(el, "[data-pay-next]");
+
+    el.cardNotCharged();
+    await el.updateComplete;
+
+    expect(field(el, "people")!.value).toBe("2");
+  });
+
+  it("a card not charged ends no run that holds no card in progress", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+
+    el.cardNotCharged();
+    await el.updateComplete;
+
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it("the sheet's notice shows beside the next-guest offer too", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    el.notice = { message: "Something to know", tone: "info" };
+    await el.updateComplete;
+
+    expect(next(el)).not.toBeNull();
+    expect(text(root(el).querySelector("[data-pay-notice]"))).toBe("Something to know");
+  });
+
   it("a payment that leaves nothing owing offers no next guest", async () => {
     const el = await handheld();
     await share(el, "3");

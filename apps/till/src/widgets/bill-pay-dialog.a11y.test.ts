@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page } from "vitest/browser";
+import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
@@ -692,6 +693,60 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       }
     },
   );
+
+  /** The next guest's card taken, and the notice that the earlier card was not charged. */
+  async function lateNotice() {
+    const mounted = await nextGuest();
+    mounted.el.notice = {
+      message: t("bill_pay.late_not_charged").replace("{amount}", () =>
+        formatMoney("20.80", currentLocale()),
+      ),
+      tone: "error",
+    };
+    await mounted.el.updateComplete;
+    return mounted;
+  }
+
+  it("has no violations on a handheld saying an earlier card was not charged", async () => {
+    const { host } = await lateNotice();
+    await expectNoA11yViolations(host);
+  });
+
+  it("looks right on a handheld saying an earlier card was not charged at 390 px", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 900);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const { el } = await lateNotice();
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      noticeBackgrounds.set(`late-${theme}`, background);
+      if (theme === "dark") {
+        const light = noticeBackgrounds.get("late-light");
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-late-notice-${theme}-390`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
+      const shown = notice.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          noticeLeft: shown.left - box.left,
+          noticeRight: box.right - shown.right,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
 
   const withRow = () =>
     mount({
