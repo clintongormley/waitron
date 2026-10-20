@@ -224,10 +224,8 @@ export class CatalogueBrowser extends LitElement {
     if (changed.has("products") || changed.has("categories")) this.#keepSelectionOwned();
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
-    if (changed.has("routing") || changed.has("categories") || changed.has("products"))
-      this.#folderMadeAt = this.routing
-        ? folderMadeAt(this.routing, this.categories, this.products)
-        : new Map();
+    if (changed.has("routing") || changed.has("categories"))
+      this.#folderMadeAt = this.routing ? folderMadeAt(this.routing, this.categories) : new Map();
   }
 
   override updated(changed: PropertyValues): void {
