@@ -515,8 +515,11 @@ describe("invoice email worker at trading boot", () => {
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
       const failure = new Error("later boot step refused");
+      // The outer wait starts at the startServer call, so it also covers the boot before the email
+      // worker starts.
+      const bootAndSend = { timeout: 30_000 };
       vi.mocked(configureDemoPrinter).mockImplementationOnce(async () => {
-        await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 5_000 });
+        await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), bootAndSend);
         throw failure;
       });
       let settled = false;
@@ -531,7 +534,7 @@ describe("invoice email worker at trading boot", () => {
           return error;
         },
       );
-      await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 5_000 });
+      await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), bootAndSend);
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
       expect(settled).toBe(false);
       smtp.accept();

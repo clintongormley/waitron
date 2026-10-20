@@ -39,7 +39,7 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
-import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
 let locationId: LocationId;
 let deviceId: DeviceId;
@@ -854,6 +854,46 @@ describe("recordSale — numbering", () => {
     const { saleId } = await run(new FakeFiscalBackend(suite.db));
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.invoiceNumber).toBe(1);
+  });
+
+  it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
+    // The series' counter still stands at 1, so the sale draws the planted row's number.
+    await seedBareSale(suite.db, { deviceId, nodeId, seriesId }, { invoiceNumber: 1 });
+
+    const error = await captureError(() => run(new FakeFiscalBackend(suite.db)));
+
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      code: "sale.number_reused",
+      params: { seriesId, invoiceNumber: 1 },
+    });
+    expect(await countRows("sales")).toBe(1);
+    expect(await countRows("sale_lines")).toBe(0);
+    expect(await countRows("fake_fiscal_records")).toBe(0);
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    expect(series?.next).toBe(1);
+  });
+
+  it("passes another unique refusal on the sale's insert through untranslated", async () => {
+    // A second sale filed from the same working order collides on `working_order_id`, not on its
+    // number, which is fresh.
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({ source: "device", deviceId, locationId, orderNumber: 1 })
+      .returning({ id: workingOrders.id });
+    const workingOrderId = brandWorkingOrderId(order!.id);
+    await run(new FakeFiscalBackend(suite.db), { workingOrderId });
+
+    const error = await captureError(() =>
+      run(new FakeFiscalBackend(suite.db), { workingOrderId }),
+    );
+
+    expect(error).not.toBeInstanceOf(AppError);
+    expect(isUniqueViolation(error)).toBe(true);
+    expect(constraintTarget(error)).toEqual({ table: "sales", columns: ["working_order_id"] });
   });
 });
 

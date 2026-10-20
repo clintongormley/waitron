@@ -12,6 +12,7 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
+  captureError,
   incidents,
   invoiceSeries,
   saleLines,
@@ -359,6 +360,32 @@ describe("recordCorrection — series purpose guard (§5)", () => {
       code: "sale.series_wrong_node",
       params: { seriesId: otherRect, expected: other.nodeId, actual: nodeId },
     });
+  });
+});
+
+describe("recordCorrection — numbering", () => {
+  it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    // The rectificative series' counter still stands at 1, so the correction draws this number.
+    await seedBareSale(
+      suite.db,
+      { deviceId, nodeId, seriesId: rectSeriesId },
+      { invoiceNumber: 1 },
+    );
+    const recordsBefore = (await backend.recordsFor(nodeId)).length;
+
+    const error = await captureError(() => correct(backend, saleId));
+
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      code: "sale.number_reused",
+      params: { seriesId: rectSeriesId, invoiceNumber: 1 },
+    });
+    expect(await countRows("sales")).toBe(2);
+    expect(await countCorrectives(saleId)).toBe(0);
+    expect((await backend.recordsFor(nodeId)).length).toBe(recordsBefore);
+    expect(await rectSeriesNext()).toBe(1);
   });
 });
 

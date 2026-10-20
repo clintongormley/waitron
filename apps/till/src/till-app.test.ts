@@ -9957,27 +9957,28 @@ describe("till-app", () => {
   /* A sale the FISCAL FILING refuses is permanent: the same basket rung up again builds the same
    * record and is refused again. The operator has no terminal — the till screen is their only
    * window — so telling them to try again is the one piece of advice that cannot work. */
-  it.each([["fiscal.record_invalid"], ["fiscal.foreign_recipient_unsupported"]])(
-    "a permanent fiscal refusal (%s) says to stop, not to retry",
-    async (code) => {
-      const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue({ code }) });
-      const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
-      await el.updateComplete;
+  it.each([
+    ["fiscal.record_invalid"],
+    ["fiscal.foreign_recipient_unsupported"],
+    ["sale.number_reused"],
+  ])("a permanent fiscal refusal (%s) says to stop, not to retry", async (code) => {
+    const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue({ code }) });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
 
-      emit(c, "confirm-payment", { method: "cash", amount: "5" });
-      await flush(el);
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
 
-      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("sale.refused"));
-      // The retry message must NOT be what is shown — the whole point of the third key.
-      expect(banner.textContent).not.toContain(t("sale.error"));
-      expect(el.shadowRoot!.textContent).not.toContain(code); // never leaks the raw code
-      // Same non-fatal handling as every other refusal: still on the counter, basket intact.
-      expect(ticket(el)).toBeNull();
-      expect(c.store.lines).toHaveLength(1);
-    },
-  );
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.refused"));
+    // The retry message must NOT be what is shown — the whole point of the third key.
+    expect(banner.textContent).not.toContain(t("sale.error"));
+    expect(el.shadowRoot!.textContent).not.toContain(code); // never leaks the raw code
+    // Same non-fatal handling as every other refusal: still on the counter, basket intact.
+    expect(ticket(el)).toBeNull();
+    expect(c.store.lines).toHaveLength(1);
+  });
 
   it("tells a CARD operator what to do about the money already on the terminal", async () => {
     /* `method: "card"` on this event is a MANUAL bank-terminal charge: the operator put the card

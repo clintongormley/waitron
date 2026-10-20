@@ -645,6 +645,36 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
   });
 });
 
+describe("recordSubstitution — numbering", () => {
+  it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+    // The full series' counter still stands at 1, so the F3 draws this number.
+    await seedBareSale(
+      suite.db,
+      { deviceId, nodeId, seriesId: fullSeriesId },
+      { invoiceNumber: 1 },
+    );
+
+    const error = await captureError(() => substitute(backend, [ticket]));
+
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      code: "sale.number_reused",
+      params: { seriesId: fullSeriesId, invoiceNumber: 1 },
+    });
+    expect(await countRows("sales")).toBe(2);
+    expect(await countRows("sale_substitutions")).toBe(0);
+    const records = await backend.recordsFor(nodeId);
+    expect(records.map((r) => r.kind)).toEqual(["sale"]);
+    const [series] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, fullSeriesId));
+    expect(series?.n).toBe(1);
+  });
+});
+
 describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => {
   it("completes when chain verification fails, recording an incident on the F3", async () => {
     // A customer is waiting for a proper invoice; a chain-integrity failure must never block it.

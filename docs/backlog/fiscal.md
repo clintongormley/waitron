@@ -101,9 +101,7 @@ No stored fiscal row is to be rewritten.
   and `:1029` carry history ("legacy path unchanged", "additive, no behaviour change"). No test
   reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
   `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
-  stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
-  `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
-  (A806 is the job to throw it). Outside core,
+  stopping both concurrent-settlement tests first. Outside core,
   `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
   record hashes" (#598 found the hash covers the totals, not the breakdown).
 

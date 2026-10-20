@@ -1005,6 +1005,28 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect((await paymentRow(paymentId)).state).toBe("attempting");
   });
 
+  it("answers sale.number_reused with 409 when the series hands out a number a sale already holds", async () => {
+    const v = await setup();
+    const firstOrder = await openOrder(v);
+    const first = await strandPayment(v, firstOrder, { status: "succeeded", amountReceived: 150 });
+    expect((await send(v, "POST", resolvePath(first.paymentId))).status).toBe(200);
+    // Wind the counter back so the next sale draws the number the first one holds.
+    await suite.db.execute(sql`
+      update invoice_series set next_number = next_number - 1
+      where id = (select series_id from sales where working_order_id = ${firstOrder})`);
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("sale.number_reused");
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
   it("answers an error and files nothing when the captured amount is below the order's locked total, leaving the capture for recovery", async () => {
     const v = await setup();
     const orderId = await openOrder(v);

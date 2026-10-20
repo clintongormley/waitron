@@ -6521,14 +6521,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
   transaction while another is still running.
 
-- **A806. Throw `sale.number_reused` when a sale would reuse an invoice number.** The code is
-  declared in `packages/core/src/errors.ts` (with the series and the number) and nothing throws it.
-  Where a sale is written, catch that index's refusal with `refusalOn(error, UNIQUE_VIOLATION,
-  { table: "sales", columns: ["series_id", "invoice_number"] })`
-  (`packages/db/src/constraint-target.ts`). The refusal names the table and columns, never the
-  index (`sales_series_invoice_number_key`), so `indexViolated` cannot match it. Then throw `sale.number_reused` with the series and the number. Done when a
-  test forces a duplicate number and asserts that code. FULL review (fiscal invariant).
-
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
   - **These index and key names still read `tenant`, and the columns they name are gone.** This is
     its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in

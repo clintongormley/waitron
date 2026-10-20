@@ -466,6 +466,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "device.profile_changed": 409,
   "working_order.not_placed": 409,
   "series.no_rectificative_for_node": 409,
+  // The series handed out a number a sale already holds: the server's state, not the request.
+  "sale.number_reused": 409,
   "sale.correction_not_whole": 409,
   "sale.correction_unsupported": 409,
   // A record built from the invoice as stored, or from the server's own pricing, disagrees with
