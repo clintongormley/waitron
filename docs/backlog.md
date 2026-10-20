@@ -3188,8 +3188,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   name) switches between (owner, 2026-10-20). Design, **final**:
   [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
   All eight questions and the extra one are answered (Q8 revised the same morning; section 19). The
-  build is 14 slices, only slice 2 adding a migration (design section 16). Slice 1, the derivation
-  and the shared contrast rules (`@waitron/ui-core/theme`), landed 2026-10-20; next: slice 2.
+  build is 14 slices, only slice 2 adding a migration (design section 16). Slice 1 landed
+  2026-10-21 (#1927): the theme derivation, the contrast rules shared with `colors.test.ts`, the
+  sweeps and the token-list guard, in `@waitron/ui-core/theme`. Next: slice 2 (the stored themes
+  and the server). Its plan decides how the server and its tsx scripts read the token files, which
+  slice 1 imports as `?raw` (Vite handles that; tsx and `scripts/bundle-node.mjs` do not), makes
+  `apps/server` depend on `@waitron/ui-core`, and retires `THEMEABLE_TOKENS` with
+  `packages/layouts/src/theme-registry.test.ts`.
 
 - **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's
   Typeface may also be a font file the venue uploads, so every screen draws the bar's own face. The
