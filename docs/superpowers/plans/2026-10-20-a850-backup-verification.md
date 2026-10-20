@@ -553,10 +553,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `apps/server/src/backup-data-placement.ts`, `apps/server/src/backup-data-placement.test.ts`; ordinary `apps/server/src/restore.ts` is read-only in this task.
 **Consumes:** Task 19 admission, Task 19a strict file validation, and existing restoreDatabase/restoreSecrets/migration functions. **Produces:** exact placement functions above.
 
-- [ ] RED `places genuine data and declared material`, `migrates populated supported catalogue predecessor preserving old columns`, `refuses traversal duplicate normalised destinations unknown entries and first-setup host paths`, `ordinary resume and hook-before-secrets ordering stay intact`. Predecessor stops before shipped catalogue 0034 and is seeded using its own columns; require new defaults and every original value after real migration.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-data-placement.test.ts src/restore-file-placement.test.ts src/restore.test.ts src/restore-operation-placement.test.ts`; expect missing placement export then absent-data assertion red.
-- [ ] Compose existing exported placement primitives without changing A679 admission/resume/identity behavior. Verification uses fresh scratch and real migrationOptionsFor including append-only declarations; no hooks/series/marker. Validate archived backup.env then exclude it from the managed layout. GREEN same command; original encrypted input unchanged and logical preserved evidence equal.
-- [ ] Commit `git commit -s -m "refactor(server): share data placement without activation"`.
+- [x] RED `places genuine data and declared material`, `migrates populated supported catalogue predecessor preserving old columns`, `refuses traversal duplicate normalised destinations unknown entries and first-setup host paths`, `ordinary resume and hook-before-secrets ordering stay intact`. Predecessor stops before shipped catalogue 0034 and is seeded using its own columns; require new defaults and every original value after real migration.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-data-placement.test.ts src/restore-file-placement.test.ts src/restore.test.ts src/restore-operation-placement.test.ts`; expect missing placement export then absent-data assertion red.
+- [x] Compose existing exported placement primitives without changing A679 admission/resume/identity behavior. Verification uses fresh scratch and real migrationOptionsFor including append-only declarations; no hooks/series/marker. Validate archived backup.env then exclude it from the managed layout. GREEN same command; original encrypted input unchanged and logical preserved evidence equal.
+- [x] Commit `git commit -s -m "refactor(server): share data placement without activation"`.
 
 ### Task 21: Complete small owners and real composition registration
 
@@ -878,3 +878,27 @@ qualification are still open. This checkpoint does not release Cloud integration
 ### Task 17 implementation checkpoint
 
 The workforce contribution compares every classified table and walks full source and restored time-entry and pay-period-closure chains by node and location. It reads stored time heads directly and checks their sequence, id, hash and recorded time. Every correction and extension field is mapped to the existing pure hash reader; full stored rows and snapshots are preserved. No workforce restore hook or activation effect is added. A captured self-consistent closure prefix is not evidence of external completeness; migration loss is checked against the captured rows. Artifact placement and qualification remain later tasks.
+
+### Task 20 execution, 20 October 2026
+
+Private placement now uses `restoreDatabase`, descriptor-derived `migrationOptionsFor` and
+`applyMigrations`, then `restoreSecrets`. It writes declared recovery material, excludes the old
+`backup.env` from the managed layout and validates its captured settings without opening the old
+destination. It requires the captured vault env input. This adapter does not set aside identity,
+run restore hooks, settle series or create a rebuild marker. Ordinary `restore.ts` is unchanged.
+Full secret usability, orchestration, cleanup admission and recovery binding remain later tasks.
+
+The real catalogue predecessor stops before `0034_content_suggestion_collect_cursor`. The fixture
+uses that schema's columns and retains every original table value, adding the expected null cursor
+and empty collected-reference list. The migration engine also restores absent append-only triggers;
+both update and delete attempts are refused afterwards. File placement checks retained source
+ciphertext and logical source rows, private file/directory modes and declared material.
+
+The four required suites passed 133 tests. Five focused root suites passed 1,925 tests and the two
+protected fiscal suites passed 20 without edits. Server types, scoped lint and explicit source
+formatting passed. Focused coverage of the actual new source measured 23/23 statements, 8/8 branches,
+9/9 functions and 21/21 lines; this is not package-wide coverage. Eight independently omitted steps
+failed their intended assertions beside accepting controls in an installed disposable copy, and
+restoring the code passed all 16 new cases. The copy matched 8,553 tracked/candidate paths and was
+removed. An initial omission exposed a weak new excluded-file assertion; checking each filename
+separately caught the omission. No existing test assertion, migration or protected writer changed.
