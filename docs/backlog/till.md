@@ -1451,14 +1451,20 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
 
 - **Its own page under Service** (owner, 2026-10-16; built by A758-2). Venue settings keeps two
   tabs, Venue details and Kitchen.
-- **The list:** a search bar, drag handles instead of Move up and Move down, a cleaner layout.
+- **The list** (built by A758-2): a search bar, drag handles instead of Move up and Move down, a
+  cleaner layout.
 - **Delete, not Disable** (built by A758-2). A recorded adjustment
   keeps its own copy of the reason's name and rules (`reason_name`, `policy_snapshot`, no foreign key:
   `packages/adjustments/src/schema/adjustments.ts:60-64`), so deleting leaves history intact. Real
   Delete through `wt-delete-dialog`, as courses and stations; the Status column, Status filter and
   Enable go, and design-system.md's "Switching off versus deleting" stops listing adjustment
   reasons among the things switched off.
-- **The edit form** asks only what applies to the reason's kind, with the role lists.
+  2026-10-20: design §1's "the migration deletes switched-off reasons" was not done, because no
+  data-migration code is written before go-live (CLAUDE.md §3). A venue holding a switched-off
+  reason gets it back as a reason; one whose switched-off reason shares a name with another reason
+  fails that migration on the unique name index, and is reset.
+- **The edit form** (built by A758-1) asks only what applies to the reason's kind, with the role
+  lists.
 
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 

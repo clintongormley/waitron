@@ -4849,13 +4849,13 @@ at `/manage/venue-operations`. A department opens at
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
-opens the first visible tab. Voids and comps (`/manage/adjustment-reasons`) sits under Service.
-Venue details holds four cards — Business, Venue, Business day and
+opens the first visible tab. Venue details holds four cards — Business, Venue, Business day and
 Defaults — and, with the Veri\*Factu module, a fifth: the AEAT certificate, which needs
 `fiscal.view` to read and `system.manage` to install or replace. The other four cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
 receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
-editable with `venue.configure` and read-only without it. The dashboard preserves module-owned
+editable with `venue.configure` and read-only without it. Voids and comps
+(`/manage/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
