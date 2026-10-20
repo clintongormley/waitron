@@ -24,6 +24,7 @@ import {
   createAdjustmentReason,
   deleteAdjustmentReason,
   listAdjustmentReasons,
+  readAdjustmentReasonDeleteImpact,
   reorderAdjustmentReasons,
   updateAdjustmentReason,
   type AdjustmentReasonInput,
@@ -266,6 +267,16 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
           updateAdjustmentReason(tx, reasonId, requireReasonInput(body)),
         );
         return c.json(reason);
+      }),
+    );
+
+    app.get("/management-api/adjustments/reasons/:reasonId/delete-impact", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
+        return c.json(
+          await gated(sessionId, (tx) => readAdjustmentReasonDeleteImpact(tx, reasonId)),
+        );
       }),
     );
 

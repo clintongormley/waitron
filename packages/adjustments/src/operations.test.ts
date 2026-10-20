@@ -11,6 +11,7 @@ import {
   deleteAdjustmentReason,
   findAdjustmentReason,
   listAdjustmentReasons,
+  readAdjustmentReasonDeleteImpact,
   reorderAdjustmentReasons,
   updateAdjustmentReason,
   type AdjustmentReasonInput,
@@ -417,6 +418,41 @@ describe("adjustment reason operations", () => {
       await inTx((tx) => deleteAdjustmentReason(tx, reason.id));
       expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([]);
     });
+  });
+
+  it("reads what deleting a reason would do", async () => {
+    const comp = await inTx((tx) => createAdjustmentReason(tx, complaint()));
+    const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+
+    expect(await inTx((tx) => readAdjustmentReasonDeleteImpact(tx, comp.id))).toEqual({
+      target: { id: comp.id, name: "Complaint" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
+    expect(await inTx((tx) => readAdjustmentReasonDeleteImpact(tx, other.id))).toEqual({
+      target: { id: other.id, name: "Other" },
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 0 }, targets: [] }],
+      ends: [],
+      removes: [],
+    });
+
+    await inTx((tx) =>
+      createAdjustmentReason(tx, voidReason({ name: "Mistake", noteRequired: false })),
+    );
+    expect(await inTx((tx) => readAdjustmentReasonDeleteImpact(tx, other.id))).toEqual({
+      target: { id: other.id, name: "Other" },
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 1 }, targets: [] }],
+      ends: [],
+      removes: [],
+    });
+
+    await expect(inTx((tx) => readAdjustmentReasonDeleteImpact(tx, MISSING))).rejects.toMatchObject(
+      {
+        code: "adjustment_reason.not_found",
+        params: { reasonId: MISSING },
+      },
+    );
   });
 
   it("refuses a name keyed by something that is not a language, on create and on update", async () => {

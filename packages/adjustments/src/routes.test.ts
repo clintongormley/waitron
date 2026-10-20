@@ -228,6 +228,60 @@ describe("adjustment reason management routes", () => {
     expect((await db.execute(recorded)).rows).toEqual(before);
     expect(await reasonCount()).toBe(0);
   });
+  it("reads a reason's delete impact for a manager or an admin, and refuses anyone else", async () => {
+    const fx = await fixture();
+    const comp = (await (
+      await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT)
+    ).json()) as { id: string };
+    const other = (await (
+      await send(fx.app, "POST", REASONS, fx.cookie.manager, OTHER)
+    ).json()) as {
+      id: string;
+    };
+    const impact = (reasonId: string) => `${REASONS}/${reasonId}/delete-impact`;
+
+    for (const role of ["manager", "admin"] as const) {
+      const served = await send(fx.app, "GET", impact(comp.id), fx.cookie[role]);
+      expect(served.status, role).toBe(200);
+      expect(await served.json()).toEqual({
+        target: { id: comp.id, name: "Complaint" },
+        refusals: [],
+        ends: [],
+        removes: [],
+      });
+    }
+    const refused = await send(fx.app, "GET", impact(other.id), fx.cookie.manager);
+    expect(refused.status).toBe(200);
+    expect(await refused.json()).toEqual({
+      target: { id: other.id, name: "Other" },
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 0 }, targets: [] }],
+      ends: [],
+      removes: [],
+    });
+
+    for (const role of ["staff", "supervisor"] as const) {
+      const response = await send(fx.app, "GET", impact(comp.id), fx.cookie[role]);
+      expect(response.status, role).toBe(403);
+      expect(await response.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "adjustment.manage" } },
+      });
+    }
+    const anonymous = await send(fx.app, "GET", impact(comp.id));
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+
+    const missing = await send(fx.app, "GET", impact(MISSING), fx.cookie.manager);
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({
+      error: { code: "adjustment_reason.not_found", params: { reasonId: MISSING } },
+    });
+    const malformed = await send(fx.app, "GET", impact("not-a-uuid"), fx.cookie.manager);
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+  });
+
   it("lets an admin manage reasons too", async () => {
     const fx = await fixture();
     expect((await send(fx.app, "POST", REASONS, fx.cookie.admin, COMPLAINT)).status).toBe(201);

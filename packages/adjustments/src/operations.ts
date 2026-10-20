@@ -9,6 +9,7 @@ import {
   decimal,
   decimalToCents,
   type Decimal,
+  type DeleteImpact,
 } from "@waitron/shared";
 import { reasonShapeFault, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
 import { adjustmentReasons, type ReasonKind } from "./schema/reasons.js";
@@ -202,6 +203,30 @@ export async function updateAdjustmentReason(
     .where(eq(adjustmentReasons.id, reasonId))
     .returning();
   return toReason(row!);
+}
+
+/** What deleting a reason would do: only the Void guard can refuse it, and it ends or removes nothing. */
+export async function readAdjustmentReasonDeleteImpact(
+  tx: Transaction,
+  reasonId: string,
+): Promise<DeleteImpact> {
+  const existing = await findReason(tx, reasonId);
+  const fault = await voidKeptFault(tx, existing, null);
+  return {
+    target: { id: existing.id, name: existing.name },
+    refusals:
+      fault === null
+        ? []
+        : [
+            {
+              code: "adjustment_reason.void_required",
+              params: { withNote: Number(fault.withNote) },
+              targets: [],
+            },
+          ],
+    ends: [],
+    removes: [],
+  };
 }
 
 /** An adjustment keeps the reason's id and name it was recorded under, so none is touched. */
