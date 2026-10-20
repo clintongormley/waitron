@@ -7,6 +7,7 @@ import {
   servedMenus,
   type DraftServer,
 } from "../src/widgets/test-helpers.js";
+import { BARRA, LECTOR_2, roleOf } from "./pay-equipment-fixtures.js";
 import type { TillApp } from "../src/till-app.js";
 import { resized } from "../src/screens/till-table-order-screen.test-helpers.js";
 import { currentLocale } from "../src/i18n/t.js";
@@ -19,7 +20,6 @@ import type {
   AllocationPreview,
   DeviceEquipment,
   EquipmentItem,
-  RoleEquipment,
   BillBalance,
   BillPaymentResult,
   BillPaymentView,
@@ -33,6 +33,8 @@ import type {
   ZoneOfferCatalogue,
 } from "../src/api/client.js";
 import { deviceZonesFixture } from "./device-zones.js";
+
+export { BARRA, LECTOR_2, equipmentItem, roleOf } from "./pay-equipment-fixtures.js";
 
 /** A fresh draft server for each test, holding the bills the payment suites open. */
 export function resetBillPayDrafts(): void {
@@ -422,40 +424,6 @@ export async function type(el: TillApp, name: string, value: string): Promise<vo
 export async function press(el: TillApp, selector: string): Promise<void> {
   inDialog(el, selector)!.click();
   await flush(el);
-}
-
-export function equipmentItem(
-  id: string,
-  name: string,
-  extra: Partial<EquipmentItem> = {},
-): EquipmentItem {
-  return { id, name, portable: false, available: true, busy: false, heldBy: null, ...extra };
-}
-export const LECTOR_2 = equipmentItem("r2", "Lector 2", { portable: true, provider: "sumup" });
-export const BARRA = equipmentItem("p1", "Barra");
-
-export function roleOf(
-  name: RoleEquipment["role"],
-  chosen: EquipmentItem | null,
-  choices: EquipmentItem[],
-): RoleEquipment {
-  return {
-    role: name,
-    selection: chosen === null ? "default" : "item",
-    chosenId: chosen?.id ?? null,
-    resolved:
-      chosen === null
-        ? null
-        : {
-            id: chosen.id,
-            name: chosen.name,
-            available: chosen.available,
-            provider: chosen.provider,
-          },
-    chosen,
-    default: null,
-    choices,
-  };
 }
 
 /** A phone's equipment: `reader` chosen as its card reader (none when null), and Barra as its

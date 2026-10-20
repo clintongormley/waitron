@@ -6,15 +6,13 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
+import {
+  LECTOR_2,
+  LECTOR_3,
+  twoReaderEquipment as equipmentWith,
+} from "../../test/pay-equipment-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type {
-  AllocationPreview,
-  BillBalance,
-  BillPaymentView,
-  DeviceEquipment,
-  EquipmentItem,
-  RoleEquipment,
-} from "../api/client.js";
+import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
@@ -1811,51 +1809,6 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     );
   });
 });
-
-function equipmentItem(
-  id: string,
-  name: string,
-  extra: Partial<EquipmentItem> = {},
-): EquipmentItem {
-  return { id, name, portable: false, available: true, busy: false, heldBy: null, ...extra };
-}
-const LECTOR_2 = equipmentItem("r2", "Lector 2", { portable: true, provider: "sumup" });
-const LECTOR_3 = equipmentItem("r3", "Lector 3", { portable: true, provider: "sumup" });
-const BARRA = equipmentItem("p1", "Barra");
-
-function roleOf(
-  name: RoleEquipment["role"],
-  chosen: EquipmentItem | null,
-  choices: EquipmentItem[],
-): RoleEquipment {
-  return {
-    role: name,
-    selection: chosen === null ? "default" : "item",
-    chosenId: chosen?.id ?? null,
-    resolved:
-      chosen === null
-        ? null
-        : {
-            id: chosen.id,
-            name: chosen.name,
-            available: chosen.available,
-            provider: chosen.provider,
-          },
-    chosen,
-    default: null,
-    choices,
-  };
-}
-
-/** The phone's equipment with `reader` (none when null) and the Barra receipt printer chosen. */
-function equipmentWith(reader: EquipmentItem | null): DeviceEquipment {
-  return {
-    roles: [
-      roleOf("receipt", BARRA, [BARRA]),
-      roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3]),
-    ],
-  };
-}
 
 describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
   const handheld = (over: Partial<TillBillPayDialog> = {}) =>
