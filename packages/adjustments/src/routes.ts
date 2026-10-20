@@ -22,9 +22,9 @@ import { currentBusinessDay, readLocationClock } from "@waitron/reporting";
 import { AppError, compareDecimal, decimal, isUuid } from "@waitron/shared";
 import {
   createAdjustmentReason,
-  deactivateAdjustmentReason,
+  deleteAdjustmentReason,
   listAdjustmentReasons,
-  reactivateAdjustmentReason,
+  readAdjustmentReasonDeleteImpact,
   reorderAdjustmentReasons,
   updateAdjustmentReason,
   type AdjustmentReasonInput,
@@ -242,10 +242,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
     app.get("/management-api/adjustments/reasons", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const includeInactive = c.req.query("includeInactive") === "true";
-        const reasons = await gated(sessionId, (tx) =>
-          listAdjustmentReasons(tx, { includeInactive }),
-        );
+        const reasons = await gated(sessionId, (tx) => listAdjustmentReasons(tx));
         return c.json({ reasons });
       }),
     );
@@ -273,20 +270,22 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.get("/management-api/adjustments/reasons/:reasonId/delete-impact", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
+        return c.json(
+          await gated(sessionId, (tx) => readAdjustmentReasonDeleteImpact(tx, reasonId)),
+        );
+      }),
+    );
+
     app.delete("/management-api/adjustments/reasons/:reasonId", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
-        await gated(sessionId, (tx) => deactivateAdjustmentReason(tx, reasonId));
+        await gated(sessionId, (tx) => deleteAdjustmentReason(tx, reasonId));
         return c.body(null, 204);
-      }),
-    );
-
-    app.post("/management-api/adjustments/reasons/:reasonId/reactivate", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
-        return c.json(await gated(sessionId, (tx) => reactivateAdjustmentReason(tx, reasonId)));
       }),
     );
 

@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -7,15 +8,17 @@ import { decimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import {
   createAdjustmentReason,
-  deactivateAdjustmentReason,
+  deleteAdjustmentReason,
   findAdjustmentReason,
   listAdjustmentReasons,
-  reactivateAdjustmentReason,
+  readAdjustmentReasonDeleteImpact,
   reorderAdjustmentReasons,
   updateAdjustmentReason,
   type AdjustmentReasonInput,
 } from "./operations.js";
-import { adjustmentReasons } from "./schema/reasons.js";
+import { policySnapshotOf } from "./policy.js";
+import { recordAdjustment } from "./record.js";
+import { seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
 
@@ -61,7 +64,7 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 describe("adjustment reason operations", () => {
-  it("creates, updates, reorders and deactivates reasons, and lists what each step left", async () => {
+  it("creates, updates, reorders and deletes reasons, and lists what each step left", async () => {
     const created = await inTx((tx) => createAdjustmentReason(tx, complaint()));
     expect(created).toEqual({
       id: expect.any(String),
@@ -74,7 +77,6 @@ describe("adjustment reason operations", () => {
       applyRoles: ["supervisor", "manager", "admin"],
       approverRoles: ["manager", "admin"],
       noteRequired: true,
-      active: true,
       position: 0,
     });
     const error = await inTx((tx) =>
@@ -112,7 +114,6 @@ describe("adjustment reason operations", () => {
       applyRoles: ["manager", "admin"],
       approverRoles: ["admin"],
       noteRequired: false,
-      active: true,
       position: 0,
     });
     expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([updated, error]);
@@ -125,28 +126,53 @@ describe("adjustment reason operations", () => {
       ["Guest complaint", 1],
     ]);
 
-    await inTx((tx) => deactivateAdjustmentReason(tx, created.id));
+    await inTx((tx) => deleteAdjustmentReason(tx, created.id));
     expect((await inTx((tx) => listAdjustmentReasons(tx))).map((r) => r.name)).toEqual([
       "Entry error",
     ]);
   });
 
-  it("keeps a deactivated reason listed when asked to include inactive ones", async () => {
+  it("deletes a reason that past adjustments name, leaving them as they were", async () => {
     const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
-    await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
+    const workingOrderId = await seedWorkingOrder(db);
+    const adjustmentId = await inTx((tx) =>
+      recordAdjustment(tx, {
+        workingOrderId,
+        line: {
+          id: randomUUID(),
+          name: "Burger",
+          quantity: "1",
+          listUnitPriceGross: decimal("12.00"),
+          creditedTo: null,
+          stage: "served",
+        },
+        quantity: "1",
+        reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+        action: "comp",
+        percentBp: null,
+        beforeAmount: decimal("12.00"),
+        afterAmount: decimal("0.00"),
+        reduction: decimal("12.00"),
+        nominalValue: decimal("12.00"),
+        requestedBy: randomUUID(),
+        approvedBy: null,
+        note: "Cold",
+      }),
+    );
+    const recorded = sql`select id, reason_id, reason_name from adjustments`;
+    const before = (await db.execute(recorded)).rows;
+    expect(before).toEqual([{ id: adjustmentId, reason_id: reason.id, reason_name: "Complaint" }]);
+
+    await inTx((tx) => deleteAdjustmentReason(tx, reason.id));
+
     expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([]);
-    expect(await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: false }))).toEqual([]);
-    expect(await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).toEqual([
-      { ...reason, active: false },
-    ]);
-    // Deactivating twice changes nothing more.
-    await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
-    expect(await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).toEqual([
-      { ...reason, active: false },
-    ]);
+    await expect(inTx((tx) => findAdjustmentReason(tx, reason.id))).rejects.toMatchObject({
+      code: "adjustment_reason.not_found",
+    });
+    expect((await db.execute(recorded)).rows).toEqual(before);
   });
 
-  it("refuses a name another active reason holds, and frees it once that reason is deactivated", async () => {
+  it("refuses a name another reason holds, and frees it once that reason is deleted", async () => {
     const first = await inTx((tx) => createAdjustmentReason(tx, complaint()));
     await expect(
       inTx((tx) => createAdjustmentReason(tx, complaint({ name: " Complaint " }))),
@@ -164,27 +190,25 @@ describe("adjustment reason operations", () => {
     // A reason keeps its own name through an update.
     await inTx((tx) => updateAdjustmentReason(tx, first.id, complaint({ noteRequired: false })));
 
-    await inTx((tx) => deactivateAdjustmentReason(tx, first.id));
+    await inTx((tx) => deleteAdjustmentReason(tx, first.id));
     const again = await inTx((tx) => createAdjustmentReason(tx, complaint()));
     expect(again.name).toBe("Complaint");
-    // The inactive reason may be edited to a name an active one holds: only active names are unique.
-    await inTx((tx) => updateAdjustmentReason(tx, first.id, complaint()));
   });
 
   it("refuses an id that names no reason", async () => {
     await expect(
       inTx((tx) => updateAdjustmentReason(tx, MISSING, complaint())),
     ).rejects.toMatchObject({ code: "adjustment_reason.not_found", params: { reasonId: MISSING } });
-    await expect(inTx((tx) => deactivateAdjustmentReason(tx, MISSING))).rejects.toMatchObject({
+    await expect(inTx((tx) => deleteAdjustmentReason(tx, MISSING))).rejects.toMatchObject({
       code: "adjustment_reason.not_found",
     });
   });
 
-  it("reorders only the full list of active reasons, each named once", async () => {
+  it("reorders only the full list of reasons, each named once", async () => {
     const a = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "A" })));
     const b = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "B" })));
     const gone = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "Gone" })));
-    await inTx((tx) => deactivateAdjustmentReason(tx, gone.id));
+    await inTx((tx) => deleteAdjustmentReason(tx, gone.id));
 
     await expect(inTx((tx) => reorderAdjustmentReasons(tx, [a.id]))).rejects.toMatchObject({
       code: "adjustment_reason.invalid",
@@ -202,35 +226,7 @@ describe("adjustment reason operations", () => {
     );
 
     await inTx((tx) => reorderAdjustmentReasons(tx, [b.id, a.id]));
-    expect(
-      (await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).map((r) => r.name),
-    ).toEqual(["B", "A", "Gone"]);
-  });
-
-  it("renumbers inactive reasons after the reordered active ones, keeping their own order", async () => {
-    const retiredFirst = await inTx((tx) =>
-      createAdjustmentReason(tx, complaint({ name: "Old A" })),
-    );
-    const x = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "X" })));
-    const retiredSecond = await inTx((tx) =>
-      createAdjustmentReason(tx, complaint({ name: "Old B" })),
-    );
-    const y = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "Y" })));
-    await inTx((tx) => deactivateAdjustmentReason(tx, retiredSecond.id));
-    await inTx((tx) => deactivateAdjustmentReason(tx, retiredFirst.id));
-
-    await inTx((tx) => reorderAdjustmentReasons(tx, [y.id, x.id]));
-    expect(
-      (await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).map((r) => [
-        r.name,
-        r.position,
-      ]),
-    ).toEqual([
-      ["Y", 0],
-      ["X", 1],
-      ["Old A", 2],
-      ["Old B", 3],
-    ]);
+    expect((await inTx((tx) => listAdjustmentReasons(tx))).map((r) => r.name)).toEqual(["B", "A"]);
   });
 
   it.each<[string, Partial<AdjustmentReasonInput>]>([
@@ -310,7 +306,6 @@ describe("adjustment reason operations", () => {
       applyRoles: [],
       approverRoles: [],
       noteRequired: true,
-      active: true,
       position: 0,
     });
     expect(await inTx((tx) => findAdjustmentReason(tx, staffMeal.id))).toEqual({
@@ -324,7 +319,6 @@ describe("adjustment reason operations", () => {
       applyRoles: ["staff"],
       approverRoles: ["supervisor", "manager"],
       noteRequired: false,
-      active: true,
       position: 1,
     });
     // Free under a full item limit is a Comp reason's to offer.
@@ -337,16 +331,16 @@ describe("adjustment reason operations", () => {
     );
   });
 
-  describe("keeping a Void reason switched on", () => {
-    it("refuses to switch off the last Void reason, and leaves it on", async () => {
+  describe("keeping a Void reason", () => {
+    it("refuses to delete the last Void reason, and keeps it", async () => {
       const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
       await inTx((tx) => createAdjustmentReason(tx, complaint()));
       const retired = await inTx((tx) =>
         createAdjustmentReason(tx, voidReason({ name: "Retired" })),
       );
-      await inTx((tx) => deactivateAdjustmentReason(tx, retired.id));
+      await inTx((tx) => deleteAdjustmentReason(tx, retired.id));
 
-      await expect(inTx((tx) => deactivateAdjustmentReason(tx, other.id))).rejects.toMatchObject({
+      await expect(inTx((tx) => deleteAdjustmentReason(tx, other.id))).rejects.toMatchObject({
         code: "adjustment_reason.void_required",
         params: { withNote: false },
       });
@@ -388,28 +382,28 @@ describe("adjustment reason operations", () => {
       ).toMatchObject({ id: other.id, noteRequired: false });
     });
 
-    it("refuses to switch off the last Void reason that asks for a note while one that does not stays on", async () => {
+    it("refuses to delete the last Void reason that asks for a note while one that does not stays", async () => {
       const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
       await inTx((tx) =>
         createAdjustmentReason(tx, voidReason({ name: "Mistake", noteRequired: false })),
       );
-      await expect(inTx((tx) => deactivateAdjustmentReason(tx, other.id))).rejects.toMatchObject({
+      await expect(inTx((tx) => deleteAdjustmentReason(tx, other.id))).rejects.toMatchObject({
         code: "adjustment_reason.void_required",
         params: { withNote: true },
       });
       expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual(other);
     });
 
-    it("allows Other to be switched off while another Void reason asks for a note", async () => {
+    it("allows Other to be deleted while another Void reason asks for a note", async () => {
       const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
       const wrongTable = await inTx((tx) =>
         createAdjustmentReason(tx, voidReason({ name: "Wrong table" })),
       );
-      await inTx((tx) => deactivateAdjustmentReason(tx, other.id));
+      await inTx((tx) => deleteAdjustmentReason(tx, other.id));
       expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([wrongTable]);
     });
 
-    it("edits the last Void reason while it stays a switched-on Void reason asking for a note", async () => {
+    it("edits the last Void reason while it stays a Void reason asking for a note", async () => {
       const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
       expect(
         await inTx((tx) =>
@@ -418,28 +412,47 @@ describe("adjustment reason operations", () => {
       ).toMatchObject({ id: other.id, name: "Anything else", kind: "void", noteRequired: true });
     });
 
-    it("edits and switches off Comp reasons in a venue holding no Void reason", async () => {
+    it("edits and deletes Comp reasons in a venue holding no Void reason", async () => {
       const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
       await inTx((tx) => updateAdjustmentReason(tx, reason.id, complaint({ noteRequired: false })));
-      await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
+      await inTx((tx) => deleteAdjustmentReason(tx, reason.id));
       expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([]);
     });
+  });
 
-    it("lets a switched-off Void reason be edited, or switched off again, while no Void reason is on", async () => {
-      const old = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
-      const spare = await inTx((tx) => createAdjustmentReason(tx, voidReason({ name: "Spare" })));
-      await inTx((tx) => deactivateAdjustmentReason(tx, old.id));
-      // A venue the guard never saw, such as one imported before it: no Void reason switched on.
-      await db
-        .update(adjustmentReasons)
-        .set({ active: false })
-        .where(eq(adjustmentReasons.id, spare.id));
+  it("reads what deleting a reason would do", async () => {
+    const comp = await inTx((tx) => createAdjustmentReason(tx, complaint()));
+    const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
 
-      await inTx((tx) => deactivateAdjustmentReason(tx, old.id));
-      expect(
-        await inTx((tx) => updateAdjustmentReason(tx, old.id, complaint({ name: "Old" }))),
-      ).toMatchObject({ id: old.id, kind: "comp", active: false });
+    expect(await inTx((tx) => readAdjustmentReasonDeleteImpact(tx, comp.id))).toEqual({
+      target: { id: comp.id, name: "Complaint" },
+      refusals: [],
+      ends: [],
+      removes: [],
     });
+    expect(await inTx((tx) => readAdjustmentReasonDeleteImpact(tx, other.id))).toEqual({
+      target: { id: other.id, name: "Other" },
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 0 }, targets: [] }],
+      ends: [],
+      removes: [],
+    });
+
+    await inTx((tx) =>
+      createAdjustmentReason(tx, voidReason({ name: "Mistake", noteRequired: false })),
+    );
+    expect(await inTx((tx) => readAdjustmentReasonDeleteImpact(tx, other.id))).toEqual({
+      target: { id: other.id, name: "Other" },
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 1 }, targets: [] }],
+      ends: [],
+      removes: [],
+    });
+
+    await expect(inTx((tx) => readAdjustmentReasonDeleteImpact(tx, MISSING))).rejects.toMatchObject(
+      {
+        code: "adjustment_reason.not_found",
+        params: { reasonId: MISSING },
+      },
+    );
   });
 
   it("refuses a name keyed by something that is not a language, on create and on update", async () => {
@@ -469,80 +482,13 @@ describe("adjustment reason operations", () => {
     expect(updated.names).toEqual({ es: "Complaint (es)" });
   });
 
-  it("reads one reason by its id, an inactive one included, and refuses an id that names none", async () => {
+  it("reads one reason by its id, and refuses an id that names none", async () => {
     const reason = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "Read" })));
-    await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
 
-    expect(await inTx((tx) => findAdjustmentReason(tx, reason.id))).toEqual({
-      ...reason,
-      active: false,
-    });
+    expect(await inTx((tx) => findAdjustmentReason(tx, reason.id))).toEqual(reason);
     await expect(inTx((tx) => findAdjustmentReason(tx, MISSING))).rejects.toMatchObject({
       code: "adjustment_reason.not_found",
       params: { reasonId: MISSING },
-    });
-  });
-
-  describe("reactivating a reason", () => {
-    it("makes a deactivated reason active again under the same id", async () => {
-      const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
-      await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
-
-      expect(await inTx((tx) => reactivateAdjustmentReason(tx, reason.id))).toEqual(reason);
-      expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([reason]);
-    });
-
-    it("refuses a name an active reason now holds, and leaves the reason deactivated", async () => {
-      const old = await inTx((tx) => createAdjustmentReason(tx, complaint()));
-      await inTx((tx) => deactivateAdjustmentReason(tx, old.id));
-      const taken = await inTx((tx) => createAdjustmentReason(tx, complaint()));
-
-      await expect(inTx((tx) => reactivateAdjustmentReason(tx, old.id))).rejects.toMatchObject({
-        code: "adjustment_reason.name_taken",
-        params: { name: "Complaint" },
-      });
-      expect(await inTx((tx) => findAdjustmentReason(tx, old.id))).toEqual({
-        ...old,
-        active: false,
-      });
-      expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([taken]);
-    });
-
-    it("refuses an id that names no reason", async () => {
-      await expect(inTx((tx) => reactivateAdjustmentReason(tx, MISSING))).rejects.toMatchObject({
-        code: "adjustment_reason.not_found",
-        params: { reasonId: MISSING },
-      });
-    });
-
-    it("changes nothing on a reason that is already active", async () => {
-      const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
-      expect(await inTx((tx) => reactivateAdjustmentReason(tx, reason.id))).toEqual(reason);
-      expect(await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).toEqual([
-        reason,
-      ]);
-    });
-
-    it("keeps the position it had, so it returns to its place among the active reasons", async () => {
-      const a = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "A" })));
-      const b = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "B" })));
-      const c = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "C" })));
-      await inTx((tx) => deactivateAdjustmentReason(tx, b.id));
-      const d = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "D" })));
-
-      await inTx((tx) => reactivateAdjustmentReason(tx, b.id));
-      expect(
-        (await inTx((tx) => listAdjustmentReasons(tx, { includeInactive: true }))).map((r) => [
-          r.id,
-          r.position,
-          r.active,
-        ]),
-      ).toEqual([
-        [a.id, 0, true],
-        [b.id, 1, true],
-        [c.id, 2, true],
-        [d.id, 3, true],
-      ]);
     });
   });
 });

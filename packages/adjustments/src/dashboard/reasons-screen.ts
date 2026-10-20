@@ -1,18 +1,15 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
-import {
-  QueryController,
-  codeMessage,
-  codeOf,
-  currentLocale,
-  tableNoMatches,
-} from "@waitron/dashboard-kit";
-import { formatMoney } from "@waitron/shared";
+import { repeat } from "lit/directives/repeat.js";
+import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import { formatMoney, searchBy, type DeleteImpact } from "@waitron/shared";
 import {
   baseStyles,
+  ReorderController,
+  reorder,
+  type ReorderModel,
   parseDecimalInput,
   formatDecimalInput,
   ContentLanguageController,
@@ -24,7 +21,6 @@ import {
   type LeaveCoordinator,
   type LeaveReason,
   submitOnEnter,
-  type DataTableColumn,
 } from "@waitron/ui";
 import type {
   AdjustmentAction,
@@ -38,7 +34,8 @@ import type {
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
-import { actionChoice, kindName, offerName, roleName, t, tf, type StringKey } from "./strings.js";
+import { reasonDeleteCopy } from "./reason-delete-copy.js";
+import { actionChoice, kindName, roleName, t, tf, type StringKey } from "./strings.js";
 
 /** What a Comp reason may offer, in the order the form and the request list them. */
 const OFFERS: readonly AdjustmentAction[] = ["comp", "discount_percent", "discount_amount"];
@@ -118,8 +115,18 @@ function copyDraft(value: Draft): Draft {
 
 type FieldErrors = Partial<Record<Field, string>>;
 
-type Editor =
-  { kind: "reason"; reason?: AdjustmentReason } | { kind: "deactivate"; reason: AdjustmentReason };
+/** The reason the editor edits; none for a new one. */
+type Editor = { reason?: AdjustmentReason };
+
+type Deletion = {
+  reasonId: string;
+  opener: HTMLElement;
+  impact: DeleteImpact | null;
+  loading: boolean;
+  readError: string;
+  actionError: string;
+  busy: boolean;
+};
 
 /** Basis points from a typed percentage; `null` for no limit, `undefined` when it cannot be one. */
 function percentBp(text: string): number | null | undefined {
@@ -184,10 +191,15 @@ function languageName(code: string): string {
 export class AdjustmentReasonsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    ReorderController.styles,
+    ReorderController.tableStyles,
     css`
       :host {
         display: block;
         min-width: 0;
+      }
+      h1 {
+        margin-top: 0;
       }
       .intro {
         margin-top: 0;
@@ -195,8 +207,65 @@ export class AdjustmentReasonsScreen extends LitElement {
       }
       .toolbar {
         display: flex;
-        justify-content: flex-end;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
         margin-block: var(--wt-space-3);
+      }
+      .toolbar wt-input[name="search"] {
+        flex: 1 1 auto;
+      }
+      .empty {
+        display: grid;
+        justify-items: start;
+        gap: var(--wt-space-3);
+      }
+      .empty p {
+        margin: 0;
+      }
+      thead th {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .table-wrap {
+        background: var(--wt-color-surface);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+      }
+      .handle-cell,
+      td.actions-cell {
+        width: 1%;
+        padding-inline: 0;
+        white-space: nowrap;
+      }
+      .handle-cell {
+        padding-inline: var(--wt-space-2) var(--wt-space-1);
+      }
+      td.actions-cell {
+        text-align: end;
+      }
+      td.actions-cell,
+      th.actions-cell {
+        position: sticky;
+        inset-inline-end: 0;
+        background: var(--wt-color-surface);
+      }
+      /* As wt-data-table's pinned column: a border on the cell would stay where the collapsed
+         table draws it, not travel with the held cell. */
+      td.actions-cell::before,
+      th.actions-cell::before {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        border-inline-start: 1px solid var(--wt-color-border);
+      }
+      tr[data-dragging] td.actions-cell {
+        background: var(--wt-color-surface-lifted);
+      }
+      .reason-name {
+        font-weight: var(--wt-font-weight-bold);
       }
       .alert,
       .required,
@@ -267,19 +336,14 @@ export class AdjustmentReasonsScreen extends LitElement {
         gap: var(--wt-space-4);
         align-items: start;
       }
-      /* Cell markup lives in the table's shadow root, so only a part reaches it. */
-      wt-data-table::part(manage) {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
     `,
   ];
 
   @property({ attribute: false }) api!: AdjustmentsApi;
   @state() private reasons?: AdjustmentReason[];
+  @state() private search = "";
   @state() private loadError?: string;
-  /** A refusal of a row action that saved at once: a move or an Enable. */
+  /** A refused save of a new order, until the next move or the editor opens. */
   @state() private actionError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
@@ -302,6 +366,9 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private limitError?: string;
   @state() private limitSaving = false;
   @state() private limitSaved = false;
+  @state() private deleting?: Deletion;
+  /** Replaced each time the delete question opens or closes, so a late answer finds it changed. */
+  #deletion?: object;
   #loaded = false;
   #settingsLoaded = false;
   #opener?: HTMLElement;
@@ -311,6 +378,37 @@ export class AdjustmentReasonsScreen extends LitElement {
   #leave?: LeaveCoordinator;
   /** Restoring a draft rerenders; the pending close still needs this editor's same guard. */
   #closeGuard?: (reason: LeaveReason) => Promise<boolean>;
+  /** Order saves not yet answered, the one in flight included. */
+  #movesOut = 0;
+  /** Where a pointer drag picked its row up, once it has moved it; null otherwise. */
+  #dragFrom: number | null = null;
+  /** A list read arrived while a grip was held or a move was unsaved, so it was not shown. */
+  #readDropped = false;
+  /** Order saves run one after another along this chain. */
+  #saving: Promise<void> = Promise.resolve();
+  /** Moved on by a refusal or a disconnect, so the saves still waiting are dropped unsent. */
+  #moveGeneration = 0;
+
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => (this.reasons ? this.#shown().map((reason) => reason.id) : []),
+      move: (id, to, via) => this.#move(id, to, via),
+      drop: (id) => this.#drop(id),
+      label: (id) => this.reasons!.find((reason) => reason.id === id)!.name,
+      // Never true for a save: that would disable the grip a keyboard user is on and drop their focus.
+      busy: () => this.#searching,
+      get reorderLabel(): string {
+        return t("adjustments.reorder");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("adjustments.reordered") },
+  );
+
+  /** While false the rows drawn are every reason, which is what lets a move send the whole order. */
+  get #searching(): boolean {
+    return this.search.trim() !== "";
+  }
 
   #comparison(draft: Draft): string {
     const money = amount(draft.maxAmount);
@@ -350,9 +448,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (!this.#leave) this.#close();
     else void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel");
   }
-  /** The active reasons' ids in list order, and each one's place in it, kept in step with `reasons`. */
-  #activeIds: readonly string[] = [];
-  #activeIndex = new Map<string, number>();
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -366,6 +461,24 @@ export class AdjustmentReasonsScreen extends LitElement {
     () => this.api.liveData,
     () => {
       this.limitLoadError = t("adjustments.limit.load_error");
+    },
+  );
+
+  /** Released whenever the delete question closes, so it reports only while one is open. */
+  readonly #impactQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      const deletion = this.deleting!;
+      if (codeOf(error) === "adjustment_reason.not_found") {
+        if (!deletion.busy) this.#reasonGone();
+        return;
+      }
+      this.deleting = {
+        ...deletion,
+        loading: false,
+        readError: tf("adjustments.delete_load_error", { reason: codeMessage(codeOf(error)) }),
+      };
     },
   );
 
@@ -399,7 +512,12 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.editor = undefined;
     this.draft = undefined;
     this.busy = false;
+    this.#closeDelete();
     this.#restart();
+    this.#moveGeneration++;
+    this.#movesOut = 0;
+    this.#dragFrom = null;
+    this.#readDropped = false;
     super.disconnectedCallback();
   }
 
@@ -466,6 +584,11 @@ export class AdjustmentReasonsScreen extends LitElement {
           ),
         },
         (reasons) => {
+          // Applied now, a list would move rows under a held grip or undo an unanswered move.
+          if (this.#movesOut > 0 || this.#reorder.dragging) {
+            this.#readDropped = true;
+            return;
+          }
           this.reasons = reasons;
           this.loadError = undefined;
         },
@@ -475,40 +598,49 @@ export class AdjustmentReasonsScreen extends LitElement {
     }
   }
 
-  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has("reasons")) {
-      this.#activeIds = this.reasons!.filter((reason) => reason.active).map((reason) => reason.id);
-      this.#activeIndex = new Map(this.#activeIds.map((id, index) => [id, index]));
-    }
+  /** `to` indexes the rows drawn, which are every reason while a move is allowed. */
+  #move(id: string, to: number, via: "key" | "pointer"): void {
+    const from = this.reasons!.findIndex((reason) => reason.id === id);
+    this.reasons = reorder(this.reasons!, from, to);
+    if (via === "key") this.#saveOrder();
+    else this.#dragFrom ??= from;
   }
 
-  async #move(reason: AdjustmentReason, step: -1 | 1): Promise<void> {
-    if (this.busy) return;
-    const ids = [...this.#activeIds];
-    const from = ids.indexOf(reason.id);
-    [ids[from], ids[from + step]] = [ids[from + step]!, ids[from]!];
-    this.busy = true;
+  #drop(id: string): void {
+    const from = this.#dragFrom;
+    this.#dragFrom = null;
+    const to = this.reasons!.findIndex((reason) => reason.id === id);
+    if (from !== null && to !== from) this.#saveOrder();
+    else if (this.#movesOut === 0 && this.#readDropped) this.#readAgain();
+  }
+
+  #saveOrder(): void {
+    const ids = this.reasons!.map((reason) => reason.id);
+    const generation = this.#moveGeneration;
     this.actionError = undefined;
-    try {
-      await this.api.reorderReasons(ids);
-    } catch {
-      this.actionError = t("adjustments.reorder_error");
-    } finally {
-      this.busy = false;
-    }
-    // Also after a refusal: the route refuses a stale list whole, so a retry needs the current one.
-    await this.#load();
-    if (this.actionError) return;
-    await this.updateComplete;
-    // Rows are drawn by position, so the pressed button now belongs to another reason.
-    const table = this.renderRoot.querySelector("wt-data-table");
-    await table?.updateComplete;
-    const button = (direction: string) =>
-      table?.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>(
-        `[data-test="move-${direction}-${reason.id}"]`,
-      );
-    const same = button(step < 0 ? "up" : "down");
-    (same && !same.disabled ? same : button(step < 0 ? "down" : "up"))?.focus();
+    this.#movesOut += 1;
+    this.#saving = this.#saving.then(async () => {
+      if (generation !== this.#moveGeneration) return;
+      try {
+        await this.api.reorderReasons(ids);
+      } catch {
+        if (generation !== this.#moveGeneration) return;
+        // Every save waiting behind a refused one names an order built on it.
+        this.#moveGeneration++;
+        this.#movesOut = 0;
+        this.actionError = t("adjustments.reorder_error");
+        this.#readAgain();
+        return;
+      }
+      if (generation !== this.#moveGeneration) return;
+      this.#movesOut -= 1;
+      if (this.#movesOut === 0 && this.#readDropped) this.#readAgain();
+    });
+  }
+
+  #readAgain(): void {
+    this.#readDropped = false;
+    void this.#load();
   }
 
   #open(editor: Editor, opener: HTMLElement): void {
@@ -521,34 +653,32 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.#closeGuard = (reason) => this.#beforeClose(editor, reason);
     this.actionError = undefined;
     this.#restart();
-    if (editor.kind === "reason") {
-      const reason = editor.reason;
-      const kind = reason?.kind ?? "comp";
-      this.draft = {
-        kind,
-        name: reason?.name ?? "",
-        names: { ...reason?.names },
-        actions: kind === "comp" ? [...(reason?.actions ?? [])] : [],
-        maxPercent:
-          reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
-        maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
-        applyRoles: [...(reason?.applyRoles ?? NEW_REASON_ROLES)],
-        approverRoles: [...(reason?.approverRoles ?? NEW_REASON_ROLES)],
-        noteRequired: reason?.noteRequired ?? false,
-      };
-      const draft = draftScopeFor(this, {
-        id: editor,
-        parent: this,
-        current: () => this.draft!,
-        snapshot: copyDraft,
-        equal: (a, b) => this.#comparison(a) === this.#comparison(b),
-        restore: (value) => {
-          this.draft = copyDraft(value);
-        },
-      });
-      this.#leave = draft.coordinator;
-      this.#reasonScope = draft.scope;
-    }
+    const reason = editor.reason;
+    const kind = reason?.kind ?? "comp";
+    this.draft = {
+      kind,
+      name: reason?.name ?? "",
+      names: { ...reason?.names },
+      actions: kind === "comp" ? [...(reason?.actions ?? [])] : [],
+      maxPercent:
+        reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
+      maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
+      applyRoles: [...(reason?.applyRoles ?? NEW_REASON_ROLES)],
+      approverRoles: [...(reason?.approverRoles ?? NEW_REASON_ROLES)],
+      noteRequired: reason?.noteRequired ?? false,
+    };
+    const draft = draftScopeFor(this, {
+      id: editor,
+      parent: this,
+      current: () => this.draft!,
+      snapshot: copyDraft,
+      equal: (a, b) => this.#comparison(a) === this.#comparison(b),
+      restore: (value) => {
+        this.draft = copyDraft(value);
+      },
+    });
+    this.#leave = draft.coordinator;
+    this.#reasonScope = draft.scope;
   }
 
   #close(): void {
@@ -640,10 +770,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       const message = t(
         withNote ? "adjustments.error.void_required_note" : "adjustments.error.void_required",
       );
-      if (this.editor?.kind === "deactivate") {
-        this.editorError = message;
-        return;
-      }
       this.refusedFields = { [withNote ? "noteRequired" : "kind"]: message };
     } else if (
       (code === "management.request_invalid" || code === "adjustment_reason.invalid") &&
@@ -667,11 +793,11 @@ export class AdjustmentReasonsScreen extends LitElement {
     await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
   }
 
-  async #write(action: () => Promise<unknown>, after?: () => Promise<void>): Promise<void> {
+  async #write(action: () => Promise<unknown>): Promise<void> {
     if (this.busy) return;
     const editor = this.editor;
-    const scope = this.#reasonScope;
-    const submitted = this.draft;
+    const scope = this.#reasonScope!;
+    const submitted = this.draft!;
     this.busy = true;
     try {
       await action();
@@ -682,8 +808,8 @@ export class AdjustmentReasonsScreen extends LitElement {
       if (this.editor === editor) this.busy = false;
     }
     if (this.editor !== editor || !this.isConnected) return;
-    if (submitted) scope?.commit(submitted);
-    if (!scope?.isDirty()) {
+    scope.commit(submitted);
+    if (!scope.isDirty()) {
       this.renderRoot.querySelector("wt-modal")?.closeAfter("saved");
       this.#close();
     }
@@ -691,58 +817,11 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (this.editor !== undefined || !this.isConnected) return;
     await this.updateComplete;
     if (this.#opener?.isConnected === false)
-      this.renderRoot.querySelector<HTMLElement>('.toolbar [data-test="add-reason"]')?.focus();
-    await after?.();
-  }
-
-  /** The status filter can drop the row, so focus goes to the row now in its place, or to Add
-   * reason. Read before the write, while the row is still shown. */
-  #refocusFrom(reason: AdjustmentReason): () => Promise<void> {
-    const rows = () => [
-      ...(this.renderRoot
-        .querySelector("wt-data-table")
-        ?.shadowRoot?.querySelectorAll<HTMLElement>("tbody tr[data-row-key]") ?? []),
-    ];
-    const index = rows().findIndex((row) => row.dataset.rowKey === reason.id);
-    return async () => {
-      await this.updateComplete;
-      await this.renderRoot.querySelector("wt-data-table")?.updateComplete;
-      const remaining = rows();
-      const row = remaining[Math.min(index, remaining.length - 1)];
-      (
-        row?.querySelector<HTMLElement>("wt-row-actions") ??
-        this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
-      )?.focus();
-    };
-  }
-
-  #deactivate(editor: Editor): void {
-    if (this.editor !== editor || editor.kind !== "deactivate" || !this.isConnected) return;
-    const reason = editor.reason;
-    void this.#write(() => this.api.deactivateReason(reason.id), this.#refocusFrom(reason));
-  }
-
-  /** Not destructive, so it acts at once with no confirmation, as a move does. */
-  async #enable(reason: AdjustmentReason): Promise<void> {
-    if (this.busy) return;
-    const refocus = this.#refocusFrom(reason);
-    this.busy = true;
-    this.actionError = undefined;
-    try {
-      await this.api.reactivateReason(reason.id);
-    } catch (error) {
-      this.actionError = codeMessage(codeOf(error));
-      return;
-    } finally {
-      this.busy = false;
-    }
-    await this.#load();
-    await refocus();
+      this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')?.focus();
   }
 
   #save(editor: Editor): void {
-    if (this.editor !== editor || editor.kind !== "reason" || !this.isConnected || this.busy)
-      return;
+    if (this.editor !== editor || !this.isConnected || this.busy) return;
     if (saveActionState(this.#reasonScope).unchanged) return;
     this.attempted = true;
     this.refusedFields = {};
@@ -755,6 +834,122 @@ export class AdjustmentReasonsScreen extends LitElement {
     const reason = editor.reason;
     void this.#write(() =>
       reason ? this.api.updateReason(reason.id, input) : this.api.createReason(input),
+    );
+  }
+
+  #openDelete(reason: AdjustmentReason, opener: HTMLElement): void {
+    this.actionError = undefined;
+    this.#closeDelete();
+    this.#deletion = {};
+    this.deleting = {
+      reasonId: reason.id,
+      opener,
+      impact: null,
+      loading: true,
+      readError: "",
+      actionError: "",
+      busy: false,
+    };
+    this.#readImpact();
+  }
+
+  #closeDelete(): void {
+    this.#impactQueries.release("delete-impact");
+    this.#deletion = undefined;
+    this.deleting = undefined;
+  }
+
+  /** Deleted elsewhere: the question closes, the page says so and the list is read again. */
+  #reasonGone(): void {
+    this.#closeDelete();
+    this.actionError = codeMessage("adjustment_reason.not_found");
+    void this.#load();
+  }
+
+  #readImpact(): void {
+    const deletion = this.deleting!;
+    this.deleting = { ...deletion, loading: true, readError: "" };
+    this.api
+      .watchReasonDeleteImpact(this.#impactQueries, deletion.reasonId, (impact) => {
+        this.deleting = { ...this.deleting!, impact, loading: false, readError: "" };
+      })
+      .catch(() => undefined);
+  }
+
+  /** Words a refused delete as the impact read's refusal would be worded. */
+  #deleteRefusal(error: unknown): string {
+    const code = codeOf(error);
+    if (code !== "adjustment_reason.void_required") return codeMessage(code);
+    const withNote = (error as { params?: { withNote?: unknown } }).params?.withNote;
+    return reasonDeleteCopy().refusal({
+      code,
+      params: { withNote: withNote ? 1 : 0 },
+      targets: [],
+    });
+  }
+
+  async #delete(reasonId: string): Promise<void> {
+    const deletion = this.deleting!;
+    if (deletion.busy) return;
+    const current = this.#deletion;
+    const shown = this.#shown();
+    const at = shown.findIndex((reason) => reason.id === reasonId);
+    const focusId = (shown[at + 1] ?? shown[at - 1])?.id;
+    this.deleting = { ...deletion, busy: true, actionError: "" };
+    try {
+      await this.api.deleteReason(reasonId);
+    } catch (error) {
+      if (current !== this.#deletion) return;
+      if (codeOf(error) === "adjustment_reason.not_found") {
+        this.#reasonGone();
+        return;
+      }
+      this.deleting = {
+        ...this.deleting,
+        busy: false,
+        actionError: tf("adjustments.delete_error", { reason: this.#deleteRefusal(error) }),
+      };
+      return;
+    }
+    if (current !== this.#deletion) return;
+    this.#closeDelete();
+    await this.#load();
+    await this.updateComplete;
+    (
+      this.renderRoot.querySelector<HTMLElement>(`tr[data-reason="${focusId}"] wt-row-actions`) ??
+      this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
+    )?.focus();
+  }
+
+  #deleteDialog() {
+    const deletion = this.deleting;
+    if (!deletion) return nothing;
+    const current = this.#deletion;
+    return keyed(
+      current,
+      html`<wt-delete-dialog
+        data-test="delete-reason"
+        .open=${true}
+        .impact=${deletion.impact}
+        .loading=${deletion.loading}
+        .submitting=${deletion.busy}
+        .readError=${deletion.readError}
+        .actionError=${deletion.actionError}
+        .copy=${reasonDeleteCopy()}
+        .opener=${deletion.opener}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          if (current === this.#deletion) void this.#delete(event.detail.id);
+        }}
+        @wt-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          if (current === this.#deletion) this.#readImpact();
+        }}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (current === this.#deletion && !this.deleting!.busy) this.#closeDelete();
+        }}
+      ></wt-delete-dialog>`,
     );
   }
 
@@ -926,36 +1121,14 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (reason.maxAmount !== null) {
       parts.push(tf("adjustments.limit_amount", { amount: formatMoney(reason.maxAmount, locale) }));
     }
-    if (parts.length === 0) parts.push(t("adjustments.no_limit"));
-    if (reason.noteRequired) parts.push(t("adjustments.note_required"));
     return parts;
   }
 
-  /** One line each: a table cell never wraps on its own, so a long cell would widen the table. */
+  /** One line each, or a dash for none. */
   #lines(lines: readonly string[]) {
-    return lines.map((line) => html`<div>${line}</div>`);
-  }
-
-  #manage(reason: AdjustmentReason) {
-    return html`<div part="manage">${this.#moveButtons(reason)}${this.#rowMenu(reason)}</div>`;
-  }
-
-  #moveButtons(reason: AdjustmentReason) {
-    if (!reason.active) return nothing;
-    const index = this.#activeIndex.get(reason.id)!;
-    const button = (direction: "up" | "down", step: -1 | 1, disabled: boolean) => {
-      const label = t(direction === "up" ? "adjustments.move_up" : "adjustments.move_down");
-      return html`<wt-button
-        size="sm"
-        variant="secondary"
-        data-test=${`move-${direction}-${reason.id}`}
-        aria-label=${`${label}: ${reason.name}`}
-        ?disabled=${this.busy || disabled}
-        @click=${() => void this.#move(reason, step)}
-        >${label}</wt-button
-      >`;
-    };
-    return html`${button("up", -1, index === 0)}${button("down", 1, index === this.#activeIds.length - 1)}`;
+    return lines.length === 0
+      ? t("adjustments.none")
+      : lines.map((line) => html`<div>${line}</div>`);
   }
 
   #rowMenu(reason: AdjustmentReason) {
@@ -972,75 +1145,88 @@ export class AdjustmentReasonsScreen extends LitElement {
         }}
         >${label}</wt-button
       >`;
-    return html`<wt-row-actions label=${`${t("adjustments.column.actions")}: ${reason.name}`}>
+    return html`<wt-row-actions
+      align="end"
+      label=${`${t("adjustments.column.actions")}: ${reason.name}`}
+    >
       ${item(`edit-${reason.id}`, t("adjustments.edit"), (opener) =>
-        this.#open({ kind: "reason", reason }, opener),
+        this.#open({ reason }, opener),
       )}
-      ${
-        reason.active
-          ? item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
-              this.#open({ kind: "deactivate", reason }, opener),
-            )
-          : item(`enable-${reason.id}`, t("adjustments.enable"), () => void this.#enable(reason))
-      }
+      ${item(`delete-${reason.id}`, t("adjustments.delete"), (opener) =>
+        this.#openDelete(reason, opener),
+      )}
     </wt-row-actions>`;
   }
 
-  #columns(): DataTableColumn<AdjustmentReason>[] {
-    return [
-      { key: "name", label: t("adjustments.column.name"), cell: (reason) => reason.name },
-      {
-        key: "allows",
-        label: t("adjustments.column.allows"),
-        choosable: "shown",
-        cell: (reason) =>
-          this.#lines(
-            reason.kind === "void"
-              ? [kindName("void")]
-              : reason.actions.map((action) => offerName(action)),
-          ),
-      },
-      {
-        key: "limits",
-        label: t("adjustments.column.limits"),
-        choosable: "shown",
-        cell: (reason) => this.#lines(this.#limits(reason)),
-      },
-      {
-        key: "roles",
-        label: t("adjustments.column.roles"),
-        choosable: "shown",
-        cell: (reason) =>
-          reason.kind === "void"
-            ? nothing
-            : this.#lines([
-                rolesText(reason.applyRoles),
-                tf("adjustments.approves", { roles: rolesText(reason.approverRoles) }),
-              ]),
-      },
-      {
-        key: "status",
-        label: t("adjustments.column.status"),
-        choosable: "shown",
-        cell: (reason) => t(reason.active ? "adjustments.active" : "adjustments.disabled"),
-        filter: {
-          label: t("adjustments.column.status"),
-          allLabel: t("adjustments.filter_all"),
-          value: (reason) => (reason.active ? "active" : "inactive"),
-          options: [
-            { value: "active", label: t("adjustments.active") },
-            { value: "inactive", label: t("adjustments.disabled") },
-          ],
-          initial: "active",
-        },
-      },
-      {
-        key: "actions",
-        label: t("adjustments.column.actions"),
-        pinned: "end",
-        cell: (reason) => this.#manage(reason),
-      },
-    ];
+  /** The rows drawn, in list order; called only once the reasons have loaded. */
+  #shown(): AdjustmentReason[] {
+    const found = new Set(
+      searchBy(this.search, this.reasons!, (reason) => [
+        reason.name,
+        ...Object.values(reason.names),
+      ]),
+    );
+    return this.reasons!.filter((reason) => found.has(reason));
+  }
+
+  #row(reason: AdjustmentReason) {
+    const isVoid = reason.kind === "void";
+    return html`<tr data-reason=${reason.id}>
+      <td class="handle-cell">${this.#reorder.handle(reason.id)}</td>
+      <td>
+        <span class="reason-name">${reason.name}</span>
+        ${
+          reason.noteRequired
+            ? html`<wt-lozenge>${t("adjustments.note_required")}</wt-lozenge>`
+            : nothing
+        }
+      </td>
+      <td><wt-lozenge>${kindName(reason.kind)}</wt-lozenge></td>
+      <td>${isVoid ? t("adjustments.none") : rolesText(reason.applyRoles)}</td>
+      <td>${isVoid ? t("adjustments.none") : rolesText(reason.approverRoles)}</td>
+      <td>${this.#lines(this.#limits(reason))}</td>
+      <td class="actions-cell">${this.#rowMenu(reason)}</td>
+    </tr>`;
+  }
+
+  #table(rows: readonly AdjustmentReason[]) {
+    const note = t(this.#searching ? "adjustments.order_note_searching" : "adjustments.order_note");
+    if (rows.length === 0)
+      return html`<p role="status" data-test="no-matches">${t("adjustments.no_matches")}</p>
+        <p class="hint">${note}</p>`;
+    return html`<div
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        aria-label=${t("adjustments.title")}
+        data-test="reasons"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th scope="col" class="handle-cell">
+                <span class="visually-hidden">${t("adjustments.reorder")}</span>
+              </th>
+              <th scope="col">${t("adjustments.column.name")}</th>
+              <th scope="col">${t("adjustments.column.kind")}</th>
+              <th scope="col">${t("adjustments.column.apply_roles")}</th>
+              <th scope="col">${t("adjustments.column.approver_roles")}</th>
+              <th scope="col">${t("adjustments.column.limits")}</th>
+              <th scope="col" class="actions-cell">
+                <span class="visually-hidden">${t("adjustments.column.actions")}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${repeat(
+              rows,
+              (reason) => reason.id,
+              (reason) => this.#row(reason),
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">${note}</p>`;
   }
 
   #fieldError(errors: FieldErrors, field: Field) {
@@ -1255,11 +1441,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #modal() {
     const editor = this.editor;
     if (editor === undefined) return nothing;
-    const reason = editor.kind === "reason" ? editor.reason : undefined;
-    const deactivating = editor.kind === "deactivate";
-    const heading = deactivating
-      ? t("adjustments.disable_heading")
-      : t(reason ? "adjustments.edit_heading" : "adjustments.new");
+    const heading = t(editor.reason ? "adjustments.edit_heading" : "adjustments.new");
     const checked = this.attempted ? this.#check() : {};
     const errors = { ...this.refusedFields, ...checked };
     const invalid = Object.keys(checked).length > 0;
@@ -1270,7 +1452,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     return keyed(
       editor,
       html`<wt-modal
-        size=${deactivating ? "compact" : "standard"}
+        size="standard"
         open
         heading=${heading}
         .beforeClose=${this.#leave ? this.#closeGuard : undefined}
@@ -1284,13 +1466,7 @@ export class AdjustmentReasonsScreen extends LitElement {
             submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        <div class="form">
-          ${
-            deactivating
-              ? html`<p>${tf("adjustments.disable_explained", { name: editor.reason.name })}</p>`
-              : this.#reasonForm(errors)
-          }
-        </div>
+        <div class="form">${this.#reasonForm(errors)}</div>
         <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button
             slot="cancel"
@@ -1299,76 +1475,56 @@ export class AdjustmentReasonsScreen extends LitElement {
             ?disabled=${this.busy}
             @click=${() => this.#cancel(editor)}
             >${t("adjustments.cancel")}</wt-button
-          >${
-            deactivating
-              ? html`<wt-button
-                  variant="danger"
-                  data-test="confirm-deactivate"
-                  ?disabled=${this.busy}
-                  @click=${() => this.#deactivate(editor)}
-                  >${t("adjustments.disable")}</wt-button
-                >`
-              : html`<wt-button
-                  variant=${saveActionState(this.#reasonScope).variant}
-                  data-test="save-editor"
-                  ?disabled=${saveActionState(this.#reasonScope).unchanged || this.busy || invalid}
-                  @click=${() => this.#save(editor)}
-                  >${t("adjustments.save")}</wt-button
-                >`
-          }</wt-form-actions
+          ><wt-button
+            variant=${saveActionState(this.#reasonScope).variant}
+            data-test="save-editor"
+            ?disabled=${saveActionState(this.#reasonScope).unchanged || this.busy || invalid}
+            @click=${() => this.#save(editor)}
+            >${t("adjustments.save")}</wt-button
+          ></wt-form-actions
         >
       </wt-modal>`,
     );
   }
 
-  #renderAdd(slot?: "empty-action") {
+  #renderAdd() {
     return html`<wt-button
       variant="primary"
       data-test="add-reason"
-      slot=${ifDefined(slot)}
       ?disabled=${this.busy}
-      @click=${(event: Event) => this.#open({ kind: "reason" }, event.currentTarget as HTMLElement)}
+      @click=${(event: Event) => this.#open({}, event.currentTarget as HTMLElement)}
       >${t("adjustments.add")}</wt-button
     >`;
   }
 
+  #renderSearch() {
+    return html`<wt-input
+      data-test="search"
+      name="search"
+      type="search"
+      autocomplete="off"
+      label=${t("adjustments.search")}
+      .value=${this.search}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => (this.search = event.detail.value)}
+    ></wt-input>`;
+  }
+
   override render() {
-    const alert = this.loadError ?? this.actionError;
-    return html`<p class="intro">${t("adjustments.intro")}</p>
+    // A read's failure never replaces an action's; a read's recovery clears only its own.
+    const alert = this.actionError ?? this.loadError;
+    return html`<h1>${t("adjustments.title")}</h1>
+      <p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}
-      <div class="toolbar">${this.#renderAdd()}</div>
       ${
-        this.reasons
-          ? html`<wt-data-table
-              filterSearchPlaceholder=${t("adjustments.combobox_search")}
-              filterNoResultsLabel=${t("adjustments.combobox_no_results")}
-              data-test="reasons"
-              aria-label=${t("adjustments.title")}
-              viewKey="waitron.adjustments.reasons.table"
-              customiseColumnsLabel=${t("adjustments.customise_columns")}
-              customiseLabel=${t("adjustments.customise")}
-              restoreColumnsLabel=${t("adjustments.restore_columns")}
-              doneLabel=${t("adjustments.done")}
-              moveColumnLabel=${t("adjustments.move_column")}
-              showColumnLabel=${t("adjustments.show_column")}
-              hideColumnLabel=${t("adjustments.hide_column")}
-              alwaysShownColumnLabel=${t("adjustments.column_always_shown")}
-              lastShownColumnLabel=${t("adjustments.column_last_shown")}
-              columnPositionLabel=${t("adjustments.column_position")}
-              filtersLabel=${t("adjustments.filters")}
-              filteredColumnLabel=${t("adjustments.filtered_column")}
-              filtersClearAllLabel=${t("adjustments.filters_clear_all")}
-              filtersCloseLabel=${t("adjustments.filters_close")}
-              .rows=${this.reasons}
-              .columns=${this.#columns()}
-              .rowKey=${(reason: AdjustmentReason) => reason.id}
-              .emptyMessage=${t("adjustments.empty")}
-              .noMatchesMessage=${tableNoMatches()}
-              >${this.reasons.length === 0 ? this.#renderAdd("empty-action") : nothing}</wt-data-table
-            >`
-          : nothing
+        this.reasons?.length === 0
+          ? html`<div class="empty">
+              <p data-test="empty">${t("adjustments.empty")}</p>
+              ${this.#renderAdd()}
+            </div>`
+          : html`<div class="toolbar">${this.#renderSearch()} ${this.#renderAdd()}</div>
+              ${this.reasons ? this.#table(this.#shown()) : nothing}`
       }
-      ${this.#limitSection()} ${this.#modal()}`;
+      ${this.#reorder.liveRegion()} ${this.#limitSection()} ${this.#modal()} ${this.#deleteDialog()}`;
   }
 }
 

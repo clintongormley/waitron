@@ -85,7 +85,6 @@ export interface AdjustmentReason {
   applyRoles: PersonRoleValue[];
   approverRoles: PersonRoleValue[];
   noteRequired: boolean;
-  active: boolean;
   position: number;
 }
 
@@ -100,8 +99,7 @@ export type AdjustmentVerdict =
   | { kind: "needs_approval"; approval: Approval }
   | {
       kind: "refused";
-      code:
-        "adjustment.action_not_allowed" | "adjustment.note_required" | "adjustment.reason_inactive";
+      code: "adjustment.action_not_allowed" | "adjustment.note_required";
     };
 
 export interface CompRequest {
@@ -143,7 +141,6 @@ function lacksNote(reason: AdjustmentReason, note: string | null): boolean {
 /** Past the bill's comp limit, that list approves the whole request (design §3.2, step 3). */
 export function evaluateComp(reason: AdjustmentReason, req: CompRequest): AdjustmentVerdict {
   assertWellFormed(req);
-  if (!reason.active) return { kind: "refused", code: "adjustment.reason_inactive" };
   if (reason.kind !== "comp" || !reason.actions.includes(req.action)) {
     return { kind: "refused", code: "adjustment.action_not_allowed" };
   }
@@ -172,7 +169,6 @@ export function evaluateComp(reason: AdjustmentReason, req: CompRequest): Adjust
 }
 
 export function evaluateCancel(reason: AdjustmentReason, req: CancelRequest): AdjustmentVerdict {
-  if (!reason.active) return { kind: "refused", code: "adjustment.reason_inactive" };
   if (reason.kind !== "void" || !reason.actions.includes("cancel")) {
     return { kind: "refused", code: "adjustment.action_not_allowed" };
   }

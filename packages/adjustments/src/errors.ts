@@ -7,13 +7,12 @@ declare module "@waitron/shared" {
     "adjustment_reason.name_taken": { name: string };
     /** `field` names the input the policy refuses, or `ids` for a reorder list. */
     "adjustment_reason.invalid": { field: string };
-    /** The change would leave the venue no switched-on Void reason, or, with `withNote`, none that
-     * asks for a note. */
+    /** The change would leave the venue no Void reason, or, with `withNote`, none that asks for a
+     * note. */
     "adjustment_reason.void_required": { withNote: boolean };
     // The refusals `evaluateComp` and `evaluateCancel` return as a verdict's `code`.
     "adjustment.action_not_allowed": Record<string, never>;
     "adjustment.note_required": Record<string, never>;
-    "adjustment.reason_inactive": Record<string, never>;
     /** A discount larger than the line or bill it is taken off; amounts are decimal strings. */
     "adjustment.exceeds_amount": { requested: string; available: string };
     /** The request needs a PIN from someone `approval` names, and none was given. */
@@ -31,7 +30,7 @@ declare module "@waitron/shared" {
      * whole. `lineNo` is the line asked about. */
     "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
     /** A configuration bundle row the venue could not hold; `field` is `table.column`, or the
-     * table alone when no row keeps a switched-on Void reason asking for a note. */
+     * table alone when no row keeps a Void reason asking for a note. */
     "setup.request_invalid": { field: string };
   }
 }

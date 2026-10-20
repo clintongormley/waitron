@@ -31,9 +31,9 @@ function textList(value: unknown, field: string): string[] {
 
 /**
  * Refuses a reason of an unknown kind or one {@link reasonShapeFault} faults, settings whose bill
- * approvers {@link isRoleList} does not accept, and a bundle that leaves the venue no switched-on
- * Void reason asking for a note, as the operations keep one (A758 D27). A Void reason that passes
- * can cancel. The export writes booleans as 0 and 1.
+ * approvers {@link isRoleList} does not accept, and a bundle that leaves the venue no Void reason
+ * asking for a note, as the operations keep one (A758 D27). A Void reason that passes can cancel.
+ * The export writes booleans as 0 and 1.
  */
 function validateAdjustmentsConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
@@ -53,7 +53,7 @@ function validateAdjustmentsConfiguration(
     });
     if (fault !== null) refuse(`adjustment_reasons.${REASON_COLUMNS[fault]}`);
   }
-  if (!reasons.some((row) => row.kind === "void" && row.active === 1 && row.note_required === 1)) {
+  if (!reasons.some((row) => row.kind === "void" && row.note_required === 1)) {
     refuse("adjustment_reasons");
   }
   for (const row of tables.adjustment_settings ?? []) {

@@ -1,4 +1,6 @@
-import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
+import type { DeleteImpact } from "@waitron/shared";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
 // Local copies of the routes' JSON shapes: importing the package barrel would pull `@waitron/db` and
 // Node builtins into the browser bundle.
@@ -29,7 +31,6 @@ export interface AdjustmentSettings {
 
 export interface AdjustmentReason extends AdjustmentReasonInput {
   id: string;
-  active: boolean;
   position: number;
 }
 
@@ -123,7 +124,7 @@ export class AdjustmentsApi {
 
   async listReasons(): Promise<AdjustmentReason[]> {
     const body = await this.request<{ reasons: AdjustmentReason[] }>(
-      "/management-api/adjustments/reasons?includeInactive=true",
+      "/management-api/adjustments/reasons",
       "GET",
       undefined,
       { passive: this.passive },
@@ -139,15 +140,34 @@ export class AdjustmentsApi {
     return this.request(`/management-api/adjustments/reasons/${reasonId}`, "PUT", input);
   }
 
-  deactivateReason(reasonId: string): Promise<void> {
+  deleteReason(reasonId: string): Promise<void> {
     return this.request(`/management-api/adjustments/reasons/${reasonId}`, "DELETE");
   }
 
-  reactivateReason(reasonId: string): Promise<AdjustmentReason> {
-    return this.request(`/management-api/adjustments/reasons/${reasonId}/reactivate`, "POST");
+  /** Keeps `apply` fed with what deleting the reason would do; resolves after the first read. */
+  watchReasonDeleteImpact(
+    queries: QueryController,
+    reasonId: string,
+    apply: (impact: DeleteImpact) => void,
+  ): Promise<void> {
+    return queries.watch(
+      "delete-impact",
+      {
+        key: `adjustments:reason-delete-impact:${reasonId}`,
+        dependencies: QUERY_DEPENDENCIES["reason-delete-impact"].map((type) => ({ type })),
+        read: () =>
+          this.request<DeleteImpact>(
+            `/management-api/adjustments/reasons/${reasonId}/delete-impact`,
+            "GET",
+            undefined,
+            { passive: true },
+          ),
+      },
+      apply,
+    );
   }
 
-  /** `ids` is every active reason, once each, in the new order. */
+  /** `ids` is every reason, once each, in the new order. */
   reorderReasons(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });
   }

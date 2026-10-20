@@ -42,14 +42,11 @@ export const adjustmentReasons = table(
     applyRoles: json<PersonRoleValue[]>("apply_roles").notNull().default([]),
     approverRoles: json<PersonRoleValue[]>("approver_roles").notNull().default([]),
     noteRequired: flag("note_required").notNull().default(false),
-    active: flag("active").notNull().default(true),
     position: count("position").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    uniqueIndex("adjustment_reasons_active_name_key")
-      .on(t.name)
-      .where(sql`${t.active}`),
+    uniqueIndex("adjustment_reasons_name_key").on(t.name),
     check("adjustment_reasons_name_ck", sql`length(trim(${t.name})) > 0`),
     check("adjustment_reasons_actions_ck", sql`json_array_length(${t.actions}) > 0`),
     check(

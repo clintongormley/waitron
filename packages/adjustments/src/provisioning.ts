@@ -45,7 +45,7 @@ function compReason(
   };
 }
 
-/** Design §4. "Other" asks for a note: a venue always keeps a switched-on Void reason that does
+/** Design §4. "Other" asks for a note: a venue always keeps a Void reason that does
  * (D27). */
 const STARTERS: readonly Starter[] = [
   voidReason("Entry error"),
@@ -66,7 +66,7 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the starter void and comp reasons",
     async run(tx) {
-      if ((await listAdjustmentReasons(tx, { includeInactive: true })).length > 0) {
+      if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
       for (const starter of STARTERS) {

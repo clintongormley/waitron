@@ -1405,6 +1405,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **The kitchen and expo screens still show allergens as text chips.** A668 brings icons to the
   editor, the till's buttons and its order list, not to these screens.
 
+- **A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
+  tested).** `apps/dashboard/src/widgets/course-list.ts` holds an incoming list only while a move
+  is unsaved (`#readDropped = this.#movesOut > 0`), and a pointer drag saves only on drop, so a live
+  list arriving mid-drag looks to be applied under the finger. A758-2 fixed the same shape on the
+  Voids and comps page by holding the list while `ReorderController.dragging` is true. Write the
+  failing test first.
+
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
@@ -2220,12 +2227,34 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   **A758-1 built the rules** ([plan](superpowers/plans/2026-10-19-a758-reason-rules.md)): Void and Comp
   reasons, Comp role lists, limits that ask for a PIN, the bill's comp limit in euros, nine starter
   reasons (English only, owner 2026-10-19; their translation at setup is A918), and the till naming
-  whose PIN it needs. Left: A758-2 (the page), A758-3 (the report),
+  whose PIN it needs. **A758-2 built the page** ([plan](superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
+  Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
+  it left open. Left: A758-3 (the report),
   A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
   "collect it at the counter" slices.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
+
+- **A923. The voids and comps list is a plain table (left open by A758-2).** It has no column
+  chooser, Filters or remembered view, and its own CSS keeps the row menu on a phone's screen,
+  because the shared reorder helper (`ReorderController`) cannot reach `wt-data-table`'s rows. The other way is to teach
+  `wt-data-table` to reorder rows (a `packages/ui` change), giving every reorderable list one
+  table. Owner to choose.
+
+- **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
+  A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word
+  carries the meaning. Owner to confirm, or `wt-lozenge` gains token colours.
+
+- **A925. Words on the voids and comps page that no picture drew (left open by A758-2).** The
+  Delete question's sentences, the hint shown while searching («Borra la búsqueda para cambiar el
+  orden.»), the Spanish intro and the limits («{percent}% por artículo», «{amount} por cuenta»), in
+  `packages/adjustments/src/dashboard/strings.ts`. Owner to read them.
+
+- **A926. A deleted reason re-added under the same name starts its limits' count again (left open
+  by A758-2).** The item and bill limits count earlier comps by the reason's id
+  (`packages/adjustments/src/record.ts`), and a re-added reason has a new one, so on an open bill
+  its limits start from nothing. Accepted for now (plan Decision 2); revisit if a venue meets it.
 
 - **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been
   started (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish
@@ -4576,13 +4605,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   Seen again 2026-10-20 in A757 slice 2's look pictures
   (`docs/backlog/mockups/a757-table-states/built-2/venue-settings-*-dark.png`).
   [Detail](backlog/dashboard.md#the-dashboards-dark-wordmark-looked-nearly-black-a253-observation-2026-10-09)
-
-- **Venue settings' tab strip cuts off its last tab on a phone (A916, A757 slice 2's look, 2026-10-20) — OPEN.**
-  At 390 px wide the three tabs (Venue details, Adjustment reasons, Kitchen) run about 30 px past
-  the screen, so Kitchen is cut off until the strip is swiped.
-  Picture: `docs/backlog/mockups/a757-table-states/built-2/venue-settings-390-light.png`.
-  **Next action:** decide with A755 (Venue settings' own page) whether the tabs wrap or show a
-  scroll cue; if A755 removes the tabs first, delete this entry.
 
 - **`wt-relative-time` also keeps disclosure state from `toggle` and has document listeners**
   (open, untested; A369 review). Next: reproduce open/remove/reinsert, including removal before the

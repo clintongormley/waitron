@@ -41,6 +41,9 @@ class TestReorderHost extends LitElement {
   @property({ attribute: false }) items: { id: string; name: string; height?: number }[] = [];
   @property({ type: Boolean }) busy = false;
   announcementText = "{item} moved to position {index} of {total}";
+  get dragging(): boolean {
+    return this.#reorder.dragging;
+  }
   readonly #reorder = new ReorderController(
     this,
     {
@@ -597,6 +600,22 @@ it("marks the row being dragged, and clears it on release", async () => {
   pointer(document, "pointerup", 1);
   await el.updateComplete;
   expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
+});
+
+it("says a drag is held from the press, before any row has moved, until it ends", async () => {
+  const el = await mount();
+  expect(el.dragging).toBe(false);
+  pointer(handle(el, "a"), "pointerdown", 1);
+  expect(el.dragging).toBe(true);
+  pointer(document, "pointerup", 1);
+  expect(el.dragging).toBe(false);
+  pointer(handle(el, "b"), "pointerdown", 2);
+  expect(el.dragging).toBe(true);
+  pointer(document, "pointercancel", 2);
+  expect(el.dragging).toBe(false);
+  pointer(handle(el, "c"), "pointerdown", 3);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(el.dragging).toBe(false);
 });
 
 it("clears the mark when the system cancels the pointer", async () => {

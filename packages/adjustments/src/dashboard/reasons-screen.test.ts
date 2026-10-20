@@ -1,18 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LiveData, codeMessage, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import { LiveData, codeMessage, setLocale, type QueryController } from "@waitron/dashboard-kit";
+import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import {
-  chooseOption,
-  chooseOptions,
-  expectFiltersFirst,
-  expectRowMenusOnScreen,
-  formMessageOf,
-} from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
-import { ADJUSTMENTS_STRINGS, actionChoice, kindName, offerName, roleName, tf } from "./strings.js";
+import { ADJUSTMENTS_STRINGS, actionChoice, kindName, roleName, t, tf } from "./strings.js";
 
 const ES = ADJUSTMENTS_STRINGS.es;
 
@@ -42,7 +37,6 @@ const entryError: AdjustmentReason = {
   applyRoles: [],
   approverRoles: [],
   noteRequired: false,
-  active: true,
   position: 0,
 };
 const complaint: AdjustmentReason = {
@@ -56,7 +50,6 @@ const complaint: AdjustmentReason = {
   applyRoles: ["supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: true,
-  active: true,
   position: 1,
 };
 const employee: AdjustmentReason = {
@@ -70,7 +63,6 @@ const employee: AdjustmentReason = {
   applyRoles: ["supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: false,
-  active: true,
   position: 2,
 };
 const retired: AdjustmentReason = {
@@ -84,19 +76,29 @@ const retired: AdjustmentReason = {
   applyRoles: ["staff", "supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: false,
-  active: false,
   position: 3,
 };
 const reasons = [entryError, complaint, employee, retired];
 
-it("names the reasons Filters panel in Spanish", async () => {
-  setLocale("es");
-  const el = await mount(fakeApi());
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  expect(table.shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe(
-    `${ES["adjustments.filters"]} 1`,
+function impactOf(reason: AdjustmentReason, refusals: DeleteImpactRefusal[] = []): DeleteImpact {
+  return { target: { id: reason.id, name: reason.name }, refusals, ends: [], removes: [] };
+}
+
+/** Reads the impact through the screen's own controller, as the real client does. */
+function watchImpact(read: (reasonId: string) => Promise<DeleteImpact>) {
+  return vi.fn(
+    (queries: QueryController, reasonId: string, apply: (impact: DeleteImpact) => void) =>
+      queries.watch(
+        "delete-impact",
+        {
+          key: `impact:${reasonId}`,
+          dependencies: [{ type: "adjustment_reasons" }],
+          read: () => read(reasonId),
+        },
+        apply,
+      ),
   );
-});
+}
 
 type FakeApi = {
   [K in keyof AdjustmentsApi]: AdjustmentsApi[K] extends (...args: infer A) => infer R
@@ -110,8 +112,10 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
     listReasons: vi.fn().mockResolvedValue(reasons),
     createReason: vi.fn().mockResolvedValue({ ...complaint, id: "n" }),
     updateReason: vi.fn().mockResolvedValue(complaint),
-    deactivateReason: vi.fn().mockResolvedValue(undefined),
-    reactivateReason: vi.fn().mockResolvedValue({ ...retired, active: true }),
+    deleteReason: vi.fn().mockResolvedValue(undefined),
+    watchReasonDeleteImpact: watchImpact(async (reasonId) =>
+      impactOf(reasons.find((reason) => reason.id === reasonId)!),
+    ),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
     getSettings: vi
       .fn()
@@ -165,13 +169,9 @@ function table(el: AdjustmentReasonsScreen): HTMLElement {
 }
 
 function rowKeys(el: AdjustmentReasonsScreen): string[] {
-  return [...table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
-    row.getAttribute("data-row-key")!,
+  return [...(table(el)?.querySelectorAll("tbody tr[data-reason]") ?? [])].map((row) =>
+    row.getAttribute("data-reason")!,
   );
-}
-
-function rowText(el: AdjustmentReasonsScreen, key: string): string {
-  return table(el).shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.textContent!;
 }
 
 async function press(el: AdjustmentReasonsScreen, test: string): Promise<void> {
@@ -282,27 +282,184 @@ function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disa
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 describe("the reasons list", () => {
-  it("puts Add reason under the empty table's sentence, opening the same editor", async () => {
+  /** Each reason's translations differ from its staff name, so a cell reading either shows which. */
+  const reason = (fields: Partial<AdjustmentReason> & Pick<AdjustmentReason, "id" | "name">) =>
+    ({
+      names: { en: `${fields.name} for guests`, es: `${fields.name} for guests (es)` },
+      kind: "void",
+      actions: ["cancel"],
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRoles: [],
+      approverRoles: [],
+      noteRequired: false,
+      position: 0,
+      ...fields,
+    }) satisfies AdjustmentReason;
+  const pictureReasons = (): AdjustmentReason[] => [
+    reason({ id: "e", name: "Entry error", position: 0 }),
+    reason({ id: "x", name: "Other", noteRequired: true, position: 1 }),
+    reason({
+      id: "c",
+      name: "Complaint",
+      kind: "comp",
+      actions: ["comp"],
+      maxAmount: "30.00",
+      applyRoles: ["supervisor", "manager", "admin"],
+      approverRoles: ["supervisor", "manager", "admin"],
+      position: 2,
+    }),
+    reason({
+      id: "s",
+      name: "Staff meal",
+      kind: "comp",
+      actions: ["discount_percent"],
+      maxPercentBp: 5000,
+      applyRoles: ["staff", "supervisor", "manager", "admin"],
+      approverRoles: ["manager", "admin"],
+      position: 3,
+    }),
+  ];
+  const text = (node: Element) => node.textContent!.replace(/[ \t\n\r]+/g, " ").trim();
+  /** Each row's cells but the grip and the menu, as the operator reads them. */
+  const cells = (el: AdjustmentReasonsScreen) =>
+    [...table(el).querySelectorAll("tbody tr[data-reason]")].map((row) =>
+      [...row.querySelectorAll("td")].slice(1, -1).map(text),
+    );
+  const headers = (el: AdjustmentReasonsScreen) =>
+    [...table(el).querySelectorAll("thead tr > *")].slice(1, -1).map(text);
+  const emptyAdd = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="empty"] + [data-test="add-reason"]')!;
+
+  it("draws each reason as picture 01", async () => {
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue(pictureReasons()) }));
+    const wrap = table(el);
+    expect(wrap.classList.contains("table-wrap")).toBe(true);
+    expect(wrap.getAttribute("tabindex")).toBe("0");
+    expect(wrap.getAttribute("role")).toBe("region");
+    expect(wrap.getAttribute("aria-label")).toBe("Voids and comps");
+    expect(headers(el)).toEqual([
+      "Name",
+      "Kind",
+      "Who can apply it",
+      "Who can approve it",
+      "Limits",
+    ]);
+    expect(rowKeys(el)).toEqual(["e", "x", "c", "s"]);
+    expect(cells(el)).toEqual([
+      ["Entry error", "Void", "—", "—", "—"],
+      ["Other Note required", "Void", "—", "—", "—"],
+      [
+        "Complaint",
+        "Comp",
+        "Supervisor, Manager, Admin",
+        "Supervisor, Manager, Admin",
+        "€30.00 a bill",
+      ],
+      ["Staff meal", "Comp", "Everyone", "Manager, Admin", "50% an item"],
+    ]);
+    expect(table(el).textContent).not.toContain("for guests");
+    const row = (id: string) => wrap.querySelector(`tr[data-reason="${id}"]`)!;
+    expect(row("x").querySelector("td:nth-child(2) wt-lozenge")!.textContent!.trim()).toBe(
+      "Note required",
+    );
+    expect(text(row("c").querySelector("td:nth-child(3) wt-lozenge")!)).toBe("Comp");
+    expect(row("e").querySelector("td.handle-cell")).not.toBeNull();
+    const menu = row("c").querySelector("td.actions-cell wt-row-actions")!;
+    expect(menu.getAttribute("label")).toBe("Actions: Complaint");
+    expect(menu.querySelector('[data-test="edit-c"]')).not.toBeNull();
+    expect(text(el.shadowRoot!.querySelector(".table-wrap + p.hint")!)).toBe(
+      "Drag ⋮⋮ to set the order the till lists them in.",
+    );
+  });
+
+  it("puts a Comp reason's two limits on a line each", async () => {
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue([employee]) }));
+    const limits = table(el).querySelector('tr[data-reason="d"] td:nth-child(6)')!;
+    expect([...limits.children].map(text)).toEqual(["30% an item", "€20.00 a bill"]);
+  });
+
+  it("draws each reason as picture 01 in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue(pictureReasons()) }));
+    expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe(ES["adjustments.title"]);
+    expect(el.shadowRoot!.querySelector(".intro")!.textContent!.trim()).toBe(
+      ES["adjustments.intro"],
+    );
+    expect(table(el).getAttribute("aria-label")).toBe(ES["adjustments.title"]);
+    expect(headers(el)).toEqual([
+      ES["adjustments.column.name"],
+      ES["adjustments.column.kind"],
+      ES["adjustments.column.apply_roles"],
+      ES["adjustments.column.approver_roles"],
+      ES["adjustments.column.limits"],
+    ]);
+    const none = ES["adjustments.none"];
+    const roles = (...each: string[]) => each.map((role) => roleName(role, "es")).join(", ");
+    expect(cells(el)).toEqual([
+      ["Entry error", kindName("void", "es"), none, none, none],
+      [`Other ${ES["adjustments.note_required"]}`, kindName("void", "es"), none, none, none],
+      [
+        "Complaint",
+        kindName("comp", "es"),
+        roles("supervisor", "manager", "admin"),
+        roles("supervisor", "manager", "admin"),
+        tf("adjustments.limit_amount", { amount: "30,00\u00a0€" }, "es"),
+      ],
+      [
+        "Staff meal",
+        kindName("comp", "es"),
+        ES["adjustments.everyone"],
+        roles("manager", "admin"),
+        tf("adjustments.limit_percent", { percent: "50" }, "es"),
+      ],
+    ]);
+    expect(table(el).textContent).not.toContain("for guests");
+    expect(text(el.shadowRoot!.querySelector(".table-wrap + p.hint")!)).toBe(
+      ES["adjustments.order_note"],
+    );
+  });
+
+  it("shows the empty sentence with Add reason under it, opening the same editor", async () => {
     const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue([]) }));
-    const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-    expect(button.assignedSlot).not.toBeNull();
+    expect(table(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="empty"]')!.textContent!.trim()).toBe(
+      "No reasons yet.",
+    );
+    expect(el.shadowRoot!.querySelectorAll('[data-test="add-reason"]')).toHaveLength(1);
+    const button = emptyAdd(el);
     expect(button.textContent!.trim()).toBe("Add reason");
     button.click();
     await settle(el);
     expect(modal(el)!.getAttribute("heading")).toBe("Add reason");
   });
 
-  it("draws no Add reason in the table once reasons exist", async () => {
+  it("draws one Add reason, on the search row, once reasons exist", async () => {
     const el = await mount(fakeApi());
-    expect(table(el).querySelector(":scope > [slot=empty-action]")).toBeNull();
+    const adds = el.shadowRoot!.querySelectorAll('[data-test="add-reason"]');
+    expect(adds).toHaveLength(1);
+    const toolbar = el.shadowRoot!.querySelector(".toolbar")!;
+    expect(toolbar.lastElementChild).toBe(adds[0]);
+    expect(toolbar.compareDocumentPosition(table(el)) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="empty"]')).toBeNull();
   });
 
-  it("returns focus to the toolbar's Add reason after the first reason is made from the empty table", async () => {
+  it("opens Edit from the row menu", async () => {
+    const el = await mount(fakeApi());
+    expect(find(el, '[data-test="edit-c"]')!.closest("td.actions-cell")).not.toBeNull();
+    await press(el, "edit-c");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit reason");
+    expect(field(el, "name").value).toBe("Complaint");
+  });
+
+  it("returns focus to the toolbar's Add reason after the first reason is made from the empty list", async () => {
     const api = fakeApi({
       listReasons: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([complaint]),
     });
     const el = await mount(api);
-    table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!.click();
+    emptyAdd(el).click();
     await settle(el);
     await type(el, "name", "Birthday");
     await toggleAction(el, "comp");
@@ -313,10 +470,10 @@ describe("the reasons list", () => {
     );
   });
 
-  it("returns focus to the empty table's Add reason after Cancel", async () => {
+  it("returns focus to the empty list's Add reason after Cancel", async () => {
     const api = fakeApi({ listReasons: vi.fn().mockResolvedValue([]) });
     const el = await mount(api);
-    const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    const button = emptyAdd(el);
     button.click();
     await settle(el);
     await press(el, "cancel-editor");
@@ -325,280 +482,396 @@ describe("the reasons list", () => {
     expect(api.createReason).not.toHaveBeenCalled();
   });
 
-  it("lists the active reasons in their order, with what each allows, its limits and roles", async () => {
-    const el = await mount(fakeApi());
-    expect(rowKeys(el)).toEqual(["e", "c", "d"]);
-    const text = rowText(el, "c");
-    expect(text).toContain("Complaint");
-    expect(text).not.toContain("Guest complaint");
-    expect(text).toContain("Free");
-    expect(text).toContain("Percentage discount");
-    expect(rowText(el, "d")).toContain("Up to 30% off an item");
-    expect(text).toContain("Up to €30.00 off a bill");
-    expect(text).toContain("Supervisor, Manager, Admin");
-    expect(text).toContain("Approves: Manager, Admin");
-    expect(text).toContain("Note required");
-    expect(rowText(el, "e")).toContain("No limit");
-    expect(rowText(el, "e")).toContain("Void");
-  });
-
-  it("shows the disabled reasons when the status filter asks for them, without reorder buttons", async () => {
-    const el = await mount(fakeApi());
-    const filter = table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
-      'wt-combobox[data-filter="status"]',
-    )!;
-    expect(filter.value).toBe("active");
-    await chooseOption(filter, "inactive");
-    await settle(el);
-    expect(rowKeys(el)).toEqual(["o"]);
-    expect(rowText(el, "o")).toContain("Disabled");
-    expect(rowText(el, "o")).not.toContain("Inactive");
-    expect(find(el, '[data-test="move-up-o"]')).toBeNull();
-    expect(find(el, '[data-test="deactivate-o"]')).toBeNull();
-    expect(find(el, '[data-test="edit-o"]')).not.toBeNull();
-  });
-
-  it.each(["en", "es"])(
-    "says the dashboard's one no-matches sentence when the status filter hides every reason (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue([complaint]) }));
-      await chooseOption(
-        table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
-          'wt-combobox[data-filter="status"]',
-        )!,
-        "inactive",
-      );
-      await settle(el);
-      expect(rowKeys(el)).toEqual([]);
-      expect(table(el).shadowRoot!.querySelector(".message")!.textContent).toBe(
-        tableNoMatches(locale),
-      );
-    },
-  );
-
-  it("reads the whole list, inactive reasons included, and later reads passively", async () => {
+  it("reads the list first as the person's own request, and passively after a save", async () => {
     const background = { listReasons: vi.fn().mockResolvedValue(reasons) };
     const api = fakeApi({ background });
     const el = await mount(api);
     expect(api.listReasons).toHaveBeenCalledTimes(1);
-    await press(el, "move-down-e");
+    await press(el, "edit-c");
+    await type(el, "name", "Guest complaint");
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledOnce();
+    expect(api.listReasons).toHaveBeenCalledTimes(1);
     expect(background.listReasons).toHaveBeenCalledTimes(1);
+  });
+
+  it("searches every name of a reason, keeping list order", async () => {
+    const el = await mount(
+      fakeApi({
+        listReasons: vi.fn().mockResolvedValue([
+          reason({ id: "k", name: "Kitchen complaint", position: 0 }),
+          reason({ id: "e", name: "Entry error", position: 1 }),
+          reason({
+            id: "c",
+            name: "Complaint",
+            names: { en: "Complaint", es: "Grievance (es)" },
+            position: 2,
+          }),
+          reason({ id: "b", name: "Crème brûlée spilt", position: 3 }),
+        ]),
+      }),
+    );
+    const search = field(el, "search");
+    expect(search.tagName).toBe("WT-INPUT");
+    expect(search.getAttribute("type")).toBe("search");
+    expect(search.getAttribute("data-test")).toBe("search");
+    expect(el.shadowRoot!.querySelector(".toolbar")!.firstElementChild).toBe(search);
+    const hint = () => text(el.shadowRoot!.querySelector("p.hint")!);
+    expect(hint()).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+
+    await type(el, "search", "compl");
+    expect(rowKeys(el)).toEqual(["k", "c"]);
+    expect(hint()).toBe("Clear the search to change the order.");
+
+    await type(el, "search", "griev");
+    expect(rowKeys(el)).toEqual(["c"]);
+
+    await type(el, "search", "CREME");
+    expect(rowKeys(el)).toEqual(["b"]);
+
+    await type(el, "search", "zzz");
+    expect(rowKeys(el)).toEqual([]);
+    expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(
+      "Nothing matches your search.",
+    );
+    expect(hint()).toBe("Clear the search to change the order.");
+
+    await type(el, "search", "");
+    expect(rowKeys(el)).toEqual(["k", "e", "c", "b"]);
+    expect(el.shadowRoot!.querySelector('[data-test="no-matches"]')).toBeNull();
+    expect(hint()).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+  });
+
+  it("says the searching note in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(field(el, "search").getAttribute("label")).toBe(ES["adjustments.search"]);
+    await type(el, "search", "compl");
+    expect(text(el.shadowRoot!.querySelector("p.hint")!)).toBe(
+      ES["adjustments.order_note_searching"],
+    );
+    await type(el, "search", "zzz");
+    expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(
+      ES["adjustments.no_matches"],
+    );
+  });
+
+  it("keeps the row menu on screen at phone width", async () => {
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue(pictureReasons()) }));
+    el.parentElement!.style.width = "390px";
+    await settle(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const wrap = table(el);
+    expect(wrap.scrollLeft).toBe(0);
+    expect(wrap.scrollWidth).toBeGreaterThan(wrap.clientWidth);
+    const wrapRight = wrap.getBoundingClientRect().right;
+    const menus = [...wrap.querySelectorAll("tbody tr[data-reason] wt-row-actions")];
+    expect(menus).toHaveLength(4);
+    for (const menu of menus)
+      expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(wrapRight + 0.5);
+    el.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+    const pinned = [...wrap.querySelectorAll(".actions-cell")];
+    expect(pinned).toHaveLength(5);
+    for (const cell of pinned) {
+      const line = getComputedStyle(cell, "::before");
+      expect(line.borderInlineStartStyle).toBe("solid");
+      expect(line.borderInlineStartColor).toBe("rgb(1, 2, 3)");
+    }
   });
 
   it("says the list could not be loaded", async () => {
     const el = await mount(fakeApi({ listReasons: vi.fn().mockRejectedValue({ code: "x" }) }));
-    expect(alert(el)).toBe("The adjustment reasons could not be loaded.");
+    expect(alert(el)).toBe("The voids and comps could not be loaded.");
     expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
       "alert",
     );
   });
-
-  it("speaks Spanish when the dashboard does", async () => {
-    setLocale("es");
-    const el = await mount(fakeApi());
-    expect(el.shadowRoot!.querySelector("h1")).toBeNull();
-    expect(table(el).getAttribute("aria-label")).toBe(ES["adjustments.title"]);
-    const text = rowText(el, "c");
-    expect(text).toContain(offerName("comp", "es"));
-    expect(rowText(el, "d")).toContain(tf("adjustments.limit_percent", { percent: "30" }, "es"));
-    expect(text).toContain(tf("adjustments.limit_amount", { amount: "30,00\u00a0€" }, "es"));
-    expect(text).toContain(
-      tf(
-        "adjustments.approves",
-        { roles: `${roleName("manager", "es")}, ${roleName("admin", "es")}` },
-        "es",
-      ),
-    );
-    expect(rowText(el, "e")).toContain(kindName("void", "es"));
-    const filter = table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      'wt-combobox[data-filter="status"]',
-    )!;
-    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
-      ES["adjustments.combobox_search"],
-      ES["adjustments.combobox_no_results"],
-    ]);
-  });
 });
 
-describe("the reasons list's column chooser", () => {
-  type Table = HTMLElement & { updateComplete: Promise<unknown> };
-  const chooser = (el: AdjustmentReasonsScreen) =>
-    table(el).shadowRoot!.querySelector(".columns-trigger")!.getAttribute("aria-label");
-  const choices = (el: AdjustmentReasonsScreen) =>
-    [...table(el).shadowRoot!.querySelectorAll<HTMLInputElement>("input[data-column]")].map(
-      (box) => [box.dataset.column, box.checked],
+describe("setting the order", () => {
+  const grip = (el: AdjustmentReasonsScreen, id: string) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test="drag-${id}"]`)!;
+  const grips = (el: AdjustmentReasonsScreen) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-test^="drag-"]'),
+  ];
+  const announced = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector(".reorder-status")!.textContent;
+  const hint = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector("p.hint")!.textContent!.trim();
+
+  async function arrowDown(el: AdjustmentReasonsScreen, id: string): Promise<void> {
+    const button = grip(el, id);
+    button.focus();
+    button.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
     );
-  const headers = (el: AdjustmentReasonsScreen) =>
-    [...table(el).shadowRoot!.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+    await el.updateComplete;
+  }
 
-  it("offers every column but the name and the row's controls, and remembers a hidden one", async () => {
-    const el = await mount(fakeApi());
-    expect(chooser(el)).toBe("Customise columns");
-    expect(choices(el)).toEqual([
-      ["allows", true],
-      ["limits", true],
-      ["roles", true],
-      ["status", true],
-    ]);
-    expect(headers(el)).toEqual([
-      "Name",
-      "Allows",
-      "Limits",
-      "Who applies it",
-      "Status",
-      "Actions",
-    ]);
-    const box = table(el).shadowRoot!.querySelector<HTMLInputElement>(
-      'input[data-column="limits"]',
-    )!;
-    box.checked = false;
-    box.dispatchEvent(new Event("change"));
-    await (table(el) as Table).updateComplete;
-    expect(headers(el)).toEqual(["Name", "Allows", "Who applies it", "Status", "Actions"]);
-    expect(JSON.parse(localStorage.getItem("waitron.adjustments.reasons.table:columns")!)).toEqual({
-      limits: false,
-    });
-  });
-
-  it("names the chooser in Spanish when the dashboard speaks it", async () => {
-    setLocale("es");
-    const el = await mount(fakeApi());
-    expect(chooser(el)).toBe(ES["adjustments.customise_columns"]);
-  });
-
-  it("words a column that is always shown, and the last one shown, in Spanish", async () => {
-    setLocale("es");
-    const el = await mount(fakeApi());
-    const list = table(el) as Table & {
-      alwaysShownColumnLabel: string;
-      lastShownColumnLabel: string;
+  /** Presses on a reason's grip. Each move aims just inside a target row's edge as it rested
+   * before the press: a sliding row is drawn away from where it rests, and a row's middle is
+   * crossed only while that row is at most twice the dragged row's height. A row's outer edge stays
+   * put while the rows between it and the dragged row trade places. */
+  function pointerDrag(el: AdjustmentReasonsScreen, id: string) {
+    const rest = new Map(
+      [...table(el).querySelectorAll<HTMLElement>("tbody tr[data-reason]")].map((row) => [
+        row.dataset.reason!,
+        row.getBoundingClientRect(),
+      ]),
+    );
+    const to = async (clientY: number) => {
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true, pointerId: 9, clientY }),
+      );
+      await el.updateComplete;
     };
-    expect(list.alwaysShownColumnLabel).toBe(ES["adjustments.column_always_shown"]);
-    expect(list.lastShownColumnLabel).toBe(ES["adjustments.column_last_shown"]);
-  });
-});
+    grip(el, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }));
+    return {
+      down: (target: string) => to(rest.get(target)!.bottom - 1),
+      up: (target: string) => to(rest.get(target)!.top + 1),
+      release: async () => {
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+        await el.updateComplete;
+      },
+    };
+  }
 
-describe("at phone width", () => {
-  const longName = "Guest complaint about the long wait for a table on the terrace (es)";
+  /** A save that answers only when the test says so. */
+  function heldSave(): { save: ReturnType<typeof vi.fn>; answer: () => void } {
+    let answer!: () => void;
+    const save = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)))
+      .mockResolvedValue(undefined);
+    return { save, answer: () => answer() };
+  }
 
-  it("puts the row controls in the last column, pinned to the table's edge", async () => {
-    const el = await mount(fakeApi());
-    const heads = [...table(el).shadowRoot!.querySelectorAll("thead th")];
-    expect(heads.at(-1)!.textContent!.trim()).toBe("Actions");
-    expect(heads.at(-1)!.getAttribute("data-pinned")).toBe("end");
-    for (const row of table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")) {
-      const last = row.querySelector("td:last-child")!;
-      expect(last.getAttribute("data-pinned")).toBe("end");
-      expect(last.querySelector("wt-row-actions")).not.toBeNull();
-    }
-  });
-
-  it.each(["en", "es"])(
-    "keeps every reason row's menu and move buttons on screen and uncovered while the other columns scroll sideways (390 px, %s)",
-    async (locale) => {
-      const width = window.innerWidth,
-        height = window.innerHeight;
-      try {
-        setLocale(locale);
-        await page.viewport(390, 844);
-        expect(window.innerWidth).toBe(390);
-        const long = { ...complaint, name: longName, names: { en: longName, es: longName } };
-        const el = await mount(
-          fakeApi({ listReasons: vi.fn().mockResolvedValue([entryError, long]) }),
-        );
-        expectRowMenusOnScreen(table(el), 2);
-        const box = table(el).shadowRoot!.querySelector(".scroll")!.getBoundingClientRect();
-        for (const test of ["move-up-e", "move-down-e", "move-up-c", "move-down-c"]) {
-          const button = find(el, `[data-test="${test}"]`)!;
-          const at = button.getBoundingClientRect();
-          expect(at.right, test).toBeLessThanOrEqual(Math.min(box.right, window.innerWidth));
-          expect(at.left, test).toBeGreaterThanOrEqual(box.left);
-          const root = button.getRootNode() as ShadowRoot;
-          expect(root, test).toBe(table(el).shadowRoot);
-          const hit = root.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
-          expect(hit !== null && button.contains(hit), `${test} is covered`).toBe(true);
-        }
-      } finally {
-        await page.viewport(width, height);
-      }
-    },
-  );
-});
-
-describe("reordering", () => {
-  it("moves a reason up or down with buttons, sending the whole active order", async () => {
+  it("moves a reason with the keyboard and saves the whole order at once", async () => {
     const api = fakeApi();
     const el = await mount(api);
-    await press(el, "move-up-c");
-    expect(api.reorderReasons).toHaveBeenLastCalledWith(["c", "e", "d"]);
-    await press(el, "move-down-c");
-    expect(api.reorderReasons).toHaveBeenLastCalledWith(["e", "d", "c"]);
-    expect(api.listReasons).toHaveBeenCalledTimes(3);
-  });
-
-  it("offers no move beyond either end, and names the reason each button moves", async () => {
-    const el = await mount(fakeApi());
-    const firstUp = find(el, '[data-test="move-up-e"]') as HTMLElement & { disabled: boolean };
-    const lastDown = find(el, '[data-test="move-down-d"]') as HTMLElement & { disabled: boolean };
-    expect(firstUp.disabled).toBe(true);
-    expect(lastDown.disabled).toBe(true);
-    const up = find(el, '[data-test="move-up-c"]')!;
-    expect((up as HTMLElement & { disabled: boolean }).disabled).toBe(false);
-    expect(up.getAttribute("aria-label")).toBe("Move up: Complaint");
-    expect(up.textContent).toContain("Move up");
-  });
-
-  it("keeps focus on the moved reason's button, or its other button at an end", async () => {
-    const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValueOnce([complaint, entryError, employee, retired])
-        .mockResolvedValue([complaint, employee, entryError, retired]),
-    });
-    const el = await mount(api);
-    const focused = () => table(el).shadowRoot!.activeElement?.getAttribute("data-test");
-    await press(el, "move-down-e");
-    expect(api.reorderReasons).toHaveBeenLastCalledWith(["c", "e", "d"]);
-    expect(focused()).toBe("move-down-e");
-    await press(el, "move-down-e");
-    expect(api.reorderReasons).toHaveBeenLastCalledWith(["c", "d", "e"]);
-    expect(focused()).toBe("move-up-e");
-  });
-
-  it("sends one reorder while one is in flight", async () => {
-    let finish!: () => void;
-    const api = fakeApi({
-      reorderReasons: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    });
-    const el = await mount(api);
-    await press(el, "move-up-c");
-    await press(el, "move-down-c");
-    expect(api.reorderReasons).toHaveBeenCalledTimes(1);
-    finish();
+    await arrowDown(el, "e");
     await settle(el);
+    expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+    expect(api.reorderReasons.mock.calls).toEqual([[["c", "e", "d", "o"]]]);
+    expect(el.shadowRoot!.activeElement).toBe(grip(el, "e"));
+    expect(announced(el)).toBe("Entry error is now 2 of 4.");
+    expect(grip(el, "e").getAttribute("aria-label")).toBe("Move reason: Entry error");
   });
 
-  it("reloads the list after a refused reorder, so a retry works from the current order", async () => {
+  it("names the grip and says the move in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(grip(el, "e").getAttribute("aria-label")).toBe(
+      `${ES["adjustments.reorder"]}: Entry error`,
+    );
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(announced(el)).toBe(
+      ES["adjustments.reordered"]
+        .replace("{item}", "Entry error")
+        .replace("{index}", "2")
+        .replace("{total}", "4"),
+    );
+  });
+
+  it("saves a pointer drag once, on drop", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    const drag = pointerDrag(el, "e");
+    await drag.down("c");
+    await drag.down("d");
+    expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
+    expect(api.reorderReasons).not.toHaveBeenCalled();
+    await drag.release();
+    await settle(el);
+    expect(api.reorderReasons.mock.calls).toEqual([[["c", "d", "e", "o"]]]);
+    expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
+  });
+
+  it("saves one move at a time", async () => {
+    const { save, answer } = heldSave();
+    const api = fakeApi({ reorderReasons: save });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
+    expect(save.mock.calls).toEqual([[["c", "e", "d", "o"]]]);
+    answer();
+    await settle(el);
+    expect(save.mock.calls).toEqual([[["c", "e", "d", "o"]], [["c", "d", "e", "o"]]]);
+  });
+
+  it("reads the list again after a refused move and says so", async () => {
+    const api = fakeApi({ reorderReasons: vi.fn().mockRejectedValue({ code: "x" }) });
+    const el = await mount(api);
+    expect(api.listReasons).toHaveBeenCalledTimes(1);
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(alert(el)).toBe("The new order could not be saved.");
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+    expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+  });
+
+  it("sends no move queued behind a refused one", async () => {
+    let refuse!: (error: unknown) => void;
+    const save = vi.fn(() => new Promise<void>((_, reject) => (refuse = reject)));
+    const api = fakeApi({ reorderReasons: save });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    await arrowDown(el, "e");
+    expect(save).toHaveBeenCalledTimes(1);
+    refuse({ code: "x" });
+    await settle(el);
+    expect(alert(el)).toBe("The new order could not be saved.");
+    expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps saying the move was refused when the list cannot be read again either", async () => {
     const api = fakeApi({
-      reorderReasons: vi.fn().mockRejectedValue({
-        code: "adjustment_reason.invalid",
-        params: { field: "ids" },
-      }),
+      listReasons: vi.fn().mockResolvedValueOnce(reasons).mockRejectedValue({ code: "x" }),
+      reorderReasons: vi.fn().mockRejectedValue({ code: "x" }),
     });
     const el = await mount(api);
-    await press(el, "move-up-c");
+    await arrowDown(el, "e");
+    await settle(el);
     expect(api.listReasons).toHaveBeenCalledTimes(2);
     expect(alert(el)).toBe("The new order could not be saved.");
   });
 
-  it("says when the new order could not be saved", async () => {
-    const el = await mount(
-      fakeApi({ reorderReasons: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
-    );
-    await press(el, "move-up-c");
-    expect(alert(el)).toBe("The new order could not be saved.");
+  it("holds a live list while a later move is unanswered, after a save answered once the screen had gone", async () => {
+    const liveData = new LiveData();
+    const { save, answer } = heldSave();
+    const api = fakeApi({ liveData, reorderReasons: save });
+    const el = await mount(api);
+    try {
+      await arrowDown(el, "e");
+      const host = el.parentElement!;
+      el.remove();
+      answer();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      host.append(el);
+      await settle(el);
+      let release!: () => void;
+      save.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+      await arrowDown(el, "e");
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      const reads = api.listReasons.mock.calls.length;
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      release();
+      await settle(el);
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("holds a live list while a move is unanswered, then reads again", async () => {
+    const liveData = new LiveData();
+    const { save, answer } = heldSave();
+    const api = fakeApi({ liveData, reorderReasons: save });
+    const el = await mount(api);
+    try {
+      await arrowDown(el, "e");
+      const reads = api.listReasons.mock.calls.length;
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      api.listReasons.mockResolvedValue([employee, complaint, entryError, retired]);
+      answer();
+      await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "c", "e", "o"]));
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("reads again after a drag put back where it started, if a list arrived while it was held", async () => {
+    const liveData = new LiveData();
+    const api = fakeApi({ liveData });
+    const el = await mount(api);
+    try {
+      const drag = pointerDrag(el, "e");
+      await drag.down("c");
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      const reads = api.listReasons.mock.calls.length;
+      api.listReasons.mockResolvedValue([employee, entryError, complaint, retired]);
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      await drag.up("e");
+      expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+      await drag.release();
+      await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "e", "c", "o"]));
+      expect(api.reorderReasons).not.toHaveBeenCalled();
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("holds a live list while a grip is pressed and not yet moved, then shows it on release", async () => {
+    const liveData = new LiveData();
+    const api = fakeApi({ liveData });
+    const el = await mount(api);
+    try {
+      const drag = pointerDrag(el, "e");
+      const reads = api.listReasons.mock.calls.length;
+      api.listReasons.mockResolvedValue([employee, complaint, entryError, retired]);
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+      await drag.release();
+      await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "c", "e", "o"]));
+      expect(api.reorderReasons).not.toHaveBeenCalled();
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("forgets a move answered after the screen has gone", async () => {
+    let refuse!: (error: unknown) => void;
+    const save = vi.fn(() => new Promise<void>((_, reject) => (refuse = reject)));
+    const api = fakeApi({ reorderReasons: save });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    const host = el.parentElement!;
+    el.remove();
+    refuse({ code: "x" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    host.append(el);
+    await settle(el);
+    expect(alert(el)).toBe("");
+  });
+
+  it("disables the grips while searching, and says how to reorder", async () => {
+    const el = await mount(fakeApi());
+    expect(grips(el).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(hint(el)).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+
+    await type(el, "search", "o");
+    expect(grips(el).length).toBeGreaterThan(0);
+    expect(grips(el).every((button) => button.disabled)).toBe(true);
+    expect(hint(el)).toBe("Clear the search to change the order.");
+
+    await type(el, "search", "   ");
+    expect(grips(el).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(hint(el)).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+
+    await type(el, "search", "");
+    expect(grips(el).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(hint(el)).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+  });
+
+  it("labels the grip column", async () => {
+    const el = await mount(fakeApi());
+    const first = table(el).querySelector("thead tr")!.firstElementChild!;
+    expect(first.tagName).toBe("TH");
+    expect(first.textContent!.trim()).toBe("Move reason");
   });
 });
 
@@ -1311,7 +1584,7 @@ describe("the editor", () => {
     await type(el, "name", "Complaint");
     await toggleAction(el, "comp");
     await press(el, "save-editor");
-    expect(besideField(el, "name")).toBe("Another active reason already has this name");
+    expect(besideField(el, "name")).toBe("Another reason already has this name");
     expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(false);
     expect(modal(el)).not.toBeNull();
@@ -1342,7 +1615,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledTimes(1);
     expect(modal(el)).toBeNull();
-    expect(alert(el)).toBe("The adjustment reasons could not be loaded.");
+    expect(alert(el)).toBe("The voids and comps could not be loaded.");
   });
 
   it("closes on Cancel without saving", async () => {
@@ -1351,7 +1624,7 @@ describe("the editor", () => {
     await press(el, "edit-c");
     await press(el, "cancel-editor");
     expect(modal(el)).toBeNull();
-    const menu = table(el).shadowRoot!.activeElement;
+    const menu = el.shadowRoot!.activeElement;
     expect(menu?.tagName).toBe("WT-ROW-ACTIONS");
     expect(menu?.getAttribute("label")).toBe("Actions: Complaint");
     expect(api.updateReason).not.toHaveBeenCalled();
@@ -1600,321 +1873,254 @@ describe("the editor's messages", () => {
   });
 });
 
-describe("disabling", () => {
-  const menuFocused = (el: AdjustmentReasonsScreen) =>
-    table(el).shadowRoot!.activeElement?.getAttribute("label");
+describe("deleting a reason", () => {
+  type Dialog = HTMLElementTagNameMap["wt-delete-dialog"];
+  const dialog = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector<Dialog>('wt-delete-dialog[data-test="delete-reason"]');
+  const inDialog = (el: AdjustmentReasonsScreen, selector: string) =>
+    dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
+  const confirm = (el: AdjustmentReasonsScreen) => inDialog(el, '[data-test="delete-confirm"]');
+  const alert = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim();
+  const refusal = (withNote: number | boolean): DeleteImpactRefusal => ({
+    code: "adjustment_reason.void_required",
+    params: { withNote: withNote ? 1 : 0 },
+    targets: [],
+  });
+
+  async function confirmed(el: AdjustmentReasonsScreen): Promise<void> {
+    await confirm(el).updateComplete;
+    confirm(el).click();
+    await settle(el);
+  }
 
   it.each([
-    {
-      locale: "en",
-      action: "Disable",
-      heading: "Disable reason",
-      body: "Staff will no longer be offered Complaint. It stays in the list as disabled.",
-      filter: ["All reasons", "Active", "Disabled"],
-    },
-    {
-      locale: "es",
-      action: ES["adjustments.disable"],
-      heading: ES["adjustments.disable_heading"],
-      body: tf("adjustments.disable_explained", { name: "Complaint" }, "es"),
-      filter: [ES["adjustments.filter_all"], ES["adjustments.active"], ES["adjustments.disabled"]],
-    },
+    { deleted: "c", after: [entryError, employee, retired], focus: "Actions: Employee discount" },
+    { deleted: "o", after: [entryError, complaint, employee], focus: "Actions: Employee discount" },
+    { deleted: "c", after: [entryError, retired], focus: "add-reason" },
   ])(
-    "in $locale, offers Disable and confirms it",
-    async ({ locale, action, heading, body, filter }) => {
-      setLocale(locale);
-      const el = await mount(fakeApi());
-      expect(find(el, '[data-test="deactivate-c"]')!.textContent!.trim()).toBe(action);
-      const status = table(el).shadowRoot!.querySelector<
-        HTMLElement & { options: { label: string }[] }
-      >('wt-combobox[data-filter="status"]')!;
-      expect(status.options.map((option) => option.label)).toEqual(filter);
-      await press(el, "deactivate-c");
-      const modal = find(el, "wt-modal")!;
-      expect(modal.getAttribute("heading")).toBe(heading);
-      expect(modal.textContent).toContain(body);
-      expect(find(el, '[data-test="confirm-deactivate"]')!.textContent!.trim()).toBe(action);
+    "asks before deleting, names the reason, then deletes and reloads ($deleted, focus $focus)",
+    async ({ deleted, after, focus }) => {
+      const api = fakeApi({
+        listReasons: vi.fn().mockResolvedValueOnce(reasons).mockResolvedValue(after),
+      });
+      const el = await mount(api);
+      await press(el, `delete-${deleted}`);
+      expect(api.watchReasonDeleteImpact).toHaveBeenCalledWith(
+        expect.anything(),
+        deleted,
+        expect.any(Function),
+      );
+      const name = reasons.find((reason) => reason.id === deleted)!.name;
+      expect(dialog(el)!.shadowRoot!.querySelector("[data-target]")!.textContent).toBe(name);
+      expect(confirm(el).disabled).toBe(false);
+      expect(api.deleteReason).not.toHaveBeenCalled();
+      await confirmed(el);
+      expect(api.deleteReason).toHaveBeenCalledTimes(1);
+      expect(api.deleteReason).toHaveBeenCalledWith(deleted);
+      expect(dialog(el)).toBeNull();
+      expect(api.listReasons).toHaveBeenCalledTimes(2);
+      expect(rowKeys(el)).toEqual(after.map((reason) => reason.id));
+      const focused = el.shadowRoot!.activeElement;
+      if (focus === "add-reason") expect(focused?.getAttribute("data-test")).toBe("add-reason");
+      else expect(focused?.getAttribute("label")).toBe(focus);
     },
   );
 
-  it("moves focus to the menu of the row that takes the deactivated one's place", async () => {
+  it("moves focus to Add reason when the last reason is deleted", async () => {
     const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValue([entryError, employee, { ...complaint, active: false }, retired]),
+      listReasons: vi.fn().mockResolvedValueOnce([complaint]).mockResolvedValue([]),
     });
     const el = await mount(api);
-    await press(el, "deactivate-c");
-    await press(el, "confirm-deactivate");
-    expect(rowKeys(el)).toEqual(["e", "d"]);
-    expect(menuFocused(el)).toBe("Actions: Employee discount");
-  });
-
-  it("moves focus to the new last row when the last row is deactivated", async () => {
-    const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValue([entryError, complaint, { ...employee, active: false }, retired]),
-    });
-    const el = await mount(api);
-    await press(el, "deactivate-d");
-    await press(el, "confirm-deactivate");
-    expect(menuFocused(el)).toBe("Actions: Complaint");
-  });
-
-  it("moves focus to Add reason when no active reason remains", async () => {
-    const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce([complaint])
-        .mockResolvedValue([{ ...complaint, active: false }]),
-    });
-    const el = await mount(api);
-    await press(el, "deactivate-c");
-    await press(el, "confirm-deactivate");
+    await press(el, "delete-c");
+    await confirmed(el);
     expect(rowKeys(el)).toEqual([]);
-    const add = el.shadowRoot!.querySelector('[data-test="add-reason"]');
-    expect(el.shadowRoot!.activeElement).toBe(add);
-  });
-
-  it("says what disabling does before it acts, then disables and reloads", async () => {
-    const api = fakeApi();
-    const el = await mount(api);
-    await press(el, "deactivate-c");
-    expect(api.deactivateReason).not.toHaveBeenCalled();
-    expect(modal(el)!.textContent).toContain(
-      "Staff will no longer be offered Complaint. It stays in the list as disabled.",
-    );
-    await press(el, "confirm-deactivate");
-    expect(api.deactivateReason).toHaveBeenCalledWith("c");
-    expect(modal(el)).toBeNull();
-    expect(api.listReasons).toHaveBeenCalledTimes(2);
-  });
-
-  it("keeps the confirmation open and explains a refusal", async () => {
-    const el = await mount(
-      fakeApi({ deactivateReason: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
-    );
-    await press(el, "deactivate-c");
-    await press(el, "confirm-deactivate");
-    expect(modal(el)).not.toBeNull();
-    expect(await bottom(el)).toBe("Something went wrong, try again");
-    expect(button(el, "confirm-deactivate").disabled).toBe(false);
+    expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("add-reason");
   });
 
   it.each([
-    [false, "A venue keeps at least one Void reason."],
-    [true, "A venue keeps at least one Void reason that asks for a note."],
+    [0, "adjustments.error.void_required"],
+    [1, "adjustments.error.void_required_note"],
   ] as const)(
-    "keeps the confirmation open and says void_required (withNote=%s)",
-    async (withNote, message) => {
+    "shows why the last Void reason cannot be deleted, with Delete held (withNote %s)",
+    async (withNote, key) => {
       const api = fakeApi({
-        deactivateReason: vi
+        watchReasonDeleteImpact: watchImpact(async () => impactOf(entryError, [refusal(withNote)])),
+      });
+      const el = await mount(api);
+      await press(el, "delete-e");
+      const lines = dialog(el)!.shadowRoot!.querySelectorAll('[data-group="refusals"] li');
+      expect([...lines].map((line) => line.textContent)).toEqual([t(key)]);
+      expect(confirm(el).disabled).toBe(true);
+    },
+  );
+
+  it.each([
+    [true, "adjustments.error.void_required_note"],
+    [false, "adjustments.error.void_required"],
+  ] as const)(
+    "keeps the question open and explains a refused delete (withNote %s)",
+    async (withNote, key) => {
+      const api = fakeApi({
+        deleteReason: vi
           .fn()
           .mockRejectedValue({ code: "adjustment_reason.void_required", params: { withNote } }),
       });
       const el = await mount(api);
-      await press(el, "deactivate-e");
-      await press(el, "confirm-deactivate");
-      expect(api.deactivateReason).toHaveBeenCalledWith("e");
-      expect(modal(el)).not.toBeNull();
-      expect(await bottom(el)).toBe(message);
-    },
-  );
-});
-
-describe("enabling", () => {
-  const disabledOnly = async (el: AdjustmentReasonsScreen) => {
-    await chooseOption(
-      table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
-        'wt-combobox[data-filter="status"]',
-      )!,
-      "inactive",
-    );
-    await settle(el);
-  };
-  const showAll = async (el: AdjustmentReasonsScreen) => {
-    await chooseOption(
-      table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
-        'wt-combobox[data-filter="status"]',
-      )!,
-      "",
-    );
-    await settle(el);
-  };
-
-  it.each([
-    { locale: "en", action: "Enable" },
-    { locale: "es", action: ES["adjustments.enable"] },
-  ])(
-    "in $locale, offers Enable and not Disable on a disabled reason, and Enable on no active one",
-    async ({ locale, action }) => {
-      setLocale(locale);
-      const el = await mount(fakeApi());
-      await showAll(el);
-      expect(find(el, '[data-test="enable-o"]')!.textContent!.trim()).toBe(action);
-      expect(find(el, '[data-test="deactivate-o"]')).toBeNull();
-      for (const id of ["e", "c", "d"]) {
-        expect(find(el, `[data-test="enable-${id}"]`), id).toBeNull();
-        expect(find(el, `[data-test="deactivate-${id}"]`), id).not.toBeNull();
-      }
+      await press(el, "delete-e");
+      await confirmed(el);
+      expect(dialog(el)!.actionError).toBe(tf("adjustments.delete_error", { reason: t(key) }));
+      expect(dialog(el)!.submitting).toBe(false);
+      expect(rowKeys(el)).toContain("e");
     },
   );
 
-  it.each([
-    { locale: "en", status: "Active" },
-    { locale: "es", status: ES["adjustments.active"] },
-  ])(
-    "in $locale, enables at once with no confirmation, then reloads the reason as $status",
-    async ({ locale, status }) => {
-      setLocale(locale);
-      const api = fakeApi({
-        listReasons: vi
-          .fn()
-          .mockResolvedValueOnce(reasons)
-          .mockResolvedValue([entryError, complaint, employee, { ...retired, active: true }]),
-      });
-      const el = await mount(api);
-      await showAll(el);
-      await press(el, "enable-o");
-      expect(api.reactivateReason).toHaveBeenCalledExactlyOnceWith("o");
-      expect(modal(el)).toBeNull();
-      expect(api.listReasons).toHaveBeenCalledTimes(2);
-      expect(alert(el)).toBe("");
-      const cells = [...table(el).shadowRoot!.querySelectorAll('tr[data-row-key="o"] td')].map(
-        (cell) => cell.textContent!.trim(),
-      );
-      expect(cells).toContain(status);
-      expect(find(el, '[data-test="deactivate-o"]')).not.toBeNull();
-      expect(find(el, '[data-test="enable-o"]')).toBeNull();
-    },
-  );
-
-  it("moves focus to Add reason when the Disabled filter has no reason left to show", async () => {
-    const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValue([entryError, complaint, employee, { ...retired, active: true }]),
-    });
-    const el = await mount(api);
-    await disabledOnly(el);
-    await press(el, "enable-o");
-    expect(rowKeys(el)).toEqual([]);
-    const add = el.shadowRoot!.querySelector('[data-test="add-reason"]');
-    expect(el.shadowRoot!.activeElement).toBe(add);
-  });
-
-  it.each([
-    { locale: "en", message: "Another active reason already has this name" },
-    { locale: "es", message: codeMessage("adjustment_reason.name_taken", "es") },
-  ])(
-    "in $locale, says at the top of the screen that an active reason holds the name, and leaves it disabled",
-    async ({ locale, message }) => {
-      setLocale(locale);
-      const api = fakeApi({
-        reactivateReason: vi.fn().mockRejectedValue({
-          code: "adjustment_reason.name_taken",
-          params: { name: "Old promotion" },
-        }),
-      });
-      const el = await mount(api);
-      await disabledOnly(el);
-      await press(el, "enable-o");
-      expect(api.reactivateReason).toHaveBeenCalledExactlyOnceWith("o");
-      expect(alert(el)).toBe(message);
-      expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
-        "alert",
-      );
-      expect(modal(el)).toBeNull();
-      expect(api.listReasons).toHaveBeenCalledTimes(1);
-      expect(rowKeys(el)).toEqual(["o"]);
-      expect(find(el, '[data-test="enable-o"]')).not.toBeNull();
-    },
-  );
-
-  it("sends one Enable for a second press made while the first is still on its way", async () => {
-    const api = fakeApi();
-    const el = await mount(api);
-    await disabledOnly(el);
-    const enable = find(el, '[data-test="enable-o"]')!;
-    enable
-      .closest("wt-row-actions")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
-    enable.click();
-    enable.click();
-    await settle(el);
-    expect(api.reactivateReason).toHaveBeenCalledExactlyOnceWith("o");
-  });
-
-  it("clears the refusal once a later Enable succeeds", async () => {
-    const api = fakeApi({
-      reactivateReason: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "server.internal" })
-        .mockResolvedValue({ ...retired, active: true }),
-    });
-    const el = await mount(api);
-    await disabledOnly(el);
-    await press(el, "enable-o");
-    expect(alert(el)).toBe("Something went wrong, try again");
-    await press(el, "enable-o");
-    expect(alert(el)).toBe("");
-  });
-
-  it("clears a name-taken refusal once the disabled reason is renamed and saved", async () => {
-    const renamed = { ...retired, name: "Old promotion 2025" };
-    const api = fakeApi({
-      reactivateReason: vi.fn().mockRejectedValue({
-        code: "adjustment_reason.name_taken",
-        params: { name: "Old promotion" },
-      }),
-      updateReason: vi.fn().mockResolvedValue(renamed),
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValue([entryError, complaint, employee, renamed]),
-    });
-    const el = await mount(api);
-    await disabledOnly(el);
-    await press(el, "enable-o");
-    expect(alert(el)).toBe("Another active reason already has this name");
-    await press(el, "edit-o");
-    await type(el, "name", "Old promotion 2025");
-    await press(el, "save-editor");
-    expect(api.updateReason).toHaveBeenCalledWith(
-      "o",
-      expect.objectContaining({ name: "Old promotion 2025" }),
-    );
-    expect(modal(el)).toBeNull();
-    expect(api.listReasons).toHaveBeenCalledTimes(2);
-    expect(rowText(el, "o")).toContain("Old promotion 2025");
-    expect(alert(el)).toBe("");
-  });
-
-  it("keeps an Enable refusal through a refresh live data asks for", async () => {
+  it("keeps a question whose Delete is on its way when a fresh read finds the reason gone", async () => {
     const liveData = new LiveData();
-    const background = { listReasons: vi.fn().mockResolvedValue(reasons) };
+    let finish!: () => void;
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(impactOf(complaint))
+      .mockRejectedValue({ code: "adjustment_reason.not_found" });
     const api = fakeApi({
       liveData,
-      background,
-      reactivateReason: vi.fn().mockRejectedValue({
-        code: "adjustment_reason.name_taken",
-        params: { name: "Old promotion" },
-      }),
+      watchReasonDeleteImpact: watchImpact(read),
+      deleteReason: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
     });
     const el = await mount(api);
-    await disabledOnly(el);
-    await press(el, "enable-o");
-    expect(alert(el)).toBe("Another active reason already has this name");
-    liveData.invalidate([{ type: "adjustment_reasons" }]);
-    await vi.waitFor(() => expect(background.listReasons).toHaveBeenCalledTimes(1));
+    try {
+      await press(el, "delete-c");
+      await confirmed(el);
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+      await settle(el);
+      expect(dialog(el)).not.toBeNull();
+      expect(alert(el)).toBeUndefined();
+      finish();
+      await settle(el);
+      expect(dialog(el)).toBeNull();
+      expect(alert(el)).toBeUndefined();
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("drops a delete accepted after the screen has gone", async () => {
+    let finish!: () => void;
+    const api = fakeApi({
+      deleteReason: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    el.remove();
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.listReasons).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains a delete refused for another cause", async () => {
+    const api = fakeApi({ deleteReason: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    expect(dialog(el)!.actionError).toBe(
+      tf("adjustments.delete_error", { reason: codeMessage("server.internal") }),
+    );
+  });
+
+  it("says why the question could not be read, and reads it again on Try again", async () => {
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValue(impactOf(complaint));
+    const el = await mount(fakeApi({ watchReasonDeleteImpact: watchImpact(read) }));
+    await press(el, "delete-c");
+    expect(dialog(el)!.readError).toBe(
+      tf("adjustments.delete_load_error", { reason: codeMessage("server.internal") }),
+    );
+    expect(confirm(el).disabled).toBe(true);
+    inDialog(el, '[data-test="delete-retry"]').click();
     await settle(el);
-    expect(alert(el)).toBe("Another active reason already has this name");
-    liveData.clear();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(dialog(el)!.readError).toBe("");
+    expect(confirm(el).disabled).toBe(false);
+  });
+
+  it("closes the question when the reason was deleted elsewhere", async () => {
+    const api = fakeApi({
+      watchReasonDeleteImpact: watchImpact(() =>
+        Promise.reject({ code: "adjustment_reason.not_found" }),
+      ),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    expect(dialog(el)).toBeNull();
+    expect(alert(el)).toBe(codeMessage("adjustment_reason.not_found"));
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the question when the reason was deleted between the read and the confirm", async () => {
+    const api = fakeApi({
+      deleteReason: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    expect(dialog(el)).toBeNull();
+    expect(alert(el)).toBe(codeMessage("adjustment_reason.not_found"));
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends one Delete while it is on its way", async () => {
+    let finish!: () => void;
+    const api = fakeApi({
+      deleteReason: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirm(el).updateComplete;
+    confirm(el).click();
+    confirm(el).click();
+    await settle(el);
+    expect(dialog(el)!.submitting).toBe(true);
+    confirm(el).click();
+    inDialog(el, '[data-test="delete-cancel"]').click();
+    await settle(el);
+    expect(api.deleteReason).toHaveBeenCalledTimes(1);
+    expect(dialog(el)).not.toBeNull();
+    finish();
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("drops a delete answered after its question was replaced", async () => {
+    let refuse!: (error: unknown) => void;
+    const api = fakeApi({
+      deleteReason: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    el.remove();
+    hosts.at(-1)!.appendChild(el);
+    await settle(el);
+    await press(el, "delete-d");
+    refuse({ code: "adjustment_reason.not_found" });
+    await settle(el);
+    expect(dialog(el)!.impact!.target.id).toBe("d");
+    expect(dialog(el)!.actionError).toBe("");
+    expect(alert(el)).toBeUndefined();
+  });
+
+  it("offers Delete after Edit in the row menu", async () => {
+    const el = await mount(fakeApi());
+    const menu = el.shadowRoot!.querySelector('tr[data-reason="c"] wt-row-actions')!;
+    expect([...menu.querySelectorAll("wt-button")].map((item) => item.textContent!.trim())).toEqual(
+      ["Edit", "Delete"],
+    );
   });
 });
 
@@ -2203,7 +2409,7 @@ describe("the bill comp limit", () => {
     expect(alert(el)).toBe("");
     expect(el.shadowRoot!.querySelector('[name="maxBillComp"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[name="billApproverRoles"]')).toBeNull();
-    expect(rowKeys(el)).toEqual(["e", "c", "d"]);
+    expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
   });
 
   it("sends one save while it is in flight, holding both fields", async () => {
@@ -2303,62 +2509,3 @@ for (const locale of ["en", "es"]) {
     );
   });
 }
-
-it("starts the reasons table's toolbar with Filters, opening beside the rows on a wide screen and over the screen on a phone", async () => {
-  await expectFiltersFirst(
-    async () => table(await mount(fakeApi())),
-    () => {
-      for (const host of hosts.splice(0)) host.remove();
-    },
-  );
-});
-
-it.each(
-  [390, 1280].flatMap((width) =>
-    ["en", "es"].flatMap((locale) =>
-      ["light", "dark"].map((theme) => [width, locale, theme] as const),
-    ),
-  ),
-)(
-  "A462 Customise ends the toolbar without search at %i px (%s, %s)",
-  async (width, locale, theme) => {
-    const previous = [window.innerWidth, window.innerHeight];
-    await page.viewport(width, 844);
-    setLocale(locale);
-    try {
-      const el = await mount(fakeApi());
-      el.parentElement!.setAttribute("data-theme", theme);
-      el.parentElement!.style.background = "var(--wt-color-bg)";
-      el.parentElement!.style.color = "var(--wt-color-text)";
-      const list = table(el);
-      await vi.waitFor(() => {
-        const chooser = list
-          .shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!
-          .getBoundingClientRect();
-        const toolbar = list
-          .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
-          .getBoundingClientRect();
-        expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
-        expect(chooser.width).toBeGreaterThan(0);
-        expect(chooser.right).toBeCloseTo(toolbar.right, 0);
-      });
-      const chooser = list.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
-      await userEvent.click(chooser);
-      await vi.waitFor(() => expect(chooser.getAttribute("aria-expanded")).toBe("true"));
-      const dialog = list.shadowRoot!.querySelector("wt-dialog")!;
-      await userEvent.click(
-        dialog
-          .querySelector<HTMLElement>('wt-button[slot="footer"]:last-of-type')!
-          .shadowRoot!.querySelector<HTMLButtonElement>("button")!,
-      );
-      await vi.waitFor(() => expect(chooser.getAttribute("aria-expanded")).toBe("false"));
-      expect(list.shadowRoot!.activeElement).toBe(chooser);
-      await page.screenshot({
-        path: `__screenshots__/a462-task1/reasons-${width}-${locale}-${theme}.png`,
-      });
-    } finally {
-      setLocale("en-GB");
-      await page.viewport(previous[0]!, previous[1]!);
-    }
-  },
-);

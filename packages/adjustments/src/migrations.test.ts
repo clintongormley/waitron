@@ -31,7 +31,6 @@ interface Row {
   maxAmount?: number | null;
   applyRoles?: string;
   approverRoles?: string;
-  active?: number;
   position?: number;
 }
 
@@ -46,11 +45,11 @@ const VOID: Row = {
 function insert(row: Row = {}) {
   return sql`insert into adjustment_reasons
       (id, name, names, kind, actions, max_percent, max_amount, apply_roles, approver_roles,
-       note_required, active, position, created_at)
+       note_required, position, created_at)
     values (${randomUUID()}, ${row.name ?? "Complaint"}, '{}', ${row.kind ?? "comp"},
       ${row.actions ?? '["comp"]'}, ${row.maxPercent ?? null}, ${row.maxAmount ?? null},
       ${row.applyRoles ?? '["supervisor","manager","admin"]'},
-      ${row.approverRoles ?? '["manager","admin"]'}, 1, ${row.active ?? 1}, ${row.position ?? 0},
+      ${row.approverRoles ?? '["manager","admin"]'}, 1, ${row.position ?? 0},
       ${new Date().toISOString()})`;
 }
 
@@ -78,7 +77,6 @@ describe("the adjustments migration set", () => {
       apply_roles: { notNull: 1, pk: 0 },
       approver_roles: { notNull: 1, pk: 0 },
       note_required: { notNull: 1, pk: 0 },
-      active: { notNull: 1, pk: 0 },
       position: { notNull: 1, pk: 0 },
       created_at: { notNull: 1, pk: 0 },
     });
@@ -127,8 +125,7 @@ describe("the adjustments migration set", () => {
     await refusedBy({ position: -1 }, "adjustment_reasons_position_ck");
   });
 
-  it("refuses a second ACTIVE reason under a name, and lets an inactive one keep it", async () => {
-    await db.execute(insert({ name: "Complaint", active: 0 }));
+  it("refuses a second reason under a name", async () => {
     await db.execute(insert({ name: "Complaint" }));
     const second = await captureError(() => db.execute(insert({ name: "Complaint" })));
     expect(isRefusal(second, UNIQUE_VIOLATION)).toBe(true);

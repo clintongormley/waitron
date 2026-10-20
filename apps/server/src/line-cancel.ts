@@ -244,7 +244,6 @@ export async function cancelItem(
         if (typeof ask.reasonId !== "string" || ask.reasonId.trim().length === 0)
           throw invalid("reasonId");
         const reason = await findAdjustmentReason(tx, ask.reasonId);
-        if (!reason.active) throw new AppError("adjustment.reason_inactive", {});
         if (reason.kind !== "void") throw new AppError("adjustment.action_not_allowed", {});
         if (reason.noteRequired && (ask.note ?? "").trim().length === 0)
           throw new AppError("adjustment.note_required", {});

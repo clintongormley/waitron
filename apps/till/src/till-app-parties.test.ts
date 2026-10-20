@@ -11309,14 +11309,14 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       finishTable: vi
         .fn()
         .mockRejectedValueOnce(refusal())
-        .mockRejectedValueOnce({ code: "adjustment.reason_inactive" })
+        .mockRejectedValueOnce({ code: "adjustment_reason.not_found" })
         .mockResolvedValue({ state: "closed" }),
     });
     await openFinish(el);
     await choose(el);
     const dialog = finishDialog(el)!;
     const field = dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!;
-    expect(field.error).toBe(codeMessage("adjustment.reason_inactive"));
+    expect(field.error).toBe(codeMessage("adjustment_reason.not_found"));
     expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
     emit(field, "wt-change", { value: "r-cancel" });
     await flush(el);

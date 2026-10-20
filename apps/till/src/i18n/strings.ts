@@ -1080,7 +1080,7 @@ export const en = {
   "adjust.amount_invalid": "Enter an amount, such as 2.50",
   "adjust.amount_too_large": "Enter no more than {total}",
   "adjust.no_reasons":
-    "No reason allows this yet. A manager can add one in the dashboard, under Adjustment reasons.",
+    "No reason allows this yet. A manager can add one in the dashboard, under Service › Voids and comps.",
   "adjust.takes_off": "Takes {amount} off the bill",
   "adjust.nearest": "The prices allow {amount} off, not the {asked} asked for.",
   "adjust.quantity_shown": "How many: 1 of {n}",
@@ -2658,7 +2658,7 @@ export const es: Record<StringKey, string> = {
   "adjust.amount_invalid": "Introduce un importe, por ejemplo 2,50",
   "adjust.amount_too_large": "Introduce como máximo {total}",
   "adjust.no_reasons":
-    "Todavía no hay ningún motivo que lo permita. Un encargado puede añadir uno en el panel, en Motivos de ajuste.",
+    "Todavía no hay ningún motivo que lo permita. Un encargado puede añadir uno en el panel, en Servicio › Cancelaciones y descuentos.",
   "adjust.takes_off": "Quita {amount} de la cuenta",
   "adjust.nearest": "Los precios permiten quitar {amount}, no los {asked} pedidos.",
   "adjust.quantity_shown": "Cuántos: 1 de {n}",

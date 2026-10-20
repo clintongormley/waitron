@@ -784,7 +784,7 @@ describe("till-app: a refused adjustment", () => {
       .mockResolvedValue([{ ...complaint, id: "r-other", name: "Guest recovery" }]);
     const { el } = await mountApp({
       listAdjustmentReasons,
-      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.reason_inactive" }),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
@@ -798,7 +798,7 @@ describe("till-app: a refused adjustment", () => {
     ).toEqual(["Guest recovery"]);
     expect(
       dialog(el)!.shadowRoot!.querySelector('[data-error-for="reason"]')!.textContent!.trim(),
-    ).toBe(codeMessage("adjustment.reason_inactive"));
+    ).toBe(codeMessage("adjustment_reason.not_found"));
   });
 
   it("shows a preview that got no answer as a failure above the action", async () => {
@@ -1865,7 +1865,7 @@ describe("till-app: service cancellation consent", () => {
 
   it("places a charged cancellation's server reason refusal on the inline reason field", async () => {
     const methods = apiFor(consent(), {
-      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.reason_inactive" }),
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
     });
     const { el } = await mountApp(methods);
     await openMesa4(el);
@@ -1875,13 +1875,87 @@ describe("till-app: service cancellation consent", () => {
     await clickChoice(el, "[data-confirm]");
     const widget = cancelDialog(el)!;
     expect(widget.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
-      codeMessage("adjustment.reason_inactive"),
+      codeMessage("adjustment_reason.not_found"),
     );
     expect(widget.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
     expect(
       widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-confirm]")!
         .disabled,
     ).toBe(false);
+  });
+
+  it("offers the reasons read again after the server refuses a charged cancellation's reason as deleted", async () => {
+    const replacement: AdjustmentReason = { ...mistake, id: "r-new", name: "Replacement" };
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
+    });
+    const reasons = vi.fn().mockResolvedValueOnce([mistake]).mockResolvedValue([replacement]);
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    const widget = cancelDialog(el)!;
+    await widget.updateComplete;
+    const field = widget.shadowRoot!.querySelector("wt-combobox")!;
+    expect(field.options.map((row) => row.value)).toEqual(["r-new"]);
+    expect(field.error).toBe(codeMessage("adjustment_reason.not_found"));
+  });
+
+  it("keeps the reasons shown and the refusal when they cannot be read again after a reason refusal", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.action_not_allowed" }),
+    });
+    const reasons = vi
+      .fn()
+      .mockResolvedValueOnce([mistake])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    const widget = cancelDialog(el)!;
+    await widget.updateComplete;
+    expect(widget.reasons).toEqual([mistake]);
+    expect(widget.reasonsLoading).toBe(false);
+    expect(widget.refusal).toBe(codeMessage("adjustment.action_not_allowed"));
+  });
+
+  it("keeps a reasons read answering after its refused cancellation closed out of a reopened one", async () => {
+    let answer!: (value: AdjustmentReason[]) => void;
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
+    });
+    const reasons = vi
+      .fn()
+      .mockResolvedValueOnce([mistake])
+      .mockReturnValueOnce(new Promise<AdjustmentReason[]>((resolve) => (answer = resolve)))
+      .mockResolvedValue([mistake]);
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    const refused = cancelDialog(el)!;
+    emit(refused, "cancel-item-close");
+    await flush(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    const current = cancelDialog(el)!;
+    expect(current).not.toBe(refused);
+    expect(current.reasons).toEqual([mistake]);
+    answer([{ ...mistake, id: "r-new", name: "Replacement" }]);
+    await flush(el);
+    expect(cancelDialog(el)).toBe(current);
+    expect(current.reasons).toEqual([mistake]);
+    expect(current.refusal).toBe("");
   });
 
   it("reveals a newly required cancel note after the server refuses the stale reason definition", async () => {

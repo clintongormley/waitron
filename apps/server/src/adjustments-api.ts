@@ -245,7 +245,7 @@ export function mountAdjustmentsApi(
     }),
   );
 
-  // The active reasons, named in the operator's language.
+  // Every reason, named in the operator's language.
   app.get("/api/adjustment-reasons", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);

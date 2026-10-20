@@ -79,7 +79,6 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment.no_reduction":
       return kind === "discount" ? "value" : null;
     case "adjustment.action_not_allowed":
-    case "adjustment.reason_inactive":
     case "adjustment_reason.not_found":
       return "reason";
     case "adjustment.quantity_invalid":
@@ -209,7 +208,7 @@ export class TillAdjustmentDialog extends LitElement {
   @property() kind: AdjustKind = "comp";
   @property({ type: Boolean }) combined = false;
   @property({ attribute: false }) target: AdjustTarget | null = null;
-  /** The venue's active reasons; the form offers those allowing the action. */
+  /** The venue's reasons; the form offers those allowing the action. */
   @property({ attribute: false }) reasons: AdjustmentReason[] = [];
   /** The server's answer to the last `adjust-preview`; set with {@link choice}, the dialog asks for
    * confirmation. */

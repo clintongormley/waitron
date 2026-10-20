@@ -1375,8 +1375,9 @@ and its count do), a fired dish removed before preparation started not listed, a
 screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. The
 owner answered the last question on 2026-10-19 (§11, D28): a cash refund only on a device whose
 profile takes cash, as today; no question is open. **A758-1 built the rules** ([plan](../superpowers/plans/2026-10-19-a758-reason-rules.md));
-A758-2 to A758-5 and the §3.8 and "collect it at the counter" slices follow, and A909–A912 and A918 are what it
-left open. The notes below are the review as written before the
+A909–A912 and A918 are what it left open. **A758-2 built the page** ([plan](../superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
+Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
+it left open. A758-3 to A758-5 and the §3.8 and "collect it at the counter" slices follow. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.
@@ -1445,19 +1446,6 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
    | Discount | Discount / Descuento (percentage) | Approval |
 
    Whether an approval rule can depend on the item having been sent was not checked.
-
-**Then the page:**
-
-- **Its own page under Service** (owner, 2026-10-16), leaving Venue settings without tabs (A755).
-- **The list:** a search bar, drag handles instead of Move up and Move down, a cleaner layout.
-- **Delete, not Disable.** The DELETE route only switches a reason off today
-  (`deactivateAdjustmentReason`, `packages/adjustments/src/routes.ts:258`). A recorded adjustment
-  keeps its own copy of the reason's name and rules (`reason_name`, `policy_snapshot`, no foreign key:
-  `packages/adjustments/src/schema/adjustments.ts:60-64`), so deleting leaves history intact. Real
-  Delete through `wt-delete-dialog`, as courses and stations; the Status column, Status filter and
-  Enable go, and design-system.md's "Switching off versus deleting" stops listing adjustment
-  reasons among the things switched off.
-- **The edit form** asks only what applies to the reason's kind, with the role lists.
 
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 
@@ -2068,6 +2056,10 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice
   (owner, 2026-10-17: accepted).** The till says "Not found" (menus spec §9) only when a newly read
   version drops the section it has open.
+- **Design §1's "the migration deletes switched-off reasons" was not done (2026-10-20, A758-2)**,
+  because no data-migration code is written before go-live (CLAUDE.md §3). A venue holding a
+  switched-off reason gets it back as a reason; one whose switched-off reason shares a name with
+  another reason fails that migration on the unique name index, and is reset.
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 

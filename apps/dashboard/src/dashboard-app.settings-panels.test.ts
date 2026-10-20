@@ -10,9 +10,9 @@ import "./dashboard-app.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import type { DashboardApp } from "./dashboard-app.js";
 
-// "widgets" adds kitchen panels this session may see and an adjustment-reasons panel it may not;
-// "gadgets" is not enabled for the venue and adds an adjustment-reasons panel too. No core panel
-// sits on that tab, so with both left out the tab itself is absent.
+// "widgets" adds kitchen panels this session may see and a venue-details panel it may not;
+// "gadgets" is not enabled for the venue and adds a venue-details panel too. The core panels on
+// that tab need venue.view, which this session lacks, so with both left out the tab is absent.
 function panelModule(module: string, panels: DashboardContribution["settingsPanels"]) {
   return {
     module,
@@ -53,7 +53,7 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
       },
       {
         id: "widgets-reasons",
-        tab: "adjustment-reasons",
+        tab: "venue-details",
         requiresPermission: "test.audit",
         create: shown("reasons"),
       },
@@ -61,7 +61,7 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
     panelModule("gadgets", [
       {
         id: "gadgets-reasons",
-        tab: "adjustment-reasons",
+        tab: "venue-details",
         requiresPermission: "test.use",
         create: shown("gadgets"),
       },
@@ -150,7 +150,7 @@ it("puts a module's panels on their tab by their stated order, the core panel co
 });
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
-  const el = await mount("/manage/venue-settings/view/adjustment-reasons");
+  const el = await mount("/manage/venue-settings/view/venue-details");
   expect(tabKeys(el)).toEqual(["kitchen"]);
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-reasons]")).toBeNull();
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-gadgets]")).toBeNull();

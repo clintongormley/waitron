@@ -362,7 +362,6 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
   for (const code of [
     "adjustment.action_not_allowed",
     "adjustment.note_required",
-    "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
     "adjustment.weighed_partial",

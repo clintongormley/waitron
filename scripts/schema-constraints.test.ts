@@ -368,7 +368,7 @@ const EXPECTED_FOREIGN_KEYS = [
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
 const EXPECTED_UNIQUE_INDEXES = [
-  "adjustment_reasons_active_name_key",
+  "adjustment_reasons_name_key",
   "bill_payment_refunds_submission_key",
   "bill_payments_submission_key",
   "card_readers_provider_ref_key",

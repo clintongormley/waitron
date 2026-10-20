@@ -589,10 +589,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This reason needs a note. Add one and try again",
     es: "Este motivo necesita una nota. Añádela e inténtalo de nuevo",
   },
-  "adjustment.reason_inactive": {
-    en: "That reason is no longer in use. Choose another reason",
-    es: "Ese motivo ya no se usa. Elige otro motivo",
-  },
   "adjustment.exceeds_amount": {
     en: "That discount is more than it would come off. Enter a smaller amount",
     es: "Ese descuento es mayor que el importe al que se aplica. Introduce un importe menor",

@@ -28,7 +28,7 @@ import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
 import { policySnapshotOf } from "./policy.js";
 import { recordAdjustment } from "./record.js";
 import { ADJUSTMENTS_ROUTES } from "./routes.js";
-import { seedReason } from "../test/seed.js";
+import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
 // A manager holds `adjustment.manage` only once the module's seat is registered, as boot does.
 registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
@@ -124,7 +124,7 @@ async function reasonCount(): Promise<number> {
 }
 
 describe("adjustment reason management routes", () => {
-  it("lets a manager create, edit, reorder and deactivate reasons", async () => {
+  it("lets a manager create, edit, reorder and delete reasons", async () => {
     const fx = await fixture();
     const manager = fx.cookie.manager;
     expect(await (await send(fx.app, "GET", REASONS, manager)).json()).toEqual({ reasons: [] });
@@ -132,7 +132,7 @@ describe("adjustment reason management routes", () => {
     const created = await send(fx.app, "POST", REASONS, manager, COMPLAINT);
     expect(created.status).toBe(201);
     const complaint = (await created.json()) as { id: string };
-    expect(complaint).toEqual({ id: expect.any(String), ...COMPLAINT, active: true, position: 0 });
+    expect(complaint).toEqual({ id: expect.any(String), ...COMPLAINT, position: 0 });
     const second = (await (
       await send(fx.app, "POST", REASONS, manager, {
         ...OTHER,
@@ -161,17 +161,126 @@ describe("adjustment reason management routes", () => {
     ]);
 
     expect((await send(fx.app, "DELETE", `${REASONS}/${complaint.id}`, manager)).status).toBe(204);
-    const active = (await (await send(fx.app, "GET", REASONS, manager)).json()) as {
+    const remaining = (await (await send(fx.app, "GET", REASONS, manager)).json()) as {
       reasons: { id: string }[];
     };
-    expect(active.reasons.map((r) => r.id)).toEqual([second.id]);
-    const all = (await (
-      await send(fx.app, "GET", `${REASONS}?includeInactive=true`, manager)
-    ).json()) as { reasons: { id: string; active: boolean }[] };
-    expect(all.reasons.map((r) => [r.id, r.active])).toEqual([
-      [second.id, true],
-      [complaint.id, false],
-    ]);
+    expect(remaining.reasons.map((r) => r.id)).toEqual([second.id]);
+    const again = await send(fx.app, "DELETE", `${REASONS}/${complaint.id}`, manager);
+    expect(again.status).toBe(404);
+    expect(await again.json()).toEqual({
+      error: { code: "adjustment_reason.not_found", params: { reasonId: complaint.id } },
+    });
+  });
+
+  it("refuses a supervisor or staff member a Delete of an existing reason, and keeps it", async () => {
+    const fx = await fixture();
+    const reason = (await (
+      await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT)
+    ).json()) as { id: string };
+    for (const role of ["staff", "supervisor"] as const) {
+      const response = await send(fx.app, "DELETE", `${REASONS}/${reason.id}`, fx.cookie[role]);
+      expect(response.status, role).toBe(403);
+      expect(await response.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "adjustment.manage" } },
+      });
+    }
+    const listed = (await (await send(fx.app, "GET", REASONS, fx.cookie.manager)).json()) as {
+      reasons: { id: string }[];
+    };
+    expect(listed.reasons.map((r) => r.id)).toEqual([reason.id]);
+  });
+
+  it("deletes a reason that past adjustments name, leaving them as they were", async () => {
+    const fx = await fixture();
+    const reason = await seedReason(db);
+    const workingOrderId = await seedWorkingOrder(db);
+    await withTransaction(db, (tx) =>
+      recordAdjustment(tx, {
+        workingOrderId,
+        line: {
+          id: randomUUID(),
+          name: "Paella",
+          quantity: "1",
+          listUnitPriceGross: decimal("20.00"),
+          creditedTo: null,
+          stage: "served",
+        },
+        quantity: "1",
+        reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+        action: "comp",
+        percentBp: null,
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("0.00"),
+        reduction: decimal("20.00"),
+        nominalValue: decimal("20.00"),
+        requestedBy: randomUUID(),
+        approvedBy: null,
+        note: null,
+      }),
+    );
+    const recorded = sql`select reason_id, reason_name from adjustments`;
+    const before = (await db.execute(recorded)).rows;
+    expect(before).toEqual([{ reason_id: reason.id, reason_name: reason.name }]);
+
+    const response = await send(fx.app, "DELETE", `${REASONS}/${reason.id}`, fx.cookie.manager);
+
+    expect(response.status).toBe(204);
+    expect((await db.execute(recorded)).rows).toEqual(before);
+    expect(await reasonCount()).toBe(0);
+  });
+
+  it("reads a reason's delete impact for a manager or an admin, and refuses anyone else", async () => {
+    const fx = await fixture();
+    const comp = (await (
+      await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT)
+    ).json()) as { id: string };
+    const other = (await (
+      await send(fx.app, "POST", REASONS, fx.cookie.manager, OTHER)
+    ).json()) as {
+      id: string;
+    };
+    const impact = (reasonId: string) => `${REASONS}/${reasonId}/delete-impact`;
+
+    for (const role of ["manager", "admin"] as const) {
+      const served = await send(fx.app, "GET", impact(comp.id), fx.cookie[role]);
+      expect(served.status, role).toBe(200);
+      expect(await served.json()).toEqual({
+        target: { id: comp.id, name: "Complaint" },
+        refusals: [],
+        ends: [],
+        removes: [],
+      });
+    }
+    const refused = await send(fx.app, "GET", impact(other.id), fx.cookie.manager);
+    expect(refused.status).toBe(200);
+    expect(await refused.json()).toEqual({
+      target: { id: other.id, name: "Other" },
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 0 }, targets: [] }],
+      ends: [],
+      removes: [],
+    });
+
+    for (const role of ["staff", "supervisor"] as const) {
+      const response = await send(fx.app, "GET", impact(comp.id), fx.cookie[role]);
+      expect(response.status, role).toBe(403);
+      expect(await response.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "adjustment.manage" } },
+      });
+    }
+    const anonymous = await send(fx.app, "GET", impact(comp.id));
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+
+    const missing = await send(fx.app, "GET", impact(MISSING), fx.cookie.manager);
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({
+      error: { code: "adjustment_reason.not_found", params: { reasonId: MISSING } },
+    });
+    const malformed = await send(fx.app, "GET", impact("not-a-uuid"), fx.cookie.manager);
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
 
   it("lets an admin manage reasons too", async () => {
@@ -321,7 +430,7 @@ describe("adjustment reason management routes", () => {
     expect(await reasonCount()).toBe(0);
   });
 
-  it("answers a reorder that leaves out an active reason with 400", async () => {
+  it("answers a reorder that leaves out a reason with 400", async () => {
     const fx = await fixture();
     await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT);
     const response = await send(fx.app, "PUT", ORDER, fx.cookie.manager, { ids: [] });
@@ -338,12 +447,11 @@ describe("adjustment reason management routes", () => {
     expect(await response.json()).toEqual({
       id: expect.any(String),
       ...OTHER,
-      active: true,
       position: 0,
     });
   });
 
-  it("answers switching off the last Void reason, or the last that asks for a note, with 409 and its withNote", async () => {
+  it("answers deleting the last Void reason, or the last that asks for a note, with 409 and its withNote", async () => {
     const fx = await fixture();
     const manager = fx.cookie.manager;
     const other = (await (await send(fx.app, "POST", REASONS, manager, OTHER)).json()) as {
@@ -386,7 +494,7 @@ describe("adjustment reason management routes", () => {
     expect((await send(fx.app, "DELETE", `${REASONS}/${other.id}`, manager)).status).toBe(204);
   });
 
-  it("keeps one of two Void reasons switched off together, refusing the other with 409", async () => {
+  it("keeps one of two Void reasons deleted together, refusing the other with 409", async () => {
     const fx = await fixture();
     const manager = fx.cookie.manager;
     const pair = [
@@ -404,124 +512,6 @@ describe("adjustment reason management routes", () => {
       reasons: { id: string }[];
     };
     expect(listed.reasons).toHaveLength(1);
-  });
-
-  describe("reactivating a reason", () => {
-    async function deactivated(fx: Fixture): Promise<{ id: string }> {
-      const reason = (await (
-        await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT)
-      ).json()) as { id: string };
-      expect(
-        (await send(fx.app, "DELETE", `${REASONS}/${reason.id}`, fx.cookie.manager)).status,
-      ).toBe(204);
-      return reason;
-    }
-    async function activeOf(fx: Fixture, id: string): Promise<boolean | undefined> {
-      const all = (await (
-        await send(fx.app, "GET", `${REASONS}?includeInactive=true`, fx.cookie.manager)
-      ).json()) as { reasons: { id: string; active: boolean }[] };
-      return all.reasons.find((reason) => reason.id === id)?.active;
-    }
-
-    it("lets a manager or an admin make a deactivated reason active again under the same id", async () => {
-      const fx = await fixture();
-      for (const role of ["manager", "admin"] as const) {
-        const reason = await deactivated(fx);
-        const response = await send(
-          fx.app,
-          "POST",
-          `${REASONS}/${reason.id}/reactivate`,
-          fx.cookie[role],
-        );
-        expect(response.status, role).toBe(200);
-        expect(await response.json()).toEqual({
-          id: reason.id,
-          ...COMPLAINT,
-          active: true,
-          position: expect.any(Number),
-        });
-        expect(await activeOf(fx, reason.id)).toBe(true);
-        expect(
-          (await send(fx.app, "DELETE", `${REASONS}/${reason.id}`, fx.cookie.manager)).status,
-        ).toBe(204);
-      }
-    });
-
-    it("refuses a supervisor or staff member, and leaves the reason deactivated", async () => {
-      const fx = await fixture();
-      const reason = await deactivated(fx);
-      for (const role of ["staff", "supervisor"] as const) {
-        const response = await send(
-          fx.app,
-          "POST",
-          `${REASONS}/${reason.id}/reactivate`,
-          fx.cookie[role],
-        );
-        expect(response.status, role).toBe(403);
-        expect(await response.json()).toEqual({
-          error: {
-            code: "authorization.not_permitted",
-            params: { permission: "adjustment.manage" },
-          },
-        });
-      }
-      expect(await activeOf(fx, reason.id)).toBe(false);
-    });
-
-    it("refuses a request with no management session", async () => {
-      const fx = await fixture();
-      const reason = await deactivated(fx);
-      const response = await send(fx.app, "POST", `${REASONS}/${reason.id}/reactivate`);
-      expect(response.status).toBe(401);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management_session.required" },
-      });
-      expect(await activeOf(fx, reason.id)).toBe(false);
-    });
-
-    it("answers a name an active reason holds with 409, an unknown reason with 404 and a malformed id with 400", async () => {
-      const fx = await fixture();
-      const manager = fx.cookie.manager;
-      const reason = await deactivated(fx);
-      expect((await send(fx.app, "POST", REASONS, manager, COMPLAINT)).status).toBe(201);
-
-      const taken = await send(fx.app, "POST", `${REASONS}/${reason.id}/reactivate`, manager);
-      expect(taken.status).toBe(409);
-      expect(await taken.json()).toEqual({
-        error: { code: "adjustment_reason.name_taken", params: { name: "Complaint" } },
-      });
-      expect(await activeOf(fx, reason.id)).toBe(false);
-
-      const missing = await send(fx.app, "POST", `${REASONS}/${MISSING}/reactivate`, manager);
-      expect(missing.status).toBe(404);
-      expect(await missing.json()).toEqual({
-        error: { code: "adjustment_reason.not_found", params: { reasonId: MISSING } },
-      });
-      const malformed = await send(fx.app, "POST", `${REASONS}/not-a-uuid/reactivate`, manager);
-      expect(malformed.status).toBe(400);
-      expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-    });
-
-    it("enables one of two same-named reasons enabled together, and refuses the other with 409", async () => {
-      const fx = await fixture();
-      const manager = fx.cookie.manager;
-      const pair = [await deactivated(fx), await deactivated(fx)];
-
-      const responses = await Promise.all(
-        pair.map((reason) => send(fx.app, "POST", `${REASONS}/${reason.id}/reactivate`, manager)),
-      );
-      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
-      const enabled = responses.findIndex((response) => response.status === 200);
-      expect(await responses[enabled]!.json()).toMatchObject({
-        id: pair[enabled]!.id,
-        active: true,
-      });
-      expect(await responses[1 - enabled]!.json()).toEqual({
-        error: { code: "adjustment_reason.name_taken", params: { name: "Complaint" } },
-      });
-      expect(await activeOf(fx, pair[enabled]!.id)).toBe(true);
-      expect(await activeOf(fx, pair[1 - enabled]!.id)).toBe(false);
-    });
   });
 
   it("refuses a reorder body that is not a list of ids", async () => {

@@ -231,6 +231,12 @@ export class ReorderController implements ReactiveController {
     host.addController(this);
   }
 
+  /** True from a pointer's press on a handle until its release or cancel, whether or not a row
+   * has moved yet. */
+  get dragging(): boolean {
+    return this.#drag !== null;
+  }
+
   hostUpdate(): void {
     if (this.#drag === null || this.#before !== null) return;
     this.#before = new Map();

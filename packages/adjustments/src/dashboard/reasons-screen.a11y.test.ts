@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "@waitron/dashboard-kit";
+import { setLocale, type QueryController } from "@waitron/dashboard-kit";
+import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { setContentLanguages } from "@waitron/ui";
-import {
-  chooseOption,
-  chooseOptions,
-  cleanup,
-  formMessageOf,
-  host,
-} from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
@@ -32,7 +27,6 @@ const reasons: AdjustmentReason[] = [
     applyRoles: [],
     approverRoles: [],
     noteRequired: false,
-    active: true,
     position: 0,
   },
   {
@@ -46,7 +40,6 @@ const reasons: AdjustmentReason[] = [
     applyRoles: ["supervisor", "manager", "admin"],
     approverRoles: ["manager", "admin"],
     noteRequired: true,
-    active: true,
     position: 1,
   },
   {
@@ -60,10 +53,13 @@ const reasons: AdjustmentReason[] = [
     applyRoles: ["staff", "supervisor", "manager", "admin"],
     approverRoles: ["manager", "admin"],
     noteRequired: false,
-    active: false,
     position: 2,
   },
 ];
+
+function impact(refusals: DeleteImpactRefusal[] = []): DeleteImpact {
+  return { target: { id: "e", name: "Entry error" }, refusals, ends: [], removes: [] };
+}
 
 async function settle(el: AdjustmentReasonsScreen): Promise<void> {
   for (let i = 0; i < 3; i++) {
@@ -154,43 +150,66 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     expect(save.variant).toBe("primary");
     await expectNoA11yViolations(host);
   });
-  test("the list of active reasons", async () => {
-    await screen(theme);
-    await expectNoA11yViolations(host);
-  });
-
-  test("the list showing inactive reasons", async () => {
+  test("the list", async () => {
     const el = await screen(theme);
-    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
-    await chooseOption(filter, "");
-    await settle(el);
+    expect(el.shadowRoot!.querySelectorAll("tbody tr[data-reason]")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 
-  test("a disabled reason's open row menu, offering Enable", async () => {
+  test("the grips disabled while searching", async () => {
     const el = await screen(theme);
-    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
-    await chooseOption(filter, "inactive");
+    const input = el
+      .shadowRoot!.querySelector("[name=search]")!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "o";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await settle(el);
-    const enable = deep(el, '[data-test="enable-o"]');
-    enable
-      .closest("wt-row-actions")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
-    await settle(el);
-    expect(enable.checkVisibility()).toBe(true);
+    const grips = [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-test^="drag-"]')];
+    expect(grips.length).toBeGreaterThan(0);
+    expect(grips.every((grip) => grip.disabled)).toBe(true);
     await expectNoA11yViolations(host);
   });
 
-  test("the list after a refused Enable", async () => {
-    const el = await screen(theme, {
-      reactivateReason: vi.fn().mockRejectedValue({ code: "adjustment_reason.name_taken" }),
-    });
-    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
-    await chooseOption(filter, "inactive");
+  test("a grip focused", async () => {
+    const el = await screen(theme);
+    const grip = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-e"]')!;
+    grip.focus();
+    expect(el.shadowRoot!.activeElement).toBe(grip);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a search matching nothing", async () => {
+    const el = await screen(theme);
+    const search = el.shadowRoot!.querySelector("[name=search]")!;
+    const input = search.shadowRoot!.querySelector("input")!;
+    input.value = "zzz";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await settle(el);
-    await press(el, "enable-o");
-    expect(deep(el, '[data-test="page-alert"]').textContent).toContain("already has this name");
+    expect(el.shadowRoot!.querySelector('[data-test="no-matches"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("the list at phone width", async () => {
+    const el = await screen(theme);
+    host.style.width = "390px";
+    await settle(el);
+    const wrap = el.shadowRoot!.querySelector<HTMLElement>('[data-test="reasons"]')!;
+    expect(wrap.scrollWidth).toBeGreaterThan(wrap.clientWidth);
+    await expectNoA11yViolations(host);
+  });
+
+  test("the empty list", async () => {
+    const el = await screen(theme, { listReasons: vi.fn().mockResolvedValue([]) });
+    expect(el.shadowRoot!.querySelector('[data-test="empty"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("the open row menu", async () => {
+    const el = await screen(theme);
+    const menu = deep(el, 'tr[data-reason="c"] wt-row-actions');
+    menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    await settle(el);
+    expect(menu.shadowRoot!.querySelector("button")!.getAttribute("aria-expanded")).toBe("true");
     await expectNoA11yViolations(host);
   });
 
@@ -306,15 +325,41 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
-  test("the bill comp limit that could not be loaded", async () => {
-    const el = await screen(theme, { getSettings: vi.fn().mockRejectedValue({ code: "x" }) });
-    expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).not.toBeNull();
+  test.each([
+    ["loading", () => new Promise<never>(() => {}), ".status[role=status]"],
+    ["ready", async () => impact(), "[data-irreversible]:not([data-group=refusals] ~ *)"],
+    [
+      "refused",
+      async () =>
+        impact([{ code: "adjustment_reason.void_required", params: { withNote: 1 }, targets: [] }]),
+      "[data-group=refusals] li",
+    ],
+    [
+      "after a failed read",
+      () => Promise.reject({ code: "server.internal" }),
+      '[data-test="delete-retry"]',
+    ],
+  ] as const)("the delete question, %s", async (_state, read, marker) => {
+    const el = await screen(theme, {
+      watchReasonDeleteImpact: vi.fn(
+        (queries: QueryController, reasonId: string, apply: (value: DeleteImpact) => void) =>
+          queries.watch(
+            "delete-impact",
+            { key: `impact:${reasonId}`, dependencies: [], read },
+            apply,
+          ),
+      ),
+    });
+    await press(el, "delete-e");
+    const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+    await dialog.updateComplete;
+    expect(dialog.shadowRoot!.querySelector(marker), marker).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  test("the deactivation confirmation", async () => {
-    const el = await screen(theme);
-    await press(el, "deactivate-c");
+  test("the bill comp limit that could not be loaded", async () => {
+    const el = await screen(theme, { getSettings: vi.fn().mockRejectedValue({ code: "x" }) });
+    expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

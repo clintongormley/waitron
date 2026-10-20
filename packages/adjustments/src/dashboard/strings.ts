@@ -9,16 +9,16 @@ import {
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
-  "adjustments.title": "Adjustment reasons",
-  "adjustments.intro":
-    "The reasons staff choose when they cancel an item, give it away or discount it, and the limits each reason carries.",
+  "nav.adjustment_reasons": "Voids and comps",
+  "adjustments.title": "Voids and comps",
+  "adjustments.intro": "The reasons staff choose when they void or comp an item.",
   "adjustments.add": "Add reason",
   "adjustments.empty": "No reasons yet.",
   "adjustments.column.name": "Name",
-  "adjustments.column.allows": "Allows",
+  "adjustments.column.kind": "Kind",
+  "adjustments.column.apply_roles": "Who can apply it",
+  "adjustments.column.approver_roles": "Who can approve it",
   "adjustments.column.limits": "Limits",
-  "adjustments.column.roles": "Who applies it",
-  "adjustments.column.status": "Status",
   "adjustments.column.actions": "Actions",
   "adjustments.customise_columns": "Customise columns",
   "adjustments.customise": "Customise",
@@ -30,26 +30,18 @@ const en = {
   "adjustments.column_always_shown": "Always shown",
   "adjustments.column_last_shown": "Keep at least one shown",
   "adjustments.column_position": "{position} of {total}",
-  "adjustments.filters": "Filters",
-  "adjustments.filtered_column": "Filtered",
-  "adjustments.filters_clear_all": "Clear all",
-  "adjustments.filters_close": "Close filters",
-  "adjustments.active": "Active",
-  "adjustments.disabled": "Disabled",
-  "adjustments.filter_all": "All reasons",
-  "adjustments.combobox_search": "Search",
-  "adjustments.combobox_no_results": "No results",
-  "adjustments.limit_percent": "Up to {percent}% off an item",
-  "adjustments.limit_amount": "Up to {amount} off a bill",
+  "adjustments.limit_percent": "{percent}% an item",
+  "adjustments.limit_amount": "{amount} a bill",
+  "adjustments.none": "—",
   "adjustments.no_limit": "No limit",
-  "adjustments.approves": "Approves: {roles}",
   "adjustments.everyone": "Everyone",
   "adjustments.note_required": "Note required",
-  "adjustments.move_up": "Move up",
-  "adjustments.move_down": "Move down",
+  "adjustments.order_note": "Drag ⋮⋮ to set the order the till lists them in.",
+  "adjustments.order_note_searching": "Clear the search to change the order.",
+  "adjustments.reorder": "Move reason",
+  "adjustments.reordered": "{item} is now {index} of {total}.",
+  "adjustments.search": "Search",
   "adjustments.edit": "Edit",
-  "adjustments.disable": "Disable",
-  "adjustments.enable": "Enable",
   "adjustments.new": "Add reason",
   "adjustments.edit_heading": "Edit reason",
   "adjustments.field.kind": "Kind",
@@ -72,9 +64,17 @@ const en = {
   "adjustments.void_rule": "Who may cancel is set by the refund permission, not by the reason.",
   "adjustments.save": "Save",
   "adjustments.cancel": "Cancel",
-  "adjustments.disable_heading": "Disable reason",
-  "adjustments.disable_explained":
-    "Staff will no longer be offered {name}. It stays in the list as disabled.",
+  "adjustments.delete": "Delete",
+  "adjustments.delete_heading": "Delete reason",
+  "adjustments.delete_refusals": "Why this cannot be deleted",
+  "adjustments.delete_ends": "Work that ends",
+  "adjustments.delete_removes": "Settings removed",
+  "adjustments.delete_irreversible": "Past voids and comps keep its name. This cannot be undone.",
+  "adjustments.delete_retry": "Try again",
+  "adjustments.delete_loading": "Checking whether this reason can be deleted…",
+  "adjustments.delete_load_error": "Could not check whether it can be deleted: {reason}",
+  "adjustments.delete_error": "Could not delete the reason: {reason}",
+  "adjustments.delete_item": "{names} ({count})",
   "adjustments.fix_fields": "Correct the highlighted fields to continue.",
   "adjustments.error.name": "Enter a name.",
   "adjustments.error.names": "Check the names in each language.",
@@ -91,7 +91,8 @@ const en = {
   "adjustments.error.void_required": "A venue keeps at least one Void reason.",
   "adjustments.error.void_required_note":
     "A venue keeps at least one Void reason that asks for a note.",
-  "adjustments.load_error": "The adjustment reasons could not be loaded.",
+  "adjustments.load_error": "The voids and comps could not be loaded.",
+  "adjustments.no_matches": "Nothing matches your search.",
   "adjustments.reorder_error": "The new order could not be saved.",
   "adjustments.limit.heading": "Limit on a bill's comps",
   "adjustments.limit.field": "Most comped on one bill",
@@ -166,16 +167,17 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
-  "adjustments.title": "Motivos de ajuste",
+  "nav.adjustment_reasons": "Cancelaciones y descuentos",
+  "adjustments.title": "Cancelaciones y descuentos",
   "adjustments.intro":
-    "Los motivos que elige el personal al anular un artículo, no cobrarlo o descontarlo, y los límites de cada motivo.",
+    "Los motivos que elige el personal al cancelar un artículo o hacerle un descuento.",
   "adjustments.add": "Añadir motivo",
   "adjustments.empty": "Todavía no hay motivos.",
   "adjustments.column.name": "Nombre",
-  "adjustments.column.allows": "Permite",
+  "adjustments.column.kind": "Tipo",
+  "adjustments.column.apply_roles": "Quién puede aplicarlo",
+  "adjustments.column.approver_roles": "Quién puede autorizarlo",
   "adjustments.column.limits": "Límites",
-  "adjustments.column.roles": "Quién lo aplica",
-  "adjustments.column.status": "Estado",
   "adjustments.column.actions": "Acciones",
   "adjustments.customise_columns": "Personalizar columnas",
   "adjustments.customise": "Personalizar",
@@ -187,26 +189,18 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.column_always_shown": "Siempre visible",
   "adjustments.column_last_shown": "Deja al menos una visible",
   "adjustments.column_position": "{position} de {total}",
-  "adjustments.filters": "Filtros",
-  "adjustments.filtered_column": "Filtrada",
-  "adjustments.filters_clear_all": "Borrar todo",
-  "adjustments.filters_close": "Cerrar filtros",
-  "adjustments.active": "Activo",
-  "adjustments.disabled": "Deshabilitado",
-  "adjustments.filter_all": "Todos los motivos",
-  "adjustments.combobox_search": "Buscar",
-  "adjustments.combobox_no_results": "Sin resultados",
-  "adjustments.limit_percent": "Hasta un {percent}% de un artículo",
-  "adjustments.limit_amount": "Hasta {amount} de una cuenta",
+  "adjustments.limit_percent": "{percent}% por artículo",
+  "adjustments.limit_amount": "{amount} por cuenta",
+  "adjustments.none": "—",
   "adjustments.no_limit": "Sin límite",
-  "adjustments.approves": "Aprueba: {roles}",
   "adjustments.everyone": "Todos",
   "adjustments.note_required": "Nota obligatoria",
-  "adjustments.move_up": "Subir",
-  "adjustments.move_down": "Bajar",
+  "adjustments.order_note": "Arrastra ⋮⋮ para fijar el orden en que la caja los muestra.",
+  "adjustments.order_note_searching": "Borra la búsqueda para cambiar el orden.",
+  "adjustments.reorder": "Mover motivo",
+  "adjustments.reordered": "{item} está ahora en la posición {index} de {total}.",
+  "adjustments.search": "Buscar",
   "adjustments.edit": "Editar",
-  "adjustments.disable": "Deshabilitar",
-  "adjustments.enable": "Habilitar",
   "adjustments.new": "Añadir motivo",
   "adjustments.edit_heading": "Editar motivo",
   "adjustments.field.kind": "Tipo",
@@ -229,9 +223,18 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.void_rule": "Quién puede cancelar lo decide el permiso de devolución, no el motivo.",
   "adjustments.save": "Guardar",
   "adjustments.cancel": "Cancelar",
-  "adjustments.disable_heading": "Deshabilitar motivo",
-  "adjustments.disable_explained":
-    "El personal dejará de ver {name}. Seguirá en la lista como deshabilitado.",
+  "adjustments.delete": "Eliminar",
+  "adjustments.delete_heading": "Eliminar motivo",
+  "adjustments.delete_refusals": "Por qué no se puede eliminar",
+  "adjustments.delete_ends": "Trabajo que termina",
+  "adjustments.delete_removes": "Ajustes eliminados",
+  "adjustments.delete_irreversible":
+    "Las cancelaciones y descuentos ya hechos conservan su nombre. Esta acción no se puede deshacer.",
+  "adjustments.delete_retry": "Reintentar",
+  "adjustments.delete_loading": "Comprobando si se puede eliminar este motivo…",
+  "adjustments.delete_load_error": "No se pudo comprobar si se puede eliminar: {reason}",
+  "adjustments.delete_error": "No se pudo eliminar el motivo: {reason}",
+  "adjustments.delete_item": "{names} ({count})",
   "adjustments.fix_fields": "Corrige los campos marcados para continuar.",
   "adjustments.error.name": "Escribe un nombre.",
   "adjustments.error.names": "Revisa los nombres en cada idioma.",
@@ -248,7 +251,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.error.void_required": "El local necesita al menos un motivo de cancelación.",
   "adjustments.error.void_required_note":
     "El local necesita al menos un motivo de cancelación que pida una nota.",
-  "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
+  "adjustments.load_error": "No se pudieron cargar las cancelaciones y descuentos.",
+  "adjustments.no_matches": "Nada coincide con tu búsqueda.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",
@@ -327,8 +331,8 @@ export const ADJUSTMENTS_STRINGS = { en, es };
 
 export const ADJUSTMENTS_CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "adjustment_reason.name_taken": {
-    en: "Another active reason already has this name",
-    es: "Ya hay otro motivo activo con este nombre",
+    en: "Another reason already has this name",
+    es: "Ya hay otro motivo con este nombre",
   },
   "adjustment_reason.not_found": {
     en: "That reason could not be found. It may have been removed",
@@ -360,13 +364,6 @@ const ACTION_CHOICES: NameTable = {
   comp: { en: "Free (100%)", es: "Gratis (100 %)" },
   discount_percent: { en: "A percentage", es: "Un porcentaje" },
   discount_amount: { en: "An amount", es: "Un importe" },
-};
-
-/** How the reasons list names a Comp reason's offers. */
-const OFFER_NAMES: NameTable = {
-  comp: { en: "Free", es: "Gratis" },
-  discount_percent: { en: "Percentage discount", es: "Descuento en porcentaje" },
-  discount_amount: { en: "Amount discount", es: "Descuento en importe" },
 };
 
 const KIND_NAMES: NameTable = {
@@ -403,10 +400,6 @@ export function actionName(action: string, locale?: string): string {
 
 export function actionChoice(action: string, locale?: string): string {
   return resolveNameTable(ACTION_CHOICES, action, locale);
-}
-
-export function offerName(action: string, locale?: string): string {
-  return resolveNameTable(OFFER_NAMES, action, locale);
 }
 
 export function kindName(kind: string, locale?: string): string {

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, applyTokens, setContentLanguages } from "@waitron/ui";
-import { LiveData, setLocale } from "@waitron/dashboard-kit";
+import { LiveData, setLocale, type QueryController } from "@waitron/dashboard-kit";
+import type { DeleteImpact } from "@waitron/shared";
 import type { AdjustmentReason, AdjustmentSettings, AdjustmentsApi } from "./client.js";
 import { AdjustmentReasonsScreen } from "./reasons-screen.js";
 
@@ -17,7 +18,6 @@ const reason: AdjustmentReason = {
   applyRoles: ["supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: true,
-  active: true,
   position: 0,
 };
 const voidReason: AdjustmentReason = {
@@ -31,7 +31,6 @@ const voidReason: AdjustmentReason = {
   applyRoles: [],
   approverRoles: [],
   noteRequired: false,
-  active: true,
   position: 1,
 };
 class ReasonLeaveApp extends LitElement {
@@ -70,8 +69,24 @@ function fakeApi() {
     saveSettings: vi.fn(async (value: unknown) => value),
     createReason: vi.fn(async () => reason),
     updateReason: vi.fn(async () => reason),
-    deactivateReason: vi.fn(async () => {}),
-    reactivateReason: vi.fn(async () => reason),
+    deleteReason: vi.fn(async () => {}),
+    watchReasonDeleteImpact: vi.fn(
+      (queries: QueryController, reasonId: string, apply: (impact: DeleteImpact) => void) =>
+        queries.watch(
+          "delete-impact",
+          {
+            key: `impact:${reasonId}`,
+            dependencies: [],
+            read: async (): Promise<DeleteImpact> => ({
+              target: { id: reason.id, name: reason.name },
+              refusals: [],
+              ends: [],
+              removes: [],
+            }),
+          },
+          apply,
+        ),
+    ),
     reorderReasons: vi.fn(async () => {}),
   };
   return Object.assign(api, { background: api });
@@ -83,7 +98,7 @@ async function mount(api = fakeApi()) {
   document.body.append(app);
   await app.updateComplete;
   const screen = app.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen")!;
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+  await expect.poll(() => screen.shadowRoot!.querySelector('[data-test="reasons"]')).not.toBeNull();
   await settle(screen);
   return { screen, api };
 }
@@ -338,14 +353,17 @@ it("a refused write retains the edited draft and Escape asks", async () => {
   expect((await question()).open).toBe(true);
   expect(native(modal).open).toBe(true);
 });
-it("a readonly deactivation confirmation closes without another question", async () => {
+it("an open Delete question closes without the unsaved-changes question", async () => {
   const { screen, api } = await mount();
-  await press(screen, "deactivate-reason-one");
+  await press(screen, "delete-reason-one");
+  const dialog = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
   expect(unload()).toBe(false);
-  await press(screen, "cancel-editor");
+  const closed = new Promise((resolve) => dialog.addEventListener("wt-close", resolve));
+  deep(dialog.shadowRoot!, '[data-test="delete-cancel"]')!.click();
+  await closed;
   expect((await question()).open).toBe(false);
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  expect(api.deactivateReason).not.toHaveBeenCalled();
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-delete-dialog")).toBeNull();
+  expect(api.deleteReason).not.toHaveBeenCalled();
 });
 
 function deferred<T>() {
@@ -479,16 +497,31 @@ it("a departed editor Enter cannot submit the current reason", async () => {
   expect(api.updateReason).not.toHaveBeenCalled();
   expect(value(screen, "name")).toBe("Current edit");
 });
-it("a departed deactivation control cannot deactivate the current reason", async () => {
+it("a departed Delete control cannot delete the current reason", async () => {
   const { screen, api } = await mount();
-  await press(screen, "deactivate-reason-one");
-  const old = screen.shadowRoot!.querySelector("wt-modal")!;
-  await press(screen, "cancel-editor");
-  await open(screen);
-  old.querySelector<HTMLElement>('[data-test="confirm-deactivate"]')!.click();
+  await press(screen, "delete-reason-one");
+  const old = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
+  const closed = new Promise((resolve) => old.addEventListener("wt-close", resolve));
+  deep(old.shadowRoot!, '[data-test="delete-cancel"]')!.click();
+  await closed;
   await settle(screen);
-  expect(api.deactivateReason).not.toHaveBeenCalled();
-  expect(value(screen, "name")).toBe("Complaint");
+  await press(screen, "delete-reason-one");
+  const current = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
+  expect(current).not.toBe(old);
+  old.dispatchEvent(
+    new CustomEvent("wt-delete-confirm", {
+      detail: { id: "reason-one" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  old.dispatchEvent(new CustomEvent("wt-delete-retry", { bubbles: true, composed: true }));
+  old.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await settle(screen);
+  expect(api.deleteReason).not.toHaveBeenCalled();
+  expect(api.watchReasonDeleteImpact).toHaveBeenCalledTimes(2);
+  expect(screen.shadowRoot!.querySelector("wt-delete-dialog")).toBe(current);
+  expect(current.open).toBe(true);
 });
 it("Keep returns focus to the edited reason control", async () => {
   const { screen } = await mount();
@@ -795,25 +828,3 @@ it("reconnect waits for fresh settings before exposing a limit draft", async () 
   await field(screen, "maxBillComp", "30");
   expect(unload()).toBe(true);
 });
-
-it.each([false, true])(
-  "closing Deactivate does not route through a retired reason draft (replaced=%s)",
-  async (replaced) => {
-    const { screen } = await mount();
-    await open(screen);
-    if (!replaced) await press(screen, "cancel-editor");
-    await press(screen, "deactivate-reason-one");
-    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
-    await modal.updateComplete;
-    const request = vi.spyOn(app.leave.coordinator, "request");
-    try {
-      const closed = editorClosed(screen);
-      await modal.requestClose("cancel");
-      await closed;
-      await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-      expect(request).not.toHaveBeenCalled();
-    } finally {
-      request.mockRestore();
-    }
-  },
-);

@@ -16,7 +16,6 @@ const reason: AdjustmentReason = {
   applyRoles: ["supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: true,
-  active: true,
   position: 0,
 };
 let el: AdjustmentReasonsScreen;
@@ -51,18 +50,16 @@ async function mount() {
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=save-limit]")).not.toBeNull(),
   );
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await vi.waitFor(() =>
-    expect(table.shadowRoot!.querySelector("[data-test=edit-reason]")).not.toBeNull(),
+    expect(el.shadowRoot!.querySelector("[data-test=edit-reason]")).not.toBeNull(),
   );
   return api;
 }
 
 async function edit(create = false) {
-  const root = create ? el.shadowRoot! : el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
-  root
-    .querySelector<HTMLElement>(create ? "[data-test=add-reason]" : "[data-test=edit-reason]")!
-    .click();
+  el.shadowRoot!.querySelector<HTMLElement>(
+    create ? "[data-test=add-reason]" : "[data-test=edit-reason]",
+  )!.click();
   await el.updateComplete;
 }
 

@@ -183,7 +183,7 @@ export async function seedAdjustmentReasons(
   tx: Transaction,
   { locale, dataSet, languages }: SeedAdjustmentReasonsInput,
 ): Promise<void> {
-  const existing = await listAdjustmentReasons(tx, { includeInactive: true });
+  const existing = await listAdjustmentReasons(tx);
   const byEnglish = new Map(existing.map((reason) => [reason.names.en ?? reason.name, reason]));
   const byName = new Map(existing.map((reason) => [reason.name, reason]));
   for (const reason of dataSet.adjustmentReasons) {
