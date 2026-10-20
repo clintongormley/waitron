@@ -2357,8 +2357,13 @@ and the parent assignment, including routed extras. A recall to a draft starts a
 on resend; a retained-id recall and a station reroute deliver the current correction beside the
 original. Ordinary reprints and firing HOLD work at its existing station add no new correction.
 
-**Remaining: A669-4.** Exercise failure, exact replay and fresh-process persistence. Update the
-guides and complete the branch
+The kitchen atomic tests exercise exact HTTP retries, changed-body refusals and rollback after a
+notice insert for all five callers. Controlled transaction-order cases cover two edits, serving and
+rerouting. Three new server processes per caller retain originals, corrections, print jobs, command
+records and acknowledgement. Eleven installed faults failed their intended assertions and each
+restored run passed.
+
+**Remaining: A669-4.** Update the guides and complete the branch
 review, push hook and current-head CI. Obtain the owner's answer for kitchen paper and notice
 wording before landing. Recheck other lanes' reservations before implementation.
 [Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

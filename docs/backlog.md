@@ -2364,7 +2364,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station-specific corrections for remaining work, with exact HOLD recipients and notices retained
   until acknowledgement. Partial and unit splits now retain copies and assignments; recall/resend
   and rerouting preserve the original and deliver the current correction to the destination.
-  Failure/replay/restart checks, guides and whole-branch gates remain. Kitchen Spanish wording
+  All five caller paths now have HTTP rollback and replay checks, controlled transaction-order cases
+  and three-process persistence checks. Guides and whole-branch gates remain. Kitchen Spanish wording
   still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
