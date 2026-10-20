@@ -7,8 +7,7 @@ import {
   type ContrastGroupId,
 } from "../theme/contrast-rules.js";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
-// The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same
-// way, and its header asks these suites to stay free of anything beyond raw DOM and `applyTokens`.
+// The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same way.
 import { applyTokens } from "./index.js";
 
 declare module "vitest/browser" {
@@ -25,8 +24,11 @@ const resolve =
     return value;
   };
 
-const failures = (id: ContrastGroupId, theme: "light" | "dark", el: HTMLElement) =>
-  failureLabels(checkRules(rulesIn(id, theme), resolve(el)));
+const failures = (id: ContrastGroupId, theme: "light" | "dark", el: HTMLElement) => {
+  const rules = rulesIn(id, theme);
+  expect(rules.length, `${id} has no rules in ${theme}`).toBeGreaterThan(0);
+  return failureLabels(checkRules(rules, resolve(el)));
+};
 
 let host: HTMLElement;
 
