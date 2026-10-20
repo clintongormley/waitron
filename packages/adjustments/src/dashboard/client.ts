@@ -123,7 +123,7 @@ export class AdjustmentsApi {
 
   async listReasons(): Promise<AdjustmentReason[]> {
     const body = await this.request<{ reasons: AdjustmentReason[] }>(
-      "/management-api/adjustments/reasons?includeInactive=true",
+      "/management-api/adjustments/reasons",
       "GET",
       undefined,
       { passive: this.passive },
@@ -141,10 +141,6 @@ export class AdjustmentsApi {
 
   deactivateReason(reasonId: string): Promise<void> {
     return this.request(`/management-api/adjustments/reasons/${reasonId}`, "DELETE");
-  }
-
-  reactivateReason(reasonId: string): Promise<AdjustmentReason> {
-    return this.request(`/management-api/adjustments/reasons/${reasonId}/reactivate`, "POST");
   }
 
   /** `ids` is every active reason, once each, in the new order. */

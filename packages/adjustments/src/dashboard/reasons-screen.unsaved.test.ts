@@ -71,7 +71,6 @@ function fakeApi() {
     createReason: vi.fn(async () => reason),
     updateReason: vi.fn(async () => reason),
     deactivateReason: vi.fn(async () => {}),
-    reactivateReason: vi.fn(async () => reason),
     reorderReasons: vi.fn(async () => {}),
   };
   return Object.assign(api, { background: api });

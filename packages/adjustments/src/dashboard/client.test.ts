@@ -36,13 +36,14 @@ function api(fetchImpl: ReturnType<typeof vi.fn>, passive = false) {
 }
 
 describe("AdjustmentsApi", () => {
-  it("lists every reason, inactive ones included, from the reasons envelope", async () => {
+  it("lists the reasons from the reasons envelope", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ reasons: [reason] }));
     expect(await api(fetchImpl).listReasons()).toEqual([reason]);
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/adjustments/reasons?includeInactive=true",
-      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
-    );
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/reasons", {
+      method: "GET",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("marks a background read passive, and keeps the live data it was given", async () => {
@@ -89,13 +90,8 @@ describe("AdjustmentsApi", () => {
     });
   });
 
-  it("reactivates a reason with a POST to its reactivate path, answering the reason", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reason));
-    expect(await api(fetchImpl).reactivateReason("r1")).toEqual(reason);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/reasons/r1/reactivate", {
-      method: "POST",
-      credentials: "include",
-    });
+  it("has no way to switch a reason back on", () => {
+    expect("reactivateReason" in api(vi.fn())).toBe(false);
   });
 
   it("sends the whole active order to the reorder route", async () => {

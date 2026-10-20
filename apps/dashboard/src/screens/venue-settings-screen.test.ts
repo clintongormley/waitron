@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtTabs } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { isVenueSettingsTab } from "./venue-settings-screen.js";
+import { VENUE_SETTINGS_TABS, isVenueSettingsTab } from "./venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsScreen } from "./venue-settings-screen.js";
 
 const initialUrl = location.href;
@@ -58,6 +58,10 @@ describe("the Venue settings page", () => {
     expect(isVenueSettingsTab("tables")).toBe(false);
   });
 
+  it("has no Adjustment reasons tab: Voids and comps is a page of its own", () => {
+    expect(VENUE_SETTINGS_TABS).toEqual(["venue-details", "kitchen"]);
+  });
+
   it("owns the one h1 and shows only the tabs that have a panel, in core's order", async () => {
     setLocale("en-GB");
     navigate("/manage/venue-settings/view/kitchen");
@@ -84,7 +88,7 @@ describe("the Venue settings page", () => {
     "/manage/venue-settings/view/nowhere",
     // The retired Floor tab: an unknown key like any other.
     "/manage/venue-settings/view/floor",
-    // A real tab this session has no panel on.
+    // The retired Adjustment reasons tab: an unknown key like any other.
     "/manage/venue-settings/view/adjustment-reasons",
   ])("replaces %s with the first visible tab, keeping the query", async (path) => {
     navigate(path);
@@ -194,15 +198,11 @@ describe("the Venue settings page", () => {
   it("names its tabs in Spanish", async () => {
     setLocale("es-ES");
     navigate("/manage/venue-settings");
-    const el = await mount([
-      panel("r", "venue-details"),
-      panel("a", "adjustment-reasons"),
-      panel("k", "kitchen"),
-    ]);
+    const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Ajustes del local");
     expect(
       [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.trim()),
-    ).toEqual(["Datos del local", "Motivos de ajuste", "Cocina"]);
+    ).toEqual(["Datos del local", "Cocina"]);
   });
 });
 

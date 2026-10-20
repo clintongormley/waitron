@@ -18,11 +18,17 @@ describe("DASHBOARD_MODULES honesty", () => {
     expect(DASHBOARD_MODULES.map((c) => c.module)).toContain("bookings");
   });
 
-  it("puts the adjustment reasons on Venue settings for managers of adjustments", () => {
+  it("puts Voids and comps under Service for managers of adjustments", () => {
     const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
-    expect(
-      adjustments?.settingsPanels?.map((panel) => [panel.tab, panel.requiresPermission]),
-    ).toEqual([["adjustment-reasons", "adjustment.manage"]]);
+    expect(adjustments?.moreScreens?.map(({ screen }) => screen)).toEqual([
+      {
+        id: "adjustment-reasons",
+        navLabelKey: "nav.adjustment_reasons",
+        group: "service",
+        requiresPermission: "adjustment.manage",
+      },
+    ]);
+    expect(adjustments?.settingsPanels).toBeUndefined();
   });
 
   it("puts the AEAT certificate on Venue details for system.manage, readable with fiscal.view", () => {

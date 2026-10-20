@@ -1825,7 +1825,7 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("treats the retired address /manage/adjustment-reasons as an unknown screen", async () => {
+  it("shows Voids and comps as a page under Service to a manager of adjustments", async () => {
     history.replaceState(null, "", "/manage/adjustment-reasons");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -1840,11 +1840,21 @@ describe("dashboard-app", () => {
       request: adjustmentsRequest,
     });
     await flush(el);
-    expect(overview(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/overview");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen")).not.toBeNull(),
+    );
+    expect(location.pathname).toBe("/manage/adjustment-reasons");
+    expect(navItem(el, "adjustment-report")).not.toBeNull();
+    const service = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
+    ].map((item) => item.dataset.test);
+    expect(service).toContain("nav-bookings");
+    expect(service.indexOf("nav-adjustment-reasons")).toBeGreaterThan(
+      service.indexOf("nav-bookings"),
+    );
   });
 
-  it("shows Adjustment reasons as a Venue settings tab to a manager of adjustments, and not in the nav", async () => {
+  it("opens the first visible Venue settings tab at the retired adjustment reasons tab's address", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/adjustment-reasons");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -1859,14 +1869,32 @@ describe("dashboard-app", () => {
       request: adjustmentsRequest,
     });
     await flush(el);
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/venue-settings/view/kitchen"));
+    expect(
+      venueSettings(el)!.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen"),
+    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen")).toBeNull();
+  });
+
+  it("keeps Voids and comps from a session that may not manage adjustments", async () => {
+    history.replaceState(null, "", "/manage/adjustment-reasons");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings", "adjustments"],
+        permissions: ["booking.manage", "report.view"],
+      }),
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: adjustmentsRequest,
+    });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/overview");
     expect(navItem(el, "adjustment-reasons")).toBeNull();
     expect(navItem(el, "adjustment-report")).not.toBeNull();
-    expect(
-      venueSettings(el)!.shadowRoot!.querySelector(
-        '[slot="adjustment-reasons"] dashboard-adjustment-reasons-screen',
-      ),
-    ).not.toBeNull();
-    expect(location.pathname).toBe("/manage/venue-settings/view/adjustment-reasons");
   });
 
   it("navigates to the devices screen", async () => {

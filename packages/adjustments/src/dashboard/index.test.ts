@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("ADJUSTMENTS_DASHBOARD", () => {
-  it("puts the reasons on Venue settings for managers of adjustments, and only the report in the nav", () => {
+  it("puts Voids and comps under Service for managers of adjustments, beside the report", () => {
     expect(ADJUSTMENTS_DASHBOARD.module).toBe("adjustments");
     expect(ADJUSTMENTS_DASHBOARD.screen).toEqual({
       id: "adjustment-report",
@@ -21,26 +21,31 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
       group: "reports",
       requiresPermission: "report.view",
     });
-    expect(ADJUSTMENTS_DASHBOARD.moreScreens).toBeUndefined();
-    expect(
-      ADJUSTMENTS_DASHBOARD.settingsPanels!.map(({ id, tab, requiresPermission }) => ({
-        id,
-        tab,
-        requiresPermission,
-      })),
-    ).toEqual([
+    expect(ADJUSTMENTS_DASHBOARD.settingsPanels).toBeUndefined();
+    expect(ADJUSTMENTS_DASHBOARD.moreScreens!.map(({ screen }) => screen)).toEqual([
       {
         id: "adjustment-reasons",
-        tab: "adjustment-reasons",
+        navLabelKey: "nav.adjustment_reasons",
+        group: "service",
         requiresPermission: "adjustment.manage",
       },
     ]);
+    const { en, es } = ADJUSTMENTS_STRINGS;
+    expect([en["nav.adjustment_reasons"], en["adjustments.title"]]).toEqual([
+      "Voids and comps",
+      "Voids and comps",
+    ]);
+    expect(en["adjustments.intro"]).toBe(
+      "The reasons staff choose when they void or comp an item.",
+    );
+    expect(es["nav.adjustment_reasons"]).toBe(es["adjustments.title"]);
+    expect(es["nav.adjustment_reasons"]).not.toBe(en["nav.adjustment_reasons"]);
   });
 
   it("gives the module's own refusals a sentence of their own in English and Spanish", () => {
     const generic = codeMessage("adjustment_reason.unregistered", "es");
     expect(codeMessage("adjustment_reason.name_taken", "en")).toBe(
-      "Another active reason already has this name",
+      "Another reason already has this name",
     );
     expect(codeMessage("adjustment_reason.not_found", "en")).toBe(
       "That reason could not be found. It may have been removed",
@@ -52,7 +57,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
     }
   });
 
-  it("the reasons panel renders on the context's request and live data", async () => {
+  it("the Voids and comps page renders on the context's request and live data", async () => {
     const fetchImpl = vi.fn((url: string) =>
       Promise.resolve({
         ok: true,
@@ -61,12 +66,29 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
           JSON.stringify(
             url.endsWith("/settings")
               ? { maxBillComp: null, billApproverRoles: ["manager", "admin"] }
-              : { reasons: [] },
+              : {
+                  reasons: [
+                    {
+                      id: "r1",
+                      name: "Complaint",
+                      names: { en: "Complaint" },
+                      kind: "void",
+                      actions: ["cancel"],
+                      maxPercentBp: null,
+                      maxAmount: null,
+                      applyRoles: [],
+                      approverRoles: [],
+                      noteRequired: false,
+                      active: true,
+                      position: 0,
+                    },
+                  ],
+                },
           ),
       } as Response),
     );
     const liveData = new LiveData();
-    const handle = ADJUSTMENTS_DASHBOARD.settingsPanels![0]!.create({
+    const handle = ADJUSTMENTS_DASHBOARD.moreScreens![0]!.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,
     });
@@ -81,7 +103,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
     expect(screen.api.liveData).toBe(liveData);
     await vi.waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith(
-        "/management-api/adjustments/reasons?includeInactive=true",
+        "/management-api/adjustments/reasons",
         expect.objectContaining({ method: "GET" }),
       ),
     );

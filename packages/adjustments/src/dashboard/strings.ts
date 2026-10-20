@@ -9,9 +9,9 @@ import {
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
-  "adjustments.title": "Adjustment reasons",
-  "adjustments.intro":
-    "The reasons staff choose when they cancel an item, give it away or discount it, and the limits each reason carries.",
+  "nav.adjustment_reasons": "Voids and comps",
+  "adjustments.title": "Voids and comps",
+  "adjustments.intro": "The reasons staff choose when they void or comp an item.",
   "adjustments.add": "Add reason",
   "adjustments.empty": "No reasons yet.",
   "adjustments.column.name": "Name",
@@ -49,7 +49,6 @@ const en = {
   "adjustments.move_down": "Move down",
   "adjustments.edit": "Edit",
   "adjustments.disable": "Disable",
-  "adjustments.enable": "Enable",
   "adjustments.new": "Add reason",
   "adjustments.edit_heading": "Edit reason",
   "adjustments.field.kind": "Kind",
@@ -166,9 +165,10 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
-  "adjustments.title": "Motivos de ajuste",
+  "nav.adjustment_reasons": "Cancelaciones y descuentos",
+  "adjustments.title": "Cancelaciones y descuentos",
   "adjustments.intro":
-    "Los motivos que elige el personal al anular un artículo, no cobrarlo o descontarlo, y los límites de cada motivo.",
+    "Los motivos que elige el personal al cancelar un artículo o hacerle un descuento.",
   "adjustments.add": "Añadir motivo",
   "adjustments.empty": "Todavía no hay motivos.",
   "adjustments.column.name": "Nombre",
@@ -206,7 +206,6 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.move_down": "Bajar",
   "adjustments.edit": "Editar",
   "adjustments.disable": "Deshabilitar",
-  "adjustments.enable": "Habilitar",
   "adjustments.new": "Añadir motivo",
   "adjustments.edit_heading": "Editar motivo",
   "adjustments.field.kind": "Tipo",
@@ -327,8 +326,8 @@ export const ADJUSTMENTS_STRINGS = { en, es };
 
 export const ADJUSTMENTS_CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "adjustment_reason.name_taken": {
-    en: "Another active reason already has this name",
-    es: "Ya hay otro motivo activo con este nombre",
+    en: "Another reason already has this name",
+    es: "Ya hay otro motivo con este nombre",
   },
   "adjustment_reason.not_found": {
     en: "That reason could not be found. It may have been removed",

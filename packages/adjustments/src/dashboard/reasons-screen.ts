@@ -189,6 +189,9 @@ export class AdjustmentReasonsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
+      h1 {
+        margin-top: 0;
+      }
       .intro {
         margin-top: 0;
         color: var(--wt-color-text-muted);
@@ -722,24 +725,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     void this.#write(() => this.api.deactivateReason(reason.id), this.#refocusFrom(reason));
   }
 
-  /** Not destructive, so it acts at once with no confirmation, as a move does. */
-  async #enable(reason: AdjustmentReason): Promise<void> {
-    if (this.busy) return;
-    const refocus = this.#refocusFrom(reason);
-    this.busy = true;
-    this.actionError = undefined;
-    try {
-      await this.api.reactivateReason(reason.id);
-    } catch (error) {
-      this.actionError = codeMessage(codeOf(error));
-      return;
-    } finally {
-      this.busy = false;
-    }
-    await this.#load();
-    await refocus();
-  }
-
   #save(editor: Editor): void {
     if (this.editor !== editor || editor.kind !== "reason" || !this.isConnected || this.busy)
       return;
@@ -981,7 +966,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           ? item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
               this.#open({ kind: "deactivate", reason }, opener),
             )
-          : item(`enable-${reason.id}`, t("adjustments.enable"), () => void this.#enable(reason))
+          : nothing
       }
     </wt-row-actions>`;
   }
@@ -1334,7 +1319,8 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   override render() {
     const alert = this.loadError ?? this.actionError;
-    return html`<p class="intro">${t("adjustments.intro")}</p>
+    return html`<h1>${t("adjustments.title")}</h1>
+      <p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}
       <div class="toolbar">${this.#renderAdd()}</div>
       ${

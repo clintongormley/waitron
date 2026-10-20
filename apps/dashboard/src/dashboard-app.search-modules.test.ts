@@ -442,16 +442,18 @@ it("opening Calendar preserves an unrelated bookmark query and hash but removes 
   expect(location.search).toBe("?source=bookmark");
   expect(location.hash).toBe("#calendar");
 });
-it("settings destinations follow the real permitted panels rather than every enabled module", async () => {
+it("the Voids and comps page follows its permission rather than every enabled module", async () => {
   const { el, session } = await mount({
     modules: ["venue-service", "adjustments"],
     permissions: ["venue.view"],
   });
-  await search(el, "adjustment");
-  expect(result(el, "settings:adjustment-reasons")).toBeNull();
+  const page = () => el.shadowRoot!.querySelector('[data-test="nav-adjustment-reasons"]');
+  await search(el, "voids");
+  expect(page()).toBeNull();
   session.permissions = ["venue.view", "adjustment.manage"];
   document.dispatchEvent(new Event("visibilitychange"));
-  await vi.waitFor(() => expect(result(el, "settings:adjustment-reasons")).not.toBeNull());
+  await vi.waitFor(() => expect(page()).not.toBeNull());
+  expect(result(el, "settings:adjustment-reasons")).toBeNull();
   await search(el, "kitchen");
   expect(
     el.shadowRoot!.querySelectorAll('[data-search-destination="settings:kitchen"]'),

@@ -21,11 +21,14 @@ export const ADJUSTMENTS_DASHBOARD: DashboardContribution & DashboardFurtherScre
         html`<dashboard-adjustment-report-screen .api=${api}></dashboard-adjustment-report-screen>`,
     };
   },
-  settingsPanels: [
+  moreScreens: [
     {
-      id: "adjustment-reasons",
-      tab: "adjustment-reasons",
-      requiresPermission: "adjustment.manage",
+      screen: {
+        id: "adjustment-reasons",
+        navLabelKey: "nav.adjustment_reasons",
+        group: "service",
+        requiresPermission: "adjustment.manage",
+      },
       create(ctx) {
         const api = new AdjustmentsApi(ctx.request, ctx.liveData);
         return {
