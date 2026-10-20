@@ -5194,8 +5194,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Waitron plan](superpowers/plans/2026-10-20-a850-backup-verification.md) for the
   [approved Cloud contract](https://github.com/waitron-io/waitron-cloud/blob/f8e243f4b6fa232756a64c7113f05e3bf835158b/docs/superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md).
   The plan's declaration, query-only reader, inventory and strict private protocol foundations are
-  implemented, together with core row/counter, membership and amendment preservation checks.
-  Embedded build identity, the artifact verifier, daily-close and remaining module checks, and
+  implemented, together with core row/counter, membership, amendment and daily-close history checks.
+  Embedded build identity, the artifact verifier and remaining module checks, and
   target-bound recovery remain open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.

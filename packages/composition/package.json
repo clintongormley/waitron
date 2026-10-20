@@ -33,7 +33,8 @@
     "@waitron/venue-service": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
-    "@waitron/media": "workspace:*"
+    "@waitron/media": "workspace:*",
+    "@waitron/reporting": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

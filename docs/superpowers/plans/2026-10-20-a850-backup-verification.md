@@ -401,10 +401,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/reporting/src/backup-verification.ts`, `packages/reporting/src/backup-verification.test.ts`; modify `packages/reporting/src/index.ts`, `packages/reporting/package.json` (store dependency), `packages/composition/package.json` (reporting dependency), `packages/composition/src/core-backup-verification.ts`.
 **Consumes:** Task 2 queries, Task 6 comparison and existing `computeCloseEntryHash`. **Produces:** `verifyBackupCloseHistory(before:BackupQuery,after:BackupQuery):Promise<boolean>`; called by composition's core adapter, not db.
 
-- [ ] RED `checks all nodes`, `rejects middle damage deleted tail and missing head`, `accepts honestly empty history`. Assert contiguous sequence, genesis, every snapshot/hash and captured `daily_close_chain` tip before/after.
-- [ ] Run `pnpm --filter @waitron/reporting exec vitest run src/backup-verification.test.ts src/daily-close-hash.test.ts src/verify-daily-close-chain.test.ts src/verify-daily-close-chain.tampered.test.ts`; expect new export/full-walk assertion red; keep existing tests intact.
-- [ ] Implement independent query mapping with existing pure hash. Do not cast a writable transaction or change the operational verifier. Core cannot pass if reporting refuses. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(reporting): verify complete captured close history"`.
+- [x] RED `checks all nodes`, `rejects middle damage deleted tail and missing head`, `accepts honestly empty history`. Assert contiguous sequence, genesis, every snapshot/hash and captured `daily_close_chain` tip before/after.
+- [x] Run `pnpm --filter @waitron/reporting exec vitest run src/backup-verification.test.ts src/daily-close-hash.test.ts src/verify-daily-close-chain.test.ts src/verify-daily-close-chain.tampered.test.ts`; expect new export/full-walk assertion red; keep existing tests intact.
+- [x] Implement independent query mapping with existing pure hash. Do not cast a writable transaction or change the operational verifier. Core cannot pass if reporting refuses. GREEN same command.
+- [x] Commit `git commit -s -m "feat(reporting): verify complete captured close history"`.
 
 ### Task 8: Walk every fiscal chain segment and stored head
 

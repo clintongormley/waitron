@@ -75,3 +75,5 @@ export type {
 // Side-effect only: keeps errors.ts's augmentation reachable from this package's public barrel
 // (the rule is in packages/shared/src/errors.ts).
 import "./errors.js";
+
+export { verifyBackupCloseHistory } from "./backup-verification.js";
