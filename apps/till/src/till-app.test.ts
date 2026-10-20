@@ -17430,7 +17430,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await answerCounterMoveIfAsked(el);
 
     expect(el.shadowRoot!.querySelector("till-party-allergy-dialog")!.refusal).toBe(
-      codeMessage("allergy.stale"),
+      t("allergy.stale"),
     );
     expect(counter(el)).not.toBeNull();
   });

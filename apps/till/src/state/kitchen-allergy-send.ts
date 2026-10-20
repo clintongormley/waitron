@@ -151,7 +151,8 @@ export class KitchenAllergySend implements ReactiveController {
         } catch (error) {
           if (!current()) return false;
           const code = (error as { code?: string } | null)?.code;
-          if (!this.#open || code === "party.out_of_date" || code === "allergy.stale") throw error;
+          if (!this.#open || code === "party.out_of_date" || code === "allergy.out_of_date")
+            throw error;
           const open = this.#open;
           const raw = error as {
             guestIndex?: number;
@@ -217,7 +218,7 @@ export class KitchenAllergySend implements ReactiveController {
               event.detail.expectedPartyRevision !== open.view.snapshot.revision
             )
               return;
-            this.#open = { ...open, busy: true };
+            this.#open = { ...open, busy: true, refusal: "", fieldRefusal: undefined };
             open.resolve({ kind: "ready", patch: event.detail.patch });
             this.host.requestUpdate();
           }}

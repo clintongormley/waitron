@@ -3332,7 +3332,13 @@ export class TillApp extends LitElement {
             expectedPartyRevision: detail.expectedPartyRevision,
             allergy: structuredClone(detail.patch),
           };
-    const writing = { ...open, busy: true, command: { fingerprint, value: command } };
+    const writing = {
+      ...open,
+      busy: true,
+      refusal: "",
+      fieldRefusal: undefined,
+      command: { fingerprint, value: command },
+    };
     this.allergyDialog = writing;
     try {
       const api = this.api;
@@ -3356,7 +3362,7 @@ export class TillApp extends LitElement {
           refusal: codeMessage(asRefusal(error)?.refused ?? "table.error"),
           fieldRefusal: allergyFieldRefusal(error),
         };
-        if (isPartyOutOfDate(error) || asRefusal(error)?.refused === "allergy.stale")
+        if (isPartyOutOfDate(error) || asRefusal(error)?.refused === "allergy.out_of_date")
           await this.#reviewTableAllergy(writing);
       }
     }
@@ -3407,14 +3413,14 @@ export class TillApp extends LitElement {
     }
     if (open.mode === "edit") await this.#saveTableAllergyEditor(open, detail);
     else {
-      this.allergyDialog = { ...open, busy: true };
+      this.allergyDialog = { ...open, busy: true, refusal: "", fieldRefusal: undefined };
       open.resolve({ kind: "ready", patch: detail.patch });
     }
   }
 
   async #reviewTableAllergy(open: NonNullable<TillApp["allergyDialog"]>): Promise<void> {
     if (!open.review) return;
-    this.allergyDialog = { ...open, busy: true };
+    this.allergyDialog = { ...open, busy: true, refusal: "", fieldRefusal: undefined };
     try {
       const view = await open.review();
       if (!open.current() || this.allergyDialog?.key !== open.key) return;
@@ -3436,7 +3442,7 @@ export class TillApp extends LitElement {
         view,
         busy: false,
         needsReview: false,
-        refusal: codeMessage("allergy.stale"),
+        refusal: t("allergy.stale"),
         fieldRefusal: undefined,
       };
       if (open.mode === "edit") this.#acceptTableAllergy(view);
@@ -3446,7 +3452,7 @@ export class TillApp extends LitElement {
           ...open,
           busy: false,
           needsReview: true,
-          refusal: codeMessage("allergy.stale"),
+          refusal: t("allergy.stale"),
         };
     }
   }
@@ -3580,7 +3586,7 @@ export class TillApp extends LitElement {
           this.#closeAllergyDialog(false, prepared.key);
           throw error;
         }
-        if (isPartyOutOfDate(error) || refusal?.refused === "allergy.stale")
+        if (isPartyOutOfDate(error) || refusal?.refused === "allergy.out_of_date")
           await this.#reviewTableAllergy(open);
         if (!prepared.current() || this.allergyDialog?.key !== prepared.key) return null;
         const retained = this.allergyDialog;
@@ -13467,7 +13473,7 @@ export class TillApp extends LitElement {
           event.detail.expectedPartyRevision !== (open.view.snapshot?.revision ?? null)
         )
           return;
-        this.moveAllergyDialog = { ...open, busy: true };
+        this.moveAllergyDialog = { ...open, busy: true, refusal: "", fieldRefusal: undefined };
         open.resolve(event.detail.patch);
       }}
       @allergy-cancel=${(event: Event) => {
@@ -13540,7 +13546,7 @@ export class TillApp extends LitElement {
         if (!latest || !current()) return false;
         view = latest;
         requireConfirmation = true;
-        refusal = codeMessage("allergy.stale");
+        refusal = t("allergy.stale");
       }
       while (current()) {
         if (!command) {
@@ -13601,7 +13607,7 @@ export class TillApp extends LitElement {
             if (retry === null || !current()) return false;
           } else if (
             isPartyOutOfDate(error) ||
-            code === "allergy.stale" ||
+            code === "allergy.out_of_date" ||
             code === "draft.out_of_date" ||
             code === "draft.taken_over"
           ) {
@@ -13616,7 +13622,7 @@ export class TillApp extends LitElement {
             else key = crypto.randomUUID();
             command = undefined;
             requireConfirmation = true;
-            refusal = codeMessage("allergy.stale");
+            refusal = t("allergy.stale");
           } else if (code === "allergy.invalid") {
             command = undefined;
             requireConfirmation = true;

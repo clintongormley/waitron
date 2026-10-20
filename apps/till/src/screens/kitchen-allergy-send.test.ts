@@ -322,7 +322,7 @@ describe("A669 kitchen fire callers", () => {
       expect(dialog(el)).toBeNull();
     },
   );
-  it.each(["party.out_of_date", "allergy.stale"])(
+  it.each(["party.out_of_date", "allergy.out_of_date"])(
     "a %s write refusal closes consideration for a fresh Fire",
     async (code) => {
       const api = fixture("group");
@@ -339,6 +339,21 @@ describe("A669 kitchen fire callers", () => {
       expect(api.fireGroup).toHaveBeenCalledOnce();
     },
   );
+  it("keeps showing a repeated Fire refusal while retaining its answer for retry", async () => {
+    const api = fixture("group");
+    api.fireGroup.mockRejectedValue({ code: "device.forbidden_action" });
+    const { el } = await mount("station", "group", api);
+    await fire(el, "group");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(form.refusal).toBe(codeMessage("device.forbidden_action")));
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(api.fireGroup).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(form.refusal).toBe(codeMessage("device.forbidden_action")));
+    expect(dialog(el)).toBe(form);
+    expect(api.fireGroup.mock.calls[1]![2]).toEqual(api.fireGroup.mock.calls[0]![2]);
+  });
   it("a failed Fire with no open form remains visible", async () => {
     const api = fixture("group");
     api.previewPartyAllergy.mockResolvedValue(view("none"));

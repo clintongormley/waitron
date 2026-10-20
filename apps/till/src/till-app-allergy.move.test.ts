@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { AllergyMoveRead } from "@waitron/module";
+import type { WtInput } from "@waitron/ui";
+import { codeMessage } from "./i18n/codes.js";
 import type { TillApi } from "./api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, measured } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -114,6 +116,144 @@ async function counter(
     });
   return { ...mounted, screen, move };
 }
+
+describe("A669 counter move refusal recovery", () => {
+  it("shows a repeated guest refusal after correcting and retrying a move", async () => {
+    const write = vi.fn().mockRejectedValue({ code: "allergy.invalid", field: "guests.0.who" });
+    const { el, move } = await counter({ moveBill: write }, "allergies");
+    move();
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.refusal).toBe(codeMessage("allergy.invalid")));
+    const who = form.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Corrected guest");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await form.updateComplete;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(form.refusal).toBe(codeMessage("allergy.invalid")));
+    expect(dialog(el)).toBe(form);
+    expect(who.value).toBe("Corrected guest");
+  });
+
+  it("corrects a refused guest without reusing the rejected move payload", async () => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "allergy.invalid", field: "guests.0.who" })
+      .mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+    const { el, move } = await counter({ moveBill: write }, "allergies");
+    move();
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.busy).toBe(false));
+    await vi.waitFor(() =>
+      expect(form.shadowRoot!.querySelector('wt-input[name="guest-0-who"]')).not.toBeNull(),
+    );
+    const who = form.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!;
+    expect(who).not.toBeNull();
+    expect(who.error).not.toBe("");
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Corrected guest");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await form.updateComplete;
+    expect(form.shadowRoot!.querySelector("[data-tick]")).not.toBeNull();
+    expect(write).toHaveBeenCalledOnce();
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull(), { timeout: 5000 });
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[1]![4].submissionId).not.toBe(write.mock.calls[0]![4].submissionId);
+    expect(write.mock.calls[1]![4].allergy).toEqual({
+      party: {
+        answer: "allergies",
+        guests: [{ id: "guest", who: "Corrected guest", allergens: { milk: {} }, note: "Severe" }],
+      },
+      ticks: [{ line: { kind: "working", id: "arriving-line" }, guestIndex: 0 }],
+    });
+  }, 15_000);
+
+  it("does not retry an uncertain move through a replacement API", async () => {
+    const write = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el, move } = await counter({ moveBill: write }, "allergies");
+    move();
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(dialog(el)?.retryOnly).toBe(true), { timeout: 5000 });
+    expect(write).toHaveBeenCalledTimes(3);
+    const replacement = vi.fn();
+    el.api = { ...api, moveBill: replacement } as unknown as TillApi;
+    await flush(el, 6);
+    expect(dialog(el)).toBeNull();
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(replacement).not.toHaveBeenCalled();
+  });
+
+  it("does not move a bill when the destination disappears during preview recovery", async () => {
+    const { el, move } = await counter({
+      previewBillMoveAllergy: vi
+        .fn()
+        .mockResolvedValue({ ...preview(), tableId: "a-different-table" }),
+    });
+    api.getTablesState!.mockResolvedValue([]);
+    move();
+    await vi.waitFor(() => expect(api.previewBillMoveAllergy).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(codeMessage("table.not_found")),
+    );
+    expect(api.moveBill).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("does not adopt a source bill that joined a party during preview recovery", async () => {
+    const find = vi
+      .fn()
+      .mockResolvedValueOnce({ workingOrderId: "counter-bill", partyId: null, edit: sourceEdit })
+      .mockResolvedValue({
+        workingOrderId: "counter-bill",
+        partyId: "another-party",
+        edit: sourceEdit,
+      });
+    const { el, move } = await counter({
+      getFindBill: find,
+      previewBillMoveAllergy: vi
+        .fn()
+        .mockResolvedValue({ ...preview(), tableId: "a-different-table" }),
+    });
+    move();
+    await vi.waitFor(() => expect(find).toHaveBeenCalledTimes(2));
+    await flush(el, 6);
+    expect(api.moveBill).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("ignores a destination refresh completed after changing the API", async () => {
+    let finish!: (rows: ReturnType<typeof table>[]) => void;
+    const { el, move } = await counter({
+      previewBillMoveAllergy: vi
+        .fn()
+        .mockResolvedValue({ ...preview(), tableId: "a-different-table" }),
+    });
+    const tables = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof table>[]>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    api.getTablesState = tables;
+    move();
+    await vi.waitFor(() => expect(tables).toHaveBeenCalledOnce());
+    const replacement = vi.fn();
+    el.api = { ...api, moveBill: replacement } as unknown as TillApi;
+    finish([table("destination", "9", null)]);
+    await flush(el, 6);
+    expect(api.moveBill).not.toHaveBeenCalled();
+    expect(replacement).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+  });
+});
 
 describe("A669 counter-to-table allergy confirmation", () => {
   it("asks before moving to a free table and sends the explicit answer with the original observations", async () => {
@@ -284,53 +424,58 @@ describe("A669 counter-to-table allergy confirmation", () => {
     expect(api.moveBill).not.toHaveBeenCalled();
   });
 
-  it("refreshes the same party and source editor while retaining a reviewed line assignment", async () => {
-    const write = vi
-      .fn()
-      .mockImplementationOnce(async () => {
-        api.getTablesState!.mockResolvedValue([table("destination", "9", party({ revision: 4 }))]);
-        api.getFindBill!.mockResolvedValue({
-          workingOrderId: "counter-bill",
-          partyId: null,
-          edit: { ...sourceEdit, editorVersion: 9 },
-        });
-        const latest = preview("allergies");
-        latest.snapshot!.revision = 4;
-        latest.snapshot!.guests[0]!.note = "Updated by another waiter";
-        latest.dishes.push({
-          ...latest.dishes[0]!,
-          line: { kind: "working", id: "new-arrival" },
-          name: "Fresh dish",
-        });
-        api.previewBillMoveAllergy!.mockResolvedValue(latest);
-        throw { code: "allergy.stale" };
-      })
-      .mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
-    const { el, move } = await counter({ moveBill: write }, "allergies");
-    move();
-    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-    const form = dialog(el)!;
-    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!);
-    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
-    await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
-    expect(write).toHaveBeenCalledOnce();
-    expect(form.shadowRoot!.querySelectorAll("[data-tick]")).toHaveLength(2);
-    expect(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!.checked).toBe(true);
-    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
-    expect(write.mock.calls[1]![3]).toEqual({
-      partyId: null,
-      otherPartyId: "v1",
-      expectedOtherPartyRevision: 4,
-      expectedEdits: [
-        { billId: "counter-bill", editorVersion: 9, draftId: null, draftRevision: null },
-      ],
-    });
-    expect(write.mock.calls[1]![4].allergy).toEqual({
-      ticks: [{ line: { kind: "working", id: "arriving-line" }, guestIndex: 0 }],
-    });
-    expect(write.mock.calls[1]![4].submissionId).not.toBe(write.mock.calls[0]![4].submissionId);
-  });
+  it.each(["party.out_of_date", "allergy.out_of_date"] as const)(
+    "refreshes the same party and source editor on %s while retaining a reviewed line assignment",
+    async (code) => {
+      const write = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          api.getTablesState!.mockResolvedValue([
+            table("destination", "9", party({ revision: 4 })),
+          ]);
+          api.getFindBill!.mockResolvedValue({
+            workingOrderId: "counter-bill",
+            partyId: null,
+            edit: { ...sourceEdit, editorVersion: 9 },
+          });
+          const latest = preview("allergies");
+          latest.snapshot!.revision = 4;
+          latest.snapshot!.guests[0]!.note = "Updated by another waiter";
+          latest.dishes.push({
+            ...latest.dishes[0]!,
+            line: { kind: "working", id: "new-arrival" },
+            name: "Fresh dish",
+          });
+          api.previewBillMoveAllergy!.mockResolvedValue(latest);
+          throw { code };
+        })
+        .mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+      const { el, move } = await counter({ moveBill: write }, "allergies");
+      move();
+      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+      const form = dialog(el)!;
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!);
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+      await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+      expect(write).toHaveBeenCalledOnce();
+      expect(form.shadowRoot!.querySelectorAll("[data-tick]")).toHaveLength(2);
+      expect(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!.checked).toBe(true);
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+      await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+      expect(write.mock.calls[1]![3]).toEqual({
+        partyId: null,
+        otherPartyId: "v1",
+        expectedOtherPartyRevision: 4,
+        expectedEdits: [
+          { billId: "counter-bill", editorVersion: 9, draftId: null, draftRevision: null },
+        ],
+      });
+      expect(write.mock.calls[1]![4].allergy).toEqual({
+        ticks: [{ line: { kind: "working", id: "arriving-line" }, guestIndex: 0 }],
+      });
+      expect(write.mock.calls[1]![4].submissionId).not.toBe(write.mock.calls[0]![4].submissionId);
+    },
+  );
 
   it("a superseded confirmation cannot submit into a reopened move window", async () => {
     const { el, move } = await counter();

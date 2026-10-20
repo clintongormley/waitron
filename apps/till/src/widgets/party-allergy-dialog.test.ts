@@ -114,6 +114,150 @@ function confirmations(el: TillPartyAllergyDialog) {
   return results;
 }
 
+describe("A669 refreshed editor recovery", () => {
+  it("keeps local note, allergen and deletion edits beside a remotely renamed guest", async () => {
+    const el = await mount("allergies", "edit");
+    const result = confirmations(el);
+    await click(el, '[data-delete="1"]');
+    await click(el, '[data-edit="0"]');
+    await fill(el, "guest-0-note", "Local kitchen instruction");
+    await click(el, '[data-guest="0"] [data-code="milk"]');
+    await click(el, '[data-guest="0"] [data-code="eggs"]');
+    const latest = view("allergies");
+    latest.snapshot.revision = 8;
+    latest.snapshot.guests[0]!.who = "Name corrected elsewhere";
+    latest.snapshot.guests[0]!.note = "Remote instruction";
+    latest.snapshot.guests[0]!.allergens = { fish: {} };
+    el.reviewLatest("opening-a", latest);
+    await el.updateComplete;
+    await click(el, "[data-primary]");
+    expect(result).toEqual([
+      {
+        scopeKey: "opening-a",
+        expectedPartyRevision: 8,
+        patch: {
+          party: {
+            answer: "allergies",
+            guests: [
+              {
+                id: "guest-a",
+                who: "Name corrected elsewhere",
+                note: "Local kitchen instruction",
+                allergens: { gluten: { kinds: ["wheat"] }, eggs: {} },
+              },
+            ],
+          },
+          ticks: [],
+        },
+      },
+    ]);
+  });
+
+  it("does not recreate an unchanged guest deleted by another waiter", async () => {
+    const el = await mount("allergies", "edit");
+    const result = confirmations(el);
+    await click(el, '[data-edit="0"]');
+    await fill(el, "guest-0-who", "Local correction");
+    const latest = view("allergies");
+    latest.snapshot.revision = 8;
+    latest.snapshot.guests.splice(1, 1);
+    el.reviewLatest("opening-a", latest);
+    await el.updateComplete;
+    await click(el, "[data-primary]");
+    expect(result[0]!.patch.party!.guests).toEqual([
+      {
+        id: "guest-a",
+        who: "Local correction",
+        note: "Severe",
+        allergens: { gluten: { kinds: ["wheat"] }, milk: {} },
+      },
+    ]);
+  });
+
+  it.each(["code", "kind"] as const)(
+    "clears a guest's allergen refusal when its %s choice changes",
+    async (choice) => {
+      const el = await mount("allergies", "edit");
+      await click(el, '[data-edit="0"]');
+      el.fieldRefusal = {
+        guestIndex: 0,
+        field: "allergens",
+        message: "Review the avoided ingredients",
+      };
+      await el.updateComplete;
+      const selector = choice === "code" ? '[data-code="milk"]' : '[data-kind="wheat"]';
+      await click(el, `[data-guest="0"] ${selector}`);
+      expect(el.fieldRefusal).toBeNull();
+      if (choice === "kind") {
+        expect(
+          el.shadowRoot!.querySelector<HTMLInputElement>(`[data-guest="0"] ${selector}`)!.checked,
+        ).toBe(false);
+        await click(el, `[data-guest="0"] ${selector}`);
+      }
+      await fill(el, "guest-0-who", "Confirmed guest");
+      const result = confirmations(el);
+      await click(el, "[data-primary]");
+      expect(result[0]!.patch.party!.guests[0]!.allergens).toEqual(
+        choice === "code"
+          ? { gluten: { kinds: ["wheat"] } }
+          : { gluten: { kinds: ["wheat"] }, milk: {} },
+      );
+    },
+  );
+
+  it("returns from dish ticking without losing guest edits or assignments", async () => {
+    const el = await mount("allergies");
+    await click(el, "[data-primary]");
+    await click(el, "[data-back]");
+    expect(el.shadowRoot!.querySelector('[data-guest="0"]')).not.toBeNull();
+    await click(el, "[data-primary]");
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>('[data-tick="0:0"]')!.checked).toBe(true);
+  });
+
+  it("Escape dismisses only deletion confirmation and retains the guest and their dish", async () => {
+    const el = await mount("allergies", "edit");
+    await click(el, '[data-delete="0"]');
+    const confirm = el.shadowRoot!.querySelectorAll("wt-dialog")[1]!;
+    await confirm.updateComplete;
+    const closed = new Promise<void>((resolve) =>
+      confirm.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("wt-dialog")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector('[data-delete="0"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>('[data-tick="0:0"]')!.checked).toBe(true);
+  });
+
+  it("retries an uncertain No allergies answer without changing its patch", async () => {
+    const el = await mount();
+    const result = confirmations(el);
+    await click(el, "[data-none]");
+    el.retryOnly = true;
+    el.refusal = "The answer has not arrived";
+    await el.updateComplete;
+    await click(el, "[data-none]");
+    expect(result).toHaveLength(2);
+    expect(result[1]).toEqual(result[0]);
+  });
+
+  it("ignores a refreshed view from another dialog opening", async () => {
+    const el = await mount("allergies", "edit");
+    await click(el, '[data-edit="0"]');
+    await fill(el, "guest-0-who", "My pending edit");
+    const latest = view("allergies");
+    latest.snapshot.revision = 99;
+    latest.snapshot.guests = [];
+    el.reviewLatest("an-old-opening", latest);
+    await el.updateComplete;
+    const result = confirmations(el);
+    await click(el, "[data-primary]");
+    expect(result[0]!.expectedPartyRevision).toBe(7);
+    expect(result[0]!.patch.party!.guests[0]!.who).toBe("My pending edit");
+  });
+});
+
 describe("A669 allergy dialog", () => {
   it("asks before sending and returns an explicit No allergies without mutating the view", async () => {
     const el = await mount();
