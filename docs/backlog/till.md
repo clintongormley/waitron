@@ -1447,25 +1447,6 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
 
    Whether an approval rule can depend on the item having been sent was not checked.
 
-**Then the page:**
-
-- **Its own page under Service** (owner, 2026-10-16; built by A758-2). Venue settings keeps two
-  tabs, Venue details and Kitchen.
-- **The list** (built by A758-2): a search bar, drag handles instead of Move up and Move down, a
-  cleaner layout.
-- **Delete, not Disable** (built by A758-2). A recorded adjustment
-  keeps its own copy of the reason's name and rules (`reason_name`, `policy_snapshot`, no foreign key:
-  `packages/adjustments/src/schema/adjustments.ts:60-64`), so deleting leaves history intact. Real
-  Delete through `wt-delete-dialog`, as courses and stations; the Status column, Status filter and
-  Enable go, and design-system.md's "Switching off versus deleting" stops listing adjustment
-  reasons among the things switched off.
-  2026-10-20: design §1's "the migration deletes switched-off reasons" was not done, because no
-  data-migration code is written before go-live (CLAUDE.md §3). A venue holding a switched-off
-  reason gets it back as a reason; one whose switched-off reason shares a name with another reason
-  fails that migration on the unique name index, and is reset.
-- **The edit form** (built by A758-1) asks only what applies to the reason's kind, with the role
-  lists.
-
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 
 **A859 (2026-10-18).** A504's LOOK passes kept these as built, as judgement calls: the solid
@@ -2075,6 +2056,10 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice
   (owner, 2026-10-17: accepted).** The till says "Not found" (menus spec §9) only when a newly read
   version drops the section it has open.
+- **Design §1's "the migration deletes switched-off reasons" was not done (2026-10-20, A758-2)**,
+  because no data-migration code is written before go-live (CLAUDE.md §3). A venue holding a
+  switched-off reason gets it back as a reason; one whose switched-off reason shares a name with
+  another reason fails that migration on the unique name index, and is reset.
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
