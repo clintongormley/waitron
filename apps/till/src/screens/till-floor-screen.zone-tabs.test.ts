@@ -467,7 +467,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
       const pulse = edge.querySelector(".pulse");
       expect(pulse?.classList.contains("wt-pulse-fast")).toBe(true);
       expect(edgeOf(el, "start")).toBeNull();
-      // The edge sits beside the strip, never inside it.
+      // The edge is laid over the strip's end, never inside it.
       expect(edge.parentElement).toBe(stripOf(el).parentElement);
       expect(stripOf(el).nextElementSibling).toBe(edge);
     });
@@ -604,7 +604,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
         await expect
           .poll(() => edgeOf(el, "start")?.getAttribute("aria-label"))
           .toBe("Show Upstairs lounge");
-        // The start edge narrows the strip; the tab asked for stays in view.
+        // The tab asked for stays in view.
         await expect.poll(() => edgeOf(el, "end")).toBeNull();
         const tab = tabOf(el, "z6").closest(".zone-tab")!.getBoundingClientRect();
         expect(tab.right).toBeLessThanOrEqual(paddingBox(stripOf(el)).right);
@@ -704,6 +704,194 @@ describe("till-floor-screen: the zone strip's edge", () => {
       }
     },
   );
+
+  // The look's phone scene: Terrace and Bar pass off the start as the strip scrolls; Patio is last.
+  const five = [
+    zone("z1", "Inside", 0),
+    zone("z2", "Terrace", 1),
+    zone("z3", "Bar", 2),
+    zone("z4", "Garden", 3),
+    zone("z5", "Patio", 4),
+  ];
+  const fiveTables = () => [
+    seated("t1", "z1"),
+    seated("t2", "z2", { timingBand: "forgotten" }),
+    seated("t3", "z3", { readyToServe: 2 }),
+    seated("t5", "z5", { signals: [{ kind: "take_order" }] }),
+  ];
+  const zoneTabs = (el: TillFloorScreen) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("nav.tabs .zone-tab"),
+  ];
+
+  it("moves the tabs by exactly the scroll while an edge appears and goes", async () => {
+    await onPhone(
+      fiveTables(),
+      async (el) => {
+        const strip = stripOf(el);
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        await nextFrames();
+        expect(edgeOf(el, "start")).toBeNull();
+        const width = strip.getBoundingClientRect().width;
+        const max = strip.scrollWidth - strip.clientWidth;
+        const lefts = () => zoneTabs(el).map((tab) => tab.getBoundingClientRect().left);
+        let before = lefts();
+        let at = strip.scrollLeft;
+        for (let to = 20; to < max + 20; to += 20) {
+          strip.scrollLeft = to;
+          await nextFrames();
+          const moved = at - strip.scrollLeft;
+          expect(Math.abs(moved + Math.min(20, max - at))).toBeLessThanOrEqual(1);
+          const after = lefts();
+          after.forEach((left, i) =>
+            expect(Math.abs(left - before[i]! - moved)).toBeLessThanOrEqual(1),
+          );
+          expect(strip.getBoundingClientRect().width).toBe(width);
+          [before, at] = [after, strip.scrollLeft];
+        }
+        // The sweep crossed both: the start edge appeared and the end edge went.
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        expect(edgeOf(el, "start")).not.toBeNull();
+      },
+      true,
+      five,
+    );
+  });
+
+  it("one scroll to the end shows the last tab whole, clear of every edge", async () => {
+    await onPhone(
+      fiveTables(),
+      async (el) => {
+        const strip = stripOf(el);
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        await nextFrames();
+        const box = paddingBox(strip);
+        strip.scrollLeft = strip.scrollWidth;
+        await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+        await nextFrames();
+        await nextFrames();
+        expect(paddingBox(strip)).toEqual(box);
+        const patio = tabOf(el, "z5").closest(".zone-tab")!.getBoundingClientRect();
+        expect(patio.left).toBeGreaterThanOrEqual(box.left);
+        expect(patio.right).toBeLessThanOrEqual(box.right);
+        const start = edgeOf(el, "start")!.getBoundingClientRect();
+        expect(patio.left).toBeGreaterThanOrEqual(start.right);
+        expect(edgeOf(el, "end")).toBeNull();
+      },
+      true,
+      five,
+    );
+  });
+
+  it("gives the edges' room back when the strip widens until its tabs fit", async () => {
+    await onPhone(
+      fiveTables(),
+      async (el, host) => {
+        const strip = stripOf(el);
+        await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+        const patio = () => tabOf(el, "z5").closest(".zone-tab")!.getBoundingClientRect();
+        const fits = () => {
+          const tabs = zoneTabs(el).map((tab) => tab.getBoundingClientRect());
+          return (
+            tabs[tabs.length - 1]!.right -
+            tabs[0]!.left +
+            2 * tapProbe(host, "calc(var(--wt-space-1) * 1.5)")
+          );
+        };
+        // Two widenings: the second leaves Patio cut as it was and every other tab whole, so no
+        // tab's visibility tells the strip it has room now.
+        host.style.width = `${host.getBoundingClientRect().width + patio().left - paddingBox(strip).right + 1}px`;
+        await nextFrames();
+        await nextFrames();
+        expect(patio().left).toBeLessThan(paddingBox(strip).right);
+        const room = fits() - (paddingBox(strip).right - paddingBox(strip).left);
+        expect(room).toBeGreaterThan(0);
+        expect(patio().right - paddingBox(strip).right).toBeGreaterThan(room + 1);
+        host.style.width = `${host.getBoundingClientRect().width + room + 1}px`;
+        await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(false);
+        expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+      },
+      true,
+      five,
+    );
+  });
+
+  it("counts a tab inside the strip but under a shown edge as hidden", async () => {
+    // Patio, Forgotten, sits just before Bar, the last tab, whose step alone puts the edge there.
+    const order = [
+      zone("z1", "Inside", 0),
+      zone("z2", "Upstairs lounge", 1),
+      zone("z3", "Garden terrace", 2),
+      zone("z4", "Patio", 3),
+      zone("z5", "Bar", 4),
+    ];
+    await onPhone(
+      [
+        seated("t1", "z1"),
+        seated("t4", "z4", { timingBand: "forgotten" }),
+        seated("t5", "z5", { signals: [{ kind: "take_order" }] }),
+      ],
+      async (el, host) => {
+        const strip = stripOf(el);
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        strip.scrollLeft = strip.scrollWidth;
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        await nextFrames();
+        // One jump that cuts Bar and leaves Patio whole, its end where the edge's middle will be.
+        const tap = tapProbe(host, "var(--wt-tap-min)");
+        const patio = () => tabOf(el, "z4").closest(".zone-tab")!.getBoundingClientRect();
+        strip.scrollLeft -= paddingBox(strip).right - tap / 2 - patio().right;
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        await nextFrames();
+        const box = paddingBox(strip);
+        expect(patio().left).toBeGreaterThanOrEqual(box.left);
+        expect(patio().right).toBeLessThanOrEqual(box.right);
+        await expect.poll(() => edgeOf(el, "end")?.getAttribute("aria-label")).toBe("Show Patio");
+        expect(edgeOf(el, "end")!.getAttribute("data-zone-state")).toBe("forgotten");
+        expect(patio().right).toBeGreaterThan(edgeOf(el, "end")!.getBoundingClientRect().left);
+      },
+      true,
+      order,
+    );
+  });
+
+  it("counts a tab under an edge that a new state draws as hidden", async () => {
+    const order = [
+      zone("z1", "Inside", 0),
+      zone("z2", "Upstairs lounge", 1),
+      zone("z3", "Garden terrace", 2),
+      zone("z4", "Patio", 3),
+      zone("z5", "Bar", 4),
+    ];
+    const tables = (bar: Partial<TableState>) => [
+      seated("t1", "z1"),
+      seated("t4", "z4", { timingBand: "forgotten" }),
+      seated("t5", "z5", bar),
+    ];
+    await onPhone(
+      tables({}),
+      async (el, host) => {
+        const strip = stripOf(el);
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        strip.scrollLeft = strip.scrollWidth;
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        await nextFrames();
+        const tap = tapProbe(host, "var(--wt-tap-min)");
+        const patio = () => tabOf(el, "z4").closest(".zone-tab")!.getBoundingClientRect();
+        strip.scrollLeft -= paddingBox(strip).right - tap / 2 - patio().right;
+        await nextFrames();
+        await nextFrames();
+        // Bar is cut but has nothing to show, and Patio is whole: no edge yet.
+        expect(edgeOf(el, "end")).toBeNull();
+        expect(patio().right).toBeLessThanOrEqual(paddingBox(strip).right);
+        el.tables = tables({ signals: [{ kind: "take_order" }] });
+        await expect.poll(() => edgeOf(el, "end")?.getAttribute("aria-label")).toBe("Show Patio");
+        expect(patio().right).toBeGreaterThan(edgeOf(el, "end")!.getBoundingClientRect().left);
+      },
+      true,
+      order,
+    );
+  });
 
   it("brings a tab wider than the strip, cut at both ends, to its start", async () => {
     const wide = [zone("z1", "Inside", 0), zone("z2", "Upstairs private dining room", 1)];

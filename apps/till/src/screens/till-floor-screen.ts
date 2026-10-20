@@ -399,6 +399,11 @@ export class TillFloorScreen extends LitElement {
         padding: calc(var(--wt-space-1) * 1.5);
         scroll-padding-inline: calc(var(--wt-space-1) * 1.5);
       }
+      /* While the tabs overflow, the first and last can scroll clear of an edge laid over each end. */
+      .tabs[data-overflows] {
+        padding-inline: calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5);
+        scroll-padding-inline: calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5);
+      }
       .tabs > * {
         flex: none;
         white-space: nowrap;
@@ -450,14 +455,15 @@ export class TillFloorScreen extends LitElement {
 
       [data-tabs-edge] {
         position: relative;
+        z-index: 1;
         display: inline-flex;
         flex: none;
         align-items: center;
         justify-content: center;
         gap: var(--wt-space-1);
-        min-width: var(--wt-tap-min);
+        inline-size: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
-        padding: 0 var(--wt-space-2);
+        padding: 0;
         border: none;
         border-radius: var(--wt-radius-md);
         background: var(--zone-tint);
@@ -465,6 +471,16 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
         font: inherit;
         cursor: pointer;
+      }
+
+      /* Laid over the strip's end: pulled back by its own width and the toolbar's gap, so the strip
+         is as wide with an edge as without one. */
+      [data-tabs-edge="start"] {
+        margin-inline-end: calc((var(--wt-tap-min) + var(--wt-space-2)) * -1);
+      }
+
+      [data-tabs-edge="end"] {
+        margin-inline-start: calc((var(--wt-tap-min) + var(--wt-space-2)) * -1);
       }
 
       [data-tabs-edge]:focus-visible {
@@ -820,7 +836,13 @@ export class TillFloorScreen extends LitElement {
   #reminderTimer?: ReturnType<typeof setTimeout>;
   /** Zone keys of the tabs the strip does not show whole, by the end they are beyond. */
   #hiddenTabs = new Map<string, TabsEdge>();
+  /** Whether the tabs, without room for the edges, are wider than the strip. */
+  #tabsOverflow = false;
+  /** The sides an edge was last drawn on: an edge drawn or removed covers or uncovers a tab without
+   * moving it, so no observer reports it. */
+  #drawnEdges = "";
   #tabsObserver?: IntersectionObserver;
+  #stripResize?: ResizeObserver;
   /** The strip being watched: `null` while there is none, `undefined` while not watching. */
   #tabsStrip?: HTMLElement | null;
   #tabsKeys?: string;
@@ -902,6 +924,13 @@ export class TillFloorScreen extends LitElement {
     this.#watchReminders();
     this.#watchFloor();
     this.#watchTabs();
+    const drawn = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-tabs-edge]")]
+      .map((edge) => edge.dataset.tabsEdge)
+      .join();
+    if (drawn !== this.#drawnEdges) {
+      this.#drawnEdges = drawn;
+      if (this.#tabsStrip) this.#placeTabs();
+    }
   }
 
   #watchFloor(): void {
@@ -2239,7 +2268,11 @@ export class TillFloorScreen extends LitElement {
           ${
             tabs.length > 1
               ? html`${this.#tabsEdge("start", tabs, marks)}
-                  <nav class="tabs" aria-label=${t("floor.zones")}>
+                  <nav
+                    class="tabs"
+                    aria-label=${t("floor.zones")}
+                    ?data-overflows=${this.#tabsOverflow}
+                  >
                     ${tabs.map((tab) => this.#tab(tab, activeKey, marks.get(tab.key)))}
                   </nav>
                   ${this.#tabsEdge("end", tabs, marks)}`
@@ -2391,22 +2424,27 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  /** "nearest" leaves a tab wider than the strip where it is once it sticks out of both ends, so
-   * such a tab is brought to the strip's start instead. */
+  /** "nearest" leaves a tab wider than the room between the edges where it is once it sticks out
+   * of both ends, so such a tab is brought to the strip's start instead: clear of the start edge
+   * when an earlier tab with a state will put one there, else as far as the ring's room. */
   #showTab(key: string): void {
     const strip = this.#tabsStrip!;
-    const tab = [...strip.querySelectorAll<HTMLElement>("wt-button.tab")]
-      .find((button) => button.dataset.zone === key)!
-      .closest(".zone-tab")!;
+    const tabs = [...strip.querySelectorAll<HTMLElement>(".zone-tab")];
+    const index = tabs.findIndex((zoneTab) => tabKey(zoneTab) === key);
+    const tab = tabs[index]!;
     const style = getComputedStyle(strip);
     const { left, right } = stripSpan(strip);
-    const room =
-      right -
-      left -
-      parseFloat(style.scrollPaddingInlineStart) -
-      parseFloat(style.scrollPaddingInlineEnd);
-    const inline = tab.getBoundingClientRect().width > room ? "start" : "nearest";
-    tab.scrollIntoView({ inline, block: "nearest" });
+    const clear = parseFloat(style.scrollPaddingInlineStart);
+    const box = tab.getBoundingClientRect();
+    if (box.width > right - left - clear - parseFloat(style.scrollPaddingInlineEnd)) {
+      const edgeBefore = tabs
+        .slice(0, index)
+        .some((zoneTab) => this.#zone.marks.has(tabKey(zoneTab)));
+      const inset = edgeBefore ? clear : parseFloat(style.paddingBlockStart);
+      strip.scrollLeft += box.left - (left + inset);
+    } else {
+      tab.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
     // A tab wider than the strip can go from cut at both ends to cut at one with no callback.
     this.#placeTabs();
   }
@@ -2425,23 +2463,51 @@ export class TillFloorScreen extends LitElement {
       threshold: 1,
     });
     for (const tab of strip.querySelectorAll(".zone-tab")) this.#tabsObserver.observe(tab);
+    // A strip that widens until its tabs would fit can leave every tab's visibility as it was. Read
+    // a frame later: the padding that reading can change resizes the strip again.
+    this.#stripResize = new ResizeObserver(() =>
+      requestAnimationFrame(() => {
+        if (this.#tabsStrip === strip) this.#placeTabs();
+      }),
+    );
+    this.#stripResize.observe(strip, { box: "border-box" });
+    // The observer sees a tab the strip cuts, not one coming out from under an edge.
+    strip.addEventListener("scroll", this.#onStripScroll, { passive: true });
   }
+
+  readonly #onStripScroll = () => this.#placeTabs();
 
   #stopWatchingTabs(): void {
     this.#tabsObserver?.disconnect();
     this.#tabsObserver = undefined;
+    this.#stripResize?.disconnect();
+    this.#stripResize = undefined;
+    this.#tabsStrip?.removeEventListener("scroll", this.#onStripScroll);
     this.#tabsStrip = undefined;
     this.#hiddenTabs = new Map();
   }
 
-  /** Reads from layout which tabs the strip cuts off, and beyond which end. The observer only says
-   * when to read: a tab one scroll jump carries from beyond one end to beyond the other gets no
-   * callback of its own. */
+  /** Reads from layout which tabs the strip cuts off or a shown edge covers, and beyond which end.
+   * The observer only says when to read: a tab one scroll jump carries from beyond one end to beyond
+   * the other gets no callback of its own. */
   #placeTabs(): void {
     const strip = this.#tabsStrip!;
-    const { left, right } = stripSpan(strip);
+    const span = stripSpan(strip);
+    const tabs = [...strip.querySelectorAll(".zone-tab")];
+    const first = tabs[0]!.getBoundingClientRect();
+    const last = tabs[tabs.length - 1]!.getBoundingClientRect();
+    // The block padding is the ring's room: the strip's inline padding too while the tabs fit.
+    const ring = parseFloat(getComputedStyle(strip).paddingBlockStart);
+    const overflows = last.right - first.left + 2 * ring > span.right - span.left;
+    // Once the tabs fit, the strip hides none of them, whatever edge is still drawn.
+    const edge = (side: TabsEdge) =>
+      overflows
+        ? this.shadowRoot!.querySelector(`[data-tabs-edge="${side}"]`)?.getBoundingClientRect()
+        : undefined;
+    const left = Math.max(span.left, edge("start")?.right ?? span.left);
+    const right = Math.min(span.right, edge("end")?.left ?? span.right);
     const sides = new Map<string, TabsEdge>();
-    for (const tab of strip.querySelectorAll(".zone-tab")) {
+    for (const tab of tabs) {
       const box = tab.getBoundingClientRect();
       if (box.left < left) sides.set(tabKey(tab), "start");
       else if (box.right > right) sides.set(tabKey(tab), "end");
@@ -2449,8 +2515,9 @@ export class TillFloorScreen extends LitElement {
     const same =
       sides.size === this.#hiddenTabs.size &&
       [...sides].every(([key, side]) => this.#hiddenTabs.get(key) === side);
-    if (same) return;
+    if (same && overflows === this.#tabsOverflow) return;
     this.#hiddenTabs = sides;
+    this.#tabsOverflow = overflows;
     this.requestUpdate();
   }
 
