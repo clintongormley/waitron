@@ -2940,8 +2940,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 10 (#908, the service dashboard's attention signals).** For the
   owner. [Detail](backlog/till.md#task-10-908-the-service-dashboards-attention-signals)
-  - The "Take order" chip looks like the "Reserved" badge, and the "Bill requested" chip like the
-    "N en camino" badge. **Next action:** decide whether the chips get tones of their own.
   - The till drops the bill request's late answer, a refusal included, once the waiter has signed
     out or left the party (`#onRequestBill`, `apps/till/src/till-app.ts`). **Next action:** decide
     whether a late refusal should be said.

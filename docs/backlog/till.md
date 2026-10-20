@@ -1314,9 +1314,10 @@ drawn out and a recommendation. The open note that the Tables tab's colour field
 **Widened 2026-10-16 (owner): how each state is shown, on the floor and in the order lists.** The
 board shows every state as it looks today beside a proposal, for the owner to choose. Today a table
 can carry the signals `take_order`, `ready` (per station), `long_wait` (warm, overdue, forgotten),
-`held_unavailable`, `bill_requested`, `unsent_draft`, `release_due` and `needs_clearing`
-(`apps/server/src/table-signals.ts`, chips in `apps/till/src/widgets/signal-chips.ts`), besides
-seated, joined, paid and taken off. Three additions the owner asked for:
+`held` (how many dishes its held groups hold), `held_unavailable`, `bill_requested`,
+`unsent_draft`, `release_due` and `needs_clearing` (`apps/server/src/table-signals.ts`, chips in
+`apps/till/src/widgets/signal-chips.ts`), besides seated, joined, paid and taken off. Two additions
+the owner asked for:
 
 - **Late orders pulse.** Decide which of warm, overdue and forgotten pulse; the same pulse as A738's
   Waiting tab; a colour change instead under reduced motion.
