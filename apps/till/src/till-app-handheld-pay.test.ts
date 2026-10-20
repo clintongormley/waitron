@@ -26,6 +26,7 @@ import {
   billOf,
   dialog,
   discardUnsavedLeave,
+  drafts,
   floor,
   emit,
   equipmentItem,
@@ -627,6 +628,25 @@ describe("an unanswered presented payment on a handheld", () => {
     }
   }
 
+  /** Signs out, signs in as Luis, opens the table again and presses the bill's Pay. */
+  async function signInAgainAndReopen(el: TillApp): Promise<void> {
+    emit(shell(el), "logout");
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
+    if (question?.open) await discardUnsavedLeave(el);
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const order = tableOrder(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")?.click();
+    await flush(el);
+    await showBillFooter(order);
+    await pressPaySheet(el, order);
+  }
+
   async function resend(el: TillApp): Promise<void> {
     inPresented(el, "[data-presented-pay-resend]")!.click();
     await flush(el);
@@ -715,21 +735,7 @@ describe("an unanswered presented payment on a handheld", () => {
       emit(presented(el)!, "presented-pay-close");
       await flush(el);
 
-      emit(shell(el), "logout");
-      await flush(el);
-      const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
-      if (question?.open) await discardUnsavedLeave(el);
-      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
-      await flush(el);
-      emit(shell(el), "screen-select", { screen: "floor" });
-      await flush(el);
-      emit(floor(el), "open-table", { tableId: "t4", seated: true });
-      await flush(el);
-      const order = tableOrder(el);
-      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")?.click();
-      await flush(el);
-      await showBillFooter(order);
-      await pressPaySheet(el, order);
+      await signInAgainAndReopen(el);
 
       await expectLockedOn(el, method);
       await resend(el);
@@ -738,6 +744,60 @@ describe("an unanswered presented payment on a handheld", () => {
       expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
     },
   );
+  it("a resend carries the original request after another person's draft has changed the bill", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockResolvedValueOnce(invoiceOf("120.00"));
+    const { el } = await sentWithNoAnswer("cash", send);
+    const original = structuredClone(send.mock.calls[0]);
+    expect(original[4]).toEqual({
+      billId: "wo-4",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
+    emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+    drafts.drafts.push({
+      id: "draft-luis",
+      partyId: "v1",
+      billId: "wo-4",
+      ownerId: "p2",
+      ownerName: "Luis",
+      revision: 3,
+      takenOverFrom: null,
+      lines: [
+        {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          id: "draft-line-1",
+          sourceLineId: null,
+          source: null,
+          menuItemId: "menu-item-cafe-0",
+          variantId: null,
+          menuVersionId: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          makeAt: "switched-off",
+          noMerge: false,
+          unavailable: false,
+        },
+      ],
+    });
+
+    await signInAgainAndReopen(el);
+    await expectLockedOn(el, "cash");
+    await resend(el);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]).toEqual(original);
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+  });
 });
 
 describe("till-app: a counter till's simulated card outcome", () => {

@@ -15838,7 +15838,7 @@ export class TillApp extends LitElement {
 
   /** The presented bill's sheet asks to take its whole amount: a card on the phone's reader through
    * `POST /api/pay`, cash or another card machine through {@link #payWholeTab}. A send with no answer
-   * closes the sheet, leaving A773-1's recovery on the pay card. */
+   * closes the sheet; it opens again locked on that payment. */
   async #onPresentedPay(event: Event): Promise<void> {
     const open = this.#presentedNow();
     if (open === null || this.submitting) return;
