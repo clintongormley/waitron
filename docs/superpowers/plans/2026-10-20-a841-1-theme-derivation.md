@@ -25,10 +25,11 @@ with the differences listed under "The reference".
 esbuild for the package build, Stryker for mutation.
 
 **Spec:** `docs/superpowers/specs/2026-10-19-a841-theme-editor-design.md` — section 16 slice 1
-(lines 2417-2420), and what it rests on: section 3 (the contrast rules, lines 311-323), section 5
-(the 22 colours, lines 665-693), section 6 and "Colours set by hand" (lines 1001-1215), section 7's
-per-version table and dark-own case (lines 1230-1265), section 9 (lines 1766-1912), section 11's
-document shape (lines 1999-2010), section 14 (lines 2211-2267), section 15 (lines 2268-2399). Line
+(lines 2431-2434), and what it rests on: section 3 (the contrast rules, lines 311-323), section 5
+(the 22 colours, lines 666-694), section 6 and "Colours set by hand" (lines 1002-1216), section 7's
+per-version table and dark-own case (lines 1231-1266), section 9 (lines 1767-1924), section 10's
+warning shape (lines 1940-1950), section 11's document shape (lines 2012-2023), section 14 (lines
+2224-2280), section 15 (lines 2281-2413), and section 16's recorded rulings (lines 2571-2580). Line
 numbers are those of this branch, whose last commit corrects the design (see "The design document
 is corrected in this branch").
 
@@ -43,12 +44,12 @@ of every task.
 ## Decision: hand-set values stay in slice 1 (no slice 1b)
 
 The design allows splitting hand-set values into a slice 1b "if this one grows past one
-implementer" (spec lines 2417-2420). Judged by the rule that each implementer task finishes in well
+implementer" (spec lines 2431-2434). Judged by the rule that each implementer task finishes in well
 under about 100 tool calls, slice 1 needs no split: the hand-set work is Tasks 7 and 8, each about
 the size of Task 5, and no task below is expected past about 50 calls. Three further reasons:
 
 - Slice 2's server validates and stores `handSet` and answers its warnings
-  (`field: "handSet.light.bg"`, spec lines 2053-2054), so a 1b would have to land before slice 2
+  (`field: "handSet.light.bg"`, spec lines 2066-2067), so a 1b would have to land before slice 2
   anyway; splitting buys a smaller pull request, not an earlier server.
 - Settling around fixed colours is one function in the reference (`settle`), and the brand-only
   path is that same function with nothing fixed. Writing it brand-only first and reshaping it later
@@ -85,9 +86,13 @@ worktree's token files (`A841_WT=<this worktree> node <script>`, Node v26.11.1, 
    that stopped being named got `fix: null` although a shade passed: text `#6a6a6a` with sunken
    areas `#bbbbbb` gave the sunken areas no fix (`two-hand.mjs ./derive-settle2.mjs`), where the
    per-colour search offers `#ebebeb` (`two-hand.mjs ./derive-h1.mjs`).
+5. **A no-fix warning names the hand-set colours that block it** (`blockedBy`, `blockersOf`; lane A
+   ruling 2026-10-20). Another hand-set colour blocks the warned one when, worked out instead, it
+   would leave the warned colour a fix; when no single one does but working out all the others
+   would, every other hand-set colour sharing a rule with it is named; otherwise none.
 
-**The reference is `derive-h1.mjs`**, sha256
-`49268daff3bf701fa7418bb91839b27e2c621b78b9f87c3778cbc3cfddf7d412`.
+**The reference is `derive-h2.mjs`**, sha256
+`dc8936f1b53bbd5c8a88692c8d4be6382c765992c19a5fe44cd685aea7e20e34`.
 
 What each change did to the outputs, measured:
 
@@ -99,6 +104,9 @@ What each change did to the outputs, measured:
 - Change 4: `output-h1.txt` is byte-identical to `output-settle2.txt` (`diff` exit 0), and `ex4.mjs`,
   `ex5.mjs`, `within-probe.mjs` and `brand-vs-hand.mjs` print the same under both; it changes only
   cases with two or more colours set by hand.
+- Change 5: `output-h2.txt` is byte-identical to `output-h1.txt` (`diff` printed nothing), and the
+  two-colour sweep printed the same totals line under both; it adds `blockedBy` and changes no
+  colour or fix.
 - Change 1, among the design's worked examples, changed only the sage warning's `against` list (18
   names, not 3) and the dark hand sweep's counts (78 / 98, not 79 / 97); every hex value in them and
   every brand-sweep count is unchanged. Outside the worked examples, the plan review's comparison of
@@ -112,7 +120,7 @@ porting fault to find, never a number to update. **A new pinned value** (Task 9 
 computed by running the reference in a script saved in that folder with its output file beside it,
 never read off the port.
 
-**Port, do not redesign.** Where a step says "port `X` (`derive-h1.mjs:a-b`)", keep every constant,
+**Port, do not redesign.** Where a step says "port `X` (`derive-h2.mjs:a-b`)", keep every constant,
 step size, iteration cap and loop order. The differences from the reference the port makes on
 purpose:
 
@@ -219,15 +227,26 @@ Task 10) and, at land time, `docs/backlog.md` (a driver step).
 ## The design document is corrected in this branch
 
 The design's passages that the plan's corrections retire were edited in the same commit as this
-revision of the plan (CLAUDE.md §1), each citing the reference: the rule count (spec line 1048),
-the fix rule and Fix all (section 6 step 3, lines 1111-1137), the sage (lines 1174-1189, and
-section 4 step 5, lines 519-522), the dark hand sweep and the made-up no-shade case (lines
-1191-1207), section 7's `rules 72 failing 0` (lines 1254-1258), section 9's "No shade passes" (lines
-1869-1876), section 14's token-list guard (lines 2213-2219, 2239), section 15's cases (lines
-2280-2292, 2382), section 18's picture 15 row, and a new product-text row naming how a warning lists
-station colours (line 614): the station fills a value fails against are one item, "the 15 station
-colours" (the driver's ruling), and the station dots likewise (an extension the driver should
-confirm).
+revision of the plan (CLAUDE.md §1), each citing the reference: the rule count (spec line 1049),
+the fix rule and Fix all (section 6 step 3, lines 1112-1138), the sage (lines 1175-1190, and
+section 4 step 5, lines 520-522), the dark hand sweep and the made-up no-shade case (lines
+1192-1208), section 7's `rules 72 failing 0` (lines 1255-1259), section 14's token-list guard
+(lines 2226-2233, 2252), section 15's cases (lines 2293-2305, 2396), and section 18's picture 15
+row. Lane A's three rulings of 2026-10-20 on the questions this revision raised are in the design
+too, recorded in section 16's "The answers, and the branches not taken" (lines 2571-2580):
+
+1. **A warning's station colours are grouped**, fills and dots alike: "the 15 station colours",
+   "the 15 station dots", or "{n} …" for some (product-text row, line 615).
+2. **Fix and save is offered when running Fix all would leave no warning**, decided by running it,
+   and applies Fix all (section 4 step 7, lines 533-539; section 9 (c), lines 1829-1840, with the
+   trade-off and "No shade passes" paragraphs; the product-text rows and note; section 15's dialog
+   case).
+3. **A no-fix warning blocked by another colour set by hand names it**: "… while Sunken areas is set
+   by hand to #000000"; with no blocker the sentence is unchanged (section 9's "No shade passes",
+   lines 1875-1887; the warning gains `blockedBy`, section 10, lines 1940-1950; product-text rows).
+
+Section 18 needs no change for them: picture 16 shows a single lemon warning that has its own fix,
+which both the old and the new Fix-and-save rule offer.
 
 ---
 
@@ -262,7 +281,7 @@ export function contrastRatio(a: string, b: string): number;
   `pnpm --filter @waitron/ui-core exec vitest run src/theme/colour.test.ts` — FAIL, the import of
   `./colour.js` does not resolve.
 
-- [ ] **Step 3: Implement** by porting `derive-h1.mjs:32-77` (`lin`, `unlin`, `hexToRgb`,
+- [ ] **Step 3: Implement** by porting `derive-h2.mjs:32-77` (`lin`, `unlin`, `hexToRgb`,
   `rgbToHex`, `toOklch`, `inGamut`, `fromOklch`, `withL`, `luminance`, `ratio`) with Ottosson's
   matrices and the chroma reduction (× 0.95, at most 60 times, tolerance 1e-4, then chroma 0)
   unchanged; add the `RangeError` and the lower-casing.
@@ -358,7 +377,7 @@ only; `contrastRatio`, `relativeLuminance` (Task 1). **Produces:**
 
 ```ts
 // tokens.ts
-export const THEME_COLOURS: readonly [ // Advanced's order, spec lines 685-693
+export const THEME_COLOURS: readonly [ // Advanced's order, spec lines 686-694
   "bg", "surface", "surface-raised", "surface-lifted", "surface-sunken", "track", "border", "text",
   "text-muted", "primary", "primary-hover", "on-primary", "primary-disabled", "on-primary-disabled",
   "primary-text", "focus", "field-fill", "field-line", "field-label-focus", "field-value",
@@ -371,7 +390,7 @@ export const BRAND_FAMILY: readonly ThemeColour[]; // primary, on-primary, prima
   // focus, field-label-focus, primary-disabled, on-primary-disabled, surface-lifted, stepper-button
 export type Corners = "square" | "standard" | "round";
 export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record<string, string>;
-  // square 0/2/4 px, round 8/14/24 px (spec lines 704-706); standard = defaults.structure's values
+  // square 0/2/4 px, round 8/14/24 px (spec lines 705-707); standard = defaults.structure's values
 
 // contrast-rules.ts — token names are full (`--wt-color-…`); `a` is the colour drawn on top
 export type RuleKind = "at-least" | "above" | "at-most";
@@ -392,7 +411,7 @@ export function failureLabels(results: readonly RuleResult[]): string[];
 ```
 
 **The rule groups.** One group per `colors.test.ts` ratio test, in file order, then Waitron's own
-button rules (spec lines 1786-1793). `≥` is at-least, `>` above, `≤` at-most. "Stations" are the
+button rules (spec lines 1787-1794). `≥` is at-least, `>` above, `≤` at-most. "Stations" are the
 15 of `colors.test.ts:513-529`; "palette" the 16 of `:421-438`; loops keep the test's nesting
 (outer list first).
 
@@ -425,8 +444,8 @@ against the old file.
 
 - [ ] **Step 1: Write the failing tests.**
 
-  `tokens.test.ts` — **the token-list guard** (spec lines 2213-2219):
-  - "the theme writes exactly the colours that carry no meaning, less the scrim": the keys of `WAITRON_DEFAULTS.light` that start `--wt-color-`, prefix removed, filtered by the design's recount pattern (spec line 667: drop `/^(on-)?(station-|palette-|table-|day-|danger|success|warning|google-|highlight)/`) and less `scrim`, equal `[...THEME_COLOURS]` as sets, and `THEME_COLOURS` has 22 entries with no repeat. (A colour token added to `colors.css` that carries no meaning fails this test until it is either added to the theme or to the pattern; slice 8's `--wt-color-logo-plate` will, by design — see "Left for later slices".)
+  `tokens.test.ts` — **the token-list guard** (spec lines 2226-2233):
+  - "the theme writes exactly the colours that carry no meaning, less the scrim": the keys of `WAITRON_DEFAULTS.light` that start `--wt-color-`, prefix removed, filtered by the design's recount pattern (spec line 668: drop `/^(on-)?(station-|palette-|table-|day-|danger|success|warning|google-|highlight)/`) and less `scrim`, equal `[...THEME_COLOURS]` as sets, and `THEME_COLOURS` has 22 entries with no repeat. (A colour token added to `colors.css` that carries no meaning fails this test until it is either added to the theme or to the pattern; slice 8's `--wt-color-logo-plate` will, by design — see "Left for later slices".)
   - "every token the theme writes is declared in both modes": each of the 22 colour tokens is a key of `WAITRON_DEFAULTS.light` and `.dark`; each radius a key of `.structure`.
   - "the scrim and every meaning colour stay outside": `THEME_TOKENS` contains no `--wt-color-scrim`, nothing matching the meaning pattern, and nothing from `structure.css` but the three radii.
   - `THEME_TOKENS` is the 22 colour tokens then the 3 radii; `cornerRadii("standard", WAITRON_DEFAULTS)` equals `{ "--wt-radius-sm": "4px", "--wt-radius-md": "8px", "--wt-radius-lg": "16px" }` (`structure.css:9-11`), `"square"` 0/2/4 px and `"round"` 8/14/24 px.
@@ -564,7 +583,8 @@ export interface ThemeChoices {
 export const WAITRON_CHOICES: ThemeChoices; // null, {}, "neutral", "standard", { light: {}, dark: {} }
 export type WarningField = "brandColor" | `handSet.${Mode}.${ThemeColour}`;
 export interface ThemeWarning { readonly field: WarningField; readonly mode: Mode;
-  readonly against: readonly string[]; readonly fix: string | null } // against: keys without --wt-color-
+  readonly against: readonly string[]; readonly fix: string | null; // against: keys without --wt-color-
+  readonly blockedBy: readonly string[] } // hand-set keys blocking every shade when fix is null; else []
 export interface DerivedTheme {
   readonly light: Readonly<Record<string, string>>; // keys exactly THEME_TOKENS, in that order
   readonly dark: Readonly<Record<string, string>>;
@@ -586,7 +606,7 @@ export function settleMode(defaults: WaitronDefaults, choices: ThemeChoices, mod
   hand: Readonly<Record<string, string>>): ModeResult; // hand: full token names; {} in this task
 ```
 
-In this task `normaliseChoices` lower-cases `brandColor` (throwing `RangeError` on anything but
+`blockedBy` is `[]` in every warning until Task 8. In this task `normaliseChoices` lower-cases `brandColor` (throwing `RangeError` on anything but
 `#rrggbb`) and drops `brandFix` entirely when `brandColor` is `null`; Task 7 extends it.
 `warnings` is `[]` until Task 6.
 
@@ -608,7 +628,7 @@ In this task `normaliseChoices` lower-cases `brandColor` (throwing `RangeError` 
 - [ ] **Step 2: Run, expect failure.**
   `pnpm --filter @waitron/ui-core exec vitest run src/theme/derive.test.ts` — FAIL, `./theme.js` does not resolve.
 
-- [ ] **Step 3: Implement.** In `derive.ts` port `until` (`derive-h1.mjs:81-89`), `deriveAt`
+- [ ] **Step 3: Implement.** In `derive.ts` port `until` (`derive-h2.mjs:81-89`), `deriveAt`
   (`:152-206`, with `adjust` removed: the fix is taken only when `brandColor` is set and
   `brandFix[mode]` is true, its shade from `brandFixShade`), `TINTED` (`:227-230`), and `settle`'s
   step 1 (`:243-256`): the tint from full strength down in tenths, keeping the first strength at
@@ -636,7 +656,7 @@ The brand colour warns in a mode when it is set, not set by hand for that mode, 
 in rule order, de-duplicated, without the prefix. `fix` is `brandFixShade(brandColor, mode, [bg,
 surface, surface-raised, field-fill])` on the settled colours — the same function the painting
 path calls — kept only if deriving again with `brandFix[mode]` leaves no rule naming the primary
-failing; otherwise `null` (port `derive-h1.mjs:333-351`, the brand half).
+failing; otherwise `null` (port `derive-h2.mjs:333-351`, the brand half).
 
 - [ ] **Step 1: Write the failing tests** in `brand-warnings.test.ts`:
   - **The lemon brand as picked:** `warnings` is exactly `[{ field: "brandColor", mode: "light", against: ["field-fill", "bg", "surface"], fix: "#9f8b18" }]`; the three ratios `"1.32"`, `"1.39"`, `"1.49"`. With `brandFix.light`: no warning, light primary `#9f8b18` — the shade the warning offered.
@@ -668,7 +688,7 @@ failing; otherwise `null` (port `derive-h1.mjs:333-351`, the brand half).
 
 - [ ] **Step 4: Run, expect pass.** Note the sweep file's duration from the run's output.
 
-- [ ] **Step 5: Prove by deletion** (spec lines 2274-2277). Make `brandFixShade` return `brand`
+- [ ] **Step 5: Prove by deletion** (spec lines 2287-2290). Make `brandFixShade` return `brand`
   unmoved. Expected: the lemon brand's warning has `fix: null`, not `#9f8b18` (deriving again with
   the flag leaves the primary failing); with `brandFix.light` the light primary is `#f2d300`,
   standing `"1.39"` on the page; the sweep's totals FAIL too. (The plan review ran this deletion on
@@ -689,8 +709,8 @@ failing; otherwise `null` (port `derive-h1.mjs:333-351`, the brand half).
 
 `normaliseChoices` now also lower-cases every hand-set value (throwing `RangeError` on anything but
 `#rrggbb`), throws `RangeError` naming any hand-set key outside `THEME_COLOURS`, and drops
-`brandFix[mode]` when `handSet[mode].primary` is set (port `normalise`, `derive-h1.mjs:146-150`; spec
-lines 493-497 and 2055-2056). In `derive.ts`: hand-set values are fixed inputs to `deriveAt`; a
+`brandFix[mode]` when `handSet[mode].primary` is set (port `normalise`, `derive-h2.mjs:146-150`; spec
+lines 493-497 and 2068-2069). In `derive.ts`: hand-set values are fixed inputs to `deriveAt`; a
 hand-set `primary` is the colour the whole `BRAND_FAMILY` is worked out from, even with
 `brandColor: null`; step 1 skips any rule naming a hand-set colour; step 2 is ported from `settle`
 (`:257-282`): a worked-out colour named in a failing rule moves — never `--wt-color-primary`, never a
@@ -703,7 +723,7 @@ that rule (by `passes`) and leaves fewer rules failing; at most 60 rounds.
   - **The burgundy brand keeping the cream** (`#7a1f2b`, Tinted, light `bg` `#f8f1e1`, no fix): light surface-lifted `#fce0e0`, surface-sunken `#e2d6d6`, field-fill `#f7eeed`, white on the button `"10.20"`, button on cream `"9.07"`, no light warning; without the hand-set page the light bg is `#fff3f3` ("Use worked-out colour").
   - **Waitron's brand, light Main buttons `#7a1f2b`:** primary-hover `#67081c`, primary-text and focus `#7a1f2b`, surface-lifted `#fee2e2`, no warning. With dark Main buttons `#9e4048` (the fix Task 8 offers for a dark `#7a1f2b`), dark primary-hover `#8a2e38`.
   - **The dark version's own button colour** (dark-green brand, Tinted, no fix, dark `primary` `#5fa77a`): dark on-primary `#001206` (`"6.70"`), primary on the dark page `"6.63"`, bg `#0b110d`, primary-hover `#72ba8c`, primary-text `#6ab284`; no rule failing in dark; every light token equal to the theme without it. The control that light reads its own hand-set values: the same `#5fa77a` set for light changes 8 light tokens. The control for the warning: the same theme with neither a fix nor an own colour has 3 dark rules failing.
-  - **A fix dropped under a hand-set button** (spec lines 2289-2292; dark-green brand, `brandFix.dark`, dark `primary` `#5a9c74`): `normaliseChoices` drops `brandFix.dark`; dark primary `#5a9c74`. Removing the hand-set value from the normalised choices ("Use worked-out colour") gives dark primary `#1e5b3a` and the brand colour's dark warning again, fix `#417c59`.
+  - **A fix dropped under a hand-set button** (spec lines 2302-2305; dark-green brand, `brandFix.dark`, dark `primary` `#5a9c74`): `normaliseChoices` drops `brandFix.dark`; dark primary `#5a9c74`. Removing the hand-set value from the normalised choices ("Use worked-out colour") gives dark primary `#1e5b3a` and the brand colour's dark warning again, fix `#417c59`.
   - **The at-most move:** dark-green brand, `brandFix.dark`, dark `surface` `#000000`: dark primary-disabled `#1a3023`.
   - **Review Focus 1:** a hand-set `"#F8F1E1"` gives the same theme as `"#f8f1e1"`; a hand-set `"#fff"` or `"f8f1e1"` throws `RangeError`.
   - **Review Focus 2:** a hand-set `scrim` or `danger` throws `RangeError` naming the key.
@@ -731,6 +751,9 @@ that rule (by `passes`) and leaves fewer rules failing; at most 60 rounds.
 ```ts
 // theme.ts
 export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeChoices;
+export function canFixAll(defaults: WaitronDefaults, choices: ThemeChoices): boolean;
+  // deriveThemeFrom(defaults, fixAll(defaults, choices)).warnings.length === 0: whether the Save
+  // dialog offers Fix and save (lane A ruling 2026-10-20)
 // warnings.ts
 export type AgainstItem =
   | { readonly kind: "colour"; readonly key: string }
@@ -741,10 +764,10 @@ export function groupAgainst(against: readonly string[]): AgainstItem[];
 **The warning.** A hand-set colour named by a rule still failing after settling warns; a rule
 between the brand colour and a hand-set colour is the hand-set colour's warning only (the brand's
 warning counts rules whose other colour is not hand-set). Port `names` and the refusal half of
-`deriveHand` (`derive-h1.mjs:283-323`, with `moveHand` false).
+`deriveHand` (`derive-h2.mjs:283-323`, with `moveHand` false).
 
 **The fix — searched for each warned colour on its own** (plan review H1; design section 6 step 3,
-spec lines 1111-1137): port `fixFor` (`derive-h1.mjs:366-382`). With the brand colour as picked,
+spec lines 1112-1138): port `fixFor` (`derive-h2.mjs:366-382`). With the brand colour as picked,
 the stored fix flags, and **every other hand-set value as typed**, try the warned colour's hue at
 lightness 0 to 1 in hundredths, nearest to its own first; skip a lightness at which a rule between
 it and a colour that cannot move (a meaning colour or another hand-set value) fails; accept the
@@ -753,12 +776,23 @@ other hand-set colour is named that was not named before. None accepted → `fix
 taken alone always clears its own warning, and `null` means no shade of that colour works while the
 others stay as typed — which another hand-set colour can cause.
 
-**Fix all** — port `fixAll` (`derive-h1.mjs:386-400`), per mode: derive; in rule order, find the
+**Fix all** — port `fixAll` (`derive-h2.mjs:386-400`), per mode: derive; in rule order, find the
 first failing rule that names a colour whose warning has a fix; take the fix of the rule's `a`
 (drawn on top) if it has one, else of its `b` (a brand fix sets `brandFix[mode]`, a hand-set fix
 replaces that value); derive again; stop when no warning has a fix (at most 50 rounds).
 
-**`groupAgainst`** — the design's new product-text row (spec line 614): `station-<colour>` keys
+**`blockedBy`** (lane A ruling 2026-10-20; spec lines 1875-1887) — port `blockersOf`
+(`derive-h2.mjs:406-414`): empty for a warning with a fix and for the brand colour's; for a hand-set
+warning with no fix, the other hand-set colours each of which, worked out instead, would give it a
+fix; if none alone would but working out all of them would, every other hand-set colour that shares
+a rule with it; otherwise empty.
+
+**`canFixAll`** (lane A ruling 2026-10-20; spec lines 1829-1840) — whether Fix and save is offered:
+run `fixAll` and derive again; `true` exactly when no warning is left. The dialog's Fix and save
+applies `fixAll`.
+
+**`groupAgainst`** — the design's new product-text row (spec line 615; lane A ruling 2026-10-20,
+fills and dots alike): `station-<colour>` keys
 become one `station-fills` item and `station-<colour>-dot` keys one `station-dots` item, each with
 its count, placed where its first member was; every other key stays a `colour` item.
 
@@ -769,27 +803,33 @@ its count, placed where its first member was; every other key stays a `colour` i
   - **The brand colour against a hand-set colour** (light `surface` `#000000`): only `handSet.light.surface` warns (fix `#ebebeb`), and its `against` includes `primary` (`output-brand-vs-hand.txt`).
   - **Black dark cards** (dark `surface` `#000000`): `handSet.dark.surface` warns, fix `#040404`, `against` `["danger-disabled"]` — a meaning colour never moves.
   - **Waitron's brand, dark Main buttons `#7a1f2b`:** `{ field: "handSet.dark.primary", mode: "dark", against: ["field-fill", "bg", "surface"], fix: "#9e4048" }`.
-  - **No shade passes** (spec lines 1869-1876; made up): light `text-muted` `#808080` with light `field-fill-disabled` `#000000` — `text-muted` must read on a black fill and on light ones. One warning, `handSet.light.text-muted`, `fix: null`, 17 names. The control: `text-muted` `#808080` alone gets fix `#636363` (`ex2.mjs`, `ex3.mjs`).
+  - **No shade passes, blocked by another hand-set colour** (spec lines 1875-1887; made up): light `text-muted` `#808080` with light `field-fill-disabled` `#000000` — `text-muted` must read on a black fill and on light ones. One warning, `handSet.light.text-muted`, `fix: null`, 17 names, `blockedBy: ["field-fill-disabled"]`. The control: `text-muted` `#808080` alone gets fix `#636363` (`ex2.mjs`, `ex3.mjs`).
+  - **Ruling 3, the blocker named** (`blocked.mjs`, `output-blocked.txt`): light `text` `#aaaaaa` with `surface-sunken` `#000000` — `handSet.light.text`, `fix: null`, `blockedBy: ["surface-sunken"]`. Two blockers together (`blocked2.mjs`): `text` `#aaaaaa` with `surface-sunken` and `track` both `#000000` — neither alone frees it — `blockedBy: ["surface-sunken", "track"]`. **No blocker, the sentence unchanged:** `deriveThemeFrom` over a contrived palette with light `--wt-color-station-red` `#000000` and `--wt-color-station-orange` `#ffffff`, light `text` `#808080` alone — `fix: null`, `blockedBy: []`. Every warning with a fix, in every case of this file, has `blockedBy: []`.
+  - **Ruling 2, Fix and save** (`fix-and-save-cases.mjs`, `output-fix-and-save-cases.txt`): light `text` `#555555` with `surface-sunken` `#555555` — the text has no fix (`blockedBy: ["surface-sunken"]`), the sunken areas' fix is `#cacaca`; `canFixAll` is `true`, and `fixAll` gives sunken areas `#cacaca`, text kept, no warning. The control: `text` `#aaaaaa` with `surface-sunken` `#555555` — the sunken areas' fix is `#3d3d3d`; `canFixAll` is `false`, and after `fixAll` the text still warns with no fix, blocked by the sunken areas.
+  - **Ruling 1, dots grouped:** the pure-blue-cards case above, whose `groupAgainst` holds one `station-dots 15` item (and the sage's, one `station-fills 15`).
 
   `hand.sweep.test.ts`:
   - **One colour at a time:** the dark-green brand (Tinted, `brandFix.dark`), each of the 22 colours set by hand in turn, for one mode, to each of `#000000 #0000ff #00ff00 #00ffff #ff0000 #ff00ff #ffff00 #ffffff`; one `test` per mode and colour. Per case: every failing rule names a hand-set colour or the brand colour (none unexplained); no `brandColor` warning; every warning has a fix; `fixAll` leaves no warning and nothing failing. A last test checks the reference's totals (`sweep-warn-exact.mjs hand light` / `dark`): light 176 cases, 87 with no warning, 89 with a hand-set warning; dark 176, 78 and 98; 0 without a fix, 0 unexplained, 0 failing after Fix all.
-  - **Two colours at a time** (light only, to keep the run short): the same theme; the pairs `text`/`surface-sunken`, `text`/`track`, `field-value`/`field-fill`, `text-muted`/`field-fill-disabled`, `primary-text`/`bg`, `field-line`/`surface`, `focus`/`surface-lifted`, `track`/`bg`, each colour set to `#555555` or `#aaaaaa` (32 cases); one `test` per pair. Per case: none unexplained; each warning with a fix, taken alone, clears that warning; after `fixAll` no warning has a fix and nothing is unexplained. Totals (`two-hand-sweep.mjs ./derive-h1.mjs "#555555,#aaaaaa" light`, `output-two-hand-sweep-light-mid.txt`): 32 cases, 61 warnings, 20 without a fix, 0 unexplained, 0 fixes leaving their own warning, 0 warnings with a fix after Fix all, 7 cases still warning after Fix all (each such warning without a fix). The reference took 4.1 to 5.4 s for these 32 in Node.
+  - **Two colours at a time** (light only, to keep the run short): the same theme; the pairs `text`/`surface-sunken`, `text`/`track`, `field-value`/`field-fill`, `text-muted`/`field-fill-disabled`, `primary-text`/`bg`, `field-line`/`surface`, `focus`/`surface-lifted`, `track`/`bg`, each colour set to `#555555` or `#aaaaaa` (32 cases); one `test` per pair. Per case: none unexplained; each warning with a fix, taken alone, clears that warning; after `fixAll` no warning has a fix and nothing is unexplained. Totals (`two-hand-sweep.mjs ./derive-h1.mjs "#555555,#aaaaaa" light`, `output-two-hand-sweep-light-mid.txt`): 32 cases, 61 warnings, 20 without a fix, 0 unexplained, 0 fixes leaving their own warning, 0 warnings with a fix after Fix all, 7 cases still warning after Fix all (each such warning without a fix); and, for ruling 2, `canFixAll` true in 25 cases — 15 where every warning has its own fix and 10 where one has none but Fix all clears everything — and false in the 7 (`fix-and-save.mjs`, `output-fix-and-save.txt`). The reference took 4.1 to 7.1 s for these 32 in Node.
 
 - [ ] **Step 2: Run, expect failure.**
   `pnpm --filter @waitron/ui-core exec vitest run src/theme/hand-warnings.test.ts src/theme/hand.sweep.test.ts`
-  — FAIL: no hand-set warning is produced, and `fixAll` and `groupAgainst` do not exist.
+  — FAIL: no hand-set warning is produced, and `fixAll`, `canFixAll` and `groupAgainst` do not exist.
 
-- [ ] **Step 3: Implement.** Export `fixAll` and `groupAgainst` from `index.ts`.
+- [ ] **Step 3: Implement.** Export `fixAll`, `canFixAll` and `groupAgainst` from `index.ts`.
 
 - [ ] **Step 4: Run, expect pass**; re-run every file under `src/theme/`. Note the sweep's duration.
 
 - [ ] **Step 5: Prove by deletion.**
   - Let the brand's warning count every rule naming the primary, hand-set or not: the "brand colour against a hand-set colour" case FAILS with an extra `brandColor` warning (the plan review's `C.mjs`: an extra warning with `fix: null`). Restore.
   - Search only the colour drawn on top (the old rule): the two-colour case FAILS — the sunken areas' fix is `null`. Restore.
+  - Make `blockersOf` return `[]`: the three "blocker named" cases FAIL; the no-blocker case still passes (its control). Restore.
+  - Make `canFixAll` return whether every warning has a fix (the old rule): the `#555555` / `#555555` case FAILS (`false`); its control still passes. Restore.
+  - Group only the station fills: the blue-cards `groupAgainst` case FAILS with 15 separate dot items. Restore.
 
 - [ ] **Step 6: Mutation, measured** (Global constraints).
 
-- [ ] **Step 7: Commit** — `git commit -s -m "Warn when a colour set by hand is hard to read, offer its fix, and fix them all"`, recording step 5, the duration and step 6's score.
+- [ ] **Step 7: Commit** — `git commit -s -m "Warn when a colour set by hand is hard to read, offer its fix, name what blocks it, and fix them all"`, recording step 5, the duration and step 6's score.
 
 ---
 
@@ -876,14 +916,10 @@ files at 90 or above keep the package at 90 or above.
   the token files, makes `apps/server` depend on `@waitron/ui-core`, and deletes
   `packages/layouts/src/theme-registry.test.ts` with `THEMEABLE_TOKENS`." Commit with
   `git commit -s`.
-- **For the owner, if the driver agrees** (raised by this revision, not decided by it):
-  (1) whether the station dots are grouped like the station fills in a warning's names;
-  (2) Fix and save is offered only when every warning has a fix (design section 9), but with fixes
-  searched per colour a warning can lack a fix only because of another colour set by hand that
-  Fix all then fixes — so Fix and save can be withheld although Fix all would clear everything;
-  (3) a no-fix warning's names are the colours it fails against as typed, not the other hand-set
-  colour that blocks every shade (light text `#aaaaaa` with black sunken areas: the text has no
-  fix, and its sentence names the surfaces it fails on, not the sunken areas).
+- **Ruled by lane A, 2026-10-20** (the three questions the first review revision raised; recorded in
+  the design's section 16): the station dots are grouped like the fills; Fix and save is offered
+  when running Fix all would leave no warning and applies Fix all; a no-fix warning blocked by
+  another colour set by hand names it. Each has its failing-first cases in Task 8.
 
 ---
 
@@ -911,7 +947,7 @@ files at 90 or above keep the package at 90 or above.
   and `scripts/workspace-cycles.test.ts`.
 - **The old guard.** `packages/layouts/src/theme-registry.test.ts:15-20` checks `THEMEABLE_TOKENS`
   (`packages/layouts/src/theme.ts:12-20`), which slice 2 retires; `tokens.test.ts` (Task 3) is its
-  replacement, so slice 2 deletes the file (spec lines 2213-2219, as corrected in this branch).
+  replacement, so slice 2 deletes the file (spec lines 2226-2233, as corrected in this branch).
 - **The stylesheet.** Building section 7's three-block sheet from `DerivedTheme` is slice 2's
   (`/api/theme`), as is validating the document (`theme.invalid`).
 
@@ -921,7 +957,7 @@ files at 90 or above keep the package at 90 or above.
   "exactly the colours that carry no meaning" fails until the plate is added to the pattern of
   colours outside the theme. That failure is the guard working.
 - **Slices 10 and 11** add the four sizes, three weights and `--wt-font-family` to the written list
-  (spec line 2237): `THEME_TOKENS`, its tests and the "list never changes" assertions change with
+  (spec line 2250): `THEME_TOKENS`, its tests and the "list never changes" assertions change with
   them.
 
 ## Changed test checks

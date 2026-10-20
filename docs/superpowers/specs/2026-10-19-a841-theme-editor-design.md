@@ -533,9 +533,10 @@ background and round corners.
 7. **Save** stores the choices. With no warning showing it saves at once. With a warning still
    unfixed it first asks, once, in a small dialog headed "Hard to read" that lists each warning,
    with **Back**, **Save anyway** and **Fix and save** (`16-save-hard-to-read-light.png`, left). Fix
-   and save, offered only when every warning has a fix, takes them all and saves; Save anyway stores
-   every colour as picked; Back saves nothing. When any warning has no fix, the dialog offers only
-   Save anyway and Back, so a colour with no fix reaches the tills only by Save anyway. The
+   and save applies Fix all and saves; it is offered when running Fix all on the draft would leave
+   no warning, even if a warning has no fix of its own (lane A ruling 2026-10-20). Save anyway
+   stores every colour as picked; Back saves nothing. When Fix all would leave a warning, the dialog
+   offers only Save anyway and Back, so a colour with no fix reaches the tills only by Save anyway. The
    dashboard that saved repaints at once; other open dashboards and signed-in tills follow (section
    12). A warning saved with Save anyway stays on the saved card, under its rows ("Buttons in the
    brand colour are hard to see on light screens."), for whoever opens the page next
@@ -611,11 +612,11 @@ Product text, English (Spanish to be written with the strings):
 | After the fix | Buttons on {light / dark} screens: {colour} · Undo |
 | Hand-set warning, under its row | {Light / Dark} screens: hard to read on {names}. / {Light / Dark} screens: {names} hard to read on it. |
 | Its fix | Use {colour} |
-| {names} in a warning | Each colour by its plain name, except the station colours: the station fills a value fails against are one item, "the 15 station colours" when all fifteen and "{n} station colours" otherwise, and its station dots likewise "the 15 station dots" or "{n} station dots"; the item stands where the first of them would (the fills: the driver's ruling of 2026-10-20 on the slice 1 plan review; the dots by the same rule, my call) |
-| No shade passes, under its row | {Light / Dark} screens: no shade of this colour can be read on {names}. Pick another colour. / {Light / Dark} screens: no shade of this colour lets {names} be read on it. Pick another colour. |
+| {names} in a warning | Each colour by its plain name, except the station colours: the station fills a value fails against are one item, "the 15 station colours" when all fifteen and "{n} station colours" otherwise, and its station dots likewise "the 15 station dots" or "{n} station dots"; the item stands where the first of them would (lane A ruling 2026-10-20, fills and dots) |
+| No shade passes, under its row | {Light / Dark} screens: no shade of this colour can be read on {names}. Pick another colour. / {Light / Dark} screens: no shade of this colour lets {names} be read on it. Pick another colour. When other colours set by hand block every shade (the warning's `blockedBy`), the sentence ends "… while {name} is set by hand to {colour}." instead of "Pick another colour.", naming each, joined with "and" (lane A ruling 2026-10-20) |
 | Two or more fixes, above the buttons | {n} colours are hard to read. · Fix all |
 | Advanced, closed, with a warning | … · {n} hard to read |
-| Save dialog | Hard to read · one line per warning: "Brand colour: buttons are hard to see on {light / dark} screens." / "{name} ({light / dark}): hard to read on {names}." / "{name} ({light / dark}): {names} hard to read on it." / "{name} ({light / dark}): no shade can be read." · Back · Save anyway · Fix and save |
+| Save dialog | Hard to read · one line per warning: "Brand colour: buttons are hard to see on {light / dark} screens." / "{name} ({light / dark}): hard to read on {names}." / "{name} ({light / dark}): {names} hard to read on it." / "{name} ({light / dark}): no shade can be read." / "{name} ({light / dark}): no shade can be read while {name} is set by hand to {colour}." · Back · Save anyway · Fix and save (offered when Fix all would leave no warning) |
 | A hand-set fix, until the editor closes | {Light / Dark} screens: fixed from {colour} · Undo |
 | Saved card, after Save anyway | Buttons in the brand colour are hard to see on {light / dark} screens. / {name} ({light / dark}) is hard to read. |
 | Main buttons, in Advanced | Brand colour · Fixed |
@@ -641,8 +642,8 @@ Product text, English (Spanish to be written with the strings):
 
 In the hand-set rows, {names} are the plain names (section 5) of the other colours in the rules the
 value fails. The first form is used when the hand-set colour is drawn on the others (a text, a
-line), the second when the others are drawn on it (a background). Fix and save appears only when
-every warning has a fix. The server sends keys, not these words (section 10); the browser words them
+line), the second when the others are drawn on it (a background). Fix and save appears when running
+Fix all would leave no warning (lane A ruling 2026-10-20). The server sends keys, not these words (section 10); the browser words them
 from its strings.
 
 ## 5. What is editable
@@ -1827,15 +1828,20 @@ worked-out colours alike; a hand-set colour gets no exemption for having been ty
   owner asked to be offered the fix, not to have it applied.
 - (c) **Chosen.** Save asks once, in a small dialog headed "Hard to read" listing each warning, with
   **Fix and save** (the default, drawn as the main button), **Save anyway** and **Back**. Fix and
-  save takes every fix, then saves; it is offered only when every warning has a fix. Save anyway
-  stores every colour as picked; Back closes the dialog and saves nothing. When any warning has no
-  fix, the dialog offers Save anyway and Back alone: the fixable ones can still be fixed in the
-  editor first, and the one with no fix goes on the tills only by Save anyway. With no warning
+  save applies Fix all (section 6, step 3), then saves; it is offered when running Fix all on the
+  draft would leave no warning — decided by running it, so a warning with no fix of its own that
+  Fix all clears (another colour set by hand was blocking it) does not withhold it (lane A ruling
+  2026-10-20; it replaces "offered only when every warning has a fix"). Save anyway stores every
+  colour as picked; Back closes the dialog and saves nothing. When Fix all would leave a warning,
+  the dialog offers Save anyway and Back alone: the fixable ones can still be fixed in the editor
+  first, and the one with no fix goes on the tills only by Save anyway. In the slice 1 plan's light
+  two-colour sweep, 10 of its 32 cases have a warning with no fix that Fix all clears, and 7 leave
+  one (`fix-and-save.mjs`, `output-fix-and-save.txt` in `~/waitron-campaign/a841-plan1-probes/`). With no warning
   showing, Save saves at once and nothing asks.
 
 The trade-off of (c): one more press for an owner who really wants the colour as picked; in
 exchange, a hard-to-read colour reaches the tills only by a deliberate "Save anyway", never by
-accident (Fix and save is not offered while any warning has no fix, so it cannot carry one past),
+accident (Fix and save is offered only when Fix all leaves no warning, so it cannot carry one past),
 and nothing is refused. It is a warning, not an invalid field, so it follows the house form rules as
 section 4 sets out: Save is never disabled by it and the correction message stays empty. The
 dashboard already does the same with labour warnings: they show while you plan, and Publish lets you
@@ -1867,9 +1873,15 @@ Worked examples:
   is stored as typed and light screens show the pale sage at about 2 to 1.
 
 **No shade passes.** Where no lightness of a colour's hue passes, the warning says "{Light / Dark}
-screens: no shade of this colour can be read on {names}. Pick another colour." and offers no fix. It
-never disables Save: the dialog lists it and offers only Save anyway and Back (Fix and save needs
-every warning to have a fix), and Save anyway stores it as picked like any other. The one-colour
+screens: no shade of this colour can be read on {names}. Pick another colour." and offers no fix.
+When other colours set by hand block every shade, the warning names them (`blockedBy`, section 10)
+and the sentence says so: "Light screens: no shade of this colour can be read on {names} while
+Sunken areas is set by hand to #000000." (lane A ruling 2026-10-20). A colour set by hand blocks
+it when, worked out instead, it would leave the warned colour a fix; when no single one does but
+working out all the others would, every other hand-set colour that shares a rule with it is named;
+when none would, nothing is named and the sentence stays as above. It never disables Save: the
+dialog lists it and offers Fix and save only when Fix all would leave no warning, and Save anyway
+stores it as picked like any other. The one-colour
 sweeps found no such case; with two colours set by hand it is common, because each value's shade
 is searched with the other held as typed (section 6, step 3). The slice 1 plan tests the made-up
 one-colour case of section 6 and the two-colour sweep.
@@ -1928,12 +1940,13 @@ zoom still enlarges everything, and the slider's 130% is not 200%.
   and the hand-set colours and text settings — to the theme being edited.
   When a warning is unfixed, the dialog of section 9 comes first, in the browser. The server checks
   the choices are valid, stores them and answers the stored choices with the worked-out values and
-  the warnings. A warning carries keys only, never words: `{ field, mode, against, fix }` — `field`
+  the warnings. A warning carries keys only, never words: `{ field, mode, against, fix, blockedBy }` — `field`
   the colour's key as in `theme.invalid` (`brandColor`, `handSet.light.text-muted`; section 11),
   `mode` `light` or `dark`, `against` the keys of the colours it is hard to read on (token names
   without `--wt-color-`, such as `surface-lifted` or `station-red-dot`), and `fix` the offered
-  `#rrggbb` or `null`. The browser words them from its own strings, in the screen's language; how
-  meaning colours such as the fifteen station dots are named in a sentence is for the strings. They
+  `#rrggbb` or `null`, and `blockedBy` the keys of the other colours set by hand that block every
+  shade when `fix` is `null` (empty otherwise; section 9). The browser words them from its own strings, in the screen's language; the station fills and dots
+  are one item each, as section 4's product-text table says (lane A ruling 2026-10-20). They
   are the same warnings the editor shows, worked out by the same `deriveTheme`. The read route
   (`GET`) answers the warnings for the stored choice too, worked out by the same shared check, so
   the saved card — which a supervisor also sees — reads them from there rather than working them out
@@ -2308,7 +2321,8 @@ and administrators change it.
   axe tests in both themes; the editor opens with Save quiet and disabled, a saved fix included; a
   warning leaves Save enabled and the bottom message empty; a fix, Fix all and Undo change the draft
   and Cancel undoes them; picking another brand colour drops a fix; the Save dialog — Fix and save
-  stores the fixed draft and is absent when any warning has no fix, Save anyway stores it as picked,
+  applies Fix all and is offered exactly when Fix all would leave no warning (a case with a warning
+  that has no fix of its own but Fix all clears, and one Fix all cannot), Save anyway stores it as picked,
   Back and Escape store nothing, and no dialog with no warning; the saved card shows a warning saved
   anyway, worded from the `GET` warning's keys in both screen languages.
 - The logo. Server: `PUT` refuses a logo naming no library image (`theme.invalid`, `field:
@@ -2554,6 +2568,15 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **Q8** is answered, revised (2026-10-20, about 06:00): every theme has a light and a dark version
   that switch with the Theme setting, which keeps its name (section 7). Superseded: the about 05:45
   answer, B, "Screen mode", and with it the rename slice; also not taken: A, "Light or dark".
+- **A warning's station colours** (lane A ruling 2026-10-20, on the slice 1 plan review): the
+  station fills a colour fails against are named as one item ("the 15 station colours", or "{n}
+  station colours"), and the station dots likewise ("the 15 station dots"). Not taken: naming each.
+- **When Fix and save is offered** (lane A ruling 2026-10-20): when running Fix all would leave no
+  warning, decided by running it; the dialog's fix applies Fix all. Not taken: only when every
+  warning has a fix of its own, which withheld it where another colour set by hand was the blocker.
+- **A warning blocked by another colour set by hand** (lane A ruling 2026-10-20): its sentence names
+  the blocking colour and its value ("… while Sunken areas is set by hand to #000000"); with no
+  blocker it stays as it was. Not taken: naming only the colours it fails against.
 
 ## 17. Risks
 
