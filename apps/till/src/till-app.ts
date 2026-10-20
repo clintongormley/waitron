@@ -22,6 +22,7 @@ import {
   registerIcons,
   NUTRITION_ICONS,
   ThemeChoiceController,
+  setHelpMode,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -15359,6 +15360,7 @@ export class TillApp extends LitElement {
   /** Every face change goes through here, so the diagnostics trail records it. */
   #setScreen(screen: Screen): void {
     if (screen !== this.screen) this.#dismissStationChoices();
+    if (screen === "lock") setHelpMode(false);
     diag.record("info", "nav", { screen });
     this.screen = screen;
   }
