@@ -215,7 +215,7 @@ dashboard banner shows Waitron's own logo, picking its light or dark drawing fro
   the word "Waitron" in bold, "The product WORDMARK: a fixed name, never translated UI copy"
   (`apps/till/src/widgets/till-shell.ts:33-34`, styled at `:148-152`), is drawn first in the bar
   only on a handheld (the `phone-portrait` and `tablet-landscape` form factors, `apps/till/src/layout.ts:21`)
-  that is above phone width, has no item moved into its menu and is not shrinking its bar
+  that is above phone width, has no item other than Find bill moved into its menu and is not shrinking its bar
   (`till-shell.ts:996`). **A counter till (form factor `till`) has drawn no word since #1905** (A738,
   2026-10-20): that change added `this.formFactor === "till" ||` to the condition
   (`git log -S'this.formFactor === "till" || this.steps > 0'` names only d99a9f403), and the counter
@@ -889,8 +889,9 @@ draws I did not check, and the plan lists the devices' fonts.
 **Device fonts now, and where uploaded fonts plug in later** (owner, Q7 B, 2026-10-20: "also
 uploaded font files", "designed and built after this as their own item (licence, file size and
 format questions to settle there)"). A841 offers only "The device's own" and "Serif". It builds the
-typeface so that the later item adds a choice without reshaping anything, and this is the whole of
-the seam (my call on its shape):
+typeface so that the later item adds a choice to the stored list, the CSS and the delivered
+stylesheet without reshaping them; the editor's preview is the exception, below. The seam (my call
+on its shape):
 
 - **The stored choice** is `text.family`, a string from a fixed list, `"system"` or `"serif"`
   (section 11). The validity check reads that list from one exported constant, so the fonts item
@@ -903,13 +904,24 @@ the seam (my call on its shape):
 - **The served stylesheet is whole text** (`/api/theme`'s `css`, section 12), and its hash covers it,
   so the later item can put an `@font-face` rule ahead of the three blocks, with `font-display:
   swap` (a till draws its own font until the file arrives and never waits for it), and every till
-  and dashboard follows a change by the delivery A841 already builds. Where the files live — the
-  image library takes images only (section 3) — is the later item's question.
+  and dashboard follows a change by the delivery A841 already builds. That holds because the
+  delivered sheet is adopted by the whole page, as the token layer is when `applyTokens` is given
+  the document's root (`packages/ui-core/src/tokens/index.ts:6-25`, section 12). Where the files
+  live — the image library takes images only (section 3) — is the later item's question.
 - **The editor's Typeface field** draws its choices from the same list, so a new font appears there
-  without a new control.
+  without a new control. **Its preview is not ready for an uploaded font.** The preview panels draw
+  the draft from a stylesheet inside the Look card's shadow root (section 10), and a font rule there
+  does nothing. Measured by the round-8 reviewer and re-run (`a841q8-design/font-probe/fontprobe.mjs`
+  in the campaign folder, Playwright's Chromium 156.0.8078.4, a macOS script face served as
+  `/venue.ttf`, a span set in `"VenueFace", monospace` at 40 px): no rule, the control, measured
+  600 px; the `@font-face` rule in a sheet adopted by a shadow root, with the span inside it, 600 px
+  and no request for the font file; the same rule adopted by the document, 327 px both in the page
+  and inside the shadow root, with one request. So the later item must register each font for the
+  whole page — an `@font-face` rule in a page-level sheet, or `document.fonts.add(new FontFace(…))`
+  — and let the preview use it from there. WebKit was not measured.
 
 What the later item must settle, and A841 does not: the licence (Waitron cannot check one), the
-formats and size limit, where files are stored and how they are served, how a till caches them for
+preview's page-level font registration (above), the formats and size limit, where files are stored and how they are served, how a till caches them for
 a restart without the box, and re-running the 130% layout cases and the hyphenation check in the
 uploaded face (a wider face wraps sooner than the faces measured above). Its backlog entry is in
 `docs/backlog.md`, under A841. The text-size reading the owner did not correct stands: the slider
@@ -1218,7 +1230,9 @@ with its buttons still `#1e5b3a`; the control, the same theme with neither the f
 colour, printed `failing 3` (the green on the dark field background, page and cards), so the check
 tells the two apart. Each version is worked out from the shared choices and that version's own
 hand-set values only (the prototype calls `warn(k, mode, handOf(k, mode))`, `a841-mockups-src/build.mjs:63`),
-so nothing set for the dark version can move a light colour. Pictures
+so nothing set for the dark version can move a light colour. The control that the light call does
+see a light value: the same `#5fa77a` set by hand for the LIGHT version moved 8 light tokens
+(`probes/dark-own-shades.mjs`, last line). Pictures
 `37-theme-versions-{light,dark}.png`, phone `38-theme-versions-phone-light.png`.
 
 **How the editor shows and edits the pair.** One card, not two: the shared choices once on the left;
@@ -1233,7 +1247,7 @@ too: the brand row names each version's button colour, and the Themes list's col
 light and the dark page.
 
 **Waitron's own theme** is the same pair: its light version is the default block of `colors.css`
-(lines 1-123) and its dark version the dark blocks (125-241, and 359-473 when forced), the values
+(lines 1-123, and 243-357 when forced) and its dark version the dark blocks (125-241, and 359-473 when forced), the values
 every screen shows today. "Waitron" in the Themes list is that pair, and "Use Waitron's look" puts
 both versions of the draft back to it.
 
@@ -1368,10 +1382,10 @@ till strip's width against its contents. A failing case — a bar with no room �
 the logo's 108 px (Bar Lucía's 96 px and the bar's 12 px gap). It printed: a busy bar (two counter
 zones, Parked 3, Waiting 2, two transfers, the kitchen pass, "Ana Fernández") at 1024 × 768 had 54 px
 free in English and was already 11 px over in Spanish; the same at 1280 × 800 had 310 and 245 px; a
-quiet bar (Counter, Tables, Parked, Waiting) had 343 to 658 px. So on the usual 1280-wide till the
+quiet bar (the Counter and Floor tabs, Parked orders and Waiting) had 343 to 658 px. So on the usual 1280-wide till the
 logo shows; on a 1024-wide till it shows until the bar fills with Parked, Waiting, transfers and the
 kitchen pass, then steps aside. That needs the counter till to measure its bar as the handheld does
-(it measures nothing today, `till-shell.ts:423,589`), which slice 8 adds, with cases at both widths
+(it measures nothing today, `till-shell.ts:423,589`), which slice 14 adds, with cases at both widths
 in both languages. The trade-off: on a busy 1024-wide till the logo can come and go as the counts
 appear; the way not taken, never drawing it on a counter till, would leave the owner's answer to
 handhelds and the sign-in screen alone.
@@ -1548,6 +1562,15 @@ nothing and left two holes):
   dots when the department names a logo, otherwise `printedLogo`. A department that names a logo
   whose pictures cannot be read still prints none, as today, rather than the venue's: the fallback
   follows the name, as `resolveReceiptTrim` does.
+- **When the department's receipt settings cannot be read, no logo prints** (ruled for round 8),
+  never a possibly wrong one: the department may have its own logo, and the venue's would then be
+  the wrong picture. That is today's result — a failed read answers `{ receipt: {}, logo: null }`
+  and prints nothing (`packages/venue-service/src/department-receipts.ts:230-240`) — but today it
+  cannot be told apart from a department with no receipt row, which answers the same
+  (`:227`). So the build makes the failure visible to the print paths: `readPrintedDepartmentReceipt`
+  says the read failed (for example `readFailed: true` beside the empty answer), and the receipt,
+  the A4 invoice, the ticket view and the preview take no logo at all in that case, the sale still
+  printing as today.
 - **A sale with no department** (`receipt-print.ts:193-197`, `invoice-document.ts:98-103`) prints
   the venue's logo too; `resolveReceiptTrim` already renders "venue-only" for a null department
   (`receipt-text.ts:73`).
@@ -2243,7 +2266,9 @@ and administrators change it.
   `/api/theme`'s hash and the till's `setupRevision` on its next menu-state call (the control:
   reading twice with nothing changed gives the same hash). The library lists the use as "Logo of
   theme {name}", linking to the Appearance page. Receipts (Q5 A): a department with no receipt logo, and a sale
-  with no department, print `printedLogo`; a department with its own prints its own; a configuration
+  with no department, print `printedLogo`; a department with its own prints its own; a department
+  whose receipt read fails prints no logo at all, on a receipt and on an A4 invoice (the control: the
+  same department with its read working prints its own logo), and the sale still prints; a configuration
   copy whose look names a logo with no readable pictures is refused; Remove, and Use Waitron's look,
   saved, stop the venue logo printing; reframing the image redraws `printedLogo`; the card says when
   the logo prints blank (a white image on a see-through background must, and a black one must
@@ -2319,8 +2344,8 @@ Each slice is one pull request that leaves main working: nothing on main reads o
 `apps/server/src/management-api.ts`, `packages/layouts/src/index.ts` and `theme-store.ts`); until
 slice 5, no screen writes a theme, so `/api/theme` answers empty and every screen stays Waitron's;
 and each later slice adds to a screen that already works without it. The order: 1, 2, 3, then 5;
-4 at any point; 6 and 12 after 5; 7 after 2; 8 after 5 and 7; 14 after 8; 9 after 7; 10, 11 and 13
-after 5.
+4 at any point; 6 and 12 after 5; 7 after 2; 8 after 5 and 7; 14 after 8; 9 after 8 (its "How it
+prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after 5.
 
 1. **The derivation and the shared checks.** `deriveTheme`, the contrast rules moved out of
    `colors.test.ts`, the sweep, the token-list guard. No screen. Hand-set values may be their own
@@ -2361,7 +2386,10 @@ after 5.
    fixes under rows, the closed line's "hard to read" count, the dark version's own button colour
    (**Pick a different colour for dark screens**, the card's "Buttons on dark screens: …, set by
    hand · Use the brand colour" line and the saved card's brand row, section 7), and their
-   `*.unsaved.test.ts` and axe cases.
+   `*.unsaved.test.ts` and axe cases. Slice 6 does not wait for slice 12 (my call): until slice 12
+   folds Advanced into sections, the link opens Advanced, which is then one flat list, and moves
+   focus to the Dark value of its Main buttons row; slice 12 changes it to open the Buttons section
+   first, with a case for each.
 7. **The logo, stored and served.** The document's `logo`, its validity check (`dark_without_light`
    included) and the import check; the library's new use, a `theme_logo` member of `ImageUsage`
    (`images.ts:53`) counted in both counters; `/api/theme`'s addresses, its cache key over the
@@ -2580,7 +2608,13 @@ and a counter till's bar draws no "Waitron" word (section 3). That redrew, keepi
 02, 03, 04, 05, 06, 12, 13, 15, 16, 17, 18, 20, 22, 25, 26, 28, 29, 30, 31 and 32; 07, 19, 21, 27 and
 33 rendered the same files as before. 34 showed the "Light or dark" rename, now not wanted, and is
 deleted (it stays in git history); 35 and 36 are now kept unchanged as the records of what the
-owner saw for Q7 and Q8. New: 37 to 42. In the editor pictures only the preview shows the draft;
+owner saw for Q7 and Q8. New: 37 to 42. Round 8 then redrew, keeping their numbers: every counter
+till's bar (06, 19, 21, 40) as main draws it — Counter and Floor, Parked orders and Waiting, the help
+switch, the name and the menu button, no Bills tab; the signed-out Theme chooser (22, 40, 41) as the
+icon button it is (`packages/ui/src/components/wt-theme-chooser.ts:117-126`), its "Theme: …" name
+heard only by screen readers; the "·" kept on the same line as Undo or Use the brand colour (02, 03,
+05, 12, 13, 15, 17, 18, 25, 26, 28, 29, 30, 37, 38); and the account menu in 39 widened so "Follow
+device" stays on one line. In the editor pictures only the preview shows the draft;
 the dashboard around the card, the card included, keeps the saved look (section 4, step 4):
 
 | File | Shows |
@@ -2590,7 +2624,7 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `03-editor-phone-light.png` | The editor at 390 px, just opened, Save quiet and disabled |
 | `04-hard-to-read-light.png` | Café Limón's lemon as picked: the warning under Brand colour with its fix, **Use #9f8b18 on light screens**; the light preview shows lemon buttons. Replaces `04-adjusted-light.png` |
 | `05-fixed-light.png` | The same after pressing the fix: "Buttons on light screens: #9f8b18 · Undo", the light preview in mustard, dark still lemon. Replaces `05-refused-light.png` |
-| `06-till-{light,dark}.png` | A till counter screen in Bar Lucía's look, with no logo set, so its bar starts with the Counter tab as on main since #1905; product tiles keep their own colours |
+| `06-till-{light,dark}.png` | A till counter screen in Bar Lucía's look, with no logo set. Its bar is drawn as main draws a counter till's (`till-shell.ts:996-1008`): the Counter and Floor tabs (`built-in-screens.ts:6`), Parked orders and Waiting, then the help switch, the person's name and the menu button, whose menu holds Find a bill (`till-shell.ts:889`); there is no Bills tab. Product tiles keep their own colours |
 | `07-dashboard-{light,dark}.png` | The Products screen in Bar Lucía's look |
 | `08-q1-knobs-or-every-colour-light.png` | Q1 options side by side, kept unchanged as the record of what the owner saw when they answered (2026-10-19). Superseded by 02 and 12: its B side says 23 colours and has no Set by hand marks |
 | `09-q2-adjust-or-refuse-light.png` | Retired: Q2's options side by side, kept unchanged as the record of what the owner saw when they answered (2026-10-19), as 08 is. Its A side (silent darkening) and B side (refusal) are both superseded by 04, 05, 15 and 16 |
@@ -2603,12 +2637,12 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `16-save-hard-to-read-light.png` | Left: Save pressed with the lemon unfixed — the "Hard to read" dialog with Back, Save anyway and Fix and save. Right: after Save anyway — the lemon on the page and on a till's Pay button, and the warning line on the saved card |
 | `17-logo-editor-{light,dark}.png` | The editor just after Lucía, the manager, uploads the bar's logo: the Logo field with Replace and Remove, "+ Add a version for dark screens" with its hint, and the preview's banner strips — the logo on the light panel, on a plate on the dark one. The dashboard around the card still shows Waitron's lockup: the logo is not saved yet |
 | `18-logo-editor-phone-light.png` | The same at 390 px |
-| `19-logo-dark-plate-or-version-dark.png` | Dark screens, the banner and a till bar: with one image, drawn on a plate (left); with a second image for dark screens (right) |
+| `19-logo-dark-plate-or-version-dark.png` | Dark screens, the banner and a till bar: with one image, drawn on a white plate (left); with a second image for dark screens (right); the till bar is a counter till's as main draws it |
 | `20-logo-banner-{light,dark}.png` | After Save: the banner shows the bar's logo before "BAR LUCÍA S.L." (on a plate in dark), and the saved card's Logo row says "Dark screens: on a light plate" |
 | `21-logo-till-{light,dark}.png` | A till counter screen with the bar's logo at the start of the top bar, a bar with room for it (section 8a) |
 | `22-logo-sign-in-{light,dark}.png` | The dashboard's sign-in page and a till's sign-in screen, with its Theme and language corner, showing the bar's logo, and "Powered by" with Waitron's lockup under each (Q6 A) |
 | `23-q5-logo-on-receipts-light.png` | Kept as what the owner saw when answering Q5 A. Q5's options side by side: A, one upload that also prints, with "How it prints" and a receipt carrying the real 80 mm dots of the logo; B, screens only and a receipt with no logo, as today |
-| `24-q6-waitron-logo-light.png` | Kept as what the owner saw when answering Q6 A. Q6's options side by side, each as the dashboard's sign-in page and a signed-in till bar: A, the bar's logo in Waitron's place and "Powered by" on the sign-in page; B, the same without "Powered by"; C, both logos. 23 and 24 are kept as the owner is seeing them while Q5 and Q6 are open: they show the editor before the slider |
+| `24-q6-waitron-logo-light.png` | Kept as what the owner saw when answering Q6 A. Q6's options side by side, each as the dashboard's sign-in page and a signed-in till bar: A, the bar's logo in Waitron's place and "Powered by" on the sign-in page; B, the same without "Powered by"; C, both logos |
 | `25-text-size-editor-{light,dark}.png` | The editor with Text size moved to 120% in the draft: the slider, its line of sizes, and both preview panels drawing the till button and bill line at that size (section 5a) |
 | `26-text-size-editor-phone-light.png` | The same at 390 px |
 | `27-text-size-top-step-{light,dark}.png` | The probe's screenshots of the real counter screen at 1280 × 800 in Bar Lucía's look, 100% beside 130%, the top step (section 5a). The probe's products carry no colour of their own, so the product buttons are drawn plain; the runner framed the screen at 1152 × 720 |
@@ -2623,7 +2657,7 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `37-theme-versions-{light,dark}.png` | The editor showing a theme's two versions: Bar Lucía's dark version given its own button colour, `#5fa77a`, through **Pick a different colour for dark screens** — the line "Buttons on dark screens: #5fa77a, set by hand · Use the brand colour" under Brand colour, the preview's light version still `#1e5b3a` beside the dark version in the lighter green, and Advanced's Buttons section open with Main buttons' Light value "Brand colour" and Dark value "Set by hand", its family worked out from it |
 | `38-theme-versions-phone-light.png` | The same at 390 px: the light version's preview above the dark version's, each Advanced row stacking its Light and Dark values |
 | `39-account-menu-theme-light.png` | The account menu with its Light / Dark / Follow device item still called "Theme" (Q8 revised), over the Appearance page, whose note says each screen shows the light or dark version as its Theme setting says |
-| `40-logo-on-screens-{light,dark}.png` | The four places the logo appears: the signed-in dashboard's banner; a counter till's bar with the logo first, and a busy 1024 px bar that leaves it out; the dashboard's sign-in page and a till's sign-in screen, each with "Powered by" and Waitron's lockup under the form. The dark picture uses the logo's own dark version |
+| `40-logo-on-screens-{light,dark}.png` | The four places the logo appears: the signed-in dashboard's banner; a counter till's bar with the logo first, and a busy bar (two counter zones, Parked orders 3, Waiting 2, Transfers, Pass) that leaves it out, its strip scrolling as today; the dashboard's sign-in page and a till's sign-in screen, each with "Powered by" and Waitron's lockup under the form, and the signed-out Theme chooser drawn as its icon button. The dark picture uses the logo's own dark version |
 | `41-logo-on-screens-phone-light.png` | At 390 px: the signed-in dashboard's banner, the sign-in page with "Powered by" under the card, and a handheld's sign-in screen with "Powered by" under the names |
 | `42-logo-on-receipt-and-invoice-light.png` | Left: the bar department, with no receipt logo of its own, prints the venue's logo (the real 80 mm dots) on its receipt and at the top of its A4 invoice. Right: the terrace department's own receipt logo wins on both (a drawn stand-in, not the real dither output) |
 
@@ -2759,7 +2793,8 @@ opens their menu to make the till dark reads "Theme" and may expect the bar's Ch
 A, the menu item becomes "Light or dark" ("Claro u oscuro"), on the dashboard and on the till's
 person menu and sign-in screen, and "theme" means only the venue's themes. With B, it becomes
 "Screen mode" ("Modo de pantalla"). With C, it stays "Theme", and the two share the word. Pictures:
-`36-q8-theme-naming-light.png` (and `34-account-menu-light-or-dark-light.png` for A).
+`36-q8-theme-naming-light.png` (and `34-account-menu-light-or-dark-light.png` for A; deleted, in
+git history before 51d612bc6).
 
 - **A (recommended):** "Light or dark" — says exactly what the three buttons do, in plain words.
 - **B (chosen at 05:45, superseded at 06:00):** "Screen mode".

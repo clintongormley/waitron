@@ -3204,7 +3204,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the licence (the venue must be allowed to serve the font to its own screens; Waitron cannot check
   that), which formats and what size limit, where the files are stored and served (the image library
   takes images only), how a till caches them for a restart without the box, `font-display: swap` so
-  no screen waits for a file, and re-running A841's 130% layout cases and hyphenation check in the
+  no screen waits for a file, registering each font for the whole page (a page-level `@font-face`
+  or `document.fonts.add`) so the theme editor's preview can draw it — an `@font-face` inside a
+  component's shadow stylesheet does nothing in Chromium 156 (A841 design, section 5a) — and re-running A841's 130% layout cases and hyphenation check in the
   uploaded face. It plugs into A841's seam: the typeface list, `typefaceStack()` and `@font-face`
   ahead of `/api/theme`'s blocks (A841 design, section 5a). Needs A841's slice 11 first.
 
