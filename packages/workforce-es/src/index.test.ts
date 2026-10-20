@@ -11,6 +11,7 @@ describe("the public surface", () => {
         "exportTimeRecord",
         "prepareTimeRecordExport",
         "WORKFORCE_ES_RECORD_EXPORT",
+        "WORKFORCE_ES_BACKUP_VERIFICATION",
         "WORKFORCE_ES_CLASSIFICATION",
         "WORKFORCE_ES_CHANGE_SOURCES",
         "WORKFORCE_ES_CONFIGURATION_TRANSFER",

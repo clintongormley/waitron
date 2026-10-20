@@ -63,6 +63,7 @@ import {
 } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
 import {
+  STAFFING_BACKUP_VERIFICATION,
   STAFFING_CHANGE_SOURCES,
   STAFFING_CLASSIFICATION,
   STAFFING_CONFIGURATION_TRANSFER,
@@ -89,6 +90,7 @@ import {
   VENUE_SERVICE_ROUTES,
 } from "@waitron/venue-service";
 import {
+  WORKFORCE_ES_BACKUP_VERIFICATION,
   WORKFORCE_ES_CLASSIFICATION,
   WORKFORCE_ES_CHANGE_SOURCES,
   WORKFORCE_ES_CONFIGURATION_TRANSFER,
@@ -221,6 +223,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../workforce-es/drizzle",
     },
     vocabulary: WORKFORCE_ES_VOCABULARY,
+    backup: { verification: WORKFORCE_ES_BACKUP_VERIFICATION },
     classification: WORKFORCE_ES_CLASSIFICATION,
     changes: WORKFORCE_ES_CHANGE_SOURCES,
     configurationTransfer: WORKFORCE_ES_CONFIGURATION_TRANSFER,
@@ -353,6 +356,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_staffing",
       from: "../staffing/drizzle",
     },
+    backup: { verification: STAFFING_BACKUP_VERIFICATION },
     classification: STAFFING_CLASSIFICATION,
     changes: STAFFING_CHANGE_SOURCES,
     routes: STAFFING_ROUTES,
