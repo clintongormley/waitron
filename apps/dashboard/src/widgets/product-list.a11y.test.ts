@@ -1,4 +1,4 @@
-import { registerIcons, setHelpMode } from "@waitron/ui";
+import { registerIcons, setHelpMode, type WtCombobox } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -394,6 +394,13 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       ),
     ).toEqual(expect.arrayContaining(["Mains", t("editor.missing_choice"), "—"]));
     expect(table.shadowRoot!.querySelector('wt-combobox[data-filter="course"]')).not.toBeNull();
+    const filter = table.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[data-filter="course"]',
+    )!;
+    const trigger = filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!;
+    await userEvent.click(trigger);
+    await filter.updateComplete;
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
     await expectNoA11yViolations(host);
   });
 

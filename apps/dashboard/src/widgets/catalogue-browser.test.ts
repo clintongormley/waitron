@@ -229,6 +229,7 @@ it("hands the courses to the products list", async () => {
   await tableOf(el);
   expect(el.shadowRoot!.querySelector("dashboard-product-list")!.courses).toEqual(courses);
 });
+
 /** The Made at cell of a row, found by its column heading. */
 async function madeAtText(el: CatalogueBrowser, key: string) {
   const root = (await tableOf(el)).shadowRoot!;

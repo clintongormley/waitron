@@ -6234,6 +6234,10 @@ describe("product-list filters (A463)", () => {
       await table.updateComplete;
       expect(table.sortDirection).toBe("ascending");
       expect(rowKeys(root)).toEqual(["b-salad", "a-soup", "d-cake", "c-bread"]);
+      root.querySelector<HTMLElement>('button[data-sort="course"]')!.click();
+      await table.updateComplete;
+      expect(table.sortDirection).toBe("descending");
+      expect(rowKeys(root)).toEqual(["d-cake", "a-soup", "b-salad", "c-bread"]);
     });
 
     it("offers the courses in firing order, then No course, and counts two choices", async () => {

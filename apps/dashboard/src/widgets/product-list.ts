@@ -1426,8 +1426,9 @@ export class ProductList extends LitElement {
     return index === undefined ? t("editor.missing_choice") : this.courses[index]!.name;
   }
 
-  #courseRank(courseId: string | null): number {
-    if (courseId === null) return this.courses.length + 1;
+  // Null, not a number, so the table keeps a row with no course last in both directions.
+  #courseRank(courseId: string | null): number | null {
+    if (courseId === null) return null;
     return this.#courseOrder.get(courseId) ?? this.courses.length;
   }
 
