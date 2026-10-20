@@ -3194,7 +3194,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.reader_not_held":
     "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. No se ha cobrado ninguna tarjeta.",
   "bill_pay.reader_not_held_unknown":
-    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. Una tarjeta anterior de esta cuenta no tuvo respuesta: antes de cobrar otra vez, pide a un encargado que lo consulte en Pagos con tarjeta.",
+    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. Una tarjeta anterior de esta cuenta no ha tenido respuesta: antes de cobrar otra vez, pide a un encargado que lo consulte en Pagos con tarjeta.",
   "bill_pay.not_checked":
     "El servidor no ha podido comprobar este cobro. Mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",

@@ -4457,6 +4457,62 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
     },
   );
 
+  const unknownBackgrounds = new Map<string, string>();
+  it.each(["light", "dark"] as const)(
+    "looks right, the presented sheet's refusal after a card that got no answer, %s at 390 px",
+    async (theme) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(390, 900);
+      try {
+        expect(window.innerWidth).toBe(390);
+        const getDeviceEquipment = vi.fn().mockResolvedValue(holding());
+        const pay = vi.fn().mockResolvedValueOnce({ outcome: "timeout" });
+        pay.mockRejectedValue(notHeld());
+        api = stubApi(
+          onPhone(
+            {
+              getDeviceEquipment,
+              pay,
+              getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+            },
+            { locale: "es-ES" },
+          ),
+        );
+        const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+        const order = await openPhoneTable(el);
+        await pressPaySheet(el, order);
+        await settled(el);
+        await pressTake(el);
+        getDeviceEquipment.mockResolvedValue(takenByMarc);
+        await pressTake(el);
+        expect(currentLocale()).toBe("es-ES");
+        expect(row(el).open).toBe(true);
+        expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held_unknown"));
+        const panel = presented(el)!
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+        const background = getComputedStyle(panel).backgroundColor;
+        unknownBackgrounds.set(theme, background);
+        if (theme === "dark") expect(background).not.toBe(unknownBackgrounds.get("light"));
+        const shot = `__screenshots__/look/a796-reader-refused-unknown-${theme}-390`;
+        await page.screenshot({ element: panel, path: `${shot}.png` });
+        const box = panel.getBoundingClientRect();
+        const rowBox = row(el).getBoundingClientRect();
+        await commands.writeFile(
+          `src/${shot}.json`,
+          JSON.stringify({
+            innerWidth: window.innerWidth,
+            panelWidth: box.width,
+            rowInside: rowBox.left >= box.left && rowBox.right <= box.right,
+            background,
+          }),
+        );
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
+
   it("on the presented path, a send that got no answer after the order was left still marks the bill", async () => {
     const answers: ((error: unknown) => void)[] = [];
     const pay = vi
@@ -4640,6 +4696,101 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
     const shown = await settled(el);
 
     expect(sent()).toHaveLength(5);
+    expect(shown.open).toBe(true);
+    expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
+  });
+
+  /** Closes the bill's payment sheet and opens the presented sheet on the same bill. */
+  async function presentAfterBill(
+    el: TillApp,
+    order: HTMLElement,
+    getPartyBills: Mock,
+  ): Promise<void> {
+    getPartyBills.mockResolvedValue([billOf({ status: "placed" })]);
+    dialog(el)!.dispatchEvent(new CustomEvent("bill-pay-close", { bubbles: true, composed: true }));
+    order.dispatchEvent(
+      new CustomEvent("pay-presented", {
+        detail: { workingOrderId: billOf().workingOrderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settled(el);
+  }
+
+  it("on the presented path, a press refused reader.not_held after a bill-path card whose first attempt got no answer and whose retry was refused reader.not_found never says nothing was charged", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const pay = vi.fn().mockRejectedValue(notHeld());
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValue({ code: "reader.not_found", params: { id: READER_ID }, status: 400 });
+    const { el, order, getDeviceEquipment } = await billOnConfirmation({
+      getPartyBills,
+      pay,
+      takeBillPayment,
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+    await settled(el);
+    expect(sent()).toHaveLength(2);
+    await presentAfterBill(el, order, getPartyBills);
+
+    await expectUnknownRefusal(el, getDeviceEquipment, () => pressTake(el));
+    expect(pay).toHaveBeenCalledOnce();
+  });
+
+  it("on the presented path, a press refused reader.not_held after a bill-path card answered timeout never says nothing was charged", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const pay = vi.fn().mockRejectedValue(notHeld());
+    const takeBillPayment = vi.fn().mockResolvedValue({
+      ...takenOf(
+        { method: "card", entry: "reader", applied: "120.00", state: "pending", change: null },
+        { reserved: "120.00", outstanding: "0.00" },
+      ),
+      outcome: "timeout",
+    });
+    const { el, order, getDeviceEquipment } = await billOnConfirmation({
+      getPartyBills,
+      pay,
+      takeBillPayment,
+    });
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+    await presentAfterBill(el, order, getPartyBills);
+
+    await expectUnknownRefusal(el, getDeviceEquipment, () => pressTake(el));
+    expect(pay).toHaveBeenCalledOnce();
+  });
+
+  it("on the bill path, a fresh Cobrar refused reader.not_held after every send of an earlier card was answered says nothing was charged", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 })
+      .mockRejectedValue(notHeld());
+    const { el, getDeviceEquipment } = await billOnConfirmation({ takeBillPayment });
+    await press(el, "[data-pay-confirm]");
+    await settled(el);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await settled(el);
+    expect(bottom(el)).toBe(t("bill_pay.not_checked"));
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    getDeviceEquipment.mockResolvedValue(takenByMarc);
+
+    await press(el, "[data-pay-confirm]");
+    const shown = await settled(el);
+
+    const ids = sent().map((request) => request.submissionId);
+    expect(ids).toHaveLength(3);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
     expect(shown.open).toBe(true);
     expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
   });

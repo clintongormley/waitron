@@ -16555,6 +16555,8 @@ export class TillApp extends LitElement {
       release();
     };
     let mayBeRecorded = keyed === previous;
+    let noAnswer = false;
+    const card = asked.pay.method === "card";
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
       try {
@@ -16565,20 +16567,18 @@ export class TillApp extends LitElement {
             () => session === this.#operatorSession,
             () => {
               mayBeRecorded = true;
+              noAnswer = true;
             },
           ),
         );
+        if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
         settle();
         await this.#onBillPaid(open, result, readerName);
       } catch (error) {
         const notChecked =
           mayBeRecorded &&
           READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
-        if (
-          asked.pay.method === "card" &&
-          (notChecked || unansweredAfter(submission, error)?.unconfirmed === true)
-        )
-          this.#unknownCardOutcome.add(key);
+        if (card && (noAnswer || previous?.unconfirmed === true)) this.#unknownCardOutcome.add(key);
         settle(error);
         await this.#onBillPayRefused(
           open.id,
