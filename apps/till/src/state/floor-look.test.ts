@@ -515,6 +515,18 @@ describe("mapLook", () => {
     });
   });
 
+  it("a merge's counter deliveries add up: each table counts only its own", () => {
+    const merged = [
+      table({ id: "a", ...free, state: "delivery-pending", pendingDeliveries: 2 }),
+      table({ id: "b", ...free, state: "delivery-pending", pendingDeliveries: 1 }),
+    ];
+    const words = `3 ${en["floor.pending_delivery"]}`;
+    expect(mapLook(merged, now)).toMatchObject({
+      cue: { icon: "floor-step", text: words },
+      description: words,
+    });
+  });
+
   it("a table with no state at all is plain", () => {
     expect(look([table({ ...free, state: "open-tab" })])).toEqual({
       fill: "plain",

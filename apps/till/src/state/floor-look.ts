@@ -110,13 +110,16 @@ function readyCount(table: TableState): number {
   return atStations > 0 ? atStations : table.enRoute;
 }
 
-// A merge's counts come from one member, never a sum: the floor read repeats a party's counts on
-// every table it sits at (`group by pt.table_id`, apps/server/src/working-order.ts:8283).
+// A merge's ready count comes from one member, never a sum: every table a party sits at carries its
+// signals (packages/shared/src/table-signals.ts:4-5) and its whole family's ready and on-the-way
+// counts (the `tab` subquery joins each table to the party's bills, working-order.ts:8267-8270).
 const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 
-const largestDelivery = (members: readonly TableState[]): number =>
-  Math.max(0, ...members.map((member) => member.pendingDeliveries));
+// Counter deliveries are counted per table (`group by delivery_table_id`, working-order.ts:8289), so
+// a merge's add up.
+const totalDeliveries = (members: readonly TableState[]): number =>
+  members.reduce((sum, member) => sum + member.pendingDeliveries, 0);
 
 /** The member whose held dishes fire soonest; one with no time counts as never. */
 function soonestHeld(members: readonly TableState[], now: number) {
@@ -146,8 +149,8 @@ function unavailableDishes(members: readonly TableState[]): string {
 
 /**
  * A kind's words, as the card says them; counts read from one member of a merge. `kind` must be one
- * of the members' own kinds (from `mapLook` or `mapKinds`): Held, Unavailable and Reserved read
- * dishes or a booking that only such a member has.
+ * of the members' own kinds (from `mapLook` or `mapKinds`) at the same `now`: Held, Unavailable and
+ * Reserved read dishes or a booking that only such a member has, and Held only until it is due.
  */
 export function kindWords(kind: MapKind, members: readonly TableState[], now: number): string {
   const fixed = FIXED_WORDS[kind];
@@ -158,7 +161,7 @@ export function kindWords(kind: MapKind, members: readonly TableState[], now: nu
     case "ready":
       return readyText(largestReady(members));
     case "delivery":
-      return `${largestDelivery(members)} ${t("floor.pending_delivery")}`;
+      return `${totalDeliveries(members)} ${t("floor.pending_delivery")}`;
     case "held": {
       const { member, dueAt } = soonestHeld(members, now);
       return heldChip(member.signals, dueAt, now)!.text;
