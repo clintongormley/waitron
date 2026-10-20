@@ -151,6 +151,31 @@ export async function readReasonItemShares(
   return { lines, billReduction };
 }
 
+/** A comp or discount of a whole line that split no row off it: its quantity, list value and
+ * reduction then, in thousandths and cents. */
+export type WholeLineReduction = {
+  lineId: string;
+  lineQuantity: number;
+  nominal: number;
+  reduction: number;
+};
+
+/** The comps and discounts of any reason on each of `lineIds` that covered the whole line and
+ * split no row off it. */
+export async function readWholeLineReductions(
+  tx: Transaction,
+  query: { workingOrderId: string; lineIds: readonly string[] },
+): Promise<WholeLineReduction[]> {
+  const { workingOrderId, lineIds } = query;
+  const found = await tx.execute<WholeLineReduction>(sql`
+    select line_id as lineId, line_quantity as lineQuantity, nominal_value as nominal, reduction
+    from adjustments
+    where working_order_id = ${workingOrderId}
+      and line_id in (select value from json_each(${JSON.stringify(lineIds)}))
+      and action <> 'cancel' and quantity = line_quantity and json_array_length(splits) = 0`);
+  return found.rows;
+}
+
 /** `ceil(reduction × 10000 ÷ nominal)` in exact integers; 0 where `nominal` is 0. */
 export function shareBp(reduction: number, nominal: number): number {
   if (nominal === 0) return 0;

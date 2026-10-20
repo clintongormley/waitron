@@ -10,6 +10,7 @@ import {
   readAdjustmentSettings,
   readReasonItemShares,
   readReasonTotals,
+  readWholeLineReductions,
   recordAdjustment,
   shareBp,
   spreadBillDiscount,
@@ -632,8 +633,9 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
  * its extras too, so an extra also counts its dish's share, and a dish the largest any of its extras
  * took on its own. What the reason's discounts on the whole bill took off each row is not recorded,
  * and the whole-cent spread can give one row more than its average, so each of the item's rows
- * counts their whole reduction, capped at what that row is now below its list value, and the item
- * the largest of those.
+ * counts their whole reduction, capped at what that row is now below its list value less what any
+ * reason's comps and discounts of that row alone took ({@link readWholeLineReductions}, at the
+ * row's present quantity and list value), and the item the largest of those.
  */
 async function judgeComp(
   tx: Transaction,
@@ -667,16 +669,24 @@ async function judgeComp(
     row.parentLineId === null
       ? rows.filter((other) => other.parentLineId === row.id)
       : [dishOf(row, rows)];
+  const lineIds = [
+    ...new Set(subjects.flatMap(({ row }) => [row, ...relatedOf(row)].map(({ id }) => id))),
+  ];
   const { lines: shares, billReduction } = await readReasonItemShares(tx, {
     workingOrderId: orderId,
     reasonId: reason.id,
-    lineIds: [
-      ...new Set(subjects.flatMap(({ row }) => [row, ...relatedOf(row)].map(({ id }) => id))),
-    ],
+    lineIds,
   });
+  const lineReductions = await readWholeLineReductions(tx, { workingOrderId: orderId, lineIds });
   const billShareOf = (row: Row) => {
     const list = decimalToCents(listValue(row, row.quantity));
-    const off = list - decimalToCents(gross(row, row.quantity));
+    const alone = lineReductions
+      .filter(
+        (taken) =>
+          taken.lineId === row.id && taken.lineQuantity === row.quantity && taken.nominal === list,
+      )
+      .reduce((sum, taken) => sum + taken.reduction, 0);
+    const off = list - decimalToCents(gross(row, row.quantity)) - alone;
     return shareBp(Math.min(billReduction, Math.max(0, off)), list);
   };
   const itemShareBp = Math.max(
