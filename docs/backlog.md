@@ -3898,9 +3898,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   by A796). A payment that got no answer, or is still being sent, now holds the bill on its locked
   confirmation (A773-1, #1897, and A796). What is left: a first send answered with a 5xx or an
   error with no code keeps its submission without holding the bill (`unansweredAfter`,
-  `apps/till/src/state/bill-payment.ts:185-194`), so if the server did record it, the next
-  identical payment on that bill from this phone reuses its id (`submissionFor`, same file, line
-  159) and the server replays the first (`beginBillPayment`, `apps/server/src/bill-payments.ts`):
+  `apps/till/src/state/bill-payment.ts`), so if the server did record it, the next
+  identical payment on that bill from this phone reuses its id (`submissionFor`, same
+  file) and the server replays the first (`beginBillPayment`, `apps/server/src/bill-payments.ts`):
   the second guest's payment is never recorded. A796's plan ran the scratch case (a contribution
   refused `server.internal` with status 502 left the dialog unlocked) and chose not to hold the
   bill, because a server that kept failing would hold it for good (plan, decision 1, B5).
@@ -3925,7 +3925,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **On a venue with no fiscal module, a handheld shows the ticket view after a presented bill is
   paid, not the paid screen** (known limit of A796; read, not run). The paid screen shows only for
-  an `F2` result (`apps/till/src/till-app.ts:16204`), and the presented path takes its invoice
+  an `F2` result (the `paid` check in `apps/till/src/till-app.ts`), and the presented path takes its invoice
   type from `readReceiptIssuer`, which returns none when the backend has no filed record
   (`apps/server/src/receipt-issuer.ts:8-9`).
 

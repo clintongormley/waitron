@@ -1533,8 +1533,8 @@ only once someone adds it to `#applyVenueSetup`.
 **The handheld's pay sheet.** Opening the sheet on a handheld reads the phone's equipment again,
 for an open bill and for a presented one; while the sheet shows a card payment of its own that the
 reader has not answered, it reads the bill again every 5 seconds (`PENDING_REREAD_MS`,
-`apps/till/src/till-app.ts`), never with a read still out, and stops once a read shows the card
-received or no longer lists it. Pinned by `apps/till/src/till-app-handheld-pay.test.ts`: the
+`apps/till/src/till-app.ts`), never with a read still out, and stops once a read shows the card no
+longer in progress, or no longer lists it. Pinned by `apps/till/src/till-app-handheld-pay.test.ts`: the
 open-time read under "till-app: paying a table from a handheld" and "a presented bill on a
 handheld", the 5-second read under "till-app: a card the reader has not answered, on a handheld".
 Neither read counts as activity for the idle logout: the till notes activity only from a

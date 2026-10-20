@@ -16316,7 +16316,7 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * One timed read. Passive: it never counts as activity. A failed read, or one unanswered at the
+   * One timed read. It never counts as activity for the till's logout. A failed read, or one unanswered at the
    * request limit, changes nothing and a later tick tries again; an answer older than the balance the dialog shows, or sent before the
    * bill's last send ended, is dropped. A tick is out until every outcome it found is shown. Each
    * watched payment no longer pending stops being watched once its outcome is shown; the reads
@@ -16737,8 +16737,8 @@ export class TillApp extends LitElement {
 
   /** A handheld's first send of a card refused `reader.not_held`: the server refuses that before it
    * records anything, so the reader field can say no card was charged, unless an earlier card on
-   * the bill has an unknown outcome. The row opens at once, and the equipment is read again, bounded
-   * and passively, for the reader the phone now has (design default 19). */
+   * the bill has an unknown outcome. The row opens at once, and the equipment is read again, bounded,
+   * for the reader the phone now has (design default 19). */
   async #onReaderNotHeld(
     sheet: "till-bill-pay-dialog" | "till-presented-pay-dialog",
     billId: string,

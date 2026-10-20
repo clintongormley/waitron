@@ -524,8 +524,7 @@ default 20).
   submission is kept, as A773-1 does, and the plan records the residual. A bill read sent after
   the send ended that shows the payment frees the bill and shows what the bill records, except a
   payment that settled the bill, whose ticket one press of Comprobar de nuevo shows; a read that
-  does not show the payment frees nothing. Picture 7, right, still draws the earlier lock and is
-  to be redrawn.
+  does not show the payment frees nothing.
 - **Changing the reader or printer while a card is at the reader**: not from the sheet, whose
   controls are disabled while the card is asked, as today's dialog's are (§2.2). An NFC tap is still
   picked up and the next payment uses the new reader; what the running card does was not checked
