@@ -8,6 +8,7 @@ import { expect, it } from "vitest";
 import {
   kitchenTimingDefaults,
   locations,
+  parties,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -272,6 +273,21 @@ async function setup() {
     };
     return body.items.find((x) => x.orderId === orderId)!.items;
   }
+  async function fireHeldDish() {
+    const [line] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, seated.tabId));
+    const [party] = await db
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, seated.partyId));
+    return request(`/api/parties/${seated.partyId}/groups/fire-line`, "POST", {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party!.revision,
+      lineId: line!.id,
+    });
+  }
   return {
     db,
     cfg,
@@ -289,6 +305,7 @@ async function setup() {
     samCookie,
     queue,
     snapshot,
+    fireHeldDish,
   };
 }
 
@@ -346,7 +363,7 @@ it("held deleted course fires with its original name and sequence", async () => 
     displayOrder: 7,
   });
   expect((await v.queue())[0]!.firedAt).toBeNull();
-  const fire = await v.request(`/api/orders/${v.tabId}/courses/${v.late.id}/fire`, "POST");
+  const fire = await v.fireHeldDish();
   expect(fire.status).toBe(200);
   expect((await v.queue())[0]!.firedAt).not.toBeNull();
   expect((await v.queue())[0]!.course).toEqual({
@@ -554,9 +571,7 @@ it("routed child extras inherit and release their dish's retained deleted course
     [station.id, v.late.id, 1000, null],
   ]);
   expect(rows[0]!.stationId).not.toBe(station.id);
-  expect((await v.request(`/api/orders/${v.tabId}/courses/${v.late.id}/fire`, "POST")).status).toBe(
-    200,
-  );
+  expect((await v.fireHeldDish()).status).toBe(200);
   const released = await v.db
     .select()
     .from(ticketItems)

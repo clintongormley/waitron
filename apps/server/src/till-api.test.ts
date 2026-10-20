@@ -1232,9 +1232,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
       // location never set it, so the column default `line` reaches the wire (per-line bump only).
       bumpMode: "line",
-      // The venue's KDS fire-control mode (KDS-2 §2c), read from the same location row — the seeded
-      // location never set it, so the column default `waiter` reaches the wire (the tab screen fires).
-      fireControl: "waiter",
       // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
@@ -1477,22 +1474,21 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till echoes a non-default fire_control from the location, proving it reads the column", async () => {
-    // The default `waiter` above would pass even if the route hardcoded it, so drive the location's
-    // `fire_control` to `kitchen` and prove the boot read reflects it — the same shape as the bump_mode
-    // echo above. Restored in `finally` so the shared location stays `waiter` for the order-independent
-    // default assertion above (CLAUDE.md §4).
-    await suite.db.execute(
-      sql`update locations set fire_control = 'kitchen' where id = ${cfg.locationId}`,
-    );
+  it("A773 waiter authority: GET /api/till omits fire control under every stored legacy mode", async () => {
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
 
-      const res = await app.request("/api/till");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body).toMatchObject({ fireControl: "kitchen" });
+      for (const mode of ["waiter", "kitchen", "expo"]) {
+        await suite.db.execute(
+          sql`update locations set fire_control = ${mode} where id = ${cfg.locationId}`,
+        );
+        const res = await app.request("/api/till");
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body).not.toHaveProperty("fireControl");
+        expect(body).toMatchObject({ bumpMode: "line" });
+      }
     } finally {
       await suite.db.execute(
         sql`update locations set fire_control = 'waiter' where id = ${cfg.locationId}`,

@@ -83,8 +83,7 @@ import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
-import { listPassMonitor, listPassScreen, markPassItems, passScopeOf } from "./pass-board.js";
-import { parsePassDoneBody } from "./pass-done-body.js";
+import { listPassMonitor, listPassScreen, passScopeOf } from "./pass-board.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -462,28 +461,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           return { orders, stations: screen.stations, zones: screen.zones };
         }),
       );
-    }),
-  );
-
-  app.post("/api/device/pass-screen/done", (c) =>
-    run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const cfg = requestCfg(deps.cfg, device);
-      const body = parsePassDoneBody(await readJsonBody(c));
-      const at = new Date();
-      await withTransaction(deps.db, async (tx) => {
-        const { screen, personId } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
-        await markPassItems(
-          tx,
-          cfg,
-          { deviceId: device.deviceId, personId },
-          passScopeOf(screen),
-          body.ticketItemIds,
-          body.done,
-          at,
-        );
-      });
-      return c.body(null, 204);
     }),
   );
 

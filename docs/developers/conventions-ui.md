@@ -466,15 +466,15 @@ the server checks each at the route, never trusting the till's copy:
   top of `apps/server/src/till-api.profile-zones.test.ts`. A new till route adds a row to each and a
   refusing case. Weaker than that sounds: both maps are comments, and nothing fails when a new
   route has no row.
-- **A kitchen display may only prepare, fire, move dishes and hand over.** A `kds` profile is a shared display
+- **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
   with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
   every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
   list names, and with nobody signed in a till route that needs a session answers
-  `session.required`. Payment and the drawer always need a named person. Its pass screen's Fire,
-  Ready and Away go through the device's own routes (`apps/server/src/device-levers.ts`), which
-  serve only a kitchen display, check the action each one takes (Fire `take-orders`, Ready
-  `prepare-orders`, Away `hand-over-orders`) and the order's zone against its pass screen, and a
-  Fire records the device as the one who fired. Its station screen's Move to station goes through
+  `session.required`. Payment and the drawer always need a named person. Its pass screen's course
+  and group Ready routes (`apps/server/src/device-levers.ts`) serve only a kitchen display, check
+  `prepare-orders` and the order's zone against its pass screen. The former device Fire and Away
+  routes are retired. Waiter group Fire uses the signed-in person's session.
+  Its station screen's Move to station goes through
   `POST /api/device/working-orders/:id/lines/move-station` (`apps/server/src/device-api.ts`), which
   serves only a kitchen display, checks `take-orders`, refuses a dish at a station its station
   screen does not work (`device.forbidden_station`), and records the device, and the signed-in
@@ -517,8 +517,8 @@ the server checks each at the route, never trusting the till's copy:
   to the profile gives it back to a device nobody has re-picked on since. Permanent station Delete
   refuses explicit effective KDS bindings, including off devices, and unfinished food. Removing
   the last station from a profile or device scope keeps its parent with an empty station list;
-  removing the whole screen kind records a different no-longer-available state. Done marks on a
-  pass screen belong to the device, with the signed-in person when there is one (`pass_item_marks`).
+  removing the whole screen kind records a different no-longer-available state. The former pass
+  Done/Undo route is retired; legacy `pass_item_marks` rows do not hide food from either board.
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks

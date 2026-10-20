@@ -263,14 +263,13 @@ async function req(path: string, init: RequestInit, cookie?: string): Promise<Re
 }
 
 it("lets a supervisor read Kitchen settings while refusing edits", async () => {
-  for (const path of ["/bump-mode", "/courses", "/fire-control"]) {
+  for (const path of ["/bump-mode", "/courses"]) {
     const response = await req(path, { method: "GET" }, supervisorCookie);
     expect(response.status, path).toBe(200);
   }
   for (const [path, method, body] of [
     ["/bump-mode", "PUT", { mode: "ticket" }],
     ["/courses", "POST", { name: unique("Denied") }],
-    ["/fire-control", "PUT", { mode: "expo" }],
   ] as const) {
     const response = await req(path, { method, body: JSON.stringify(body) }, supervisorCookie);
     expect(response.status, path).toBe(403);
@@ -2261,6 +2260,28 @@ describe("/management-api/stations (KDS-1 config)", () => {
 });
 
 describe("/management-api/courses + product course + fire-control (KDS-2 config)", () => {
+  it("A773 waiter authority: fire-control is retired without changing stored settings", async () => {
+    const before = await suite.db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, venue.locationId));
+    for (const cookie of [managerCookie, supervisorCookie, staffCookie, undefined]) {
+      const read = await req("/fire-control", { method: "GET" }, cookie);
+      expect(read.status).toBe(404);
+      for (const mode of ["waiter", "kitchen", "expo", "banana", null]) {
+        const write = await req(
+          "/fire-control",
+          { method: "PUT", body: JSON.stringify({ mode }) },
+          cookie,
+        );
+        expect(write.status).toBe(404);
+        expect(
+          await suite.db.select().from(locations).where(eq(locations.id, venue.locationId)),
+        ).toEqual(before);
+      }
+    }
+  });
+
   it("courses default to held, and create and update persist an explicit false", async () => {
     const id = await createCourse(unique("Held"));
     expect((await listCourses()).find((c) => c.id === id)).toMatchObject({ heldUntilFired: true });
@@ -2778,63 +2799,50 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     }
   });
 
-  it("GET /fire-control reads the venue setting (defaults 'waiter'); PUT sets it; a bad value → 400", async () => {
-    const initial = await req("/fire-control", { method: "GET" }, managerCookie);
-    expect(initial.status).toBe(200);
-    expect(await initial.json()).toEqual({ mode: "waiter" });
+  it.each(["waiter", "kitchen", "expo"])(
+    "retired fire-control routes leave the stored %s value and bump mode unchanged",
+    async (mode) => {
+      const [original] = await suite.db
+        .select()
+        .from(locations)
+        .where(eq(locations.id, venue.locationId));
+      try {
+        await suite.db
+          .update(locations)
+          .set({ fireControl: mode as "waiter" | "kitchen" | "expo" })
+          .where(eq(locations.id, venue.locationId));
+        const [before] = await suite.db
+          .select()
+          .from(locations)
+          .where(eq(locations.id, venue.locationId));
+        const initial = await req("/fire-control", { method: "GET" }, managerCookie);
+        expect(initial.status).toBe(404);
+        for (const next of ["waiter", "kitchen", "expo", "banana"]) {
+          const set = await req(
+            "/fire-control",
+            { method: "PUT", body: JSON.stringify({ mode: next }) },
+            managerCookie,
+          );
+          expect(set.status).toBe(404);
+          const [after] = await suite.db
+            .select()
+            .from(locations)
+            .where(eq(locations.id, venue.locationId));
+          expect(after).toEqual(before);
+        }
+        const bump = await req("/bump-mode", { method: "GET" }, managerCookie);
+        expect(bump.status).toBe(200);
+        expect(await bump.json()).toEqual({ mode: before!.bumpMode });
+      } finally {
+        await suite.db
+          .update(locations)
+          .set({ fireControl: original!.fireControl })
+          .where(eq(locations.id, venue.locationId));
+      }
+    },
+  );
 
-    const set = await req(
-      "/fire-control",
-      { method: "PUT", body: JSON.stringify({ mode: "kitchen" }) },
-      managerCookie,
-    );
-    expect(set.status).toBe(204);
-    const after = await req("/fire-control", { method: "GET" }, managerCookie);
-    expect(await after.json()).toEqual({ mode: "kitchen" });
-    const row = await suite.db.execute<{ fire_control: string }>(
-      sql`select fire_control from locations where id = ${venue.locationId}`,
-    );
-    expect(row.rows[0]!.fire_control).toBe("kitchen");
-    // Reset to the default so a later assertion on the shared venue is unaffected.
-    await req(
-      "/fire-control",
-      { method: "PUT", body: JSON.stringify({ mode: "waiter" }) },
-      managerCookie,
-    );
-
-    const bad = await req(
-      "/fire-control",
-      { method: "PUT", body: JSON.stringify({ mode: "banana" }) },
-      managerCookie,
-    );
-    expect(bad.status).toBe(400);
-    expect(await bad.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "mode" } },
-    });
-  });
-
-  it("PUT /fire-control accepts the KDS-3 'expo' mode and round-trips it", async () => {
-    const set = await req(
-      "/fire-control",
-      { method: "PUT", body: JSON.stringify({ mode: "expo" }) },
-      managerCookie,
-    );
-    expect(set.status).toBe(204);
-    const after = await req("/fire-control", { method: "GET" }, managerCookie);
-    expect(await after.json()).toEqual({ mode: "expo" });
-    const row = await suite.db.execute<{ fire_control: string }>(
-      sql`select fire_control from locations where id = ${venue.locationId}`,
-    );
-    expect(row.rows[0]!.fire_control).toBe("expo");
-    // Reset to the default so a later assertion on the shared venue is unaffected.
-    await req(
-      "/fire-control",
-      { method: "PUT", body: JSON.stringify({ mode: "waiter" }) },
-      managerCookie,
-    );
-  });
-
-  it("a STAFF session is refused on every course/product-course/fire-control route (403 authorization.not_permitted)", async () => {
+  it("a STAFF session is refused on every retained course/product-course route (403 authorization.not_permitted)", async () => {
     const someId = randomUUID();
     // A staff person can log in but holds no `venue.configure`.
     const cases = [
@@ -2856,12 +2864,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         { method: "PUT", body: JSON.stringify({ courseId: null }) },
         staffCookie,
       ),
-      req("/fire-control", { method: "GET" }, staffCookie),
-      req(
-        "/fire-control",
-        { method: "PUT", body: JSON.stringify({ mode: "waiter" }) },
-        staffCookie,
-      ),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(403);
@@ -2869,7 +2871,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     }
   });
 
-  it("no session → 401 management_session.required on every course/product-course/fire-control route", async () => {
+  it("no session → 401 management_session.required on every retained course/product-course route", async () => {
     const someId = randomUUID();
     const cases = [
       req("/courses", { method: "GET" }, undefined),
@@ -2890,8 +2892,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         { method: "PUT", body: JSON.stringify({ courseId: null }) },
         undefined,
       ),
-      req("/fire-control", { method: "GET" }, undefined),
-      req("/fire-control", { method: "PUT", body: JSON.stringify({ mode: "waiter" }) }, undefined),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);

@@ -94,9 +94,7 @@ import {
  * | POST /api/working-orders/:id/collect, tender cash / card  | take-cash / hand-keyed-card-payment | (cash code) / hand-keyed-card-payment |
  * | POST /api/working-orders/:id/payments, cash / manual card / reader | take-cash / hand-keyed-card-payment / integrated-card-payment | (cash code) / hand-keyed-card-payment / pay |
  * | POST /api/working-orders/:id/payments/:paymentId/refunds, by how the payment was taken | take-cash / hand-keyed-card-payment / integrated-card-payment | (cash code) / hand-keyed-card-payment / pay |
- * | POST /api/orders/:id/courses/:courseId/fire               | take-orders                | take-orders           |
  * | POST /api/orders/:id/courses/:courseId/ready              | prepare-orders             | prepare-orders        |
- * | POST /api/orders/:id/courses/:courseId/away               | hand-over-orders           | hand-over-orders      |
  * | POST /api/orders/:id/collect                              | hand-over-orders           | hand-over-orders      |
  * | POST /api/orders/:id/reprint (kitchen tickets)            | take-orders                | take-orders           |
  * | POST /api/ticket-items/:id/advance                        | prepare-orders             | prepare-orders        |
@@ -117,7 +115,7 @@ import {
  * | POST /api/parties/:id/groups, /groups/move, /groups/split-line, /groups/fire-line; PUT /groups/order | take-orders            | take-orders           |
  * | POST /api/parties/:id/groups/:gid/fire, /snooze, /unsnooze | take-orders               | take-orders           |
  * | POST /api/parties/:id/groups/:gid/ready                   | prepare-orders             | prepare-orders        |
- * | POST /api/parties/:id/groups/:gid/away, /served           | hand-over-orders           | hand-over-orders      |
+ * | POST /api/parties/:id/groups/:gid/served           | hand-over-orders           | hand-over-orders      |
  * | POST /api/parties/:id/served, /unserved                   | hand-over-orders           | hand-over-orders      |
  * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit, /split | take-orders        | take-orders           |
  * | POST /api/parties/:id/unpaid-departure                    | take-orders                | take-orders           |
@@ -127,12 +125,8 @@ import {
  * | GET, PUT /api/device/stations/:stationId/today            | prepare-orders             | prepare-orders        |
  * | POST /api/device/ticket-items/:id/advance (display)       | prepare-orders             | prepare-orders        |
  * | POST /api/device/kitchen-notices/:id/acknowledge (display)| prepare-orders             | prepare-orders        |
- * | POST /api/device/orders/:id/courses/:courseId/fire (display) | take-orders            | take-orders           |
  * | POST /api/device/orders/:id/courses/:courseId/ready (display) | prepare-orders        | prepare-orders        |
- * | POST /api/device/orders/:id/courses/:courseId/away (display) | hand-over-orders       | hand-over-orders      |
- * | POST /api/device/parties/:id/groups/:gid/fire (display)   | take-orders                | take-orders           |
  * | POST /api/device/parties/:id/groups/:gid/ready (display)  | prepare-orders             | prepare-orders        |
- * | POST /api/device/parties/:id/groups/:gid/away (display)   | hand-over-orders           | hand-over-orders      |
  * | POST /api/device/working-orders/:id/lines/move-station (display) | take-orders         | take-orders           |
  *
  * A management reprint (`POST /management-api/orders/:id/reprint`) checks `print-receipt` on the
@@ -151,10 +145,6 @@ import {
  *   `PUT /api/service-zones/:zoneId/period-extension` and
  *   `PUT /api/service-zones/:zoneId/zone-extension`: the venue's day, session reads and
  *   `venue_service.manage` or a permitted PIN for writes;
- * - the "done" marks: each is a record of what a pass has seen, not preparing or handing over.
- *   `/api/device/pass-screen/done` is the device's own mark, made on its pass screen: by a kitchen
- *   display on its cookie alone, and on any other device by the person signed in on it, which the
- *   route requires;
  * - the table's cleared mark, and `/api/sales/:id/receipt/handover` (a printed receipt
  *   handed over): none is an ordering, payment or drawer write;
  * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.
@@ -395,9 +385,7 @@ const ROUTES: readonly Row[] = [
     forbidden("pay"),
     billPayment("card", "reader"),
   ],
-  ordering("POST", `/api/orders/${id}/courses/${id}/fire`),
   preparing("POST", `/api/orders/${id}/courses/${id}/ready`),
-  handingOver("POST", `/api/orders/${id}/courses/${id}/away`),
   handingOver("POST", `/api/orders/${id}/collect`),
   ordering("POST", `/api/orders/${id}/reprint`),
   preparing("POST", `/api/ticket-items/${id}/advance`),
@@ -456,7 +444,6 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/groups/${id}/snooze`),
   ordering("POST", `/api/parties/${id}/groups/${id}/unsnooze`),
   preparing("POST", `/api/parties/${id}/groups/${id}/ready`),
-  handingOver("POST", `/api/parties/${id}/groups/${id}/away`),
   handingOver("POST", `/api/parties/${id}/groups/${id}/served`),
   handingOver("POST", `/api/parties/${id}/served`),
   handingOver("POST", `/api/parties/${id}/unserved`),
@@ -697,12 +684,8 @@ describe("a shared kitchen display", () => {
   });
 
   for (const [path, lacking] of [
-    [`/api/device/orders/${id}/courses/${id}/fire`, "take-orders"],
     [`/api/device/orders/${id}/courses/${id}/ready`, "prepare-orders"],
-    [`/api/device/orders/${id}/courses/${id}/away`, "hand-over-orders"],
-    [`/api/device/parties/${id}/groups/${id}/fire`, "take-orders"],
     [`/api/device/parties/${id}/groups/${id}/ready`, "prepare-orders"],
-    [`/api/device/parties/${id}/groups/${id}/away`, "hand-over-orders"],
     [`/api/device/working-orders/${id}/lines/move-station`, "take-orders"],
   ] as const) {
     it(`refuses the display's ${path.replaceAll(id, ":id")} without ${lacking}`, async () => {

@@ -1,8 +1,17 @@
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  kitchenTimingDefaults,
+  locations,
+  parties,
+  workingOrderLines,
+  workingOrders,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -322,8 +331,8 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     expect(items.get(FILETE)!.firedAt).toBeNull();
   });
 
-  it("a HELD item cannot advance (409 ticket.item_held); firing its course releases it, and it then advances", async () => {
-    const orderId = await placeOrder([SOPA, FILETE]);
+  it("a HELD item cannot advance (409 ticket.item_held); the waiter releasing its line releases it, and it then advances", async () => {
+    const orderId = await tabWithSopaAndFilete();
     const station = await cocinaId();
     const heldItemId = (await queueItemsByName(orderId, station)).get(FILETE)!.id;
 
@@ -338,13 +347,29 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
       error: { code: "ticket.item_held", params: { ticketItemId: heldItemId } },
     });
 
-    // Fire the held course → 200; the queue now shows the item fired.
-    const fire = await app.request(`/api/orders/${orderId}/courses/${priCourseId}/fire`, {
+    const [bill] = await suite.db
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, orderId));
+    const [party] = await suite.db
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, bill!.partyId!));
+    const [line] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, orderId), eq(workingOrderLines.lineNo, 2)));
+    const fire = await app.request(`/api/parties/${bill!.partyId}/groups/fire-line`, {
       method: "POST",
-      headers: { cookie },
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        expectedPartyRevision: party!.revision,
+        lineId: line!.id,
+      }),
     });
     expect(fire.status).toBe(200);
-    expect(await fire.text()).toBe("");
+    expect(await fire.json()).toMatchObject({ revision: party!.revision + 1 });
     expect((await queueItemsByName(orderId, station)).get(FILETE)!.firedAt).not.toBeNull();
 
     // Now the (fired) item advances.
@@ -357,7 +382,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     expect((await queueItemsByName(orderId, station)).get(FILETE)!.state).toBe("preparing");
   });
 
-  it("fire with an unknown or malformed course → 404 course.not_found; a malformed order → 404 working_order.not_found", async () => {
+  it("retired course Fire returns 404 for unknown or malformed targets", async () => {
     const orderId = await placeOrder([SOPA, FILETE]);
 
     const unknownCourse = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/fire`, {
@@ -365,33 +390,29 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
       headers: { cookie },
     });
     expect(unknownCourse.status).toBe(404);
-    expect(await unknownCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
+    expect(await unknownCourse.text()).toBe("404 Not Found");
 
     const malformedCourse = await app.request(`/api/orders/${orderId}/courses/not-a-uuid/fire`, {
       method: "POST",
       headers: { cookie },
     });
     expect(malformedCourse.status).toBe(404);
-    expect(await malformedCourse.json()).toMatchObject({
-      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
-    });
+    expect(await malformedCourse.text()).toBe("404 Not Found");
 
     const malformedOrder = await app.request(`/api/orders/not-a-uuid/courses/${priCourseId}/fire`, {
       method: "POST",
       headers: { cookie },
     });
     expect(malformedOrder.status).toBe(404);
-    expect(await malformedOrder.json()).toMatchObject({
-      error: { code: "working_order.not_found", params: { workingOrderId: "not-a-uuid" } },
-    });
+    expect(await malformedOrder.text()).toBe("404 Not Found");
   });
 
-  it("REJECTS the fire route with 401 session.required when no cookie is present", async () => {
+  it("retired course Fire returns 404 without a session", async () => {
     const res = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/fire`, {
       method: "POST",
     });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("404 Not Found");
   });
 });
 
@@ -665,7 +686,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(order.courses.find((c) => c.courseId === null)!.items[0]!.name).toBe(PAN);
   });
 
-  it("the ready route bumps a fired course to `ready` across stations; the away route then dispatches it", async () => {
+  it("the Ready route still bumps fired food, while retired Away leaves it ready", async () => {
     const orderId = await placeOrder([SOPA, FILETE]);
 
     // Entrantes auto-fired but its items are `queued`; the pass bumps the WHOLE course to ready.
@@ -677,37 +698,32 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(await ready.text()).toBe("");
     expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
 
-    // Dispatch the plated course to the floor → away_at stamped on its ready items.
     const away = await app.request(`/api/orders/${orderId}/courses/${entCourseId}/away`, {
       method: "POST",
       headers: { cookie },
     });
-    expect(away.status).toBe(200);
-    expect(await away.text()).toBe("");
-    // The order survives the read (its held Principales is not away), so the dispatched item is still visible.
-    expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.awayAt).not.toBeNull();
+    expect(away.status).toBe(404);
+    expect(await away.text()).toBe("404 Not Found");
+    expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.awayAt).toBeNull();
+    expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
   });
 
-  it("away → 404 course.not_found for an unknown/malformed course; ready no-ops (200) on an unknown course; a malformed order → 404 working_order.not_found", async () => {
+  it("retired Away returns 404; retained Ready keeps its target validation and unknown-course no-op", async () => {
     const orderId = await placeOrder([SOPA]);
 
-    // `away` existence-checks (markCourseAway → requireCourse): an unknown well-formed course → 404.
     const unknownAway = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/away`, {
       method: "POST",
       headers: { cookie },
     });
     expect(unknownAway.status).toBe(404);
-    expect(await unknownAway.json()).toMatchObject({ error: { code: "course.not_found" } });
+    expect(await unknownAway.text()).toBe("404 Not Found");
 
-    // A malformed course id is isUuid-screened to the SAME code on BOTH routes.
     const malformedAway = await app.request(`/api/orders/${orderId}/courses/not-a-uuid/away`, {
       method: "POST",
       headers: { cookie },
     });
     expect(malformedAway.status).toBe(404);
-    expect(await malformedAway.json()).toMatchObject({
-      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
-    });
+    expect(await malformedAway.text()).toBe("404 Not Found");
     const malformedReady = await app.request(`/api/orders/${orderId}/courses/not-a-uuid/ready`, {
       method: "POST",
       headers: { cookie },
@@ -725,18 +741,21 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     });
     expect(unknownReady.status).toBe(200);
 
-    // A malformed ORDER id on either route → 404 working_order.not_found.
-    const malformedOrder = await app.request(`/api/orders/not-a-uuid/courses/${entCourseId}/away`, {
-      method: "POST",
-      headers: { cookie },
-    });
+    // Ready still validates the order id.
+    const malformedOrder = await app.request(
+      `/api/orders/not-a-uuid/courses/${entCourseId}/ready`,
+      {
+        method: "POST",
+        headers: { cookie },
+      },
+    );
     expect(malformedOrder.status).toBe(404);
     expect(await malformedOrder.json()).toMatchObject({
       error: { code: "working_order.not_found", params: { workingOrderId: "not-a-uuid" } },
     });
   });
 
-  it("REJECTS the queue read + ready + away with 401 session.required when no cookie is present", async () => {
+  it("requires sign-in for the queue and Ready while Away is retired", async () => {
     const queue = await app.request("/api/expo/queue");
     expect(queue.status).toBe(401);
     expect(await queue.json()).toMatchObject({ error: { code: "session.required" } });
@@ -750,7 +769,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     const away = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/away`, {
       method: "POST",
     });
-    expect(away.status).toBe(401);
-    expect(await away.json()).toMatchObject({ error: { code: "session.required" } });
+    expect(away.status).toBe(404);
+    expect(await away.text()).toBe("404 Not Found");
   });
 });

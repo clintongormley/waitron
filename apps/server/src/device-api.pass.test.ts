@@ -109,6 +109,37 @@ async function burgerOrder(v: Awaited<ReturnType<typeof setupPartyVenue>>) {
 }
 
 describe("the pass screen's device routes", () => {
+  it("A773 waiter authority: Done and Undo cannot write marks or change kitchen work", async () => {
+    const f = await fixture();
+    const itemId = await burgerOrder(f.v);
+    await inTx(f.v, (tx) =>
+      tx.insert(passItemMarks).values({
+        deviceId: f.a.id,
+        ticketItemId: itemId,
+        doneAt: "2026-10-20T12:00:00.000Z",
+        doneByPersonId: null,
+      }),
+    );
+    const before = await inTx(f.v, async (tx) => ({
+      items: await tx.select().from(ticketItems),
+      marks: await tx.select().from(passItemMarks),
+    }));
+    for (const cookie of [f.a.cookie, f.b.cookie, ""]) {
+      for (const marked of [true, false]) {
+        const response = await done(f.app, cookie, { ticketItemIds: [itemId], done: marked });
+        expect(response.status).toBe(404);
+        expect(
+          await inTx(f.v, async (tx) => ({
+            items: await tx.select().from(ticketItems),
+            marks: await tx.select().from(passItemMarks),
+          })),
+        ).toEqual(before);
+        expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
+        expect(items(await read(f.app, f.b.cookie))).toEqual([itemId]);
+      }
+    }
+  });
+
   it("answers a device with no pass screen device.unauthorized, and a pass screen's read names its stations", async () => {
     const f = await fixture();
     const station = await f.device("Grill screen", f.kds, { stationId: f.grill });
@@ -118,8 +149,7 @@ describe("the pass screen's device routes", () => {
       expect(await refused.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     }
     const refusedDone = await done(f.app, station.cookie, { ticketItemIds: [f.a.id], done: true });
-    expect(refusedDone.status).toBe(401);
-    expect(await refusedDone.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    expect(refusedDone.status).toBe(404);
     const monitorOnPass = await f.app.request("/api/device/pass-monitor", {
       headers: { cookie: f.a.cookie },
     });
@@ -135,41 +165,40 @@ describe("the pass screen's device routes", () => {
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
   });
 
-  it("legacy marks record their device and person without hiding food from either board", async () => {
+  it("Done and Undo are retired on both devices and leave both boards visible", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
     const marked = await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true });
-    expect(marked.status).toBe(204);
+    expect(marked.status).toBe(404);
     expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
     expect(items(await read(f.app, f.b.cookie))).toEqual([itemId]);
     expect(
       await inTx(f.v, (tx) =>
         tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, itemId)),
       ),
-    ).toMatchObject([{ deviceId: f.a.id, doneByPersonId: null }]);
+    ).toEqual([]);
     expect((await done(f.app, f.b.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
-      204,
+      404,
     );
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: false })).status).toBe(
-      204,
+      404,
     );
     expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
     expect(items(await read(f.app, f.b.cookie))).toEqual([itemId]);
   });
 
-  it("on a till, needs a signed-in session to read or mark, and the mark records the person", async () => {
+  it("on a till, still needs a signed-in session to read while Done is retired for everyone", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
-    const till = await f.device("Caja", f.till, { kitchenScreen: EVERY_PASS });
+    const till = await f.device("Till", f.till, { kitchenScreen: EVERY_PASS });
     const anonymousRead = await f.app.request("/api/device/pass-screen", {
       headers: { cookie: till.cookie },
     });
     expect(anonymousRead.status).toBe(401);
     expect(await anonymousRead.json()).toMatchObject({ error: { code: "session.required" } });
     const anonymous = await done(f.app, till.cookie, { ticketItemIds: [itemId], done: true });
-    expect(anonymous.status).toBe(401);
-    expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
+    expect(anonymous.status).toBe(404);
     expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
 
     const [person] = await inTx(f.v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
@@ -178,16 +207,16 @@ describe("the pass screen's device routes", () => {
     );
     const signedIn = `${till.cookie}; ${SESSION_COOKIE}=${session.token}`;
     expect(items(await read(f.app, signedIn))).toEqual([itemId]);
-    expect((await done(f.app, signedIn, { ticketItemIds: [itemId], done: true })).status).toBe(204);
+    expect((await done(f.app, signedIn, { ticketItemIds: [itemId], done: true })).status).toBe(404);
     expect(
       await inTx(f.v, (tx) =>
         tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, till.id)),
       ),
-    ).toMatchObject([{ ticketItemId: itemId, doneByPersonId: person!.id }]);
+    ).toEqual([]);
     expect(items(await read(f.app, signedIn))).toEqual([itemId]);
   });
 
-  it("refuses Done on a dish outside the device's stations or zones, as its read leaves it out", async () => {
+  it("keeps station and zone read scope while Done is retired inside and outside that scope", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const grillOnly = await f.device("Pass Grill", f.kds, {
@@ -206,20 +235,18 @@ describe("the pass screen's device routes", () => {
           ticketItemIds: [itemId],
           done: marked,
         });
-        expect(refused.status).toBe(400);
-        expect(await refused.json()).toMatchObject({
-          error: { code: "management.request_invalid", params: { field: "ticketItemIds" } },
-        });
+        expect(refused.status).toBe(404);
       }
     }
     expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
     expect(items(await read(f.app, tablesOnly.cookie))).toEqual([itemId]);
     expect(
       (await done(f.app, tablesOnly.cookie, { ticketItemIds: [itemId], done: true })).status,
-    ).toBe(204);
+    ).toBe(404);
+    expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
   });
 
-  it("lists a counter sale's dish on a pass screen limited to the counter's zone, and accepts its Done", async () => {
+  it("lists a counter sale's dish on a pass screen limited to the counter's zone while Done stays retired", async () => {
     const f = await fixture();
     const tableItemId = await burgerOrder(f.v);
     const counterId = randomUUID();
@@ -251,12 +278,12 @@ describe("the pass screen's device routes", () => {
     expect(
       (await done(f.app, counterOnly.cookie, { ticketItemIds: [counterItem!.id], done: true }))
         .status,
-    ).toBe(204);
+    ).toBe(404);
     expect(
       await inTx(f.v, (tx) =>
         tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, counterOnly.id)),
       ),
-    ).toMatchObject([{ ticketItemId: counterItem!.id }]);
+    ).toEqual([]);
     expect(items(await read(f.app, counterOnly.cookie))).toEqual([counterItem!.id]);
     expect(items(await read(f.app, f.a.cookie)).sort()).toEqual(
       [tableItemId, counterItem!.id].sort(),
@@ -292,8 +319,7 @@ describe("the pass screen's device routes", () => {
       expect(await refused.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     }
     const refusedDone = await done(f.app, pass.cookie, { ticketItemIds: [itemId], done: true });
-    expect(refusedDone.status).toBe(401);
-    expect(await refusedDone.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    expect(refusedDone.status).toBe(404);
     expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
     const screens = await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, pass.id),
@@ -311,27 +337,21 @@ describe("the pass screen's device routes", () => {
     ]);
   });
 
-  it("refuses malformed Done, and foreign items atomically when Done also names a local item", async () => {
+  it("retires malformed Done and mixed local/foreign Done and Undo without writing marks", async () => {
     const f = await fixture();
     const local = await burgerOrder(f.v);
     const badDone = await done(f.app, f.a.cookie, { ticketItemIds: [local], done: "true" });
-    expect(badDone.status).toBe(400);
-    expect(await badDone.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "done" } },
-    });
+    expect(badDone.status).toBe(404);
     for (const ticketItemIds of [[], ["not-a-uuid"], Array(201).fill(local)]) {
       const response = await done(f.app, f.a.cookie, { ticketItemIds, done: true });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "ticketItemIds" } },
-      });
+      expect(response.status).toBe(404);
     }
     const [foreignLocation] = await suite.db
       .insert(locations)
       .values({
         name: "Other venue",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurante",
+        operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
     const foreignNode = await seedNode(suite.db, brandLocationId(foreignLocation!.id));
@@ -383,22 +403,19 @@ describe("the pass screen's device routes", () => {
       ticketItemIds: [local, foreignItem!.id],
       done: true,
     });
-    expect(mixed.status).toBe(400);
-    expect(await mixed.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "ticketItemIds" } },
-    });
+    expect(mixed.status).toBe(404);
     expect(await marks()).toEqual([]);
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [local], done: true })).status).toBe(
-      204,
+      404,
     );
     const mixedUndo = await done(f.app, f.a.cookie, {
       ticketItemIds: [local, foreignItem!.id],
       done: false,
     });
-    expect(mixedUndo.status).toBe(400);
-    expect(await marks()).toEqual([{ ticketItemId: local }]);
+    expect(mixedUndo.status).toBe(404);
+    expect(await marks()).toEqual([]);
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [local], done: false })).status).toBe(
-      204,
+      404,
     );
     expect(await marks()).toEqual([]);
   });
@@ -416,12 +433,11 @@ describe("the pass monitor's device route", () => {
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
     expect(board.zones).toBeNull();
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
-      204,
+      404,
     );
     expect(items(await read(f.app, monitor.cookie, "/api/device/pass-monitor"))).toEqual([itemId]);
     const monitorDone = await done(f.app, monitor.cookie, { ticketItemIds: [itemId], done: true });
-    expect(monitorDone.status).toBe(401);
-    expect(await monitorDone.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    expect(monitorDone.status).toBe(404);
     const passOnMonitor = await f.app.request("/api/device/pass-screen", {
       headers: { cookie: monitor.cookie },
     });
@@ -459,7 +475,7 @@ describe("a pass monitor on a till", () => {
     expect(board.zones?.map((zone) => zone.id)).toEqual([f.v.tables.zoneId]);
     expect(items(await read(f.app, counter.signedIn, "/api/device/pass-monitor"))).toEqual([]);
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
-      204,
+      404,
     );
     expect(items(await read(f.app, tables.signedIn, "/api/device/pass-monitor"))).toEqual([itemId]);
   });
@@ -508,23 +524,24 @@ describe("the till's watcher routes", () => {
     }
   });
 
-  it("refuses course and group Fire with only a pass screen's device cookie", async () => {
+  it("retires course Fire and still requires a session for waiter group Fire", async () => {
     const f = await tillApp();
     const seated = await seat(f.v, await f.v.table("Inside"));
     await orderForParty(f.v, seated.partyId, ["Burger"], seated.tabId);
     const before = await inTx(f.v, (tx) =>
       tx.select({ id: ticketItems.id, firedAt: ticketItems.firedAt }).from(ticketItems),
     );
-    for (const path of [
-      `/api/orders/${seated.tabId}/courses/${randomUUID()}/fire`,
-      `/api/parties/${seated.partyId}/groups/${randomUUID()}/fire`,
-    ]) {
+    for (const [path, status] of [
+      [`/api/orders/${seated.tabId}/courses/${randomUUID()}/fire`, 404],
+      [`/api/parties/${seated.partyId}/groups/${randomUUID()}/fire`, 401],
+    ] as const) {
       const response = await f.app.request(path, {
         method: "POST",
         headers: { cookie: f.a.cookie },
       });
-      expect(response.status).toBe(401);
-      expect(await response.json()).toMatchObject({ error: { code: "session.required" } });
+      expect(response.status).toBe(status);
+      if (status === 401)
+        expect(await response.json()).toMatchObject({ error: { code: "session.required" } });
     }
     expect(
       await inTx(f.v, (tx) =>

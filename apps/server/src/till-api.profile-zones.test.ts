@@ -117,7 +117,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
  * | POST /api/working-orders/:id/prep                       | order                  | refuses POST .../prep                                |
- * | POST /api/orders/:id/courses/:courseId/fire|ready|away  | order                  | refuses POST /api/orders/:id/courses/:courseId/<verb>|
+ * | POST /api/orders/:id/courses/:courseId/ready  | order                  | refuses POST /api/orders/:id/courses/:courseId/<verb>|
  * | GET  /api/orders/counter-waiting                        | list, by order zone    | "lists only the profile's zones, tables and orders"  |
  * | POST /api/orders/:id/collect                            | order                  | refuses POST /api/orders/:id/collect                 |
  * | POST /api/orders/:id/reprint                            | order                  | refuses POST /api/orders/:id/reprint                 |
@@ -160,7 +160,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/split-table                       | party                  | refuses POST /api/parties/:id/split-table            |
  * | GET  /api/parties/:id/bills|groups|current-orders|print-problems|drafts | party  | refuses GET /api/parties/:id/<read>                  |
  * | POST /api/parties/:id/groups                            | party                  | refuses POST /api/parties/:id/groups                 |
- * | POST /api/parties/:id/groups/:gid/fire|ready|away|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
+ * | POST /api/parties/:id/groups/:gid/fire|ready|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
  * | POST /api/parties/:id/served, /unserved                 | party                  | refuses POST /api/parties/:id/<served|unserved>      |
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
  * | POST /api/parties/:id/groups/move, /groups/split-line, /groups/fire-line | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
@@ -193,8 +193,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
  * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
- * | POST /api/device/orders/:id/courses/:courseId/fire|ready|away | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/courses/:courseId/<verb> |
- * | POST /api/device/parties/:id/groups/:gid/fire|ready|away | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
+ * | POST /api/device/orders/:id/courses/:courseId/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/courses/:courseId/<verb> |
+ * | POST /api/device/parties/:id/groups/:gid/ready | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
  *
  * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
  * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
@@ -220,7 +220,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
  * work, and moves nothing" in `apps/server/src/device-api.station-move.test.ts`);
  * `/api/device/stations`, which needs a station screen and lists every active station;
- * `/api/device/pass-screen`, its `/done` and
+ * `/api/device/pass-screen` and
  * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
@@ -641,7 +641,7 @@ const ROUTES: readonly Row[] = [
     () => ({}),
     deliOrderZone,
   ],
-  ...(["fire", "ready", "away"] as const).map((verb): Row => [
+  ...(["ready"] as const).map((verb): Row => [
     `POST /api/orders/:id/courses/:courseId/${verb}`,
     "POST",
     (x) => `/api/orders/${x.deliOrder}/courses/${id}/${verb}`,
@@ -985,7 +985,7 @@ const ROUTES: readonly Row[] = [
     }),
     deliTableZone,
   ],
-  ...(["fire", "ready", "away", "served", "snooze", "unsnooze"] as const).map((verb): Row => [
+  ...(["fire", "ready", "served", "snooze", "unsnooze"] as const).map((verb): Row => [
     `POST /api/parties/:id/groups/:gid/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups/${id}/${verb}`,
@@ -1376,7 +1376,7 @@ describe("a kitchen display's pass levers", () => {
     return `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   }
 
-  for (const verb of ["fire", "ready", "away"] as const) {
+  for (const verb of ["ready"] as const) {
     it(`refuses the display's POST /api/device/orders/:id/courses/:courseId/${verb}`, async () => {
       const answer = await send(
         await restaurantPass(),

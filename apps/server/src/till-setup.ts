@@ -37,7 +37,6 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
   const [loc] = await tx
     .select({
       bumpMode: locations.bumpMode,
-      fireControl: locations.fireControl,
     })
     .from(locations)
     .where(eq(locations.id, deps.cfg.locationId));
@@ -97,7 +96,6 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     venueName: taxpayer.legalName,
     nif: taxpayer.taxId,
     bumpMode: loc.bumpMode,
-    fireControl: loc.fireControl,
     courses,
     cardProvider: (simulator
       ? "simulator"

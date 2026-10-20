@@ -4,10 +4,10 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
-  devices,
   orderGroupEvents,
   orderGroups,
   products,
+  serviceCommands,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -165,30 +165,82 @@ async function itemsOf(orderId: string) {
     .where(eq(ticketItems.workingOrderId, orderId));
 }
 
-async function label(deviceId: string) {
-  const [row] = await suite.db
-    .select({ label: devices.label })
-    .from(devices)
-    .where(eq(devices.id, deviceId));
-  return row!.label;
-}
+describe("waiter cooking authority", () => {
+  it.each([
+    ["device course Fire", 0],
+    ["device course Away", 1],
+    ["device group Fire", 2],
+    ["device group Away", 3],
+    ["session course Fire", 4],
+    ["session course Away", 5],
+    ["session group Away", 6],
+  ] as const)(
+    "A773 waiter authority: retired %s cannot mutate held or ready food",
+    async (_name, pathIndex) => {
+      const f = await fixture();
+      const held = await f.heldBurger();
+      const cookie = await tillCookie(f);
+      const snapshot = async () => ({
+        groups: await suite.db.select().from(orderGroups),
+        events: await suite.db.select().from(orderGroupEvents),
+        commands: await suite.db.select().from(serviceCommands),
+        items: await suite.db.select().from(ticketItems),
+        lines: await suite.db.select().from(workingOrderLines),
+        orders: await suite.db.select().from(workingOrders),
+      });
+      for (const state of ["held", "ready"]) {
+        if (state === "ready") {
+          const fired = await send(
+            f.app,
+            cookie,
+            `/api/parties/${held.partyId}/groups/${held.groupId}/fire`,
+            {
+              submissionId: randomUUID(),
+              expectedPartyRevision: await revisionOf(f.v, held.partyId),
+            },
+          );
+          expect(fired.status).toBe(200);
+          const ready = await send(
+            f.app,
+            f.pass.cookie,
+            groupPath(held.partyId, held.groupId, "ready"),
+            {
+              submissionId: randomUUID(),
+              expectedPartyRevision: await revisionOf(f.v, held.partyId),
+            },
+          );
+          expect(ready.status).toBe(200);
+        }
+        const before = await snapshot();
+        for (const path of [
+          [
+            coursePath(held.tabId, f.mains, "fire"),
+            coursePath(held.tabId, f.mains, "away"),
+            groupPath(held.partyId, held.groupId, "fire"),
+            groupPath(held.partyId, held.groupId, "away"),
+            `/api/orders/${held.tabId}/courses/${f.mains}/fire`,
+            `/api/orders/${held.tabId}/courses/${f.mains}/away`,
+            `/api/parties/${held.partyId}/groups/${held.groupId}/away`,
+          ][pathIndex]!,
+        ]) {
+          for (const auth of [f.pass.cookie, cookie, ""]) {
+            const response = await f.app.request(path, {
+              method: "POST",
+              headers: { cookie: auth, "content-type": "application/json" },
+              body: JSON.stringify({
+                submissionId: randomUUID(),
+                expectedPartyRevision: await revisionOf(f.v, held.partyId),
+              }),
+            });
+            expect(response.status, `${state}: ${path}`).toBe(404);
+            expect(await snapshot()).toEqual(before);
+          }
+        }
+      }
+    },
+  );
 
-describe("a kitchen display's pass fires as the device", () => {
-  it("a device course refuses person-owned allergy input even when the order has no party", async () => {
-    const f = await fixture();
-    const orderId = await counterOrder(f.v, "Burger");
-    const before = await itemsOf(orderId);
-    const result = await send(f.app, f.pass.cookie, coursePath(orderId, f.mains, "fire"), {
-      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-    });
-    expect(result.status).toBe(400);
-    expect(result.body.error?.code).toBe("allergy.invalid");
-    expect(await itemsOf(orderId)).toEqual(before);
-    const allowed = await send(f.app, f.pass.cookie, coursePath(orderId, f.mains, "fire"));
-    expect(allowed.status).toBe(200);
-  });
-
-  it("device group preflight and release roll back every bill when the later dish is unavailable", async () => {
+  it("waiter group preflight and release roll back every bill when the later dish is unavailable", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
     await inTx(f.v, (tx) =>
@@ -211,10 +263,15 @@ describe("a kitchen display's pass fires as the device", () => {
       .where(eq(products.id, f.v.productId("Flan")));
     const before = [await itemsOf(held.tabId), await itemsOf(other)];
     const revision = await revisionOf(f.v, held.partyId);
-    const result = await send(f.app, f.pass.cookie, groupPath(held.partyId, held.groupId, "fire"), {
-      submissionId: randomUUID(),
-      expectedPartyRevision: revision,
-    });
+    const result = await send(
+      f.app,
+      await tillCookie(f),
+      `/api/parties/${held.partyId}/groups/${held.groupId}/fire`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+      },
+    );
     expect(result.status).toBe(409);
     expect(result.body.error?.code).toBe("product.unavailable");
     expect([await itemsOf(held.tabId), await itemsOf(other)]).toEqual(before);
@@ -222,14 +279,7 @@ describe("a kitchen display's pass fires as the device", () => {
     expect(await firedEvent(held.groupId)).toBeUndefined();
     expect(await revisionOf(f.v, held.partyId)).toBe(revision);
   });
-  for (const path of [
-    "course",
-    "group",
-    "line",
-    "held-line",
-    "device-course",
-    "device-group",
-  ] as const) {
+  for (const path of ["group", "line", "held-line"] as const) {
     it(`${path} rechecks current profile authority after reading a queued Fire body`, async () => {
       const f = await fixture();
       const held = await f.heldBurger();
@@ -242,13 +292,9 @@ describe("a kitchen display's pass fires as the device", () => {
           .update(workingOrderLines)
           .set({ groupId: null })
           .where(eq(workingOrderLines.id, line!.id));
-      const profile = path.startsWith("device")
-        ? f.runner
-        : await f.profile("till", ["take-orders"]);
-      const till = path.startsWith("device")
-        ? f.pass
-        : await f.device("Queued allergy till", profile, {});
-      const cookie = path.startsWith("device") ? till.cookie : await f.signIn(till.cookie);
+      const profile = await f.profile("till", ["take-orders"]);
+      const till = await f.device("Queued allergy till", profile, {});
+      const cookie = await f.signIn(till.cookie);
       const revision = await revisionOf(f.v, held.partyId);
       const body = {
         submissionId: randomUUID(),
@@ -258,17 +304,11 @@ describe("a kitchen display's pass fires as the device", () => {
         lineNos: [line!.lineNo],
       };
       const url =
-        path === "device-course"
-          ? coursePath(held.tabId, f.mains, "fire")
-          : path === "device-group"
-            ? groupPath(held.partyId, held.groupId, "fire")
-            : path === "course"
-              ? `/api/orders/${held.tabId}/courses/${f.mains}/fire`
-              : path === "group"
-                ? `/api/parties/${held.partyId}/groups/${held.groupId}/fire`
-                : path === "held-line"
-                  ? `/api/parties/${held.partyId}/groups/fire-line`
-                  : `/api/working-orders/${held.tabId}/lines/send`;
+        path === "group"
+          ? `/api/parties/${held.partyId}/groups/${held.groupId}/fire`
+          : path === "held-line"
+            ? `/api/parties/${held.partyId}/groups/fire-line`
+            : `/api/working-orders/${held.tabId}/lines/send`;
       let unblock!: () => void;
       let notifyRead!: () => void;
       const blocked = new Promise<void>((resolve) => {
@@ -302,85 +342,7 @@ describe("a kitchen display's pass fires as the device", () => {
       expect(await revisionOf(f.v, held.partyId)).toBe(revision);
     });
   }
-  it("device course commands reject stale revisions before any release", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    const revision = await revisionOf(f.v, held.partyId);
-    const result = await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), {
-      submissionId: randomUUID(),
-      expectedPartyRevision: revision + 1,
-    });
-    expect(result.status).toBe(409);
-    expect(result.body.error?.code).toBe("party.out_of_date");
-    expect((await groupRow(held.groupId)).state).toBe("held");
-    expect(await revisionOf(f.v, held.partyId)).toBe(revision);
-  });
-  it("device course command replay retains its target and advances the party once", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    const body = {
-      submissionId: randomUUID(),
-      expectedPartyRevision: await revisionOf(f.v, held.partyId),
-    };
-    expect(
-      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), body)).status,
-    ).toBe(200);
-    expect(
-      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), body)).status,
-    ).toBe(200);
-    expect(await revisionOf(f.v, held.partyId)).toBe(body.expectedPartyRevision + 1);
-    const other = await inTx(f.v, (tx) =>
-      createCourse(tx, f.v.cfg, { name: "Another course", displayOrder: 2 }),
-    );
-    const reused = await send(f.app, f.pass.cookie, coursePath(held.tabId, other.id, "fire"), body);
-    expect(reused.status).toBe(409);
-    expect(reused.body.error?.code).toBe("submission.id_reused");
-  });
-  for (const path of ["course", "group"] as const) {
-    it(`refuses an unanswered device ${path} without firing or recording an actor`, async () => {
-      const f = await fixture();
-      const held = await f.heldBurger();
-      await suite.db.run(sql`delete from party_allergy where party_id = ${held.partyId}`);
-      const before = await itemsOf(held.tabId);
-      const revision = await revisionOf(f.v, held.partyId);
-      const result = await send(
-        f.app,
-        f.pass.cookie,
-        path === "course"
-          ? coursePath(held.tabId, f.mains, "fire")
-          : groupPath(held.partyId, held.groupId, "fire"),
-        { submissionId: randomUUID(), expectedPartyRevision: revision },
-      );
-      expect(result.status).toBe(409);
-      expect(result.body.error?.code).toBe("allergy.unanswered");
-      expect(await itemsOf(held.tabId)).toEqual(before);
-      expect(await revisionOf(f.v, held.partyId)).toBe(revision);
-      expect(await firedEvent(held.groupId)).toBeUndefined();
-    });
-    it(`a device ${path} cannot save a person-owned allergy answer`, async () => {
-      const f = await fixture();
-      const held = await f.heldBurger();
-      const result = await send(
-        f.app,
-        f.pass.cookie,
-        path === "course"
-          ? coursePath(held.tabId, f.mains, "fire")
-          : groupPath(held.partyId, held.groupId, "fire"),
-        {
-          submissionId: randomUUID(),
-          expectedPartyRevision: await revisionOf(f.v, held.partyId),
-          allergy: { party: { answer: "allergies", guests: [] }, ticks: [] },
-        },
-      );
-      expect(result.status).toBe(400);
-      expect(result.body.error?.code).toBe("allergy.invalid");
-      expect(
-        (await inTx(f.v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, held.partyId))).answer,
-      ).toBe("none");
-      expect((await groupRow(held.groupId)).state).toBe("held");
-    });
-  }
-  for (const path of ["course", "group", "line", "held-line"] as const) {
+  for (const path of ["group", "line", "held-line"] as const) {
     it(`signed-in ${path} saves its first allergy answer with Fire and replays exactly`, async () => {
       const f = await fixture();
       const held = await f.heldBurger();
@@ -412,13 +374,11 @@ describe("a kitchen display's pass fires as the device", () => {
         },
       };
       const url =
-        path === "course"
-          ? `/api/orders/${held.tabId}/courses/${f.mains}/fire`
-          : path === "group"
-            ? `/api/parties/${held.partyId}/groups/${held.groupId}/fire`
-            : path === "held-line"
-              ? `/api/parties/${held.partyId}/groups/fire-line`
-              : `/api/working-orders/${held.tabId}/lines/send`;
+        path === "group"
+          ? `/api/parties/${held.partyId}/groups/${held.groupId}/fire`
+          : path === "held-line"
+            ? `/api/parties/${held.partyId}/groups/fire-line`
+            : `/api/working-orders/${held.tabId}/lines/send`;
       const fired = await send(f.app, cookie, url, body);
       expect(fired.status).toBe(200);
       const snapshot = await inTx(f.v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, held.partyId));
@@ -431,365 +391,219 @@ describe("a kitchen display's pass fires as the device", () => {
       expect(await revisionOf(f.v, held.partyId)).toBe(body.expectedPartyRevision + 1);
     });
   }
-  it("fires a course, recording the device on its group and its event, and shows the device as the sender", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    const fired = await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"));
-    expect(fired.status).toBe(200);
-    expect(await groupRow(held.groupId)).toMatchObject({
-      state: "fired",
-      firedBy: null,
-      firedByDeviceId: f.pass.id,
-    });
-    expect(await firedEvent(held.groupId)).toMatchObject({
-      actorId: null,
-      actorDeviceId: f.pass.id,
-    });
-    expect((await itemsOf(held.tabId)).every((item) => item.firedAt !== null)).toBe(true);
-    const current = await f.app.request(`/api/parties/${held.partyId}/current-orders`, {
-      headers: { cookie: await tillCookie(f) },
-    });
-    expect(current.status).toBe(200);
-    const read = (await current.json()) as { groups: { id: string; sentBy: string | null }[] };
-    expect(read.groups.find((group) => group.id === held.groupId)?.sentBy).toBe(
-      await label(f.pass.id),
-    );
-  });
+});
 
-  it("fires a group with the session route's body, recording the device", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    const fired = await send(f.app, f.pass.cookie, groupPath(held.partyId, held.groupId, "fire"), {
+async function fireAsWaiter(
+  f: Awaited<ReturnType<typeof fixture>>,
+  held: { partyId: string; groupId: string },
+) {
+  const answer = await send(
+    f.app,
+    await tillCookie(f),
+    `/api/parties/${held.partyId}/groups/${held.groupId}/fire`,
+    {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(f.v, held.partyId),
-    });
-    expect(fired.status).toBe(200);
-    expect(fired.body).toEqual({ revision: await revisionOf(f.v, held.partyId) });
-    expect(await groupRow(held.groupId)).toMatchObject({
-      state: "fired",
-      firedBy: null,
-      firedByDeviceId: f.pass.id,
-    });
-    expect(await firedEvent(held.groupId)).toMatchObject({
-      actorId: null,
-      actorDeviceId: f.pass.id,
-    });
-  });
+    },
+  );
+  expect(answer.status).toBe(200);
+}
 
-  it("moves a course's dishes to ready and away, as the session routes do", async () => {
+const readyPaths = (
+  held: { tabId: string; partyId: string; groupId: string },
+  courseId: string,
+) => [coursePath(held.tabId, courseId, "ready"), groupPath(held.partyId, held.groupId, "ready")];
+
+describe("a kitchen display's retained Ready actions", () => {
+  it("readies an actually released course while leaving a held course unchanged", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    expect((await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"))).status).toBe(
-      200,
-    );
+    const before = await itemsOf(held.tabId);
+    expect(
+      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "ready"))).status,
+    ).toBe(200);
+    expect(await itemsOf(held.tabId)).toEqual(before);
+    await fireAsWaiter(f, held);
     expect(
       (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "ready"))).status,
     ).toBe(200);
     expect(await itemsOf(held.tabId)).toEqual([
-      expect.objectContaining({ state: "ready", awayAt: null }),
-    ]);
-    expect((await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "away"))).status).toBe(
-      200,
-    );
-    expect(await itemsOf(held.tabId)).toEqual([
-      expect.objectContaining({ state: "ready", awayAt: expect.any(String) }),
+      expect.objectContaining({ state: "ready", firedAt: expect.any(String), awayAt: null }),
     ]);
   });
 
-  it("fires, readies and sends away a counter order's course from a pass limited to the counter's zone", async () => {
+  it("readies the counter's released course on a pass limited to the counter zone", async () => {
     const f = await fixture();
-    const counterPass = await f.device("Pase barra", f.runner, {
+    const display = await f.device("Counter pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
     });
-    const counter = await counterOrder(f.v, "Caña", "Burger");
+    const counter = await counterOrder(f.v, "Burger");
     const placed = await f.app.request(`/api/working-orders/${counter}/place`, {
       method: "POST",
       headers: { cookie: await tillCookie(f) },
     });
     expect(placed.status).toBe(200);
-    const statuses = [];
-    for (const verb of ["fire", "ready", "away"]) {
-      const answer = await send(f.app, counterPass.cookie, coursePath(counter, f.mains, verb));
-      statuses.push({ verb, status: answer.status, error: answer.body.error });
-    }
-    expect(statuses).toEqual([
-      { verb: "fire", status: 200, error: undefined },
-      { verb: "ready", status: 200, error: undefined },
-      { verb: "away", status: 200, error: undefined },
-    ]);
     expect((await itemsOf(counter)).every((item) => item.firedAt !== null)).toBe(true);
-    expect(await itemsOf(counter)).toContainEqual(
-      expect.objectContaining({ state: "ready", awayAt: expect.any(String) }),
+    expect((await send(f.app, display.cookie, coursePath(counter, f.mains, "ready"))).status).toBe(
+      200,
     );
+    expect(await itemsOf(counter)).toEqual([
+      expect.objectContaining({ state: "ready", firedAt: expect.any(String), awayAt: null }),
+    ]);
   });
 
-  it("moves a group's dishes to ready and away, replays a retried Ready, and refuses its id from another device", async () => {
+  it("readies a group, replays the same command and refuses another device's reuse", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    const command = async () => ({
+    await fireAsWaiter(f, held);
+    const body = {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(f.v, held.partyId),
-    });
-    expect(
-      (
-        await send(
-          f.app,
-          f.pass.cookie,
-          groupPath(held.partyId, held.groupId, "fire"),
-          await command(),
-        )
-      ).status,
-    ).toBe(200);
-    const ready = await command();
-    const first = await send(
-      f.app,
-      f.pass.cookie,
-      groupPath(held.partyId, held.groupId, "ready"),
-      ready,
-    );
+    };
+    const path = groupPath(held.partyId, held.groupId, "ready");
+    const first = await send(f.app, f.pass.cookie, path, body);
     expect(first.status).toBe(200);
-    expect(await itemsOf(held.tabId)).toEqual([expect.objectContaining({ state: "ready" })]);
+    expect(await itemsOf(held.tabId)).toEqual([
+      expect.objectContaining({ state: "ready", awayAt: null }),
+    ]);
     const revision = await revisionOf(f.v, held.partyId);
-    const retried = await send(
-      f.app,
-      f.pass.cookie,
-      groupPath(held.partyId, held.groupId, "ready"),
-      ready,
-    );
-    expect(retried).toEqual(first);
+    expect(await send(f.app, f.pass.cookie, path, body)).toEqual(first);
     expect(await revisionOf(f.v, held.partyId)).toBe(revision);
-    const other = await f.device("Pase 2", f.runner, { kitchenScreen: EVERY_PASS });
-    const reused = await send(
-      f.app,
-      other.cookie,
-      groupPath(held.partyId, held.groupId, "ready"),
-      ready,
-    );
+    const other = await f.device("Other pass", f.runner, { kitchenScreen: EVERY_PASS });
+    const reused = await send(f.app, other.cookie, path, body);
     expect({ status: reused.status, code: reused.body.error?.code }).toEqual({
       status: 409,
       code: "submission.id_reused",
     });
-    expect(
-      (
-        await send(
-          f.app,
-          f.pass.cookie,
-          groupPath(held.partyId, held.groupId, "away"),
-          await command(),
-        )
-      ).status,
-    ).toBe(200);
-    expect(await itemsOf(held.tabId)).toEqual([
-      expect.objectContaining({ state: "ready", awayAt: expect.any(String) }),
-    ]);
+    expect(await revisionOf(f.v, held.partyId)).toBe(revision);
   });
-});
 
-describe("what a kitchen display's lever refuses", () => {
-  it("refuses each lever without its profile action", async () => {
+  it("requires prepare-orders for both Ready routes", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    for (const [verb, action] of [
-      ["fire", "take-orders"],
-      ["ready", "prepare-orders"],
-      ["away", "hand-over-orders"],
-    ] as const) {
-      const lacking = await f.profile(
-        "kds",
-        RUNS_THE_PASS.filter((flag) => flag !== action),
-      );
-      const display = await f.device(`Pase ${verb}`, lacking, { kitchenScreen: EVERY_PASS });
-      for (const path of [
-        coursePath(held.tabId, f.mains, verb),
-        groupPath(held.partyId, held.groupId, verb),
-      ]) {
+    const display = await f.device(
+      "No preparation",
+      await f.profile("kds", ["take-orders", "hand-over-orders"]),
+      { kitchenScreen: EVERY_PASS },
+    );
+    const before = await itemsOf(held.tabId);
+    for (const path of readyPaths(held, f.mains)) {
+      const answer = await send(f.app, display.cookie, path, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(f.v, held.partyId),
+      });
+      expect({ status: answer.status, error: answer.body.error }).toEqual({
+        status: 403,
+        error: { code: "device.forbidden_action", params: { action: "prepare-orders" } },
+      });
+    }
+    expect(await itemsOf(held.tabId)).toEqual(before);
+  });
+
+  it("refuses a till cookie on both device Ready routes, with or without a session", async () => {
+    const f = await fixture();
+    const held = await f.heldBurger();
+    const till = await f.device("Till", await f.profile("till", RUNS_THE_PASS), {
+      kitchenScreen: EVERY_PASS,
+    });
+    for (const cookie of [till.cookie, await f.signIn(till.cookie)]) {
+      for (const path of readyPaths(held, f.mains)) {
+        const answer = await send(f.app, cookie, path, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await revisionOf(f.v, held.partyId),
+        });
+        expect({ status: answer.status, code: answer.body.error?.code }).toEqual({
+          status: 401,
+          code: "device.unauthorized",
+        });
+      }
+    }
+    expect((await groupRow(held.groupId)).state).toBe("held");
+  });
+
+  it("requires an effective pass screen for Ready, excluding station and monitor screens", async () => {
+    const f = await fixture();
+    const held = await f.heldBurger();
+    const grill = await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Grill" }));
+    for (const choice of [
+      { stationId: grill.id },
+      { kitchenScreen: { kind: "pass_monitor" as const, stationIds: null, zoneIds: null } },
+    ]) {
+      const display = await f.device(`Other screen ${randomUUID()}`, f.runner, choice);
+      for (const path of readyPaths(held, f.mains)) {
         const answer = await send(f.app, display.cookie, path, {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(f.v, held.partyId),
         });
-        expect({ path, status: answer.status, error: answer.body.error }).toEqual({
-          path,
-          status: 403,
-          error: { code: "device.forbidden_action", params: { action } },
+        expect({ status: answer.status, error: answer.body.error }).toEqual({
+          status: 400,
+          error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
         });
       }
     }
     expect((await groupRow(held.groupId)).state).toBe("held");
   });
 
-  it("refuses a till's cookie on every lever, even with a pass screen and a session", async () => {
+  it("refuses both Ready routes outside the pass's zones", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    const till = await f.device("Caja", await f.profile("till", RUNS_THE_PASS), {
-      kitchenScreen: EVERY_PASS,
-    });
-    const signedIn = await f.signIn(till.cookie);
-    for (const verb of ["fire", "ready", "away"]) {
-      for (const path of [
-        coursePath(held.tabId, f.mains, verb),
-        groupPath(held.partyId, held.groupId, verb),
-      ]) {
-        for (const cookie of [till.cookie, signedIn]) {
-          const answer = await send(f.app, cookie, path, {
-            submissionId: randomUUID(),
-            expectedPartyRevision: await revisionOf(f.v, held.partyId),
-          });
-          expect({ path, status: answer.status, code: answer.body.error?.code }).toEqual({
-            path,
-            status: 401,
-            code: "device.unauthorized",
-          });
-        }
-      }
-    }
-    expect((await groupRow(held.groupId)).state).toBe("held");
-  });
-
-  it("refuses a kitchen display running a station screen with 400 on Fire, Ready and Away", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    const grill = await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Grill" }));
-    const station = await f.device("Grill screen", f.runner, { stationId: grill.id });
-    for (const path of (["fire", "ready", "away"] as const).flatMap((verb) => [
-      coursePath(held.tabId, f.mains, verb),
-      groupPath(held.partyId, held.groupId, verb),
-    ])) {
-      const answer = await send(f.app, station.cookie, path, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: await revisionOf(f.v, held.partyId),
-      });
-      expect({ path, status: answer.status, error: answer.body.error }).toEqual({
-        path,
-        status: 400,
-        error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
-      });
-    }
-    expect((await groupRow(held.groupId)).state).toBe("held");
-  });
-
-  it("refuses an order or a party in a zone outside the pass's zones", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    const counterPass = await f.device("Pase barra", f.runner, {
+    const display = await f.device("Counter pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
     });
-    for (const path of [
-      coursePath(held.tabId, f.mains, "fire"),
-      groupPath(held.partyId, held.groupId, "fire"),
-      coursePath(held.tabId, f.mains, "ready"),
-      groupPath(held.partyId, held.groupId, "away"),
-    ]) {
-      const answer = await send(f.app, counterPass.cookie, path, {
+    for (const path of readyPaths(held, f.mains)) {
+      const answer = await send(f.app, display.cookie, path, {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(f.v, held.partyId),
       });
-      expect({ path, status: answer.status, error: answer.body.error }).toEqual({
-        path,
+      expect({ status: answer.status, error: answer.body.error }).toEqual({
         status: 403,
-        error: {
-          code: "kitchen_screen.zone_not_allowed",
-          params: { zoneId: f.v.tables.zoneId },
-        },
+        error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: f.v.tables.zoneId } },
       });
     }
     expect((await groupRow(held.groupId)).state).toBe("held");
-
-    const tablesPass = await f.device("Pase sala", f.runner, {
-      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.tables.zoneId] },
-    });
-    const counter = await counterOrder(f.v, "Burger");
-    const refused = await send(f.app, tablesPass.cookie, coursePath(counter, f.mains, "fire"));
-    expect({ status: refused.status, error: refused.body.error }).toEqual({
-      status: 403,
-      error: {
-        code: "kitchen_screen.zone_not_allowed",
-        params: { zoneId: f.v.counter.zoneId },
-      },
-    });
-    expect(
-      (await send(f.app, tablesPass.cookie, coursePath(held.tabId, f.mains, "fire"))).status,
-    ).toBe(200);
   });
 
-  it("refuses an order in no zone on an explicit zone list, and an every-zone pass serves it and a counter order", async () => {
+  it("requires every-zone scope for an order with no zone", async () => {
     const f = await fixture();
-    const [zoneless] = await suite.db
+    const [order] = await suite.db
       .insert(workingOrders)
       .values({
         source: "dashboard",
         deviceId: null,
         locationId: f.v.cfg.locationId,
         nodeId: f.v.cfg.nodeId,
-        orderNumber: 999_001,
+        orderNumber: 999001,
         status: "open",
       })
       .returning({ id: workingOrders.id });
-    const tablesPass = await f.device("Pase sala", f.runner, {
+    const display = await f.device("Table pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.tables.zoneId] },
     });
-    const refused = await send(
-      f.app,
-      tablesPass.cookie,
-      coursePath(zoneless!.id, f.mains, "ready"),
-    );
+    const path = coursePath(order!.id, f.mains, "ready");
+    const refused = await send(f.app, display.cookie, path);
     expect({ status: refused.status, error: refused.body.error }).toEqual({
       status: 403,
       error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: null } },
     });
-    expect(
-      (await send(f.app, f.pass.cookie, coursePath(zoneless!.id, f.mains, "ready"))).status,
-    ).toBe(200);
-
-    const counter = await counterOrder(f.v, "Caña", "Burger");
-    const placed = await f.app.request(`/api/working-orders/${counter}/place`, {
-      method: "POST",
-      headers: { cookie: await tillCookie(f) },
-    });
-    expect(placed.status).toBe(200);
-    expect((await itemsOf(counter)).filter((item) => item.firedAt === null)).toHaveLength(1);
-    expect((await send(f.app, f.pass.cookie, coursePath(counter, f.mains, "fire"))).status).toBe(
-      200,
-    );
-    expect((await itemsOf(counter)).every((item) => item.firedAt !== null)).toBe(true);
+    expect((await send(f.app, f.pass.cookie, path)).status).toBe(200);
   });
 
-  it("answers an unknown order or party as the session routes do", async () => {
+  it("keeps Ready's missing-id, malformed-id and command checks", async () => {
     const f = await fixture();
-    const unknownOrder = await send(
-      f.app,
-      f.pass.cookie,
-      coursePath(randomUUID(), f.mains, "fire"),
-    );
-    expect({ status: unknownOrder.status, code: unknownOrder.body.error?.code }).toEqual({
-      status: 404,
-      code: "working_order.not_found",
-    });
-    const unknownParty = await send(
-      f.app,
-      f.pass.cookie,
-      groupPath(randomUUID(), randomUUID(), "fire"),
-      {
-        submissionId: randomUUID(),
-        expectedPartyRevision: 0,
-      },
-    );
-    expect({ status: unknownParty.status, code: unknownParty.body.error?.code }).toEqual({
-      status: 409,
-      code: "party.not_open",
-    });
     const held = await f.heldBurger();
-    const command = { submissionId: randomUUID(), expectedPartyRevision: 0 };
+    const command = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(f.v, held.partyId),
+    };
     for (const [path, body, status, code] of [
-      [coursePath("nope", f.mains, "fire"), {}, 404, "working_order.not_found"],
-      [coursePath(held.tabId, "nope", "fire"), {}, 404, "course.not_found"],
-      [groupPath("nope", held.groupId, "fire"), command, 409, "party.not_open"],
-      [groupPath(held.partyId, "nope", "fire"), command, 404, "group.not_found"],
-      [
-        groupPath(held.partyId, held.groupId, "fire"),
-        { submissionId: randomUUID() },
-        400,
-        "management.request_invalid",
-      ],
+      [coursePath(randomUUID(), f.mains, "ready"), {}, 404, "working_order.not_found"],
+      [coursePath("nope", f.mains, "ready"), {}, 404, "working_order.not_found"],
+      [coursePath(held.tabId, "nope", "ready"), {}, 404, "course.not_found"],
+      [groupPath(randomUUID(), randomUUID(), "ready"), command, 409, "party.not_open"],
+      [groupPath(held.partyId, randomUUID(), "ready"), command, 404, "group.not_found"],
+      [groupPath("nope", held.groupId, "ready"), command, 409, "party.not_open"],
+      [groupPath(held.partyId, "nope", "ready"), command, 404, "group.not_found"],
+      [groupPath(held.partyId, held.groupId, "ready"), {}, 400, "management.request_invalid"],
     ] as const) {
       const answer = await send(f.app, f.pass.cookie, path, body);
       expect({ path, status: answer.status, code: answer.body.error?.code }).toEqual({
@@ -800,61 +614,36 @@ describe("what a kitchen display's lever refuses", () => {
     }
     expect((await groupRow(held.groupId)).state).toBe("held");
   });
-  it("refuses a Fire holding a sold-out dish with the till's status, firing nothing", async () => {
-    const f = await fixture();
-    const held = await f.heldBurger();
-    await suite.db
-      .update(products)
-      .set({ available: false })
-      .where(eq(products.id, f.v.productId("Burger")));
-    const command = async () => ({
-      submissionId: randomUUID(),
-      expectedPartyRevision: await revisionOf(f.v, held.partyId),
-    });
-    const till = await tillCookie(f);
-    for (const [cookie, path, body] of [
-      [f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), {}],
-      [f.pass.cookie, groupPath(held.partyId, held.groupId, "fire"), await command()],
-      [till, `/api/orders/${held.tabId}/courses/${f.mains}/fire`, {}],
-      [till, `/api/parties/${held.partyId}/groups/${held.groupId}/fire`, await command()],
-    ] as const) {
-      const answer = await send(f.app, cookie, path, body);
-      expect({ path, status: answer.status, code: answer.body.error?.code }).toEqual({
-        path,
-        status: 409,
-        code: "product.unavailable",
-      });
-    }
-    expect((await groupRow(held.groupId)).state).toBe("held");
-  });
 
-  it("answers every code the till's session routes answer at the till's status", () => {
-    for (const [code, status] of Object.entries(TILL_STATUS)) {
+  it("answers every till refusal code at the same status", () => {
+    for (const [code, status] of Object.entries(TILL_STATUS))
       expect({ code, status: LEVER_STATUS[code] }).toEqual({ code, status });
-    }
   });
 });
 
 describe("a till's session Fire", () => {
-  it("still records the signed-in person", async () => {
+  it("records the signed-in person on the group, event and current-order sender", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    const cookie = await tillCookie(f);
-    const fired = await f.app.request(`/api/orders/${held.tabId}/courses/${f.mains}/fire`, {
-      method: "POST",
-      headers: { cookie },
-    });
-    expect(fired.status).toBe(200);
+    await fireAsWaiter(f, held);
     expect(await groupRow(held.groupId)).toMatchObject({
+      state: "fired",
       firedBy: f.ana,
       firedByDeviceId: null,
     });
     expect(await firedEvent(held.groupId)).toMatchObject({ actorId: f.ana, actorDeviceId: null });
+    expect((await itemsOf(held.tabId)).every((item) => item.firedAt !== null)).toBe(true);
+    const current = await f.app.request(`/api/parties/${held.partyId}/current-orders`, {
+      headers: { cookie: await tillCookie(f) },
+    });
+    expect(current.status).toBe(200);
+    const read = (await current.json()) as { groups: { id: string; sentBy: string | null }[] };
+    expect(read.groups.find((group) => group.id === held.groupId)?.sentBy).toBe("Ana");
   });
 });
 
 /** A till's device cookie; signing it in gives a session. */
 async function tillCookie(f: Awaited<ReturnType<typeof fixture>>): Promise<string> {
-  const till = await f.device(`Caja ${randomUUID()}`, await f.profile("till", RUNS_THE_PASS), {});
+  const till = await f.device(`Till ${randomUUID()}`, await f.profile("till", RUNS_THE_PASS), {});
   return f.signIn(till.cookie);
 }

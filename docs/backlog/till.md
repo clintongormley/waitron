@@ -602,6 +602,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   3's plan makes a kitchen display's "Close for today" take a manager's PIN because nobody is
   signed in; a signed-in manager could skip it.
 
+**2026-10-20, A773-2:** the pass's Done/Undo HTTP route is retired. The sign-in work must use
+the remaining preparation actions and planned pass release rather than extend those former marks.
+
 ## Task 7 (#789, each person's draft kept on the server)
 
 **2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)

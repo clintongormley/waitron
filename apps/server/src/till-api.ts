@@ -45,7 +45,6 @@ import {
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import { kindOfFormFactor } from "@waitron/layouts";
-import type { ProfileAction } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
 import {
@@ -68,7 +67,7 @@ import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { mountTillClockApi } from "./till-clock-api.js";
 import { mountTillAttendanceApi } from "./till-attendance-api.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { TillConfig } from "./till-config.js";
 import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
@@ -100,7 +99,6 @@ import {
   bumpCourseReady,
   cancelPlacedOrder,
   captureOrderService,
-  fireCourse,
   getHeldOrder,
   getPlacedCounterOrder,
   listExpoQueue,
@@ -109,7 +107,6 @@ import {
   listStationQueue,
   listTablesWithState,
   handOverOrder,
-  markCourseAway,
   markGroupServed,
   markServed,
   parkOrder,
@@ -162,7 +159,6 @@ import {
   fireGroup,
   fireHeldLine,
   listOrderGroups,
-  markGroupAway,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
   readCurrentOrders,
@@ -171,7 +167,7 @@ import {
   submitGroups,
   unsnoozeReminder,
 } from "./order-groups.js";
-import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
+import type { GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, splitDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState, BillEditExpected } from "./order-drafts.js";
@@ -1152,50 +1148,26 @@ function requireLineNo(tabId: string, raw: string): number {
   return lineNo;
 }
 
-/**
- * `POST /api/orders/:id/courses/:courseId/<suffix>`. Session-gated with no permission: the
- * `fire_control` venue setting decides which UI shows the button, not who may call it. The profile
- * must permit `action`.
- */
-function mountCourseVerb(
-  app: Hono,
-  deps: TillApiDeps,
-  log: Logger,
-  suffix: string,
-  action: ProfileAction,
-  verb: (
-    tx: Transaction,
-    cfg: OriginConfig,
-    orderId: string,
-    courseId: string,
-    firer: Firer,
-    attendance?: OrderAttendance,
-    command?: AllergyCommand,
-  ) => Promise<void>,
-): void {
-  app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
+function mountCourseReady(app: Hono, deps: TillApiDeps, log: Logger): void {
+  app.post("/api/orders/:id/courses/:courseId/ready", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { action });
+      const session = await requireSession(deps, c, { action: "prepare-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
-      const command =
-        suffix === "fire" ? allergyCommand(asObject(await readJsonBody<unknown>(c))) : undefined;
       await withTransaction(deps.db, async (tx) => {
-        const current = suffix === "fire" ? await recheckFireSession(tx, deps, session) : session;
-        await checkZones(tx, deps.cfg, current, [{ orderId }]);
-        await verb(
+        await checkZones(tx, deps.cfg, session, [{ orderId }]);
+        await bumpCourseReady(
           tx,
-          suffix === "fire" ? requestCfg(deps.cfg, current) : cfg,
+          cfg,
           orderId,
           courseId,
           { personId },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock },
-          command,
         );
       });
       return c.body(null, 200);
@@ -2236,8 +2208,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  mountCourseVerb(app, deps, log, "fire", "take-orders", fireCourse);
-
   app.get("/api/expo/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2248,11 +2218,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Unlike `fire`/`away`, `bumpCourseReady` does not existence-check the course: an unknown one
-  // updates zero rows and answers 200.
-  mountCourseVerb(app, deps, log, "ready", "prepare-orders", bumpCourseReady);
-
-  mountCourseVerb(app, deps, log, "away", "hand-over-orders", markCourseAway);
+  mountCourseReady(app, deps, log);
 
   app.get("/api/orders/counter-waiting", (c) =>
     run(c, log, async () => {
@@ -3199,10 +3165,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  for (const [step, command, action] of [
-    ["ready", bumpGroupReady, "prepare-orders"],
-    ["away", markGroupAway, "hand-over-orders"],
-  ] as const) {
+  for (const [step, command, action] of [["ready", bumpGroupReady, "prepare-orders"]] as const) {
     app.post(`/api/parties/:id/groups/:gid/${step}`, (c) =>
       run(c, log, async () => {
         const session = await requireSession(deps, c, { action });

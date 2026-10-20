@@ -51,7 +51,7 @@ import { createPrinter } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
-import { createCourse, setProductCourse, setFireControl } from "./kitchen.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -5323,7 +5323,10 @@ describe("Fire now on one held dish", () => {
     async (mode) => {
       const { v, s, steak, fish } = await fixture(false);
       await inTx(async (tx) => {
-        await setFireControl(tx, v.cfg, mode);
+        await tx
+          .update(locations)
+          .set({ fireControl: mode })
+          .where(eq(locations.id, v.cfg.locationId));
         await writeEditSentLines(tx, false);
       });
       const command = await args(s.partyId);
