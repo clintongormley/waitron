@@ -1838,6 +1838,54 @@ describe("till-app: a sticker's notice inside the sheet", () => {
     expect(toast(el).open).toBe(false);
   });
 
+  it("a printer picked up for payment slips only says so in the sheet", async () => {
+    const PORTABLE = equipmentItem(PRINTER_ID, "Portable printer", { portable: true });
+    const slips = (chosen: EquipmentItem | null): DeviceEquipment => ({
+      roles: [
+        roleOf("receipt", BARRA, [BARRA]),
+        roleOf("payment_slip", chosen, [BARRA, PORTABLE]),
+        roleOf("card_terminal", LECTOR_2, [LECTOR_2, LECTOR_3]),
+      ],
+    });
+    const { el } = await phoneSheet({
+      getDeviceEquipment: vi.fn().mockResolvedValue(slips(null)),
+      setDeviceEquipment: vi.fn().mockResolvedValue(slips(PORTABLE)),
+    });
+    (await nfcReader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
+    await flush(el);
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(
+        t("equipment.picked_up_slip_only").replace("{item}", "Portable printer"),
+      ),
+    );
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("a notice from before the sheet opened is not shown in it, and the next tap is", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_3));
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)),
+        setDeviceEquipment,
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await tap(el);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+
+    await pressPaySheet(el, order);
+
+    expect(dialog(el)).not.toBeNull();
+    expect(inDialog(el, "[data-pay-notice]")).toBeNull();
+    expect(toast(el).open).toBe(false);
+    await tap(el);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(pickedUp("Lector 3")),
+    );
+  });
+
   it("a tap on a presented bill's locked sheet shows above its buttons", async () => {
     const presented = (el: TillApp) =>
       el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");

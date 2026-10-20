@@ -3741,9 +3741,10 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
-    // A notice the sheet showed is not repeated in the toast once the sheet closes.
+    // A sheet shows only the notices of taps made while it is open, and the toast does not repeat
+    // them once it closes.
     const sheetOpen = this.#paySheetOpen();
-    if (this.#paySheetWasOpen && !sheetOpen) this.nfcNotice = null;
+    if (this.#paySheetWasOpen !== sheetOpen) this.nfcNotice = null;
     this.#paySheetWasOpen = sheetOpen;
     if (this.finishRefunds !== null && !this.#finishRefundsCurrent(this.finishRefunds))
       this.finishRefunds = null;
@@ -9293,19 +9294,24 @@ export class TillApp extends LitElement {
       }
       if (nfc !== undefined) {
         const selection = change.selection;
-        const noPrinterRole =
-          "kind" in change &&
-          change.kind === "printer" &&
-          typeof selection === "object" &&
-          !stored.roles.some(
+        const printer =
+          "kind" in change && change.kind === "printer" && typeof selection === "object";
+        const printerFor = (name: "receipt" | "payment_slip") =>
+          printer &&
+          stored.roles.some(
             (role) =>
-              (role.role === "receipt" || role.role === "payment_slip") &&
+              role.role === name &&
               (role.chosenId === selection.id || role.resolved?.id === selection.id),
           );
+        const receipt = printerFor("receipt");
+        const slip = printerFor("payment_slip");
         this.nfcNotice = {
-          message: noPrinterRole
-            ? t("equipment.no_printer_role")
-            : t("equipment.picked_up").replace("{item}", () => nfc.name),
+          message:
+            printer && !receipt && !slip
+              ? t("equipment.no_printer_role")
+              : printer && !receipt
+                ? t("equipment.picked_up_slip_only").replace("{item}", () => nfc.name)
+                : t("equipment.picked_up").replace("{item}", () => nfc.name),
           tone: "info",
         };
       }

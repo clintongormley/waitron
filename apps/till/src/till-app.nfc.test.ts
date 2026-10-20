@@ -12,7 +12,7 @@ import type { TillApp } from "./till-app.js";
 import type { TillEquipmentDialog } from "./widgets/equipment-dialog.js";
 import { TillApi } from "./api/client.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 
 beforeEach(() => {
@@ -39,14 +39,15 @@ async function signOut(el: TillApp) {
 
 describe("NFC throughout the till", () => {
   it.each([
-    ["receipt", "chosen"],
-    ["receipt", "resolved"],
-    ["payment_slip", "chosen"],
-    ["payment_slip", "resolved"],
-  ])("an accepted printer scan confirms its %s %s assignment", async (target, source) => {
+    ["receipt", "chosen", "Picked up Portable printer"],
+    ["receipt", "resolved", "Picked up Portable printer"],
+    ["payment_slip", "chosen", "slip only"],
+    ["payment_slip", "resolved", "slip only"],
+    ["receipt+payment_slip", "chosen", "Picked up Portable printer"],
+  ])("an accepted printer scan confirms its %s %s assignment", async (target, source, message) => {
     const stored = {
       roles: NFC_EQUIPMENT.roles.map((role) =>
-        role.role === target
+        target.split("+").includes(role.role)
           ? {
               ...role,
               ...(source === "chosen"
@@ -61,7 +62,11 @@ describe("NFC throughout the till", () => {
     });
     await signIn(el);
     (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
-    await vi.waitFor(() => expect(notice(el)?.message).toBe("Picked up Portable printer"));
+    const expected =
+      message === "slip only"
+        ? t("equipment.picked_up_slip_only").replace("{item}", "Portable printer")
+        : message;
+    await vi.waitFor(() => expect(notice(el)?.message).toBe(expected));
     expect(notice(el)?.tone).toBe("info");
   });
   it.each(["none", "drawer-only"])(

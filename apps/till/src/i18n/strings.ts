@@ -813,6 +813,7 @@ export const en = {
   "equipment.taken_person": "{item} was taken by {device} ({person})",
   "equipment.close": "Close",
   "equipment.picked_up": "Picked up {item}",
+  "equipment.picked_up_slip_only": "You picked up {item} for payment slips only.",
   "equipment.no_printer_role": "No printer role selected. Choose a role in Equipment.",
   "pay_equipment.heading": "Reader and printer",
   "pay_equipment.change": "Change",
@@ -2487,6 +2488,7 @@ export const es: Record<StringKey, string> = {
   "equipment.taken_person": "{device} ({person}) se ha llevado {item}",
   "equipment.close": "Cerrar",
   "equipment.picked_up": "Has recogido {item}",
+  "equipment.picked_up_slip_only": "Has recogido {item} solo para justificantes de pago.",
   "equipment.no_printer_role":
     "No se ha seleccionado ninguna función de impresora. Elige una en Equipo.",
   "pay_equipment.heading": "Lector e impresora",
