@@ -207,8 +207,8 @@ export class WtTableToken extends LitElement {
       }
 
       .badge.fire-due {
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
         border: 1px solid var(--wt-color-warning);
       }
 
@@ -313,8 +313,12 @@ export class WtTableToken extends LitElement {
     if (t.fireDue !== true) return nothing;
     const label = this.labels.fireDue;
     return label
-      ? html`<span class="badge fire-due" data-fire-due>${label}</span>`
-      : html`<span class="badge fire-due" data-fire-due aria-hidden="true"></span>`;
+      ? html`<span class="badge fire-due" data-fire-due
+          ><wt-icon name="fire" size="sm"></wt-icon>${label}</span
+        >`
+      : html`<span class="badge fire-due" data-fire-due aria-hidden="true"
+          ><wt-icon name="fire" size="sm"></wt-icon
+        ></span>`;
   }
 
   #unsentMark(t: FloorTable): TemplateResult | typeof nothing {

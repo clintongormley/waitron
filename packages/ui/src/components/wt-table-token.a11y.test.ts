@@ -140,6 +140,40 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("a token with a held chip and its icon is accessible", async () => {
+    const el = await mountToken(
+      tableData({
+        state: "open-tab",
+        tabTotal: "12.00",
+        chips: [{ key: "held", text: "Held 2", tone: "muted", icon: "held" }],
+      }),
+      theme,
+    );
+    const icon = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-chip=held] wt-icon",
+    );
+    expect(icon).not.toBeNull();
+    await icon!.updateComplete;
+    expect(icon!.shadowRoot!.querySelector("svg path")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token with the filled due chip is accessible", async () => {
+    const el = await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", fireDue: true }),
+      theme,
+    );
+    el.labels = { ...el.labels, fireDue: "Time to fire" };
+    await el.updateComplete;
+    const icon = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-fire-due] wt-icon",
+    );
+    expect(icon).not.toBeNull();
+    await icon!.updateComplete;
+    expect(icon!.shadowRoot!.querySelector("svg path")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   test("a token naming the party seated there is accessible", async () => {
     await mountToken(tableData({ state: "open-tab", tabTotal: "12.00", partyName: "Ana" }), theme);
     await expectNoA11yViolations(host);
