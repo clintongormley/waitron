@@ -174,11 +174,9 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes`
   with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a
-  second attempt run only when the first failed.** The action retries a fetch that fails but
-  waits on one that stalls with no limit of its own. Cost: run 39446310822's `test-dashboard (2)`
-  fetch printed nothing for 353 s, and run 39440790729's `test-server (4)` sat in checkout until
-  its 10-minute limit. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`, weaker than
-  their name — they read text and never run a workflow. Receipt:
+  second attempt run only when the first failed.** Cost: run 39446310822's `test-dashboard (2)`
+  fetch printed nothing for 353 s. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`,
+  weaker than their name — they read text and never run a workflow. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-checkout-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
@@ -464,11 +462,10 @@ called weaker than its name, the topic file lists what it does not see.
   per-line resolver).
 - **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
   the database does not refuse the write.** A write of one of them lives only in the files that
-  JSON names: requests
-  and the paths that write these tables share one venue handle (`ownerDb` is a name, not a separate
-  handle), so that file list is the only separation. Guard: `scripts/write-path-tables.test.ts` is
+  JSON names. Guard: `scripts/write-path-tables.test.ts` is
   the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
-  call chain.
+  call chain. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement).
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.**
   Write-path functions take a `tx: Transaction` and never open their own; a route handler opens
   exactly one `withTransaction` per request. This is a convention, not a compiler guarantee. A
@@ -479,12 +476,11 @@ called weaker than its name, the topic file lists what it does not see.
   under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
   in turn, never `Promise.all`.** No guard enforces it.
-- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** The
-  store routes by ASYNCHRONOUS CONTEXT and per-body identity, so a read
-  written inside the body still sees that body's own rows; three shapes are outside the rule, each
-  stated at its site. Cost: a concurrent read returned rows a rollback then removed. Guard: the
-  routing cases in `packages/store/src/index.test.ts` and `connections.test.ts`, weaker than the set
-  looks.
+- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** Three
+  shapes are outside the rule, each stated at its site. Cost: a concurrent read returned rows a
+  rollback then removed. Guard: the routing cases in `packages/store/src/index.test.ts` and
+  `connections.test.ts`, weaker than the set looks. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-read-taken-while-another-callers-write-transaction-is-open-sees-committed-rows-only).
 - **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
   a refusal and carrying on in the same `tx` is safe. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
@@ -646,10 +642,9 @@ browser test** — most of these rules exist because a test passed while proving
   shard 1 lost its worker to the watchdog. Guard: two cases in
   `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
   folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
-  `setInterval` captured when `@waitron/store` loads, because `vi.useFakeTimers()` fakes both by
-  default. Guard: the cases under "a holder whose test fakes the
-  clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options
-  only, and only when the store loads before the clock is faked. Receipt:
+  `setInterval` captured when `@waitron/store` loads. Guard: the cases under "a holder whose test
+  fakes the clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default
+  options only, and only when the store loads before the clock is faked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
   **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
@@ -663,7 +658,8 @@ browser test** — most of these rules exist because a test passed while proving
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
   `ci.yml` as TEXT, so install
-  commands left only in a YAML comment, or in a step an `if:` switches off, pass it.
+  commands left only in a YAML comment, or in a step an `if:` switches off, pass it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#the-stream-loop-test-skips-locally-without-its-two-binaries-and-a-skip-reads-as-a-pass).
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's
   `test.browser` block**; the command-line flag and a project's own `browser` block are ignored
   without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:

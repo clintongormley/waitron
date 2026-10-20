@@ -874,8 +874,9 @@ calendar.
 it inherits `deployment`'s rule. The guard pins all five names directly. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants — one process opens one file, and every path, request and
-provisioning alike, shares that one venue handle. So the rule is a convention over source text, and
-that guard is not a second opinion on an engine that would refuse the write anyway.
+provisioning alike, shares that one venue handle (`ownerDb` is a name, not a separate handle). So
+the rule is a convention over source text, and that guard is not a second opinion on an engine that
+would refuse the write anyway.
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
