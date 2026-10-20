@@ -165,3 +165,12 @@ it("admits the actual fiscal descriptor only with its complete verification owne
   const fiscal = inventory.find((owner) => owner.module.name === "fiscal-verifactu")!.verification;
   expect(fiscal.data.checks).toEqual(["chain", "history", "secret", "entries"]);
 });
+
+it("admits the actual identity descriptor with all authenticator and ceremony obligations", () => {
+  const owners = ALL_MODULES.filter((module) => ["core", "identity"].includes(module.name));
+  const inventory = backupVerificationInventory(owners);
+  const owner = inventory.find((entry) => entry.module.name === "identity")!.verification;
+  expect(owner.data.tables).toContain("totp_enrollments");
+  expect(owner.data.tables).toContain("google_oidc_states");
+  expect(owner.data.checks).toEqual(["data", "secret"]);
+});

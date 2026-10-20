@@ -23,6 +23,7 @@ import {
 } from "@waitron/fiscal-verifactu";
 import {
   IDENTITY_MIGRATIONS,
+  IDENTITY_BACKUP_VERIFICATION,
   registerModulePermissions,
   roleHasPermission,
 } from "@waitron/identity";
@@ -126,9 +127,16 @@ describe("ALL_MODULES backup contribution", () => {
       ),
     ).toEqual(["media_images", "media_image_data", "media_image_blobs", "media_image_edits"]);
   });
-  it("a module may omit backup (open contribution set)", () => {
+  it("identity declares its offline verification owner", () => {
     const identity = ALL_MODULES.find((m) => m.name === "identity");
-    expect(identity?.backup).toBeUndefined();
+    expect(identity?.backup?.verification).toBe(IDENTITY_BACKUP_VERIFICATION);
+  });
+  it("migration composition still accepts a module without a backup contribution", () => {
+    const modules = ALL_MODULES.map((module) =>
+      module.name === "identity" ? { ...module, backup: undefined } : module,
+    );
+    expect(modules.find((module) => module.name === "identity")?.backup).toBeUndefined();
+    expect(orderedMigrationSets(modules)).toEqual(manifestSets());
   });
 });
 

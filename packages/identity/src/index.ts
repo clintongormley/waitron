@@ -141,3 +141,4 @@ export { IDENTITY_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import "./errors.js";
 export { withPassiveManagementRead } from "./management-session.js";
 export { IDENTITY_CHANGE_SOURCES } from "./classification.js";
+export { IDENTITY_BACKUP_VERIFICATION } from "./backup-verification.js";

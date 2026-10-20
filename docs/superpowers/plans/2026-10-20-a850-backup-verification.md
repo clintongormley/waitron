@@ -839,3 +839,15 @@ conflicts are checked in each captured taxpayer/environment scope. Schema-zero c
 hide database or retained hour evidence. Non-hour stored formats remain unsupported by this
 hour policy. Fresh installation, series, registration and promotion stay activation effects.
 The artifact verifier and the remaining owners remain open.
+
+### Task 13 implementation checkpoint
+
+The identity contribution compares every classified identity table and checks password/PIN,
+proof/session, passkey and ceremony representations on both copies. It authenticates all person
+and pending-enrolment TOTP ciphertexts using archived account-key inputs. Unknown formats stay
+unsupported; inconclusive decryption stays unavailable. It does not verify supplied passwords
+or issue a login. `apps/server/src/backup-verification-identity.test.ts` exercises the operational
+account-key helpers and enrolment writer, outside the later artifact/placement harness.
+That genuine archive integration remains in Tasks20–24. The existing composition pin for an
+absent identity backup contribution is replaced by its explicit owner; a separate case keeps
+migration composition working with an omitted backup contribution.

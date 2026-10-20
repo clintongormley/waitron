@@ -47,6 +47,7 @@ import {
 } from "@waitron/bookings";
 import {
   IDENTITY_CLASSIFICATION,
+  IDENTITY_BACKUP_VERIFICATION,
   IDENTITY_CONFIGURATION_TRANSFER,
   IDENTITY_CHANGE_SOURCES,
 } from "@waitron/identity";
@@ -183,6 +184,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../identity/drizzle",
     },
     classification: IDENTITY_CLASSIFICATION,
+    backup: { verification: IDENTITY_BACKUP_VERIFICATION },
     changes: IDENTITY_CHANGE_SOURCES,
     configurationTransfer: IDENTITY_CONFIGURATION_TRANSFER,
   },
