@@ -1,5 +1,5 @@
-import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
-import { settleMode } from "./derive.js";
+import type { Mode, WaitronDefaults } from "./defaults.js";
+import { type ModeResult, settleMode } from "./derive.js";
 import type { Corners, ThemeColour } from "./tokens.js";
 
 export type Background = "neutral" | "tinted";
@@ -53,10 +53,8 @@ export function normaliseChoices(choices: ThemeChoices): ThemeChoices {
 
 export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices): DerivedTheme {
   const normalised = normaliseChoices(choices);
-  const [light, dark] = MODES.map((mode) => settleMode(defaults, normalised, mode, {})) as [
-    ReturnType<typeof settleMode>,
-    ReturnType<typeof settleMode>,
-  ];
+  const light: ModeResult = settleMode(defaults, normalised, "light", {});
+  const dark: ModeResult = settleMode(defaults, normalised, "dark", {});
   return {
     light: light.tokens,
     dark: dark.tokens,

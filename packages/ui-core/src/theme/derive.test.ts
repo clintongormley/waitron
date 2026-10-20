@@ -1,7 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { contrastRatio } from "./colour.js";
 import { MODES, type Mode } from "./defaults.js";
-import { deriveThemeFrom, WAITRON_CHOICES, type DerivedTheme, type ThemeChoices } from "./theme.js";
+import {
+  deriveThemeFrom,
+  normaliseChoices,
+  WAITRON_CHOICES,
+  type DerivedTheme,
+  type ThemeChoices,
+} from "./theme.js";
 import { BRAND_FAMILY, colourToken, THEME_COLOURS, THEME_RADII, THEME_TOKENS } from "./tokens.js";
 import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
 
@@ -61,6 +67,12 @@ describe("Waitron's look", () => {
     }
     expect(theme.tintStrength).toEqual({ light: 1, dark: 1 });
     expectFullList(theme);
+  });
+
+  test("normalising Waitron's brand colour drops a brand fix flag", () => {
+    expect(normaliseChoices({ ...WAITRON_CHOICES, brandFix: { light: true } }).brandFix).toEqual(
+      {},
+    );
   });
 
   test("a brand fix flag with Waitron's brand colour gives exactly Waitron's values", () => {
@@ -207,7 +219,7 @@ describe("Waitron's blue typed as a custom colour (#1f6feb), Neutral", () => {
 });
 
 describe("the tint gives way", () => {
-  // A contrived palette: no real input weakens the tint.
+  // A contrived palette.
   const contrived = {
     ...WAITRON_DEFAULTS,
     light: { ...WAITRON_DEFAULTS.light, [P("track")]: "#d0d0d0", [P("text")]: "#585858" },

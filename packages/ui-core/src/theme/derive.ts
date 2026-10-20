@@ -52,7 +52,6 @@ const TINT_TARGETS: Readonly<
 const minRatio = (colour: string, list: readonly string[]) =>
   Math.min(...list.map((other) => contrastRatio(colour, other)));
 
-/** Moves a colour's lightness one way until it stands `need` from every colour in `list`. */
 function until(hex: string, dir: number, list: readonly string[], need: number): string {
   let { L } = toOklch(hex);
   let out = hex;
@@ -181,11 +180,13 @@ export function settleMode(
     (tinted.includes(rule.a) || tinted.includes(rule.b)) &&
     !(brandOwned && (rule.a === PRIMARY || rule.b === PRIMARY));
   let strength = 1;
-  for (; strength >= -1e-9; strength -= 0.1) {
-    const tokens = deriveAt(defaults, choices, mode, Math.max(0, strength));
-    if (!failing(defaults, mode, tokens).some(tintIn)) break;
+  if (choices.background === "tinted") {
+    for (; strength >= -1e-9; strength -= 0.1) {
+      const tokens = deriveAt(defaults, choices, mode, Math.max(0, strength));
+      if (!failing(defaults, mode, tokens).some(tintIn)) break;
+    }
+    strength = Math.max(0, Math.round(strength * 10) / 10);
   }
-  strength = Math.max(0, Math.round(strength * 10) / 10);
   const written = deriveAt(defaults, choices, mode, strength);
   const tokens: Record<string, string> = {};
   for (const colour of THEME_COLOURS) {
