@@ -2176,11 +2176,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slices 1 (Needs clearing per department), 2 (retire venue-made statuses) and 7
-  (service steps: the settings) landed (plans
+  2026-10-17.** Slices 1 (Needs clearing per department), 2 (retire venue-made statuses), 3 (the
+  held mark and its countdown) and 7 (service steps: the settings) landed (plans
   `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`,
-  `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md` and
-  `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 3–6 and 8 are left
+  `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`,
+  `docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md` and
+  `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 4–6 and 8 are left
   (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
@@ -2188,7 +2189,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for the whole of A757 (slices 3–6 and 8 are left).
+  settle the two suggestions in the detail. Waits for the whole of A757 (slices 4–6 and 8 are left).
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
@@ -2939,9 +2940,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 10 (#908, the service dashboard's attention signals).** For the
   owner. [Detail](backlog/till.md#task-10-908-the-service-dashboards-attention-signals)
-  - The floor's older waiting band (`timingBand`) still counts HELD dishes, while the long-wait
-    chip counts only dishes sent to the kitchen. **Next action:** decide whether `timingBand`
-    should also count only dishes sent.
   - The "Take order" chip looks like the "Reserved" badge, and the "Bill requested" chip like the
     "N en camino" badge. **Next action:** decide whether the chips get tones of their own.
   - The till drops the bill request's late answer, a refusal included, once the waiter has signed

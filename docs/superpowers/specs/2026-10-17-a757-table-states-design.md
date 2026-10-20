@@ -1,6 +1,6 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19; slices 3–6 and 8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slice 3 built 2026-10-20; slices 4–6 and 8 left (§11).**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
@@ -145,6 +145,9 @@ seated, bill, clearing — `apps/till/src/state/floor-map.ts:13-21`) and one dot
 (forgotten red, beating ready green, `floor-map.ts:23-26`). Both dots blink once a second unless
 motion is reduced: the blink is set on every dot, not only the red one
 (`packages/ui/src/components/wt-floor-map.ts:341-377`).
+
+**2026-10-20:** slice 3 marks a table holding dishes on the list card and the unplaced token, and
+`timingBand` counts fired dishes only; see §5.1.
 
 ### 1.3 What planned work adds
 
@@ -321,6 +324,11 @@ Fire" and pulses slowly.
 (`isNotNull(ticketItems.firedAt)`, `apps/server/src/table-signals.ts:76`). The build makes
 `timingBand` count fired dishes only, so T7 in picture 03 shows "⏸ Held 2 · fire in 4 min" at 21:16,
 not "Forgotten". This settles Task 10's open point in `docs/backlog/till.md`, which this revision marks decided.
+
+**2026-10-20:** built by slice 3 (plan `docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`):
+the floor read carries a `held` signal with the count; the list card and the unplaced token show the
+held chip, its countdown and the filled Time to fire chip; `timingBand` counts fired dishes only. The
+pulse is slice 4's, the map's cue slice 5's; requested dishes wait for A773-2.
 
 ### 5.2 Two pulse speeds (Q18)
 

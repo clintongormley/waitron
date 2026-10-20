@@ -840,7 +840,7 @@ set. The consuming app registers the `chevron-down` icon.
 On the till's floor screen, the map box follows the cropped zone's aspect ratio, capped in height
 so the surrounding controls and Unplaced tray have room; the cap stays at least six tap heights
 on short windows, where the page can scroll (owner, 2026-10-10, A472). Bill requested
-chips share the map's purple tokens. The order pin's swatch follows its displayed signal: ready
+chips share the map's purple tokens. A table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place, on the list card and the unplaced token alike. `@waitron/ui`'s `floor-chips.ts` registers both icons. The order pin's swatch follows its displayed signal: ready
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as {saved name}" /
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after
