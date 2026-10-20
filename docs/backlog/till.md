@@ -1355,9 +1355,10 @@ Two owner suggestions are open; settle them here:
 - "It feels like we need a key of the different states when we click the ?" (owner, 2026-10-18) —
   with help on, the floor shows a badge, “What the colours mean”, that opens a key of every table
   state.
-- Once A893 settles the look, add the “What the colours mean” badge on the floor; A582 slice 4 left
-  it, see its plan's decision 8
-  ([2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md)).
+
+Once A893 settles the look, add the “What the colours mean” badge on the floor; A582 slice 4 left
+it, see its plan's decision 8
+([2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md)).
 
 ## A758. Adjustment reasons: review the rules, then a page of their own
 

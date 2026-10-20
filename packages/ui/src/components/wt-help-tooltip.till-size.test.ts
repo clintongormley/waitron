@@ -77,7 +77,6 @@ test("a wt-disclosure's heading badge stays inside the section's top", async () 
   expect(getComputedStyle(section).paddingBlockEnd).toBe("12px");
 });
 
-// Read at 390px with the dashboard's 24px target before the change: both were 12px.
 test("the modal's side padding and the disclosure's top padding are unchanged at 24px", async () => {
   const { body, footer } = await openModal("");
   expect(getComputedStyle(body).paddingInlineStart).toBe("12px");

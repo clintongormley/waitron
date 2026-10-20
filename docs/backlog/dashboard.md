@@ -1146,6 +1146,8 @@ help about anything you want very quickly."
   Tasks 6–12). Slice 4 is complete: 4a #1907, 4b #NNNN.
 - **Left open by 4b:** help on Counter's payment buttons waits for A739, which is redesigning the
   payment window (plan, decision 11); once A739 lands, add it there.
+- **Left open by 4b:** `till-shell` does not clear its guide when it is removed; the sheet closes on
+  lock only because a lock draws a new shell.
 - **Remaining slice** (design §8): **5** kitchen screens and monitors — the corner switch, off after
   two minutes without a touch.
 - **Left open by 2b:**

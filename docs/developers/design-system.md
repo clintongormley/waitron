@@ -2250,7 +2250,8 @@ can show the guide its own way (`packages/ui/src/components/wt-help-tooltip.guid
 The till does: `till-shell` cancels it and shows the page in a full-screen sheet with a Close button,
 because a till has no tab bar to come back by (conventions-ui.md, "How the till links a guide").
 A link is only worth adding where the guide says more than the badge: in Products, the price field,
-the default course and the Variants section link to their sections, and VAT and Availability do not.
+the default course and the Variants section link to their sections, and VAT and Availability do not;
+on the till, the dishes' search field links to the Products guide's "Read a dish's nutrition at the till".
 A `wt-data-table` column badge, a `wt-tabs` item and a `wt-menu-row` cannot carry a link yet. Where the guides live and
 how the box serves them: [conventions-ui.md](conventions-ui.md), "The user guides".
 
@@ -2277,7 +2278,8 @@ columns and tabs; and the "a help badge inside a menu row, and a menu that chang
 `wt-row-actions.test.ts`. A badge a screen places outside a primitive's `help` slot is checked
 only by that screen's own tests: SumUp's affiliate badge by the "the affiliate
 help is hidden until help is on, then hangs over the heading's top trailing corner" case in
-`packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; nothing checks a new one.
+`packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; the till's screen badges by
+the `*.help.test.ts` files beside each till screen and `menu-browser.ts`; nothing checks a new one.
 
 ### Forms
 
