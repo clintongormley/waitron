@@ -4058,47 +4058,102 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     },
   );
 
-  it("keeps the returned Cloud confirmation on refresh but clears it after leaving", async () => {
-    let refuse!: (reason: unknown) => void;
-    const el = await approvedCloudApp({
-      restoreFromCloud: vi.fn().mockImplementation(
-        () =>
-          new Promise((_, reject) => {
-            refuse = reject;
-          }),
-      ),
-    });
-    const original = await cloudScreen(el);
-    await userEvent.click(
-      original.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!,
-    );
-    await userEvent.click(original.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull(),
-    );
-    refuse({ code: "server.internal", status: 500 });
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("setup-cloud-restore-screen")).not.toBeNull(),
-    );
-    cloudRecoveryAction(el, "status");
-    await flush(el);
-    const retained = await cloudScreen(el);
-    expect(
-      retained.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.checked,
-    ).toBe(true);
-    await userEvent.click(
-      retained.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!,
-    );
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBeNull(),
-    );
-    goto(el, "cloud-restore");
-    await flush(el);
-    const returned = await cloudScreen(el);
-    expect(
-      returned.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.checked,
-    ).toBe(false);
-  });
+  it.each([false, true])(
+    "clears the returned Cloud confirmation after leaving (refresh=%s)",
+    async (refresh) => {
+      let refuse!: (reason: unknown) => void;
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi.fn().mockImplementation(
+          () =>
+            new Promise((_, reject) => {
+              refuse = reject;
+            }),
+        ),
+      });
+      const original = await cloudScreen(el);
+      await userEvent.click(
+        original.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!,
+      );
+      await userEvent.click(
+        original.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!,
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull(),
+      );
+      refuse({ code: "server.internal", status: 500 });
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("setup-cloud-restore-screen")).not.toBeNull(),
+      );
+      if (refresh) {
+        cloudRecoveryAction(el, "status");
+        await flush(el);
+      }
+      const retained = await cloudScreen(el);
+      expect(
+        retained.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.checked,
+      ).toBe(true);
+      await userEvent.click(
+        retained.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!,
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBeNull(),
+      );
+      goto(el, "cloud-restore");
+      await flush(el);
+      const returned = await cloudScreen(el);
+      expect(
+        returned.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.checked,
+      ).toBe(false);
+    },
+  );
+
+  it.each(["departed", "reconnected"])(
+    "does not restore confirmation from a %s Cloud attempt's late refusal",
+    async (lifetime) => {
+      let refuse!: (reason: unknown) => void;
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi.fn().mockImplementation(
+          () =>
+            new Promise((_, reject) => {
+              refuse = reject;
+            }),
+        ),
+      });
+      const original = await cloudScreen(el);
+      await userEvent.click(
+        original.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!,
+      );
+      await userEvent.click(
+        original.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!,
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull(),
+      );
+      if (lifetime === "departed") goto(el, "restore");
+      else {
+        const parent = el.parentElement!;
+        el.remove();
+        parent.append(el);
+      }
+      await flush(el);
+      refuse({ code: "server.internal", status: 500 });
+      await flush(el);
+      expect(
+        el.shadowRoot!.querySelector(
+          lifetime === "departed"
+            ? "[data-test=screen-restore]"
+            : "[data-test=screen-provisioning]",
+        ),
+      ).not.toBeNull();
+      goto(el, "cloud-restore");
+      await flush(el);
+      const returned = await cloudScreen(el);
+      expect(
+        returned.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.checked,
+      ).toBe(false);
+      expect(returned.errorMessage).toBeUndefined();
+    },
+  );
 
   it.each([
     [live, { liveSince: "2026-09-23T11:58:00.000Z", liveUnknown: false }],
