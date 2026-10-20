@@ -225,8 +225,8 @@ dishes only.
 
 **Interfaces — produces:**
 - `TableSignal` gains `| { kind: "held"; count: number }`, doc comment: "Dishes waiting in the
-  party's held groups, counted as items: a counted dish by its quantity, a weighed dish as one,
-  extras not at all."
+  party's held groups, counted as items: a counted dish by its quantity left after cancellation,
+  a weighed dish as one unless cancelled whole, extras not at all."
 - `readHeldCounts(tx: Transaction, partyIds: readonly string[]): Promise<Map<string, number>>` —
   keyed by party, only parties holding at least one dish; one select (lines → `order_groups` →
   `parties` → `working_orders`, left join `line_service_cancellations`), filters as Decision 2.
