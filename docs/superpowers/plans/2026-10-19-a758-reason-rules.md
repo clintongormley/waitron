@@ -247,7 +247,7 @@ retired. Every other D-number lands in A758-1 to A758-5 below.
    meal 50% on one of two burgers on a line would then make the other burger ask for its own 50%.
    So a line-level row whose `quantity` is less than its `line_quantity` counts only on the rows its
    `splits` name as `to` and their descendants; every other row counts as today. Ceiling rounding
-   and counting a bill comp against items added after it both err toward asking (Open point 2). _(2026-10-20, finish-branch: no longer so; see A910 in docs/backlog.md.)_ No migration: `reduction` and `nominal_value` are on every row
+   and counting a bill comp against items added after it both err toward asking (Open point 2). No migration: `reduction` and `nominal_value` are on every row
    (`schema/adjustments.ts:72-74`); today's `readLinePercents` sums `percent_bp` only
    (`record.ts:113-134`), which is why a €12 amount took a burger to €0 under a 20% cap (design §2.2).
 4. **The bill's comp limit** (§3.5, D6) counts what comps took off the items still on the bill:
@@ -1162,7 +1162,7 @@ A773-1 lands if that is near, else rebase.
    D13), while the stage rule is right on both sides with no adaptation. Pre-live, no venue is
    affected. The driver may choose the alternative if A773-1 is not near landing.
 2. **The item limit errs toward asking** in two ways: each row's share is rounded up to a whole
-   basis point, and a comp on the whole bill counts against items added after it. _(2026-10-20, finish-branch: no longer so; see A910 in docs/backlog.md.)_ Default: accept
+   basis point, and a comp on the whole bill counts against items added after it. Default: accept
    (never lets through what should ask); a backlog entry if a venue meets it.
 3. **"Full" for an amount comp** means it took the item's whole list price (`afterAmount` 0 and
    `beforeAmount` = `nominalValue`). An amount that takes what another comp left prints "Descuento"

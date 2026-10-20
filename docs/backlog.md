@@ -2200,14 +2200,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   discounts on the whole bill took off each row is not recorded, so `judgeComp`
   (`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
   about, and its dish or its extras), capped at what that row is now below its list value less what
-  comps and discounts of any reason recorded on that row alone took (`readWholeLineReductions`: the
+  comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
   whole line, nothing split off, at the row's present quantity and list value); the item counts the
   largest of those. A row no bill discount reached, such as one added after them, counts nothing for
   them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
   reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
-  priced its extras too, a comp or discount that carved the row off another, and anything taken off
-  a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
-  that was not tested. Revisit if a venue meets an approval it did not expect.
+  priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
+  moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
+  that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
+  item's count starts again on another bill, because the reason's earlier comps are read from the
+  item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
+  reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
+  with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
+  an item's count should follow it to another bill.
 
 - **A911. When an amount comp prints "Descuento 100%" (left open by A758-1, for A758-4).** "Full"
   means the comp took the item's whole list price. An amount comp that takes what another comp left
