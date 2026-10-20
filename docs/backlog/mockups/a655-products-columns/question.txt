@@ -1,0 +1,52 @@
+A655 — fewer and slimmer columns on Products: two choices
+
+Two questions. Ask them one at a time: question 1 of 2, then 2 of 2.
+
+Background: you already decided the rest. The Standalone ordering column gets the short heading
+"Standalone"; Allergens and Dietary info start hidden (still in the Columns chooser); a Course
+column and a Course filter join the list; "Default course" becomes "Course" everywhere. What is
+left: what happens to "Made at", and the Spanish words for "Standalone".
+Today's list: 01-today-light.png. Every category row in Made at has a grey second line
+("set on this category", "from Food · some items made elsewhere", "default station"), which makes
+those rows up to three lines tall.
+
+---
+
+## Question 1 of 2 — the Made at column
+
+Pictures: 02-a-made-at-deleted-light.png, 03-b-made-at-one-line-light.png,
+04-c-made-at-hidden-light.png, 05-routing-unavailable-light.png
+
+Example: a manager wants to see which drinks go to the downstairs bar.
+
+- **C (recommended) — keep it, one line, but start it hidden** like Allergens and Dietary info.
+  The grey second line goes. The "Made at" filter still works while the column is hidden, so the
+  manager can still pick "Downstairs bar" in the filter, and anyone who wants the column turns it
+  on in Columns. When the kitchen routing cannot be read, one line above the list says so
+  (picture 05), because the column that used to say it is hidden.
+- **A — delete it, with its filter.** The list is narrowest. The manager finds which items go
+  where only on Prep stations → Routing (today each station name in the column links there).
+  The red * on a category with no working station stays; the "routing cannot be read" line moves
+  above the list as in picture 05.
+- **B — keep it shown, one line only.** Only the grey second line goes; the routing message stays
+  in the column.
+- **Stop here — I'll write.**
+
+---
+
+## Question 2 of 2 — the Spanish words for "Standalone"
+
+Picture: 06-spanish-light.png
+
+Today the column says «Pedido por separado» and the editor field «Pedir por separado». English
+will be: column "Standalone", editor field and filter "Standalone ordering by", values Anyone /
+Staff only / Nobody (Spanish: Cualquiera / Solo el personal / Nadie).
+
+- **A (recommended) — column «Por separado», editor field and filter «Quién lo pide por
+  separado».** Short heading; the field reads as a question the values answer ("Who orders it on
+  its own? Anyone").
+- **B — column «Suelto», editor field and filter «Quién lo pide suelto».** Shortest; more
+  colloquial ("loose", as in "sold loose").
+- **C — keep today's column «Pedido por separado»; editor field and filter «Pedido por separado
+  por».** No new word to learn, but the heading stays long and the field reads awkwardly.
+- **Stop here — I'll write.**

@@ -756,6 +756,11 @@ everywhere the dashboard shows it. A course change is live on the till without r
 (course is left out of the published copy, `packages/catalogue/src/menu-document.ts`); confirm
 that on a till while building.
 
+**Open owner question (2026-10-20, lane A):** Made at deleted, kept one line, or kept one line
+but hidden at first (recommended); and the Spanish for "Standalone". Pictures and the question:
+[mockups/a655-products-columns/](mockups/a655-products-columns/question.txt) — today's list is
+`01-today-light.png`.
+
 ## A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions" shows only when something is scheduled
 
 **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
