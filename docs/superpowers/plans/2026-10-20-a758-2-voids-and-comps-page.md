@@ -304,7 +304,11 @@ The parent plan's apply. In particular, and for this PR:
     `DELETE` of the same id answers 404 `adjustment_reason.not_found`. Add `"refuses a supervisor or
     staff member a Delete of an existing reason, and keeps it"`: create as manager, `DELETE` as each
     → 403 `authorization.not_permitted { permission: "adjustment.manage" }`, and the reason is still
-    listed. Retire the reactivating block and drop `active` from the bodies (Changed test checks).
+    listed. Add `"deletes a reason that past adjustments name, leaving them as they were"`: record
+    an adjustment under a reason (`seedReason` and `recordAdjustment`, as `:675-702` does),
+    `DELETE` the reason → 204, and the `adjustments` row is still there with `reason_name`
+    unchanged (Review focus 1). Retire the reactivating block and drop `active` from the bodies
+    (Changed test checks).
   - `configuration-transfer.test.ts`: `row()` loses `active`; the cases at `:86-96` as listed.
   - `provisioning.test.ts:93` and `:130` as listed.
 - [ ] **Step 2: Run; expect red** —
@@ -341,13 +345,15 @@ The parent plan's apply. In particular, and for this PR:
     anyone else"`: manager and admin → 200 and the body above; staff and supervisor → 403
     `authorization.not_permitted { permission: "adjustment.manage" }`; no session → 401
     `management_session.required`; `MISSING` → 404; `"not-a-uuid"` → 400.
-- [ ] **Step 2: Run; expect red** —
-  `pnpm --filter @waitron/adjustments exec vitest run src/operations.test.ts src/routes.test.ts -t "delete impact|what deleting"`
-  — FAIL: not a function / 404 from Hono.
+- [ ] **Step 2: Run; expect red** — one file at a time, since `-t` filters every file on its line:
+  `pnpm --filter @waitron/adjustments exec vitest run src/operations.test.ts -t "what deleting"`
+  — FAIL: not a function; then
+  `pnpm --filter @waitron/adjustments exec vitest run src/routes.test.ts -t "delete impact"`
+  — FAIL: 404 from Hono.
 - [ ] **Step 3: Implement** `readAdjustmentReasonDeleteImpact` beside `deleteAdjustmentReason`
   (both read the same `voidKeptFault`), the route next to `DELETE`, gated through `gated` as the
   other reason routes are (`routes.ts:209-210`), and the live-query key.
-- [ ] **Step 4: Run; expect green** — the same command, then
+- [ ] **Step 4: Run; expect green** — Step 2's two commands, then
   `pnpm --filter @waitron/adjustments exec vitest run --project node` and
   `pnpm exec vitest run scripts/live-subscriptions.test.ts`.
 - [ ] **Step 5: Commit** — `"Read what deleting an adjustment reason would do, for managers of adjustments (A758-2)"`.
@@ -371,9 +377,12 @@ The parent plan's apply. In particular, and for this PR:
   `adjustment_reason.not_found` (`adjustments-api.test.ts`) or a rejection with that code and an
   unchanged order (`line-cancel.test.ts`; the `inactive` row of its table becomes `deleted`); the
   till cases mock `{ code: "adjustment_reason.not_found" }` and expect
-  `codeMessage("adjustment_reason.not_found")`; the two refusal lists drop `reason_inactive`;
-  `configuration-transfer.test.ts` stops reading `active` (`:1783-1795`, `:1811-1910`).
-- [ ] **Step 2: Run; expect red where code still names it** —
+  `codeMessage("adjustment_reason.not_found")`; the `reason_inactive` entries at
+  `apps/till/src/i18n/codes.test.ts:365`, `widgets/adjustment-dialog.test.ts:716` and `:755` are
+  deleted, not replaced, since `adjustment_reason.not_found` is already listed beside them
+  (`:371`, `:721`, `:757`); `configuration-transfer.test.ts` stops reading `active` (`:1783-1795`,
+  `:1811-1910`).
+- [ ] **Step 2: Run; expect red in the server, green in the till** —
   `pnpm --filter @waitron/server exec vitest run src/adjustments-api.test.ts src/line-cancel.test.ts src/configuration-transfer.test.ts scripts/demo-seed/seed-adjustments.test.ts`,
   `pnpm --filter @waitron/till exec vitest run src/i18n/codes.test.ts src/widgets/adjustment-dialog.test.ts`
   (whole files), and one filtered file at a time, since `-t` filters every file on its line:
@@ -381,7 +390,11 @@ The parent plan's apply. In particular, and for this PR:
   and `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "refused reason"`.
   Expected: the server suites fail on the missing `deactivateAdjustmentReason` import until the
   tests are rewritten, then on `line-cancel.ts`'s `reason.active` (undefined, so every reason
-  refused) — read the failure before changing code.
+  refused) — read the failure before changing code. The till runs are green before and after
+  Step 3: the till already treats `adjustment_reason.not_found` as a reason refusal
+  (`apps/till/src/till-app.ts:1054`), puts it beside the reason (`widgets/adjustment-dialog.ts:83`)
+  and words it (`i18n/codes.ts:616`). What drives the till's removal is Step 4's
+  `git grep -n reason_inactive`, not a red test.
 - [ ] **Step 3: Implement** — remove `line-cancel.ts:247`; the till's copies of the code go
   (`codes.ts:592-595`, `till-app.ts:1053`, `adjustment-dialog.ts:82`, `till-api.ts:624`);
   `listAdjustmentReasons(tx)` at `seed-adjustments.ts:186` and in the tests.
@@ -402,7 +415,7 @@ The parent plan's apply. In particular, and for this PR:
   `apps/dashboard/src/i18n/strings.ts:938`, `:3917`
 - Tests: `packages/adjustments/src/dashboard/index.test.ts`, `client.test.ts`,
   `reasons-screen.test.ts:400` (the screen now draws an `<h1>`) and `:1314` (the `name_taken`
-  sentence, Decision 4);
+  sentence, Decision 4); `reasons-screen.a11y.test.ts:170-195` (the Enable states retire);
   `packages/dashboard-modules/src/registry.test.ts:21-26`; `apps/dashboard/src/dashboard-app.test.ts:1828-1870`,
   `dashboard-app.settings-panels.test.ts:13-64`, `:152-158`, `dashboard-app.search-modules.test.ts:445-458`,
   `screens/venue-settings-screen.test.ts:88`, `:196-205`
@@ -415,16 +428,19 @@ The parent plan's apply. In particular, and for this PR:
 - `AdjustmentsApi`: `listReasons()` GETs `/management-api/adjustments/reasons`;
   `reactivateReason` goes (its route went in Task 1b). `deactivateReason` stays, already calling
   the `DELETE` that now deletes, until Task 7a renames it; `active` stays on the client's type
-  until Task 5a rewrites the list. Between Task 1a and Task 5a the running page shows every reason
-  as Disabled (the server no longer sends `active`); the suites mock their own reasons, so none
-  sees it — a mid-branch state, gone by Task 5a.
+  until Task 5a rewrites the list. Between Task 1a and Task 5a the running page lists no reasons
+  by default: the Status filter starts on "active" (`reasons-screen.ts:1033`) and the server no
+  longer sends `active`, so every reason is filtered out. The suites mock their own reasons, so
+  none sees it — a mid-branch state, gone by Task 5a.
 - Strings: `nav.adjustment_reasons` and `adjustments.title` "Voids and comps" / «Cancelaciones y
   descuentos»; `adjustments.intro` "The reasons staff choose when they void or comp an item." /
   «Los motivos que elige el personal al cancelar un artículo o hacerle un descuento.» (picture 01).
 
 - [ ] **Step 1: Write the failing tests** (Changed test checks list each): `index.test.ts` — the
   contribution has no `settingsPanels` and `moreScreens` holds the entry above; the page renders on
-  the context's request and live data and GETs `/management-api/adjustments/reasons`; the
+  the context's request and live data and GETs `/management-api/adjustments/reasons`; its fetch
+  answers one reason in place of `{ reasons: [] }` (`:65`), so the wait for `[data-test="reasons"]`
+  (`:88-90`) still holds after Task 5a, which draws no table for an empty list; the
   `name_taken` sentence. `registry.test.ts` — the adjustments contribution's `moreScreens` screen is
   that placement and `settingsPanels` is undefined. `dashboard-app.test.ts` — at
   `/manage/adjustment-reasons` a manager of adjustments sees the page, with nav items
@@ -443,7 +459,9 @@ The parent plan's apply. In particular, and for this PR:
   `pnpm --filter @waitron/dashboard-modules exec vitest run src/registry.test.ts`,
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.settings-panels.test.ts src/dashboard-app.search-modules.test.ts src/screens/venue-settings-screen.test.ts`
   (whole files), and `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "adjustment"`
-  on its own line.
+  on its own line, and
+  `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen.test.ts -t "speaks Spanish when the dashboard does|shows a name already in use beside the name"`
+  on its own line (the cases holding `:400` and `:1314`).
 - [ ] **Step 3: Implement.** The reasons screen renders its own `<h1>` (`adjustments.title`) above
   the intro, as `packages/staffing/src/dashboard/staff-roles-screen.ts:320-324` does; the venue
   settings page no longer owns its heading. Do not name `adjustment-reasons` in
@@ -453,7 +471,8 @@ The parent plan's apply. In particular, and for this PR:
   (`:1728-1919`) and the Enable a11y states (`reasons-screen.a11y.test.ts:170-195`) in this task.
 - [ ] **Step 4: Run; expect green** — Step 2's commands, then
   `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/` (the screen suites mount it
-  standalone, so only the heading can move their results), the dashboard strings guards,
+  standalone; what moves their results is the heading, the `name_taken` sentence, and the
+  retired `enabling` block and Enable a11y states), the dashboard strings guards,
   and `pnpm --filter @waitron/dashboard typecheck && pnpm --filter @waitron/adjustments typecheck`.
 - [ ] **Step 5: Commit** — `"Voids and comps is a page under Service; the Venue settings tab goes (A758-2)"`.
 
@@ -465,7 +484,8 @@ The parent plan's apply. In particular, and for this PR:
   `strings.ts` (`:366-370`, `:408-410` `OFFER_NAMES`/`offerName` retire with the Allows column)
 - Tests: `reasons-screen.test.ts`, `reasons-screen.a11y.test.ts`, `strings.test.ts:5-8`,
   `reasons-screen.unsaved.test.ts` and `reasons-screen.save-state.test.ts` (`:54`, `:62`; helpers
-  that found rows through `wt-data-table`)
+  that found rows through `wt-data-table`), `client.test.ts:29` (the typed `reason` drops
+  `active: true`, or the package's typecheck fails)
 
 **Interfaces:**
 - Produces, for Tasks 5b–7b: rows are `<tr data-reason=${id}>` drawn with `repeat(rows, (r) => r.id, …)`
@@ -486,12 +506,15 @@ The parent plan's apply. In particular, and for this PR:
   `adjustments.none` "—" (both); `adjustments.order_note` "Drag ⋮⋮ to set the order the till lists
   them in." / «Arrastra ⋮⋮ para fijar el orden en que la caja los muestra.». Retire the keys only
   the old table used (`column.allows`, `column.roles`, `column.status`, the column-chooser and
-  Filters keys `:23-41`, `active`, `disabled`, `no_limit`, `approves`, `move_up`, `move_down`) —
-  `git grep` each before removing. (`enable` goes in Task 4, `disable*` in Task 7a.)
+  Filters keys `:23-41`, `active`, `disabled`, `approves`, `move_up`, `move_down`) —
+  `git grep` each before removing. `no_limit` stays: it is the placeholder of three editor
+  fields (`reasons-screen.ts:877`, `:1152`, `:1164`). (`enable` goes in Task 4, `disable*` in Task 7a.)
 
 - [ ] **Step 1: Write the failing tests** in `reasons-screen.test.ts`, replacing the
   `"the reasons list"`, column-chooser, Filters and Status cases (Changed test checks):
-  - `"draws each reason as picture 01"`: fixtures Entry error (Void), Other (Void, note), Complaint
+  - `"draws each reason as picture 01"`, building its four reasons inside the case (the shared
+    fixtures, `reasons-screen.test.ts:47-60` and beside it, stay as they are except for losing
+    `active`): Entry error (Void), Other (Void, note), Complaint
     (Comp, Supervisor/Manager/Admin both lists, `maxAmount` "30.00"), Staff meal (Comp, all four /
     Manager, Admin, `maxPercentBp` 5000) → cell texts, in English:
     `["Entry error", "Void", "—", "—", "—"]`, `["Other Note required", "Void", "—", "—", "—"]`,
@@ -596,8 +619,9 @@ exactly the rows drawn, in order, as the controller requires (`reorder-table.ts:
 
 **Files:** `packages/adjustments/src/dashboard/client.ts:142-144`, new
 `packages/adjustments/src/dashboard/reason-delete-copy.ts` and `reason-delete-copy.test.ts`,
-`strings.ts`, `reasons-screen.ts` (`#deactivate` `:719-724`, the `deactivate` editor kind and its
-modal branch `:1255-1322`, the Disable menu item); tests `client.test.ts`,
+`strings.ts`, `reasons-screen.ts` (`#deactivate` `:719-724`, `#refocusFrom` `:698-717`, the
+`deactivate` branch of `#refused` `:643-646`, the `deactivate` editor kind and its modal branch
+`:1255-1322`, the Disable menu item); tests `client.test.ts`,
 `reasons-screen.test.ts` (`:1603-1726`), `reasons-screen.a11y.test.ts:315`,
 `reasons-screen.unsaved.test.ts` (`:341`, `:482`, `:798-819`)
 
@@ -612,9 +636,17 @@ modal branch `:1255-1322`, the Disable menu item); tests `client.test.ts`,
   `packages/staffing/src/dashboard/staff-role-delete-copy.ts`; its `refusal` maps
   `adjustment_reason.void_required` to `adjustments.error.void_required_note` when
   `params.withNote === 1`, else `adjustments.error.void_required` (`strings.ts:91-93`), and any
-  other code to `codeMessage(code)`.
+  other code to `codeMessage(code)`. Its `item` returns
+  `tf("adjustments.delete_item", { names: <targets' names joined by ", ">, count: String(item.count) }).trim()`,
+  as staffing's fallback does (`staff-role-delete-copy.ts:26-29`, with
+  `"staffing.role.delete_unknown": "{names} ({count})"` in English and Spanish alike,
+  `packages/staffing/src/dashboard/strings.ts:154`, `:378`). The dialog never calls it here
+  (`ends` and `removes` are always empty), so the test calls it.
 - Removes: Disable (`#deactivate`, the `deactivate` editor kind, the `adjustments.disable*`
-  strings). Between 7a and 7b the row menu offers Edit only.
+  strings), and with it `#refocusFrom` (its last caller is `#deactivate`, `:722`; `#enable`'s went
+  in Task 4) and `#refused`'s `this.editor?.kind === "deactivate"` branch (`:643-646`), each of
+  which would fail the typecheck once Disable is gone. Focus after a delete comes back in Task 7b.
+  Between 7a and 7b the row menu offers Edit only.
 - Strings (en / es): `adjustments.delete` "Delete" / «Eliminar»; `adjustments.delete_heading`
   "Delete reason" / «Eliminar motivo»; `adjustments.delete_refusals` "Why this cannot be deleted" /
   «Por qué no se puede eliminar»; `adjustments.delete_ends` "Work that ends" / «Trabajo que
@@ -625,13 +657,17 @@ modal branch `:1255-1322`, the Disable menu item); tests `client.test.ts`,
   "Checking whether this reason can be deleted…" / «Comprobando si se puede eliminar este
   motivo…»; `adjustments.delete_load_error` "Could not check whether it can be deleted: {reason}"
   / «No se pudo comprobar si se puede eliminar: {reason}»; `adjustments.delete_error` "Could not
-  delete the reason: {reason}" / «No se pudo eliminar el motivo: {reason}».
+  delete the reason: {reason}" / «No se pudo eliminar el motivo: {reason}»;
+  `adjustments.delete_item` "{names} ({count})" / «{names} ({count})». The copy's `cancel` is the
+  existing `adjustments.cancel` (`strings.ts:74`, `:231`).
 
 - [ ] **Step 1: Write the failing tests** — `client.test.ts`: `deleteReason("r1")` sends
   `DELETE /management-api/adjustments/reasons/r1`; `watchReasonDeleteImpact` reads
   `/management-api/adjustments/reasons/r1/delete-impact` with `passive: true`.
   `reason-delete-copy.test.ts`: the refusal line for `withNote` 0 and 1, an unknown code through
-  `codeMessage`, every copy key set, in English and (read from the strings file) Spanish.
+  `codeMessage`; `item({ key: "anything", count: 2, targets: [A, B] })` reads "A, B (2)"; and
+  each copy value equals its string exactly — `heading` is `ADJUSTMENTS_STRINGS.en["adjustments.delete_heading"]`,
+  and so on for every key — in English and, read from `ADJUSTMENTS_STRINGS.es`, Spanish.
 - [ ] **Step 2: Run; expect red** —
   `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/client.test.ts src/dashboard/reason-delete-copy.test.ts`.
 - [ ] **Step 3: Implement**; remove Disable from the screen and retire its tests (Changed test
@@ -652,29 +688,42 @@ modal branch `:1255-1322`, the Disable menu item); tests `client.test.ts`,
   `:289-316`: a `Deletion` state, a second `QueryController` for the impact released on close, a
   generation object so a late answer is dropped, `adjustment_reason.not_found` closing the
   question with that sentence on the page and a reload, a refusal kept in `actionError`.
+- When the `DELETE` itself is refused `adjustment_reason.void_required`, the screen maps the thrown
+  error to the impact's refusal shape — `{ code, params: { withNote: params.withNote ? 1 : 0 },
+  targets: [] }` — and words it with `reasonDeleteCopy().refusal`, so the sentence is written once
+  in the copy and not a third time in the screen.
+- Focus after a delete, as `apps/dashboard/src/widgets/course-list.ts:470-475` does: before the
+  row goes, take the next row's id, else the previous row's; after the list is read again, focus
+  that row's `wt-row-actions`, or Add reason (`[data-test="add-reason"]`) when there is none or it
+  has gone.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing tests** — those in `reasons-screen.test.ts` inside a new
+  `describe("deleting a reason", …)`:
   - `"asks before deleting, names the reason, then deletes and reloads"`: row menu → Delete → a
     `wt-delete-dialog` whose impact read was asked for that id; once read, the dialog names
     "Complaint" (fixture `c`) and its Delete is enabled; confirm → `deleteReason("c")` once, the
-    dialog closes, the list is read again, focus goes to the row now in its place (or Add reason
-    when none).
+    dialog closes, the list is read again, focus goes to the next row's menu (else the previous
+    row's, else Add reason).
   - `"shows why the last Void reason cannot be deleted, with Delete held"`: impact with the
     `withNote: 0` refusal → the refusal line reads `adjustments.error.void_required`; `withNote: 1`
     → `…_note`; Delete disabled.
   - `"keeps the question open and explains a refused delete"`: `deleteReason` rejects
     `{ code: "adjustment_reason.void_required", params: { withNote: true } }` → `actionError`
-    reads `delete_error` with that sentence; the row is still listed.
+    reads `delete_error` with `adjustments.error.void_required_note`; the row is still listed.
   - `"closes the question when the reason was deleted elsewhere"`: the impact read rejects
     `adjustment_reason.not_found` → no dialog, the page alert reads
     `codeMessage("adjustment_reason.not_found")`, the list is read again.
+  - `"closes the question when the reason was deleted between the read and the confirm"`: the
+    impact read succeeds, then `deleteReason` rejects `adjustment_reason.not_found` → no dialog,
+    the page alert reads `codeMessage("adjustment_reason.not_found")`, the list is read again.
   - `"sends one Delete while it is on its way"` (two confirms → one call).
-  - `reasons-screen.unsaved.test.ts`: `"an open Delete question closes without the unsaved-changes
-    question"` and `"a departed Delete control cannot delete the current reason"` (in place of the
-    cases 7a retired).
-  - a11y (both themes): the dialog loading, ready, refused, and after a failed read.
+  - In `reasons-screen.unsaved.test.ts`: `"an open Delete question closes without the
+    unsaved-changes question"` and `"a departed Delete control cannot delete the current reason"`
+    (in place of the cases 7a retired).
+  - In `reasons-screen.a11y.test.ts`, both themes: the dialog loading, ready, refused, and after a
+    failed read.
 - [ ] **Step 2: Run; expect red** — one file at a time, since `-t` filters every file on the line:
-  `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen.test.ts -t "delet"`,
+  `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen.test.ts -t "deleting a reason"`,
   then `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen.unsaved.test.ts src/dashboard/reasons-screen.a11y.test.ts`.
 - [ ] **Step 3: Implement**, adding Delete after Edit in the row menu. In design-system.md
   "Switching off versus deleting": drop "an adjustment reason" from the English list of things
@@ -736,10 +785,13 @@ and Fixtures grown below; the owner points.
 - `packages/adjustments/src/migrations.test.ts:64-85` (no `active` column); `:130-136` (a second
   reason under a name is refused whatever its state). `schema/reasons.test.ts:7-11` (index name).
 - `operations.test.ts`: `:64` "…and deactivates…" → deletes; `:134` (inactive listed) retired;
-  `:149` (name freed once deactivated) → freed once deleted; `:183` (reorder names every active) →
+  `:149` (name freed once deactivated) → freed once deleted; `:174` ("refuses an id that names no
+  reason": `deactivateAdjustmentReason(tx, MISSING)` at `:178` → `deleteAdjustmentReason`, same
+  code); `:183` (reorder names every active) →
   every reason; `:210` (inactive renumbered) retired; `:341`, `:391`, `:403` switch-off → delete;
-  `:428` (a switched-off Void reason edited) retired; `:472` (inactive included) narrowed;
-  `:486-535` (reactivating) retired.
+  `:421` ("edits and switches off Comp reasons…": the Comp reason is deleted, and the list is
+  still `[]`); `:428` (a switched-off Void reason edited) retired; `:472` (inactive included) narrowed;
+  `:486-535` (reactivating) retired (Task 1a).
 - `policy.test.ts:213`, `:277` (switched-off reason refused) retired, and `:227-229`'s second
   `expect` (the same throw for `{ ...COMPLAINT, active: false }`) removed — `reason_inactive` and
   `active` retire (Task 1a).
@@ -759,12 +811,14 @@ and Fixtures grown below; the owner points.
   only Void reason asking for a note was switched off" retired (nothing can be switched off; the
   case at `:1892` keeps the refusal through a reason that cannot cancel); `:1901`'s
   `[row.active, row.actions]` → `row.actions` (Task 3).
-- `apps/till/src/i18n/codes.test.ts:365`; `widgets/adjustment-dialog.test.ts:716`, `:755`;
+- `apps/till/src/i18n/codes.test.ts:365`; `widgets/adjustment-dialog.test.ts:716`, `:755` — the
+  `reason_inactive` entry or check is deleted, not replaced: `adjustment_reason.not_found` is
+  already listed there (`codes.test.ts:371`, `adjustment-dialog.test.ts:721`, `:757`).
   `till-app-adjustments.test.ts:787`, `:801`, `:1868`, `:1878`; `till-app-parties.test.ts:11312`,
   `:11319` — `reason_inactive` → `adjustment_reason.not_found` (design §6, the till's words for a
-  deleted reason).
+  deleted reason). All Task 3.
 - `packages/adjustments/src/dashboard/index.test.ts:16-38`, `:55-91` (the page, not a panel; the
-  list URL); `:43` (the `name_taken` sentence, Decision 4). `client.test.ts:43`, `:94-95` (Task 4),
+  list URL; its fetch answers one reason, Task 4); `:43` (the `name_taken` sentence, Decision 4). `client.test.ts:43`, `:94-95` (Task 4),
   and its `deactivateReason` case → `deleteReason` (Task 7a). `strings.test.ts:5-8` ("Up to €30.00
   off a bill" → "€30.00 a bill", picture 01; Task 5a).
   `packages/dashboard-modules/src/registry.test.ts:21-26`.
@@ -790,7 +844,8 @@ and Fixtures grown below; the owner points.
 ## Fixtures grown
 
 - Every reason fixture loses `active` (`packages/adjustments/src/configuration-transfer.test.ts:7-25`,
-  `migrations.test.ts:46-54`, the dashboard tests' reason objects, `client.test.ts:29`).
+  `migrations.test.ts:46-54`, the dashboard tests' reason objects; `client.test.ts:29`'s
+  `active: true` goes in Task 5a, with the client's type).
 - `apps/server/scripts/demo-seed/seed-adjustments.test.ts` calls `listAdjustmentReasons(tx)`.
 - Test helpers that found rows inside `wt-data-table` find them in the screen's own `<table>`.
 
