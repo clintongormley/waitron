@@ -5,6 +5,9 @@ import { currentLocale } from "./t.js";
 export const helpEn = {
   "help.label": "Help",
   "help.badge_label": "Help: {part}",
+  "help.guide_link": "Read more in the guide",
+  "help.menu.dishes":
+    "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
   "help.more.profile":
     "Switches this device to another profile it is approved for. Park or clear the order in progress first.",
   "help.more.settings":
@@ -24,6 +27,9 @@ export type HelpKey = keyof typeof helpEn;
 export const helpEs: Record<HelpKey, string> = {
   "help.label": "Ayuda",
   "help.badge_label": "Ayuda: {part}",
+  "help.guide_link": "Más información en la guía",
+  "help.menu.dishes":
+    "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.more.profile":
     "Cambia este dispositivo a otro perfil para el que está aprobado. Antes, aparca o vacía el pedido en curso.",
   "help.more.settings":
