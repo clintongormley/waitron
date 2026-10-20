@@ -6,6 +6,8 @@ export const helpEn = {
   "help.label": "Help",
   "help.badge_label": "Help: {part}",
   "help.guide_link": "Read more in the guide",
+  "help.guide_title": "Guide",
+  "help.guide_close": "Close",
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
   "help.more.profile":
@@ -28,6 +30,8 @@ export const helpEs: Record<HelpKey, string> = {
   "help.label": "Ayuda",
   "help.badge_label": "Ayuda: {part}",
   "help.guide_link": "Más información en la guía",
+  "help.guide_title": "Guía",
+  "help.guide_close": "Cerrar",
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.more.profile":

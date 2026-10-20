@@ -36,6 +36,8 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": devServerProxy(),
+      // The guide sheet's frame loads the box's guide pages.
+      "/help": devServerProxy(),
       // Product images are served same-origin in production.
       "/media": devServerProxy(),
     },
