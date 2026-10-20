@@ -86,11 +86,14 @@ Found while checking the guides for A582 slice 3. One clean-up of the dashboard'
 
 Done when the three are changed and the dashboard's strings tests pass.
 
-## A887. The English guides say "parked order" where the till says "Hold" and "Held orders"
+## A887. Find a bill's state filter still says "Held" for an order the till now calls parked
 
-Found while checking the guides for A582 slice 3. `apps/server/src/guide/en/products.md` and
-`modifiers.md` call an order set aside on the till a "parked order", while the till's English
-buttons and list say **Hold** and **Held orders** (`action.hold`, `held.title`,
-`apps/till/src/i18n/strings.ts`). The Spanish matches: the till says **Aparcar** and **Pedidos
-aparcados**, and the Spanish guides use the same word. Decide one English word, and make the guides and
-the till use it. Done when the English guides and the till's English strings say the same word.
+Found while checking the guides for A582 slice 3, narrowed in slice 4a. The English guides call an
+order set aside on the till a "parked order" (`grep -n "parked order" apps/server/src/guide/en/*.md`:
+`modifiers.md` and `products.md`), and since A738 (`d99a9f403`) the till's own button and list say
+**Park** and **Parked orders** (`action.hold`, `held.title`, `apps/till/src/i18n/strings.ts:317`,
+`:468`), with **Aparcar** and **Pedidos aparcados** in Spanish (`:1928`, `:2070`), so the guides and
+Park agree. What is left: Find a bill's state filter (`till-find-bill-screen.ts:42`, `:394`) calls
+an open, unpaid order with no table (`apps/server/src/find-bill-bills.ts:83`) **Held** /
+**En espera** (`find_page.held`, `strings.ts:525`, `:2125`). Done when that filter uses the till's
+word. Not renamed in A582: `strings.ts` was being changed heavily by two other lanes at the time.
