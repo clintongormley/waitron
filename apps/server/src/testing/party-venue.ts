@@ -206,16 +206,42 @@ export async function seat(
   return inTx(v, (tx) => seatTable(tx, v.cfg, { tableId, guestCount, operatorId: OPERATOR }));
 }
 
+export async function seatWithNoAllergies(
+  v: PartyVenue,
+  tableId: string,
+  guestCount: number | null = null,
+): Promise<{ partyId: string; tabId: string; revision: number }> {
+  const seated = await seat(v, tableId, guestCount);
+  await inTx(v, (tx) =>
+    VENUE_SERVICE.writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, OPERATOR),
+  );
+  return seated;
+}
+
 /** One of each dish named, added to that bill as a round. */
 export async function order(v: PartyVenue, billId: string, ...names: string[]): Promise<void> {
-  await inTx(v, (tx) =>
-    addTabRound(
+  await inTx(v, async (tx) => {
+    const [bill] = await tx
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    if (
+      bill?.partyId != null &&
+      (await VENUE_SERVICE.readPartyAllergy(tx, bill.partyId)).answer === null
+    )
+      await VENUE_SERVICE.writePartyAllergy(
+        tx,
+        bill.partyId,
+        { answer: "none", guests: [] },
+        OPERATOR,
+      );
+    await addTabRound(
       tx,
       v.cfg,
       billId,
       names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
-    ),
-  );
+    );
+  });
 }
 
 /** One of each dish named, sent as one fired group by {@link OPERATOR}, to `billId` when given. */
@@ -225,8 +251,10 @@ export async function orderForParty(
   names: string[],
   billId?: string,
 ): Promise<{ tabId: string; revision: number }> {
-  const { tabId, revision } = await inTx(v, (tx) =>
-    placeGroups(tx, v.cfg, partyId, {
+  const { tabId, revision } = await inTx(v, async (tx) => {
+    if ((await VENUE_SERVICE.readPartyAllergy(tx, partyId)).answer === null)
+      await VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, OPERATOR);
+    return placeGroups(tx, v.cfg, partyId, {
       groups: [
         {
           lines: names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
@@ -235,8 +263,8 @@ export async function orderForParty(
       ],
       operatorId: OPERATOR,
       ...(billId === undefined ? {} : { billId }),
-    }),
-  );
+    });
+  });
   return { tabId, revision };
 }
 

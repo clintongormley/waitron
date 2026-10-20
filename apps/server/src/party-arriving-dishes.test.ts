@@ -45,7 +45,7 @@ import {
   orderForParty,
   partyAt,
   revisionOf,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";

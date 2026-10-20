@@ -8,7 +8,7 @@ import type { AllergyCommand, AllergyPatch } from "@waitron/module";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { readBillEditState } from "./bill-editing.js";
 import { fireGroup, fireHeldLine } from "./order-groups.js";
-import { fireCourse, fireOrderLines, sendLines } from "./working-order.js";
+import { addTabRound, fireCourse, fireLines, fireOrderLines, sendLines } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -41,6 +41,9 @@ useVenueDb({
 const none: AllergyPatch = { party: { answer: "none", guests: [] }, ticks: [] };
 async function fixture(ungrouped = false, multiBill = false) {
   const p = await seat(v, await v.table(`Release ${randomUUID().slice(0, 8)}`));
+  await inTx(v, (tx) =>
+    VENUE_SERVICE.writePartyAllergy(tx, p.partyId, { answer: "none", guests: [] }, OPERATOR),
+  );
   const placed = await inTx(v, (tx) =>
     placeGroups(tx, v.cfg, p.partyId, {
       operatorId: OPERATOR,
@@ -66,6 +69,7 @@ async function fixture(ungrouped = false, multiBill = false) {
       .update(workingOrderLines)
       .set({ groupId: null })
       .where(eq(workingOrderLines.workingOrderId, p.tabId));
+  await v.db.run(sql`delete from party_allergy where party_id = ${p.partyId}`);
   return {
     ...p,
     groupId: placed.groups[0]!.id,
@@ -102,11 +106,87 @@ async function run(p: Fixture, path: string, ask?: AllergyCommand) {
     if (path === "course")
       return fireCourse(tx, v.cfg, p.tabId, mains, { personId: OPERATOR }, undefined, ask);
     if (path === "lower") return fireOrderLines(tx, v.cfg, p.tabId, [p.lineId]);
-    return sendLines(tx, v.cfg, p.tabId, path === "all" ? [] : [1], authority, undefined, ask);
+    return sendLines(
+      tx,
+      v.cfg,
+      p.tabId,
+      path === "all" ? [] : path === "missing" ? [999] : [1],
+      authority,
+      undefined,
+      ask,
+    );
   });
 }
 
 describe("A669 release matrix", () => {
+  it("a missing named line is a no-op without an answer, while a mixed selection still checks real work", async () => {
+    const p = await fixture(true);
+    const before = frozen();
+    await run(p, "missing");
+    expect(frozen()).toEqual(before);
+    const authority = {
+      operatorId: OPERATOR,
+      expectedEdit: await inTx(v, (tx) => readBillEditState(tx, p.tabId)),
+    };
+    await expect(
+      inTx(v, (tx) => sendLines(tx, v.cfg, p.tabId, [999, 1], authority)),
+    ).rejects.toMatchObject({ code: "allergy.unanswered" });
+    expect(frozen()).toEqual(before);
+  });
+  it("the raw round writer refuses an unanswered party before any kitchen write", async () => {
+    const p = await seat(v, await v.table(`Raw round ${randomUUID().slice(0, 8)}`));
+    const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, p.tabId));
+    const before = frozen();
+    await expect(
+      inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, p.tabId, [{ menuItemId: v.item("Burger"), quantity: "1" }], {
+          operatorId: OPERATOR,
+          expectedEdit,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "allergy.unanswered" });
+    expect(frozen()).toEqual(before);
+  });
+
+  it("the lowest kitchen writer refuses an unanswered party with no partial output", async () => {
+    const p = await seat(v, await v.table(`Low writer ${randomUUID().slice(0, 8)}`));
+    const billId = await counterOrder(v, "Burger");
+    await v.db
+      .update(workingOrders)
+      .set({ partyId: p.partyId })
+      .where(eq(workingOrders.id, billId));
+    const lines = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const before = frozen();
+    await expect(inTx(v, (tx) => fireLines(tx, v.cfg, billId, lines))).rejects.toMatchObject({
+      code: "allergy.unanswered",
+    });
+    expect(frozen()).toEqual(before);
+  });
+
+  it("the lowest kitchen writer still accepts a counter dish with no allergy state", async () => {
+    const billId = await counterOrder(v, "Burger");
+    const lines = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    expect(await inTx(v, (tx) => fireLines(tx, v.cfg, billId, lines))).toEqual([]);
+    const [stored] = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lines[0]!.id));
+    expect(stored!.sentAt).not.toBeNull();
+  });
+
+  it("an empty kitchen write needs no answer and changes no rows", async () => {
+    const p = await seat(v, await v.table(`Empty round ${randomUUID().slice(0, 8)}`));
+    const before = frozen();
+    expect(await inTx(v, (tx) => fireLines(tx, v.cfg, p.tabId, []))).toEqual([]);
+    expect(frozen()).toEqual(before);
+  });
+
   for (const path of ["line", "all", "group", "course", "held-line", "lower"]) {
     it(`${path} refuses unanswered with no database writes`, async () => {
       const p = await fixture(["line", "all", "lower"].includes(path), path === "group");
@@ -210,6 +290,9 @@ describe("A669 release matrix", () => {
   });
   it("course preflight accepts ticks across both bills and multiple qualifying groups before release", async () => {
     const p = await fixture(false, true);
+    await inTx(v, (tx) =>
+      VENUE_SERVICE.writePartyAllergy(tx, p.partyId, { answer: "none", guests: [] }, OPERATOR),
+    );
     const second = await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, p.partyId, {
         operatorId: OPERATOR,
@@ -218,6 +301,7 @@ describe("A669 release matrix", () => {
       }),
     );
     const secondId = second.groups[0]!.lineIds[0]!;
+    await v.db.run(sql`delete from party_allergy where party_id = ${p.partyId}`);
     const allergy: AllergyPatch = {
       party: {
         answer: "allergies",

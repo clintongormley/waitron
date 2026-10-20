@@ -2175,6 +2175,7 @@ async function billOfNoParty(
       zoneId: v.zoneId,
     });
     const opened = await openPartyTab(tx, v.cfg, { tableId });
+    await VENUE_SERVICE.writePartyAllergy(tx, opened.partyId, { answer: "none", guests: [] }, ALEX);
     await fill(tx, opened.tabId);
     return opened;
   });

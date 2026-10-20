@@ -38,7 +38,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -228,6 +228,7 @@ async function seated(v: Venue): Promise<Seated> {
       guestCount: 2,
       operatorId: ALEX,
     });
+    await VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ALEX);
     return { partyId, tabId };
   });
 }

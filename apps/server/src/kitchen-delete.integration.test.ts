@@ -46,7 +46,12 @@ import {
   advanceTicketItem,
 } from "./working-order.js";
 import { readRestOfOrder } from "./rest-of-order.js";
-import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
+import {
+  inTx,
+  setupPartyVenue,
+  seatWithNoAllergies as seat,
+  OPERATOR,
+} from "./testing/party-venue.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 function deferred() {

@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -157,6 +158,7 @@ async function billOf(
       guestCount: null,
       operatorId: venue.staffId,
     });
+    await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, venue.staffId);
     await placeGroups(tx, venue.cfg, seated.partyId, {
       groups: [{ lines: [withSides(offer[dish], portions)], release }],
       operatorId: venue.staffId,

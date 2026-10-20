@@ -2281,7 +2281,13 @@ ticks use the dish ids returned by its final save. A stale group Fire shows the 
 requires another confirmation before sending their assignments. Signed-in station and pass Fire
 uses the common prompt, including cross-bill assignments. Device Fire uses recorded answers and
 shows an unanswered refusal without offering a guest editor. Lifecycle and counter-to-table move
-integration remain.
+integration remain. The lower kitchen writer now checks table answers, and a missing named line
+keeps the send's existing no-work behavior. The counter-to-table move writer accepts an explicit
+answer and assignments before adopting the destination zone, with bill-scoped replay and rollback.
+Its HTTP preview, request parsing and till confirmation remain to be connected; it is not a
+deployable feature yet. Join-answer combinations, copied-guest deletion and assignments through a
+partial split of recalled dishes have server integration checks. Restart and preview/adoption
+authority checks and the guides remain.
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.

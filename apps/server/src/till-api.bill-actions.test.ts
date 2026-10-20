@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -58,6 +59,7 @@ async function seated(...names: string[]): Promise<{ partyId: string; tabId: str
       guestCount: null,
       operatorId: venue.operatorId,
     });
+    await writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, venue.operatorId);
     await addTabRound(
       tx,
       venue.cfg,

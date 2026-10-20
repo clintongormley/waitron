@@ -19,7 +19,7 @@ import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
-import { setRoutingCell } from "@waitron/venue-service";
+import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { createTable } from "./live-table.js";
 import { seatTable } from "../parties.js";
 import { OPERATOR } from "./party-venue.js";
@@ -227,6 +227,7 @@ export async function setupSplitExtrasVenue() {
     const tableId = (await createTable(tx, cfg, { label: "Split extras", zoneId: tables.zoneId }))
       .id;
     const seated = await seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR });
+    await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, OPERATOR);
     const party = { tableId, zoneId: tables.zoneId, partyId: seated.partyId, tabId: seated.tabId };
     return { stations, printers, folders, products, lists, tables, counter, party };
   });

@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -150,7 +151,9 @@ async function floorToday(tableId: string): Promise<FloorToday | null> {
 async function seatAt(tableId: string): Promise<string> {
   const answer = await send("POST", `/api/tables/${tableId}/seat`, {});
   expect(answer.status).toBe(200);
-  return ((await answer.json()) as { partyId: string }).partyId;
+  const partyId = ((await answer.json()) as { partyId: string }).partyId;
+  await inTx(v, (tx) => writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, OPERATOR));
+  return partyId;
 }
 
 async function finish(partyId: string): Promise<void> {

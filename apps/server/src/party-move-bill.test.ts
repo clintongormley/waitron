@@ -46,7 +46,7 @@ import {
   placeByHand,
   pricedInZone,
   revisionOf,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   tableRow,
   zoneOf,
@@ -935,7 +935,16 @@ describe("move a counter order into a party", () => {
     const mesa = await v.table("Mesa D3");
     const orderId = await counterOrder(v, "Tarta");
 
-    const result = await move(orderId, { tableId: mesa });
+    const result = await move(
+      orderId,
+      { tableId: mesa },
+      {
+        submissionId: randomUUID(),
+        partyId: null,
+        otherPartyId: null,
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      },
+    );
 
     expect(result.billId).toBe(orderId);
     expect(result.merged).toBe(false);
@@ -1063,7 +1072,16 @@ describe("the dishes of an open bill moved between service modes", () => {
   it("sends a pay-first counter order's dish when it is seated at a free table", async () => {
     const orderId = await counterOrder(v, "Tarta");
 
-    await move(orderId, { tableId: await v.table("Mesa envío 3") });
+    await move(
+      orderId,
+      { tableId: await v.table("Arrival table 3") },
+      {
+        submissionId: randomUUID(),
+        partyId: null,
+        otherPartyId: null,
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      },
+    );
 
     const tickets = await ticketsOf(orderId);
     expect(tickets).toHaveLength(1);

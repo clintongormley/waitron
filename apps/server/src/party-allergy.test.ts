@@ -62,7 +62,11 @@ useVenueDb({
 
 async function party() {
   const tableId = await v.table(`Allergy ${randomUUID().slice(0, 8)}`);
-  return { ...(await seat(v, tableId)), tableId };
+  const seated = await seat(v, tableId);
+  await inTx(v, (tx) =>
+    VENUE_SERVICE.writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, OPERATOR),
+  );
+  return { ...seated, tableId };
 }
 
 function fresh(overrides: Partial<FreshDraftLineInput> = {}): FreshDraftLineInput {

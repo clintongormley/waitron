@@ -278,7 +278,8 @@ export async function readAllergySendView(
         const named = [...storedById.values()].find(
           (l) => l.workingOrderId === target.orderId && l.lineNo === n,
         );
-        if (named === undefined || named.parentLineId !== null) invalid("lineNos");
+        if (named === undefined) continue;
+        if (named.parentLineId !== null) invalid("lineNos");
         const held = current.groups.find(
           (g) => g.state === "held" && g.rows.some((r) => r.lineId === named.id),
         );

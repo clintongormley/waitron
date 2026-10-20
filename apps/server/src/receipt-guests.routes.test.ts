@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
@@ -379,7 +380,12 @@ async function partyBill(
       label: `Mesa ${randomUUID().slice(0, 8)}`,
       zoneId: v.tablesZone,
     });
-    const { tabId } = await seatTable(tx, v.cfg, { tableId, guestCount, operatorId: v.staffId });
+    const { tabId, partyId } = await seatTable(tx, v.cfg, {
+      tableId,
+      guestCount,
+      operatorId: v.staffId,
+    });
+    await writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, v.staffId);
     await addTabRound(tx, v.cfg, tabId, [{ menuItemId, quantity }]);
     return tabId;
   });

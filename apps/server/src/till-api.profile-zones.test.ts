@@ -55,7 +55,7 @@ import {
   OPERATOR,
   inTx,
   partyRow,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";

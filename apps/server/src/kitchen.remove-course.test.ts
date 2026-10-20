@@ -25,7 +25,13 @@ import {
   updateCourse,
 } from "./kitchen.js";
 
-import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import {
+  inTx,
+  OPERATOR,
+  seatWithNoAllergies as seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 

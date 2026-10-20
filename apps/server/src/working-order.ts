@@ -1880,6 +1880,8 @@ export async function fireLines(
   if (parentLines.length === 0) {
     return [];
   }
+  const partyId = await partyOfOrder(tx, orderId);
+  if (partyId !== null) await assertPartyAllergyAnswered(tx, partyId);
   lines = parentLines;
   const chosenRows = await tx
     .select({

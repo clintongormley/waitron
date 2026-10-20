@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { partyTables, parties, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
+import { writePartyAllergy } from "@waitron/venue-service";
 import { splitBill } from "./bill-action-fixture.js";
 import { partyRevisionOfOrder, setMainBill } from "../parties.js";
 import type { OriginConfig, TillConfig } from "../till-config.js";
@@ -36,6 +37,7 @@ export async function openPartyTab(
     .returning({ id: parties.id });
   const opened = await openTab(tx, cfg, { ...req, partyId: party!.id });
   await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
+  await writePartyAllergy(tx, party!.id, { answer: "none", guests: [] }, OPERATOR);
   await setMainBill(tx, party!.id, opened.tabId);
   return { ...opened, partyId: party!.id };
 }

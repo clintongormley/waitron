@@ -41,7 +41,7 @@ import type { CardProviderPool } from "../card-provider-pool.js";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
-import { ALL_MODULES } from "../modules.js";
+import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../till-config.js";
 import { mountTillApi } from "../till-api.js";
@@ -437,6 +437,9 @@ export async function seatedWith(
   const seated = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   if (seated.status !== 200) throw new Error(`seatedWith: seating answered ${seated.status}`);
   const partyId = seated.json.partyId as string;
+  await inTx(venue, (tx) =>
+    VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, venue.operatorId),
+  );
   if (names.length > 0) {
     const ordered = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, seated.json.tabId as string)),

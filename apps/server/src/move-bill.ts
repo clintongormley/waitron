@@ -10,7 +10,8 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, partyDisplayName } from "@waitron/shared";
+import type { AllergyPatch } from "@waitron/module";
+import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
@@ -25,6 +26,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
+import { applyPartyAllergyPatch, normaliseAllergyPatch } from "./party-allergy.js";
 import {
   checkAndBumpParty,
   holderOf,
@@ -32,6 +34,7 @@ import {
   partyZone,
   readMainBill,
   refuseMovedParty,
+  runServiceCommand,
   setMainBill,
 } from "./parties.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
@@ -58,6 +61,8 @@ export interface OtherPartyRead {
 }
 
 export interface MoveBillOptions extends OtherPartyRead {
+  submissionId?: string;
+  allergy?: AllergyPatch;
   expectedEdits: BillEditExpected[];
   bills: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
@@ -93,7 +98,40 @@ export async function moveBill(
   options: MoveBillOptions,
   attendance?: OrderAttendance,
 ): Promise<MoveBillResult> {
+  if ((options.submissionId === undefined) !== (options.allergy === undefined))
+    throw new AppError("management.request_invalid", { field: "allergy" });
+  if (options.submissionId !== undefined) {
+    if (!isUuid(options.submissionId) || !("tableId" in to))
+      throw new AppError("management.request_invalid", { field: "submissionId" });
+    const command = {
+      ...options,
+      submissionId: options.submissionId.toLowerCase(),
+      allergy: normaliseAllergyPatch(options.allergy!),
+    };
+    return runServiceCommand(
+      tx,
+      { kind: "bill", workingOrderId: billId },
+      command.submissionId,
+      "bill.move.allergy",
+      { billId, to, ...command },
+      () => moveBillOnce(tx, cfg, billId, to, command, attendance),
+      cfg.madeHereSink,
+    );
+  }
+  return moveBillOnce(tx, cfg, billId, to, options, attendance);
+}
+
+async function moveBillOnce(
+  tx: Transaction,
+  cfg: OriginConfig,
+  billId: string,
+  to: MoveTarget,
+  options: MoveBillOptions,
+  attendance?: OrderAttendance,
+): Promise<MoveBillResult> {
   const path = await guardPathParty(tx, billId, options);
+  if (options.allergy !== undefined && path.partyId !== null)
+    throw new AppError("management.request_invalid", { field: "allergy" });
   const destination = await resolveDestination(tx, cfg, path.partyId, to, options);
 
   if (path.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
@@ -141,6 +179,26 @@ export async function moveBill(
 
   let result: MoveBillResult;
   let held: string[] = [];
+  const recordAllergy = async (partyId: string) => {
+    if (options.allergy === undefined) return;
+    const lines = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+      );
+    await applyPartyAllergyPatch(
+      tx,
+      partyId,
+      options.allergy,
+      options.operatorId,
+      lines.map((line) => ({
+        ref: { kind: "working", id: line.id },
+        draftLineId: null,
+        workingLineId: line.id,
+      })),
+    );
+  };
   if (destination.kind === "counter") {
     if (source === null) throw new AppError("management.request_invalid", { field: "to" });
     await inheritKitchenNote(tx, cfg, noteScope, { workingOrderId: billId }, "copy");
@@ -164,7 +222,7 @@ export async function moveBill(
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
-    await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
+    await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId, () => recordAllergy(partyId));
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     ({ held } = await groupArrivingDishes(
       tx,
@@ -182,7 +240,7 @@ export async function moveBill(
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
-    await takeIntoParty(tx, cfg, billId, partyId, zoneId);
+    await takeIntoParty(tx, cfg, billId, partyId, zoneId, () => recordAllergy(partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.
     ({ held } = await groupArrivingDishes(
@@ -402,6 +460,7 @@ export async function takeIntoParty(
   billId: string,
   partyId: string,
   zoneId: string | null,
+  beforeSend?: () => Promise<void>,
 ): Promise<BillState> {
   const [bill] = await tx
     .update(workingOrders)
@@ -409,6 +468,7 @@ export async function takeIntoParty(
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
+  await beforeSend?.();
   if (zoneId !== null && (bill!.status === "open" || bill!.status === "placed")) {
     await adoptZone(tx, cfg, billId, zoneId, { takesOrders: bill!.status === "open" });
   }

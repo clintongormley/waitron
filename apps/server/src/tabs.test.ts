@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -1050,6 +1051,9 @@ describe("listTablesWithState (occupancy)", () => {
 
     const { tabId, partyId } = await asApp(cfg, (tx) =>
       seatTable(tx, cfg, { tableId, guestCount: null, operatorId }),
+    );
+    await asApp(cfg, (tx) =>
+      writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, operatorId),
     );
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
@@ -2632,8 +2636,11 @@ async function sentOn(tx: Transaction, billId: string) {
 async function partyTab() {
   const venue = await setupVenue();
   const { cfg, tableId, cafeOffer } = venue;
-  const { tabId } = await asApp(cfg, (tx) =>
+  const { tabId, partyId } = await asApp(cfg, (tx) =>
     seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR }),
+  );
+  await asApp(cfg, (tx) =>
+    writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, OPERATOR),
   );
   await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "3" }]));
   return { ...venue, tabId };
