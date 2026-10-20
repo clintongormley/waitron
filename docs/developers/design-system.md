@@ -4736,7 +4736,7 @@ removing a product from a menu removes that offer.
 
 ### Switching off versus deleting
 
-Something switched off but kept — an options or extras list, an adjustment reason, a user, a printer, a print
+Something switched off but kept — an options or extras list, a user, a printer, a print
 agent, a device or a card reader — is switched off with **Disable** (options and extras lists
 are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
@@ -4745,7 +4745,7 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 "Inactive" are not used for a record that is kept.
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
-screen uses: **Activo** or **Deshabilitado** for a motivo, usuario,
+screen uses: **Activo** or **Deshabilitado** for a usuario,
 lector, agente or dispositivo; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
@@ -4759,7 +4759,8 @@ remains. An off device still binds; an Every-stations scope alone does not. Once
 allowed, the dialog lists the settings and unsent choices that will be removed. Deleted rows
 never return to these lists or become selectable again. Recorded names stay with historical
 work, and adding the same name creates a different id. Station Default, Closed today/destination
-and clock warnings stay because they describe current configuration.
+and clock warnings stay because they describe current configuration. Voids and comps reasons offer Delete on every row; Delete is refused only
+while the reason is the venue's last Void reason, or its last one asking for a note.
 
 **A confirmed Delete asks with `wt-delete-dialog`.** The screen reads the record's `DeleteImpact`
 and hands it over with its own `DeleteDialogCopy`. The dialog first names the record, in bold,

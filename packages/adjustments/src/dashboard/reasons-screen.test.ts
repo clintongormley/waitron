@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import {
+  LiveData,
+  codeMessage,
+  setLocale,
+  tableNoMatches,
+  type QueryController,
+} from "@waitron/dashboard-kit";
+import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
-import { ADJUSTMENTS_STRINGS, actionChoice, kindName, roleName, tf } from "./strings.js";
+import { ADJUSTMENTS_STRINGS, actionChoice, kindName, roleName, t, tf } from "./strings.js";
 
 const ES = ADJUSTMENTS_STRINGS.es;
 
@@ -79,6 +86,26 @@ const retired: AdjustmentReason = {
 };
 const reasons = [entryError, complaint, employee, retired];
 
+function impactOf(reason: AdjustmentReason, refusals: DeleteImpactRefusal[] = []): DeleteImpact {
+  return { target: { id: reason.id, name: reason.name }, refusals, ends: [], removes: [] };
+}
+
+/** Reads the impact through the screen's own controller, as the real client does. */
+function watchImpact(read: (reasonId: string) => Promise<DeleteImpact>) {
+  return vi.fn(
+    (queries: QueryController, reasonId: string, apply: (impact: DeleteImpact) => void) =>
+      queries.watch(
+        "delete-impact",
+        {
+          key: `impact:${reasonId}`,
+          dependencies: [{ type: "adjustment_reasons" }],
+          read: () => read(reasonId),
+        },
+        apply,
+      ),
+  );
+}
+
 type FakeApi = {
   [K in keyof AdjustmentsApi]: AdjustmentsApi[K] extends (...args: infer A) => infer R
     ? ReturnType<typeof vi.fn<(...args: A) => R>>
@@ -92,6 +119,9 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
     createReason: vi.fn().mockResolvedValue({ ...complaint, id: "n" }),
     updateReason: vi.fn().mockResolvedValue(complaint),
     deleteReason: vi.fn().mockResolvedValue(undefined),
+    watchReasonDeleteImpact: watchImpact(async (reasonId) =>
+      impactOf(reasons.find((reason) => reason.id === reasonId)!),
+    ),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
     getSettings: vi
       .fn()
@@ -1806,6 +1836,257 @@ describe("the editor's messages", () => {
     await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
     expect(await bottom(el)).toBe(ES["adjustments.fix_fields"]);
+  });
+});
+
+describe("deleting a reason", () => {
+  type Dialog = HTMLElementTagNameMap["wt-delete-dialog"];
+  const dialog = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector<Dialog>('wt-delete-dialog[data-test="delete-reason"]');
+  const inDialog = (el: AdjustmentReasonsScreen, selector: string) =>
+    dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
+  const confirm = (el: AdjustmentReasonsScreen) => inDialog(el, '[data-test="delete-confirm"]');
+  const alert = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim();
+  const refusal = (withNote: number | boolean): DeleteImpactRefusal => ({
+    code: "adjustment_reason.void_required",
+    params: { withNote: withNote ? 1 : 0 },
+    targets: [],
+  });
+
+  async function confirmed(el: AdjustmentReasonsScreen): Promise<void> {
+    await confirm(el).updateComplete;
+    confirm(el).click();
+    await settle(el);
+  }
+
+  it.each([
+    { deleted: "c", after: [entryError, employee, retired], focus: "Actions: Employee discount" },
+    { deleted: "o", after: [entryError, complaint, employee], focus: "Actions: Employee discount" },
+    { deleted: "c", after: [entryError, retired], focus: "add-reason" },
+  ])(
+    "asks before deleting, names the reason, then deletes and reloads ($deleted, focus $focus)",
+    async ({ deleted, after, focus }) => {
+      const api = fakeApi({
+        listReasons: vi.fn().mockResolvedValueOnce(reasons).mockResolvedValue(after),
+      });
+      const el = await mount(api);
+      await press(el, `delete-${deleted}`);
+      expect(api.watchReasonDeleteImpact).toHaveBeenCalledWith(
+        expect.anything(),
+        deleted,
+        expect.any(Function),
+      );
+      const name = reasons.find((reason) => reason.id === deleted)!.name;
+      expect(dialog(el)!.shadowRoot!.querySelector("[data-target]")!.textContent).toBe(name);
+      expect(confirm(el).disabled).toBe(false);
+      expect(api.deleteReason).not.toHaveBeenCalled();
+      await confirmed(el);
+      expect(api.deleteReason).toHaveBeenCalledTimes(1);
+      expect(api.deleteReason).toHaveBeenCalledWith(deleted);
+      expect(dialog(el)).toBeNull();
+      expect(api.listReasons).toHaveBeenCalledTimes(2);
+      expect(rowKeys(el)).toEqual(after.map((reason) => reason.id));
+      const focused = el.shadowRoot!.activeElement;
+      if (focus === "add-reason") expect(focused?.getAttribute("data-test")).toBe("add-reason");
+      else expect(focused?.getAttribute("label")).toBe(focus);
+    },
+  );
+
+  it("moves focus to Add reason when the last reason is deleted", async () => {
+    const api = fakeApi({
+      listReasons: vi.fn().mockResolvedValueOnce([complaint]).mockResolvedValue([]),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    expect(rowKeys(el)).toEqual([]);
+    expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("add-reason");
+  });
+
+  it.each([
+    [0, "adjustments.error.void_required"],
+    [1, "adjustments.error.void_required_note"],
+  ] as const)(
+    "shows why the last Void reason cannot be deleted, with Delete held (withNote %s)",
+    async (withNote, key) => {
+      const api = fakeApi({
+        watchReasonDeleteImpact: watchImpact(async () => impactOf(entryError, [refusal(withNote)])),
+      });
+      const el = await mount(api);
+      await press(el, "delete-e");
+      const lines = dialog(el)!.shadowRoot!.querySelectorAll('[data-group="refusals"] li');
+      expect([...lines].map((line) => line.textContent)).toEqual([t(key)]);
+      expect(confirm(el).disabled).toBe(true);
+    },
+  );
+
+  it.each([
+    [true, "adjustments.error.void_required_note"],
+    [false, "adjustments.error.void_required"],
+  ] as const)(
+    "keeps the question open and explains a refused delete (withNote %s)",
+    async (withNote, key) => {
+      const api = fakeApi({
+        deleteReason: vi
+          .fn()
+          .mockRejectedValue({ code: "adjustment_reason.void_required", params: { withNote } }),
+      });
+      const el = await mount(api);
+      await press(el, "delete-e");
+      await confirmed(el);
+      expect(dialog(el)!.actionError).toBe(tf("adjustments.delete_error", { reason: t(key) }));
+      expect(dialog(el)!.submitting).toBe(false);
+      expect(rowKeys(el)).toContain("e");
+    },
+  );
+
+  it("keeps a question whose Delete is on its way when a fresh read finds the reason gone", async () => {
+    const liveData = new LiveData();
+    let finish!: () => void;
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(impactOf(complaint))
+      .mockRejectedValue({ code: "adjustment_reason.not_found" });
+    const api = fakeApi({
+      liveData,
+      watchReasonDeleteImpact: watchImpact(read),
+      deleteReason: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    try {
+      await press(el, "delete-c");
+      await confirmed(el);
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+      await settle(el);
+      expect(dialog(el)).not.toBeNull();
+      expect(alert(el)).toBeUndefined();
+      finish();
+      await settle(el);
+      expect(dialog(el)).toBeNull();
+      expect(alert(el)).toBeUndefined();
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("drops a delete accepted after the screen has gone", async () => {
+    let finish!: () => void;
+    const api = fakeApi({
+      deleteReason: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    el.remove();
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.listReasons).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains a delete refused for another cause", async () => {
+    const api = fakeApi({ deleteReason: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    expect(dialog(el)!.actionError).toBe(
+      tf("adjustments.delete_error", { reason: codeMessage("server.internal") }),
+    );
+  });
+
+  it("says why the question could not be read, and reads it again on Try again", async () => {
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValue(impactOf(complaint));
+    const el = await mount(fakeApi({ watchReasonDeleteImpact: watchImpact(read) }));
+    await press(el, "delete-c");
+    expect(dialog(el)!.readError).toBe(
+      tf("adjustments.delete_load_error", { reason: codeMessage("server.internal") }),
+    );
+    expect(confirm(el).disabled).toBe(true);
+    inDialog(el, '[data-test="delete-retry"]').click();
+    await settle(el);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(dialog(el)!.readError).toBe("");
+    expect(confirm(el).disabled).toBe(false);
+  });
+
+  it("closes the question when the reason was deleted elsewhere", async () => {
+    const api = fakeApi({
+      watchReasonDeleteImpact: watchImpact(() =>
+        Promise.reject({ code: "adjustment_reason.not_found" }),
+      ),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    expect(dialog(el)).toBeNull();
+    expect(alert(el)).toBe(codeMessage("adjustment_reason.not_found"));
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the question when the reason was deleted between the read and the confirm", async () => {
+    const api = fakeApi({
+      deleteReason: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    expect(dialog(el)).toBeNull();
+    expect(alert(el)).toBe(codeMessage("adjustment_reason.not_found"));
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends one Delete while it is on its way", async () => {
+    let finish!: () => void;
+    const api = fakeApi({
+      deleteReason: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirm(el).updateComplete;
+    confirm(el).click();
+    confirm(el).click();
+    await settle(el);
+    expect(dialog(el)!.submitting).toBe(true);
+    confirm(el).click();
+    inDialog(el, '[data-test="delete-cancel"]').click();
+    await settle(el);
+    expect(api.deleteReason).toHaveBeenCalledTimes(1);
+    expect(dialog(el)).not.toBeNull();
+    finish();
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("drops a delete answered after its question was replaced", async () => {
+    let refuse!: (error: unknown) => void;
+    const api = fakeApi({
+      deleteReason: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const el = await mount(api);
+    await press(el, "delete-c");
+    await confirmed(el);
+    el.remove();
+    hosts.at(-1)!.appendChild(el);
+    await settle(el);
+    await press(el, "delete-d");
+    refuse({ code: "adjustment_reason.not_found" });
+    await settle(el);
+    expect(dialog(el)!.impact!.target.id).toBe("d");
+    expect(dialog(el)!.actionError).toBe("");
+    expect(alert(el)).toBeUndefined();
+  });
+
+  it("offers Delete after Edit in the row menu", async () => {
+    const el = await mount(fakeApi());
+    const menu = el.shadowRoot!.querySelector('tr[data-reason="c"] wt-row-actions')!;
+    expect([...menu.querySelectorAll("wt-button")].map((item) => item.textContent!.trim())).toEqual(
+      ["Edit", "Delete"],
+    );
   });
 });
 

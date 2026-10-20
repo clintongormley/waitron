@@ -10,7 +10,7 @@ import {
   currentLocale,
   tableNoMatches,
 } from "@waitron/dashboard-kit";
-import { formatMoney, searchBy } from "@waitron/shared";
+import { formatMoney, searchBy, type DeleteImpact } from "@waitron/shared";
 import {
   baseStyles,
   ReorderController,
@@ -40,6 +40,7 @@ import type {
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
+import { reasonDeleteCopy } from "./reason-delete-copy.js";
 import { actionChoice, kindName, roleName, t, tf, type StringKey } from "./strings.js";
 
 /** What a Comp reason may offer, in the order the form and the request list them. */
@@ -120,7 +121,18 @@ function copyDraft(value: Draft): Draft {
 
 type FieldErrors = Partial<Record<Field, string>>;
 
-type Editor = { kind: "reason"; reason?: AdjustmentReason };
+/** The reason the editor edits; none for a new one. */
+type Editor = { reason?: AdjustmentReason };
+
+type Deletion = {
+  reasonId: string;
+  opener: HTMLElement;
+  impact: DeleteImpact | null;
+  loading: boolean;
+  readError: string;
+  actionError: string;
+  busy: boolean;
+};
 
 /** Basis points from a typed percentage; `null` for no limit, `undefined` when it cannot be one. */
 function percentBp(text: string): number | null | undefined {
@@ -339,6 +351,9 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private limitError?: string;
   @state() private limitSaving = false;
   @state() private limitSaved = false;
+  @state() private deleting?: Deletion;
+  /** Replaced each time the delete question opens or closes, so a late answer finds it changed. */
+  #deletion?: object;
   #loaded = false;
   #settingsLoaded = false;
   #opener?: HTMLElement;
@@ -434,6 +449,24 @@ export class AdjustmentReasonsScreen extends LitElement {
     },
   );
 
+  /** Released whenever the delete question closes, so it reports only while one is open. */
+  readonly #impactQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      const deletion = this.deleting!;
+      if (codeOf(error) === "adjustment_reason.not_found") {
+        if (!deletion.busy) this.#reasonGone();
+        return;
+      }
+      this.deleting = {
+        ...deletion,
+        loading: false,
+        readError: tf("adjustments.delete_load_error", { reason: codeMessage(codeOf(error)) }),
+      };
+    },
+  );
+
   constructor() {
     super();
     new ContentLanguageController(this);
@@ -464,6 +497,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.editor = undefined;
     this.draft = undefined;
     this.busy = false;
+    this.#closeDelete();
     this.#restart();
     this.#moveGeneration++;
     this.#movesOut = 0;
@@ -604,34 +638,32 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.#closeGuard = (reason) => this.#beforeClose(editor, reason);
     this.actionError = undefined;
     this.#restart();
-    if (editor.kind === "reason") {
-      const reason = editor.reason;
-      const kind = reason?.kind ?? "comp";
-      this.draft = {
-        kind,
-        name: reason?.name ?? "",
-        names: { ...reason?.names },
-        actions: kind === "comp" ? [...(reason?.actions ?? [])] : [],
-        maxPercent:
-          reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
-        maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
-        applyRoles: [...(reason?.applyRoles ?? NEW_REASON_ROLES)],
-        approverRoles: [...(reason?.approverRoles ?? NEW_REASON_ROLES)],
-        noteRequired: reason?.noteRequired ?? false,
-      };
-      const draft = draftScopeFor(this, {
-        id: editor,
-        parent: this,
-        current: () => this.draft!,
-        snapshot: copyDraft,
-        equal: (a, b) => this.#comparison(a) === this.#comparison(b),
-        restore: (value) => {
-          this.draft = copyDraft(value);
-        },
-      });
-      this.#leave = draft.coordinator;
-      this.#reasonScope = draft.scope;
-    }
+    const reason = editor.reason;
+    const kind = reason?.kind ?? "comp";
+    this.draft = {
+      kind,
+      name: reason?.name ?? "",
+      names: { ...reason?.names },
+      actions: kind === "comp" ? [...(reason?.actions ?? [])] : [],
+      maxPercent:
+        reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
+      maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
+      applyRoles: [...(reason?.applyRoles ?? NEW_REASON_ROLES)],
+      approverRoles: [...(reason?.approverRoles ?? NEW_REASON_ROLES)],
+      noteRequired: reason?.noteRequired ?? false,
+    };
+    const draft = draftScopeFor(this, {
+      id: editor,
+      parent: this,
+      current: () => this.draft!,
+      snapshot: copyDraft,
+      equal: (a, b) => this.#comparison(a) === this.#comparison(b),
+      restore: (value) => {
+        this.draft = copyDraft(value);
+      },
+    });
+    this.#leave = draft.coordinator;
+    this.#reasonScope = draft.scope;
   }
 
   #close(): void {
@@ -746,11 +778,11 @@ export class AdjustmentReasonsScreen extends LitElement {
     await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
   }
 
-  async #write(action: () => Promise<unknown>, after?: () => Promise<void>): Promise<void> {
+  async #write(action: () => Promise<unknown>): Promise<void> {
     if (this.busy) return;
     const editor = this.editor;
-    const scope = this.#reasonScope;
-    const submitted = this.draft;
+    const scope = this.#reasonScope!;
+    const submitted = this.draft!;
     this.busy = true;
     try {
       await action();
@@ -761,8 +793,8 @@ export class AdjustmentReasonsScreen extends LitElement {
       if (this.editor === editor) this.busy = false;
     }
     if (this.editor !== editor || !this.isConnected) return;
-    if (submitted) scope?.commit(submitted);
-    if (!scope?.isDirty()) {
+    scope.commit(submitted);
+    if (!scope.isDirty()) {
       this.renderRoot.querySelector("wt-modal")?.closeAfter("saved");
       this.#close();
     }
@@ -771,12 +803,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     await this.updateComplete;
     if (this.#opener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')?.focus();
-    await after?.();
   }
 
   #save(editor: Editor): void {
-    if (this.editor !== editor || editor.kind !== "reason" || !this.isConnected || this.busy)
-      return;
+    if (this.editor !== editor || !this.isConnected || this.busy) return;
     if (saveActionState(this.#reasonScope).unchanged) return;
     this.attempted = true;
     this.refusedFields = {};
@@ -789,6 +819,122 @@ export class AdjustmentReasonsScreen extends LitElement {
     const reason = editor.reason;
     void this.#write(() =>
       reason ? this.api.updateReason(reason.id, input) : this.api.createReason(input),
+    );
+  }
+
+  #openDelete(reason: AdjustmentReason, opener: HTMLElement): void {
+    this.actionError = undefined;
+    this.#closeDelete();
+    this.#deletion = {};
+    this.deleting = {
+      reasonId: reason.id,
+      opener,
+      impact: null,
+      loading: true,
+      readError: "",
+      actionError: "",
+      busy: false,
+    };
+    this.#readImpact();
+  }
+
+  #closeDelete(): void {
+    this.#impactQueries.release("delete-impact");
+    this.#deletion = undefined;
+    this.deleting = undefined;
+  }
+
+  /** Deleted elsewhere: the question closes, the page says so and the list is read again. */
+  #reasonGone(): void {
+    this.#closeDelete();
+    this.actionError = codeMessage("adjustment_reason.not_found");
+    void this.#load();
+  }
+
+  #readImpact(): void {
+    const deletion = this.deleting!;
+    this.deleting = { ...deletion, loading: true, readError: "" };
+    this.api
+      .watchReasonDeleteImpact(this.#impactQueries, deletion.reasonId, (impact) => {
+        this.deleting = { ...this.deleting!, impact, loading: false, readError: "" };
+      })
+      .catch(() => undefined);
+  }
+
+  /** Words a refused delete as the impact read's refusal would be worded. */
+  #deleteRefusal(error: unknown): string {
+    const code = codeOf(error);
+    if (code !== "adjustment_reason.void_required") return codeMessage(code);
+    const withNote = (error as { params?: { withNote?: unknown } }).params?.withNote;
+    return reasonDeleteCopy().refusal({
+      code,
+      params: { withNote: withNote ? 1 : 0 },
+      targets: [],
+    });
+  }
+
+  async #delete(reasonId: string): Promise<void> {
+    const deletion = this.deleting!;
+    if (deletion.busy) return;
+    const current = this.#deletion;
+    const shown = this.#shown();
+    const at = shown.findIndex((reason) => reason.id === reasonId);
+    const focusId = (shown[at + 1] ?? shown[at - 1])?.id;
+    this.deleting = { ...deletion, busy: true, actionError: "" };
+    try {
+      await this.api.deleteReason(reasonId);
+    } catch (error) {
+      if (current !== this.#deletion) return;
+      if (codeOf(error) === "adjustment_reason.not_found") {
+        this.#reasonGone();
+        return;
+      }
+      this.deleting = {
+        ...this.deleting,
+        busy: false,
+        actionError: tf("adjustments.delete_error", { reason: this.#deleteRefusal(error) }),
+      };
+      return;
+    }
+    if (current !== this.#deletion) return;
+    this.#closeDelete();
+    await this.#load();
+    await this.updateComplete;
+    (
+      this.renderRoot.querySelector<HTMLElement>(`tr[data-reason="${focusId}"] wt-row-actions`) ??
+      this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
+    )?.focus();
+  }
+
+  #deleteDialog() {
+    const deletion = this.deleting;
+    if (!deletion) return nothing;
+    const current = this.#deletion;
+    return keyed(
+      current,
+      html`<wt-delete-dialog
+        data-test="delete-reason"
+        .open=${true}
+        .impact=${deletion.impact}
+        .loading=${deletion.loading}
+        .submitting=${deletion.busy}
+        .readError=${deletion.readError}
+        .actionError=${deletion.actionError}
+        .copy=${reasonDeleteCopy()}
+        .opener=${deletion.opener}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          if (current === this.#deletion) void this.#delete(event.detail.id);
+        }}
+        @wt-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          if (current === this.#deletion) this.#readImpact();
+        }}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (current === this.#deletion && !this.deleting!.busy) this.#closeDelete();
+        }}
+      ></wt-delete-dialog>`,
     );
   }
 
@@ -989,7 +1135,10 @@ export class AdjustmentReasonsScreen extends LitElement {
       label=${`${t("adjustments.column.actions")}: ${reason.name}`}
     >
       ${item(`edit-${reason.id}`, t("adjustments.edit"), (opener) =>
-        this.#open({ kind: "reason", reason }, opener),
+        this.#open({ reason }, opener),
+      )}
+      ${item(`delete-${reason.id}`, t("adjustments.delete"), (opener) =>
+        this.#openDelete(reason, opener),
       )}
     </wt-row-actions>`;
   }
@@ -1328,7 +1477,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       variant="primary"
       data-test="add-reason"
       ?disabled=${this.busy}
-      @click=${(event: Event) => this.#open({ kind: "reason" }, event.currentTarget as HTMLElement)}
+      @click=${(event: Event) => this.#open({}, event.currentTarget as HTMLElement)}
       >${t("adjustments.add")}</wt-button
     >`;
   }
@@ -1360,7 +1509,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           : html`<div class="toolbar">${this.#renderSearch()} ${this.#renderAdd()}</div>
               ${this.reasons ? this.#table(this.#shown()) : nothing}`
       }
-      ${this.#reorder.liveRegion()} ${this.#limitSection()} ${this.#modal()}`;
+      ${this.#reorder.liveRegion()} ${this.#limitSection()} ${this.#modal()} ${this.#deleteDialog()}`;
   }
 }
 

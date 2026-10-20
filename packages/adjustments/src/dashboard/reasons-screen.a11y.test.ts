@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "@waitron/dashboard-kit";
+import { setLocale, type QueryController } from "@waitron/dashboard-kit";
+import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { setContentLanguages } from "@waitron/ui";
 import { chooseOptions, cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -55,6 +56,10 @@ const reasons: AdjustmentReason[] = [
     position: 2,
   },
 ];
+
+function impact(refusals: DeleteImpactRefusal[] = []): DeleteImpact {
+  return { target: { id: "e", name: "Entry error" }, refusals, ends: [], removes: [] };
+}
 
 async function settle(el: AdjustmentReasonsScreen): Promise<void> {
   for (let i = 0; i < 3; i++) {
@@ -317,6 +322,31 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await el.updateComplete;
     await press(el, "save-limit");
     expect(el.shadowRoot!.querySelector('[data-test="limit-saved"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test.each([
+    ["loading", () => new Promise<never>(() => {})],
+    ["ready", async () => impact()],
+    [
+      "refused",
+      async () =>
+        impact([{ code: "adjustment_reason.void_required", params: { withNote: 1 }, targets: [] }]),
+    ],
+    ["after a failed read", () => Promise.reject({ code: "server.internal" })],
+  ] as const)("the delete question, %s", async (_state, read) => {
+    const el = await screen(theme, {
+      watchReasonDeleteImpact: vi.fn(
+        (queries: QueryController, reasonId: string, apply: (value: DeleteImpact) => void) =>
+          queries.watch(
+            "delete-impact",
+            { key: `impact:${reasonId}`, dependencies: [], read },
+            apply,
+          ),
+      ),
+    });
+    await press(el, "delete-e");
+    expect(el.shadowRoot!.querySelector("wt-delete-dialog")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
