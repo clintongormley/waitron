@@ -104,7 +104,7 @@ What constrains the next change to the wizard:
 
 ### A834 link qualification, 2026-10-20
 
-The macOS link now uses `/en/`, matching Windows and Firefox. A headless Chromium opening of
+The macOS link in setup and the dashboard now uses `/en/`, matching Windows and Firefox. A headless Chromium opening of
 all three URLs returned HTTP 200 and `html lang="en-GB"`; opening the old macOS `/eu/` URL
 returned `html lang="eu-ES"`. This qualifies the site language, not a translated article or a
 certificate export. The existing walkthrough above remains open.
