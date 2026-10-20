@@ -374,7 +374,7 @@ for flashing.
 `--wt-duration-pulse-slow`, `--wt-duration-pulse-fast` and `--wt-opacity-pulse-dim` in
 `structure.css`, one keyframe set in `packages/ui/src/floor-ring.ts`; the list card and the
 unplaced token ring Overdue and Time to fire slowly, Forgotten fast and Waiting in steady amber;
-the kitchen screen and the pass read the fast token. The map, its dot and the zone tabs are slice
+the kitchen screen and the pass read the fast token, and the till bar's Waiting tab (A738) the slow one. The map, its dot and the zone tabs are slice
 5's.
 
 ### 5.3 Item counts in the order lists (Q19)

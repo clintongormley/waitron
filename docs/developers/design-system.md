@@ -502,8 +502,9 @@ dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 `--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one cycle of a floor
 ring's pulse, which dims it to `--wt-opacity-pulse-dim` (0.3) half-way;
-`packages/ui/src/floor-ring.ts` holds the one keyframe set. The kitchen screen's and the pass's
-forgotten flash read the fast one.
+`packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. The kitchen screen's and the pass's
+forgotten flash keep their own keyframes and read the fast duration; the till bar's Waiting tab
+keeps its own and reads the slow one.
 
 Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
 their default border reads `--wt-color-primary-text`. If your screen paints the border through

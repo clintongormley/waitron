@@ -36,8 +36,7 @@ export class WtTableToken extends LitElement {
         display: block;
       }
 
-      /* Mirrors till-floor-screen's .card body: the occupancy accent is the left edge, coloured by
-         state via the tokens below. */
+      /* The occupancy accent is the left edge, coloured by state via the tokens below. */
       .card {
         position: relative;
         display: flex;

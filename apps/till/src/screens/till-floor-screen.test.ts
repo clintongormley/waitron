@@ -417,7 +417,6 @@ describe("till-floor-screen", () => {
     });
 
     it("coexists with the occupancy accent — a forgotten OPEN-TAB table keeps its state class and draws the forgotten ring", async () => {
-      // The occupancy state-* accent and the timing ring must never clobber one another.
       const { el } = await mount({
         tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, timingBand: "forgotten" })],
       });

@@ -535,14 +535,14 @@ describe("the outline ring", () => {
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
   });
 
-  test("forgotten flashes by default (motion allowed) and shows the non-colour forgotten marker", async () => {
+  test("forgotten pulses fast when motion is allowed and shows the non-colour forgotten marker", async () => {
     const el = await mountToken(table({ timingBand: "forgotten" }), undefined, false);
     const ring = el.shadowRoot!.querySelector('[data-ring="forgotten"]')!;
     expect(ring.classList.contains("wt-pulse-fast")).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
   });
 
-  test("reduced motion: a forgotten table renders steady red with NO flash class, marker still shown", async () => {
+  test("reduced motion: a forgotten token's ring stands still, its left edge turns wide, and it keeps the marker", async () => {
     const el = await mountToken(table({ timingBand: "forgotten" }), undefined, true);
     const card = el.shadowRoot!.querySelector(".card")!;
     expect(el.shadowRoot!.querySelector('[data-ring="forgotten"]')).not.toBeNull();
@@ -566,7 +566,7 @@ describe("the outline ring", () => {
     );
   });
 
-  test("coexists with the occupancy accent — a forgotten OPEN-TAB token carries BOTH classes", async () => {
+  test("coexists with the occupancy accent — a forgotten OPEN-TAB token keeps its state class and draws the forgotten ring", async () => {
     const el = await mountToken(table({ state: "open-tab", timingBand: "forgotten" }));
     const card = el.shadowRoot!.querySelector(".card")!;
     expect(card.classList.contains("state-open-tab")).toBe(true);
@@ -596,8 +596,8 @@ describe("the outline ring", () => {
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
   });
 
-  test("with nothing injected, the flash follows the browser's own reduced-motion setting", async () => {
-    const flashesWhenMotionReduced = async (reduced: boolean) => {
+  test("with nothing injected, the pulse follows the browser's own reduced-motion setting", async () => {
+    const pulsesWhenMotionReduced = async (reduced: boolean) => {
       const restore = stubReducedMotion(reduced);
       try {
         const el = await mountToken(table({ timingBand: "forgotten" }));
@@ -608,8 +608,8 @@ describe("the outline ring", () => {
         restore();
       }
     };
-    expect(await flashesWhenMotionReduced(true)).toBe(false);
-    expect(await flashesWhenMotionReduced(false)).toBe(true);
+    expect(await pulsesWhenMotionReduced(true)).toBe(false);
+    expect(await pulsesWhenMotionReduced(false)).toBe(true);
   });
 
   test("rings a table whose reminder is due in amber, slowly", async () => {
