@@ -1519,9 +1519,7 @@ export class TillBillPayDialog extends LitElement {
       ${this.#wayFields(errors)} ${this.#methodFields(errors)}
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
       ${this.#methods().length === 0 ? this.#notice() : nothing}`;
-    // Stays in the body: bill-pay-dialog.unsent.test.ts reads this row's own message, which a
-    // footer row leaves to wt-dialog to show.
-    const actions = html`<wt-form-actions .error=${bottom}>
+    const actions = html`<wt-form-actions slot="footer" .error=${bottom}>
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -1547,7 +1545,7 @@ export class TillBillPayDialog extends LitElement {
         ${t("bill_pay.continue")}
       </wt-button>
     </wt-form-actions>`;
-    return { body: html`${body}${actions}`, actions: nothing };
+    return { body, actions };
   }
 
   #wayFields(errors: ReadonlyMap<Field, string>): TemplateResult | typeof nothing {

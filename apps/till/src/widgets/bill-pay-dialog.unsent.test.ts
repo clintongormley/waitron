@@ -53,7 +53,7 @@ describe.each([
       await expectNoA11yViolations(host);
       const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
       await dialog.updateComplete;
-      const nativeError = form.shadowRoot!.querySelector<HTMLElement>("[role=alert]")!;
+      const nativeError = dialog.shadowRoot!.querySelector<HTMLElement>(".footer > [role=alert]")!;
       expect(nativeError.textContent!.trim()).toBe(`${label}. ${sentence}`);
       expect(nativeError.checkVisibility()).toBe(true);
       const box = nativeError.getBoundingClientRect();

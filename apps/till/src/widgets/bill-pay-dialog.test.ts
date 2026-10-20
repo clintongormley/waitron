@@ -2996,6 +2996,18 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     expect(target.closest("wt-form-actions")!.slot).toBe("footer");
   }
 
+  it("the form's Continue, under a long bill and a refusal in Spanish", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const el = await mount({
+      balance: longBill(),
+      way: "contribution",
+      refusal: { code: "bill.unsent_dishes", unsent: { billId: "wo-4" }, billLabel: "Terraza" },
+    });
+
+    await expectInView(el, "[data-pay-continue]");
+  });
+
   it("the confirmation's Take, under a long bill", async () => {
     setLocale("es");
     await page.viewport(390, 900);
