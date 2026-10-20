@@ -2475,6 +2475,8 @@ the existing allowance for fired ready history on station deletion remains. Rest
 quantity, and kitchen-note corrections still reach unserved food carrying an old Away stamp.
 The department-transfer preview includes remaining held/ready work regardless of old Away stamps,
 excludes fully served/cancelled quantities and omits its unused Away wire field.
+Group readiness uses the remaining kitchen quantity: fully served/cancelled and made-here
+components no longer hold up ready food, and a group with no remaining kitchen work is not ready.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan

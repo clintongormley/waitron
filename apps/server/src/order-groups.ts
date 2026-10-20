@@ -144,8 +144,7 @@ export interface OrderGroup {
   firedAt: string | null;
   remindAt: string | null;
   /**
-   * Present only when a person has recorded every fired kitchen item of the group ready (a station's
-   * advance or the pass's Ready); a group with no kitchen item is never ready.
+   * Present only while kitchen work remains and every remaining fired component is ready.
    */
   ready?: true;
   /** Present only when every fired kitchen item of the group has been sent away from the pass. */
@@ -1463,11 +1462,16 @@ async function readGroups(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(orderGroups.partyId, partyId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+  const remaining = and(
+    eq(ticketItems.madeHere, false),
+    gt(firedQuantity, workingOrderLines.servedQuantity),
+  );
   const kitchen = await tx
     .select({
       groupId: workingOrderLines.groupId,
       fired: sql<number>`count(*)`,
-      ready: sql<number>`sum(${ticketItems.state} = 'ready')`,
+      remaining: sql<number>`count(*) filter (where ${remaining})`,
+      ready: sql<number>`count(*) filter (where ${remaining} and ${ticketItems.state} = 'ready')`,
       away: sql<number>`sum(${ticketItems.awayAt} is not null)`,
     })
     .from(ticketItems)
@@ -1476,7 +1480,9 @@ async function readGroups(
     .where(and(eq(orderGroups.partyId, partyId), isNotNull(ticketItems.firedAt), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
-    kitchen.filter((row) => row.ready === row.fired).map((row) => row.groupId!),
+    kitchen
+      .filter((row) => row.remaining > 0 && row.ready === row.remaining)
+      .map((row) => row.groupId!),
   );
   const awayGroups = new Set(
     kitchen.filter((row) => row.away === row.fired).map((row) => row.groupId!),

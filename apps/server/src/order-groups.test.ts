@@ -3550,6 +3550,137 @@ async function specExampleOnTwoBills(v: Venue) {
   return { ...s, checkId };
 }
 
+describe("A773 no dispatch state — group readiness", () => {
+  it.each([
+    { name: "live queued food", kitchenQuantity: 2000, served: 0, madeHere: false, ready: false },
+    {
+      name: "fully served food",
+      kitchenQuantity: 2000,
+      served: 2000,
+      madeHere: false,
+      ready: true,
+    },
+    {
+      name: "partly served food",
+      kitchenQuantity: 2000,
+      served: 1000,
+      madeHere: false,
+      ready: false,
+    },
+    { name: "fully cancelled food", kitchenQuantity: 0, served: 0, madeHere: false, ready: true },
+    {
+      name: "partly cancelled food",
+      kitchenQuantity: 1000,
+      served: 0,
+      madeHere: false,
+      ready: false,
+    },
+    {
+      name: "served active remainder",
+      kitchenQuantity: 1000,
+      served: 1000,
+      madeHere: false,
+      ready: true,
+    },
+    {
+      name: "legacy quantity with served food",
+      kitchenQuantity: null,
+      served: 2000,
+      madeHere: false,
+      ready: true,
+    },
+    {
+      name: "legacy quantity with live food",
+      kitchenQuantity: null,
+      served: 1000,
+      madeHere: false,
+      ready: false,
+    },
+    { name: "made-here food", kitchenQuantity: 2000, served: 0, madeHere: true, ready: true },
+  ])(
+    "ignores $name only when no kitchen work remains",
+    async ({ kitchenQuantity, served, madeHere, ready: expectedReady }) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const group = (
+        await submit(v, s.partyId, [
+          {
+            release: "fire",
+            lines: [line(v, "steak"), line(v, "fish", "2")],
+          },
+        ])
+      ).groups[0]!;
+      const rows = await linesIn(s.partyId, group.id);
+      const steak = rows.find((row) => row.productId === v.productId.steak)!;
+      const fish = rows.find((row) => row.productId === v.productId.fish)!;
+      await db
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: "2026-10-20T12:00:00.000Z" })
+        .where(eq(ticketItems.workingOrderLineId, steak.id));
+      await db
+        .update(ticketItems)
+        .set({ quantity: kitchenQuantity, madeHere, awayAt: "2026-10-20T12:01:00.000Z" })
+        .where(eq(ticketItems.workingOrderLineId, fish.id));
+      await db
+        .update(workingOrderLines)
+        .set({ servedQuantity: served, servedAt: null })
+        .where(eq(workingOrderLines.id, fish.id));
+      if (kitchenQuantity !== null && kitchenQuantity < 2000) {
+        await db.insert(lineServiceCancellations).values({
+          lineId: fish.id,
+          quantity: 2000 - kitchenQuantity,
+          cancelledAt: "2026-10-20T12:02:00.000Z",
+          wasStarted: false,
+          actorId: ALEX,
+        });
+      }
+      const before = await snapshot(v, s.partyId);
+
+      const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+      expect(read.ready === true).toBe(expectedReady);
+      expect(read.lineIds).toContain(steak.id);
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+
+  it.each(["served", "cancelled"] as const)(
+    "does not report a wholly %s group ready",
+    async (completion) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const group = (
+        await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak", "2")] }])
+      ).groups[0]!;
+      const [dish] = await linesIn(s.partyId, group.id);
+      await db
+        .update(ticketItems)
+        .set({ state: "ready", quantity: completion === "cancelled" ? 0 : 2000 })
+        .where(eq(ticketItems.workingOrderLineId, dish!.id));
+      if (completion === "served") {
+        await db
+          .update(workingOrderLines)
+          .set({ servedQuantity: 2000, servedAt: null })
+          .where(eq(workingOrderLines.id, dish!.id));
+      } else {
+        await db.insert(lineServiceCancellations).values({
+          lineId: dish!.id,
+          quantity: 2000,
+          cancelledAt: "2026-10-20T12:02:00.000Z",
+          wasStarted: false,
+          actorId: ALEX,
+        });
+      }
+      const before = await snapshot(v, s.partyId);
+
+      const read = (await groupsOf(s.partyId)).groups.find((row) => row.id === group.id)!;
+
+      expect(read.ready).toBeUndefined();
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+});
+
 describe("the pass by group (D1)", () => {
   it("bumps the fired cold starters ready on both bills, then sends them away, leaving every other group as it was", async () => {
     const v = await setupVenue();
