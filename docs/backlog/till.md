@@ -2287,6 +2287,11 @@ there before committing, including deletion of the last guest. `prepareAllergyRe
 line, group, held-line and course Fire callers; the move hook runs after bill attachment and before
 zone adoption. Frozen ticket copies and acknowledged notices have not been implemented here.
 
+The [reviewed kitchen implementation plan](../superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
+defines nine tasks. It captures localized allergen names with kinds alongside their codes, keeps
+original cards separate from corrections and covers all five change-set callers. The storage
+choice needs venue-service migrations; populated upgrade behavior remains to be measured.
+
 **Remaining: A669-4.** Freeze the guest details beside each ticket item and render the allergy
 heading, block and clash at both paper widths and on station/pass screens. Enqueue acknowledged
 change/removal notices for affected unserved dishes already with the kitchen, including held

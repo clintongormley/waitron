@@ -2383,10 +2383,18 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   deletion affecting unserved dishes already with the kitchen must create acknowledged,
   station-specific change/removal notices. The table answer, guest editor, dish assignments and
   send guards are implemented together; they do not yet deliver this kitchen information.
-  Kitchen Spanish wording still needs the owner's answer.
+  The [reviewed kitchen plan](superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
+  defines storage, paper, boards and notices. Implementation remains; kitchen Spanish wording
+  still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
+
+- **Check an extra-only allergy clash in the table dialog.** Source reading at
+  `party-allergy-dialog.ts:684,720` shows clash/action checks use `dish.allergens` while extras
+  render separately. Run a browser case with an allergen-free parent and an extra containing an
+  avoided allergen; check the red reason and Send anyway. Runtime behavior is unverified.
+  A669-4 covers kitchen warnings for active extras; it does not change the dialog.
 
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
