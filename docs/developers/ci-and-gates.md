@@ -541,6 +541,19 @@ appeared in the wrapper's json report with every count zero. On `apps/till`'s tw
 merge and the wrapper printed the same counts. On a Vitest upgrade, run a plain merge over a
 browser package's blobs: if it gives the unsharded totals, delete the wrapper.
 
+### A file-only Vitest list does not apply shard selection
+
+Measured on Vitest 4.1.11, 2026-10-20: `pnpm --filter @waitron/server exec vitest list
+--filesOnly --shard=1/11 --json=<output>` with CI's server exclusions returned all 852 files.
+Every index through 11 returned that same full inventory. Its successful exit is not evidence
+that a file belongs to that shard.
+
+For the A679 split check, the installed `BaseSequencer.shard` ran over that actual inventory,
+using the package root and CI's 11-shard count. Its outputs covered every file once, with 77 or
+78 files per shard. Removing the three added files put the original recovery-host file in shard
+9, matching CI run `39344124324`. Repeating with the CI checkout root kept the new assignment.
+That selector experiment establishes file placement, not test success or runtime in CI.
+
 ### Every package test job prints which file is running
 
 Every `Run the … shard` step, and the stream tests' step, adds the reporter

@@ -241,23 +241,32 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## Finish first Live setup integration
 
-PR #1752 needs the normal hook and required CI on its final head, including all six provisioning
-shards and their coverage merge. Their CI timing still needs qualification. The earlier published
-head's failed CI does not qualify the integrated candidate.
+PR #1752 remains a draft. CI run 39344124324 on `747c9069091214f7e6371920f476c9d3df17202a`
+passes 52 jobs, but two server shards fail and the aggregate CI check fails. The source reproduces
+37 failed cases and 29 unhandled rejections. Server coverage merge and publishing are skipped.
 
-All exact owner-approved restore, crash, clock and Cloud test patches are now applied. The Cloud
-patch deliberately removes the retired combined signed-report HTTP assertions. Its current cases
-use surviving local hour evidence rather than an outside-registry guarantee after newer local
-evidence is lost. [Changed test checks](../operations/a679-changed-checks.md) records each boundary.
+Two exact test proposals await owner approval in Lane E's questions. The first retains all 36
+signed-register retirement cases and their 58 expect-rooted expressions while explicitly selecting
+the historical contributions. The second replaces register-till's source-text expansion with three
+accepted and seven refused real parser shapes; the other two commands keep their original source
+checks. This retires header/usage/destructure textual agreement for register-till. Both patches
+remain outside the feature checkout. Their installed selection passes 50 cases, unchanged real
+command checks pass 19, and three omission controls fail their intended assertions and restore.
 
-The latest overlapping-main rebase preserves A757's configuration format 5 in the implementation
-A679 moved into provisioning. Focused checks pass: 57 server import/Cloud/clock cases, the full
-117-case transfer suite, 69 provisioning import/transfer/command cases and the unchanged protected
-20-case pair. These are local results, not final-head CI or whole-package coverage.
+All previously approved Cloud, restore, crash, clock, PDF and CLI patches are applied and closed.
+Provisioning's six CI shards and merge pass all 1,471 cases and coverage bars. Test steps take
+56–235 seconds. The earlier ten-minute shared-job timeout is no longer the current failure.
 
-Keep the two completed installed reviews and earlier source/built-command, PDF viewing and
-rendered-entry receipts. The remaining CI gate must pass before landing. Preserve the independent
-fiscal follow-ups below.
+The current server timing log identifies `hour-recovery-host.test.ts` alone at 471.9 seconds for
+129 cases. The local split preserves all assertion expressions, registrations, hooks, fixture
+constants and helper bodies. All 129 cases pass across four files, with the longest local file
+at about 119 seconds; this is not CI timing qualification. The installed selector sends the three
+placement files to shards 3, 11 and 9. The moved source-binding assertion still fails its omission
+control and passes after restoration. Source types and the unchanged protected 20-case pair pass.
+
+Keep the two completed installed reviews and earlier acceptance receipts. After the two exact
+approvals, run the normal hook and CI on the literal final head, including server coverage and the
+new file timings, before landing. Preserve the independent fiscal follow-ups below.
 
 
 ## Pin the clock's future-finished sample refusal

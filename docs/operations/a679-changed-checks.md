@@ -3680,3 +3680,71 @@ The configuration failures expose the moved reader accepting format 4 and refusi
 After the port, the four-file server selection passes 57 cases, the complete configuration-transfer
 file passes 117, and four provisioning transfer/import/command suites pass 69. The protected fiscal
 pair passes 20 cases unedited. All logs are retained under Lane E's `a679-final-cloud-20261020-014223`.
+
+
+## Current CI read-back and exact remaining proposals, 2026-10-20
+
+CI `39344124324` belongs to published `747c9069091214f7e6371920f476c9d3df17202a` and ends in
+failure. Fifty-two jobs pass; server shards 3 and 4 fail, and the aggregate CI check fails.
+Server coverage merge and publishing are skipped. All six provisioning shards and their merge
+pass 1,471 cases with S98.02/B96.70/F98.71/L98.99. Their test steps take 56–235 seconds.
+
+The source reproduction fails 36 cases in `first-setup-retired-assignments.test.ts` and one
+register-till expansion in `scripts/script-arguments.test.ts`, with 29 unhandled rejections.
+The retirement suite was already named in the previous CI failure index; it was missed in the
+focused selection before this push.
+
+Two qualified literal patches remain outside the feature checkout pending the exact permissions
+requested in Lane E's questions. Retirement patch `0a1b9883134566bf6b5d205deb5afce2936ceb9335e557de5d19f9f158a6e388`
+retains all 36 cases and 58 expect-rooted expressions, selecting explicit historical signed
+setup and operation contributions. This changes the scope they qualify, not their expected
+values. The actual generic host, retirement and evidence readers remain in use. Current hour
+composition and its retired-entry HTTP refusals remain separate qualifications.
+
+Guard patch `e90d4bfde097cf0598cf1fa3bbc7b003f61bccedc4d216ef465789cc59233fa5` retains the entire
+source-check body for record-one-sale and settle-invoice-first. It replaces the register-till
+expansion with three valid and seven invalid real parser shapes, giving 12 cases total. It stops
+checking that command's header/usage/destructure textual agreement. Valid shapes reach the
+operation-file reader's controlled missing-file refusal before opening a database; that is parser
+admission, not successful activation. The separate unchanged real command selection passes 19.
+
+The installed proposal selection passes 50 cases, with types, lint and formatting passing.
+Omitting argument refusal fails seven cases; rejecting every shape fails three valid cases;
+omitting assignment retirement fails its reuse-refusal case. Each restored selection passes.
+Neither exact patch is applied or approved by the earlier Cloud decision. No guard or fiscal
+assertion changes under general finish/land authorisation.
+
+
+## Recovery-host file distribution, 2026-10-20
+
+CI run `39344124324` records `hour-recovery-host.test.ts` at 471.9 seconds for 129 passing cases.
+That single file holds up server shard 9. Its shared fixture and helpers now live in
+`apps/server/test/hour-recovery-host.ts`; the host checks stay in the original file and the
+placement checks are distributed across `hour-recovery-placement-1.test.ts`, `-2.test.ts` and
+`-3.test.ts` beside it.
+
+All 685 expect-rooted expressions and 95 test-registration call expressions match after AST
+printing. Those counts include nested calls, not runtime cases. The fixture's top-level constants,
+before/after hooks and all 12 helper function bodies also match. No assertion value, contribution
+selection, clock fixture, production code, coverage exclusion or threshold changes. This is file
+and fixture relocation, distinct from the two still-unapproved scope/guard proposals above.
+
+An independently installed complete candidate passes all 129 cases with none skipped. Its four
+files run 30, 33, 36 and 30 cases. The local test-file durations are about 20, 119, 115 and 97
+seconds; the two-worker command takes 237.97 seconds. Those measurements are on macOS/Node
+26.11.1 and do not establish the next Linux CI timings. Calling the installed Vitest selector on
+the actual file inventory places the three placement files in shards 3, 11 and 9; the older
+849-file control places the original host in shard 9, matching the recorded CI run.
+
+Removing the selected-source comparison makes the moved refusal case resolve instead of reject;
+restoring it passes that case. Types, scoped lint, formatting and 3,344 module-boundary/teardown
+checks pass. The feature checkout's types and unchanged protected pair pass after copying the
+qualified files. The two exact pending permission patches remain unapplied.
+
+Qualification mistakes are retained in the local receipts. The first split prototype could not
+re-export imported API functions through the mocked helper, and a directly exported hoisted mock
+was refused before collection. The final files import their APIs directly and keep the hoisted
+binding private behind an ordinary exported alias. Earlier no-test and failed-import runs are not
+counted as behavior qualification. The first file-only shard listing also returned every file for
+every index; the corrected selector probe checks complete, non-overlapping shard coverage and a
+checkout-root control.
