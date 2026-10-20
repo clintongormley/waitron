@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
 import {
@@ -6,6 +6,7 @@ import {
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
+  lineServiceCancellations,
   orderDrafts,
   orderGroups,
   products,
@@ -20,6 +21,7 @@ import { readHeldCounts } from "./order-groups.js";
 import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
+import { firedQuantity } from "./kitchen-print.js";
 
 /** A fired line with a record nobody has finished serving, with its station and waiting bands. */
 interface KitchenLine {
@@ -49,11 +51,12 @@ async function readKitchenLines(
       stationName: kitchenStations.name,
       state: ticketItems.state,
       queuedAt: ticketItems.queuedAt,
-      quantity: workingOrderLines.quantity,
+      quantity: firedQuantity,
       servedQuantity: workingOrderLines.servedQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
       dishQuantity: dish.quantity,
       dishServedQuantity: dish.servedQuantity,
+      dishCancelledQuantity: lineServiceCancellations.quantity,
       dishUnitPrecision: dish.unitPrecision,
       warmAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.warmAfterMinutes}, ${kitchenTimingDefaults.warmAfterMinutes})`,
       overdueAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.overdueAfterMinutes}, ${kitchenTimingDefaults.overdueAfterMinutes})`,
@@ -62,6 +65,7 @@ async function readKitchenLines(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .leftJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, dish.id))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .innerJoin(
@@ -72,6 +76,7 @@ async function readKitchenLines(
       and(
         inArray(workingOrderLines.workingOrderId, [...billIds]),
         isNull(workingOrderLines.servedAt),
+        gt(firedQuantity, workingOrderLines.servedQuantity),
         isNotNull(ticketItems.firedAt),
         eq(ticketItems.madeHere, false),
       ),
@@ -83,6 +88,7 @@ async function readKitchenLines(
       unitPrecision,
       dishQuantity,
       dishServedQuantity,
+      dishCancelledQuantity,
       dishUnitPrecision,
       ...line
     }) => ({
@@ -91,7 +97,10 @@ async function readKitchenLines(
       units:
         (dishUnitPrecision ?? unitPrecision)
           ? 1
-          : ((dishQuantity ?? quantity) - (dishServedQuantity ?? servedQuantity)) / 1000,
+          : ((dishQuantity ?? quantity) -
+              (dishCancelledQuantity ?? 0) -
+              (dishServedQuantity ?? servedQuantity)) /
+            1000,
     }),
   );
 }

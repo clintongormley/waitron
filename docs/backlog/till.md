@@ -2477,6 +2477,8 @@ The department-transfer preview includes remaining held/ready work regardless of
 excludes fully served/cancelled quantities and omits its unused Away wire field.
 Group readiness uses the remaining kitchen quantity: fully served/cancelled and made-here
 components no longer hold up ready food, and a group with no remaining kitchen work is not ready.
+Floor and counter ready/waiting signals use remaining kitchen quantities; fully served or cancelled
+work contributes neither signal, and separately routed extras count remaining parent dishes.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan
