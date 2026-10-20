@@ -1,3 +1,4 @@
+import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -422,8 +423,7 @@ describe("device made-here stations", () => {
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
-      const orderId = randomUUID();
-      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const orderId = await createTableKitchenOrder(tx, venue.cfg);
       const drink = await rawLine(tx, orderId, venue.cafeId, 1, first.id);
       const burger = await rawLine(tx, orderId, venue.aguaId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink, burger]);
@@ -465,8 +465,7 @@ describe("device made-here stations", () => {
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
-      const orderId = randomUUID();
-      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const orderId = await createTableKitchenOrder(tx, venue.cfg);
       const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
       const drink = await rawLine(tx, orderId, venue.cafeId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [burger, drink]);

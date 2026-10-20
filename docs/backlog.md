@@ -2420,7 +2420,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   is being built in Lane G (PR A): service lifetime and backend retirement of course Fire, device
-  Fire, Away, Done/Undo and Fire-control management/setup are implemented. Client and helper
+  Fire, Away, Done/Undo and Fire-control management/setup are implemented. Counter Send and
+  payment now release every recorded course; table holding remains separate. Client and helper
   retirement remains. Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain

@@ -1902,8 +1902,8 @@ export async function fireLines(
   orderId: string,
   // The dish decides first; an extra may get a separate record after its destination is known.
   // `quantity` is the line's stored thousandths, which the kitchen is asked to make.
-  // `hold: true` inserts the line unfired whatever its course unless it is made here, and
-  // `release: true` fires it whatever its course; neither is stored.
+  // For table work, `hold` defers cooking unless made here, and `release` overrides the course.
+  // Counter work always releases. Neither flag is stored.
   lines: (FireableLine & { hold?: boolean; release?: boolean })[],
   options: {
     unroutable?: "skip";
@@ -2064,6 +2064,7 @@ export async function fireLines(
       const maker = outcome?.kind === "made" ? outcome.route : null;
       const courseId = courseByLine.get(line.id) ?? null;
       const courseFired =
+        partyId === null ||
         line.release === true ||
         (line.hold !== true &&
           (courseId === null ||

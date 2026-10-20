@@ -633,7 +633,7 @@ describe("made-here route wiring", () => {
       firedAt: null,
     });
   });
-  it("an ungrouped made-here course does not mark that course fired for an edit", async () => {
+  it("keeps every counter course released when edited beside a made-here dish", async () => {
     const [first, later] = await inTx(venue, async (tx) => [
       await createCourse(tx, venue.cfg, { name: `First ${randomUUID()}`, displayOrder: 1 }),
       await createCourse(tx, venue.cfg, { name: `Later ${randomUUID()}`, displayOrder: 2 }),
@@ -680,7 +680,7 @@ describe("made-here route wiring", () => {
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
     );
     expect(beforeItems.find((item) => item.courseId === first.id)).toMatchObject({
-      firedAt: null,
+      firedAt: expect.any(String),
       madeHere: false,
     });
     expect(beforeItems.find((item) => item.courseId === later.id)).toMatchObject({
@@ -717,7 +717,7 @@ describe("made-here route wiring", () => {
       firedAt: expect.any(String),
     });
     expect(items.find((item) => !item.madeHere && item.courseId === later.id)).toMatchObject({
-      firedAt: null,
+      firedAt: expect.any(String),
     });
   });
   it("refuses changing or recalling an already-made drink", async () => {

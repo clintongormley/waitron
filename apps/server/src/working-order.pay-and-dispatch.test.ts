@@ -2517,7 +2517,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
   });
 
   it.each(["ticket_then_pay", "ticket_then_pay"] as const)(
-    "%s: a parked order paid sends its first course and holds its later course, and the same pay sent again changes nothing",
+    "%s: a parked order paid sends every counter course, and the same pay sent again changes nothing",
     async (mode) => {
       const { cfg, cafe, agua, zoneId } = await modeVenue(mode);
       const printerId = await kitchenPrinter(cfg);
@@ -2543,17 +2543,17 @@ describe("paying a counter order never sent, in a zone that sends before payment
 
       const sent = [
         { lineNo: 1, lineCourse: primeros, itemCourse: primeros, fired: true, state: "queued" },
-        { lineNo: 2, lineCourse: segundos, itemCourse: segundos, fired: false, state: "queued" },
+        { lineNo: 2, lineCourse: segundos, itemCourse: segundos, fired: true, state: "queued" },
       ];
       expect(await tabSnapshot(id)).toEqual(sent);
-      expect(await linesSent(id)).toEqual([true, false]);
+      expect(await linesSent(id)).toEqual([true, true]);
       expect(await kitchenJobCount(printerId)).toBe(1);
 
       const again = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
 
       expect(again.invoiceNumber).toBe(first.invoiceNumber);
       expect(await tabSnapshot(id)).toEqual(sent);
-      expect(await linesSent(id)).toEqual([true, false]);
+      expect(await linesSent(id)).toEqual([true, true]);
       expect(await kitchenJobCount(printerId)).toBe(1);
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);

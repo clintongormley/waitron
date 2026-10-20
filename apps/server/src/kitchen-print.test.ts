@@ -1,3 +1,4 @@
+import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
@@ -611,7 +612,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       });
 
       // Round 1: firing auto-fires the earliest course (Entrantes) and HOLDS the later one (steak).
-      const orderId = await fireNewOrder(tx, cfg, [line(soup), line(steak)]);
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(steak)]);
       const afterRound1 = await printJobsFor(tx);
       // Round 2: fireCourse releases the held course.
       await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
@@ -1837,7 +1838,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
         courseId: pri.id,
       });
       // Three soups fire; two steaks are held by their course.
-      const orderId = await fireNewOrder(tx, cfg, [
+      const orderId = await fireTableKitchenOrder(tx, cfg, [
         { productId: soup, quantity: "3" },
         { productId: steak, quantity: "2" },
       ]);

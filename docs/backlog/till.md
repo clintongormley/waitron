@@ -2464,8 +2464,11 @@ check. No legacy move assertion was changed to hide this result.
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md).
-Lane G has started the first build branch with service lifetime. Waiter authority, Requested and
-scoped pass release, station configuration, tickets and schema retirement remain. Recheck A756's
+Lane G's first build branch has service lifetime, backend retirement of the old kitchen Fire,
+Away and Done routes, and counter release of every course on Send or payment. Existing table
+holding checks use seated parties; counter retries retain their existing sale and print counts.
+Client/internal-helper retirement, Requested and scoped pass release, station configuration,
+ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan
 records A797's completed Q42 amendments; its revised design/pictures remain a UI prerequisite.
 This plan adds no runtime behavior. The table panel and per-bill editing contracts belong to
