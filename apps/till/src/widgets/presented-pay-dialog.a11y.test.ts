@@ -203,7 +203,10 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-notice-presented-${view}-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-notice-presented-${view}-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const line = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
       const shown = line.getBoundingClientRect();
@@ -247,7 +250,10 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-presented-locked-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-presented-locked-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const action = el.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-resend]")!;
       const actionBox = action.getBoundingClientRect();
@@ -301,7 +307,10 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-scan-presented-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-scan-presented-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const back = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-scan-back]")!;
       const shown = back.getBoundingClientRect();
@@ -369,7 +378,10 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-presented-card-at-table-${state}-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-presented-card-at-table-${state}-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const shown = (
         state === "waiting"
@@ -516,7 +528,10 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
           selector === null ? null : el.shadowRoot!.querySelector<HTMLElement>(selector)!;
         const button = shown?.getBoundingClientRect();
         const shot = `__screenshots__/look/a796-26f-presented-${view}-${theme}-390`;
-        await page.screenshot({ element: panel, path: `${shot}.png` });
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a796-26f-presented-${view}-${theme}-390.png`,
+        });
         await commands.writeFile(
           `src/widgets/${shot}.json`,
           JSON.stringify({

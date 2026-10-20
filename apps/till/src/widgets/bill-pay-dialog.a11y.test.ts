@@ -730,7 +730,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-late-notice-${theme}-390`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-late-notice-${theme}-390.png`,
+      });
       const box = panel.getBoundingClientRect();
       const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
       const shown = notice.getBoundingClientRect();
@@ -888,7 +891,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           expect(background).not.toBe(light);
         }
         const shot = `__screenshots__/look/a796-notice-confirm-${theme}-${width}`;
-        await page.screenshot({ element: panel, path: `${shot}.png` });
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a796-notice-confirm-${theme}-${width}.png`,
+        });
         const box = panel.getBoundingClientRect();
         const line = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
         const shown = line.getBoundingClientRect();
@@ -959,7 +965,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-card-at-table-${state}-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-card-at-table-${state}-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const shown = (
         state === "waiting"
@@ -1016,7 +1025,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         expect(background).not.toBe(light);
       }
       const shot = `__screenshots__/look/a796-scan-bill-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-scan-bill-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const back = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-scan-back]")!;
       const shown = back.getBoundingClientRect();
@@ -1223,7 +1235,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       const shown = selector === null ? null : el.shadowRoot!.querySelector<HTMLElement>(selector)!;
       const button = shown?.getBoundingClientRect();
       const shot = `__screenshots__/look/a796-26f-${view}-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-26f-${view}-${theme}-${width}.png`,
+      });
       await commands.writeFile(
         `src/widgets/${shot}.json`,
         JSON.stringify({

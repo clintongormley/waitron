@@ -600,7 +600,10 @@ describe("a presented bill on a handheld", () => {
       lookBackgrounds.set(`${theme}-${width}`, background);
       if (theme === "dark") expect(background).not.toBe(lookBackgrounds.get(`light-${width}`));
       const shot = `__screenshots__/look/a796-presented-from-bill-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-presented-from-bill-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const take = inPresented(el, "[data-presented-pay-take]")!.getBoundingClientRect();
       await commands.writeFile(
@@ -3698,7 +3701,10 @@ describe("the paid screen on a handheld", () => {
         if (theme === "dark")
           expect(banner).not.toBe(paidBackgrounds.get(`${path}-light-${width}`));
         const shot = `__screenshots__/look/a796-paid-${path}-${theme}-${width}`;
-        await page.screenshot({ element: view, path: `${shot}.png` });
+        await page.screenshot({
+          element: view,
+          path: `__screenshots__/look/a796-paid-${path}-${theme}-${width}.png`,
+        });
         const box = view.getBoundingClientRect();
         const inside = [...view.shadowRoot!.querySelectorAll("wt-button")].every((button) => {
           const rect = button.getBoundingClientRect();
@@ -4166,7 +4172,10 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
       if (theme === "dark")
         expect(background).not.toBe(lookBackgrounds.get(`${state}-light-${width}`));
       const shot = `__screenshots__/look/a796-first-use-${state}-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-first-use-${state}-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const rowBox = row(el).getBoundingClientRect();
       await commands.writeFile(
@@ -4403,7 +4412,10 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
       lookBackgrounds.set(`${theme}-${width}`, background);
       if (theme === "dark") expect(background).not.toBe(lookBackgrounds.get(`light-${width}`));
       const shot = `__screenshots__/look/a796-reader-taken-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-reader-taken-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const reasonBox = row(el)
         .shadowRoot!.querySelector("[data-pay-reader-reason]")!
@@ -4707,7 +4719,10 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       if (theme === "dark")
         expect(background).not.toBe(lookBackgrounds.get(`${state}-light-${width}`));
       const shot = `__screenshots__/look/a796-${state}-${theme}-${width}`;
-      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-${state}-${theme}-${width}.png`,
+      });
       const box = panel.getBoundingClientRect();
       const rowBox = row(el).getBoundingClientRect();
       await commands.writeFile(
@@ -4860,7 +4875,10 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         unknownBackgrounds.set(theme, background);
         if (theme === "dark") expect(background).not.toBe(unknownBackgrounds.get("light"));
         const shot = `__screenshots__/look/a796-reader-refused-unknown-${theme}-390`;
-        await page.screenshot({ element: panel, path: `${shot}.png` });
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a796-reader-refused-unknown-${theme}-390.png`,
+        });
         const box = panel.getBoundingClientRect();
         const rowBox = row(el).getBoundingClientRect();
         await commands.writeFile(
