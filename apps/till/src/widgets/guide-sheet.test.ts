@@ -31,6 +31,11 @@ const closed = (el: Element) =>
 const modalOf = (sheet: TillGuideSheet) => sheet.shadowRoot!.querySelector<WtModal>("wt-modal")!;
 const dialogOf = (sheet: TillGuideSheet) =>
   modalOf(sheet).shadowRoot!.querySelector<HTMLDialogElement>("dialog")!;
+/** The sheet's name, and the heading it shows. */
+const titlesOf = (sheet: TillGuideSheet) => [
+  dialogOf(sheet).getAttribute("aria-label"),
+  sheet.shadowRoot!.querySelector("h2")?.textContent,
+];
 
 async function mountSheet(href = HREF): Promise<TillGuideSheet> {
   setLocale("en");
@@ -45,7 +50,7 @@ describe("the guide sheet", () => {
     const modal = modalOf(sheet);
     expect(modal.open).toBe(true);
     expect(modal.size).toBe("full");
-    expect(modal.heading).toBe(helpEn["help.guide_title"]);
+    expect(titlesOf(sheet)).toEqual([helpEn["help.guide_title"], helpEn["help.guide_title"]]);
     const frame = sheet.shadowRoot!.querySelector("iframe")!;
     expect(frame.getAttribute("src")).toBe(HREF);
     expect(frame.title).toBe(helpEn["help.guide_title"]);
@@ -134,7 +139,7 @@ describe("a guide link on the till", () => {
       expect(clicks).toHaveLength(1);
       expect(clicks[0]!.defaultPrevented).toBe(true);
       expect(modalOf(sheet).open).toBe(true);
-      expect(modalOf(sheet).heading).toBe(text["help.guide_title"]);
+      expect(titlesOf(sheet)).toEqual([text["help.guide_title"], text["help.guide_title"]]);
       expect(sheet.shadowRoot!.querySelector("iframe")!.src.endsWith(href)).toBe(true);
     },
   );

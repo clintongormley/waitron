@@ -260,7 +260,11 @@ because a till runs full screen and has no tab bar to come back by (the design,
 - `till-shell` listens for it, cancels it, and sets the sheet's address
   (`apps/till/src/widgets/till-shell.ts`, `#onGuideOpen`). The sheet, `till-guide-sheet`
   (`apps/till/src/widgets/guide-sheet.ts`), is a `wt-modal size="full"` holding the page in an
-  `<iframe>`, headed "Guide", with a Close button. Close and Escape both close it, and focus goes
+  `<iframe>`, headed "Guide", with a Close button. The sheet draws that heading itself, above the
+  frame, and names the modal with `aria-label`, so heading and frame fill the modal's body with
+  nothing left to scroll: under the modal's own heading the frame overflowed the body by the
+  heading's height, and a page opened at a section scrolled the body to the section and the heading
+  out of view (`apps/till/src/widgets/guide-sheet.fragment.test.ts`). Close and Escape both close it, and focus goes
   back to the badge that opened it. A badge outside `till-shell` reaches no sheet and opens a tab.
 - The page is served by the box on the till's own origin, and its policy allows same-origin framing
   (`frame-ancestors 'self'`, above). In development the till's Vite server sends `/help` to the

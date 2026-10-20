@@ -16,10 +16,27 @@ export class TillGuideSheet extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* The heading and the frame together fill the modal's body exactly. With the modal's own
+         heading above a full-height frame the body overflowed by the heading's height, and a page
+         opened at a section scrolled the body to bring that section up, taking the heading away. */
+      .frame {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        height: 100%;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: var(--wt-font-size-lg);
+        overflow-wrap: anywhere;
+      }
+
       iframe {
         display: block;
+        flex: 1;
+        min-height: 0;
         width: 100%;
-        height: 100%;
         border: 0;
       }
     `,
@@ -37,14 +54,17 @@ export class TillGuideSheet extends LitElement {
     const title = helpText("help.guide_title");
     return html`<wt-modal
       size="full"
-      heading=${title}
+      aria-label=${title}
       .open=${this.href !== ""}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#onClose();
       }}
     >
-      ${this.href === "" ? nothing : html`<iframe src=${this.href} title=${title}></iframe>`}
+      <div class="frame">
+        <h2>${title}</h2>
+        ${this.href === "" ? nothing : html`<iframe src=${this.href} title=${title}></iframe>`}
+      </div>
       <wt-button slot="footer" @click=${() => void this.modal.requestClose("cancel")}
         >${helpText("help.guide_close")}</wt-button
       >
