@@ -2,11 +2,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  adjustments,
-  createAdjustmentReason,
-  deactivateAdjustmentReason,
-} from "@waitron/adjustments";
+import { adjustments, createAdjustmentReason, deleteAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -276,7 +272,7 @@ describe("Cancel item service command", () => {
     },
   );
 
-  it.each(["not-found", "inactive", "wrong-action", "note"] as const)(
+  it.each(["not-found", "deleted", "wrong-action", "note"] as const)(
     "refuses an invalid charged cancellation reason (%s) without changing service or money",
     async (kind) => {
       const order = await fixture();
@@ -284,7 +280,7 @@ describe("Cancel item service command", () => {
       let reasonId: string = randomUUID();
       if (kind === "wrong-action") reasonId = venue.reasonId.complaint;
       if (kind === "note") reasonId = venue.reasonId.mistake;
-      if (kind === "inactive") {
+      if (kind === "deleted") {
         const reason = await inTx(venue, (tx) =>
           createAdjustmentReason(tx, {
             name: `Retired cancellation ${randomUUID()}`,
@@ -299,7 +295,7 @@ describe("Cancel item service command", () => {
           }),
         );
         reasonId = reason.id;
-        await inTx(venue, (tx) => deactivateAdjustmentReason(tx, reasonId));
+        await inTx(venue, (tx) => deleteAdjustmentReason(tx, reasonId));
       }
       const before = await snapshot(order);
       await expect(
@@ -311,7 +307,7 @@ describe("Cancel item service command", () => {
       ).rejects.toMatchObject({
         code: {
           "not-found": "adjustment_reason.not_found",
-          inactive: "adjustment.reason_inactive",
+          deleted: "adjustment_reason.not_found",
           "wrong-action": "adjustment.action_not_allowed",
           note: "adjustment.note_required",
         }[kind],

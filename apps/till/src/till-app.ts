@@ -1050,11 +1050,7 @@ const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 const CANCEL_MAY_HAVE_LANDED = new Set(["network", "working_order.not_placed"]);
 
 /** Refusals about the reason chosen, after which the reasons are read again. */
-const REASON_REFUSALS = new Set([
-  "adjustment.action_not_allowed",
-  "adjustment.reason_inactive",
-  "adjustment_reason.not_found",
-]);
+const REASON_REFUSALS = new Set(["adjustment.action_not_allowed", "adjustment_reason.not_found"]);
 
 /** A change to a line of an order the waiter had started leaving, and how it failed. */
 interface LateChange {

@@ -79,7 +79,6 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment.no_reduction":
       return kind === "discount" ? "value" : null;
     case "adjustment.action_not_allowed":
-    case "adjustment.reason_inactive":
     case "adjustment_reason.not_found":
       return "reason";
     case "adjustment.quantity_invalid":

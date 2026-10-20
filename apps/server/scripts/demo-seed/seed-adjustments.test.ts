@@ -62,7 +62,7 @@ describe("seedAdjustmentReasons", () => {
           dataSet: CASA_DELGADO_ES,
           languages: locale === "en" ? ["en", "es"] : ["es", "en"],
         });
-        return listAdjustmentReasons(tx, { includeInactive: true });
+        return listAdjustmentReasons(tx);
       });
       expect(reasons.map((reason) => reason.names.en)).toEqual(PROVISIONED);
       expect(new Set(reasons.map((reason) => reason.name)).size).toBe(reasons.length);
@@ -79,13 +79,13 @@ describe("seedAdjustmentReasons", () => {
     const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
     const [before, after] = await withTransaction(suite.db, async (tx) => {
       await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
-      const provisioned = await listAdjustmentReasons(tx, { includeInactive: true });
+      const provisioned = await listAdjustmentReasons(tx);
       await seedAdjustmentReasons(tx, {
         locale: "es",
         dataSet: CASA_DELGADO_ES,
         languages: ["es", "en"],
       });
-      return [provisioned, await listAdjustmentReasons(tx, { includeInactive: true })];
+      return [provisioned, await listAdjustmentReasons(tx)];
     });
     const demo = CASA_DELGADO_ES.adjustmentReasons.find(
       (reason) => reason.names.en === "Entry error",
@@ -163,7 +163,7 @@ describe("seedAdjustmentReasons", () => {
         dataSet: CASA_DELGADO_ES,
         languages: ["en", "es"],
       });
-      return listAdjustmentReasons(tx, { includeInactive: true });
+      return listAdjustmentReasons(tx);
     });
     expect(reasons.map((reason) => reason.name)).toEqual(ENGLISH);
   });
@@ -181,9 +181,9 @@ describe("seedAdjustmentReasons", () => {
       const seed = () =>
         seedAdjustmentReasons(tx, { locale: "es", dataSet: CASA_DELGADO_ES, languages: ["es"] });
       await seed();
-      const first = await listAdjustmentReasons(tx, { includeInactive: true });
+      const first = await listAdjustmentReasons(tx);
       await seed();
-      return [first, await listAdjustmentReasons(tx, { includeInactive: true })];
+      return [first, await listAdjustmentReasons(tx)];
     });
     expect(once).toHaveLength(PROVISIONED.length);
     expect(twice).toEqual(once);

@@ -784,7 +784,7 @@ describe("till-app: a refused adjustment", () => {
       .mockResolvedValue([{ ...complaint, id: "r-other", name: "Guest recovery" }]);
     const { el } = await mountApp({
       listAdjustmentReasons,
-      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.reason_inactive" }),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
     });
     const order = await openMesa4(el);
     await previewComp(el, order);
@@ -798,7 +798,7 @@ describe("till-app: a refused adjustment", () => {
     ).toEqual(["Guest recovery"]);
     expect(
       dialog(el)!.shadowRoot!.querySelector('[data-error-for="reason"]')!.textContent!.trim(),
-    ).toBe(codeMessage("adjustment.reason_inactive"));
+    ).toBe(codeMessage("adjustment_reason.not_found"));
   });
 
   it("shows a preview that got no answer as a failure above the action", async () => {
@@ -1865,7 +1865,7 @@ describe("till-app: service cancellation consent", () => {
 
   it("places a charged cancellation's server reason refusal on the inline reason field", async () => {
     const methods = apiFor(consent(), {
-      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.reason_inactive" }),
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
     });
     const { el } = await mountApp(methods);
     await openMesa4(el);
@@ -1875,7 +1875,7 @@ describe("till-app: service cancellation consent", () => {
     await clickChoice(el, "[data-confirm]");
     const widget = cancelDialog(el)!;
     expect(widget.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
-      codeMessage("adjustment.reason_inactive"),
+      codeMessage("adjustment_reason.not_found"),
     );
     expect(widget.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
     expect(

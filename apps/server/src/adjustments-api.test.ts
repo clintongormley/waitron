@@ -13,8 +13,8 @@ import { attachPrinterToStation, detachPrinterFromStation } from "./station-prin
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   adjustments,
-  deactivateAdjustmentReason,
   createAdjustmentReason,
+  deleteAdjustmentReason,
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { createPinThrottle, loginWithPin, persons, type PersonRoleValue } from "@waitron/identity";
@@ -1016,19 +1016,19 @@ describe("the route's own rules", () => {
     ]);
   });
 
-  it("maps weighed_partial and reason_inactive to 409, and a comp past the reason's cap to 403", async () => {
+  it("maps weighed_partial to 409, a deleted reason to 404, and a comp past the reason's cap to 403", async () => {
     const { billId } = await billWith(venue, [
       { name: "Bottle" },
       { name: "Bottle" },
       { name: "Ham", quantity: "0.333" },
     ]);
-    const inactive = await inTx(venue, async (tx) => {
+    const deleted = await inTx(venue, async (tx) => {
       const reason = await createAdjustmentReason(tx, {
         ...REASONS.house,
         name: "Retired",
         names: {},
       });
-      await deactivateAdjustmentReason(tx, reason.id);
+      await deleteAdjustmentReason(tx, reason.id);
       return reason.id;
     });
     const comp = async (lineNo: number, extra: Record<string, unknown> = {}) => ({
@@ -1046,8 +1046,8 @@ describe("the route's own rules", () => {
       await comp(3, { reasonId: venue.reasonId.house, quantity: "0.100" }),
     );
     expect([partial.status, partial.json.code]).toEqual([409, "adjustment.weighed_partial"]);
-    const retired = await post(billId, await comp(2, { reasonId: inactive }));
-    expect([retired.status, retired.json.code]).toEqual([409, "adjustment.reason_inactive"]);
+    const retired = await post(billId, await comp(2, { reasonId: deleted }));
+    expect([retired.status, retired.json.code]).toEqual([404, "adjustment_reason.not_found"]);
   });
 
   it("maps a give-away that takes nothing off to 409", async () => {
