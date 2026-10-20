@@ -1,3 +1,4 @@
+import { orderLabel } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -16,7 +17,8 @@ export interface PayWaitingOrderDetail {
 
 /** How the row's buttons' names and the move dialog's heading name the order: `#12 Mesa 4`. */
 export function waitingScope(order: CounterWaitingOrder): string {
-  return `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
+  const label = orderLabel(order);
+  return `#${order.orderNumber}${label ? ` ${label}` : ""}`;
 }
 
 /**
@@ -121,6 +123,7 @@ export class TillCounterWaiting extends LitElement {
 
   #row(order: CounterWaitingOrder): TemplateResult {
     const scope = waitingScope(order);
+    const label = orderLabel(order);
     const pay = order.status === "placed";
     return html`
       <div
@@ -135,7 +138,7 @@ export class TillCounterWaiting extends LitElement {
           aria-controls=${`preview-${order.id}`}
         >
           <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
-          ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
+          ${label ? html`<span class="label">${label}</span>` : nothing}
           <span class="state" data-waiting-state>${t(this.#state(order))}</span>
           <span class="meta">${formatMoney(order.total, currentLocale())}</span>
         </button>

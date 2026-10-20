@@ -1,3 +1,4 @@
+import { orderLabel } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -217,7 +218,8 @@ export class TillHeldOrders extends LitElement {
   }
 
   #scope(order: HeldOrderSummary): string {
-    return `#${order.orderNumber}${order.label ? ` ${order.label}` : ""}`;
+    const label = orderLabel(order);
+    return `#${order.orderNumber}${label ? ` ${label}` : ""}`;
   }
 
   #meta(order: HeldOrderSummary): string {
@@ -240,6 +242,7 @@ export class TillHeldOrders extends LitElement {
 
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
+    const label = orderLabel(order);
     return html`
       <div class="order" @click=${(event: Event) => this.#togglePreview(event, order.id)}>
         <button
@@ -249,7 +252,7 @@ export class TillHeldOrders extends LitElement {
           aria-controls=${`preview-${order.id}`}
         >
           <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
-          ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
+          ${label ? html`<span class="label">${label}</span>` : nothing}
           <span class="meta">${this.#meta(order)}</span>
           ${this.#signals(order)}
         </button>

@@ -2250,11 +2250,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`) and
   `apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
 
-- **A765. Say which table an order belongs to (owner, 2026-10-16).** Held orders shows a table's
-  bill as "#2" with nothing else; the summary carries only a party id. The server sends the table's
-  name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.
-  [Detail](backlog/till.md#a765-say-which-table-an-order-belongs-to)
-
 - **A785. A kitchen screen in device mode keeps its start-up settings until reload (left open by
   A768, 2026-10-17).** Its bump mode and fire control never refresh: the menu-state poll that
   carries the setup revision starts only when someone signs in, and a kitchen screen in device mode

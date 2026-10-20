@@ -4639,6 +4639,7 @@ export interface HeldOrderSummary {
    * name the server set; null when neither gave one.
    */
   label: string | null;
+  tableLabel?: string;
   /** Number of lines on the order, 0 for a lineless order. */
   itemCount: number;
   /** The GROSS total the operator saw; the filed `sale_lines.line_total` is net. */
@@ -4732,7 +4733,6 @@ export async function listHeldOrders(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
 ): Promise<HeldOrderSummary[]> {
-  void cfg;
   return withTransaction(deps.db, async (tx) => {
     const rows = await tx
       .select({
@@ -4740,6 +4740,8 @@ export async function listHeldOrders(
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
         partyId: workingOrders.partyId,
+        deliveryTableId: workingOrders.deliveryTableId,
+        deliveryTableLabel: workingOrders.deliveryTableLabel,
         itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
@@ -4757,6 +4759,11 @@ export async function listHeldOrders(
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
+    const tableLabels = await orderTableLabels(
+      tx,
+      cfg.locationId,
+      rows.map((row) => ({ ...row, label: null })),
+    );
     const ids = rows.map((row) => row.id);
     const { received, holding } = await readPaymentsByBill(tx, ids);
     const signals = await readBillSignals(tx, ids, Date.now());
@@ -4765,7 +4772,13 @@ export async function listHeldOrders(
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       return {
-        ...row,
+        id: row.id,
+        orderNumber: row.orderNumber,
+        label: row.label,
+        partyId: row.partyId,
+        itemCount: row.itemCount,
+        openedAt: row.openedAt,
+        ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
         items: items.get(row.id)!,
         total,
         outstanding: outstandingOf(total, received.get(row.id)),
@@ -6811,6 +6824,7 @@ export interface CounterWaitingOrder {
   id: string;
   orderNumber: number;
   label: string | null;
+  tableLabel?: string;
   status: "placed" | "settled";
   openedAt: string;
   settledAt: string | null;
@@ -6852,6 +6866,8 @@ export async function listCounterWaiting(
         settledAt: workingOrders.settledAt,
         collectedAt: workingOrders.collectedAt,
         partyId: workingOrders.partyId,
+        deliveryTableId: workingOrders.deliveryTableId,
+        deliveryTableLabel: workingOrders.deliveryTableLabel,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         // The number 1 or 0: test its truthiness, never with `===`. Qualified, not bare, because
@@ -6875,6 +6891,11 @@ export async function listCounterWaiting(
       )
       .groupBy(workingOrders.id)
       .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
+    const tableLabels = await orderTableLabels(
+      tx,
+      cfg.locationId,
+      rows.map((row) => ({ ...row, label: null })),
+    );
     const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
     const modes = await VENUE_SERVICE.findOrderModes(tx, cfg, placedIds);
     const issued = await readIssuedSales(tx, placedIds);
@@ -6935,6 +6956,7 @@ export async function listCounterWaiting(
         id: row.id,
         orderNumber: row.orderNumber,
         label: row.label,
+        ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
         status: row.status as CounterWaitingOrder["status"],
         openedAt: row.openedAt,
         settledAt: row.settledAt,

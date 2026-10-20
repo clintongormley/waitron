@@ -492,6 +492,7 @@ export interface DepartmentTransfer {
   summary?: {
     orderNumber: number;
     tabLabel: string | null;
+    tableLabel?: string;
     sourceDepartmentName: string;
     destinationDepartmentName: string;
   };

@@ -86,6 +86,38 @@ async function venue() {
 afterEach(() => vi.useRealTimers());
 
 describe("departmental tab transfers", () => {
+  it("A765 names the delivery table in incoming and sent transfer summaries", async () => {
+    const v = await pending();
+    await withTransaction(suite.db, async (tx) => {
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ locationId: v.cfg.locationId, zoneId: v.az, label: "Saved patio" })
+        .returning();
+      await tx.insert(floorTodayTables).values({ tableId: table!.id, name: "Patio today" });
+      await tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table!.id, label: "Alex" })
+        .where(eq(workingOrders.id, v.tab));
+      const incoming = await service.listIncomingDepartmentTransfers(tx, v.cfg, receiver(v));
+      const detail = await service.readIncomingDepartmentTransfer(
+        tx,
+        v.cfg,
+        v.request.id,
+        receiver(v),
+      );
+      const sent = await service.listSentDepartmentTransfers(tx, v.cfg, v.tab, {
+        departmentId: v.a,
+        personId: "sender",
+      });
+      const history = await service.listDepartmentSentTransfers(tx, v.cfg, {
+        departmentId: v.a,
+        personId: "sender",
+      });
+      for (const row of [incoming![0], detail, sent[0], history[0]])
+        expect(row?.summary).toMatchObject({ tabLabel: "Alex", tableLabel: "Patio today" });
+    });
+  });
+
   it("offers only active usable receiving profiles in this department", async () => {
     const v = await venue();
     await withTransaction(suite.db, async (tx) => {

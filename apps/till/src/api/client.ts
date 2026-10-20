@@ -1276,6 +1276,7 @@ export interface CounterWaitingOrder {
   id: string;
   orderNumber: number;
   label: string | null;
+  tableLabel?: string;
   status: "placed" | "settled";
   openedAt: string;
   settledAt: string | null;
@@ -1306,6 +1307,7 @@ export interface HeldOrderSummary {
   id: string;
   orderNumber: number;
   label: string | null;
+  tableLabel?: string;
   itemCount: number;
   total: string;
   /** `total` less the money the bill has received. */
@@ -2427,6 +2429,7 @@ export interface DepartmentTransfer {
   summary?: {
     orderNumber: number;
     tabLabel: string | null;
+    tableLabel?: string;
     sourceDepartmentName: string;
     destinationDepartmentName: string;
   };

@@ -6,6 +6,7 @@ import type {
 export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  orderTableLabels,
   joinedOutOfService,
   tableInService,
   billPayments,
@@ -500,7 +501,7 @@ export async function listDepartmentTransferDestinations(
   return choices;
 }
 
-async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
+async function summarizeTransfers(tx: Transaction, cfg: VenueScope, rows: DepartmentTransfer[]) {
   if (rows.length === 0) return [];
   const source = alias(departments, "transfer_source_department");
   const destination = alias(departments, "transfer_destination_department");
@@ -510,6 +511,10 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
       currentDepartmentId: orderServiceContexts.departmentId,
       orderNumber: workingOrders.orderNumber,
       tabLabel: workingOrders.label,
+      orderId: workingOrders.id,
+      partyId: workingOrders.partyId,
+      deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
       sourceDepartmentName: source.name,
       destinationDepartmentName: destination.name,
     })
@@ -524,10 +529,30 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
         rows.map((row) => row.id),
       ),
     );
+  const labels = await orderTableLabels(
+    tx,
+    cfg.locationId,
+    identities.map((row) => ({
+      id: row.orderId,
+      partyId: row.partyId,
+      deliveryTableId: row.deliveryTableId,
+      deliveryTableLabel: row.deliveryTableLabel,
+      label: null,
+    })),
+  );
   const byId = new Map(
-    identities.map(({ id, currentDepartmentId, ...summary }) => [
-      id,
-      { currentDepartmentId, summary },
+    identities.map((row) => [
+      row.id,
+      {
+        currentDepartmentId: row.currentDepartmentId,
+        summary: {
+          orderNumber: row.orderNumber,
+          tabLabel: row.tabLabel,
+          sourceDepartmentName: row.sourceDepartmentName,
+          destinationDepartmentName: row.destinationDepartmentName,
+          ...(labels.get(row.orderId) ? { tableLabel: labels.get(row.orderId)! } : {}),
+        },
+      },
     ]),
   );
   return rows.map((row) => ({ ...row, ...byId.get(row.id)! }));
@@ -540,7 +565,7 @@ export async function listIncomingDepartmentTransfers(
   receiver: DepartmentTransferReceiver,
 ) {
   if (!(await receives(tx, cfg, receiver.departmentId, receiver))) return null;
-  return summarizeTransfers(tx, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
+  return summarizeTransfers(tx, cfg, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
 }
 
 export async function readIncomingDepartmentTransfer(
@@ -551,7 +576,7 @@ export async function readIncomingDepartmentTransfer(
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
   await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
-  return (await summarizeTransfers(tx, [request]))[0]!;
+  return (await summarizeTransfers(tx, cfg, [request]))[0]!;
 }
 
 export async function listSentDepartmentTransfers(
@@ -578,7 +603,7 @@ export async function listSentDepartmentTransfers(
     if (context.departmentId !== sender.departmentId)
       throw new AppError("department_transfer.not_allowed", {});
   }
-  return summarizeTransfers(tx, rows);
+  return summarizeTransfers(tx, cfg, rows);
 }
 
 export async function listDepartmentSentTransfers(
@@ -613,5 +638,5 @@ export async function listDepartmentSentTransfers(
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
   if (rows.some((row) => row.status === "pending"))
     await assertDepartment(tx, cfg, sender.departmentId);
-  return summarizeTransfers(tx, rows);
+  return summarizeTransfers(tx, cfg, rows);
 }
