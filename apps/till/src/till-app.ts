@@ -16058,9 +16058,15 @@ export class TillApp extends LitElement {
     guests: number | null | undefined,
   ): Promise<void> {
     if (this.submitting) return;
+    const billId = bill.workingOrderId;
+    if (this.#billPaymentHeld(billId)) {
+      this.errorKey = this.#paymentsOut.has(billId)
+        ? "bill_pay.sending"
+        : "bill_pay.unconfirmed_elsewhere";
+      return;
+    }
     this.submitting = true;
     this.errorKey = undefined;
-    const billId = bill.workingOrderId;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
     const api = this.api;
