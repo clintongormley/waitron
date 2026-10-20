@@ -151,7 +151,7 @@ import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
-import { moveBill, moveWouldSend } from "./move-bill.js";
+import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable, type SplitGuests } from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
@@ -896,6 +896,11 @@ function moveCommand(personId: string, body: Record<string, unknown>): MoveBillO
     expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
   if (partyId === null) command.partyId = null;
+  if (body.submissionId !== undefined || body.allergy !== undefined) {
+    if (body.submissionId === undefined || body.allergy === undefined) throw invalid("allergy");
+    command.submissionId = requireBodyUuid(body.submissionId, "submissionId").toLowerCase();
+    command.allergy = body.allergy as MoveBillOptions["allergy"];
+  }
   return { ...command, ...otherPartyRead(body) };
 }
 
@@ -4103,6 +4108,30 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.post("/api/bills/:id/move/allergy-preview", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const billId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const to = requireMoveTarget(body.to);
+      if (!("tableId" in to)) throw invalid("to");
+      const command = moveCommand(session.personId, body);
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const current = await recheckFireSession(tx, deps, session);
+          await checkZones(tx, deps.cfg, current, [{ orderId: billId }, { tableId: to.tableId }]);
+          return previewBillMoveAllergy(
+            tx,
+            requestCfg(deps.cfg, current),
+            billId,
+            to.tableId,
+            command,
+          );
+        }),
+      );
+    }),
+  );
+
   // A move changes no amount, so nothing is invoiced here.
   app.post("/api/bills/:id/move", (c) =>
     run(c, log, async () => {
@@ -4115,7 +4144,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = moveCommand(personId, body);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [
+        const current =
+          command.allergy === undefined ? session : await recheckFireSession(tx, deps, session);
+        if (command.allergy !== undefined) {
+          const [source] = await tx
+            .select({ id: workingOrders.id })
+            .from(workingOrders)
+            .where(
+              and(eq(workingOrders.id, billId), eq(workingOrders.locationId, deps.cfg.locationId)),
+            );
+          if (source === undefined) throw new AppError("tab.not_open", { tabId: billId });
+        }
+        await checkZones(tx, deps.cfg, current, [
           { orderId: billId },
           ...named(
             "tableId" in to && { tableId: to.tableId },

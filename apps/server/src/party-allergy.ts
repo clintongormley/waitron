@@ -30,6 +30,7 @@ import {
   decimal,
   QUANTITY_SCALE,
   toScale,
+  thousandthsToDecimal,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -37,6 +38,7 @@ import { readDrafts } from "./order-drafts.js";
 import { readCurrentOrders, requireGroup, type CurrentOrderRow } from "./order-groups.js";
 import { fingerprint, partyFamily, partyZone } from "./parties.js";
 import { extraQuantityFor } from "./working-order.js";
+import { readLineCancellations } from "./line-service-state.js";
 import "./errors.js";
 
 function invalid(field: string): never {
@@ -199,6 +201,46 @@ export async function readPartyAllergyView(
   partyId: string,
 ): Promise<PartyAllergyRead> {
   return (await readAllergyState(tx, cfg, partyId)).view;
+}
+
+export async function readArrivingAllergyDishes(
+  tx: Transaction,
+  billId: string,
+): Promise<AllergyDish[]> {
+  const lines = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, billId))
+    .orderBy(workingOrderLines.lineNo);
+  const nutrition = await productNutrition(
+    tx,
+    lines.flatMap((line) => (line.productId === null ? [] : [line.productId])),
+  );
+  const cancellations = await readLineCancellations(
+    tx,
+    lines.map((line) => line.id),
+  );
+  const allergens = (line: (typeof lines)[number]) =>
+    line.productId === null ? null : (nutrition.get(line.productId) ?? null);
+  const active = lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
+  return active
+    .filter((line) => line.parentLineId === null)
+    .map((line) => ({
+      line: { kind: "working", id: line.id },
+      billId,
+      name: staffPresentationName({ name: line.name, variantName: line.variantName }),
+      quantity: thousandthsToDecimal(line.quantity - (cancellations.get(line.id) ?? 0)),
+      allergens: allergens(line),
+      extras: active
+        .filter((extra) => extra.parentLineId === line.id)
+        .map((extra) => ({
+          name: staffPresentationName({ name: extra.name, variantName: extra.variantName }),
+          quantity: thousandthsToDecimal(extra.quantity - (cancellations.get(extra.id) ?? 0)),
+          allergens: allergens(extra),
+        })),
+      sentAt: line.sentAt,
+      offeredBefore: false,
+    }));
 }
 
 export async function readAllergySendView(

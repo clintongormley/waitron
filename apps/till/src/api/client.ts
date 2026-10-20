@@ -1,5 +1,6 @@
 import type {
   AllergyCommand,
+  AllergyMoveRead,
   AllergyPatch,
   AllergySendTarget,
   PartyAllergyRead,
@@ -4436,8 +4437,30 @@ export class TillApi {
     to: MoveBillTarget,
     bills: "merge" | "separate",
     revisions: MoveBillRevisions,
+    command?: { submissionId: string; allergy: AllergyPatch },
+    options: ReadOptions = {},
   ): Promise<MoveBillResult> {
-    return this.#request(`/api/bills/${billId}/move`, "POST", { to, bills, ...revisions });
+    return this.#request(
+      `/api/bills/${billId}/move`,
+      "POST",
+      { to, bills, ...revisions, ...command },
+      options.signal,
+    );
+  }
+
+  previewBillMoveAllergy(
+    billId: string,
+    to: MoveBillTarget,
+    bills: "merge" | "separate",
+    revisions: MoveBillRevisions,
+    options: ReadOptions = {},
+  ): Promise<AllergyMoveRead> {
+    return this.#request(
+      `/api/bills/${billId}/move/allergy-preview`,
+      "POST",
+      { to, bills, ...revisions },
+      options.signal,
+    );
   }
 
   /**

@@ -10,7 +10,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { AllergyPatch } from "@waitron/module";
+import type { AllergyMoveRead, AllergyPatch } from "@waitron/module";
 import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
@@ -26,7 +26,11 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
-import { applyPartyAllergyPatch, normaliseAllergyPatch } from "./party-allergy.js";
+import {
+  applyPartyAllergyPatch,
+  normaliseAllergyPatch,
+  readArrivingAllergyDishes,
+} from "./party-allergy.js";
 import {
   checkAndBumpParty,
   holderOf,
@@ -85,6 +89,43 @@ type Destination =
   | { kind: "free"; tableId: string; zoneId: string }
   | { kind: "party"; partyId: string };
 
+export async function previewBillMoveAllergy(
+  tx: Transaction,
+  cfg: TillConfig,
+  billId: string,
+  tableId: string,
+  options: MoveBillOptions,
+): Promise<AllergyMoveRead> {
+  const [bill] = await tx
+    .select({ partyId: workingOrders.partyId, status: workingOrders.status })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.id, billId), eq(workingOrders.locationId, cfg.locationId)));
+  if (bill === undefined || bill.status === "abandoned")
+    throw new AppError("tab.not_open", { tabId: billId });
+  if (bill.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
+  if (bill.partyId !== null) await refuseMovedParty(tx, bill.partyId);
+  if (options.partyId !== null)
+    throw new AppError("management.request_invalid", { field: "partyId" });
+  if (options.otherPartyId === undefined)
+    throw new AppError("management.request_invalid", { field: "otherPartyId" });
+  const table = await inspectTargetTable(tx, cfg, tableId, null, options);
+  if (table.holding === null) await refuseUnseatable(tx, cfg, table);
+  await requireRelocatableBillEditors(
+    tx,
+    [billId, ...(table.holding === null ? [] : await readPartyBillIds(tx, [table.holding]))],
+    options.operatorId,
+    options.expectedEdits,
+  );
+  return {
+    billId,
+    tableId,
+    partyId: table.holding,
+    snapshot:
+      table.holding === null ? null : await VENUE_SERVICE.readPartyAllergy(tx, table.holding),
+    dishes: await readArrivingAllergyDishes(tx, billId),
+  };
+}
+
 /**
  * Move a whole bill to another party, a free table (a new party) or the counter, or a counter order
  * into a party. Both parties' revisions are checked before either the bill's or the table's own
@@ -103,6 +144,10 @@ export async function moveBill(
   if (options.submissionId !== undefined) {
     if (!isUuid(options.submissionId) || !("tableId" in to))
       throw new AppError("management.request_invalid", { field: "submissionId" });
+    if (options.partyId !== null)
+      throw new AppError("management.request_invalid", { field: "partyId" });
+    if (options.otherPartyId === undefined)
+      throw new AppError("management.request_invalid", { field: "otherPartyId" });
     const command = {
       ...options,
       submissionId: options.submissionId.toLowerCase(),
@@ -307,15 +352,23 @@ export interface TargetTable {
 }
 
 /**
- * The table an action moves to or joins. A revision read there must name its party. The party the
- * command read there must be the one holding it now, else `party.out_of_date` for that party, since
- * a revision alone can match a party seated there since; a table read free (`otherPartyId: null`)
- * that a party other than `source` holds now is `party.out_of_date` for the party holding it. Then
- * the revision of a party holding it, other than `source`, is checked and moved on (P27); then the
- * table is refused when it does not exist, is out of use, is out of service because of a joined
- * table (`joinedOutOfService`), needs clearing or needs moving.
+ * A revision alone can match a replacement party. Check the holder's identity as well, then advance
+ * its revision in the action's transaction. Read-only previews use inspectTargetTable instead.
  */
 export async function readTargetTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  source: string | null,
+  read: OtherPartyRead,
+): Promise<TargetTable> {
+  const table = await inspectTargetTable(tx, cfg, tableId, source, read);
+  if (table.holding !== null && table.holding !== source)
+    await checkAndBumpParty(tx, table.holding, read.expectedOtherPartyRevision!, "open");
+  return table;
+}
+
+async function inspectTargetTable(
   tx: Transaction,
   cfg: TillConfig,
   tableId: string,
@@ -337,7 +390,13 @@ export async function readTargetTable(
     if (expectedOtherPartyRevision === undefined) {
       throw new AppError("management.request_invalid", { field: "expectedOtherPartyRevision" });
     }
-    await checkAndBumpParty(tx, holding, expectedOtherPartyRevision, "open");
+    const [party] = await tx
+      .select({ state: parties.state, revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, holding));
+    if (party?.state !== "open") throw new AppError("party.not_open", { partyId: holding });
+    if (party.revision !== expectedOtherPartyRevision)
+      throw new AppError("party.out_of_date", { partyId: holding, revision: party.revision });
   }
   const [table] = await tx
     .select({

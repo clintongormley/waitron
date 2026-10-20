@@ -60,6 +60,7 @@ import {
  * | GET /api/parties/:id/allergy | take-orders | till-api.allergy.test.ts: "checks device, profile action and admission for GET" |
  * | PUT /api/parties/:id/allergy | take-orders | same suite: "checks device, profile action and admission for PUT" |
  * | POST /api/parties/:id/allergy/send-preview | take-orders | same suite: "checks device, profile action and admission for POST" |
+ * | POST /api/bills/:id/move/allergy-preview | take-orders | till-api.allergy-move.test.ts: "preview checks current action authority"; allowed: "previews counter adoption into an existing party false without changing any row" |
  * | GET /api/clock/state                                    | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on state" |
  * | POST /api/clock/in                                      | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on in" |
  * | POST /api/clock/out                                     | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on out" |

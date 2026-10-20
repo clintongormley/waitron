@@ -2128,6 +2128,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
+  accepted a counter bill from another location into an answered party. The new allergy move
+  command checks the source location; the legacy request still needs its own fix and regression.
+  [Probe and scope](backlog/till.md#legacy-bill-moves-do-not-check-the-source-location).
+
 - **Remove the Filter's unused session-storage write.** Filter selections live in the active
   operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
@@ -2380,8 +2385,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   final-save dish ids and renewed confirmation when a stale Fire finds different dishes. Signed-in
   station/pass Fire uses the same prompt; device Fire keeps its existing answer and refusal path.
   The lower kitchen writer checks table answers; the counter-to-table write can record an answer
-  and assignments before kitchen work. Its HTTP preview and till confirmation, restart and authority
-  checks, and guides remain;
+  and assignments before kitchen work. The read-only move preview and paired HTTP/client command
+  are connected, with source/destination zone and current-session checks. The till's move confirmation,
+  restart checks and guides remain;
   kitchen copies/notices remain a separate slice after them. At the first Send, ask "Any allergies at this table?" on every table send path; the counter has no allergy step.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

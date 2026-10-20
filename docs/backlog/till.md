@@ -2284,10 +2284,13 @@ shows an unanswered refusal without offering a guest editor. Lifecycle and count
 integration remain. The lower kitchen writer now checks table answers, and a missing named line
 keeps the send's existing no-work behavior. The counter-to-table move writer accepts an explicit
 answer and assignments before adopting the destination zone, with bill-scoped replay and rollback.
-Its HTTP preview, request parsing and till confirmation remain to be connected; it is not a
-deployable feature yet. Join-answer combinations, copied-guest deletion and assignments through a
-partial split of recalled dishes have server integration checks. Restart and preview/adoption
-authority checks and the guides remain.
+The move preview now reads the destination answer and arriving parent dishes without advancing
+party revisions or attaching the bill. The paired move HTTP/client command carries the explicit
+answer, assignments and retry id. The routes check source/destination zones and recheck the current
+session, device action and profile admission after reading the request body. Join-answer combinations,
+copied-guest deletion and assignments through a partial split of recalled dishes have server
+integration checks. The till's move confirmation, restart checks and guides remain; this unpublished
+branch is not a deployable feature yet.
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.
@@ -2301,6 +2304,22 @@ with the kitchen. New Spanish copy still requires the owner's answer before feat
   table leaving the party copies the allergic guests to both parties, and a guest can be deleted.
   After A668's data shape. [Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](mockups/a669-allergy-at-the-table/)
+
+## Legacy bill moves do not check the source location
+
+2026-10-20: in an installed disposable checkout, restore all four production files changed by
+A669's HTTP/client continuation to `322b2e00bc7a4369fb3318a6a8f76f5eac2cf79f`. With the real-route
+fixture in `apps/server/src/till-api.allergy-move.test.ts`, create a counter bill and an answered
+destination party. Change only the source bill's `locationId` to a second location, then call
+`POST /api/bills/:id/move` without `submissionId` or `allergy`, retaining its editor observations
+and destination identity. A test expecting 409 received 200. The same-location control received
+200 as expected: `pnpm --filter @waitron/server exec vitest run src/till-api.allergy-move.test.ts
+-t 'legacy location probe'` reported one failed, one passed and 45 unselected tests. The temporary
+probe body and log are retained in Lane G's `resume-20261020-062334-move-http` receipts.
+
+The paired allergy command and its preview now check the source location. Fixing the unpaired
+route is outside A669's allergy scope; retain its valid move and payment behavior when adding the
+check. No legacy move assertion was changed to hide this result.
 
 ## A773. Courses, groups and the pass
 
