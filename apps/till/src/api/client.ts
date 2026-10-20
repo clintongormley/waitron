@@ -2484,7 +2484,6 @@ export interface DepartmentTransferDetail {
     state: TicketState;
     note: string | null;
     firedAt: string | null;
-    awayAt: string | null;
     courseId: string | null;
   }[];
 }

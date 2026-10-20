@@ -2421,7 +2421,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   retirement remains, apart from the removed Done helper and split-copy operation. Dark-pass alerts
   now follow remaining service quantity, ignoring legacy Done/Away stamps. Server movement, closing/deletion checks,
   rest-of-order reads and note corrections now ignore Away too. Rest-of-order quantities exclude
-  served food. Add Requested and pass release,
+  served food. The transfer preview uses remaining kitchen quantity too, retains old-Away work
+  and drops its unused Away field. Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain
   a UI prerequisite. A803's pass/station tail follows this build.

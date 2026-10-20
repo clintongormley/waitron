@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, gt } from "drizzle-orm";
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { codeOf } from "@waitron/server-kit";
@@ -26,6 +26,7 @@ import type { Logger } from "./logger.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
+import { firedQuantity } from "./kitchen-print.js";
 import "./errors.js";
 
 function uuid(value: unknown, field: string): string {
@@ -260,16 +261,16 @@ export function mountDepartmentTransferApi(
             state: ticketItems.state,
             note: ticketItems.note,
             firedAt: ticketItems.firedAt,
-            awayAt: ticketItems.awayAt,
             courseId: ticketItems.courseId,
           })
           .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
           .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
           .where(
             and(
               eq(ticketItems.workingOrderId, request.tabId),
               eq(ticketItems.madeHere, false),
-              isNull(ticketItems.awayAt),
+              gt(firedQuantity, workingOrderLines.servedQuantity),
             ),
           )
           .orderBy(asc(ticketItems.queuedAt), asc(ticketItems.id));

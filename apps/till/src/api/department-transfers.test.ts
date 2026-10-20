@@ -44,7 +44,6 @@ const detail = {
       state: "queued",
       note: "No salt",
       firedAt: "2026-10-07T09:01:00.000Z",
-      awayAt: null,
       courseId: null,
     },
   ],

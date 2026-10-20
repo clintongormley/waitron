@@ -934,7 +934,6 @@ describe("department transfer durable reads", () => {
               state: "preparing",
               note: "Keep pickup at the deli",
               firedAt: ticket!.firedAt,
-              awayAt: null,
             },
           ],
         },
@@ -1066,7 +1065,7 @@ describe("department transfer read boundaries", () => {
       body: { receiving: true, count: 1, requests: [{ id }] },
     });
   });
-  it("does not label away or made-here kitchen work outstanding", async () => {
+  it("keeps ready work with a legacy Away stamp outstanding and excludes made-here work", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
@@ -1083,14 +1082,101 @@ describe("department transfer read boundaries", () => {
       .where(eq(ticketItems.workingOrderId, f.tab));
     expect(
       (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
-    ).toHaveLength(1);
-    for (const patch of [{ awayAt: new Date().toISOString() }, { awayAt: null, madeHere: true }]) {
-      await suite.db.update(ticketItems).set(patch).where(eq(ticketItems.id, ticket!.id));
-      expect(
-        (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
-      ).toEqual([]);
-    }
+    ).toEqual([expect.objectContaining({ id: ticket!.id })]);
+    await suite.db
+      .update(ticketItems)
+      .set({ state: "ready", readyAt: new Date().toISOString(), awayAt: new Date().toISOString() })
+      .where(eq(ticketItems.id, ticket!.id));
+    const before = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, ticket!.id));
+    const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.outstandingWork).toEqual([
+      expect.objectContaining({ id: ticket!.id, state: "ready" }),
+    ]);
+    expect(detail.body.outstandingWork[0]).not.toHaveProperty("awayAt");
+    expect(await suite.db.select().from(ticketItems).where(eq(ticketItems.id, ticket!.id))).toEqual(
+      before,
+    );
+    await suite.db
+      .update(ticketItems)
+      .set({ awayAt: null, madeHere: true })
+      .where(eq(ticketItems.id, ticket!.id));
+    expect(
+      (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
+    ).toEqual([]);
   });
+  it.each([
+    { name: "held", active: 2000, served: 0, held: true, included: true },
+    { name: "partly served", active: 2000, served: 1000, held: false, included: true },
+    { name: "fully served", active: 2000, served: 2000, held: false, included: false },
+    { name: "cancelled remainder", active: 1000, served: 1000, held: false, included: false },
+    { name: "all cancelled", active: 0, served: 0, held: false, included: false },
+    { name: "legacy quantity", active: null, served: 1000, held: false, included: true },
+    {
+      name: "legacy quantity fully served",
+      active: null,
+      served: 2000,
+      held: false,
+      included: false,
+    },
+  ])(
+    "A773 no dispatch state: transfer preview handles $name work",
+    async ({ active, served, held, included }) => {
+      const f = await ready();
+      f.tab = await counterOrder(v, "Burger");
+      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+      await suite.db
+        .update(workingOrderLines)
+        .set({ quantity: 2000 })
+        .where(eq(workingOrderLines.workingOrderId, f.tab));
+      await placeOrder(
+        { db: suite.db, backend: v.backend, clock: v.clock },
+        requestCfg(v.cfg, f.source),
+        f.tab,
+        personId,
+      );
+      const id = await pending(f);
+      const [ticket] = await suite.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, f.tab));
+      await suite.db
+        .update(workingOrderLines)
+        .set({ servedQuantity: served })
+        .where(eq(workingOrderLines.id, ticket!.workingOrderLineId));
+      await suite.db
+        .update(ticketItems)
+        .set({ quantity: active, firedAt: held ? null : ticket!.firedAt })
+        .where(eq(ticketItems.id, ticket!.id));
+      const before = {
+        lines: await suite.db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, f.tab)),
+        tickets: await suite.db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, f.tab)),
+        transfer: await state(f.tab),
+      };
+      const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+      expect(detail.status).toBe(200);
+      expect(detail.body.outstandingWork.map((work: { id: string }) => work.id)).toEqual(
+        included ? [ticket!.id] : [],
+      );
+      expect({
+        lines: await suite.db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, f.tab)),
+        tickets: await suite.db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, f.tab)),
+        transfer: await state(f.tab),
+      }).toEqual(before);
+    },
+  );
   for (const kind of ["revoked", "suspended", "action"] as const)
     it(`refuses reads after the receiver is ${kind}`, async () => {
       const f = await ready();

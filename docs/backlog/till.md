@@ -2473,6 +2473,8 @@ The server's movement predicate ignores Away; queued/unserved and made-here rest
 Closing/deletion checks include work only while its kitchen quantity exceeds what was served;
 the existing allowance for fired ready history on station deletion remains. Rest-of-order reads show only the remaining
 quantity, and kitchen-note corrections still reach unserved food carrying an old Away stamp.
+The department-transfer preview includes remaining held/ready work regardless of old Away stamps,
+excludes fully served/cancelled quantities and omits its unused Away wire field.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan

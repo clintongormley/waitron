@@ -3749,7 +3749,6 @@ describe("department transfers across operator lifetimes", () => {
         state: "queued",
         note: "No salt",
         firedAt: null,
-        awayAt: null,
         courseId: null,
       },
     ],
