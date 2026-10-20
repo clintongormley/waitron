@@ -100,6 +100,16 @@ describe("till-paid-view", () => {
     ]);
   });
 
+  it("a presented bill paid in cash shows the change to give back", async () => {
+    const el = await mount({ payments: [], change: "30.00" });
+    expect(text(el, "[data-paid-change]")).toBe(`${t("label.change")} 30,00 €`);
+  });
+
+  it.each([null, "0.00"])("shows no change line for a change of %s", async (change) => {
+    const el = await mount({ payments: [], change });
+    expect(el.shadowRoot!.querySelector("[data-paid-change]")).toBeNull();
+  });
+
   it("shows a tip beside the amount where one was given", async () => {
     const el = await mount({ payments: [payment({ tip: "1.50" })] });
     expect(text(el, "[data-paid-payment]")).toBe(

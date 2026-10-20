@@ -372,6 +372,35 @@ describe("a presented bill on a handheld", () => {
     expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
   });
 
+  it("cash handed over beyond the bill shows the change to give back on the paid screen", async () => {
+    const { el } = await openPresented({
+      collectOrder: vi
+        .fn()
+        .mockResolvedValue({ ...ticket(), tender: { method: "cash", change: "30.00" } }),
+    });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 3 });
+
+    const paid = el.shadowRoot!.querySelector("till-paid-view")!;
+    await paid.updateComplete;
+    expect(text(paid.shadowRoot!.querySelector("[data-paid-change]"))).toBe(
+      `${t("label.change")} ${money("30.00")}`,
+    );
+  });
+
+  it("a card on another machine shows no change on the paid screen", async () => {
+    const { el } = await openPresented({
+      collectOrder: vi.fn().mockResolvedValue({
+        ...ticket(),
+        tender: { method: "card", charged: "120.00", tip: "0.00", reference: "op-1" },
+      }),
+    });
+    await payFromSheet(el, { method: "manual", externalRef: "op-1", guests: 3 });
+
+    const paid = el.shadowRoot!.querySelector("till-paid-view")!;
+    await paid.updateComplete;
+    expect(paid.shadowRoot!.querySelector("[data-paid-change]")).toBeNull();
+  });
+
   it("another card machine is collected as a card of the whole amount with its operation number", async () => {
     const { el } = await openPresented();
     await payFromSheet(el, { method: "manual", externalRef: "OP-7", guests: null });
@@ -2172,9 +2201,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
       t("bill_pay.uncertain").replace("{amount}", money("40.00")),
     );
-    expect(text(inDialog(el, "[data-pay-pending-manager]"))).toBe(
-      t("bill_pay.pending_where"),
-    );
+    expect(text(inDialog(el, "[data-pay-pending-manager]"))).toBe(t("bill_pay.pending_where"));
     expect(reads()).toBe(0);
     await tick(el);
     expect(reads()).toBe(1);
@@ -2937,6 +2964,44 @@ describe("the paid screen on a handheld", () => {
     expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledWith("wo-4");
     expect(vi.mocked(api.getInvoiceDeliveries)).not.toHaveBeenCalled();
     expect(vi.mocked(api.finishTable)).not.toHaveBeenCalled();
+  });
+
+  it("a last share paid in cash shows its change in the paid screen's list, and no second change line", async () => {
+    const cashShare = paymentOf({
+      id: "pay-3",
+      submissionId: "sub-3",
+      method: "cash",
+      entry: null,
+      applied: "40.00",
+      tendered: "50.00",
+      change: "10.00",
+    });
+    const { el } = await threeShares(simplified(), {
+      takeBillPayment: vi
+        .fn()
+        .mockResolvedValueOnce(shareOf("80.00"))
+        .mockResolvedValueOnce(shareOf("40.00"))
+        .mockResolvedValueOnce(
+          takenOf(
+            { method: "cash", entry: null, applied: "40.00", tendered: "50.00", change: "10.00" },
+            {
+              total: "120.00",
+              received: "120.00",
+              outstanding: "0.00",
+              status: "settled",
+              payments: [sharePaid(1), sharePaid(2), cashShare],
+            },
+            { ...simplified(), tender: { method: "cash", change: "10.00" } },
+          ),
+        ),
+    });
+
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await paidView(el)!.updateComplete;
+    expect(text(inPaid(el, '[data-paid-payment="pay-3"]'))).toContain(
+      `${t("label.change")} ${money("10.00")}`,
+    );
+    expect(inPaid(el, "[data-paid-change]")).toBeNull();
   });
 
   it("where receipts print on request, the original-print action prints it once and reads the ticket again", async () => {

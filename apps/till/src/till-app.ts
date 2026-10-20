@@ -17546,6 +17546,7 @@ export class TillApp extends LitElement {
           .tableName=${this.#activeTableTitle()}
           .total=${this.result!.total}
           .payments=${this.paidPayments}
+          .change=${this.paidPayments.length === 0 && this.result!.tender.method === "cash" ? this.result!.tender.change : null}
           .receipt=${this.originalReceiptPrint ?? null}
           .receiptReadFailed=${this.originalReceiptReadFailed}
           .originalAvailable=${this.originalReceiptAvailable}

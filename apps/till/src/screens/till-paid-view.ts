@@ -111,6 +111,10 @@ export class TillPaidView extends LitElement {
       .status {
         font-weight: var(--wt-font-weight-bold);
       }
+      .change {
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
       .actions {
         display: flex;
         flex-direction: column;
@@ -125,6 +129,8 @@ export class TillPaidView extends LitElement {
   @property() tableName = "";
   @property() total = "0";
   @property({ attribute: false }) payments: BillPaymentView[] = [];
+  /** A presented bill's cash change; a bill paid in parts shows each payment's change in its list. */
+  @property({ attribute: false }) change: string | null = null;
   /** Null while the receipt's print status is being read. */
   @property({ attribute: false }) receipt: OriginalReceiptPrint | null = null;
   @property({ type: Boolean }) receiptReadFailed = false;
@@ -217,6 +223,13 @@ export class TillPaidView extends LitElement {
           <span data-paid-title>${t("paid.title").replace("{table}", () => this.tableName)}</span>
         </h2>
         <p data-paid-summary>${summary}</p>
+        ${
+          this.#nonZero(this.change)
+            ? html`<p class="change" data-paid-change>
+                ${t("label.change")} ${this.#money(this.change)}
+              </p>`
+            : nothing
+        }
       </section>
       ${
         count === 0
