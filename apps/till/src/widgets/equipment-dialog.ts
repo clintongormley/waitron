@@ -51,7 +51,7 @@ const ROWS: { role: EquipmentRole; field: Field; scan: "printer" | "reader" | nu
   { role: "invoice", field: "invoicePrinterId", scan: null },
 ];
 
-function canScan(): boolean {
+export function canScan(): boolean {
   return (navigator.mediaDevices as MediaDevices | undefined)?.getUserMedia !== undefined;
 }
 

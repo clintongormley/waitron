@@ -19,7 +19,7 @@ import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
-import { payReaderOf } from "./state/pay-equipment.js";
+import { payReaderOf, type FixedReader } from "./state/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
@@ -242,7 +242,7 @@ import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
 import "./widgets/find-bill-dialog.js";
-import "./widgets/equipment-dialog.js";
+import { canScan } from "./widgets/equipment-dialog.js";
 import "./widgets/profile-dialog.js";
 import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
@@ -9402,6 +9402,13 @@ export class TillApp extends LitElement {
         .defaultReaderId=${this.#payDefaultReaderId()}
         .asksGuests=${this.#billPayingAsksGuests(open)}
         .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guests ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
+        .handheld=${this.handheldMode}
+        .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
+        .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
+        .tableName=${this.#payingTableName(open)}
+        .equipment=${this.deviceEquipment}
+        .canScan=${canScan()}
+        .fixedReader=${this.#fixedPayReader()}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -9409,6 +9416,20 @@ export class TillApp extends LitElement {
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  #payingTableName(open: BillPaying): string {
+    if (open.surface !== "table") return "";
+    const label = this.tables.find((table) => table.id === this.activeTableId)?.label;
+    return label === undefined ? "" : t("floor.table_title").replace("{table}", () => label);
+  }
+
+  /** A practice venue's demo reader, which its handhelds charge whatever their equipment says. */
+  #fixedPayReader(): FixedReader | null {
+    if (this.cardProvider !== "simulator") return null;
+    const demo = this.activeReaders.filter((reader) => reader.provider === "simulator");
+    const reader = demo.find((shown) => shown.id === this.defaultReaderId) ?? demo[0];
+    return reader === undefined ? null : { id: reader.id, name: reader.name };
   }
 
   #billPayingAsksGuests(open: BillPaying): boolean {
@@ -15755,6 +15776,7 @@ export class TillApp extends LitElement {
       ...(out === undefined ? {} : { ...out.shown, busy: true, refusal: { code: "sending" } }),
     };
     this.billPaying = open;
+    if (this.handheldMode) void this.#readEquipment();
     await this.#rereadBillPaying(open.id, billId, order);
     return open;
   }

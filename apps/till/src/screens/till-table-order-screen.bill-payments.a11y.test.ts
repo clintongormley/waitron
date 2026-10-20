@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { resized } from "./till-table-order-screen.test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -76,6 +78,90 @@ const balance: BillBalance = {
     { lineId: "line-3", lineNo: 3, paidQuantity: "1.000" },
   ],
 };
+
+const lines = [
+  line({ lineNo: 1, name: "Paella", unitPriceGross: "30.00" }),
+  line({ lineNo: 2, name: "Caña", quantity: "3.000", unitPriceGross: "3.00" }),
+  line({ lineNo: 3, name: "Tiramisú", unitPriceGross: "6.00" }),
+];
+
+async function mountHandheld(
+  theme: "light" | "dark",
+  shownBill: PartyBill,
+  billBalance: BillBalance | null,
+) {
+  const mounted = await mountWidget<TillTableOrderScreen>(
+    "till-table-order-screen",
+    {
+      products: [],
+      lines,
+      statuses: [],
+      orderId: "wo-4",
+      party,
+      bills: [shownBill],
+      billBalance,
+      fullInvoices: true,
+      handheld: true,
+    },
+    theme,
+  );
+  mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+  await mounted.el.updateComplete;
+  if (mounted.el.shadowRoot!.querySelector("[data-pay-sheet]") === null)
+    throw new Error("the scan must include the handheld's Cobrar");
+  return mounted;
+}
+
+describe.each(["light", "dark"] as const)(
+  "till-table-order-screen handheld Cobrar a11y (%s theme)",
+  (theme) => {
+    it.each([
+      ["an untouched bill", { ...bill, hasPayments: false }, null],
+      ["a partly paid bill", bill, balance],
+    ] as const)("has no violations for %s", async (_case, shownBill, billBalance) => {
+      const { host } = await mountHandheld(theme, shownBill, billBalance);
+      await expectNoA11yViolations(host);
+    });
+  },
+);
+
+describe("till-table-order-screen handheld Cobrar look", () => {
+  it("is captured in both themes at 390 and 1280, and the themes paint differently", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const backgrounds: Record<string, string> = {};
+    try {
+      for (const theme of ["light", "dark"] as const)
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 900);
+          expect(window.innerWidth).toBe(width);
+          const { el } = await mountHandheld(theme, bill, balance);
+          await resized(el);
+          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+          if (review?.checkVisibility()) {
+            await userEvent.click(review);
+            await el.updateComplete;
+          }
+          const drawer = el.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
+          const pay = el.shadowRoot!.querySelector<HTMLElement>("section.pay")!;
+          expect(pay.getBoundingClientRect().width).toBeGreaterThan(0);
+          expect(pay.scrollWidth).toBeLessThanOrEqual(pay.clientWidth);
+          backgrounds[theme] = getComputedStyle(drawer).backgroundColor;
+          // The pay section sits below the fold at phone width; the viewport capture shows it.
+          pay.scrollIntoView({ block: "end" });
+          await page.screenshot({
+            path: `__screenshots__/look/a796-handheld-cobrar-${theme}-${width}.png`,
+          });
+          console.info(
+            `look ${theme} ${width}: pay section ${pay.getBoundingClientRect().width}px, Cobrar ${el.shadowRoot!.querySelector("[data-pay-sheet]")!.getBoundingClientRect().width}px`,
+          );
+          cleanupWidgets();
+        }
+      expect(backgrounds.light).not.toBe(backgrounds.dark);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+});
 
 describe.each(["light", "dark"] as const)(
   "till-table-order-screen bill payments a11y (%s theme)",

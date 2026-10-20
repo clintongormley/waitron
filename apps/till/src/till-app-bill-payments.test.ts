@@ -1,31 +1,61 @@
 import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
-import { deviceZonesFixture } from "../test/device-zones.js";
+import {
+  discardUnsavedLeave,
+  mesa,
+  billOf,
+  line,
+  paella,
+  chuleton,
+  ensalada,
+  bill120,
+  balanceOf,
+  paymentOf,
+  takenOf,
+  cash,
+  invoiceOf,
+  till,
+  offers,
+  drafts,
+  stubApi,
+  flush,
+  emit,
+  text,
+  money,
+  lock,
+  shell,
+  floor,
+  tableOrder,
+  dialog,
+  inDialog,
+  shownBalance,
+  balanceShows,
+  openTable,
+  openDialog,
+  showBillFooter,
+  type,
+  press,
+  resetBillPayDrafts,
+  equipmentItem,
+  equipmentWith,
+} from "../test/bill-pay-app.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { formatMoney } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
   cancelThroughDialog,
   cleanupWidgets,
-  draftServer,
   expectNoA11yViolations,
   mountWidget,
-  servedMenus,
-  type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
-import { resized } from "./screens/till-table-order-screen.test-helpers.js";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import type { TillFloorScreen } from "./screens/till-floor-screen.js";
-import type { TillBillPayDialog } from "./widgets/bill-pay-dialog.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
@@ -39,310 +69,19 @@ import type {
   BillRefundResult,
   BillRefundView,
   CurrentOrders,
-  FloorZone,
   HeldOrderSummary,
   OrderGroup,
   PartyBill,
-  TabLine,
-  TableParty,
   TableState,
   TillApi,
   TillProduct,
   TillSaleResult,
-  ZoneOfferCatalogue,
 } from "./api/client.js";
 
 // A table's bill paid in parts through the bill payment dialog (plan Task 15, design §12): the
 // dialog asks the server for each allocation, shows it, takes it, and the bill's balance follows.
 
-async function discardUnsavedLeave(el: TillApp): Promise<void> {
-  await flush(el);
-  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  expect(question.open).toBe(true);
-  await question.updateComplete;
-  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  await flush(el);
-}
-
-const zone: FloorZone = {
-  id: "z1",
-  name: "Comedor",
-  displayOrder: 0,
-  active: true,
-  closesAt: null,
-  closed: false,
-  hasPlan: false,
-  layoutSetName: null,
-  layoutDue: null,
-  serviceMode: "table_tab",
-};
-
-function partyOf(over: Partial<TableParty> = {}): TableParty {
-  return {
-    kitchenNote: {
-      scope: { partyId: over.id ?? "v1" },
-      note: null,
-      revision: 0,
-      ownerRevision: over.revision ?? 3,
-    },
-    id: "v1",
-    revision: 3,
-    guestCount: 4,
-    state: "open",
-    name: null,
-    displayName: "4",
-    mainBillId: "wo-4",
-    outstanding: "120.00",
-    billCount: 1,
-    tableIds: ["t4"],
-    unsentDrafts: [],
-    reminder: null,
-    ...over,
-  };
-}
-
-function mesa(partyOver: Partial<TableParty> = {}): TableState {
-  return {
-    id: "t4",
-    label: "4",
-    zoneId: "z1",
-    state: "open-tab",
-    condition: "held",
-    hasOpenTab: true,
-    tabLineCount: 4,
-    tabTotal: "120.00",
-    pendingDeliveries: 0,
-    pendingToServe: 0,
-    readyToServe: 0,
-    enRoute: 0,
-    timingBand: "fresh",
-    nextReservation: null,
-    today: null,
-    signals: [],
-    party: partyOf(partyOver),
-  };
-}
-
-function billOf(over: Partial<PartyBill> = {}): PartyBill {
-  return {
-    workingOrderId: "wo-4",
-    revision: 0,
-    invoiceType: "F2",
-    recipient: null,
-    partyId: "v1",
-    label: null,
-    status: "open",
-    total: "120.00",
-    outstanding: "120.00",
-    hasPayments: false,
-    receiptAvailable: false,
-    ...over,
-  };
-}
-
-function line(over: Partial<TabLine>): TabLine {
-  return {
-    stationId: null,
-    movable: false,
-    id: `line-${over.lineNo}`,
-    groupId: null,
-    lineNo: 1,
-    productId: "p",
-    quantity: "1.000",
-    unitPrecision: 0,
-    unitPriceGross: "1.00",
-    servedAt: null,
-    courseId: null,
-    sentAt: "2026-09-30T19:00:00.000Z",
-    firedAt: "2026-09-30T19:00:00.000Z",
-    state: "queued",
-    note: null,
-    listId: null,
-    menuItemId: null,
-    parentProductId: null,
-    ...over,
-  };
-}
-
-// The owner's €120.00 bill: Paella, Chuletón, Ensalada, and two items a guest takes onto a bill of
-// their own, Tarta and Vino, €30.00 between them.
-const paella = line({ lineNo: 1, name: "Paella", unitPriceGross: "40.00" });
-const chuleton = line({ lineNo: 2, name: "Chuletón", unitPriceGross: "35.00" });
-const ensalada = line({ lineNo: 3, name: "Ensalada", unitPriceGross: "15.00" });
-const tarta = line({ lineNo: 4, name: "Tarta", unitPriceGross: "12.00" });
-const vino = line({ lineNo: 5, name: "Vino", unitPriceGross: "18.00" });
-const bill120 = [paella, chuleton, ensalada, tarta, vino];
-
-function balanceOf(over: Partial<BillBalance> = {}): BillBalance {
-  return {
-    workingOrderId: "wo-4",
-    status: "open",
-    total: "120.00",
-    received: "0.00",
-    reserved: "0.00",
-    outstanding: "120.00",
-    tips: "0.00",
-    payments: [],
-    paidLines: [],
-    ...over,
-  };
-}
-
-function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
-  return {
-    id: "pay-1",
-    submissionId: "sub-1",
-    kind: "contribution",
-    shareOf: null,
-    method: "cash",
-    entry: null,
-    applied: "50.00",
-    tip: "0.00",
-    tendered: "50.00",
-    change: "0.00",
-    state: "received",
-    createdAt: "2026-09-30T20:00:00.000Z",
-    receivedAt: "2026-09-30T20:00:00.000Z",
-    lines: [],
-    refunds: [],
-    ...over,
-  };
-}
-
-function takenOf(
-  payment: Partial<BillPaymentView>,
-  balance: Partial<BillBalance>,
-  invoice?: TillSaleResult,
-): BillPaymentResult {
-  return {
-    outcome: "received",
-    payment: paymentOf(payment),
-    balance: balanceOf(balance),
-    ...(invoice === undefined ? {} : { invoice }),
-  };
-}
-
-const cash = (applied: string, change: string, tip = "0.00"): AllocationPreview => ({
-  kind: "allocated",
-  choice: null,
-  applied,
-  tip,
-  change,
-  charged: null,
-});
-
-const invoiceOf = (total: string): TillSaleResult => ({
-  receiptTrim: {},
-  venueAddress: [],
-  receiptSettings: { printAddress: false },
-  orderLabel: "4",
-  orderNumber: 7,
-  invoiceNumber: "F-0007",
-  issuedAt: "2026-09-30T20:30:00.000Z",
-  total,
-  vatBreakdown: [{ rate: "10", base: "27.27", tax: "2.73" }],
-  lines: [{ descriptions: { "es-ES": "Tarta" }, quantity: "1", gross: "12.00" }],
-  tender: { method: "cash", change: "0.00" },
-  payments: [
-    { method: "cash", amount: total, tip: "0.00", tendered: total, change: "0.00", refunds: [] },
-  ],
-  qr: "https://example.test/vf?nif=B1&num=F-0007&fecha=30-09-2026&total=30.00",
-});
-
-const formFactor: FormFactor = "till";
-
-const till = {
-  locale: "en",
-  invoiceLocale: "es-ES",
-  venueName: "Bar Pepe",
-  nif: "B12345678",
-  orderFlow: "prepay" as const,
-  receiptPrintMode: "auto" as const,
-  bumpMode: "line" as const,
-  fireControl: "waiter" as const,
-  courses: [] as { id: string; name: string; displayOrder: number }[],
-  cardProvider: "none" as const,
-  tipsEnabled: true,
-  formFactor: formFactor,
-  capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
-  inactivityTimeoutSeconds: null as number | null,
-  nodeId: "n1",
-  servers: [],
-};
-
-const offers: ZoneOfferCatalogue = {
-  service: {
-    open: true,
-    zoneOpen: true,
-    periodName: null,
-    periodOccurrenceKey: null,
-    keepOpen: null,
-    zoneKeepOpen: null,
-  },
-  context: {
-    departmentName: "Restaurant",
-    zoneId: zone.id,
-    departmentId: "department-default",
-    serviceMode: "prepay",
-  },
-  defaultMenuId: null,
-  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }], []),
-  offers: [],
-};
-
-let drafts: DraftServer;
 let api: TillApi;
-
-function stubApi(overrides: Record<string, unknown> = {}): TillApi {
-  return {
-    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
-    getContentLanguages: vi
-      .fn()
-      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-    getLocales: vi.fn().mockResolvedValue({
-      locales: [
-        { code: "es-ES", label: "Español" },
-        { code: "en-GB", label: "English" },
-      ],
-      venueDefault: "en",
-      loginDefault: "en",
-    }),
-    getTill: vi.fn().mockResolvedValue(till),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
-    getDeviceIdentity: vi.fn().mockResolvedValue({
-      deviceId: "till-dev",
-      name: "Till 1",
-      formFactor: "till",
-    }),
-    getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-    listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(offers),
-    listZoneOffers: vi.fn().mockResolvedValue(offers),
-    setServiceZone: vi.fn(),
-    listWorkingOrders: vi.fn().mockResolvedValue([]),
-    listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([mesa()]),
-    listZones: vi.fn().mockResolvedValue([zone]),
-    getPartyBills: vi.fn().mockResolvedValue([billOf()]),
-    getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
-    getTabLines: vi.fn().mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
-    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
-    recordSale: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
-    collectOrder: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
-    pay: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
-    getBillBalance: vi.fn().mockResolvedValue(balanceOf()),
-    previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
-    takeBillPayment: vi.fn(),
-    reprint: vi.fn().mockResolvedValue(undefined),
-    logout: vi.fn().mockResolvedValue(undefined),
-    ...adjustmentStubs(),
-    listDrafts: drafts.listDrafts,
-    saveDraft: drafts.saveDraft,
-    submitDraft: drafts.submitDraft,
-    ...overrides,
-  } as unknown as TillApi;
-}
 
 const fullInvoicesOn = () => ({
   getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
@@ -353,101 +92,12 @@ async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light"
   return mountWidget<TillApp>("till-app", { api }, theme);
 }
 
-async function flush(el: TillApp, rounds = 3): Promise<void> {
-  for (let i = 0; i < rounds; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-  }
-}
-
-function emit(source: Element, type: string, detail?: unknown): void {
-  if (
-    type === "change-line" &&
-    typeof detail === "object" &&
-    detail !== null &&
-    !Object.hasOwn(detail, "expectedEdit")
-  ) {
-    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
-  }
-  source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-}
-
-const text = (node: Element | null | undefined) =>
-  (node?.textContent ?? "").replace(/\s+/g, " ").trim();
-const money = (amount: string) => formatMoney(amount, currentLocale());
-const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
-const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
-const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen")!;
-const tableOrder = (el: TillApp) =>
-  el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
-const dialog = (el: TillApp) =>
-  el.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog");
-const inDialog = (el: TillApp, selector: string) =>
-  dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string; disabled: boolean }>(
-    selector,
-  );
-const shownBalance = (el: TillApp) => ({
-  total: text(inDialog(el, "[data-pay-total] dd")),
-  received: text(inDialog(el, "[data-pay-received] dd")),
-  reserved: text(inDialog(el, "[data-pay-reserved] dd")),
-  outstanding: text(inDialog(el, "[data-pay-outstanding] dd")),
-});
-const balanceShows = (total: string, received: string, outstanding: string, reserved = "0.00") => ({
-  total: money(total),
-  received: money(received),
-  reserved: money(reserved),
-  outstanding: money(outstanding),
-});
 const sent = (): BillPaymentRequest[] =>
   vi.mocked(api.takeBillPayment).mock.calls.map(([, request]) => request);
 
-async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
-  await flush(el);
-  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-  await flush(el);
-  emit(shell(el), "screen-select", { screen: "floor" });
-  await flush(el);
-  emit(floor(el), "open-table", { tableId: "t4", seated: true });
-  await flush(el);
-  const order = tableOrder(el);
-  order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await flush(el);
-  return order;
-}
-
-async function openDialog(el: TillApp, way: "items" | "contribution" | "share" | "rest") {
-  const order = tableOrder(el);
-  const selector = way === "rest" ? "[data-pay-rest]" : `[data-open-bill-pay="${way}"]`;
-  order.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
-  await flush(el);
-}
-
-async function showBillFooter(order: TillTableOrderScreen): Promise<void> {
-  await resized(order);
-  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await order.updateComplete;
-  }
-}
-
-async function type(el: TillApp, name: string, value: string): Promise<void> {
-  const input = inDialog(el, `wt-input[name="${name}"]`)!.shadowRoot!.querySelector("input")!;
-  input.value = value;
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await flush(el);
-}
-
-async function press(el: TillApp, selector: string): Promise<void> {
-  inDialog(el, selector)!.click();
-  await flush(el);
-}
-
 beforeEach(() => {
   setLocale("en");
-  drafts = draftServer();
-  drafts.bills.add("wo-5");
-  drafts.bills.add("wo-9");
+  resetBillPayDrafts();
 });
 afterEach(cleanupWidgets);
 
@@ -4979,7 +4629,7 @@ describe("till-app: a bill payment on the card reader", () => {
       getTill: vi.fn().mockResolvedValue({
         ...till,
         formFactor: phoneFormFactor,
-        capabilities: ["print-receipt"] as CapabilityFlag[],
+        capabilities: ["print-receipt", "hand-keyed-card-payment"] as CapabilityFlag[],
         cardProvider: "stripe_terminal",
         activeReaders: readers,
         defaultReaderId: readers[0]!.id,
@@ -5004,7 +4654,7 @@ describe("till-app: a bill payment on the card reader", () => {
     });
     await flush(el);
     await type(el, "amount", "40");
-    await press(el, 'input[name="method"][value="card"]');
+    await press(el, 'input[name="method"][value="manual"]');
 
     expect(inDialog(el, 'input[name="reader"]')).toBeNull();
     expect(inDialog(el, 'wt-input[name="externalRef"]')).not.toBeNull();
@@ -5162,6 +4812,11 @@ describe("till-app: a bill payment on the card reader", () => {
           name: "Móvil",
           formFactor: "phone-portrait",
         }),
+        getDeviceEquipment: vi
+          .fn()
+          .mockResolvedValue(
+            equipmentWith(equipmentItem(readers[1]!.id, readers[1]!.name, { provider: "stripe" })),
+          ),
         ...(method === "card"
           ? { previewBillPayment: vi.fn().mockResolvedValue(cardPreview) }
           : {}),
