@@ -473,3 +473,10 @@ Keep a probe's input bounded too. In A682's 2026-10-20 review, the command place
 test had started. The driver retained the process snapshot and sent SIGTERM to the recorded
 `cat` pid 47264. The following snapshot showed Bash running the probe. A test timeout does not
 cover a command waiting before the test is launched.
+
+
+An ignored scratch file can still run through a tool. A682's 2026-10-20 pre-push hook stopped
+at `pnpm lint` on an explicit `any` in its completed `.superpowers/sdd/.../guide-visual.mts`
+probe. `git ls-files` returned no entry and `git check-ignore` named the file: Git ignored it,
+but `eslint .` still read it. Keep completed executable probes outside the checkout; the driver
+preserved this one in the campaign receipts before rerunning the normal hook.
