@@ -73,7 +73,16 @@ export default defineConfig({
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
     // source. Without this exclude Vitest discovers them as real test files, so
     // one interrupted mutation run makes every later test run fail confusingly.
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "test/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.stryker-tmp/**",
+      "test/**",
+      // Under Stryker `src` holds instrumented copies, which sources.test.ts would read as the
+      // theme's source text.
+      ...(process.env.STRYKER_MUTATOR_WORKER === undefined
+        ? []
+        : ["src/theme/*.sweep.test.ts", "src/theme/sources.test.ts"]),
+    ],
     browser: {
       enabled: true,
       provider: playwright({}),

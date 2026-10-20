@@ -14,15 +14,14 @@ const FORCED = (mode: Mode) => `:where([data-wt-theme-root][data-theme="${mode}"
 // turns that into a loud failure instead of a theme with no values.
 export function parseBlock(css: unknown, selector: string, from = 0): Record<string, string> {
   if (typeof css !== "string") throw new TypeError("token CSS was not loaded as text");
-  const at = css.indexOf(selector, from);
-  const open = at < 0 ? -1 : css.indexOf("{", at + selector.length);
-  const close = open < 0 ? -1 : css.indexOf("}", open);
+  // Blanked to the same length, so a caller's `from` offset still points where it did.
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, (comment) => " ".repeat(comment.length));
+  const at = text.indexOf(selector, from);
+  const open = at < 0 ? -1 : text.indexOf("{", at + selector.length);
+  const close = open < 0 ? -1 : text.indexOf("}", open);
   if (close < 0) throw new Error(`token CSS has no block for ${selector}`);
   const values: Record<string, string> = {};
-  for (const declaration of css
-    .slice(open + 1, close)
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split(";")) {
+  for (const declaration of text.slice(open + 1, close).split(";")) {
     const match = /^\s*(--wt-[a-z0-9-]+)\s*:\s*([\s\S]*?)\s*$/.exec(declaration);
     if (match) values[match[1]!] = match[2]!;
   }
@@ -30,7 +29,7 @@ export function parseBlock(css: unknown, selector: string, from = 0): Record<str
 }
 
 function requireToken(block: Record<string, string>, name: string, what: string) {
-  if (!(name in block)) throw new Error(`${what} has no ${name}`);
+  if (!(name in block)) throw new Error(`${what} have no ${name}`);
   return block;
 }
 

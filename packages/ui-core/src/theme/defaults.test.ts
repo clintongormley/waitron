@@ -57,16 +57,31 @@ describe("parseBlock and readDefaults refuse what they cannot read", () => {
     expect(() => parseBlock("a{}", ":where(x)")).toThrow(":where(x)");
   });
 
+  test("a closing brace inside a comment within the block", () => {
+    expect(parseBlock(`${ROOT} { --wt-a: 1; /* } */ --wt-b: 2; }`, ROOT)).toEqual({
+      "--wt-a": "1",
+      "--wt-b": "2",
+    });
+  });
+
+  test("the selector's text inside an earlier comment", () => {
+    expect(parseBlock(`/* ${ROOT} { --wt-x: 9; } */ ${ROOT} { --wt-a: 1; }`, ROOT)).toEqual({
+      "--wt-a": "1",
+    });
+  });
+
   test("colours with no brand colour", () => {
     const structure = `${ROOT} { --wt-radius-md: 8px; }`;
     const colours = `${FORCED_LIGHT} { --wt-color-bg: #ffffff; } ${FORCED_DARK} { --wt-color-primary: #000000; }`;
-    expect(() => readDefaults(colours, structure)).toThrow("--wt-color-primary");
+    expect(() => readDefaults(colours, structure)).toThrow(
+      "the light colours have no --wt-color-primary",
+    );
   });
 
   test("structure with no medium radius", () => {
     const colours = `${FORCED_LIGHT} { --wt-color-primary: #1f6feb; } ${FORCED_DARK} { --wt-color-primary: #000000; }`;
     expect(() => readDefaults(colours, `${ROOT} { --wt-radius-sm: 4px; }`)).toThrow(
-      "--wt-radius-md",
+      "the structure tokens have no --wt-radius-md",
     );
   });
 });
