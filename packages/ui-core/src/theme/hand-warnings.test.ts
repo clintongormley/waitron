@@ -271,6 +271,22 @@ describe("Fix and save", () => {
 });
 
 describe("the brand colour's fix beside colours set by hand", () => {
+  test("a hand-set colour keeps its fix while the brand colour as picked warns", () => {
+    const lemon: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
+    const brandAlone = derive(lemon).warnings;
+    expect(brandAlone.map(({ field, fix }) => [field, fix])).toEqual([["brandColor", "#9f8b18"]]);
+
+    const theme = derive(withHand(lemon, "light", { "text-muted": "#8fa898" }));
+    expect(theme.warnings.map(({ field, fix }) => [field, fix])).toEqual([
+      ["brandColor", "#9f8b18"],
+      ["handSet.light.text-muted", "#526a5b"],
+    ]);
+    expect(theme.warnings[0]).toEqual(brandAlone[0]);
+
+    const fixed = derive(withHand(lemon, "light", { "text-muted": "#526a5b" }));
+    expect(fixed.warnings).toEqual(brandAlone);
+  });
+
   // Two warnings with no fix search every shade several times: about 4 s in Chromium, and the
   // default 15 s ran out in Stryker's instrumented dry run.
   test(
@@ -294,7 +310,7 @@ describe("the brand colour's fix beside colours set by hand", () => {
           field: "handSet.dark.field-line",
           mode: "dark",
           against: ["field-fill", "surface"],
-          fix: null,
+          fix: "#585e6a",
           blockedBy: [],
         },
         {
@@ -302,7 +318,7 @@ describe("the brand colour's fix beside colours set by hand", () => {
           mode: "dark",
           against: ["field-fill"],
           fix: null,
-          blockedBy: [],
+          blockedBy: ["field-line"],
         },
       ]);
       expect(derive({ ...choices, brandFix: { dark: true } }).dark[P("primary")]).toBe("#737373");

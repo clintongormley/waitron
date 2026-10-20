@@ -25,8 +25,8 @@ const LIGHTNESSES = Array.from({ length: 101 }, (_, i) => i / 100);
 
 /**
  * The nearest lightness of `token`'s hue at which, after settling with every other hand-set value
- * as typed, no rule names it, no rule between worked-out colours fails, and no other hand-set
- * value is newly named; `null` when none does.
+ * as typed, no rule names it, no rule between worked-out colours (the brand colour as picked is
+ * not one) fails, and no other hand-set value is newly named; `null` when none does.
  */
 function fixFor(
   defaults: WaitronDefaults,
@@ -40,6 +40,14 @@ function fixFor(
   const base = toOklch(hand[token]!);
   const order = [...LIGHTNESSES].sort((x, y) => Math.abs(x - base.L) - Math.abs(y - base.L));
   const cannotMove = (other: string) => !THEMED.has(other) || other in hand;
+  const brandAsPicked =
+    choices.brandColor !== null && choices.brandFix[mode] !== true && !(PRIMARY in hand);
+  // Departs from the reference: a rule failing on the brand colour as picked is the brand's warning,
+  // so it must not take away a hand-set colour's fix (a null fix means no shade of it works).
+  const workedOut = ({ rule }: RuleResult, trial: Readonly<Record<string, string>>) =>
+    !(rule.a in trial) &&
+    !(rule.b in trial) &&
+    !(brandAsPicked && (rule.a === PRIMARY || rule.b === PRIMARY));
   for (const L of order) {
     const candidate = fromOklch({ ...base, L });
     const quick = checkRules(THEME_RULES[mode], (other) =>
@@ -53,7 +61,7 @@ function fixFor(
     const { failures } = settleMode(defaults, choices, mode, trial);
     const accepted =
       names(failures, token).length === 0 &&
-      !failures.some(({ rule }) => !(rule.a in trial) && !(rule.b in trial)) &&
+      !failures.some((result) => workedOut(result, trial)) &&
       Object.keys(hand).every(
         (other) =>
           other === token || names(failures, other).length === 0 || namedBefore.includes(other),
