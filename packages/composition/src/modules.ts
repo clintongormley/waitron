@@ -2,6 +2,7 @@ import { MEDIA_MODULE } from "@waitron/media";
 import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
 import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
 import {
+  ADJUSTMENTS_BACKUP_VERIFICATION,
   ADJUSTMENTS_CHANGE_SOURCES,
   ADJUSTMENTS_CLASSIFICATION,
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
@@ -79,6 +80,7 @@ import {
 import {
   VENUE_SERVICE,
   VENUE_SERVICE_ALERTS,
+  VENUE_SERVICE_BACKUP_VERIFICATION,
   VENUE_SERVICE_CLASSIFICATION,
   VENUE_SERVICE_CHANGE_SOURCES,
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
@@ -166,6 +168,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_venue_service",
       from: "../venue-service/drizzle",
     },
+    backup: { verification: VENUE_SERVICE_BACKUP_VERIFICATION },
     classification: VENUE_SERVICE_CLASSIFICATION,
     changes: VENUE_SERVICE_CHANGE_SOURCES,
     venueService: VENUE_SERVICE,
@@ -332,6 +335,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_adjustments",
       from: "../adjustments/drizzle",
     },
+    backup: { verification: ADJUSTMENTS_BACKUP_VERIFICATION },
     classification: ADJUSTMENTS_CLASSIFICATION,
     changes: ADJUSTMENTS_CHANGE_SOURCES,
     routes: ADJUSTMENTS_ROUTES,

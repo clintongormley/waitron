@@ -13,3 +13,4 @@ export { ADJUSTMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js"
 export { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
 export { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
 export { ADJUSTMENTS_ROUTES } from "./routes.js";
+export { ADJUSTMENTS_BACKUP_VERIFICATION } from "./backup-verification.js";

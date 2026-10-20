@@ -554,6 +554,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../store
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment
@@ -2178,6 +2181,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../store
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment
