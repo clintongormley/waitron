@@ -6,7 +6,6 @@ import {
   byPrecedence,
   lateBand,
   tableStates,
-  topState,
   type TableStateKind,
 } from "./table-precedence.js";
 
@@ -178,7 +177,7 @@ describe("tableStates", () => {
       "not-sent",
       "reserved",
     ]);
-    expect(topState(busy, now)).toBe("forgotten");
+    expect(tableStates(busy, now)[0]).toBe("forgotten");
   });
 
   it("orders T4 as the owner's Q34 example does", () => {
@@ -190,7 +189,7 @@ describe("tableStates", () => {
       ],
     });
     expect(tableStates(t4, now)).toEqual(["bill", "ready", "step"]);
-    expect(topState(t4, now)).toBe("bill");
+    expect(tableStates(t4, now)[0]).toBe("bill");
   });
 });
 
@@ -209,9 +208,9 @@ describe("lateBand", () => {
   });
 });
 
-describe("topState", () => {
-  it("is undefined for a table in no state", () => {
-    expect(topState(table({ ...free, state: "delivery-pending" }), now)).toBeUndefined();
+describe("a table in no state", () => {
+  it("has an empty state list", () => {
+    expect(tableStates(table({ ...free, state: "delivery-pending" }), now)).toEqual([]);
   });
 });
 

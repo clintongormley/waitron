@@ -19,7 +19,6 @@ export const floorRingStyles = css`
     box-shadow: inset 0 0 0 var(--wt-space-1) currentColor;
   }
 
-  /* --ring-dim is set per ring, not a token: the colour its pulse dims to half-way. */
   .ring-forgotten,
   .ring-overdue {
     color: var(--wt-color-danger);
@@ -36,6 +35,7 @@ export const floorRingStyles = css`
     box-shadow: inset 0 0 0 calc(var(--wt-space-1) / 2) currentColor;
   }
 
+  /* --ring-dim is set per ring above, not a token: the colour its pulse dims to half-way. */
   @keyframes wt-pulse {
     50% {
       color: var(--ring-dim);

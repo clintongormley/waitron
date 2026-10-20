@@ -572,6 +572,11 @@ test("in light, each dim colour is its full colour at 30% over the surface", () 
   }
 });
 
+test("in light, the calm edge is the disabled primary", () => {
+  const el = mount("light");
+  expect(token(el, "--wt-color-table-calm-edge")).toBe(token(el, "--wt-color-primary-disabled"));
+});
+
 const STATION_FILLS = [
   "red",
   "orange",

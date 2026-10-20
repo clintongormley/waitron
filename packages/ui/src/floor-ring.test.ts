@@ -128,8 +128,10 @@ test("dims each colour to its own theme token, at full opacity", async () => {
     "--wt-color-danger-pulse-dim": "rgb(9, 8, 7)",
     "--wt-color-warning-pulse-dim": "rgb(6, 5, 4)",
     "--wt-duration-pulse-slow": "2000ms",
+    "--wt-duration-pulse-fast": "2000ms",
   };
   for (const [name, dim] of [
+    ["forgotten", "rgb(9, 8, 7)"],
     ["overdue", "rgb(9, 8, 7)"],
     ["fire", "rgb(6, 5, 4)"],
   ] as const) {
