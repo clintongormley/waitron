@@ -1,6 +1,9 @@
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import type { TillBasket } from "./widgets/basket.js";
+import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
@@ -13,6 +16,9 @@ import type { TillStationChoiceDialog } from "./widgets/station-choice-dialog.js
 import type { FormFactor } from "./layout.js";
 import type {
   CounterWaitingOrder,
+  HeldOrder,
+  TabLine,
+  TabLines,
   Station,
   StationQueue,
   TillApi,
@@ -77,6 +83,7 @@ const station = (id: string, name: string, displayOrder: number): Station => ({
 const stations = [station("kitchen", "Kitchen", 0), station("grill", "Grill", 1)];
 
 const paid: CounterWaitingOrder = {
+  items: [],
   id: "wo-paid",
   orderNumber: 11,
   label: "Ana",
@@ -196,6 +203,8 @@ async function signedIn(
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
+  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
+  await flush(el);
   return el;
 }
 
@@ -242,6 +251,387 @@ async function changeOperator(el: TillApp): Promise<void> {
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
+
+const sentDish = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine => ({
+  id,
+  lineNo,
+  stationId: "kitchen",
+  movable: true,
+  name: `Staff dish ${lineNo}`,
+  productId: `dish-${lineNo}`,
+  parentLineNo: null,
+  quantity: "1.000",
+  unitPrecision: 0,
+  unitPriceGross: "5.00",
+  servedAt: null,
+  courseId: null,
+  sentAt: "2026-10-19T10:00:00Z",
+  firedAt: "2026-10-19T10:00:00Z",
+  state: "queued",
+  groupId: null,
+  note: "No salt",
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
+  ...over,
+});
+
+function placedServer() {
+  const order: HeldOrder = {
+    id: "wo-placed",
+    orderNumber: 12,
+    label: "Lunch",
+    revision: 7,
+    kitchenNote: {
+      scope: { workingOrderId: "wo-placed" },
+      note: null,
+      revision: 0,
+      ownerRevision: 7,
+    },
+    lines: [1, 2].map((n) => ({
+      workingOrderLineId: `dish-line-${n}`,
+      productId: `dish-${n}`,
+      quantity: "1.000",
+      note: "No salt",
+      product: {
+        id: `dish-${n}`,
+        name: `Staff dish ${n}`,
+        customerName: { en: `Customer dish ${n}` },
+        unitPrice: "5.00",
+        pricingUnit: "each",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+    })),
+  };
+  const server = {
+    order,
+    lines: {
+      revision: 7,
+      editSentLines: false,
+      lines: [sentDish("dish-line-1", 1), sentDish("dish-line-2", 2)],
+    } as TabLines,
+    retrievePlacedOrder: vi.fn(async () => structuredClone(server.order)),
+    getTabLines: vi.fn(async () => structuredClone(server.lines)),
+    moveDishStation: vi.fn(async (_id: string, body: { lineIds: string[]; stationId: string }) => {
+      server.order = {
+        ...server.order,
+        revision: 8,
+        kitchenNote: { ...server.order.kitchenNote, ownerRevision: 8 },
+      };
+      server.lines = {
+        ...server.lines,
+        revision: 8,
+        lines: server.lines.lines.map((line) =>
+          body.lineIds.includes(line.id) ? { ...line, stationId: body.stationId } : line,
+        ),
+      };
+      return { revision: 8, stationId: body.stationId, moved: body.lineIds };
+    }),
+    listCounterWaiting: vi.fn(
+      async () =>
+        [
+          {
+            ...paid,
+            id: "wo-placed",
+            status: "placed",
+            settledAt: null,
+            canHandOver: false,
+            serviceMode: "ticket_then_pay",
+            movableDishes: [],
+          },
+        ] as CounterWaitingOrder[],
+    ),
+  };
+  return server;
+}
+
+const basketOf = (el: TillApp) => counter(el).shadowRoot!.querySelector<TillBasket>("till-basket")!;
+
+async function inspectPlaced(overrides: Record<string, unknown> = {}) {
+  const server = placedServer();
+  const el = await signedIn({ ...server, ...overrides });
+  emit(counter(el), "pay-waiting-order", { id: "wo-placed" });
+  await flush(el, 6);
+  expect(counter(el).stage).toBe("collect");
+  expect(basketOf(el).readOnly).toBe(true);
+  await userEvent.click(
+    basketOf(el).shadowRoot!.querySelector<HTMLElement>('[data-line-detail="1"]')!,
+  );
+  await flush(el);
+  const picker =
+    basketOf(el).shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+  expect(picker).not.toBeNull();
+  return { el, server, picker };
+}
+
+it("A738 collection line-window Move sends exactly its dish and keeps collection facts read-only after refresh", async () => {
+  const { el, server, picker } = await inspectPlaced();
+  expect(picker.readOnly).toBe(true);
+  expect(picker.initialSelections?.note).toBe("No salt");
+  expect(counter(el).storedLines).toBeNull();
+  expect(basketOf(el).shadowRoot!.querySelector("[data-discount-line]")).toBeNull();
+  const action = picker.querySelector<HTMLElement>("[data-move-station]");
+  expect(action, "collection inspection must have the dish's current move facts").not.toBeNull();
+  await userEvent.click(action!);
+  await flush(el);
+  expect(dialog(el)?.dishName).toBe("Staff dish 2");
+  expect(dialog(el)?.wholeOrder).toBe(false);
+  expect(dialog(el)?.currentStationId).toBe("kitchen");
+  await choose(el);
+  expect(server.moveDishStation).toHaveBeenCalledExactlyOnceWith(
+    "wo-placed",
+    {
+      submissionId: expect.stringMatching(UUID),
+      lineIds: ["dish-line-2"],
+      stationId: "grill",
+      expectedEdit: null,
+    },
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(server.retrievePlacedOrder).toHaveBeenCalledTimes(2);
+  expect(server.getTabLines).toHaveBeenCalledTimes(2);
+  expect(counter(el).stage).toBe("collect");
+  expect(counter(el).storedLines).toBeNull();
+  expect(counter(el).store.revision).toBe(8);
+  expect(counter(el).store.total).toBe("10.00");
+  expect(
+    counter(el).store.lines.map((line) => [line.workingOrderLineId, line.quantity, line.note]),
+  ).toEqual([
+    ["dish-line-1", "1", "No salt"],
+    ["dish-line-2", "1", "No salt"],
+  ]);
+  expect(dialog(el)).toBeNull();
+  expect(server.lines.lines.map((line) => line.stationId)).toEqual(["kitchen", "grill"]);
+});
+
+type MoveInvalidation =
+  | "order"
+  | "generation"
+  | "store revision"
+  | "listing revision"
+  | "listing order"
+  | "movable"
+  | "missing line"
+  | "dirty"
+  | "sending"
+  | "edit lock"
+  | "order action"
+  | "capability"
+  | "API"
+  | "session"
+  | "disconnect";
+
+async function invalidateMove(el: TillApp, reason: MoveInvalidation) {
+  const store = counter(el).store;
+  const state = el as unknown as {
+    counterLines: { orderId: string; revision: number; lines: TabLine[] };
+    submitting: boolean;
+    capabilities: string[];
+  };
+  switch (reason) {
+    case "order":
+      store.loadFrom("replacement", [...store.lines], undefined, 7);
+      break;
+    case "generation":
+      store.loadFrom(store.id, [...store.lines], undefined, 7);
+      break;
+    case "store revision":
+      store.loadFrom(store.id, [...store.lines], undefined, 8);
+      break;
+    case "listing revision":
+      state.counterLines = { ...state.counterLines, revision: 8 };
+      break;
+    case "listing order":
+      state.counterLines = { ...state.counterLines, orderId: "replacement" };
+      break;
+    case "movable":
+      state.counterLines = {
+        ...state.counterLines,
+        lines: state.counterLines.lines.map((line) => ({ ...line, movable: false })),
+      };
+      break;
+    case "missing line":
+      state.counterLines = { ...state.counterLines, lines: [] };
+      break;
+    case "dirty":
+      store.setLineExtras(0, { note: "Later local edit" });
+      expect(store.dirty).toBe(true);
+      break;
+    case "sending":
+      store.sending = true;
+      break;
+    case "edit lock":
+      store.lockEdits();
+      break;
+    case "order action":
+      state.submitting = true;
+      break;
+    case "capability":
+      state.capabilities = [];
+      break;
+    case "API":
+      el.api = stubApi();
+      break;
+    case "session":
+      await changeOperator(el);
+      break;
+    case "disconnect":
+      el.remove();
+      break;
+  }
+}
+
+for (const phase of ["while stations load", "before confirmation"])
+  it.each<MoveInvalidation>([
+    "order",
+    "generation",
+    "store revision",
+    "listing revision",
+    "listing order",
+    "movable",
+    "missing line",
+    "dirty",
+    "sending",
+    "edit lock",
+    "order action",
+    "capability",
+    "API",
+    "session",
+    "disconnect",
+  ])(`A738 line-window Move rejects %s ${phase}`, async (reason) => {
+    const { el, server, picker } = await inspectPlaced();
+    const originalApi = api;
+    const stationRead = held<Station[]>();
+    if (phase === "while stations load")
+      vi.mocked(originalApi.listStations).mockReturnValueOnce(stationRead.promise);
+    await userEvent.click(picker.querySelector<HTMLElement>("[data-move-station]")!);
+    await flush(el);
+    const chooser = dialog(el);
+    if (phase === "before confirmation") expect(chooser).not.toBeNull();
+    await invalidateMove(el, reason);
+    if (phase === "while stations load") {
+      stationRead.answer(stations);
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+    } else {
+      emit(chooser!, "station-chosen", { stationId: "grill" });
+      await flush(el);
+    }
+    expect(server.moveDishStation).not.toHaveBeenCalled();
+    expect(originalApi.moveDishStation).not.toHaveBeenCalled();
+  });
+
+it.each(["read failure", "preparing", "collected", "no capability"])(
+  "A738 collection inspection offers no station action for %s",
+  async (reason) => {
+    const server = placedServer();
+    if (reason === "preparing" || reason === "collected")
+      server.lines.lines[1] = {
+        ...server.lines.lines[1]!,
+        movable: false,
+        ...(reason === "preparing" ? { state: "preparing" } : {}),
+      };
+    const overrides: Record<string, unknown> = {
+      ...server,
+      ...(reason === "read failure"
+        ? { getTabLines: vi.fn().mockRejectedValue({ code: "server.internal" }) }
+        : {}),
+      ...(reason === "no capability"
+        ? { getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }) }
+        : {}),
+    };
+    const { el, picker } = await inspectPlaced(overrides);
+    expect(picker.querySelector("[data-move-station]")).toBeNull();
+    expect(picker.readOnly).toBe(true);
+    expect(picker.shadowRoot!.querySelector(".confirm")).toBeNull();
+    expect(counter(el).storedLines).toBeNull();
+  },
+);
+
+it("A738 collection movement refusal keeps the station choice and refreshes its exact order", async () => {
+  const moveDishStation = vi.fn().mockRejectedValue({ code: "ticket.already_started" });
+  const { el, server, picker } = await inspectPlaced({ moveDishStation });
+  await userEvent.click(picker.querySelector<HTMLElement>("[data-move-station]")!);
+  await flush(el);
+  await choose(el);
+  expect(moveDishStation).toHaveBeenCalledOnce();
+  expect(server.retrievePlacedOrder).toHaveBeenCalledTimes(2);
+  expect(dialog(el)?.busy).toBe(false);
+  expect(dialogRefusal(el)).toBe(t("move_station.refused.ticket.already_started"));
+  expect(counter(el).stage).toBe("collect");
+  expect(counter(el).storedLines).toBeNull();
+  expect(counter(el).store.total).toBe("10.00");
+});
+
+it.each(["order", "session", "API"])(
+  "A738 drops collection movement facts after the %s changes during their read",
+  async (reason) => {
+    const server = placedServer();
+    const read = held<TabLines>();
+    const el = await signedIn({ ...server, getTabLines: vi.fn(() => read.promise) });
+    emit(counter(el), "pay-waiting-order", { id: "wo-placed" });
+    await flush(el);
+    expect(counter(el).store.editsLocked).toBe(true);
+    if (reason === "order") counter(el).store.loadFrom("replacement", [], undefined, 3);
+    if (reason === "session") await changeOperator(el);
+    if (reason === "API") el.api = stubApi();
+    await flush(el);
+    read.answer(server.lines);
+    await flush(el, 6);
+    expect(counter(el).store.id).not.toBe("wo-placed");
+    expect(counter(el).stage).toBe("order");
+    expect(basketOf(el).stationMoveLines).toBeNull();
+    expect(server.moveDishStation).not.toHaveBeenCalled();
+    expect(counter(el).store.editsLocked).toBe(false);
+  },
+);
+
+it("A738 collection station confirmation sends once and locks the basket until its refresh", async () => {
+  const result = held<{ revision: number }>();
+  const moveDishStation = vi.fn(() => result.promise);
+  const { el, picker } = await inspectPlaced({ moveDishStation });
+  await userEvent.click(picker.querySelector<HTMLElement>("[data-move-station]")!);
+  await flush(el);
+  await pick(el, 1);
+  dialogMove(el).click();
+  dialogMove(el).click();
+  await flush(el);
+  expect(moveDishStation).toHaveBeenCalledOnce();
+  expect(counter(el).store.editsLocked).toBe(true);
+  result.answer({ revision: 8 });
+  await flush(el, 6);
+  expect(dialog(el)).toBeNull();
+  expect(counter(el).store.editsLocked).toBe(false);
+  expect(counter(el).stage).toBe("collect");
+});
+
+it("A738 collection station read is bounded and offers no chooser after a refused read", async () => {
+  const { el, picker } = await inspectPlaced();
+  let signal: AbortSignal | undefined;
+  vi.mocked(api.listStations).mockImplementationOnce((_options) => {
+    signal = _options?.signal;
+    return new Promise((_resolve, reject) =>
+      signal?.addEventListener("abort", () => reject(new DOMException("Timed out", "AbortError")), {
+        once: true,
+      }),
+    );
+  });
+  try {
+    vi.useFakeTimers();
+    picker.querySelector<HTMLElement>("[data-move-station]")!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+    expect(signal?.aborted).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+  await flush(el);
+  expect(dialog(el)).toBeNull();
+  expect(api.moveDishStation).not.toHaveBeenCalled();
+});
 
 describe("till-app: moving a paid counter order to another station", () => {
   it("reads the stations and opens the move dialog headed with the order, at the station its dishes share", async () => {

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import { expectChooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
+import {
+  expectChooserFaces,
+  cleanupWidgets,
+  mountWidget as mountBaseWidget,
+} from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -12,6 +16,12 @@ import {
   THEME_STORAGE_KEY,
   type WtRowActions,
 } from "@waitron/ui";
+
+const mountWidget = <T extends TillShell>(
+  tag: string,
+  props: Partial<T>,
+  theme?: "light" | "dark",
+) => mountBaseWidget<T>(tag, { formFactor: "tablet-landscape", ...props }, theme);
 
 afterEach(cleanupWidgets);
 
@@ -28,7 +38,7 @@ describe("till-shell", () => {
     await page.viewport(1280, 844);
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         operatorName: "Ana",
         clockAvailable: true,
         clockState: {
@@ -85,7 +95,7 @@ describe("till-shell", () => {
     await page.viewport(390, 844);
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         operatorName: "Ana",
         clockAvailable: true,
         clockState: {
@@ -116,7 +126,7 @@ describe("till-shell", () => {
     "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)",
     async (activeLocation) => {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         operatorName: "Ana",
         clockAvailable: true,
         clockError: "Could not read the clock",
@@ -180,8 +190,8 @@ describe("till-shell", () => {
 
   it("emits show-station only when the station affordance is present", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
       affordances: ["station"],
     });
     let fired = false;
@@ -192,7 +202,7 @@ describe("till-shell", () => {
 
   it("offers Find a bill from the header when the operator can collect a debt", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
+      formFactor: "tablet-landscape",
       affordances: ["find-bill"],
     });
     const seen: string[] = [];
@@ -203,8 +213,8 @@ describe("till-shell", () => {
 
   it("omits an affordance button that is not in affordances", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
       affordances: ["station"],
     });
     expect(el.shadowRoot!.querySelector(".station")).not.toBeNull();
@@ -214,8 +224,8 @@ describe("till-shell", () => {
 
   it("emits show-expo, show-schedule and logout from the header chrome", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
       affordances: ["expo", "schedule"],
     });
     const fired: string[] = [];
@@ -229,7 +239,7 @@ describe("till-shell", () => {
   });
 
   it("offers Equipment without the retired Allergens action, emitting open-equipment", async () => {
-    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "till" });
+    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "tablet-landscape" });
     const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
     expect(equipment.textContent).toContain(t("equipment.open"));
     expect(el.shadowRoot!.querySelector("wt-button.allergens")).toBeNull();
@@ -240,7 +250,7 @@ describe("till-shell", () => {
   });
 
   it("offers Profile before Equipment only when the device can switch profile, emitting open-profile", async () => {
-    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "till" });
+    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "tablet-landscape" });
     expect(el.shadowRoot!.querySelector("wt-button.profile")).toBeNull();
     el.canSwitchProfile = true;
     await el.updateComplete;
@@ -255,8 +265,8 @@ describe("till-shell", () => {
 
   it("shows the operator name in the header", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
       operatorName: "Ana",
     });
     expect(el.shadowRoot!.querySelector<HTMLElement>(".operator")!.textContent).toContain("Ana");
@@ -268,7 +278,7 @@ describe("till-shell", () => {
     await page.viewport(1280, 844);
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         activeScreen: "floor",
         operatorName: "Ana",
         loadLocales: async () => [{ code: "es-ES", label: "Español" }],
@@ -286,7 +296,7 @@ describe("till-shell", () => {
   it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
+      formFactor: "tablet-landscape",
       loadLocales: async () => [{ code: "es-ES", label: "Español" }],
     });
     await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
@@ -299,7 +309,7 @@ describe("till-shell", () => {
     setLocale("es-ES");
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         loadLocales: async () => [],
       });
       setLocale("en-GB");
@@ -314,8 +324,8 @@ describe("till-shell", () => {
 
   it("lets one composed chooser selection reach its parent", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
       loadLocales: async () => [
         { code: "en-GB", label: "English" },
         { code: "es-ES", label: "Español" },
@@ -338,8 +348,8 @@ describe("till-shell", () => {
 
   it("omits the language chooser when loadLocales is not supplied (no throw-on-open surface)", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
     });
     expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
   });
@@ -355,7 +365,7 @@ describe("till-shell", () => {
       setLocale("en-GB");
       try {
         const { el } = await mountWidget<TillShell>("till-shell", {
-          formFactor: "till",
+          formFactor: "tablet-landscape",
           activeScreen: "counter",
           operatorName: "Ana",
           loadLocales: async () => [{ code: "en-GB", label: "English" }],
@@ -397,7 +407,7 @@ describe("till-shell", () => {
       setLocale("es-ES");
       try {
         const { el } = await mountWidget<TillShell>("till-shell", {
-          formFactor: "till",
+          formFactor: "tablet-landscape",
           operatorName: "Ana",
         });
         const menu = el.shadowRoot!.querySelector<WtRowActions>("wt-row-actions.operator-menu")!;
@@ -417,7 +427,7 @@ describe("till-shell", () => {
   it("marks the new choice in the operator's menu when the theme choice changes", async () => {
     await atViewport(1280, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         activeScreen: "counter",
         operatorName: "Ana",
       });
@@ -441,7 +451,7 @@ describe("till-shell", () => {
   it("asks for a theme picked in the operator's menu, closes the menu and leaves applying it to the app", async () => {
     await atViewport(1280, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
+        formFactor: "tablet-landscape",
         activeScreen: "counter",
         operatorName: "Ana",
       });
@@ -472,7 +482,7 @@ describe("till-shell", () => {
         const { el } = await mountWidget<TillShell>(
           "till-shell",
           {
-            formFactor: "till",
+            formFactor: "tablet-landscape",
             operatorName: "Ana",
             clockAvailable: true,
             clockState: {
@@ -505,8 +515,8 @@ describe("till-shell", () => {
 
   it("makes the body inert while a drill-in is slotted", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
     });
     expect(el.shadowRoot!.querySelector<HTMLElement>("main.body")!.hasAttribute("inert")).toBe(
       false,
@@ -526,7 +536,7 @@ describe("till-shell", () => {
 
   it("keeps a drill-in over a long tab after the tab is scrolled", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
+      formFactor: "tablet-landscape",
       loadLocales: async () => [{ code: "en-GB", label: "English" }],
     });
     const content = document.createElement("div");
@@ -567,8 +577,8 @@ describe("till-shell", () => {
   });
 
   it.each([
-    ["en-GB", "till"],
-    ["es-ES", "till"],
+    ["en-GB", "tablet-landscape"],
+    ["es-ES", "phone-portrait"],
     ["en-GB", "phone-portrait"],
     ["es-ES", "tablet-landscape"],
   ] as const)(
@@ -582,7 +592,7 @@ describe("till-shell", () => {
       try {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor,
-          activeScreen: formFactor === "till" ? "counter" : "floor",
+          activeScreen: "floor",
           operatorName: "Ana Fernández",
           affordances: ["find-bill", "station", "expo", "schedule"],
           loadLocales: async () => [{ code: locale, label: locale }],
@@ -600,7 +610,7 @@ describe("till-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(formFactor === "till" ? 12 : 11);
+        expect(controls.length).toBe(11);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
           .map((c) => {
@@ -629,8 +639,8 @@ describe("till-shell", () => {
 
   it("renders the full header when not in kiosk mode (default)", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "counter",
+      formFactor: "tablet-landscape",
+      activeScreen: "floor",
     });
     expect(el.shadowRoot!.querySelector("header")).not.toBeNull();
   });
@@ -694,8 +704,8 @@ it.each(["till", "phone-portrait", "tablet-landscape"] as const)(
 );
 
 const full: Partial<TillShell> = {
-  formFactor: "till",
-  activeScreen: "counter",
+  formFactor: "tablet-landscape",
+  activeScreen: "floor",
   operatorName: "Ana Fernández",
   affordances: ["find-bill", "station", "expo", "schedule"],
   transferAvailable: true,
@@ -716,7 +726,6 @@ const menuActions = [
   [".profile", "open-profile"],
   [".equipment", "open-equipment"],
   ["[data-open-transfers]", "open-transfers"],
-  [".settings", "open-settings"],
   [".logout", "logout"],
 ] as const;
 
@@ -748,8 +757,6 @@ function deepActive(): Element | null {
 }
 
 describe("till-shell at phone width", () => {
-  /** The More menu of the re-look's demo till (relook-more-360x640-control-theme-hidden.png): no
-   * Profile, no transfer count, and the clock actions of a clocked-in person. */
   const clockedIn: Partial<TillShell> = {
     ...full,
     transferCount: undefined,
@@ -914,7 +921,6 @@ describe("till-shell at phone width", () => {
         "equipment",
         "department-transfers",
         "data-open-transfers",
-        "settings",
         "operator",
         "logout",
         "theme-choices",
@@ -945,7 +951,7 @@ describe("till-shell at phone width", () => {
       for (const tab of el.shadowRoot!.querySelectorAll<HTMLElement>(".tab")) {
         await userEvent.click(tab);
       }
-      expect(keys).toEqual(["counter", "floor"]);
+      expect(keys).toEqual(["floor", "order"]);
     });
   });
 
@@ -1094,14 +1100,14 @@ describe("till-shell at phone width", () => {
     });
   });
 
-  it("draws the wide header with Find a bill in More and every other button in priority order", async () => {
+  it("draws the wide handheld header with Find a bill in More and every other button in priority order", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", full);
       expect(
         el
           .shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!
           .querySelectorAll(":scope > *"),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
       expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       const session = el.shadowRoot!.querySelector("header .session")!;
@@ -1136,7 +1142,7 @@ describe("till-shell at phone width", () => {
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(menuOf(el)).not.toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
-      await vi.waitFor(() => expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2));
+      await vi.waitFor(() => expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1));
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
       await page.viewport(390, 844);
@@ -1283,8 +1289,8 @@ describe("till-shell above phone width", () => {
     },
   );
 
-  const demoCounter: Partial<TillShell> = {
-    formFactor: "till",
+  const compactHandheld: Partial<TillShell> = {
+    formFactor: "tablet-landscape",
     activeScreen: "counter",
     operatorName: "Ana",
     affordances: ["find-bill", "station", "expo", "schedule"],
@@ -1315,7 +1321,7 @@ describe("till-shell above phone width", () => {
       const { el, host } = await mountWidget<TillShell>("till-shell", shell);
       await settle(el);
       await settle(el);
-      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       const header = el.shadowRoot!.querySelector("header")!;
       const session = header.querySelector<HTMLElement>(".session")!;
       const width = (node: Element) => node.getBoundingClientRect().width;
@@ -1355,7 +1361,7 @@ describe("till-shell above phone width", () => {
 
   for (const [fixture, shell] of [
     ["full", full],
-    ["the demo counter", demoCounter],
+    ["a compact handheld", compactHandheld],
   ] as const) {
     for (const locale of ["en-GB", "es-ES"] as const) {
       it(`moves the transfers, and what ranks below Pass and Kitchen, into More before them, then Kitchen first, with ${fixture} in ${locale}`, async () => {
@@ -1423,7 +1429,7 @@ describe("till-shell above phone width", () => {
         atViewport(ROOMY_WIDTH, async () => {
           const { el } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
-          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
           const button = el.shadowRoot!.querySelector<HTMLElement>(
             "header .session > [data-open-transfers]",
           )!;
@@ -1446,7 +1452,7 @@ describe("till-shell above phone width", () => {
         await atViewport(ROOMY_WIDTH, async () => {
           const { el, host } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
-          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
           const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
           const onBar = nameMenu.querySelector<HTMLElement>(".logout")!;
           expect(onBar.textContent!.trim()).toBe(label);
@@ -1470,12 +1476,12 @@ describe("till-shell above phone width", () => {
     },
   );
 
-  it("keeps Pass and Kitchen on the demo counter's Spanish bar at 800 wide when its measured width fits there", async () => {
+  it("keeps Pass and Kitchen on a compact handheld's Spanish bar at 800 wide when its measured width fits there", async () => {
     await withLocale("es-ES", async () => {
-      const { fits, tight } = await serviceWidths(demoCounter);
-      console.info(`The demo counter's Spanish bar keeps Pass and Kitchen from ${fits} px.`);
+      const { fits, tight } = await serviceWidths(compactHandheld);
+      console.info(`The compact handheld's Spanish bar keeps Pass and Kitchen from ${fits} px.`);
       await atViewport(800, async () => {
-        const { el } = await mountWidget<TillShell>("till-shell", demoCounter);
+        const { el } = await mountWidget<TillShell>("till-shell", compactHandheld);
         await settle(el);
         expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
         const moved = inMore(el);
@@ -1512,7 +1518,6 @@ describe("till-shell above phone width", () => {
         "equipment",
         "department-transfers",
         "data-open-transfers",
-        "settings",
         "operator",
         "logout",
         "theme-choices",
@@ -1545,7 +1550,7 @@ describe("till-shell above phone width", () => {
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
       await settle(el);
-      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       expectOneRow(el);
     });
@@ -1618,7 +1623,7 @@ describe("till-shell above phone width", () => {
       atViewport(ROOMY_WIDTH, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
-        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         const [status, ...rest] = statuses(el);
         expect(rest).toEqual([]);
         expect(status!.getAttribute("data-test")).toBe("department-transfers");
@@ -1692,7 +1697,7 @@ describe("till-shell above phone width", () => {
         expect(inMore(el)).toEqual(held);
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1701,7 +1706,7 @@ describe("till-shell above phone width", () => {
 
   it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
     await withLocale("en-GB", () =>
-      atViewport(800, async () => {
+      atViewport(660, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           ...full,
           canSwitchProfile: false,
@@ -1726,7 +1731,7 @@ describe("till-shell above phone width", () => {
         );
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1850,7 +1855,7 @@ describe("till-shell above phone width", () => {
             for (let i = 0; i < ticks; i += 1) await Promise.resolve();
             el.kiosk = false;
             await settle(el);
-            expect(menuOf(el)!.querySelectorAll(":scope > *"), `${ticks}`).toHaveLength(2);
+            expect(menuOf(el)!.querySelectorAll(":scope > *"), `${ticks}`).toHaveLength(1);
             expect(el.shadowRoot!.querySelector("header > .brand"), `${ticks}`).not.toBeNull();
             expectOneRow(el);
           }
@@ -1867,7 +1872,7 @@ describe("till-shell above phone width", () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el, host } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
-      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       el.remove();
       host.append(el);
       await settle(el);

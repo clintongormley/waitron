@@ -9,7 +9,7 @@ import { heldViews, placeFor } from "./state/draft-place.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
-import { type DietPredicate } from "./menu-filter.js";
+import { EMPTY_MENU_FILTERS, activeFilterCount, type MenuFilters } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -1105,6 +1105,7 @@ interface DishMove {
   counter?: boolean;
   basketRevision?: number;
   basketGeneration?: number;
+  counterContext?: { api: TillApi; session: number; visit: number };
   bill?: {
     expectedEdit: BillEditExpected;
     api: TillApi;
@@ -2564,12 +2565,12 @@ export class TillApp extends LitElement {
   readonly #polledDefaults = new Map<string, string | null>();
   #counterOfferRequest = 0;
   @state() private selectedCatalogueId = "";
-  @state() private selectedDiet: DietPredicate | null = null;
+  @state() private selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
   @state() private operatorName = "";
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
   @state() private staff: StaffMember[] = [];
-  /** Every open working order in the venue, across devices. */
+  @state() private counterOrderList: "parked" | "waiting" | null = null;
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
@@ -3195,7 +3196,7 @@ export class TillApp extends LitElement {
     }
     if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
       this.#syncDepartmentTransfers();
-    if (changed.has("formFactor") || changed.has("capabilities"))
+    if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
@@ -4281,7 +4282,8 @@ export class TillApp extends LitElement {
       this.#counterDefaultMenuId,
     );
     if (retainedZone === undefined) this.#selectMenu(menuId);
-    this.#selectDiet(null);
+    this.counterOrderList = null;
+    this.#selectFilters(EMPTY_MENU_FILTERS);
     this.operatorName = displayName;
     this.#loginPending = false;
     this.operatorPersonId = personId;
@@ -4643,12 +4645,12 @@ export class TillApp extends LitElement {
     this.#rememberZoneMenu(this.#tableZoneId, this.tableService, id);
   }
 
-  #selectDiet(predicate: DietPredicate | null): void {
+  #selectFilters(filters: MenuFilters): void {
     if (!this.isConnected) return;
-    this.selectedDiet = predicate;
+    this.selectedFilters = filters;
     try {
-      if (predicate === null) sessionStorage.removeItem("waitron.dietFilter");
-      else sessionStorage.setItem("waitron.dietFilter", predicate);
+      if (activeFilterCount(filters) === 0) sessionStorage.removeItem("waitron.dietFilter");
+      else sessionStorage.setItem("waitron.dietFilter", JSON.stringify(filters));
     } catch {
       // Filtering remains available when browser storage is blocked.
     }
@@ -7228,11 +7230,8 @@ export class TillApp extends LitElement {
     limit.signal.addEventListener("abort", unlock, { once: true });
     this.errorKey = undefined;
     try {
-      const order = await this.api.retrievePlacedOrder(id, { signal: limit.signal });
-      if (movedOn()) return;
-      this.#loadIntoBasket(order, null);
-      this.stage = "collect";
-      this.collectFlow = "ticket_then_pay";
+      const loaded = await this.#loadPlacedCounterOrder(id, movedOn, limit.signal);
+      if (loaded === undefined) return;
     } catch (error) {
       if (movedOn()) return;
       const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
@@ -7539,8 +7538,6 @@ export class TillApp extends LitElement {
     this.collectFlow = undefined;
   }
 
-  /** Null when the lines cannot be read: the basket then offers no adjustment, and keeps its own
-   * controls on every line. */
   async #readStoredLines(orderId: string, signal?: AbortSignal): Promise<StoredLines | null> {
     try {
       const { lines, revision } = await this.api.getTabLines(orderId, { signal });
@@ -7548,6 +7545,24 @@ export class TillApp extends LitElement {
     } catch {
       return null;
     }
+  }
+
+  async #loadPlacedCounterOrder(
+    id: string,
+    left: () => boolean,
+    signal: AbortSignal,
+    stationChoiceOwner: object | null = null,
+  ): Promise<boolean | undefined> {
+    const api = this.api;
+    const [order, listed] = await Promise.all([
+      api.retrievePlacedOrder(id, { signal }),
+      this.#readStoredLines(id, signal),
+    ]);
+    if (api !== this.api || left() || signal.aborted) return undefined;
+    this.#loadIntoBasket(order, listed, stationChoiceOwner);
+    this.stage = "collect";
+    this.collectFlow = "ticket_then_pay";
+    return listed !== null;
   }
 
   /** The stored order `orderId` is no longer the basket's (clearing the basket gives it a new id),
@@ -7573,12 +7588,11 @@ export class TillApp extends LitElement {
     const movedOn = () => load !== this.#store.loadGeneration || session !== this.#operatorSession;
     let failure: StringKey | undefined;
     try {
-      const read = await this.#loadHeldOrder(
-        orderId,
-        () => limit.signal.aborted || movedOn(),
-        limit.signal,
-        stationChoiceOwner,
-      );
+      const read = await (
+        this.stage === "collect"
+          ? this.#loadPlacedCounterOrder.bind(this)
+          : this.#loadHeldOrder.bind(this)
+      )(orderId, () => limit.signal.aborted || movedOn(), limit.signal, stationChoiceOwner);
       if (read !== undefined) load = this.#store.loadGeneration;
       if (read !== true) failure = "held.reread_failed";
     } catch (error) {
@@ -8959,6 +8973,7 @@ export class TillApp extends LitElement {
     const tab = this.#resolveScreen(key);
     if (tab === undefined) return;
     key = tab;
+    this.counterOrderList = null;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
     const wasLoadingOrder = this.tableOpening && this.#orderScreenShown();
@@ -11068,6 +11083,7 @@ export class TillApp extends LitElement {
     const opening = {};
     this.#moveStationOpening = opening;
     const session = this.#operatorSession;
+    const api = this.api;
     const visit = this.#orderVisit;
     const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
     const revision = this.#store.revision;
@@ -11091,15 +11107,20 @@ export class TillApp extends LitElement {
           };
     const counterEligible = () =>
       detail.counter !== true ||
-      (detail.workingOrderId === orderId &&
-        generation === this.#store.loadGeneration &&
-        this.#counterStillAdjustable({ orderId: detail.workingOrderId, revision }) &&
-        this.counterLines?.lines.some((line) => line.id === detail.lineId && line.movable) ===
-          true);
+      this.#counterStationMoveCurrent({
+        orderId: detail.workingOrderId,
+        revision,
+        generation,
+        lineId: detail.lineId,
+      });
+    const limit = detail.counter === true ? limited(TABLE_REQUEST_LIMIT_MS) : null;
     try {
       if (!counterEligible()) return;
-      await this.#loadStations();
+      if (limit === null) await this.#loadStations();
+      else await this.#loadStations(true, { signal: limit.signal });
       if (
+        limit?.signal.aborted === true ||
+        api !== this.api ||
         this.#moveStationOpening !== opening ||
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
@@ -11115,12 +11136,45 @@ export class TillApp extends LitElement {
         busy: false,
         ...(bill === undefined ? {} : { bill }),
         ...(detail.counter === true
-          ? { basketRevision: revision, basketGeneration: generation }
+          ? {
+              basketRevision: revision,
+              basketGeneration: generation,
+              counterContext: { api, session, visit },
+            }
           : {}),
       };
+    } catch {
+      if (api === this.api && session === this.#operatorSession && visit === this.#orderVisit)
+        this.errorKey = "table.error";
     } finally {
+      limit?.done();
       if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
     }
+  }
+
+  #counterStationMoveCurrent(open: {
+    orderId: string;
+    revision: number;
+    generation: number;
+    lineId: string;
+  }): boolean {
+    const listing = adjustableListing(this.#store, this.counterLines, this.#counterOrderInFlight());
+    return (
+      this.isConnected &&
+      this.operatorName !== "" &&
+      this.capabilities.includes("take-orders") &&
+      open.generation === this.#store.loadGeneration &&
+      listing !== null &&
+      listing.orderId === open.orderId &&
+      listing.revision === open.revision &&
+      listing.lines.some(
+        (line) =>
+          line.id === open.lineId &&
+          (line.parentLineNo ?? null) === null &&
+          line.movable &&
+          (line.sentAt !== null || line.firedAt !== null),
+      )
+    );
   }
 
   async #onOpenMakeAt(event: Event): Promise<void> {
@@ -11196,12 +11250,15 @@ export class TillApp extends LitElement {
     }
     if (
       open.counter === true &&
-      (open.basketGeneration !== this.#store.loadGeneration ||
-        !this.#counterStillAdjustable({
+      (open.counterContext?.api !== this.api ||
+        open.counterContext.session !== this.#operatorSession ||
+        open.counterContext.visit !== this.#orderVisit ||
+        !this.#counterStationMoveCurrent({
           orderId: open.workingOrderId,
           revision: open.basketRevision!,
-        }) ||
-        this.counterLines?.lines.some((line) => line.id === open.lineId && line.movable) !== true)
+          generation: open.basketGeneration!,
+          lineId: open.lineId,
+        }))
     ) {
       this.movingStation = null;
       return;
@@ -11221,7 +11278,7 @@ export class TillApp extends LitElement {
     if (counterSubmission !== null) this.#counterMoveSubmitting = counterSubmission;
     const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    const api = open.bill?.api ?? this.api;
+    const api = open.bill?.api ?? open.counterContext?.api ?? this.api;
     const live = () =>
       session === this.#operatorSession &&
       api === this.api &&
@@ -15498,10 +15555,16 @@ export class TillApp extends LitElement {
       : undefined;
   }
 
+  #testingKitchen(): boolean {
+    return this.onboardingIntent === "demo" || this.onboardingIntent === "prepare";
+  }
+
   #affordances(): ShellAffordance[] {
     return [
-      ...(["station", "expo", "schedule"] as const).filter((screen) =>
-        this.capabilities.includes(`show-${screen}`),
+      ...(["station", "expo", "schedule"] as const).filter(
+        (screen) =>
+          this.capabilities.includes(`show-${screen}`) &&
+          (screen !== "station" || this.formFactor !== "till" || this.#testingKitchen()),
       ),
       "find-bill",
     ];
@@ -15527,6 +15590,7 @@ export class TillApp extends LitElement {
         .menus=${this.menus}
         .service=${this.counterService}
         .departmentName=${this.counterDepartmentName}
+        .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
         .zoneName=${this.profileServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? ""}
         .selectedMenuId=${this.selectedCatalogueId}
         .menuSelectionRequired=${true}
@@ -15538,7 +15602,8 @@ export class TillApp extends LitElement {
             : this.profileServiceZones
         }
         .selectedServiceZoneId=${this.counterServiceZoneId}
-        .selectedDiet=${this.selectedDiet}
+        .selectedFilters=${this.selectedFilters}
+        .orderList=${this.counterOrderList}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
@@ -15569,6 +15634,7 @@ export class TillApp extends LitElement {
         .receiptGuests=${null}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
+        .stationMoveLines=${this.capabilities.includes("take-orders") ? this.counterLines : null}
         .makeAtStations=${this.stations}
         .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
@@ -15623,10 +15689,11 @@ export class TillApp extends LitElement {
       .menus=${this.tableMenus}
       .service=${this.tableService}
       .departmentName=${this.tableDepartmentName}
+      .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
       .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
       .selectedMenuId=${this.tableSelectedCatalogueId}
       .menuSelectionRequired=${true}
-      .selectedDiet=${this.selectedDiet}
+      .selectedFilters=${this.selectedFilters}
       .courses=${this.courses}
       .stations=${this.stations}
       .fireControl=${this.fireControl}
@@ -15755,10 +15822,11 @@ export class TillApp extends LitElement {
           .menus=${this.tableMenus}
           .service=${this.tableService}
           .departmentName=${this.tableDepartmentName}
+          .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
           .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
           .selectedMenuId=${this.tableSelectedCatalogueId}
           .menuSelectionRequired=${true}
-          .selectedDiet=${this.selectedDiet}
+          .selectedFilters=${this.selectedFilters}
           .courses=${this.courses}
           .stations=${this.stations}
           .fireControl=${this.fireControl}
@@ -16143,8 +16211,8 @@ export class TillApp extends LitElement {
           if (e.detail.code === currentLocale()) return;
           this.#requestLeave(() => this.#onLocaleSelected(e));
         }}
-        @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-          this.#selectDiet(e.detail.predicate)}
+        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) =>
+          this.#selectFilters(e.detail.filters)}
         @counter-zone-selected=${(event: Event) => this.#requestLeave(() => this.#onCounterZoneSelected(event))}
         @keep-open-changed=${(e: CustomEvent<{ zoneId: string }>) => {
           e.stopPropagation();
@@ -16525,6 +16593,25 @@ export class TillApp extends LitElement {
                           .selectedCounterZoneId=${this.counterServiceZoneId}
                           .showCounter=${this.formFactor !== "till" || (this.#deviceNavigation()?.counterZoneIds.length ?? 0) > 0}
                           .showFloor=${this.formFactor !== "till" || (this.#deviceNavigation()?.floorZoneIds.length ?? 0) > 0}
+                          .parkedCount=${this.heldOrders.filter((order) => order.id !== this.#store.id).length}
+                          .waitingCount=${this.counterWaiting.length}
+                          .activeOrderList=${this.counterOrderList}
+                          .testingKitchen=${this.#testingKitchen()}
+                          @show-counter-orders=${(
+                            event: CustomEvent<{ kind: "parked" | "waiting" }>,
+                          ) => {
+                            const kind = event.detail.kind;
+                            if (
+                              (kind !== "parked" && kind !== "waiting") ||
+                              this.formFactor !== "till" ||
+                              !this.#deviceNavigation()?.counterZoneIds.length
+                            )
+                              return;
+                            this.#requestLeave(() => {
+                              this.#onTabSelect("counter");
+                              this.counterOrderList = kind;
+                            });
+                          }}
                           .operatorName=${this.operatorName}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
@@ -16546,7 +16633,11 @@ export class TillApp extends LitElement {
                               !builtInScreensFor(this.formFactor).includes(e.detail.screen)
                             )
                               return;
-                            if (e.detail.screen === this.activeTabKey && this.drill === undefined)
+                            if (
+                              e.detail.screen === this.activeTabKey &&
+                              this.drill === undefined &&
+                              this.counterOrderList === null
+                            )
                               return;
                             this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
                           }}

@@ -11,7 +11,7 @@ import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import {
   beer,
   menuOf,
-  openDraftLine,
+  openDraftLine as openRawDraftLine,
   resized,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
@@ -83,6 +83,15 @@ function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+async function openDraftLine(...args: Parameters<typeof openRawDraftLine>) {
+  const picker = await openRawDraftLine(...args);
+  const addNote = picker.shadowRoot!.querySelector<HTMLElement>(".add-note");
+  if (addNote) {
+    await userEvent.click(addNote);
+    await picker.updateComplete;
+  }
+  return picker;
 }
 async function mount() {
   const { el: app, host } = await mountWidget<LineLeaveApp>("line-leave-test-app", {});

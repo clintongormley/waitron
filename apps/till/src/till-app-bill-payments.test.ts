@@ -3121,6 +3121,7 @@ describe("till-app: a partly paid order at the counter", () => {
   });
   const counterFormFactor: FormFactor = "till";
   const held = (over: Partial<HeldOrderSummary> = {}): HeldOrderSummary => ({
+    items: [],
     id: "wo-1",
     orderNumber: 5,
     label: "Ana",

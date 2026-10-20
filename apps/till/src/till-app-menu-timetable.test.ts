@@ -917,7 +917,7 @@ describe("period service at the counter", () => {
     expect(el.shadowRoot!.querySelector("till-basket-refresh")).toBeNull();
     expect(
       counter(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
-    ).toBe("Lunch");
+    ).toBe("Open");
   });
 });
 
@@ -1576,7 +1576,7 @@ describe("an open table's order", () => {
     ).toEqual([["Tostada", "1", "3.00"]]);
     expect(
       tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
-    ).toBe("Lunch");
+    ).toBe("Open");
     emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "counter" });
     await flush(el);
     expect(selected(el)).toBe("desayunos");

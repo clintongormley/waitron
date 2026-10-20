@@ -63,6 +63,7 @@ const waitingList = (el: TillCounterScreen) =>
   el.shadowRoot!.querySelector("till-counter-waiting")!;
 const heldList = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-held-orders")!;
 const heldOrder = {
+  items: [],
   id: "held",
   orderNumber: 1,
   label: "Ana",
@@ -75,6 +76,7 @@ const heldOrder = {
   signals: [],
 };
 const waitingOrder = {
+  items: [],
   id: "waiting",
   orderNumber: 2,
   label: "Luis",
@@ -259,6 +261,7 @@ describe("till-counter-screen", () => {
   it("passes held orders to the rendered list", async () => {
     const heldOrders = [
       {
+        items: [],
         id: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",
@@ -271,13 +274,13 @@ describe("till-counter-screen", () => {
         signals: [],
       },
     ];
-    const { el } = await mount({ heldOrders });
+    const { el } = await mount({ heldOrders, orderList: "parked" });
     expect(heldList(el).orders).toBe(heldOrders);
   });
 
   it("passes the floor tables to held orders for Move to table", async () => {
     const tables = [{ id: "t9", label: "Mesa 9" }];
-    const { el } = await mount({ tables, heldOrders: [heldOrder] } as never);
+    const { el } = await mount({ tables, heldOrders: [heldOrder], orderList: "parked" } as never);
     expect(heldList(el).tables).toBe(tables);
   });
 
@@ -309,12 +312,20 @@ describe("till-counter-screen", () => {
 
   it("passes canMoveStation to Waiting, off by default", async () => {
     expect(
-      waitingList((await mount({ canMoveStation: true, counterWaiting: [waitingOrder] })).el)
-        .canMoveStation,
+      waitingList(
+        (
+          await mount({
+            canMoveStation: true,
+            counterWaiting: [waitingOrder],
+            orderList: "waiting",
+          })
+        ).el,
+      ).canMoveStation,
     ).toBe(true);
-    expect(waitingList((await mount({ counterWaiting: [waitingOrder] })).el).canMoveStation).toBe(
-      false,
-    );
+    expect(
+      waitingList((await mount({ counterWaiting: [waitingOrder], orderList: "waiting" })).el)
+        .canMoveStation,
+    ).toBe(false);
   });
 
   it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
@@ -345,9 +356,9 @@ describe("till-counter-screen", () => {
     diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
   };
 
-  it("shows NO diet filter when no product carries a published diet", async () => {
+  it("offers Filter without a published diet so allergen exclusions stay reachable", async () => {
     const { el } = await mount(); // cafe only — no diet
-    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-diet-filter")).not.toBeNull();
   });
 
   it("shows the diet filter when some product carries a diet, and narrows the grid to the picked lens", async () => {
@@ -360,7 +371,11 @@ describe("till-counter-screen", () => {
         .products.map((p) => p.id)
         .sort(),
     ).toEqual(["meat", "vegan"]);
-    filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
+    await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!);
+    await filter.updateComplete;
+    await userEvent.click(
+      filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!,
+    );
     await el.updateComplete;
     await body(el)!.updateComplete;
     const browser = body(el)!.shadowRoot!.querySelector<HTMLElement & { products: TillProduct[] }>(
@@ -377,12 +392,15 @@ describe("till-counter-screen", () => {
     const { el } = await mount({
       menus,
       selectedMenuId: "lunch",
-      selectedDiet: "vegan",
+      selectedFilters: { diets: ["vegan"], exclude: {} },
       handheld: true,
     });
     expect(menuBrowser(el).menus).toBe(menus);
     expect(menuBrowser(el).menu!.id).toBe("lunch");
-    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-diet-filter")!.selected).toEqual({
+      diets: ["vegan"],
+      exclude: {},
+    });
     expect(menuBrowser(el).products).toEqual([]);
     expect(menuBrowser(el).handheld).toBe(true);
   });
@@ -555,6 +573,7 @@ it("lets a held-order retrieve event reach the fixed Counter host", async () => 
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     heldOrders: [{ ...heldOrder, id: "wo-2" }],
+    orderList: "parked",
   });
   let captured: CustomEvent<{ id: string }> | undefined;
   el.addEventListener(

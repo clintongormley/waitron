@@ -457,6 +457,7 @@ describe("A768 the till follows the venue's setup revision", () => {
   it("bump mode and fire control reach the station screen", async () => {
     const stationTill = {
       ...till(drillFormFactor),
+      onboardingIntent: "prepare" as const,
       capabilities: ["print-receipt", "show-station"] as CapabilityFlag[],
     };
     const { el } = await mountApp({

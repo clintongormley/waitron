@@ -340,6 +340,7 @@ export interface TillProduct {
   name: string;
   /** The product's customer-facing text, locale -> text; null or blank falls back to {@link name}. */
   customerName?: Record<string, string> | null;
+  description?: Record<string, string> | null;
   unit?: {
     id: string;
     name: Record<string, string>;
@@ -489,6 +490,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     image: offer.image,
     name: offer.name,
     customerName: offer.customerName,
+    description: offer.description,
     kitchenName: offer.kitchenName,
     unit: offer.unit,
     // No `pricingUnit`: `productUnit()` consults it only when `unit` is absent, and an offer always
@@ -1253,10 +1255,19 @@ export interface BillLookupRow {
   stillOwed: string;
 }
 
+export interface OrderPreviewItem {
+  lineId: string;
+  name: string;
+  quantity: string;
+  note: string | null;
+  extras: { lineId: string; name: string; quantity: string }[];
+}
+
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
  * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid
  * and not handed over. `canHandOver` says whether {@link TillApi.markCollected} would accept it now. */
 export interface CounterWaitingOrder {
+  items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
   label: string | null;
@@ -1286,6 +1297,7 @@ export interface CounterWaitingOrder {
  * gave one.
  */
 export interface HeldOrderSummary {
+  items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
   label: string | null;

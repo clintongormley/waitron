@@ -9,6 +9,7 @@ import {
   leaveCoordinatorFor,
   type DraftScope,
   type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import { live } from "lit/directives/live.js";
 import {
@@ -40,6 +41,7 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
+import { trackDialog } from "./track-dialog.js";
 
 /**
  * For `cash`, `amount` is the FULL operator-entered tendered amount, never the total — the
@@ -234,6 +236,11 @@ export class TillTenderPay extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
+      .label-input {
+        width: var(--wt-form-max-width);
+        max-width: 100%;
+      }
+
       .card-extras {
         display: flex;
         flex-direction: column;
@@ -328,6 +335,11 @@ export class TillTenderPay extends LitElement {
   #extrasBaseline?: CardDraft;
   #entryView?: View;
   #leave?: LeaveCoordinator;
+  readonly #beforeParkClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (!this.#leave ||
+      (await this.#leave.request({ scopes: [this.#entryOwner], reason, proceed() {} })) ===
+        "proceeded");
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -571,8 +583,19 @@ export class TillTenderPay extends LitElement {
   }
 
   #startHolding(): void {
+    if (!this.isConnected || this.busy || this.store.lineCount === 0 || this.view !== "idle")
+      return;
     this.labelEntry = "";
     this.view = "holding";
+    void this.updateComplete.then(async () => {
+      const dialog = this.shadowRoot!.querySelector("wt-dialog")!;
+      const field =
+        this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".label-input");
+      if (!field) return;
+      await Promise.all([dialog.updateComplete, field.updateComplete]);
+      if (this.isConnected && field.isConnected && !this.busy && this.view === "holding")
+        field.focus();
+    });
   }
 
   #startCard(): void {
@@ -709,7 +732,8 @@ export class TillTenderPay extends LitElement {
   /** Reset BEFORE the dispatch, so even a synchronous listener that throws leaves the widget
    * idle. */
   #park(): void {
-    if (!this.isConnected || this.busy || this.view !== "holding") return;
+    if (!this.isConnected || this.busy || this.store.lineCount === 0 || this.view !== "holding")
+      return;
     this.#finishEntry();
     const label = this.labelEntry.trim();
     this.view = "idle";
@@ -823,7 +847,7 @@ export class TillTenderPay extends LitElement {
   }
 
   override render() {
-    return html`${this.#renderView()}${this.#renderReaderPicker()}${
+    return html`${this.#renderView()}${this.#renderHolding()}${this.#renderReaderPicker()}${
       this.modifierDraft
         ? html`<till-modifier-picker
             .product=${this.modifierDraft.product}
@@ -850,7 +874,7 @@ export class TillTenderPay extends LitElement {
     if (this.view === "weighing") return this.#renderWeighing();
     if (this.weighOnly) return nothing;
     if (this.view === "paying") return this.#renderPaying();
-    if (this.view === "holding") return this.#renderHolding();
+    if (this.view === "holding") return nothing;
     if (this.view === "card") return this.#renderCard();
     if (this.view === "collecting") return this.#renderCollecting();
     if (this.view === "card_outcome") return this.#renderCardOutcome();
@@ -1242,22 +1266,55 @@ export class TillTenderPay extends LitElement {
 
   #renderHolding() {
     return html`
-      <wt-input
-        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".park"))}
-        name="label"
-        class="label-input"
-        .value=${live(this.labelEntry)}
-        .label=${t("held.label_prompt")}
-        @wt-change=${(event: Event) => this.#onLabelChange(event)}
-      ></wt-input>
-      <div class="actions">
-        <wt-button class="park" variant="primary" size="lg" @click=${() => this.#park()}>
-          ${t("action.hold")}
-        </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
-          ${t("action.cancel")}
-        </wt-button>
-      </div>
+      <wt-dialog
+        ${trackDialog()}
+        .open=${this.view === "holding"}
+        .heading=${t("action.hold")}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#beforeParkClose}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.view === "holding") this.#cancel();
+          void this.updateComplete.then(() => {
+            if (this.view === "idle") this.shadowRoot!.querySelector<HTMLElement>(".hold")?.focus();
+          });
+        }}
+      >
+        ${
+          this.view === "holding"
+            ? html`
+                <wt-input
+                  @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".park"))}
+                  name="label"
+                  class="label-input"
+                  .value=${live(this.labelEntry)}
+                  .label=${t("held.label_prompt")}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: Event) => this.#onLabelChange(event)}
+                ></wt-input>
+                <div slot="footer" class="actions">
+                  <wt-button
+                    class="park"
+                    variant="primary"
+                    size="lg"
+                    ?disabled=${this.busy || this.store.lineCount === 0}
+                    @click=${() => this.#park()}
+                  >
+                    ${t("action.hold")}
+                  </wt-button>
+                  <wt-button
+                    class="cancel"
+                    variant="secondary"
+                    ?disabled=${this.busy}
+                    @click=${() => this.#requestCancel()}
+                  >
+                    ${t("action.cancel")}
+                  </wt-button>
+                </div>
+              `
+            : nothing
+        }
+      </wt-dialog>
     `;
   }
 

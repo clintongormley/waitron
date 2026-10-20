@@ -2537,7 +2537,7 @@ describe("till-app fits the page it is given", () => {
     "zone-counter",
   );
 
-  it("keeps the tab shell's language button on the page while a refusal banner shows", async () => {
+  it("keeps the tab shell's More and Language choices on the page while a refusal banner shows", async () => {
     const { el, host } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
@@ -2559,6 +2559,13 @@ describe("till-app fits the page it is given", () => {
     expect(banner(el)).not.toBeNull();
     const pageBox = host.getBoundingClientRect();
     const pageBottom = pageBox.bottom;
+    const more =
+      shell(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="more-menu"]',
+      )!;
+    await more.updateComplete;
+    expectChooserOnPage(more.shadowRoot!.querySelector("button")!.getBoundingClientRect(), pageBox);
+    await userEvent.click(more.shadowRoot!.querySelector("button")!);
     const edges = edgesOf(el, shell(el)!);
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
@@ -4223,10 +4230,12 @@ describe("department transfers across operator lifetimes", () => {
             await flush(el);
             const pending =
               locale === "en-GB" ? "Transfers (1 pending)" : "Traspasos (pendientes: 1)";
-            await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain(pending));
-            // While the visible count is in the closed menu, the status region is outside it.
-            const status = shell(el)!.shadowRoot!.querySelector<HTMLElement>('[role="status"]')!;
-            expect(status.textContent).toContain(pending);
+            await expect.element(pendingCount(el)!).toHaveAccessibleName(pending);
+            expect(pendingCount(el)?.textContent).toBe("1");
+            const status = shell(el)!.shadowRoot!.querySelector<HTMLElement>(
+              '[data-test="department-transfers"][role="status"]',
+            )!;
+            await expect.element(status).toHaveAccessibleName(pending);
             expect(status.checkVisibility()).toBe(true);
             const menu =
               shell(el)!.shadowRoot!.querySelector<HTMLElement>('[data-test="more-menu"]');
@@ -4234,6 +4243,7 @@ describe("department transfers across operator lifetimes", () => {
               await userEvent.click(menu.shadowRoot!.querySelector("button")!);
             }
             await vi.waitFor(() => expect(pendingCount(el)!.checkVisibility()).toBe(true));
+            pendingCount(el)!.scrollIntoView({ inline: "nearest", block: "nearest" });
             expect(pendingCount(el)!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
             await expectNoA11yViolations(host);
             await page.screenshot({
@@ -4360,6 +4370,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let accepted = false;
     const held = {
+      items: [],
       id: "tab-1",
       orderNumber: 12,
       label: "Lunch",
@@ -4757,6 +4768,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let received = false;
     const row = {
+      items: [],
       id: "tab-1",
       orderNumber: 12,
       label: "Lunch",
@@ -4815,6 +4827,7 @@ describe("department transfers across operator lifetimes", () => {
     await flush(el);
     answer([
       {
+        items: [],
         id: "old-tab",
         orderNumber: 12,
         label: "Old client",
@@ -5950,7 +5963,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     Object.assign(el, {
       tabGroups: groups,
       stations,
-      selectedDiet: "vegetarian",
+      selectedFilters: { diets: ["vegetarian"], exclude: {} },
       orderParty: party,
       activeTabId: "wo-1",
     });
@@ -5962,7 +5975,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
         canSettle: boolean;
         groups: unknown;
         stations: unknown;
-        selectedDiet: string;
+        selectedFilters: { diets: string[]; exclude: object };
         receiptLanguages: string[];
         kitchenNote: string | null;
         kitchenNoteRevision: number;
@@ -5971,7 +5984,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     expect(order).not.toBeNull();
     expect(order.embedded).toBe(true);
     expect(order.canSettle).toBe(true);
-    expect(order.selectedDiet).toBe("vegetarian");
+    expect(order.selectedFilters).toEqual({ diets: ["vegetarian"], exclude: {} });
     expect(order.groups).toBe(groups);
     expect(order.stations).toBe(stations);
     expect(order.receiptLanguages).toBe(receiptLanguages);
@@ -6080,6 +6093,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 view.name === "counter-waiting"
                   ? [
                       {
+                        items: [],
                         id: "waiting",
                         orderNumber: 11,
                         label: "Ana",
@@ -6233,8 +6247,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
               await counter(el)!.updateComplete;
               expect(counter(el)!.store.lines).toHaveLength(18);
             }
-            if (view.name === "counter-waiting")
+            if (view.name === "counter-waiting") {
+              emit(shell(el)!, "show-counter-orders", { kind: "waiting" });
+              await flush(el);
+              await screen!.updateComplete;
               expect(screen!.shadowRoot!.querySelector("till-counter-waiting")).not.toBeNull();
+            }
             if (view.formFactor === "kds")
               expect(shell(el)!.shadowRoot!.querySelector("header")).toBeNull();
             else expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(2);
@@ -6353,3 +6371,111 @@ it.each(retirementActionLooks)(
     }
   },
 );
+
+describe("A738 counter order views", () => {
+  it("A738 opens Parked or Waiting without replacing the current basket", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "1");
+    const lines = store.lines;
+    const original = structuredClone(lines);
+    const held = (id: string) => ({
+      items: [],
+      id,
+      orderNumber: 42,
+      label: "Lunch",
+      itemCount: 1,
+      total: "1.50",
+      outstanding: "1.50",
+      hasPayments: false,
+      partyId: null,
+      openedAt: "2026-10-19T10:00:00Z",
+      signals: [],
+    });
+    Object.assign(el, {
+      heldOrders: [held(store.id), held("another")],
+      counterWaiting: [
+        {
+          items: [],
+          id: "waiting",
+          orderNumber: 7,
+          label: "Pickup",
+          status: "placed",
+          total: "1.50",
+          openedAt: "2026-10-19T10:00:00Z",
+          settledAt: null,
+          collectedAt: null,
+          canHandOver: true,
+          serviceMode: "ticket_then_pay",
+          movableDishes: [],
+        },
+      ],
+    });
+    await flush(el);
+    const bar = () =>
+      el.shadowRoot!.querySelector<import("./widgets/till-shell.js").TillShell>("till-shell")!;
+    expect(bar().parkedCount).toBe(1);
+    expect(bar().waitingCount).toBe(1);
+    expect(c.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+    expect(c.shadowRoot!.querySelector("till-counter-waiting")).toBeNull();
+    emit(bar(), "show-counter-orders", { kind: "parked" });
+    await flush(el);
+    await c.updateComplete;
+    expect(bar().activeOrderList).toBe("parked");
+    expect(c.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(
+      c
+        .shadowRoot!.querySelector<import("./widgets/held-orders.js").TillHeldOrders>(
+          "till-held-orders",
+        )!
+        .orders.map((order) => order.id),
+    ).toEqual(["another"]);
+    expect(c.shadowRoot!.querySelector("till-counter-waiting")).toBeNull();
+    emit(bar(), "show-counter-orders", { kind: "waiting" });
+    await flush(el);
+    await c.updateComplete;
+    expect(bar().activeOrderList).toBe("waiting");
+    expect(c.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+    expect(
+      c
+        .shadowRoot!.querySelector<import("./widgets/counter-waiting.js").TillCounterWaiting>(
+          "till-counter-waiting",
+        )!
+        .orders.map((order) => order.id),
+    ).toEqual(["waiting"]);
+    Object.assign(el, { heldOrders: [], counterWaiting: [] });
+    await flush(el);
+    expect(bar().parkedCount).toBe(0);
+    expect(bar().waitingCount).toBe(0);
+    expect(bar().activeOrderList).toBe("waiting");
+    emit(bar(), "screen-select", { screen: "counter" });
+    await flush(el);
+    await c.updateComplete;
+    expect(bar().activeOrderList).toBeNull();
+    expect(c.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
+    expect(c.store).toBe(store);
+    expect(c.store.lines).toStrictEqual(original);
+    expect(c.store.lines[0]).toBe(lines[0]);
+    expect(c.store.lines[0]?.quantity).toBe("1");
+  });
+
+  it.each([undefined, "demo", "prepare"] as const)(
+    "A738 gates direct and restored till Kitchen for %s",
+    async (onboardingIntent) => {
+      history.replaceState(null, "", "/tabs/counter/view/station");
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent }),
+      });
+      const c = await toCounter(el);
+      const allowed = onboardingIntent === "demo" || onboardingIntent === "prepare";
+      const bar =
+        el.shadowRoot!.querySelector<import("./widgets/till-shell.js").TillShell>("till-shell")!;
+      expect(bar.testingKitchen).toBe(allowed);
+      expect(el.shadowRoot!.querySelector("till-station-screen") !== null).toBe(allowed);
+      emit(c, "show-station");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-station-screen") !== null).toBe(allowed);
+    },
+  );
+});

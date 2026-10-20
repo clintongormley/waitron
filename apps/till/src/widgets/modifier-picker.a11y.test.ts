@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
 import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
@@ -80,6 +80,41 @@ const burger: TillProduct = {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)", (theme) => {
+  it("A738 line inspection and invalid quantity remain accessible", async () => {
+    const priorLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el, host } = await mountWidget<TillModifierPicker>(
+        "till-modifier-picker",
+        {
+          product: burger,
+          lineDetails: true,
+          withNote: true,
+          initialSelections: {
+            note: "No salt",
+            options: [{ listId: "list-cooked", labelId: "label-medium" }],
+          },
+          nutrition: { allergens: null, dietaryDeclarations: [] },
+        },
+        theme,
+      );
+      el.shadowRoot!.querySelector('[name="quantity"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "0" } }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+      el.readOnly = true;
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-textarea")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".confirm")).toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      setLocale(priorLocale);
+    }
+  });
+
   it("has no violations with an extras list and an options list on screen", async () => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillModifierPicker>(

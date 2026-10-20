@@ -883,6 +883,11 @@ plans to retire the editor.
   closing modality on removal; the fix would re-show it modally on reconnect.
   (`packages/ui/src/components/wt-dialog.ts`.)
 
+  **2026-10-19, A738:** the modifier picker's combined-edit reconnect cases reproduced loss of
+  `:modal` in all three close paths, including native Escape. That picker now recreates its modal
+  while retaining its draft; the shared primitive remains unchanged. Run
+  `pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker.unsaved.test.ts -t "combined line edits"`.
+
 ## Decisions and deliberate limits
 
 - **Long top-seller names on the overview (A829, owner, 2026-10-17).** Wrap between words;

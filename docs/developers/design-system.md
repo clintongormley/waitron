@@ -4870,11 +4870,17 @@ an in-memory fallback when storage fails. They belong in neither the path nor br
 Every fresh-order sign-in on a till starts at its saved starting zone. Restoring an order keeps
 that order's zone and recorded prices.
 
-Dietary filters (vegan, vegetarian, no meat and no fish) reset at sign-in. The till app
-owns the selection and passes it to counter and table-order screens, including embedded Order.
-Screen changes, menu changes, payment and new or parked orders retain the selection. Tapping the
-selected filter clears it everywhere; a new login starts with no dietary filter. Changing a filter
-never alters basket contents or browser history. Browser storage being blocked must not stop filtering.
+Counter and table Order share one Filter beside the menu search. You can require several dietary
+labels and exclude several declared allergens at once. A dish must meet every selected diet and
+contain none of the excluded allergens. Gluten and Nuts offer All or their recorded kinds; an
+unspecified kind matches every kind in that allergen group. An unreviewed declaration supplies no
+recorded allergens, so a filtered result is not an assurance that a dish is safe to eat.
+
+The app owns this selection. Screen and menu changes, payment, and new or parked orders retain it;
+a fresh sign-in clears it. Clear all removes every selected diet and exclusion. The badge counts
+each selected diet and allergen group once, regardless of how many kinds you chose. Filtering
+changes the displayed offers, leaving the basket and browser history in place. Browser storage
+being blocked must not stop filtering.
 
 The production server serves app HTML for browser navigation under `/manage` and `/tabs`. APIs and
 static assets keep their own responses; setup continues to use its existing root page.
@@ -4883,9 +4889,9 @@ The language controls display the names from `SUPPORTED_LOCALES` before their op
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
 header, after the logo; in the dashboard's banner only while nobody is signed in, just after the
 Theme chooser with nothing following it (signed in, the languages are a `layout="group"` row in the
-account menu; see "Dashboard banner"); in the till's shell bar, before the operator's name
-while that is on the bar, and before the More menu when the bar has one, as in the counter screen's
-own header (which it draws only when not embedded in the shell, and the
+account menu; see "Dashboard banner"); inside More on a signed-in till; on a handheld, in the shell
+bar before the operator's name while that is on the bar, and before More when the bar has it, as in
+the counter screen's own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, the
 kitchen display and kiosk mode, whose shell draws no bar — holds it at the top right, above the content.
 
@@ -4894,9 +4900,9 @@ header, the till's sign-in and join screens and the kitchen display's and kiosk 
 dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
 "Dashboard banner"). The counter screen's own header has none, because the till never shows that
 header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in
-person's menu (the menu under their name, or inside More once their name has moved there), the same
-row as the dashboard's account menu, just after Log out, so Log out keeps its place. Measured
-2026-10-17 in A681's re-look of the till's person menu: as three rows before Log out, the group pushed Log out
+person's menu under their name. On a handheld, that menu can move inside More and keeps Theme
+after Log out. On a till, Log out is in More while Theme and clock actions stay under the person's
+name. Measured 2026-10-17 in A681's re-look of the till's person menu: as three rows before Log out, the group pushed Log out
 below the visible More menu at 360×640, 360×740, 320×740 and 390×664. Measured 2026-10-17
 in the real-browser look for A681: with the chooser on the bar, at 360 px the tab strip got 148 px
 of the 178 px its tabs needed, and "Sala" showed as "Sa". A theme pick applies at once and never
@@ -4905,23 +4911,24 @@ lockup follows the choice (its `<source>`'s `media` is `all` for Dark, `not all`
 `(prefers-color-scheme: dark)` for Follow device), and the printable node recovery page takes the
 screen's resolved `color-scheme` rather than `light dark`.
 
-The till's shell bar is one row at every width. On a phone (40rem wide or less) it holds the
-tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
-its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row.
-Find a bill stays in More at every width and opens the Bills and Transactions page. Its Back
-returns to the counter without replacing the basket. A transaction receipt keeps the page's tab,
-query and server page for its own Back action.
+A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally
+scrollable strip, subject to the device and person's permissions. Parked, Waiting and Transfers
+carry their counts. Waiting draws attention while nonempty and stops when empty; reduced motion
+removes the animation. The operator and More remain reachable while the strip scrolls. Selecting
+Parked or Waiting changes the Counter menu-side view while keeping its basket. Returning to
+Counter restores the menu. An order already in the basket is excluded from the Parked view and count.
 
-The other bar actions run left to right in priority order: Pass, Kitchen, My schedule,
-Profile, Equipment and Transfers (the count and its button together). More takes these from the
-right. The Waitron name hides first, followed by Transfers, Equipment, Profile, My
-schedule, Kitchen, Pass, and finally the operator's name, which sits after the language chooser, taking Log out and the Theme row with it.
-Inside More the items keep the bar's order, with Find a bill first. The tabs and the language
-chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
-when the screen grows wider, the content other than the transfer count changes, or the language
-changes, but they stay in an open More menu until it closes. While Transfers is in More, the
-menu's button carries its pending count. Cases: `apps/till/src/widgets/till-shell.test.ts` and the
-A737 cases in `apps/till/src/till-app.test.ts`.
+More permanently holds Find a bill, My schedule, Profile when there is a profile choice, Language,
+Settings and Log out. Settings holds Equipment and Zones on this device. Kitchen appears only
+under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
+keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen.
+Find a bill opens Bills and Transactions. Its Back returns to Counter without replacing the basket;
+a transaction receipt keeps the page's tab, query and server page for its own Back action.
+
+A handheld keeps the adaptive bar. On a phone it puts secondary actions in More; wider, it moves
+items there only as needed. Find a bill stays in More. Its action priority remains Pass, Kitchen,
+My schedule, Profile, Equipment and Transfers. The tabs and language chooser stay on the bar while
+items return as room becomes available. Opening More holds its contents steady until it closes.
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation
@@ -4980,17 +4987,41 @@ order or payment in place, refuses new forbidden picks and reconciles navigation
 
 ### Counter basket and payment space
 
-On Counter, the menu sits beside a basket that scrolls within its own card. Menu and dietary
-controls stay on the menu side. Total and payment controls take the space their contents need
-underneath the basket. Held and waiting orders follow the products within the menu side's scroll
-area, including when only waiting orders exist. At phone width, menu, basket, total, payment and
-held/waiting lists stack in that order and the page scrolls. Basket rows wrap
-controls that do not fit beside the dish name. When full invoices are on, Full invoice and Hold
-share a row in both payment modes; while they are off the payment card draws no Full invoice, and
-Hold sits alone in the first of the row's two columns. When Place is offered, it fills the row above
-them. The cash-at-till explanation spans the
-payment card. Cash, Card and Hold use the shared medium button size. The Chromium payment-mode
-cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those arrangements.
+Keep the order visually separate from the menu, using the surface and border tokens. The basket
+scrolls inside its card; total and payment controls take the space they need below it. Parked
+orders and Waiting each replace the menu-side content when selected, rather than following the
+product grid. Tapping an order expands its recorded staff names, quantities, extras and note;
+a second tap collapses it. Its action buttons act independently of expansion.
+
+Counter and table Order share a last-added strip in the layout flow after the menu. It must leave
+the final product row uncovered. Adding a dish, including merging into an existing line, reveals
+that line in the order scroller; unrelated updates preserve the scroll position. The strip's
+quantity steps apply only to whole-unit dishes. Its name opens the matching line window, and a
+held press does the same. On a narrow table screen, opening it brings the existing Review into view.
+
+An unsent Counter row shows the name and nutrition marks, quantity steps, amount, information and
+removal actions. Extras and a note sit on their own indented lines. Amounts share a right edge;
+a note has no invented quantity or charge. Information, a held press, a mouse double click or the
+note opens the same existing modifiers window. Quantity, extras and note are staged there together.
+An unchanged Save stays quiet and disabled; Cancel, Escape and leaving retain the shared draft
+protection. Sent lines are read-only. A sent, unpaid Counter dish can offer Move to station in that
+window using its separately checked movement facts. Table draft, group, course and sending controls
+keep their own placement and permissions. A recalled table quantity decrease requests the existing
+cancellation flow; that request does not apply other staged note or modifier changes.
+
+The status row above the menu or selected list shows the service, zone and receipt-equipment
+availability. Tapping the service text opens today's keep-open action. Unknown, unconfigured,
+unavailable and available receipt equipment are separate states; availability does not claim that
+a physical printer is online or healthy. The existing equipment poll supplies changes.
+
+Park opens a small dialog for an optional name. Blank sends no label, preserving the existing
+order number and retrieved-name handling; it does not create a timestamp name. Park is available
+without editing the optional field. The action and list use Park and Parked orders; sending an
+unpaid Counter order uses Send. Course and group Held remains distinct.
+
+The payment card still offers Cash and Card and retains its existing full-invoice, receipt-language,
+simulator and post-payment receipt behavior. A739 owns their replacement. Cash, Card and Park use
+the shared medium button size; Send fills its own row when the zone offers sending before payment.
 
 ### Departments and zones
 
@@ -5313,8 +5344,8 @@ for the hierarchy's separate immediate cleanup and retained-history limits.
 A product button uses the shared `allergies` symbol in its top trailing corner when it has declared
 allergens or dietary labels. The name leaves room for the mark. The mark is decorative; a short
 press on any part of the button selects the dish. A held pointer press opens the product information
-window without selecting it. The window offers Close and Add to order and remains available on
-products with no mark.
+window without selecting it. The window shows the published description, allergens and dietary labels, offers Close and Add to
+order, and remains available on products with no mark.
 
 Counter and table-order lines place the dish’s allergen and positive diet icons after its name.
 Each icon carries the localized name, including cereal or nut kinds. A dish with unreviewed allergens

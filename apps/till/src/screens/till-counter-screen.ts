@@ -7,13 +7,19 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
+import {
+  type MenuFilters,
+  EMPTY_MENU_FILTERS,
+  memoVisibleProducts,
+  shownMenu,
+} from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
+import "../widgets/last-added.js";
 import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
@@ -106,8 +112,7 @@ export class TillCounterScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .menu-controls till-menu-switcher::part(options),
-      .menu-controls till-diet-filter::part(options) {
+      .menu-controls till-menu-switcher::part(options) {
         margin-bottom: 0;
       }
 
@@ -128,7 +133,21 @@ export class TillCounterScreen extends LitElement {
         grid-row: 1 / span 3;
         overflow: auto;
       }
+      .menu-column {
+        grid-column: 1;
+        grid-row: 1 / span 3;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        gap: var(--wt-space-2);
+      }
+      .menu-column .menu-cell {
+        flex: 1;
+        min-height: 0;
+      }
       .basket-cell {
+        background: var(--wt-color-surface);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
         grid-column: 2;
         grid-row: 1;
         overflow: auto;
@@ -173,6 +192,10 @@ export class TillCounterScreen extends LitElement {
         .basket-cell {
           overflow: visible;
         }
+        .basket-cell {
+          border-inline-start: 0;
+          border-block-start: var(--wt-space-1) solid var(--wt-color-border);
+        }
       }
     `,
   ];
@@ -182,6 +205,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  @property({ attribute: false }) stationMoveLines: StoredLines | null = null;
   @property({ attribute: false }) makeAtStations: Station[] = [];
   /** A pay, place or hold of {@link store}'s order is out; see the basket's own. */
   @property({ type: Boolean }) orderInFlight = false;
@@ -196,12 +220,15 @@ export class TillCounterScreen extends LitElement {
     keepOpen: null,
   };
   @property() departmentName = "";
+  @property({ attribute: false })
+  receiptEquipment?: import("../api/client.js").RoleEquipment["resolved"];
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";
   @property({ type: Boolean }) menuSelectionRequired = false;
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
+  @property({ attribute: false }) orderList: "parked" | "waiting" | null = null;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   /** The floor, which a held order's Move to table lists. */
@@ -215,8 +242,7 @@ export class TillCounterScreen extends LitElement {
   @property() operatorName = "";
   @property() invoiceLocale = "es-ES";
 
-  /** null shows every dish in the selected menu. */
-  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
+  @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
   /** A sale or order is being sent: the visible half of the app's guard against a second send. */
   @property({ type: Boolean }) busy = false;
   /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
@@ -272,17 +298,12 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("show-expo", { bubbles: true, composed: true }));
   }
 
-  #pickDiet(predicate: DietPredicate | null): void {
-    this.selectedDiet = predicate;
-  }
-
-  #hasDietData(): boolean {
-    return hasDietData(this.products);
+  #pickFilters(filters: MenuFilters): void {
+    this.selectedFilters = filters;
   }
 
   #menuControls(): TemplateResult {
     return html`
-      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName)}
       ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${
         this.service?.open === true && this.service.zoneOpen
@@ -291,16 +312,6 @@ export class TillCounterScreen extends LitElement {
               .menus=${this.menus}
               .selectedId=${this.selectedMenuId}
             ></till-menu-switcher>`
-          : nothing
-      }
-      ${
-        this.service?.open === true && this.service.zoneOpen && this.#hasDietData()
-          ? html`<till-diet-filter
-              class="diet-filter"
-              .selected=${this.selectedDiet}
-              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-                this.#pickDiet(e.detail.predicate)}
-            ></till-diet-filter>`
           : nothing
       }
     `;
@@ -317,31 +328,39 @@ export class TillCounterScreen extends LitElement {
     );
     return html`<till-menu-browser
       .menu=${menu}
-      .products=${this.#browserProducts(this.products, menu.id, this.selectedDiet)}
-      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, null)}
+      .products=${this.#browserProducts(this.products, menu.id, this.selectedFilters)}
+      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, EMPTY_MENU_FILTERS)}
       .menus=${this.menus}
-      .servedProducts=${this.#searchProducts(served, "", this.selectedDiet)}
-      .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", null)}
+      .servedProducts=${this.#searchProducts(served, "", this.selectedFilters)}
+      .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
       .handheld=${this.handheld}
+      ><till-diet-filter
+        slot="filters"
+        .selected=${this.selectedFilters}
+        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
+      ></till-diet-filter
     ></till-menu-browser>`;
   }
 
   #lists(): TemplateResult | typeof nothing {
-    if (this.heldOrders.length === 0 && this.counterWaiting.length === 0) return nothing;
+    if (this.orderList === null) return nothing;
     const orders = this.heldOrders.some((order) => order.id === this.store.id)
       ? this.heldOrders.filter((order) => order.id !== this.store.id)
       : this.heldOrders;
-    return html`<till-held-orders
-        .orders=${orders}
-        .tables=${this.tables}
-        .zones=${this.zones}
-      ></till-held-orders>
-      <till-counter-waiting
-        .orders=${this.counterWaiting}
-        .canEditKitchenNote=${this.canEditKitchenNote}
-        .canMoveStation=${this.canMoveStation}
-      ></till-counter-waiting>`;
+    return this.orderList === "parked"
+      ? html`<till-held-orders
+          .orders=${orders}
+          .tables=${this.tables}
+          .zones=${this.zones}
+        ></till-held-orders>`
+      : this.counterWaiting.length === 0
+        ? html`<p role="status">${t("shell.waiting_empty")}</p>`
+        : html`<till-counter-waiting
+            .orders=${this.counterWaiting}
+            .canEditKitchenNote=${this.canEditKitchenNote}
+            .canMoveStation=${this.canMoveStation}
+          ></till-counter-waiting>`;
   }
 
   #takeRest(outstanding: string): TemplateResult {
@@ -361,16 +380,30 @@ export class TillCounterScreen extends LitElement {
 
   #gridBody(): TemplateResult {
     return html`<div class="body grid-body">
+      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName, this.receiptEquipment)}
       <div class="sale-grid">
-        <div class="menu-cell">
-          <div class="menu-controls">${this.#menuControls()}</div>
-          ${this.#menu()}${this.#phone.matches ? nothing : this.#lists()}
+        <div class="menu-column">
+          <div class="menu-cell">
+            ${
+              this.orderList === null
+                ? html`<div class="menu-controls">${this.#menuControls()}</div>
+                    ${this.#menu()}`
+                : this.#lists()
+            }
+          </div>
+          ${this.store.lastAdded === undefined ? nothing : html`<till-last-added .store=${this.store} .disabled=${this.busy || this.orderInFlight} .readOnly=${this.stage === "collect"} @open-line-details=${(event: CustomEvent<{ line: import("../state/working-order.js").OrderLine }>) => this.shadowRoot!.querySelector("till-basket")?.openLineDetails(event.detail.line)}></till-last-added>`}
         </div>
         <div class="basket-cell">
           <till-basket
             ?stacked=${this.#phone.matches}
             .store=${this.store}
+            .lineDetails=${true}
+            .revealAdded=${true}
+            .allowPickRemoval=${true}
+            .draftParent=${this}
+            .readOnly=${this.stage === "collect"}
             .storedLines=${this.storedLines}
+            .stationMoveLines=${this.stationMoveLines}
             .makeAtStations=${this.makeAtStations}
             .orderInFlight=${this.orderInFlight}
           ></till-basket>
@@ -398,7 +431,6 @@ export class TillCounterScreen extends LitElement {
             .receiptGuests=${this.receiptGuests}
           ></till-tender-pay>
         </div>
-        ${this.#phone.matches ? this.#lists() : nothing}
       </div>
     </div>`;
   }

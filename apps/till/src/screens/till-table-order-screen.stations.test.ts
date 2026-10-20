@@ -17,6 +17,12 @@ import { current, row } from "./till-table-order-screen.current-orders.test-help
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
+it("A738 omits the obsolete draft station selector from the line window", async () => {
+  const el = await draft([bar, kitchen], "bar");
+  expect(el.shadowRoot!.querySelector("[data-make-at]")).toBeNull();
+  expect(store(el).lines[0]!.makeAt).toBe("bar");
+});
+
 const bar: Station = {
   id: "bar",
   name: "Upstairs bar",
@@ -50,41 +56,20 @@ async function draft(stations: Station[], makeAt?: string) {
   return el;
 }
 
-it("offers each draft a station choice only when there is a choice, including closed stations", async () => {
-  const el = await draft([bar, kitchen]);
-  const field = el.shadowRoot!.querySelector<
-    HTMLElement & { options: { value: string; label: string }[]; value: string }
-  >("[data-make-at='0']")!;
-  expect(field.tagName).toBe("WT-COMBOBOX");
-  expect(field.getAttribute("name")).toBe("make-at");
-  expect(field.getAttribute("label")).toBe("Make at · Beer");
-  expect(field.options).toEqual([
-    { value: "__make_at_rules__", label: "Where the rules send it" },
-    { value: "bar", label: "Upstairs bar (closed)" },
-    { value: "kitchen", label: "Kitchen" },
-  ]);
-  el.stations = [kitchen];
+it("A738 keeps recorded draft routing when the station list changes", async () => {
+  const el = await draft([bar, kitchen], "kitchen");
+  expect(el.shadowRoot!.querySelector("[data-make-at]")).toBeNull();
+  expect(store(el).lines[0]!.makeAt).toBe("kitchen");
+  el.stations = [bar];
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-make-at]")).toBeNull();
+  expect(store(el).lines[0]!.makeAt).toBe("kitchen");
 });
 
-it("saves a chosen draft station and clears it for rules", async () => {
-  const el = await draft([bar, kitchen], "kitchen");
-  const field = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-    "[data-make-at='0']",
-  )!;
-  expect(field.value).toBe("kitchen");
-  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
-  expect(store(el).lines[0]!.makeAt).toBe("bar");
-  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "__make_at_rules__" } }));
-  expect(store(el).lines[0]!.makeAt).toBeUndefined();
-});
-
-it("shows rules when the draft's saved station is no longer listed", async () => {
+it("A738 keeps an absent station's recorded id without drawing a fallback selector", async () => {
   const el = await draft([bar, kitchen], "removed");
-  expect(
-    el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-make-at='0']")!.value,
-  ).toBe("__make_at_rules__");
+  expect(el.shadowRoot!.querySelector("[data-make-at]")).toBeNull();
+  expect(store(el).lines[0]!.makeAt).toBe("removed");
 });
 
 const sent: TabLine = {

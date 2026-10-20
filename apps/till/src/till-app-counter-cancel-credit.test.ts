@@ -59,6 +59,7 @@ const offers: ZoneOfferCatalogue = {
 };
 
 const notInvoiced: CounterWaitingOrder = {
+  items: [],
   id: "wo-sent",
   orderNumber: 12,
   label: null,
@@ -185,6 +186,8 @@ async function signedIn(overrides: Record<string, unknown> = {}): Promise<TillAp
   const { el } = await mountWidget<TillApp>("till-app", { api });
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
   await flush(el);
   return el;
 }

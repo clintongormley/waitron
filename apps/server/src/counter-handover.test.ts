@@ -794,7 +794,12 @@ describe("GET /api/orders/counter-waiting", () => {
   });
 
   it("lists sent-not-paid, handed-over-not-paid and paid-not-handed-over counter orders, with what can be handed over now", async () => {
-    const sent = await placed("ticket_then_pay", "Tarta");
+    const sent = await parked("ticket_then_pay", "Tarta");
+    await inTx(venue, async (tx) => {
+      await tx.execute(sql`
+        update working_order_lines set name = 'Cake' where working_order_id = ${sent}`);
+    });
+    await placeOrder(deps(), venue.cfg, sent, venue.operatorId);
     const handedOver = await placed("issued", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, handedOver);
     const sentPrepay = await placed("prepay", "Tarta");
@@ -806,6 +811,9 @@ describe("GET /api/orders/counter-waiting", () => {
 
     expect(row(sent)).toEqual({
       id: sent,
+      items: [
+        { lineId: expect.any(String), name: "Cake", quantity: "1.000", note: null, extras: [] },
+      ],
       orderNumber: (await orderRow(sent)).orderNumber,
       label: null,
       status: "placed",

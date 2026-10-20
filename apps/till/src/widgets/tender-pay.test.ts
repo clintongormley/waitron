@@ -5,6 +5,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
 import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
+import { userEvent } from "vitest/browser";
+import { dialogOpenUnder } from "./track-dialog.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -94,6 +96,99 @@ const click = (el: TillTenderPay, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
 
 afterEach(cleanupWidgets);
+
+describe("A738 Park name dialog", () => {
+  async function open() {
+    const store = new WorkingOrderStore();
+    store.addProduct({ ...cafe, name: "Staff coffee" }, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".hold");
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("wt-dialog");
+    expect(dialog, "Park must open a modal name window").not.toBeNull();
+    await dialog!.updateComplete;
+    expect(dialog!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(dialogOpenUnder(el)).toBe(true);
+    return { el, store, dialog: dialog! };
+  }
+
+  it.each([
+    { label: "  Guest 07  ", expected: "Guest 07" },
+    { label: "", expected: undefined },
+    { label: "   ", expected: undefined },
+  ])(
+    "keeps the optional-name payload for $label across a minute change and sends Enter once",
+    async ({ label, expected }) => {
+      const { el, dialog } = await open();
+      const parks: unknown[] = [];
+      el.addEventListener("park-order", (event) => parks.push((event as CustomEvent).detail));
+      vi.useFakeTimers({ toFake: ["Date"] });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      vi.setSystemTime(new Date("2026-10-20T10:59:59Z"));
+      await typeLabel(el, label);
+      vi.setSystemTime(new Date("2026-10-20T11:00:01Z"));
+      const input = el.shadowRoot!.querySelector("wt-input")!;
+      await input.updateComplete;
+      const native = input.shadowRoot!.querySelector("input")!;
+      const closed = new Promise((resolve) =>
+        dialog.addEventListener("wt-close", resolve, { once: true }),
+      );
+      for (let i = 0; i < 2; i++)
+        native.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+          }),
+        );
+      expect(parks).toEqual([{ label: expected }]);
+      await closed;
+      await el.updateComplete;
+      expect(el.shadowRoot!.activeElement).toBe(query(el, ".hold"));
+      expect(query(el, ".label-input")).toBeNull();
+      expect(dialogOpenUnder(el)).toBe(false);
+    },
+  );
+
+  it.each(["cancel", "escape"] as const)(
+    "%s closes without parking and returns focus",
+    async (way) => {
+      const { el, store, dialog } = await open();
+      const parks: unknown[] = [];
+      el.addEventListener("park-order", (event) => parks.push((event as CustomEvent).detail));
+      const closed = new Promise((resolve) =>
+        dialog.addEventListener("wt-close", resolve, { once: true }),
+      );
+      if (way === "cancel") click(el, ".cancel");
+      else await userEvent.keyboard("{Escape}");
+      await closed;
+      await el.updateComplete;
+      expect(parks).toEqual([]);
+      expect(store.lines.map((line) => line.quantity)).toEqual(["1"]);
+      expect(el.shadowRoot!.activeElement).toBe(query(el, ".hold"));
+    },
+  );
+
+  it.each(["empty", "busy"] as const)(
+    "refuses a stale Park control after the basket becomes %s",
+    async (kind) => {
+      const { el, store, dialog } = await open();
+      const parks: unknown[] = [];
+      el.addEventListener("park-order", (event) => parks.push((event as CustomEvent).detail));
+      const confirm = query(el, ".park") as HTMLElement;
+      if (kind === "busy") el.busy = true;
+      else store.removeLine(0);
+      confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(parks).toEqual([]);
+      expect(dialog.open).toBe(true);
+      expect(query(el, ".park")!.hasAttribute("disabled")).toBe(true);
+    },
+  );
+});
 
 describe("till-tender-pay", () => {
   it.each([undefined, null, 4])(

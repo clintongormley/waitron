@@ -63,6 +63,17 @@ async function open(el: TillTableOrderScreen, index = 0) {
 function save(picker: TillModifierPicker) {
   return picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!;
 }
+
+it("A738 a mouse double click opens one table line window without changing its quantity or selection", async () => {
+  const { el } = await holding();
+  const control = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!;
+  await userEvent.dblClick(control);
+  const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
+  await basket.updateComplete;
+  expect(basket.shadowRoot!.querySelectorAll("till-modifier-picker")).toHaveLength(1);
+  expect(store(el).lines[0]!.quantity).toBe("2");
+  expect(control.getAttribute("aria-pressed")).toBe("false");
+});
 async function course(picker: TillModifierPicker, value: string) {
   const field = picker.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
   expect(field).not.toBeNull();
@@ -226,7 +237,7 @@ it.each(["sending", "locked", "group-command", "departed"] as const)(
 );
 
 it.each(["group-command", "departed", "other-bill"] as const)(
-  "a retained making-station choice refuses edits after %s",
+  "A738 a retained line window refuses edits after %s",
   async (state) => {
     const { el } = await holding();
     el.stations = ["bar", "kitchen"].map((id) => ({
@@ -240,9 +251,8 @@ it.each(["group-command", "departed", "other-bill"] as const)(
       why: "default" as const,
     }));
     await el.updateComplete;
-    await open(el);
-    const station = el.shadowRoot!.querySelector<WtCombobox>('[data-make-at="0"]')!;
-    expect(station.checkVisibility()).toBe(true);
+    const picker = await open(el);
+    expect(el.shadowRoot!.querySelector('[data-make-at="0"]')).toBeNull();
     const original = store(el);
     if (state === "group-command") el.groupCommandBusy = true;
     if (state === "departed") el.remove();
@@ -251,7 +261,14 @@ it.each(["group-command", "departed", "other-bill"] as const)(
       el.draftStore.addProduct(beer, "1");
       el.orderId = "other-bill";
     }
-    station.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "kitchen" } }));
+    await el.updateComplete;
+    picker.dispatchEvent(
+      new CustomEvent("wt-modifier-confirm", {
+        detail: { product: beer, quantity: "3", note: "Stale note" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     expect(original.lines[0]!.makeAt).toBeUndefined();
     expect(original.lines[0]!.quantity).toBe("2");
   },

@@ -87,6 +87,21 @@ export class DraftStore extends WorkingOrderStore {
     );
   }
 
+  override setLineDetails(
+    index: number,
+    update: Parameters<WorkingOrderStore["setLineDetails"]>[1],
+  ): boolean {
+    const line = this.lines[index];
+    if (
+      line?.source !== undefined &&
+      compareDecimal(decimal(update.quantity), decimal(line.quantity)) < 0
+    ) {
+      this.setLineQuantity(index, update.quantity);
+      return false;
+    }
+    return super.setLineDetails(index, update);
+  }
+
   override addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     this.addMerging(product, quantity, selection);
   }

@@ -2,6 +2,12 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "service.open": "Open",
+  "service.printer_unknown": "Receipt printer status unknown",
+  "service.printer_none": "No receipt printer",
+  "service.printer_unavailable": "Receipt printer unavailable: {name}",
+  "service.printer_available": "Receipt printer available: {name}",
+
   "finish_table.unserved": "{n} dishes not served",
   "cancel_item.title": "Cancel item",
   "cancel_item.preparation": "Has preparation started?",
@@ -33,7 +39,7 @@ export const en = {
   "device_zones.settings": "Settings",
   "device_zones.read_failed": "The zones could not be read. Try again.",
   "device_zones.write_failed": "The zones could not be saved. Try again.",
-  "device_zones.order_in_zone": "Hold, send or cancel this order before hiding its zone.",
+  "device_zones.order_in_zone": "Park, send or cancel this order before hiding its zone.",
 
   "refund_ack.title": "Payment refund acknowledgment",
   "refund_ack.reference": "Refund reference",
@@ -268,6 +274,11 @@ export const en = {
     "Transfer updates could not be loaded. The last received state is shown.",
   "department_transfer.open": "Transfers ({count} pending)",
   "shell.more": "More",
+  "shell.parked": "Parked orders",
+  "shell.waiting": "Waiting",
+  "shell.waiting_empty": "No waiting orders",
+  "shell.testing": "Testing",
+  "shell.language": "Language",
   "shell.more_transfers": "More, {n} transfers pending",
   "shell.more_transfers_one": "More, 1 transfer pending",
   "shell.logout": "Log out",
@@ -303,7 +314,7 @@ export const en = {
   "form.fix_fields": "Correct the highlighted fields to continue.",
   "form.combobox_search": "Search",
   "form.combobox_no_results": "No results",
-  "action.hold": "Hold",
+  "action.hold": "Park",
   "action.authorize": "Authorize",
   // Tenders
   "tender.cash": "Cash",
@@ -454,8 +465,8 @@ export const en = {
   "weigh.prompt": "Enter quantity",
   // Held (parked) orders
   "held.label_prompt": "Name this order (optional)",
-  "held.title": "Held orders",
-  "held.empty": "No held orders",
+  "held.title": "Parked orders",
+  "held.empty": "No parked orders",
   "held.retrieve": "Retrieve",
   "held.discard": "Discard",
   // Counter orders sent and not paid, or paid and not handed over
@@ -567,7 +578,7 @@ export const en = {
   "find_page.remove_filter": "Remove {filter} filter",
   "find_page.retry": "Retry",
   // Placing and prep
-  "action.place": "Place order",
+  "action.place": "Send",
   "action.send_to_prep": "Send to prep",
   // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
   // rendered as `${n} ${t(key)}`.
@@ -720,7 +731,7 @@ export const en = {
   "profile.title": "This device's profile",
   "profile.label": "Device profile",
   "profile.switch": "Switch",
-  "profile.order_open": "Hold or clear the order in progress before switching profile.",
+  "profile.order_open": "Park or clear the order in progress before switching profile.",
   "profile.draft_unsaved":
     "The order's last change could not be saved. Try again, or remove it, before switching profile.",
   "profile.draft_replaced":
@@ -782,11 +793,17 @@ export const en = {
   "diet.contains.fish": "Contains fish",
   "diet.not_reviewed": "Diet not reviewed",
   // Menu diet filter chips
+  "menu.filter.title": "Filter",
+  "menu.filter.include": "Only show dishes that are",
+  "menu.filter.exclude": "Hide dishes that contain",
+  "menu.filter.all": "All",
+  "menu.filter.clear": "Clear all",
   "diet.filter.label": "Dietary filter",
   "diet.filter.no_meat": "No meat",
   "diet.filter.no_fish": "No fish",
   // Per-line kitchen note
   "line.note.label": "Kitchen note",
+  "line.note.add": "+ Add a note",
   "line.note.placeholder": "e.g. no onion, allergy — nut",
   "line.note.button": "Note",
   // Staff schedule (the staff-facing swap/absence request path)
@@ -1082,7 +1099,7 @@ export const en = {
   "adjust.unconfirmed":
     "No answer from the server. The bill has been read again: check whether the change was made before trying again.",
   "adjust.unconfirmed_unread":
-    "No answer from the server: the change may already have been made. Hold the order, then retrieve it, and check whether the change was made before trying again.",
+    "No answer from the server: the change may already have been made. Park the order, then retrieve it, and check whether the change was made before trying again.",
   "adjust.basket_changed": "The order changed while this was open, so nothing was sent.",
   "adjust.changed_bill":
     "This bill was changed on another device. It has been read again: check it and try again.",
@@ -1149,6 +1166,7 @@ export const en = {
   "table.confirm_different_people_action": "Confirm different people",
   "table.split_no_lines": "No items to split",
   "table.split_quantity": "Quantity",
+  "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
   "table.split_quantity_decimal_error":
     "Enter a quantity greater than zero and no more than the amount ordered",
@@ -1267,14 +1285,14 @@ export const en = {
   "receipt_language.title": "Receipt language",
   "receipt_language.button": "Receipt: {language}",
   "receipt_language.save_error": "Could not save the receipt language, try again",
-  "receipt_language.held_unsaved": "Held without its receipt language: open it and choose again",
+  "receipt_language.held_unsaved": "Parked without its receipt language: open it and choose again",
   "action.choose": "Choose",
   "receipt.error": "Could not print the receipt, try again",
   "receipt.guests_none": "No line",
   "payment_slip.error": "Could not print the payment slip, try again",
   "drawer.error": "Could not open the cash drawer, try again",
   "drawer.not_attached": "No cash drawer is attached to this printer",
-  "held.park_error": "Could not hold the order, try again",
+  "held.park_error": "Could not park the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
     "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the kitchen, paying is refused until it is removed.",
@@ -1284,23 +1302,24 @@ export const en = {
   "held.discard_holds_money":
     "This order still holds money from a payment. Give it back before discarding the order",
   "held.reread_failed":
-    "The order could not be read again. Hold it, then retrieve it, to check it.",
+    "The order could not be read again. Park it, then retrieve it, to check it.",
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
-  "place.error": "Could not place the order, try again",
+  "place.error": "Could not send the order, try again",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   "station.advance_error": "Could not update the ticket, try again",
   // Shown when a list's refresh failed: the plain key when no write came before it, an `_after_*`
   // key after a write that SUCCEEDED, when only the list refresh behind it failed.
-  "refresh.held": "The list of held orders could not refresh.",
-  "refresh.held_after_park": "The order was held, but the list of held orders could not refresh.",
+  "refresh.held": "The list of parked orders could not refresh.",
+  "refresh.held_after_park":
+    "The order was parked, but the list of parked orders could not refresh.",
   "refresh.held_after_sale":
-    "The sale was recorded, but the list of held orders could not refresh.",
-  "refresh.held_after_move": "The bill was moved, but the list of held orders could not refresh.",
+    "The sale was recorded, but the list of parked orders could not refresh.",
+  "refresh.held_after_move": "The bill was moved, but the list of parked orders could not refresh.",
   "refresh.station": "The kitchen queue could not refresh.",
-  "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
+  "refresh.station_after_place": "The order was sent, but the kitchen queue could not refresh.",
   "refresh.station_after_hand_over":
     "The order was handed over, but the kitchen queue could not refresh.",
   "refresh.station_after_move": "The dishes were moved, but the kitchen queue could not refresh.",
@@ -1593,6 +1612,12 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "service.open": "Abierto",
+  "service.printer_unknown": "Estado de la impresora de recibos desconocido",
+  "service.printer_none": "Sin impresora de recibos",
+  "service.printer_unavailable": "Impresora de recibos no disponible: {name}",
+  "service.printer_available": "Impresora de recibos disponible: {name}",
+
   "finish_table.unserved": "{n} platos sin servir",
   "cancel_item.title": "Cancelar plato",
   "cancel_item.preparation": "En preparación",
@@ -1862,6 +1887,11 @@ export const es: Record<StringKey, string> = {
     "No se pudieron cargar las novedades. Se muestra el último estado recibido.",
   "department_transfer.open": "Traspasos (pendientes: {count})",
   "shell.more": "Más",
+  "shell.parked": "Pedidos aparcados",
+  "shell.waiting": "En espera",
+  "shell.waiting_empty": "No hay pedidos en espera",
+  "shell.testing": "Pruebas",
+  "shell.language": "Idioma",
   "shell.more_transfers": "Más, traspasos pendientes: {n}",
   "shell.more_transfers_one": "Más, traspasos pendientes: 1",
   "shell.logout": "Salir",
@@ -2147,7 +2177,7 @@ export const es: Record<StringKey, string> = {
   "find_page.remove_dates": "Quitar filtro de fechas",
   "find_page.remove_filter": "Quitar filtro de {filter}",
   "find_page.retry": "Reintentar",
-  "action.place": "Enviar pedido",
+  "action.place": "Enviar",
   "action.send_to_prep": "Enviar a cocina",
   "kitchen_screen.station": "Pantalla de estación",
   "kitchen_screen.pass": "Pantalla de pase",
@@ -2352,10 +2382,16 @@ export const es: Record<StringKey, string> = {
   "diet.contains.meat": "Contiene carne",
   "diet.contains.fish": "Contiene pescado",
   "diet.not_reviewed": "Dieta pendiente de revisión",
+  "menu.filter.title": "Filtros",
+  "menu.filter.include": "Mostrar solo platos que sean",
+  "menu.filter.exclude": "Ocultar platos que contengan",
+  "menu.filter.all": "Todos",
+  "menu.filter.clear": "Borrar todos",
   "diet.filter.label": "Filtro dietético",
   "diet.filter.no_meat": "Sin carne",
   "diet.filter.no_fish": "Sin pescado",
   "line.note.label": "Nota para cocina",
+  "line.note.add": "+ Añadir una nota",
   "line.note.placeholder": "p. ej. sin cebolla, alergia — frutos secos",
   "line.note.button": "Nota",
   "schedule.open": "Mi horario",
@@ -2707,6 +2743,7 @@ export const es: Record<StringKey, string> = {
   "table.confirm_different_people_action": "Confirmar personas distintas",
   "table.split_no_lines": "No hay artículos para dividir",
   "table.split_quantity": "Cantidad",
+  "line.quantity_invalid": "Introduce una cantidad positiva válida para la unidad de este plato.",
   "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",
   "table.split_quantity_decimal_error":
     "Introduce una cantidad mayor que cero y no superior a la cantidad pedida",

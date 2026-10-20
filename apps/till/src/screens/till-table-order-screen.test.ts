@@ -399,9 +399,9 @@ describe("till-table-order-screen", () => {
     expect(productGrid.store).toBe(basket.store);
   });
 
-  it("shows NO diet filter when no product carries a published diet", async () => {
+  it("offers Filter without a published diet so allergen exclusions stay reachable", async () => {
     const { el } = await mount(); // cafe only — no diet
-    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-diet-filter")).not.toBeNull();
   });
 
   it("shows the diet filter and narrows the round grid to the picked lens", async () => {
@@ -429,7 +429,11 @@ describe("till-table-order-screen", () => {
         .products.map((p) => p.id)
         .sort(),
     ).toEqual(["meat", "vegan"]);
-    filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
+    await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!);
+    await filter.updateComplete;
+    await userEvent.click(
+      filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!,
+    );
     await el.updateComplete;
     expect(grid(el).products.map((p) => p.id)).toEqual(["vegan"]);
   });
@@ -994,6 +998,8 @@ describe("till-table-order-screen", () => {
     await el.updateComplete;
 
     const form = await openDraftLine(el, 0);
+    form.shadowRoot!.querySelector<HTMLElement>(".add-note")!.click();
+    await form.updateComplete;
     const note = form.shadowRoot!.querySelector('[data-test="line-note"]')!;
     note.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "table 4 — no ice" } }));
     await form.updateComplete;
@@ -3217,7 +3223,14 @@ describe("till-table-order-screen", () => {
       ]);
       await el.updateComplete;
       if (el.shadowRoot!.querySelector("[data-drawer]") !== null) await openDrawer(el);
-      return openDraftLine(el, 0);
+      const picker = await openDraftLine(el, 0);
+      const addNote = picker.shadowRoot!.querySelector<HTMLElement>(".add-note");
+      if (addNote !== null) {
+        addNote.click();
+        await picker.updateComplete;
+      }
+      await picker.shadowRoot!.querySelector("wt-textarea")?.updateComplete;
+      return picker;
     }
     const saved = (el: TillTableOrderScreen) => {
       const line = el.draftStore!.lines[0]!;
@@ -6317,7 +6330,7 @@ describe("till-table-order-screen", () => {
       };
       const { el } = await mount({
         ...bothMenus,
-        selectedDiet: "vegan",
+        selectedFilters: { diets: ["vegan"], exclude: {} },
         products: [veganFood, meatDrink],
       });
       const source = grid(el) as TillMenuBrowser & { unfilteredServedProducts: TillProduct[] };
@@ -6368,7 +6381,7 @@ describe("till-table-order-screen", () => {
         menus: [foodMenu, servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croqueta])],
         products: [bocadillo, veganCerveza, croqueta],
         selectedMenuId: "cat-drinks",
-        selectedDiet: "vegan",
+        selectedFilters: { diets: ["vegan"], exclude: {} },
       });
       await grid(el).updateComplete;
       expect(grid(el).products).toEqual([veganCerveza]);
@@ -6447,7 +6460,7 @@ describe("till-table-order-screen", () => {
           "Cerveza",
           "Croqueta",
         ]);
-        el.selectedDiet = "vegan";
+        el.selectedFilters = { diets: ["vegan"], exclude: {} };
         await el.updateComplete;
         await grid(el).updateComplete;
         expect(groups(el).find((group) => group.menu === "cat-drinks")?.names).toEqual(["Cerveza"]);
@@ -6695,14 +6708,18 @@ describe("A668 nutrition after table-order names", () => {
     draft.addProduct(dish, "1");
     const { el } = await mount({ draftStore: draft });
     expect(
-      el.shadowRoot!.querySelector(
-        '[data-last-added] .last-added-name wt-icon[name="allergen-milk"]',
-      ),
+      el
+        .shadowRoot!.querySelector("till-last-added")!
+        .shadowRoot!.querySelector(
+          '[data-last-added] .last-added-name wt-icon[name="allergen-milk"]',
+        ),
     ).not.toBeNull();
     expect(
-      el.shadowRoot!.querySelector(
-        '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
-      ),
+      el
+        .shadowRoot!.querySelector("till-last-added")!
+        .shadowRoot!.querySelector(
+          '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
+        ),
     ).not.toBeNull();
     await openReview(el);
     expect(

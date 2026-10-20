@@ -36,7 +36,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
@@ -53,12 +53,19 @@ import {
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
+import {
+  type MenuFilters,
+  EMPTY_MENU_FILTERS,
+  memoVisibleProducts,
+  shownMenu,
+} from "../menu-filter.js";
 import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import { lineNutrition } from "../widgets/line-nutrition.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
+import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -885,7 +892,8 @@ export class TillTableOrderScreen extends LitElement {
       .side-by-side .draft-pane {
         flex: 2 1 0;
         padding-inline-start: var(--wt-space-4);
-        border-inline-start: 1px solid var(--wt-color-border);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
+        background: var(--wt-color-surface);
       }
 
       .browsing[hidden],
@@ -906,39 +914,13 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* Kept in view at the bottom while the menu scrolls, clear of the column the till's floating
-         language button takes at the bottom right: a tap target and two gaps wide. */
       .bottom-bar {
-        position: sticky;
-        bottom: 0;
-        z-index: 1;
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
         padding-block: var(--wt-space-2);
         padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
         background: var(--wt-color-bg);
-      }
-
-      .last-added {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-
-      .last-added-line {
-        margin: 0;
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .last-added-name {
-        font-weight: var(--wt-font-weight-bold);
       }
 
       .other-draft {
@@ -970,12 +952,6 @@ export class TillTableOrderScreen extends LitElement {
 
       .other-draft-name {
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .last-added-steps {
-        display: flex;
-        flex: 0 0 auto;
-        gap: var(--wt-space-2);
       }
 
       .review-open {
@@ -1023,6 +999,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) orderingAllowed = true;
   @property({ attribute: false }) productSelectable?: (product: TillProduct) => boolean;
   @property() departmentName = "";
+  @property({ attribute: false })
+  receiptEquipment?: import("../api/client.js").RoleEquipment["resolved"];
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
@@ -1097,8 +1075,7 @@ export class TillTableOrderScreen extends LitElement {
   /** Where browsing was scrolled when Review opened, put back on Back. */
   #browsingScroll?: { scroller: Element; top: number };
 
-  /** null shows every dish in the selected menu. */
-  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
+  @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
 
   /** The revision {@link lines} was read at. */
   @property({ attribute: false }) revision = 0;
@@ -2011,41 +1988,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  #makeAtPicker(
-    store: WorkingOrderStore,
-    line: OrderLine,
-    index: number,
-    name: string,
-  ): TemplateResult {
-    const rules = "__make_at_rules__";
-    const options: ComboboxOption[] = [
-      { value: rules, label: t("move_station.rules") },
-      ...this.stations.map((station) => ({
-        value: station.id,
-        label: station.open
-          ? station.name
-          : t("dead_end.station_closed").replace("{station}", () => station.name),
-      })),
-    ];
-    return html`<wt-combobox
-      data-make-at=${index}
-      name="make-at"
-      label=${`${t("move_station.make_at")} · ${name}`}
-      ?disabled=${!this.#canEditDraftLine(store, line)}
-      search="never"
-      .options=${options}
-      .value=${this.stations.some((station) => station.id === line.makeAt) ? line.makeAt! : rules}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        if (!this.#canEditDraftLine(store, line)) return;
-        store.setLineMakeAt(
-          store.lines.indexOf(line),
-          event.detail.value === rules ? undefined : event.detail.value,
-        );
-      }}
-    ></wt-combobox>`;
-  }
-
   #canRecall(line: TabLine): boolean {
     const served = (row: CurrentOrderRow) =>
       row.lineId === line.id && compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
@@ -2146,18 +2088,14 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("back-to-floor", { bubbles: true, composed: true }));
   }
 
-  #pickDiet(predicate: DietPredicate | null): void {
-    this.selectedDiet = predicate;
+  #pickFilters(filters: MenuFilters): void {
+    this.selectedFilters = filters;
   }
 
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
   readonly #unfilteredSearchProducts = memoVisibleProducts();
-
-  #hasDietData(): boolean {
-    return hasDietData(this.products);
-  }
 
   /** The browser gets the products through the diet lens; a tab line's name still resolves against
    * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
@@ -2174,26 +2112,31 @@ export class TillTableOrderScreen extends LitElement {
       class="round-control"
       ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
-      .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
-      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}
+      .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
+      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}
       .menus=${this.menus}
       .servedProducts=${this.#searchProducts(
         this.products.filter((product) =>
           this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
         ),
         "",
-        this.selectedDiet,
+        this.selectedFilters,
       )}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(
         this.products.filter((product) =>
           this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
         ),
         "",
-        null,
+        EMPTY_MENU_FILTERS,
       )}
       .store=${store}
       .handheld=${this.handheld}
       weighs
+      ><till-diet-filter
+        slot="filters"
+        .selected=${this.selectedFilters}
+        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
+      ></till-diet-filter
     ></till-menu-browser>`;
   }
 
@@ -2748,6 +2691,7 @@ export class TillTableOrderScreen extends LitElement {
                 ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
                 ${this.#sentDetails(row)}
               </p>
+              ${lineNutrition(row.nutrition)}
               ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
               <div class="total-row">
                 <span>${row.name}</span
@@ -2935,42 +2879,48 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** −1 at one takes the line out, so a mis-tap is undone where it was made. */
   #lastAdded(store: WorkingOrderStore): TemplateResult | typeof nothing {
-    const line = store.lastAdded;
-    if (line === undefined) return nothing;
+    return store.lastAdded === undefined
+      ? nothing
+      : html`<till-last-added
+          .store=${store}
+          @open-line-details=${(event: CustomEvent<{ line: OrderLine }>) => void this.#openLastAdded(store, event.detail.line)}
+        ></till-last-added>`;
+  }
+
+  async #openLastAdded(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    if (
+      store !== this.#draftStore ||
+      store.lastAdded !== line ||
+      store.sending ||
+      store.editsLocked
+    )
+      return;
+    const generation = store.loadGeneration;
+    if (!this.wide && !this.reviewing) await this.#openReview();
+    await this.updateComplete;
+    if (
+      store !== this.#draftStore ||
+      generation !== store.loadGeneration ||
+      store.lastAdded !== line ||
+      store.sending ||
+      store.editsLocked
+    )
+      return;
     const index = store.lines.indexOf(line);
-    const name = shownName(line.product);
-    const count = Number(line.quantity);
-    const step = (by: -1 | 1, key: StringKey, text: string) =>
-      html`<wt-button
-        variant="secondary"
-        data-last-added-step=${by}
-        ?disabled=${by === 1 && store.canSelectProduct?.(line.product) === false}
-        aria-label=${`${t(key)} ${text} · ${name}`}
-        @click=${() =>
-          count + by < 1
-            ? store.removeLine(index)
-            : store.setLineQuantity(index, String(count + by))}
-      >
-        ${text}
-      </wt-button>`;
-    return html`<div
-      class="last-added"
-      data-last-added
-      role="group"
-      aria-label=${t("table.last_added")}
-      ?inert=${store.sending}
-    >
-      <p class="last-added-line">${this.#lineSummary(line, "last-added-name")}</p>
-      ${
-        soldByTheUnit(line.product)
-          ? html`<span class="last-added-steps">
-              ${step(-1, "basket.decrease", "−1")} ${step(1, "basket.increase", "+1")}
-            </span>`
-          : nothing
-      }
-    </div>`;
+    const basket = [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")].find(
+      (basket) =>
+        basket.store === store &&
+        (basket.lineIndexes === undefined || basket.lineIndexes.includes(index)),
+    );
+    if (basket === undefined) return;
+    await basket.updateComplete;
+    if (
+      store === this.#draftStore &&
+      generation === store.loadGeneration &&
+      store.lastAdded === line
+    )
+      basket.openLineDetails(line);
   }
 
   /** A line's name and quantity, its staff answers, its extras and its note. A dish or pick the
@@ -3011,7 +2961,9 @@ export class TillTableOrderScreen extends LitElement {
     this.reviewing = false;
     await this.updateComplete;
     if (saved !== undefined) saved.scroller.scrollTop = saved.top;
-    this.renderRoot.querySelector<HTMLElement>("[data-review-open]")?.focus();
+    this.renderRoot
+      .querySelector<HTMLElement>("[data-review-open]")
+      ?.focus({ preventScroll: true });
   }
 
   /** The nearest ancestor that scrolls, across shadow roots, else the page. */
@@ -3028,34 +2980,25 @@ export class TillTableOrderScreen extends LitElement {
     if (this.service === null) return html`<div class="grid-region"></div>`;
     if (this.service.zoneOpen === false)
       return html`<div class="grid-region">
-        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName)}
+        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
       </div>`;
     if (this.service?.open === false)
       return html`<div class="grid-region">
-        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
+        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
       </div>`;
     if (!this.menus.some((menu) => menu.orderable))
       return html`<div class="grid-region">
-        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
+        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
         <p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>
       </div>`;
     return html`<div class="grid-region">
-      ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
+      ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
       <till-menu-switcher
         class="menu-switcher"
         .menus=${this.menus}
         .selectedId=${this.selectedMenuId}
       ></till-menu-switcher>
-      ${
-        this.#hasDietData()
-          ? html`<till-diet-filter
-              class="diet-filter"
-              .selected=${this.selectedDiet}
-              @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
-                this.#pickDiet(e.detail.predicate)}
-            ></till-diet-filter>`
-          : nothing
-      }
+
       ${keyed(this.orderId, this.#menuBrowser(draft))}
     </div>`;
   }
@@ -3083,7 +3026,11 @@ export class TillTableOrderScreen extends LitElement {
           ${keyed(
             this.orderId,
             draft.lineCount === 0
-              ? html`<till-basket .hideKitchenNote=${true} .store=${draft}></till-basket>`
+              ? html`<till-basket
+                  .hideKitchenNote=${true}
+                  .store=${draft}
+                  .revealAdded=${this.wide || this.reviewing}
+                ></till-basket>`
               : this.#draftSections(draft),
           )}
           ${this.#draftBar(draft)} ${this.#draftMoveDialog(draft)}
@@ -3290,6 +3237,7 @@ export class TillTableOrderScreen extends LitElement {
                       .orderInFlight=${this.groupCommandBusy}
                       stacked
                       .store=${store}
+                      .revealAdded=${this.wide || this.reviewing}
                       .lineIndexes=${section.indexes}
                     >
                       ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
@@ -3321,7 +3269,6 @@ export class TillTableOrderScreen extends LitElement {
       Number(line.quantity) > 1;
     const isFlagged = flagged(line);
     const tools = [
-      ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
       ...(isFlagged && line.source === undefined ? [this.#flagChoice(store, line, index)] : []),
       this.#draftRoutingWarning(store, line, index, true),
     ];

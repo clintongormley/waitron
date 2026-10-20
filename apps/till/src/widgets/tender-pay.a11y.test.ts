@@ -4,6 +4,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import "./tender-pay.js";
 import type { TillTenderPay } from "./tender-pay.js";
 import type { TillProduct } from "../api/client.js";
+import { page } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -28,6 +30,62 @@ const jamon: TillProduct = {
 };
 
 afterEach(cleanupWidgets);
+
+describe.each(["en-GB", "es-ES"])("A738 Park dialog %s", (locale) => {
+  describe.each(["light", "dark"] as const)("%s", (theme) => {
+    it.each([390, 1280])("fits its native controls and has no violations at %i", async (width) => {
+      const before = { locale: currentLocale(), width: innerWidth, height: innerHeight };
+      await page.viewport(width, width === 390 ? 844 : 800);
+      setLocale(locale);
+      try {
+        const store = new WorkingOrderStore();
+        store.addProduct({ ...cafe, name: "Staff coffee" }, "1");
+        const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
+        el.shadowRoot!.querySelector<HTMLElement>(".hold")!.click();
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+        await dialog.updateComplete;
+        const field = el.shadowRoot!.querySelector("wt-input")!;
+        await field.updateComplete;
+        const input = field.shadowRoot!.querySelector("input")!;
+        expect(field.required).toBe(false);
+        expect(input.value).toBe("");
+        expect(field.shadowRoot!.activeElement).toBe(input);
+        const label = field.shadowRoot!.querySelector<HTMLElement>(".field-label")!;
+        const style = getComputedStyle(label);
+        const measure = document.createElement("canvas").getContext("2d")!;
+        measure.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        expect(label.clientWidth).toBeGreaterThanOrEqual(
+          measure.measureText(label.textContent!).width,
+        );
+        expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+        const controls = [
+          input,
+          ...[...el.shadowRoot!.querySelectorAll("wt-button")].flatMap((button) => [
+            ...button.shadowRoot!.querySelectorAll("button"),
+          ]),
+        ];
+        for (const control of controls) {
+          const box = control.getBoundingClientRect();
+          expect(box.height).toBeGreaterThanOrEqual(
+            parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min")),
+          );
+          expect(box.left).toBeGreaterThanOrEqual(0);
+          expect(box.right).toBeLessThanOrEqual(width);
+          expect(box.bottom).toBeLessThanOrEqual(innerHeight);
+        }
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        await expectNoA11yViolations(host);
+        await page.screenshot({
+          path: `__screenshots__/a738-park/${locale}-${theme}-${width}.png`,
+        });
+      } finally {
+        setLocale(before.locale);
+        await page.viewport(before.width, before.height);
+      }
+    });
+  });
+});
 
 describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (theme) => {
   it.each(["cash", "card"] as const)(

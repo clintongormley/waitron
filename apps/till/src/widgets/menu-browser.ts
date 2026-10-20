@@ -139,6 +139,16 @@ export class TillMenuBrowser extends LitElement {
         align-content: start;
       }
 
+      [data-region="search"] {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: end;
+      }
+      [data-region="search"] wt-input {
+        flex: 1;
+        min-width: 0;
+      }
+
       section {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
@@ -834,6 +844,7 @@ export class TillMenuBrowser extends LitElement {
           .value=${this.query}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
         ></wt-input>
+        <slot name="filters"></slot>
       </div>
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}
       ${view}

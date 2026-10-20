@@ -40,7 +40,7 @@ const till = {
   cardProvider: "none" as const,
   tipsEnabled: false,
   formFactor: formFactor,
-  capabilities: ["print-receipt"] as CapabilityFlag[],
+  capabilities: ["print-receipt", "take-orders"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
   servers: [],
@@ -257,6 +257,17 @@ async function press(el: TillApp, target: HTMLElement): Promise<void> {
   await flush(el);
 }
 
+async function counterMoveAction(el: TillApp): Promise<HTMLElement | null> {
+  basket(el).openLineDetails(counter(el).store.lines[0]!);
+  await flush(el);
+  return inBasket(el, '[data-move-station="0"]');
+}
+
+async function openCounterMove(el: TillApp): Promise<void> {
+  (await counterMoveAction(el))!.click();
+  await flush(el);
+}
+
 /** Signs in and retrieves the stored order wo-9 into the counter's basket. */
 async function retrieved(overrides: Record<string, unknown> = {}): Promise<TillApp> {
   api = stubApi(overrides);
@@ -352,19 +363,24 @@ const stations = [
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
+function emitMakeAt(el: TillApp, index: number): void {
+  expect(inBasket(el, "[data-make-at]")).toBeNull();
+  emit(basket(el), "open-make-at", index);
+}
+
 describe("till-app: counter station choice", () => {
   it("lets a new basket choose Make at while the held basket's station read still hangs", async () => {
     const oldRead = deferred<typeof stations>();
     const el = await retrieved({ listStations: vi.fn().mockResolvedValue(stations) });
     vi.mocked(api.listStations).mockImplementationOnce(() => oldRead.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     emit(counter(el), "park-order", {});
     await flush(el);
     expect(counter(el).store.lineCount).toBe(0);
     counter(el).store.addProduct(product("new-cana", "New caña", "2.50"), "1");
     await flush(el);
-    inBasket(el, '[data-make-at="0"]')!.click();
+    emitMakeAt(el, 0);
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog");
     expect(chooser?.getAttribute("mode")).toBe("make-at");
@@ -384,7 +400,7 @@ describe("till-app: counter station choice", () => {
       listStations: vi.fn().mockResolvedValue(stations),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     read.resolve(stations);
@@ -403,7 +419,7 @@ describe("till-app: counter station choice", () => {
       getTabLines: vi.fn().mockResolvedValue(lines),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     read.resolve(stations);
@@ -418,7 +434,7 @@ describe("till-app: counter station choice", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["show-schedule"] }),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     emit(counter(el), "show-schedule");
     read.resolve(stations);
@@ -430,7 +446,7 @@ describe("till-app: counter station choice", () => {
     const oldRead = deferred<typeof stations>();
     const el = await retrieved({ listStations: vi.fn().mockResolvedValue(stations) });
     vi.mocked(api.listStations).mockImplementationOnce(() => oldRead.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     emit(counter(el), "logout");
     await flush(el);
@@ -441,7 +457,7 @@ describe("till-app: counter station choice", () => {
       canConfigureTill: false,
     });
     await flush(el);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog");
     expect(chooser?.getAttribute("mode")).toBe("make-at");
@@ -461,7 +477,7 @@ describe("till-app: counter station choice", () => {
       seatTable: vi.fn(() => seating.promise),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     emit(counter(el), "open-table", { tableId: "t-1", seated: false, guestCount: 2 });
     read.resolve(stations);
@@ -500,7 +516,7 @@ describe("till-app: counter station choice", () => {
       getPartyBills: vi.fn().mockResolvedValue([]),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     emit(counter(el), "open-table", { tableId: "t-1", seated: false, guestCount: 2 });
     seating.resolve({ tabId: "table-order", partyId: "party-1", revision: 1 });
@@ -528,7 +544,7 @@ describe("till-app: counter station choice", () => {
     });
     const read = deferred<typeof stations>();
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     counter(el).store.setLineQuantity(1, "2");
     read.resolve(stations);
@@ -545,7 +561,7 @@ describe("till-app: counter station choice", () => {
       getTabLines: vi.fn().mockResolvedValue(lines),
       moveDishStation: vi.fn(),
     });
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
     counter(el).store.setLineQuantity(1, "2");
@@ -570,7 +586,7 @@ describe("till-app: counter station choice", () => {
       retrieveWorkingOrder: vi.fn().mockResolvedValueOnce(heldOrder(4)).mockResolvedValue(after),
       moveDishStation: vi.fn(() => answer.promise),
     });
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
     emit(chooser, "station-chosen", { stationId: "grill" });
@@ -605,7 +621,7 @@ describe("till-app: counter station choice", () => {
         .mockImplementation((id: string) => Promise.resolve(id === "wo-10" ? other : heldOrder(4))),
       moveDishStation: vi.fn(() => answer.promise),
     });
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     const old = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
     emit(old, "station-chosen", { stationId: "grill" });
@@ -614,7 +630,7 @@ describe("till-app: counter station choice", () => {
     emit(counter(el), "retrieve-order", { id: "wo-10" });
     await flush(el);
     expect(counter(el).store.id).toBe("wo-10");
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog");
     expect(chooser?.getAttribute("mode")).toBe("make-at");
@@ -637,7 +653,7 @@ describe("till-app: counter station choice", () => {
       retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder(4)),
       moveDishStation: vi.fn(() => answer.promise),
     });
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
       stationId: "grill",
@@ -665,9 +681,9 @@ describe("till-app: counter station choice", () => {
     });
     const read = deferred<typeof stations>();
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     read.resolve(stations);
     await flush(el);
@@ -689,9 +705,9 @@ describe("till-app: counter station choice", () => {
     });
     const read = deferred<typeof stations>();
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     read.resolve(stations);
     await flush(el);
@@ -708,12 +724,12 @@ describe("till-app: counter station choice", () => {
       getTabLines: vi.fn().mockResolvedValue(lines),
       moveDishStation: vi.fn(),
     });
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     const old = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
     emit(old, "close");
     await flush(el);
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     emit(old, "station-chosen", { stationId: "grill" });
     await flush(el);
@@ -746,7 +762,7 @@ describe("till-app: counter station choice", () => {
       getTabLines: vi.fn().mockResolvedValue(lines),
       moveDishStation: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
     });
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
       stationId: "grill",
@@ -764,7 +780,7 @@ describe("till-app: counter station choice", () => {
       updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
       recordSale: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
-    inBasket(el, '[data-make-at="1"]')!.click();
+    emitMakeAt(el, 1);
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("till-station-choice-dialog")!;
     expect(chooser.getAttribute("mode")).toBe("make-at");
@@ -806,7 +822,7 @@ describe("till-app: counter station choice", () => {
       moveDishStation: vi.fn().mockResolvedValue({ revision: 6 }),
       updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 7 }),
     });
-    inBasket(el, '[data-move-station="0"]')!.click();
+    await openCounterMove(el);
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
       stationId: "grill",
@@ -820,7 +836,9 @@ describe("till-app: counter station choice", () => {
     ]);
     expect(counter(el).store.lines).toHaveLength(3);
     expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
-    expect(inBasket(el, '[data-move-station="0"]')).not.toBeNull();
+    expect(await counterMoveAction(el)).not.toBeNull();
+    emit(inBasket(el, "till-modifier-picker")!, "wt-modifier-cancel");
+    await flush(el);
     inBasket(el, ".line .step-inc")!.click();
     await flush(el);
     emit(counter(el), "park-order", {});
@@ -1698,7 +1716,7 @@ it("station-choice Keep and Discard leave the counter basket and server writes a
   const store = counter(el).store;
   const before = store.lines.map((line) => ({ ...line }));
   const movesBefore = moveDishStation.mock.calls.length;
-  inBasket(el, '[data-make-at="1"]')!.click();
+  emitMakeAt(el, 1);
   await flush(el);
   const form = el.shadowRoot!.querySelector<HTMLElement>("till-station-choice-dialog")!;
   const field =

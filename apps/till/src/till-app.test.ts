@@ -118,6 +118,7 @@ const jamon: TillProduct = {
 };
 
 const heldSummary: HeldOrderSummary = {
+  items: [],
   id: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
@@ -225,6 +226,7 @@ const saleResult: TillSaleResult = {
 };
 
 const till = {
+  onboardingIntent: "prepare" as const,
   locale: "es-ES",
   invoiceLocale: "es-ES",
   venueName: "Bar Pepe",
@@ -610,6 +612,26 @@ function emit(source: Element, type: string, detail?: unknown): void {
   )
     detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+}
+
+async function showCounterList(el: TillApp, kind: "parked" | "waiting") {
+  emit(shell(el)!, "show-counter-orders", { kind });
+  await flush(el);
+}
+
+async function openMore(el: TillApp) {
+  const menu = shell(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    'wt-row-actions[data-test="more-menu"]',
+  )!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await menu.updateComplete;
+}
+
+async function openEquipmentFromSettings(el: TillApp) {
+  await openMore(el);
+  await userEvent.click(shell(el)!.shadowRoot!.querySelector<HTMLElement>(".settings")!);
+  await flush(el);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-settings-equipment]")!);
 }
 
 /** A fake {@link SessionActivity} the app can be mounted with, so a till-app test asserts how the app
@@ -2202,6 +2224,7 @@ describe("till-app", () => {
         expect(currentApi.listWorkingOrders).toHaveBeenCalled();
         expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
         expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+        if (type === "held-orders") await showCounterList(el, "parked");
         const grid = activeTabGrid(el)!.shadowRoot!;
         if (type === "prep-queue") {
           expect(counter(el)!.stationQueue).toEqual([stationGroup]);
@@ -13834,12 +13857,12 @@ describe("till-app", () => {
     });
 
     it("applies a late browser match after logout when it was unavailable during login", async () => {
-      let answerLocales!: (value: Awaited<ReturnType<TillApi["getLocales"]>>) => void;
+      const answers: Array<(value: Awaited<ReturnType<TillApi["getLocales"]>>) => void> = [];
       const { el } = await mountApp({
         getLocales: vi.fn(
           () =>
             new Promise<Awaited<ReturnType<TillApi["getLocales"]>>>((r) => {
-              answerLocales = r;
+              answers.push(r);
             }),
         ),
       });
@@ -13847,7 +13870,9 @@ describe("till-app", () => {
       emit(c, "logout");
       await flush(el);
       expect(currentLocale()).toBe("es-ES");
-      answerLocales({ locales: [], venueDefault: "es-ES", loginDefault: "en-GB" });
+      expect(answers.length).toBeGreaterThan(0);
+      for (const answer of answers)
+        answer({ locales: [], venueDefault: "es-ES", loginDefault: "en-GB" });
       await flush(el);
       expect(currentLocale()).toBe("en-GB");
     });
@@ -13975,7 +14000,8 @@ describe("till-app", () => {
 
     /** Opens a chooser by its trigger and picks `code` from the list, as a person does. */
     async function pickLanguage(chooser: Element, code: string): Promise<void> {
-      chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+      if (chooser.getAttribute("layout") !== "group")
+        chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
       await vi.waitFor(() => {
         expect(chooser.shadowRoot!.querySelector(`[data-test="lang-${code}"]`)).not.toBeNull();
       });
@@ -13987,6 +14013,7 @@ describe("till-app", () => {
       const { el } = await mountApp({ putLocale });
       await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
+      await openMore(el);
       await pickLanguage(shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!, "en-GB");
       await flush(el);
       expect(putLocale).toHaveBeenCalledWith("en-GB");
@@ -14503,7 +14530,7 @@ describe("till-app", () => {
   });
 });
 
-it("keeps the shell's language chooser in its bar, above the counter as it scrolls", async () => {
+it("keeps More reachable above the scrolling counter and its language group inside", async () => {
   const width = window.innerWidth;
   const height = window.innerHeight;
   await page.viewport(390, 900);
@@ -14512,8 +14539,8 @@ it("keeps the shell's language chooser in its bar, above the counter as it scrol
     await toCounter(el);
     selectTab(el, "counter");
     await flush(el);
-    const chooser = shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!;
-    const trigger = chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+    const menu = shell(el)!.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+    const trigger = menu.shadowRoot!.querySelector<HTMLElement>("button")!;
     const head = shell(el)!.shadowRoot!.querySelector<HTMLElement>("header")!;
     const body = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".body")!;
     body.scrollTop = body.scrollHeight;
@@ -14524,6 +14551,10 @@ it("keeps the shell's language chooser in its bar, above the counter as it scrol
     expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       body.getBoundingClientRect().top,
     );
+    await openMore(el);
+    const language = shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!;
+    expect(language.getAttribute("layout")).toBe("group");
+    expect(language.shadowRoot!.querySelectorAll("button")).toHaveLength(2);
     const hold = tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".hold")!;
     expect(hold.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       body.getBoundingClientRect().bottom,
@@ -14599,10 +14630,17 @@ describe("remembered dietary filters", () => {
   const listProducts = () =>
     vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [salad, mixed] });
   const filter = (screen: HTMLElement) => screen.shadowRoot!.querySelector("till-diet-filter")!;
-  const pick = (screen: HTMLElement, predicate: string) =>
-    filter(screen)
+  const pick = async (screen: HTMLElement, predicate: string) => {
+    const widget = filter(screen) as HTMLElement & { updateComplete: Promise<unknown> };
+    widget.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!.click();
+    await widget.updateComplete;
+    widget
       .shadowRoot!.querySelector<HTMLElement>(`[data-test="diet-filter-${predicate}"]`)!
       .click();
+    await widget.updateComplete;
+    widget.shadowRoot!.querySelector<HTMLElement>("wt-dialog [slot=footer]:last-child")!.click();
+    await widget.updateComplete;
+  };
   const pressed = (screen: HTMLElement, predicate: string) =>
     filter(screen)
       .shadowRoot!.querySelector(`[data-test="diet-filter-${predicate}"]`)!
@@ -14622,7 +14660,7 @@ describe("remembered dietary filters", () => {
       c.store.addProduct(mixed, "1");
       const push = vi.spyOn(history, "pushState");
       const path = location.href;
-      pick(c, predicate);
+      await pick(c, predicate);
       await flush(el);
       expect(names(el)).toEqual(["Ensalada"]);
       expect(push).not.toHaveBeenCalled();
@@ -14634,7 +14672,9 @@ describe("remembered dietary filters", () => {
       expect(pressed(counter(el)!, predicate)).toBe("true");
       expect(names(el)).toEqual(["Ensalada"]);
       expect(counter(el)!.store.lines[0]!.product.id).toBe("mixed");
-      expect(sessionStorage.getItem("waitron.dietFilter")).toBe(predicate);
+      expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
+        JSON.stringify({ diets: [predicate], exclude: {} }),
+      );
       emit(counter(el)!, "logout");
       await flush(el);
       await toCounter(el);
@@ -14651,14 +14691,14 @@ describe("remembered dietary filters", () => {
       listZones: vi.fn().mockResolvedValue([floorZone]),
     });
     const c = await toCounter(el);
-    pick(c, "vegetarian");
+    await pick(c, "vegetarian");
     await flush(el);
     selectTab(el, "floor");
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false });
     await flush(el);
     expect(pressed(tableOrder(el)!, "vegetarian")).toBe("true");
-    pick(tableOrder(el)!, "vegetarian");
+    await pick(tableOrder(el)!, "vegetarian");
     await flush(el);
     selectTab(el, "counter");
     await flush(el);
@@ -14677,14 +14717,14 @@ describe("remembered dietary filters", () => {
     try {
       const { el } = await mountApp({ listProducts: listProducts() });
       const c = await toCounter(el);
-      pick(c, "vegan");
+      await pick(c, "vegan");
       await flush(el);
       selectTab(el, "floor");
       await flush(el);
       selectTab(el, "counter");
       await flush(el);
       expect(names(el)).toEqual(["Ensalada"]);
-      pick(counter(el)!, "vegan");
+      await pick(counter(el)!, "vegan");
       await flush(el);
       expect(names(el)).toEqual(["Ensalada", "Mixto"]);
     } finally {
@@ -14707,19 +14747,112 @@ describe("remembered dietary filters", () => {
     el.remove();
     const { el: live } = await mountApp({ listProducts: listProducts() });
     const c = await toCounter(live);
-    pick(c, "vegetarian");
+    await pick(c, "vegetarian");
     await flush(live);
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe("vegetarian");
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
+      JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
+    );
     resolve({ menus: [defaultMenu], products: [salad, mixed] });
     await flush(el);
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe("vegetarian");
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
+      JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
+    );
     expect(names(live)).toEqual(["Ensalada"]);
+  });
+
+  it("A738 shares filters across Counter and table Order without changing the basket or history", async () => {
+    const almond = { ...salad, allergens: { nuts: { kinds: ["almonds"] } } };
+    const walnut = {
+      ...salad,
+      id: "walnut",
+      menuItemId: "menu-item-walnut",
+      name: "Walnut salad",
+      allergens: { nuts: { kinds: ["walnuts"] } },
+    };
+    const { el } = await mountApp({
+      listProducts: vi
+        .fn()
+        .mockResolvedValue({ menus: [defaultMenu], products: [almond, walnut, mixed] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Next",
+        revision: 3,
+        lines: [{ menuItemId: mixed.menuItemId, productId: mixed.id, quantity: "1.000" }],
+      }),
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(mixed, "1");
+    const before = c.store.lines.map((line) => ({
+      name: line.product.name,
+      quantity: line.quantity,
+    }));
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    await pick(c, "vegan");
+    await pick(c, "no-fish");
+    const widget = filter(c);
+    widget.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]")!.click();
+    await widget.updateComplete;
+    await userEvent.click(widget.shadowRoot!.querySelector<HTMLElement>('[data-allergen="nuts"]')!);
+    await userEvent.click(
+      widget.shadowRoot!.querySelector<HTMLElement>('[data-test="kind-walnuts"]')!,
+    );
+    await flush(el);
+    expect(names(el)).toEqual(["Ensalada"]);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(
+      c.store.lines.map((line) => ({ name: line.product.name, quantity: line.quantity })),
+    ).toEqual(before);
+    widget.shadowRoot!.querySelector<HTMLElement>("wt-dialog [slot=footer]:last-child")!.click();
+    await flush(el);
+    const chosen = { diets: ["vegan", "no-fish"], exclude: { nuts: ["walnuts"] } };
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(JSON.stringify(chosen));
+    selectTab(el, "floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false });
+    await flush(el);
+    expect(filter(tableOrder(el)!).selected).toEqual(chosen);
+    selectTab(el, "counter");
+    await flush(el);
+    expect(filter(counter(el)!).selected).toEqual(chosen);
+    expect(names(el)).toEqual(["Ensalada"]);
+    const oldOrder = counter(el)!.store.id;
+    emit(counter(el)!, "park-order", { label: "Next" });
+    await flush(el);
+    expect(counter(el)!.store.id).not.toBe(oldOrder);
+    expect(counter(el)!.store.lineCount).toBe(0);
+    expect(filter(counter(el)!).selected).toEqual(chosen);
+    emit(counter(el)!, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(
+      counter(el)!.store.lines.map((line) => ({
+        product: line.product.id,
+        quantity: line.quantity,
+      })),
+    ).toEqual([{ product: "mixed", quantity: "1" }]);
+    expect(filter(counter(el)!).selected).toEqual(chosen);
+    emit(counter(el)!, "logout");
+    await flush(el);
+    await toCounter(el);
+    expect(filter(counter(el)!).selected).toEqual({ diets: [], exclude: {} });
+    expect(names(el)).toEqual(["Ensalada", "Walnut salad", "Mixto"]);
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
   });
 
   it("keeps a filter through payment, new orders and parked orders", async () => {
     const { el } = await mountApp({ listProducts: listProducts() });
     const c = await toCounter(el);
-    pick(c, "vegan");
+    await pick(c, "vegan");
     c.store.addProduct(salad, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -16459,6 +16592,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       ...overrides,
     });
     const c = await toCounter(mounted.el);
+    await showCounterList(mounted.el, "parked");
     return { ...mounted, c };
   }
 
@@ -16864,6 +16998,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await toCounter(el);
     late([{ ...floorZone, serviceMode: "prepay" }]);
     await flush(el);
+    await showCounterList(el, "parked");
     const held = heldList(el);
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
     await flush(el);
@@ -17238,6 +17373,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
 
 describe("the counter's waiting orders (sent and not paid, or paid and not handed over)", () => {
   const sentOrder: CounterWaitingOrder = {
+    items: [],
     id: "wo-sent",
     orderNumber: 12,
     label: null,
@@ -17280,6 +17416,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   async function counterWaiting(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp(overrides);
     const c = await toCounter(mounted.el);
+    await showCounterList(mounted.el, "waiting");
     return { ...mounted, c };
   }
 
@@ -18100,8 +18237,6 @@ describe("the device's equipment, chosen from the header", () => {
     el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog");
   const chosenIn = (el: TillApp, role: "receipt" | "payment_slip") =>
     equipmentDialog(el)!.equipment!.roles.find((each) => each.role === role)!.chosenId;
-  const openButton = (el: TillApp) =>
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".equipment")!;
 
   async function openEquipment(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
@@ -18110,7 +18245,7 @@ describe("the device's equipment, chosen from the header", () => {
     });
     await toCounter(el);
     expect(equipmentDialog(el)).toBeNull();
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     return el;
   }
@@ -18511,7 +18646,7 @@ describe("the device's equipment, chosen from the header", () => {
   async function reopen(el: TillApp): Promise<void> {
     emit(equipmentDialog(el)!, "close");
     await flush(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
   }
 
@@ -18821,7 +18956,7 @@ describe("the device's equipment, chosen from the header", () => {
       .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     const { el } = await mountApp({ getDeviceEquipment });
     await toCounter(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
 
@@ -18987,8 +19122,6 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
   });
   const equipmentDialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog");
-  const openButton = (el: TillApp) =>
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".equipment")!;
   const toast = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
       "wt-toast[data-equipment-toast]",
@@ -19022,7 +19155,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
       setDeviceEquipment,
     });
     await toCounter(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     const dialog = equipmentDialog(el)!;
 
@@ -19282,7 +19415,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     expect(readerName(el)).toBe(R1.name);
 
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     emit(equipmentDialog(el)!, "equipment-change", {
       role: "card_terminal",
@@ -19360,7 +19493,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
       setDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R2)),
     });
     await toCounter(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     emit(equipmentDialog(el)!, "equipment-change", {
       role: "card_terminal",
@@ -19481,7 +19614,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
     await flush(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
 
     expect(setDeviceEquipment).not.toHaveBeenCalled();
@@ -19523,7 +19656,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(tenderPay(el).activeReaders).toEqual([]);
 
     getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
 
     const shown = equipmentDialog(el)!.equipment!;
@@ -20827,6 +20960,7 @@ describe("W69 held move basket protection", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await expect.poll(() => c.store.id).toBe("wo-1");
+    await showCounterList(el, "parked");
     return { el, c };
   }
   function move(c: TillCounterScreen, orderId = "wo-1") {
@@ -21345,6 +21479,7 @@ describe("basket native replacement warning", () => {
               theme,
             );
             const c = await toCounter(el);
+            await showCounterList(el, "parked");
             c.store.addProduct(jamon, "1");
             c.store.label = "Lunch";
             const id = c.store.id;
@@ -23064,6 +23199,7 @@ describe("A767 card outcome belongs to its order", () => {
 
 describe("A767 sign-in and held-order recovery", () => {
   const heldRow = (id: string): HeldOrderSummary => ({
+    items: [],
     id,
     orderNumber: id === "wo-1" ? 41 : 42,
     label: null,
@@ -23126,6 +23262,7 @@ describe("A767 sign-in and held-order recovery", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
+    await showCounterList(el, "parked");
     const held = () =>
       c.shadowRoot!.querySelector<HTMLElement & { orders: HeldOrderSummary[] }>("till-held-orders");
     expect(held()!.orders.map((order) => order.id)).toEqual(["wo-2"]);

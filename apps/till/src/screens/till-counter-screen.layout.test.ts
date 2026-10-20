@@ -293,7 +293,7 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
         await expect
           .element(
             page.getByRole("button", {
-              name: locale === "es-ES" ? "Vegano" : "Vegan",
+              name: locale === "es-ES" ? "Filtros" : "Filter",
               exact: true,
             }),
           )
@@ -325,7 +325,9 @@ it("keeps a usable basket and payment controls when many orders are held", async
   const grid = await mountCounter(1280, 800);
   const counter = grid as TillCounterScreen;
   counter.embedded = true;
+  counter.orderList = "parked";
   counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
+    items: [],
     id: `held-${i}`,
     orderNumber: i + 1,
     label: `Order ${i + 1}`,

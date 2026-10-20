@@ -18,6 +18,7 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   MenuState,
+  DeviceEquipment,
   MenuUnavailable,
   TillApi,
   TillMenuOffer,
@@ -2198,9 +2199,12 @@ describe("keep-open changes refresh the order screen", () => {
     await poll(el);
     await expect
       .poll(() =>
-        counter(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+        counter(el)
+          .shadowRoot!.querySelector("[data-service-period]")
+          ?.shadowRoot?.querySelector("[data-action]")
+          ?.textContent?.trim(),
       )
-      .toBe("Lunch · kept open until 14:30");
+      .toBe("Open · kept open until 14:30");
     expect(
       counter(el).store.lines.map((line) => [
         line.product.productId,
@@ -2221,9 +2225,12 @@ describe("keep-open changes refresh the order screen", () => {
     emit(widget!, "keep-open-changed", { zoneId: "zone-counter" });
     await expect
       .poll(() =>
-        counter(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+        counter(el)
+          .shadowRoot!.querySelector("[data-service-period]")
+          ?.shadowRoot?.querySelector("[data-action]")
+          ?.textContent?.trim(),
       )
-      .toBe("Lunch · kept open until 14:30");
+      .toBe("Open · kept open until 14:30");
     expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-counter"]);
   });
   it("redraws the embedded Order screen after a poll changes only the extension", async () => {
@@ -2244,9 +2251,12 @@ describe("keep-open changes refresh the order screen", () => {
     await poll(el);
     await expect
       .poll(() =>
-        tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+        tableScreen(el)
+          .shadowRoot!.querySelector("[data-service-period]")
+          ?.shadowRoot?.querySelector("[data-action]")
+          ?.textContent?.trim(),
       )
-      .toBe("Lunch · kept open until 14:30");
+      .toBe("Open · kept open until 14:30");
     expect(dialog(el)).toBeNull();
   });
   it("passes the API and dining zone through the embedded Order mount and refreshes it after a change", async () => {
@@ -2271,9 +2281,12 @@ describe("keep-open changes refresh the order screen", () => {
     emit(widget!, "keep-open-changed", { zoneId: "zone-dining" });
     await expect
       .poll(() =>
-        tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+        tableScreen(el)
+          .shadowRoot!.querySelector("[data-service-period]")
+          ?.shadowRoot?.querySelector("[data-action]")
+          ?.textContent?.trim(),
       )
-      .toBe("Lunch · kept open until 14:30");
+      .toBe("Open · kept open until 14:30");
     expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
   });
 });
@@ -2345,8 +2358,13 @@ it("passes keep-open recovery through a standalone table drill", async () => {
   expect(widget.zoneId).toBe("zone-dining");
   emit(widget, "keep-open-changed", { zoneId: "zone-dining" });
   await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim())
-    .toBe("Lunch · kept open until 14:30");
+    .poll(() =>
+      screen
+        .shadowRoot!.querySelector("[data-service-period]")
+        ?.shadowRoot?.querySelector("[data-action]")
+        ?.textContent?.trim(),
+    )
+    .toBe("Open · kept open until 14:30");
   expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
 });
 
@@ -2547,5 +2565,53 @@ it.each(["counter", "table"] as const)(
     expect(
       shown().shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
     ).toBe("");
+  },
+);
+
+it.each(["counter", "table"] as const)(
+  "A738 %s receipt status follows the existing equipment poll",
+  async (kind) => {
+    let available = false;
+    const read = vi.fn(async (): Promise<DeviceEquipment> => ({
+      roles: (["receipt", "payment_slip", "cash_drawer", "invoice", "card_terminal"] as const).map(
+        (role) => ({
+          role,
+          selection: "default",
+          chosenId: null,
+          chosen: null,
+          default: null,
+          choices: [],
+          resolved:
+            role === "receipt" ? { id: "front-printer", name: "Front printer", available } : null,
+        }),
+      ),
+    }));
+    const service: ZoneOfferCatalogue["service"] = {
+      open: true,
+      zoneOpen: true,
+      periodName: "Lunch",
+      periodOccurrenceKey: "lunch",
+      keepOpen: null,
+      zoneKeepOpen: null,
+    };
+    const overrides = {
+      getDeviceEquipment: read,
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service }),
+      listZoneOffers: vi.fn((zone: string) =>
+        Promise.resolve({ ...(zone === "zone-dining" ? DINING : V1), service }),
+      ),
+    };
+    const { el } = await mountApp(kind === "counter" ? overrides : tableStubs(DINING, overrides));
+    if (kind === "counter") await toCounter(el);
+    else await toTable(el);
+    const screen = () => (kind === "counter" ? counter(el) : tableScreen(el));
+    const status = () =>
+      screen().shadowRoot!.querySelector("[data-receipt-status]")?.textContent?.trim();
+    await expect.poll(status).toBe("Receipt printer unavailable: Front printer");
+    const before = read.mock.calls.length;
+    available = true;
+    await poll(el);
+    await expect.poll(status).toBe("Receipt printer available: Front printer");
+    expect(read.mock.calls.length).toBe(before + 1);
   },
 );

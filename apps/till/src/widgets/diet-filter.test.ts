@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { ALLERGEN_CODES } from "@waitron/catalogue/src/allergens.js";
+import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { dialogOpenUnder } from "./track-dialog.js";
 import { TillDietFilter } from "./diet-filter.js";
 
-function options(el: TillDietFilter): HTMLElement[] {
-  return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="diet-filter-"]')];
+async function open(el: TillDietFilter) {
+  const trigger = el.shadowRoot!.querySelector<HTMLElement>("[data-filter-open]");
+  expect(trigger).not.toBeNull();
+  await userEvent.click(trigger!);
+  await el.updateComplete;
 }
-
+function option(el: TillDietFilter, name: string) {
+  return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${name}"]`)!;
+}
 afterEach(cleanupWidgets);
 
 describe("till-diet-filter", () => {
@@ -14,10 +23,14 @@ describe("till-diet-filter", () => {
     expect(customElements.get("till-diet-filter")).toBe(TillDietFilter);
   });
 
-  it("renders the four dietary lenses, labelled and in order, marking the selected one", async () => {
-    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", { selected: "vegan" });
-    const opts = options(el);
-    expect(opts.map((o) => o.getAttribute("data-test"))).toEqual([
+  it("A738 Filter opens the two groups and four ordered diet choices, marking every selected diet", async () => {
+    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", {
+      selected: { diets: ["vegan", "no-fish"], exclude: {} },
+    });
+    await open(el);
+    expect(dialogOpenUnder(el)).toBe(true);
+    const opts = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="diet-filter-"]')];
+    expect(opts.map((o) => o.dataset.test)).toEqual([
       "diet-filter-vegan",
       "diet-filter-vegetarian",
       "diet-filter-no-meat",
@@ -29,45 +42,84 @@ describe("till-diet-filter", () => {
       t("diet.filter.no_meat"),
       t("diet.filter.no_fish"),
     ]);
+    expect(opts.map((o) => o.getAttribute("aria-pressed"))).toEqual([
+      "true",
+      "false",
+      "false",
+      "true",
+    ]);
+    expect(el.shadowRoot!.textContent).toContain("Only show dishes that are");
+    expect(el.shadowRoot!.textContent).toContain("Hide dishes that contain");
     expect(
-      el.shadowRoot!.querySelector('[data-test="diet-filter-vegan"]')!.getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(
-      el
-        .shadowRoot!.querySelector('[data-test="diet-filter-vegetarian"]')!
-        .getAttribute("aria-pressed"),
-    ).toBe("false");
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-allergen]")].map(
+        (o) => o.dataset.allergen,
+      ),
+    ).toEqual([...ALLERGEN_CODES]);
   });
 
-  it("emits a composed, bubbling diet-filter-selected with the clicked predicate — holds no state itself", async () => {
-    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", { selected: null });
-    let captured: CustomEvent<{ predicate: string | null }> | undefined;
-    el.addEventListener("diet-filter-selected", (e) => {
-      captured = e as CustomEvent<{ predicate: string | null }>;
+  it("A738 emits a bubbling composed immutable selection, keeping the parent in control", async () => {
+    const selected: MenuFilters = { diets: ["vegan"], exclude: { milk: "all" } };
+    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", { selected });
+    let captured: CustomEvent<{ filters: MenuFilters }> | undefined;
+    el.addEventListener("menu-filters-selected", (e) => {
+      captured = e as CustomEvent<{ filters: MenuFilters }>;
     });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-no-meat"]')!.click();
+    await open(el);
+    await userEvent.click(option(el, "diet-filter-no-meat"));
     await el.updateComplete;
-
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail).toEqual({ predicate: "no-meat" });
-    // Presentational: the widget does NOT move its own selection — the parent owns `selected`.
-    expect(
-      el
-        .shadowRoot!.querySelector('[data-test="diet-filter-no-meat"]')!
-        .getAttribute("aria-pressed"),
-    ).toBe("false");
+    expect(captured!.detail).toEqual({
+      filters: { diets: ["vegan", "no-meat"], exclude: { milk: "all" } },
+    });
+    expect(selected).toEqual({ diets: ["vegan"], exclude: { milk: "all" } });
+    expect(option(el, "diet-filter-no-meat").getAttribute("aria-pressed")).toBe("false");
+    await userEvent.click(option(el, "diet-filter-vegan"));
+    expect(captured!.detail).toEqual({ filters: { diets: [], exclude: { milk: "all" } } });
   });
 
-  it("toggles OFF (predicate: null) when the active lens is tapped again", async () => {
-    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", { selected: "vegan" });
-    let captured: CustomEvent<{ predicate: string | null }> | undefined;
-    el.addEventListener("diet-filter-selected", (e) => {
-      captured = e as CustomEvent<{ predicate: string | null }>;
+  it("A738 selects kinds or All, counts allergen groups once, and clears every filter", async () => {
+    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", {
+      selected: EMPTY_MENU_FILTERS,
     });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
-    await el.updateComplete;
-    expect(captured!.detail).toEqual({ predicate: null });
+    const choices: MenuFilters[] = [];
+    el.addEventListener("menu-filters-selected", (e) => {
+      el.selected = (e as CustomEvent<{ filters: MenuFilters }>).detail.filters;
+      choices.push(el.selected);
+    });
+    await open(el);
+    await userEvent.click(option(el, "diet-filter-vegan"));
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-allergen="nuts"]')!);
+    expect(el.shadowRoot!.querySelector("[data-kind-step]")).not.toBeNull();
+    await userEvent.click(option(el, "kind-walnuts"));
+    await userEvent.click(option(el, "kind-almonds"));
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: { nuts: ["walnuts", "almonds"] } });
+    expect(el.shadowRoot!.querySelector("[data-filter-count]")?.textContent?.trim()).toBe("2");
+    await userEvent.click(option(el, "kind-all"));
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: { nuts: "all" } });
+    await userEvent.click(option(el, "kind-all"));
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: {} });
+    await userEvent.click(option(el, "kind-all"));
+    await userEvent.click(option(el, "kind-walnuts"));
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: { nuts: ["walnuts"] } });
+    await userEvent.click(option(el, "kind-all"));
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-filter-back]")!);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-allergen="gluten"]')!);
+    await userEvent.click(option(el, "kind-wheat"));
+    expect(choices.at(-1)).toEqual({
+      diets: ["vegan"],
+      exclude: { nuts: "all", gluten: ["wheat"] },
+    });
+    await userEvent.click(option(el, "kind-wheat"));
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: { nuts: "all" } });
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-filter-back]")!);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-allergen="milk"]')!);
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: { nuts: "all", milk: "all" } });
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-allergen="milk"]')!);
+    expect(choices.at(-1)).toEqual({ diets: ["vegan"], exclude: { nuts: "all" } });
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-filter-clear]")!);
+    expect(choices.at(-1)).toEqual({ diets: [], exclude: {} });
+    expect(el.shadowRoot!.querySelector("[data-filter-count]")).toBeNull();
   });
 });

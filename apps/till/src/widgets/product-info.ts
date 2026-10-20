@@ -6,6 +6,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { trackDialog } from "./track-dialog.js";
+import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
 import { dietLabel, nutritionDietLabels } from "./nutrition-icons.js";
@@ -55,6 +56,7 @@ export class TillProductInfo extends LitElement {
   override render() {
     const product = this.product;
     const allergens = product.allergens;
+    const description = descriptionFor(product.description ?? {}, "").trim();
     const labels = nutritionDietLabels(product.diet, product.dietaryDeclarations);
     return html`<wt-dialog
       ${trackDialog()}
@@ -65,6 +67,7 @@ export class TillProductInfo extends LitElement {
         this.#emit("close-info");
       }}
     >
+      ${description ? html`<p data-description>${description}</p>` : nothing}
       <h3>${t("allergens.contains")}</h3>
       ${
         allergens === null

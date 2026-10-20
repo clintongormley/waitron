@@ -1,3 +1,4 @@
+import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
@@ -4630,6 +4631,7 @@ async function splitTicketItem(
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
+  items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
   /**
@@ -4759,10 +4761,12 @@ export async function listHeldOrders(
     const { received, holding } = await readPaymentsByBill(tx, ids);
     const signals = await readBillSignals(tx, ids, Date.now());
     const former = await readFormerNumbers(tx, ids);
+    const items = await readOrderPreviewItems(tx, ids);
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       return {
         ...row,
+        items: items.get(row.id)!,
         total,
         outstanding: outstandingOf(total, received.get(row.id)),
         hasPayments: holding.has(row.id),
@@ -6803,6 +6807,7 @@ export function paysAfterSending(mode: string | undefined): boolean {
 
 /** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
 export interface CounterWaitingOrder {
+  items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
   label: string | null;
@@ -6905,6 +6910,10 @@ export async function listCounterWaiting(
       tx,
       rows.map((row) => row.id),
     );
+    const items = await readOrderPreviewItems(
+      tx,
+      rows.map((row) => row.id),
+    );
     const movable = new Map<string, { lineId: string; stationId: string }[]>();
     for (const dish of dishes) {
       if (!stillMovable(dish, dish)) continue;
@@ -6922,6 +6931,7 @@ export async function listCounterWaiting(
         row.collectedAt === null &&
         (!placed || paysAfterSending(modes.get(row.id)));
       waiting.push({
+        items: items.get(row.id)!,
         id: row.id,
         orderNumber: row.orderNumber,
         label: row.label,

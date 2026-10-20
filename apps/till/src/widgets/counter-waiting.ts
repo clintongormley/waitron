@@ -1,5 +1,6 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { orderPreview, orderPreviewStyles } from "./order-preview.js";
+import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
@@ -29,6 +30,7 @@ export function waitingScope(order: CounterWaitingOrder): string {
 export class TillCounterWaiting extends LitElement {
   static override styles = [
     baseStyles,
+    orderPreviewStyles,
     orderNumberStyles,
     css`
       :host {
@@ -86,6 +88,28 @@ export class TillCounterWaiting extends LitElement {
 
   @property({ type: Boolean }) canEditKitchenNote = false;
 
+  @state() private expanded = new Set<string>();
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("orders")) {
+      const ids = new Set(this.orders.map((order) => order.id));
+      this.expanded = new Set([...this.expanded].filter((id) => ids.has(id)));
+    }
+  }
+
+  #togglePreview(event: Event, id: string): void {
+    if (
+      event
+        .composedPath()
+        .some((target) => target instanceof Element && target.classList.contains("controls"))
+    )
+      return;
+    const next = new Set(this.expanded);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.expanded = next;
+  }
+
   #emit(type: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -99,13 +123,22 @@ export class TillCounterWaiting extends LitElement {
     const scope = waitingScope(order);
     const pay = order.status === "placed";
     return html`
-      <div class="order" data-waiting-order=${order.id}>
-        <div class="summary">
+      <div
+        class="order"
+        data-waiting-order=${order.id}
+        @click=${(event: Event) => this.#togglePreview(event, order.id)}
+      >
+        <button
+          type="button"
+          class="summary"
+          aria-expanded=${String(this.expanded.has(order.id))}
+          aria-controls=${`preview-${order.id}`}
+        >
           <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
           ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
           <span class="state" data-waiting-state>${t(this.#state(order))}</span>
           <span class="meta">${formatMoney(order.total, currentLocale())}</span>
-        </div>
+        </button>
         <div class="controls">
           ${
             this.canEditKitchenNote && order.collectedAt === null
@@ -166,6 +199,13 @@ export class TillCounterWaiting extends LitElement {
                 >`
               : nothing
           }
+        </div>
+        <div
+          class="order-preview"
+          id=${`preview-${order.id}`}
+          ?hidden=${!this.expanded.has(order.id)}
+        >
+          ${this.expanded.has(order.id) ? orderPreview(order.items) : nothing}
         </div>
       </div>
     `;

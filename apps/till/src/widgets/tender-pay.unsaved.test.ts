@@ -107,6 +107,31 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+it("A738 Escape keeps the Park name and focus until Discard closes its own opening", async () => {
+  const { app, form } = await mount();
+  await click(form, ".hold");
+  const input = await fill(form, ".label-input", "  Guest 07  ");
+  const dialog = form.shadowRoot!.querySelector("wt-dialog")!;
+  await dialog.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+  await choose(app, "keep");
+  expect(input.value).toBe("  Guest 07  ");
+  expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);
+  expect(unload()).toBe(true);
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  await choose(app, "discard");
+  await closed;
+  await form.updateComplete;
+  expect(form.shadowRoot!.activeElement).toBe(form.shadowRoot!.querySelector(".hold"));
+  expect(app.parks).toEqual([]);
+  expect(unload()).toBe(false);
+});
 for (const kind of ["cash", "weight", "label", "reference"] as const) {
   it(`${kind} Cancel keeps the raw entry until local Discard without a command`, async () => {
     const { app, form } = await mount();

@@ -19,7 +19,9 @@ import {
 } from "./till-table-order-screen.test-helpers.js";
 
 const bar = (el: TillTableOrderScreen) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-last-added]");
+  el
+    .shadowRoot!.querySelector("till-last-added")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-last-added]") ?? null;
 const barText = (el: TillTableOrderScreen) => bar(el)!.textContent!.replace(/\s+/g, " ").trim();
 
 async function step(el: TillTableOrderScreen, by: "-1" | "1"): Promise<void> {
@@ -292,7 +294,9 @@ describe("till-table-order-screen: a note being written while other lines move",
     expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
 
     for (let press = 0; press < 2; press++) {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="-1"]')!.click();
+      el.shadowRoot!.querySelector("till-last-added")!
+        .shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="-1"]')!
+        .click();
       await settle(el);
     }
 

@@ -9,7 +9,10 @@ import { holdDraftLine } from "./test/hold-draft-line.js";
 type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
-  emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  emulateMedia(options: {
+    colorScheme?: ColorScheme;
+    reducedMotion?: "reduce" | "no-preference";
+  }): Promise<void>;
 }
 
 /**
@@ -51,6 +54,10 @@ export default defineConfig({
         probeTillReload,
         holdDraftLine,
         emulateColorScheme,
+        emulateReducedMotion: async (context, reduced: boolean) => {
+          const { page } = context as unknown as { page: PlaywrightPage };
+          await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+        },
         ...parkPointerCommands,
         ...pointerGestureCommands,
       },

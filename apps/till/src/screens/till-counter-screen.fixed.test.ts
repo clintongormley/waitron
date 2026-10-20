@@ -26,6 +26,7 @@ const dish: TillProduct = {
 };
 
 const waiting: CounterWaitingOrder = {
+  items: [],
   id: "waiting-11",
   orderNumber: 11,
   label: "Ana",
@@ -65,7 +66,7 @@ it("renders menu, basket, total and payment without an authored layout", async (
 });
 
 it("shows a waiting order when no order is held, and removes the lists when both are empty", async () => {
-  const { el } = await mount({ counterWaiting: [waiting] });
+  const { el } = await mount({ counterWaiting: [waiting], orderList: "waiting" });
   const list = el.shadowRoot!.querySelector("till-counter-waiting");
   expect(list).not.toBeNull();
   await list!.updateComplete;

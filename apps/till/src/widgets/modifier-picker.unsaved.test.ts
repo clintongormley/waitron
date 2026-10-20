@@ -133,6 +133,8 @@ class ModifierLeaveApp extends LitElement {
   product = product;
   initialSelections?: LineSelection;
   withNote = false;
+  lineDetails = false;
+  quantity = "1";
   initialCourse?: string;
   courseChoices: readonly ComboboxOption[] = [];
   closes = 0;
@@ -142,6 +144,8 @@ class ModifierLeaveApp extends LitElement {
         .product=${this.product}
         .initialSelections=${this.initialSelections}
         .withNote=${this.withNote}
+        .lineDetails=${this.lineDetails}
+        .quantity=${this.quantity}
         .initialCourse=${this.initialCourse}
         .courseChoices=${this.courseChoices}
         @wt-modifier-cancel=${() => this.closes++}
@@ -199,6 +203,33 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+it("A738 a refused confirmation restores dirty protection after releasing it for its consumer", async () => {
+  const { form } = await mount({
+    product: { ...product, variants: undefined, offeredModifiers: [] },
+    lineDetails: true,
+    withNote: true,
+    quantity: "2",
+    initialSelections: { note: "Initial note" },
+  });
+  await note(form, "Edited note");
+  const protection: boolean[] = [];
+  const refuse = (event: Event) => {
+    protection.push(unload());
+    event.preventDefault();
+  };
+  form.addEventListener("wt-modifier-confirm", refuse);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  expect(protection).toEqual([false]);
+  expect(unload()).toBe(true);
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Edited note");
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!.disabled,
+  ).toBe(false);
+  form.removeEventListener("wt-modifier-confirm", refuse);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  expect(unload()).toBe(false);
+});
 const edits = {
   variant: async (form: TillModifierPicker) => {
     await input(form, 'input[value="large"]');
@@ -216,6 +247,106 @@ const edits = {
     await note(form, "No salt");
   },
 };
+
+it.each(["Cancel", "Escape", "navigation"])(
+  "A738 combined line edits survive Keep and reconnect, then restore together on %s Discard",
+  async (action) => {
+    const { app, form } = await mount({
+      product: { ...product, variants: undefined },
+      lineDetails: true,
+      withNote: true,
+      quantity: "2",
+      initialSelections: {
+        extras: [
+          { listId: "extras", productId: "cheese", name: "Cheese", price: "1.00", quantity: 1 },
+        ],
+        options: [{ listId: "cooked", labelId: "medium" }],
+        note: "No salt",
+      },
+    });
+    const quantity = form.shadowRoot!.querySelector("wt-input")!;
+    await userEvent.fill(quantity.shadowRoot!.querySelector("input")!, "3");
+    await step(form, "inc");
+    await note(form, "No onion");
+    expect(modal(form).shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
+    form.remove();
+    app.shadowRoot!.prepend(form);
+    await form.updateComplete;
+    await modal(form).updateComplete;
+    expect(modal(form).open).toBe(true);
+    expect(modal(form).shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(
+      modal(form).shadowRoot!.querySelector("dialog")!.matches(":modal"),
+      "reconnected editor is visibly modal",
+    ).toBe(true);
+    const values = () => ({
+      quantity: form.shadowRoot!.querySelector("wt-input")!.value,
+      note: form.shadowRoot!.querySelector("wt-textarea")!.value,
+      cheese: form
+        .shadowRoot!.querySelector('[data-test="pick-extras-cheese-count"]')!
+        .textContent?.trim(),
+    });
+    expect(values()).toEqual({ quantity: "3", note: "No onion", cheese: "2" });
+    expect(unload()).toBe(true);
+    const leave = () => {
+      if (action === "navigation") {
+        void app.leave.coordinator.request({
+          scopes: "all",
+          reason: "navigation",
+          proceed: () => {
+            app.closes++;
+          },
+        });
+      } else if (action === "Cancel") cancel(form);
+      else return userEvent.keyboard("{Escape}");
+    };
+    await leave();
+    const q = await question(app);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(values()).toEqual({ quantity: "3", note: "No onion", cheese: "2" });
+    expect(app.closes).toBe(0);
+    await leave();
+    await expect.poll(() => q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => app.closes).toBe(1);
+    expect(values()).toEqual({ quantity: "2", note: "No salt", cheese: "1" });
+    expect(app.submitted).toEqual([]);
+    expect(unload()).toBe(false);
+  },
+);
+
+it.each(["Cancel", "Escape"])(
+  "A738 quantity %s protects Keep and restores the initial quantity on Discard",
+  async (action) => {
+    const { app, form } = await mount({
+      product: { ...product, variants: undefined },
+      lineDetails: true,
+      quantity: "2",
+      initialSelections: {},
+    });
+    const field = form.shadowRoot!.querySelector("wt-input")!;
+    expect(field).not.toBeNull();
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "3");
+    await form.updateComplete;
+    expect(unload()).toBe(true);
+    if (action === "Cancel") cancel(form);
+    else await userEvent.keyboard("{Escape}");
+    const q = await question(app);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(field.value).toBe("3");
+    expect(app.closes).toBe(0);
+    cancel(form);
+    await expect.poll(() => q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => app.closes).toBe(1);
+    expect(field.value).toBe("2");
+    expect(app.submitted).toEqual([]);
+  },
+);
 for (const [name, edit] of Object.entries(edits)) {
   for (const action of ["Cancel", "Escape"]) {
     it(`modifier ${name} ${action} preserves edits on Keep and restores only this picker on Discard`, async () => {

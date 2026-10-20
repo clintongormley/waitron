@@ -1,5 +1,5 @@
 import { css, html, nothing } from "lit";
-import type { MenuState, TillApi } from "../api/client.js";
+import type { MenuState, TillApi, RoleEquipment } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import "./keep-open.js";
 
@@ -18,15 +18,15 @@ export function servicePeriod(
   api: TillApi | undefined,
   zoneId: string,
   zoneName = "",
+  receiptEquipment?: RoleEquipment["resolved"],
 ) {
   if (!service) return nothing;
   const subject = service.keepOpen;
   const line = subject
     ? t(subject.extendedUntil === null ? "keep_open.line_until" : "keep_open.line_extended")
-        .replace("{period}", () => subject.periodName)
+        .replace("{period}", () => t("service.open"))
         .replace("{time}", () => subject.extendedUntil ?? subject.endsAt)
-    : service.periodName;
-  if (service.open && service.zoneOpen && line === null && !service.zoneKeepOpen) return nothing;
+    : t("service.open");
   return html`<div class="service-period">
     ${
       !service.zoneOpen
@@ -34,12 +34,30 @@ export function servicePeriod(
             ${t("menu.zone_closed").replace("{zone}", () => zoneName || service.zoneKeepOpen?.zoneName || "")}
           </p>`
         : service.open
-          ? html`<p role="status" data-service-period>${line}</p>`
+          ? subject
+            ? html`<till-keep-open
+                data-service-period
+                .api=${api}
+                .zoneId=${zoneId}
+                .keepOpen=${subject}
+                .triggerLabel=${line}
+              ></till-keep-open>`
+            : html`<p
+                role="status"
+                ?data-service-period=${service.periodName !== null}
+                data-service-open
+              >
+                ${line}
+              </p>`
           : html`<p role="status" data-service-closed>
               ${t("menu.department_closed").replace("{department}", () => departmentName)}
             </p>`
     }
-    ${service.zoneOpen && subject ? html`<till-keep-open .api=${api} .zoneId=${zoneId} .keepOpen=${subject}></till-keep-open>` : nothing}
+    ${service.zoneOpen && !service.open && subject ? html`<till-keep-open .api=${api} .zoneId=${zoneId} .keepOpen=${subject}></till-keep-open>` : nothing}
+    ${zoneName ? html`<span data-service-zone>${zoneName}</span>` : nothing}
+    <span data-receipt-status role="status"
+      >${receiptEquipment === undefined ? t("service.printer_unknown") : receiptEquipment === null ? t("service.printer_none") : t(receiptEquipment.available ? "service.printer_available" : "service.printer_unavailable").replace("{name}", () => receiptEquipment.name)}</span
+    >
     ${zoneKeepOpen(service.zoneKeepOpen, api, zoneId)}
   </div>`;
 }

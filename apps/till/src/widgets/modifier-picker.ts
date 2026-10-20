@@ -1,8 +1,11 @@
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { trackDialog } from "./track-dialog.js";
 import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
+import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
+import "@waitron/ui/src/components/wt-input.js";
 import type {
   ComboboxOption,
   DraftScope,
@@ -20,8 +23,11 @@ import {
   quantityPlaces,
 } from "../state/order-line.js";
 import { optionSnapshotOf } from "../state/held-options.js";
-import { productName } from "./product-name.js";
+import { productName, productUnit } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
+import { lineNutrition } from "./line-nutrition.js";
+import { optionAnswers } from "./option-snapshot.js";
+import type { LineNutrition } from "../api/client.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
 import type {
@@ -32,6 +38,7 @@ import type {
 } from "../api/client.js";
 
 interface ModifierDraft {
+  quantity: string;
   variantId: string;
   picks: Record<string, number>;
   answers: Record<string, string>;
@@ -39,7 +46,10 @@ interface ModifierDraft {
   courseId: string | null;
 }
 
+export type StagedRemoval = "note" | { listId: string; productId: string };
+
 export interface ModifierConfirmDetail extends LineSelection {
+  quantity?: string;
   product: TillProduct;
   courseId?: string;
 }
@@ -82,6 +92,18 @@ export class TillModifierPicker extends LitElement {
       }
       wt-combobox[name="course"] {
         --wt-field-height: max(var(--wt-tap-min), var(--wt-line-course-field-height));
+      }
+      h3 {
+        margin: var(--wt-space-3) 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
+      }
+      ul {
+        margin: 0 0 var(--wt-space-3);
+        padding-inline-start: var(--wt-space-4);
+      }
+      wt-input[name="quantity"] {
+        display: block;
+        margin-block-end: var(--wt-space-3);
       }
       .group {
         margin: 0 0 var(--wt-space-4);
@@ -197,8 +219,14 @@ export class TillModifierPicker extends LitElement {
   @property({ attribute: false }) courseChoices: readonly ComboboxOption[] = [];
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) lineDetails = false;
+  @property({ type: Boolean }) readOnly = false;
+  @property({ attribute: false }) nutrition: LineNutrition | null = null;
+  @property({ attribute: false }) stagedRemoval?: StagedRemoval;
+  #removalStaged = false;
   @property({ attribute: false }) draftParent?: object;
   @state() private courseId = "";
+  @state() private editedQuantity = "1";
+  @state() private attempted = false;
 
   /** How many of each offered product is taken, keyed by {@link pickKey}. */
   @state() private picks: Record<string, number> = {};
@@ -207,12 +235,14 @@ export class TillModifierPicker extends LitElement {
   @state() private answers: Record<string, string> = {};
 
   @state() private note = "";
+  @state() private noteExpanded = false;
 
   @state() private variantId = "";
 
   #seeded = false;
 
   @state() private active = true;
+  #connection = 0;
   #scope?: DraftScope<ModifierDraft>;
   #leave?: LeaveCoordinator;
   #baseline?: ModifierDraft;
@@ -221,6 +251,7 @@ export class TillModifierPicker extends LitElement {
 
   #draft(): ModifierDraft {
     return {
+      quantity: this.editedQuantity,
       variantId: this.variantId,
       picks: { ...this.picks },
       answers: { ...this.answers },
@@ -231,6 +262,8 @@ export class TillModifierPicker extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // Keep the draft across reconnects while creating a fresh native modal opening.
+    if (this.hasUpdated) this.#connection++;
     this.requestUpdate();
   }
 
@@ -245,6 +278,7 @@ export class TillModifierPicker extends LitElement {
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value, picks: { ...value.picks }, answers: { ...value.answers } }),
       equal: (a, b) =>
+        a.quantity === b.quantity &&
         a.variantId === b.variantId &&
         a.note === b.note &&
         a.courseId === b.courseId &&
@@ -253,6 +287,7 @@ export class TillModifierPicker extends LitElement {
         Object.keys(a.answers).length === Object.keys(b.answers).length &&
         Object.entries(a.answers).every(([key, label]) => b.answers[key] === label),
       restore: (value) => {
+        this.editedQuantity = value.quantity;
         this.variantId = value.variantId;
         this.picks = { ...value.picks };
         this.answers = { ...value.answers };
@@ -263,6 +298,12 @@ export class TillModifierPicker extends LitElement {
     this.#leave = coordinator;
     this.#scope = scope;
     scope.commit(this.#baseline);
+    if (this.stagedRemoval !== undefined && !this.#removalStaged && !this.readOnly) {
+      this.#removalStaged = true;
+      if (this.stagedRemoval === "note") this.note = "";
+      else this.#setCount(this.stagedRemoval.listId, this.stagedRemoval.productId, 0);
+      scope.changed();
+    }
   }
 
   override disconnectedCallback(): void {
@@ -274,9 +315,11 @@ export class TillModifierPicker extends LitElement {
 
   #seedSelections(): void {
     this.#seeded = true;
+    this.editedQuantity = this.quantity;
     this.courseId = this.initialCourse ?? "";
     if (this.initialSelections !== undefined) {
       if (this.withNote) this.note = this.initialSelections.note ?? "";
+      this.noteExpanded = this.note !== "";
       for (const extra of this.initialSelections.extras ?? [])
         this.picks[pickKey(extra.listId, extra.productId)] = extra.quantity;
       for (const answer of this.initialSelections.options ?? [])
@@ -421,9 +464,10 @@ export class TillModifierPicker extends LitElement {
   }
 
   get #runningPrice(): string {
+    if (this.lineDetails && this.#quantityInvalid()) return "—";
     const previewLine: OrderLine = {
       product: this.#selectedProduct,
-      quantity: this.quantity,
+      quantity: this.lineDetails ? this.editedQuantity : this.quantity,
       extras: this.#selectedExtras(),
     };
     return formatMoney(lineGross(previewLine), currentLocale());
@@ -467,16 +511,19 @@ export class TillModifierPicker extends LitElement {
 
   #confirm(e?: Event): void {
     e?.stopPropagation();
-    if (!this.isConnected || !this.active || this.disabled) return;
+    if (!this.isConnected || !this.active || this.disabled || this.readOnly) return;
     if (this.#saveAction().unchanged) return;
+    this.attempted = true;
+    if (this.lineDetails && this.#quantityInvalid()) return;
     if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
     const submitted = this.#draft();
-    this.#baseline = submitted;
-    this.#scope?.commit(submitted);
     const extras = this.#selectedExtras();
     const options = this.#selectedOptions();
     const detail: ModifierConfirmDetail = {
       product: this.#selectedProduct,
+      ...(this.lineDetails && this.initialSelections !== undefined
+        ? { quantity: this.editedQuantity }
+        : {}),
       ...(this.initialCourse === undefined ? {} : { courseId: this.courseId }),
       ...(extras.length === 0 ? {} : { extras }),
       ...(options.length === 0 ? {} : { options, optionSnapshots: this.#selectedSnapshots() }),
@@ -485,13 +532,22 @@ export class TillModifierPicker extends LitElement {
     if (note !== "") {
       detail.note = note;
     }
-    this.dispatchEvent(
+    // Consumers can leave during the event; a refused apply must restore this draft's baseline.
+    const baseline = this.#baseline;
+    this.#baseline = submitted;
+    this.#scope?.commit(submitted);
+    const accepted = this.dispatchEvent(
       new CustomEvent<ModifierConfirmDetail>("wt-modifier-confirm", {
         detail,
         bubbles: true,
         composed: true,
+        cancelable: true,
       }),
     );
+    if (!accepted) {
+      this.#baseline = baseline;
+      if (baseline !== undefined) this.#scope?.commit(baseline);
+    }
   }
 
   #cancel(event: Event): void {
@@ -529,7 +585,7 @@ export class TillModifierPicker extends LitElement {
     const totals = this.#listTotals();
     const saveAction = this.#saveAction();
     const satisfied = this.#satisfied(stale, totals);
-    return html`<wt-modal
+    const modal = html`<wt-modal
       ${trackDialog()}
       size="standard"
       .open=${this.active}
@@ -539,100 +595,169 @@ export class TillModifierPicker extends LitElement {
     >
       <div ?inert=${this.disabled}>
         <slot name="line-details"></slot>
+        ${lineNutrition(this.nutrition)}
         ${
-          this.initialCourse === undefined
-            ? nothing
-            : html`<wt-combobox
-                name="course"
-                label=${`${t("table.course_label")} · ${productName(this.product)}`}
-                placeholder=${this.coursePlaceholder || this.courseChoices.find((choice) => choice.value === "")?.label || ""}
-                search="auto"
-                searchPlaceholder=${t("form.combobox_search")}
-                noResultsLabel=${t("form.combobox_no_results")}
-                .options=${this.courseChoices}
-                .value=${this.courseId}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  if (
-                    !this.isConnected ||
-                    !this.active ||
-                    this.disabled ||
-                    !this.courseChoices.some((choice) => choice.value === event.detail.value)
-                  )
-                    return;
-                  this.courseId = event.detail.value;
-                  this.#scope?.changed();
-                }}
-              ></wt-combobox>`
-        }
-        ${
-          this.#variants.length === 0
-            ? nothing
-            : html`<fieldset class="group">
-                <legend class="group-name">${t("modifier.variant")} *</legend>
-                ${this.#variants.map(
-                  (variant) =>
-                    html`<label class="option">
-                      <input
-                        type="radio"
-                        name="product-variant"
-                        value=${variant.id}
-                        .checked=${this.variantId === variant.id}
-                        ?disabled=${!variant.available}
-                        @change=${(event: Event) => {
+          this.readOnly
+            ? html`
+                <p>${this.quantity}</p>
+                ${(this.initialSelections?.extras ?? []).map((extra) => html`<p>${extra.name} ×${extra.quantity}</p>`)}
+                ${
+                  this.initialSelections?.optionSnapshots !== undefined
+                    ? optionAnswers(this.initialSelections.optionSnapshots, {
+                        reads: "staff",
+                      }).map((answer) => html`<p>${answer}</p>`)
+                    : (this.initialSelections?.options ?? []).map(
+                        (answer) =>
+                          html`<p>
+                            ${this.product.offeredModifiers?.flatMap((list) => (list.kind === "options" && list.id === answer.listId ? list.labels.filter((label) => label.id === answer.labelId).map((label) => label.name) : []))}
+                          </p>`,
+                      )
+                }
+                ${this.initialSelections?.note ? html`<p>${t("line.note.label")}: ${this.initialSelections.note}</p>` : nothing}
+              `
+            : html`
+                ${
+                  this.lineDetails && this.initialSelections !== undefined
+                    ? html`<wt-input
+                        name="quantity"
+                        label=${t("table.split_quantity")}
+                        required
+                        decimal-locale=${currentLocale()}
+                        .value=${this.editedQuantity}
+                        .error=${this.attempted && this.#quantityInvalid() ? t("line.quantity_invalid") : ""}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
-                          if (!this.isConnected || !this.active) return;
-                          this.variantId = variant.id;
+                          if (!this.isConnected || !this.active || this.disabled || this.readOnly)
+                            return;
+                          this.editedQuantity = event.detail.value;
                           this.#scope?.changed();
                         }}
-                      />
-                      <span class="option-name">${variant.name}</span>
-                      ${
-                        variant.unitPriceDifference === null
-                          ? nothing
-                          : html`<span class="price-difference"
-                              >${priceDifference(variant.unitPriceDifference)}</span
-                            >`
-                      }
-                      <span class="option-delta"
-                        >${formatMoney(variant.unitPrice, currentLocale())}</span
-                      >
-                    </label>`,
+                      ></wt-input>`
+                    : nothing
+                }
+                ${
+                  this.initialCourse === undefined
+                    ? nothing
+                    : html`<wt-combobox
+                        name="course"
+                        label=${`${t("table.course_label")} · ${productName(this.product)}`}
+                        placeholder=${this.coursePlaceholder || this.courseChoices.find((choice) => choice.value === "")?.label || ""}
+                        search="auto"
+                        searchPlaceholder=${t("form.combobox_search")}
+                        noResultsLabel=${t("form.combobox_no_results")}
+                        .options=${this.courseChoices}
+                        .value=${this.courseId}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                          event.stopPropagation();
+                          if (
+                            !this.isConnected ||
+                            !this.active ||
+                            this.disabled ||
+                            !this.courseChoices.some(
+                              (choice) => choice.value === event.detail.value,
+                            )
+                          )
+                            return;
+                          this.courseId = event.detail.value;
+                          this.#scope?.changed();
+                        }}
+                      ></wt-combobox>`
+                }
+                ${
+                  this.#variants.length === 0
+                    ? nothing
+                    : html`<fieldset class="group">
+                        <legend class="group-name">${t("modifier.variant")} *</legend>
+                        ${this.#variants.map(
+                          (variant) =>
+                            html`<label class="option">
+                              <input
+                                type="radio"
+                                name="product-variant"
+                                value=${variant.id}
+                                .checked=${this.variantId === variant.id}
+                                ?disabled=${!variant.available}
+                                @change=${(event: Event) => {
+                                  event.stopPropagation();
+                                  if (!this.isConnected || !this.active) return;
+                                  this.variantId = variant.id;
+                                  this.#scope?.changed();
+                                }}
+                              />
+                              <span class="option-name">${variant.name}</span>
+                              ${
+                                variant.unitPriceDifference === null
+                                  ? nothing
+                                  : html`<span class="price-difference"
+                                      >${priceDifference(variant.unitPriceDifference)}</span
+                                    >`
+                              }
+                              <span class="option-delta"
+                                >${formatMoney(variant.unitPrice, currentLocale())}</span
+                              >
+                            </label>`,
+                        )}
+                      </fieldset>`
+                }
+                ${this.#offered.map((entry) =>
+                  entry.kind === "extras"
+                    ? this.#renderExtras(entry, totals.get(entry.id) ?? 0)
+                    : this.#renderOptions(entry),
                 )}
-              </fieldset>`
-        }
-        ${this.#offered.map((entry) =>
-          entry.kind === "extras"
-            ? this.#renderExtras(entry, totals.get(entry.id) ?? 0)
-            : this.#renderOptions(entry),
-        )}
-        ${stale.map(
-          (extra) =>
-            html`<p class="refusal" role="alert">
-              ${extra.name}: ${t("modifier.selection_changed")}
-            </p>`,
-        )}
-        ${
-          this.initialSelections !== undefined && !this.withNote
-            ? nothing
-            : renderLineExtrasEditor({
-                note: this.note,
-                onNoteChange: (note) => {
-                  if (!this.isConnected || !this.active) return;
-                  this.note = note;
-                  this.#scope?.changed();
-                },
-              })
-        }
-        ${
-          this.showTotal
-            ? html`<div class="running">
-                <span class="running-label">${t("label.total")}</span>
-                <span class="running-amount">${this.#runningPrice}</span>
-              </div>`
-            : nothing
+                ${stale.map(
+                  (extra) =>
+                    html`<p class="refusal" role="alert">
+                      ${extra.name}: ${t("modifier.selection_changed")}
+                    </p>`,
+                )}
+                ${
+                  this.initialSelections !== undefined && !this.withNote
+                    ? nothing
+                    : this.lineDetails && this.note === "" && !this.noteExpanded
+                      ? html`<wt-button
+                          class="add-note"
+                          variant="secondary"
+                          @click=${async (event: Event) => {
+                            event.stopPropagation();
+                            if (!this.isConnected || !this.active || this.disabled || this.readOnly)
+                              return;
+                            const connection = this.#connection;
+                            this.noteExpanded = true;
+                            await this.updateComplete;
+                            const field = this.shadowRoot!.querySelector("wt-textarea");
+                            await field?.updateComplete;
+                            if (
+                              connection === this.#connection &&
+                              this.isConnected &&
+                              this.active &&
+                              !this.disabled &&
+                              !this.readOnly
+                            )
+                              field?.focus();
+                          }}
+                          >${t("line.note.add")}</wt-button
+                        >`
+                      : renderLineExtrasEditor({
+                          note: this.note,
+                          onNoteChange: (note) => {
+                            if (!this.isConnected || !this.active) return;
+                            this.note = note;
+                            this.#scope?.changed();
+                          },
+                        })
+                }
+                ${
+                  this.showTotal
+                    ? html`<div class="running">
+                        <span class="running-label">${t("label.total")}</span>
+                        <span class="running-amount">${this.#runningPrice}</span>
+                      </div>`
+                    : nothing
+                }
+              `
         }
       </div>
+      ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
       <wt-button
         slot="footer"
         class="cancel"
@@ -641,16 +766,32 @@ export class TillModifierPicker extends LitElement {
       >
         ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
       </wt-button>
-      <wt-button
-        slot="footer"
-        class="confirm"
-        variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
-        ?disabled=${this.disabled || saveAction.unchanged || !satisfied}
-        @click=${(e: Event) => this.#confirm(e)}
-      >
-        ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
-      </wt-button>
+      ${
+        this.readOnly
+          ? nothing
+          : html`<wt-button
+              slot="footer"
+              class="confirm"
+              variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
+              ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.attempted && this.lineDetails && this.#quantityInvalid())}
+              @click=${(e: Event) => this.#confirm(e)}
+            >
+              ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
+            </wt-button>`
+      }
     </wt-modal>`;
+    return keyed(this.#connection, modal);
+  }
+
+  #quantityInvalid(): boolean {
+    try {
+      assertQuantityPrecision(this.editedQuantity, productUnit(this.product).precision, {
+        positive: true,
+      });
+      return false;
+    } catch {
+      return true;
+    }
   }
 
   #renderExtras(list: OfferedExtrasList, total: number) {
@@ -715,7 +856,7 @@ export class TillModifierPicker extends LitElement {
         <span class="stepper">
           <wt-button
             class="step"
-            size="sm"
+            size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-dec"
             aria-label=${`${t("modifier.decrease")} ${item.name}`}
             ?disabled=${count <= 0}
@@ -726,7 +867,7 @@ export class TillModifierPicker extends LitElement {
           <span class="stepper-count" data-test="${test}-count">${count}</span>
           <wt-button
             class="step"
-            size="sm"
+            size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-inc"
             aria-label=${`${t("modifier.increase")} ${item.name}`}
             ?disabled=${(item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}

@@ -1470,6 +1470,7 @@ describe("TillApi", () => {
   it("listCounterWaiting GETs the counter's waiting orders and returns them", async () => {
     const rows = [
       {
+        items: [],
         id: "wo1",
         orderNumber: 3,
         label: null,
@@ -4883,6 +4884,11 @@ describe("menuOfferToTillProduct", () => {
     };
 
     expect(menuOfferToTillProduct(offer).offeredModifiers).toEqual([extras, options]);
+    expect(
+      menuOfferToTillProduct({ ...offer, description: { en: "Slow roasted", es: "Asado lento" } })
+        .description,
+    ).toEqual({ en: "Slow roasted", es: "Asado lento" });
+    expect(menuOfferToTillProduct(offer).description).toBeNull();
   });
 
   it("prices the product at the offer's RESOLVED price, never the stored menu price", () => {

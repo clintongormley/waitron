@@ -13,7 +13,9 @@ afterEach(async () => {
 });
 
 const bar = (el: TillTableOrderScreen) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-last-added]");
+  el
+    .shadowRoot!.querySelector("till-last-added")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-last-added]") ?? null;
 
 async function mounted(width = 390) {
   await page.viewport(width, 900);

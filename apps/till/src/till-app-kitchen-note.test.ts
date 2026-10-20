@@ -729,6 +729,7 @@ it("does not pay after an order reload between the note wait and payment", async
 });
 
 const waitingOrder = {
+  items: [],
   id: "waiting-7",
   orderNumber: 7,
   label: "Train",
@@ -1409,6 +1410,8 @@ it("opens the Waiting note from its real row action and returns focus after Canc
     listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
     getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
   });
+  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
+  await flush(el);
   const grid = counter(el);
   const waiting = grid.shadowRoot!.querySelector("till-counter-waiting")!;
   const button = waiting.shadowRoot!.querySelector<HTMLElement>("[data-waiting-kitchen-note]");
