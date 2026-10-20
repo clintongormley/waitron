@@ -663,6 +663,57 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     )!.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations with tabs in each family", async () => {
+    const [owing] = partyTables as [TableState];
+    const families: [string, Partial<TableState>][] = [
+      ["Forgotten", { timingBand: "forgotten" }],
+      [
+        "Fire",
+        {
+          party: { ...owing.party!, reminder: { groupId: "g", dueAt: "2026-09-29T19:00:00.000Z" } },
+        },
+      ],
+      ["Bill", { signals: [{ kind: "bill_requested", requestedAt: "2026-09-29T19:55:00.000Z" }] }],
+      ["Ready", { readyToServe: 2 }],
+      ["Step", { readyToServe: 0, enRoute: 0, signals: [{ kind: "take_order" }] }],
+    ];
+    const familyZones: FloorZone[] = [
+      zones[0]!,
+      ...families.map(([name], i): FloorZone => ({
+        ...zones[1]!,
+        id: `f${i}`,
+        name,
+        displayOrder: i + 1,
+      })),
+    ];
+    const familyTables: TableState[] = [
+      { ...owing, zoneId: "z1" },
+      ...families.map(([, over], i): TableState => ({
+        ...owing,
+        id: `tf${i}`,
+        label: `F${i}`,
+        zoneId: `f${i}`,
+        ...over,
+      })),
+    ];
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      {
+        zones: familyZones,
+        tables: familyTables,
+        now: Date.parse("2026-09-29T20:00:00.000Z"),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    expect(
+      [...el.shadowRoot!.querySelectorAll(".zone-tab[data-zone-state]")].map((tab) =>
+        tab.getAttribute("data-zone-state"),
+      ),
+    ).toEqual(["forgotten", "fire", "bill", "ready", "step"]);
+    await expectNoA11yViolations(host);
+  });
 });
 
 for (const locale of ["en-GB", "es-ES"]) {

@@ -27,7 +27,14 @@ import {
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
-import type { FloorMapDrop, FloorMapTable, FloorRing, FloorTable, ZoneTab } from "@waitron/ui";
+import type {
+  FloorCueIcon,
+  FloorMapDrop,
+  FloorMapTable,
+  FloorRing,
+  FloorTable,
+  ZoneTab,
+} from "@waitron/ui";
 import {
   conjunctionList,
   decimal,
@@ -101,7 +108,14 @@ import type {
 } from "../api/client.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
-import { reminderClock } from "../state/floor-look.js";
+import {
+  kindIcon,
+  kindWords,
+  mapKinds,
+  reminderClock,
+  zoneTabKind,
+  type MapKind,
+} from "../state/floor-look.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import {
@@ -254,8 +268,17 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
     : { ...table, today: { ...table.today, placement } };
 }
 
+/** What a hidden zone's tab shows: its tables' most urgent state. */
+interface ZoneTabMark {
+  kind: MapKind;
+  icon: FloorCueIcon | null;
+  words: string;
+}
+
 interface ZoneOnScreen {
   tabs: ZoneTab[];
+  /** Keyed by zone; the zone on screen and a zone with nothing urgent have none. */
+  marks: Map<string, ZoneTabMark>;
   refusedZone: FloorZone | undefined;
   activeKey: string | undefined;
   planned: boolean;
@@ -356,6 +379,50 @@ export class TillFloorScreen extends LitElement {
       .tabs > * {
         flex: none;
         white-space: nowrap;
+      }
+
+      .zone-tab {
+        position: relative;
+        display: inline-flex;
+        border-radius: var(--wt-radius-md);
+      }
+
+      /* Each family sets its tint and bar once; a tab, and the toolbar's edge, read them. */
+      [data-zone-state="forgotten"],
+      [data-zone-state="overdue"] {
+        --zone-tint: var(--wt-color-tab-danger-tint);
+        --zone-bar: var(--wt-color-danger);
+      }
+
+      [data-zone-state="unavailable"],
+      [data-zone-state="fire"],
+      [data-zone-state="waiting"],
+      [data-zone-state="clearing"],
+      [data-zone-state="moving"] {
+        --zone-tint: var(--wt-color-tab-warning-tint);
+        --zone-bar: var(--wt-color-warning);
+      }
+
+      [data-zone-state="bill"] {
+        --zone-tint: var(--wt-color-tab-bill-tint);
+        --zone-bar: var(--wt-color-table-bill);
+      }
+
+      [data-zone-state="ready"] {
+        --zone-tint: var(--wt-color-tab-ready-tint);
+        --zone-bar: var(--wt-color-success);
+      }
+
+      [data-zone-state="step"],
+      [data-zone-state="delivery"],
+      [data-zone-state="not-sent"] {
+        --zone-tint: var(--wt-color-tab-seated-tint);
+        --zone-bar: var(--wt-color-table-seated);
+      }
+
+      .zone-tab[data-zone-state] wt-button::part(button) {
+        background: var(--zone-tint);
+        box-shadow: inset 0 calc(var(--wt-space-1) * -1) 0 var(--zone-bar);
       }
 
       .map {
@@ -2026,6 +2093,7 @@ export class TillFloorScreen extends LitElement {
       (zone) => zone.id === this.refusedZoneId && (zone.closed || !seatsGuests(zone)),
     );
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
+    const marks = this.#tabMarks(tabs, activeKey);
     const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
     const listed = listedTables(visible);
@@ -2037,6 +2105,7 @@ export class TillFloorScreen extends LitElement {
     const view = this.viewOverride ?? (onMap.length > 0 ? "map" : "list");
     return {
       tabs,
+      marks,
       refusedZone,
       activeKey,
       planned,
@@ -2046,6 +2115,20 @@ export class TillFloorScreen extends LitElement {
       onMap,
       unplaced,
     };
+  }
+
+  #tabMarks(tabs: readonly ZoneTab[], activeKey: string | undefined): Map<string, ZoneTabMark> {
+    const now = this.#drawnAt;
+    const marks = new Map<string, ZoneTabMark>();
+    for (const tab of tabs) {
+      if (tab.key === activeKey) continue;
+      const zoneTables = this.tables.filter((table) => table.zoneId === tab.key);
+      const kind = zoneTabKind(zoneTables, now);
+      if (kind === null) continue;
+      const members = zoneTables.filter((table) => mapKinds(table, now).includes(kind));
+      marks.set(tab.key, { kind, icon: kindIcon(kind), words: kindWords(kind, members, now) });
+    }
+    return marks;
   }
 
   /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
@@ -2060,7 +2143,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   override render() {
-    const { tabs, refusedZone, activeKey, planned, view, listed, onMap, unplaced } = this.#zone;
+    const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
+      this.#zone;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -2081,7 +2165,7 @@ export class TillFloorScreen extends LitElement {
           ${
             tabs.length > 1
               ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
-                  ${tabs.map((tab) => this.#tab(tab, activeKey))}
+                  ${tabs.map((tab) => this.#tab(tab, activeKey, marks.get(tab.key)))}
                 </nav>`
               : nothing
           }
@@ -2204,16 +2288,19 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  #tab(tab: ZoneTab, activeKey: string | undefined): TemplateResult {
+  #tab(tab: ZoneTab, activeKey: string | undefined, mark: ZoneTabMark | undefined): TemplateResult {
     const active = tab.key === activeKey;
-    return html`<wt-button
-      class="tab"
-      data-zone=${tab.key}
-      variant=${active ? "primary" : "secondary"}
-      @click=${() => this.#selectZone(tab.key)}
-    >
-      ${tab.name}
-    </wt-button>`;
+    return html`<span class="zone-tab" data-zone-state=${mark?.kind ?? nothing}
+      ><wt-button
+        class="tab"
+        data-zone=${tab.key}
+        variant=${active ? "primary" : "secondary"}
+        aria-label=${mark === undefined ? nothing : `${tab.name}, ${mark.words}`}
+        @click=${() => this.#selectZone(tab.key)}
+      >
+        ${tab.name} ${mark?.icon ? html`<wt-icon name=${mark.icon} size="sm"></wt-icon>` : nothing}
+      </wt-button></span
+    >`;
   }
 
   #prefersReducedMotion(): boolean {

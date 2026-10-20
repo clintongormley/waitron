@@ -259,6 +259,24 @@ export function pinLook(rows: readonly TableState[], now: number): PinLook {
   return { fill, icon: cue?.icon ?? null, text };
 }
 
+/** The kinds a zone's tab shows while another zone is on screen: every kind above Held. */
+export const TAB_KINDS: ReadonlySet<MapKind> = new Set(
+  MAP_PRECEDENCE.slice(0, MAP_PRECEDENCE.indexOf("held")),
+);
+
+/** The most urgent tab kind across the zone's tables, or `null` when none has one. */
+export function zoneTabKind(tables: readonly TableState[], now: number): MapKind | null {
+  const kinds = new Set(tables.flatMap((table) => mapKinds(table, now)));
+  return MAP_PRECEDENCE.find((kind) => TAB_KINDS.has(kind) && kinds.has(kind)) ?? null;
+}
+
+/** The icon the map's cue shows for a kind, where it has one. */
+export function kindIcon(kind: MapKind): FloorCueIcon | null {
+  if (kind === "ready") return "floor-ready";
+  if (kind === "delivery") return "floor-step";
+  return FIXED_CUE[kind]?.icon ?? null;
+}
+
 /** Each table's minutes to fire, or "due": it changes whenever a look can change with time. */
 export function reminderClock(tables: readonly TableState[], now: number): string {
   return tables

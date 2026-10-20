@@ -7,12 +7,15 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { PRECEDENCE } from "./table-precedence.js";
 import {
   MAP_PRECEDENCE,
+  TAB_KINDS,
+  kindIcon,
   kindWords,
   mapKinds,
   mapLook,
   pinLook,
   readyText,
   reminderClock,
+  zoneTabKind,
 } from "./floor-look.js";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
@@ -806,5 +809,67 @@ describe("reminderClock", () => {
     expect(at(dueAt - 1)).not.toBe(at(dueAt));
     expect(at(dueAt)).toBe(at(dueAt + 5 * 60_000));
     expect(reminderClock([table({ id: "c", ...free })], now)).toBe("");
+  });
+});
+
+describe("zoneTabKind", () => {
+  const forgotten = table({ id: "f", timingBand: "forgotten" });
+  const overdue = table({ id: "o", signals: [wait("overdue")] });
+  const out = table({ id: "u", signals: [unavailable] });
+  const fire = table({ id: "x", party: due(-1) });
+  const billed = table({ id: "b", signals: [bill] });
+  const ready = table({ id: "r", readyToServe: 2 });
+  const step = table({ id: "s", signals: [takeOrder] });
+  const delivery = table({ id: "d", ...free, state: "delivery-pending", pendingDeliveries: 2 });
+  const notSent = table({ id: "n", party: party({ unsentDrafts: [unsent] }) });
+  const waiting = table({ id: "w", signals: [wait("warm")] });
+  const clearing = table({ id: "c", ...free, condition: "needs_clearing" });
+  const moving = table({ id: "m", ...free, today: today({ needsMoving: true }) });
+  const heldTable = table({ id: "h", signals: [held(2)], party: due(10) });
+  const calm = table({ id: "q" });
+  const reserved = table({ id: "v", ...free, nextReservation: { time: "21:30" } });
+  const freeTable = table({ id: "e", ...free });
+
+  // Each kind, then every kind after it, so the first wins over all the rest in either order.
+  const ranked = [
+    forgotten,
+    overdue,
+    out,
+    fire,
+    billed,
+    ready,
+    step,
+    delivery,
+    notSent,
+    waiting,
+    clearing,
+    moving,
+  ];
+
+  it("lists the kinds above Held, which a tab shows", () => {
+    expect([...TAB_KINDS]).toEqual(MAP_PRECEDENCE.slice(0, MAP_PRECEDENCE.indexOf("held")));
+  });
+
+  it.each(ranked.map((tbl, i) => [mapKinds(tbl, now)[0]!, i] as const))(
+    "takes %s over every kind below it, across the zone's tables",
+    (kind, i) => {
+      const rest = [...ranked.slice(i + 1), heldTable, calm, reserved, freeTable];
+      expect(zoneTabKind([...rest, ranked[i]!], now)).toBe(kind);
+      expect(zoneTabKind([ranked[i]!, ...rest], now)).toBe(kind);
+    },
+  );
+
+  it("is null for a zone whose best is held, calm, reserved or free, and for no tables", () => {
+    expect(zoneTabKind([heldTable, calm, reserved, freeTable], now)).toBeNull();
+    expect(zoneTabKind([freeTable], now)).toBeNull();
+    expect(zoneTabKind([], now)).toBeNull();
+  });
+
+  it("names each tab kind's icon, the map cue's", () => {
+    for (const tbl of ranked) {
+      const { top, cue } = mapLook([tbl], now);
+      expect(kindIcon(top!)).toBe(cue!.icon);
+    }
+    expect(kindIcon("free")).toBeNull();
   });
 });
