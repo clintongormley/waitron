@@ -2556,6 +2556,100 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     expect(text(next(el))).toBe(nextShare(2, 2));
   });
 
+  it("a change of way and back, with the count left as shown, starts a new run from that count", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+    await pick(el, "way", "contribution");
+    await pick(el, "way", "share");
+    expect(field(el, "people")!.value).toBe("2");
+    await pay(el, "20.80");
+
+    expect(text(next(el))).toBe(nextShare(2, 2));
+  });
+
+  it("the app's own call to paymentAccepted, made while the last payment is still shown, counts no share", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    await click(el, "[data-pay-next]");
+    await previewed(el, card("20.80"));
+    await click(el, "[data-pay-confirm]");
+    el.paymentAccepted();
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ total: "62.40", outstanding: "20.80" });
+    el.taken = { change: null };
+    await el.updateComplete;
+
+    expect(text(next(el))).toBe(nextShare(3, 3));
+  });
+
+  it("a refund made from the next view ends the run: no next guest, and the next share starts afresh", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    el.taken = null;
+    el.refunded = { state: "completed", amount: "20.80", method: "card", terminal: false };
+    el.balance = balanceOf({ total: "62.40", outstanding: "62.40" });
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+    expect(field(el, "people")!.value).toBe("");
+    await type(el, "people", "3");
+    el.refunded = null;
+    await pay(el, "41.60");
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it("a later read that shows nothing owing ends the next-guest offer", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+    expect(next(el)).not.toBeNull();
+
+    el.balance = balanceOf({ total: "62.40", received: "62.40", outstanding: "0.00" });
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+  });
+
+  it("keeps the count of the next share on one line", async () => {
+    setLocale("es");
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60");
+
+    const count = next(el)!.querySelector("[data-pay-next-count]")!;
+    expect(text(count)).toBe("(2 de 3)");
+    expect(getComputedStyle(count).whiteSpace).toBe("nowrap");
+  });
+
+  it("a counter till that takes an equal share keeps today's form, with no next guest", async () => {
+    const el = await mount({ way: "share", takesCash: false, cardReader: "stripe_terminal" });
+    await type(el, "people", "3");
+    await previewed(el, card("40.00"));
+    const confirmed = capture(el, "bill-pay-confirm");
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toHaveLength(1);
+    el.busy = true;
+    await el.updateComplete;
+    el.busy = false;
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ received: "40.00", outstanding: "80.00" });
+    el.taken = { change: null };
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+    expect(field(el, "people")!.value).toBe("");
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
   it("after a contribution, offers the next guest and starts again on Contribution with the amount empty", async () => {
     const el = await handheld();
     await pick(el, "way", "contribution");

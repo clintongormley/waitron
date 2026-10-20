@@ -383,6 +383,10 @@ export class TillBillPayDialog extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .nowrap {
+        white-space: nowrap;
+      }
+
       .taken-block {
         display: flex;
         flex-direction: column;
@@ -701,7 +705,9 @@ export class TillBillPayDialog extends LitElement {
     } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
-    if (changed.has("taken") && this.taken !== null) this.paymentAccepted();
+    if (changed.has("taken") && this.taken !== null) this.#accept(this.taken);
+    if (changed.has("refunded") && this.refunded !== null) this.#endRun();
+    if (changed.has("balance") && !this.#owing()) this.nextOffered = false;
     const wanted = this.#rowWantsOpen();
     if (wanted && !this.#rowWanted) this.rowOpen = true;
     this.#rowWanted = wanted;
@@ -714,8 +720,14 @@ export class TillBillPayDialog extends LitElement {
   }
 
   paymentAccepted(): void {
+    this.#accept(null);
+  }
+
+  /** Only the `taken` that arrives counts toward the run of shares, so the app's own earlier call
+   * counts nothing. */
+  #accept(taken: PayTaken | null): void {
     this.#startAgain();
-    if (this.handheld && this.taken !== null) this.#offerNext(this.taken);
+    if (this.handheld && taken !== null) this.#offerNext(taken);
     this.#entryBaseline = this.#draft();
     this.#entry?.commit(this.#entryBaseline);
     this.#tip?.dispose();
@@ -724,8 +736,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   /** A card still in progress keeps today's form. Otherwise the run of shares counts the one just
-   * paid, the form holds one fewer, and the next guest is offered while money is owing. The app
-   * also calls {@link paymentAccepted} before it sets `taken`, so only a set `taken` counts, once. */
+   * paid, the form holds one fewer, and the next guest is offered while money is owing. */
   #offerNext(taken: PayTaken): void {
     const paying = this.#sharePaying;
     this.#sharePaying = null;
@@ -744,8 +755,20 @@ export class TillBillPayDialog extends LitElement {
     }
     const left = this.#sharesLeft();
     if (left > 0) this.people = String(left);
-    this.nextOffered =
-      this.balance !== null && compareDecimal(decimal(this.balance.outstanding), decimal("0")) > 0;
+    this.nextOffered = this.#owing();
+  }
+
+  #owing(): boolean {
+    return (
+      this.balance !== null && compareDecimal(decimal(this.balance.outstanding), decimal("0")) > 0
+    );
+  }
+
+  /** A refund gives a share back, so the count the run lowered no longer holds. */
+  #endRun(): void {
+    if (this.#sharesLeft() > 0 && this.people === String(this.#sharesLeft())) this.people = "";
+    this.#shareRun = null;
+    this.nextOffered = false;
   }
 
   /** The people still to pay in the run of shares, 0 outside one. */
@@ -1084,14 +1107,26 @@ export class TillBillPayDialog extends LitElement {
     </div>`;
   }
 
+  /** The count stays on one line: "(2 de" over "3)" reads as nonsense on a phone. */
+  #nextShareLabel(run: { of: number; paid: number }): TemplateResult {
+    const fill = (text: string) =>
+      text.replace("{n}", String(run.paid + 1)).replace("{m}", String(run.of));
+    // One inline box: the button lays its content out as flex items, so bare parts would sit in
+    // columns side by side.
+    return html`<span
+      >${t("bill_pay.next_share")
+        .split(/(\(\{n\}.*\{m\}\))/s)
+        .map((part, index) =>
+          index === 1
+            ? html`<span class="nowrap" data-pay-next-count>${fill(part)}</span>`
+            : fill(part),
+        )}</span
+    >`;
+  }
+
   #nextActions(): TemplateResult {
     const left = this.#sharesLeft();
-    const label =
-      left > 0
-        ? t("bill_pay.next_share")
-            .replace("{n}", String(this.#shareRun!.paid + 1))
-            .replace("{m}", String(this.#shareRun!.of))
-        : t("bill_pay.next");
+    const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
     return html`<wt-form-actions>
       <wt-button
         slot="cancel"
