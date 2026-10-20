@@ -45,9 +45,10 @@ export type ReasonShapeField =
   "actions" | "applyRoles" | "approverRoles" | "maxPercentBp" | "maxAmount";
 
 /**
- * The first field a reason may not hold, or null. A Void reason only cancels, and carries no roles
- * or limits: a cancel's rule is the refund permission. A Comp reason never cancels, and one whose
- * most off one item is under 100% cannot offer Free (design §3.1).
+ * The first field of `shape` these checks fault, or null. A Void reason only cancels, and carries no
+ * roles or limits: a cancel's rule is the refund permission. A Comp reason has one or more distinct
+ * comp actions, two role lists {@link isRoleList} accepts, and an item limit of 1 to 10000 basis
+ * points or none, under 10000 only without Free (design §3.1); its amount limit is not checked.
  */
 export function reasonShapeFault(shape: ReasonShape): ReasonShapeField | null {
   const { actions } = shape;

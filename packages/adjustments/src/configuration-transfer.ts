@@ -30,9 +30,10 @@ function textList(value: unknown, field: string): string[] {
 }
 
 /**
- * Refuses a reason or a setting the operations would refuse, and a bundle that leaves the venue no
- * switched-on Void reason asking for a note, as the operations keep one (A758 D27). A Void reason
- * that passes can cancel. The export writes booleans as 0 and 1.
+ * Refuses a reason of an unknown kind or one {@link reasonShapeFault} faults, settings whose bill
+ * approvers {@link isRoleList} does not accept, and a bundle that leaves the venue no switched-on
+ * Void reason asking for a note, as the operations keep one (A758 D27). A Void reason that passes
+ * can cancel. The export writes booleans as 0 and 1.
  */
 function validateAdjustmentsConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
