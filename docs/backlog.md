@@ -2139,16 +2139,26 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slices 1–4, a follow-up to slice 4, and 7 have landed; slices 5, 6 and 8 are left
-  (design §11; plans in the detail).
+  2026-10-17.** Slices 1–5, a follow-up to slice 4, and 7 have landed (slice 5's plan:
+  `docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`); slices 6 and 8 are left (design
+  §11; plans in the detail).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for the whole of A757 (slices 5, 6 and 8 are left).
+  settle the two suggestions in the detail. Waits for the whole of A757 (slices 6 and 8 are left).
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
+
+- **A936. Waiting's minutes on the map (left open by A757 slice 5).** The map's cue for a waiting
+  table says "Waiting", not the minutes picture 07 draws, because the floor read carries only the
+  timing band; showing minutes needs the oldest fired dish's age in the read.
+  [Detail](backlog/till.md#a936-waitings-minutes-on-the-map)
+
+- **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
+  5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run
+  it on the owner's floor. [Detail](backlog/till.md#a937-measure-the-owners-real-floor-plan-once-it-is-drawn)
 
 - **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
   For the owner, a candidate question to batch: the words the pictures do not draw — the fifth
