@@ -526,6 +526,7 @@ read 81.54% and 86.63% statements alone; `PLAYWRIGHT_BROWSERS_PATH=<empty folder
 "@waitron/till" test:merge` exited 0 with 223 files, 6,328 tests and 98.03 / 95.46 / 98.97 / 99.38
 (statements / branches / functions / lines), the same as an unsharded `test:coverage`. The control,
 one till test file run under the same empty folder, failed with "Executable doesn't exist".
+(Seven shards since A929: see "The till's shards: seven, because the work outgrew two" below.)
 
 The three browser packages' `test:merge` names a coverage provider of its own,
 `scripts/vitest-shard-coverage-merge.mjs`: v8's, with only the merge changed. On Vitest 4.1.11 a
@@ -537,8 +538,8 @@ none did. Measured 2026-10-09 on `packages/venue-service`, four `test:shard` blo
 exited 0 at 98.38 / 95.16 / 99.32 / 99.2, every count equal to an unsharded `pnpm test:coverage`;
 `pnpm exec vitest --merge-reports .vitest-reports --coverage` exited 1 at 98.09 / 95.16 / 97.44 /
 99.2 (functions 2,635 of 2,704 against 2,635 of 2,653). A throwaway source file no test loaded
-appeared in the wrapper's json report with every count zero. On `apps/till`'s two blobs the plain
-merge and the wrapper printed the same counts. On a Vitest upgrade, run a plain merge over a
+appeared in the wrapper's json report with every count zero. On `apps/till`'s two blobs (2026-10-09,
+before A929 made them seven) the plain merge and the wrapper printed the same counts. On a Vitest upgrade, run a plain merge over a
 browser package's blobs: if it gives the unsharded totals, delete the wrapper.
 
 ### A file-only Vitest list does not apply shard selection
@@ -1039,35 +1040,45 @@ whichever shard holds it. Local wall times were no guide here: the same old code
 
 ### The till's shards: seven, because the work outgrew two
 
-A929 (2026-10-20). `test-till (2)` took 5.2 to 8.9 minutes on the 13 successful CI runs the
-watcher read before the change (main and pull requests); `test-till (1)` took 4.9 on run
-39398967206. The steps before the tests
-(checkout, pnpm, Node, install, Playwright) took about 30 s in each job of run 39398967206;
-the test step took 261 s in shard 1 and 477 s in shard 2.
+A929 (2026-10-20). On four runs (39392294060, 39394031377, 39397847779, 39398967206), timed from the
+first to the last line of each job's log, `test-till (2)` took 7.7 to 9.1 minutes and `test-till
+(1)` 4.9 to 6.4. The steps before the tests (checkout, pnpm, Node, install, Playwright) took about
+30 s in each job of run 39398967206; the test step took 261 s in shard 1 and 477 s in shard 2.
 
-- **The work, not the runner.** On four runs (39392294060, 39394031377, 39397847779,
-  39398967206) the two shards' `[file-progress]` times summed to 2,000 to 2,262 file-seconds:
-  shard 2 held 1,162 to 1,363 of them, shard 1 699 to 899. Wall time ran at about 0.37 of
-  a shard's file-seconds in both shards (259 s for 699, 475 s for 1,301 on run 39398967206), so
-  the slower shard was slower because it held more work, not because it drew a slower runner.
-- **No single removable cost.** Shard 2 held three files of 108 to 145 s each,
-  `src/till-app-drafts.test.ts`, `src/till-app-parties.test.ts` and
-  `src/screens/till-counter-cleanup.look.test.ts`; shard 1 held `src/till-app.test.ts` (103 to
-  143 s). Run alone locally, the first two hold 410 and 565 cases and the fastest case of each
-  took 0.08 to 0.09 s, so there is no fixed cost per case to cut; the look test's 16 cases each
-  take several screenshots with an accessibility check per screenshot.
-- **Why seven.** A replay of Vitest 4.1.11's split (the sha1 of each path under `apps/till`,
-  sorted, cut into equal counts) over those runs' per-file times put the same files in each of
-  the two shards as the runs did. Over the current names the busiest shard of four would hold 751
-  to 892 file-seconds, of five 536 to 628, of six 517 to 611 and of seven 472 to 562, because the
-  three heavy files sort next to each other. Names change with every new file, so the choice was
-  also tested over 300 random orders per run: the busiest of seven held at most 535 to 588
-  file-seconds in nine orders out of ten, against 587 to 640 for six. Halving the four heaviest
-  files in that model lowered the busiest shard by only about 40 to 70 file-seconds, so they
-  were left whole.
+- **More work in one shard.** On those four runs the two shards' `[file-progress]` times summed to
+  2,000 to 2,262 file-seconds: shard 2 held 1,162 to 1,363 of them, shard 1 699 to 899. On three of
+  the runs (all but 39397847779) the split was the same, 231 files in each shard, and shard 2's
+  always summed more (1,162 to 1,301 against 699 to 848), so the gap travels with the files. The
+  runner moved the totals too: shard 1's same files took 699 file-seconds on run 39398967206 and 846
+  to 848 on the other two. Vitest's reported duration was 0.36 to 0.38 of a shard's file-seconds in
+  all eight jobs (259 s for 699 and 475 s for 1,301 on run 39398967206).
+- **No large cost shared by every case in the two biggest files.** Shard 2 held three files of 108
+  to 145 s each, `src/till-app-drafts.test.ts`, `src/till-app-parties.test.ts` and
+  `src/screens/till-counter-cleanup.look.test.ts`; shard 1 held `src/till-app.test.ts` (103 to 143
+  s). Run alone locally, the first two's 410 and 565 cases took 292 and 298 s in all, and the
+  fastest case of each took 0.09 and 0.08 s, so a cost every case pays could be at most about 37 and
+  44 s of those files; the look test's 16 cases each take several screenshots.
+- **Why seven.** A replay of Vitest 4.1.11's split (the sha1 of each path under `apps/till`, sorted,
+  cut into equal counts) over those runs' per-file times put the same files in each of the two
+  shards as the runs did. Over each run's own file names the busiest shard of four would hold 751 to
+  892 file-seconds, of five 536 to 628, of six 517 to 611 and of seven 472 to 562, because the heavy
+  files sort close together: on run 39398967206 (462 files) the look test and
+  `till-app-drafts.test.ts` come 235th and 263rd, so they share a shard at five, six and seven, and
+  with `till-app-parties.test.ts` (338th) all three share one at four. On the 477 names this branch
+  runs on (run 39397847779 has the same files as the branch head) the two come 240th and 270th: six
+  shards split them and seven do not, so there the busiest of six (517) was lighter than the busiest
+  of seven (562). Seven was chosen on the random orders below, not on the current names. Names
+  change with every new file, so the choice was also tested over 300 random orders per run: the
+  busiest of seven held at most 535 to 588 file-seconds in nine orders out of ten, against 587 to
+  640 for six. Halving the four heaviest files in that model lowered the busiest shard by only about
+  40 to 70 file-seconds, so they were left whole.
 
-Not yet measured: the seven shards' CI times. The replay predicts the busiest test step at about
-175 to 210 s (0.37 of 472 to 562 file-seconds); the first runs after the change are the receipt.
+The replay predicted the busiest test step at about 175 to 210 s (0.37 of 472 to 562 file-seconds).
+Measured on run 39404947291, which is this change plus a one-line comment in
+`apps/till/src/main.ts`, because the change alone touches only CI's own files and documents, for
+which CI's `changes` job answers `code=false` and runs no package's tests: the seven test steps took
+72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
+busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
 
 ### A cheap job can still be the critical path
 

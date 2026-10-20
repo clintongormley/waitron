@@ -1079,6 +1079,9 @@ jobs:
   # here proves it would — see TILL_PACKAGE in scripts/changed-scope.mjs for the honest framing. What
   # it buys with certainty is that a second wedged browser can never take the other packages'
   # test-light results down with it.
+  #
+  # Seven shards: see docs/developers/ci-and-gates.md, "The till's shards: seven, because the work
+  # outgrew two" (A929).
   test-till:
     timeout-minutes: 10
     needs: changes

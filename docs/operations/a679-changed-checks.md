@@ -3868,6 +3868,8 @@ The recovery-host split passes its 129 cases in Linux CI. File-progress end time
 The earlier combined file took 471.9 seconds. These are file measurements, not a claim that
 every package job meets the approximate four-minute target. The till duration follow-up
 remains open, and provisioning shard 1's 297-second test step is recorded separately.
+(2026-10-20: closed by A929; see ci-and-gates.md, "The till's shards: seven, because the work
+outgrew two".)
 
 The finished integration entry is removed from the backlog. Its three internal test gaps,
 root-summary housekeeping, A696, A731–A733 and later W41s work remain separate. Main's
