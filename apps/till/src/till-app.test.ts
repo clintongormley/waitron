@@ -22107,6 +22107,7 @@ describe("till-app: a box update while a kitchen display's dish move still waits
                 items: [
                   {
                     id: "ti-1",
+                    allergy: null,
                     workingOrderLineId: "wol-1",
                     state: "queued",
                     name: "Paella",
