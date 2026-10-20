@@ -685,7 +685,8 @@ export function settleMode(defaults: WaitronDefaults, choices: ThemeChoices, mod
 The brand colour warns in a mode when it is set, not set by hand for that mode, and a rule naming
 `--wt-color-primary` fails on the settled colours. `against` is the other colour of each such rule,
 in rule order, de-duplicated, without the prefix. `fix` is `brandFixShade(brandColor, mode, [bg,
-surface, surface-raised, field-fill])` on the settled colours — the same function the painting
+surface, surface-raised, field-fill])` (2026-10-20, slice 1 pre-merge review: plus `stepper-button`,
+`BRAND_FIX_GROUNDS`) on the settled colours — the same function the painting
 path calls — kept only if deriving again with `brandFix[mode]` leaves no rule naming the primary
 failing; otherwise `null` (port `derive-h2.mjs:333-351`, the brand half).
 
@@ -834,6 +835,9 @@ become one `station-fills` item and `station-<colour>-dot` keys one `station-dot
 its count, placed where its first member was; every other key stays a `colour` item.
 
 - [ ] **Step 1: Write the failing tests** in `hand-warnings.test.ts`:
+  (2026-10-20, slice 1 pre-merge review: the three rules added after this task change the names and
+  counts below for the sage, pure blue, `#7a1f2b` and `#808080` cases, and the cream page now warns
+  beside the sage; the current values are the tests' pins, regenerated from `derive-h4.mjs`.)
   - **The sage secondary text** (dark-green brand, `brandFix.dark`, light `bg` `#f8f1e1` and `text-muted` `#8fa898`): one warning, `field` `"handSet.light.text-muted"`, `fix` `"#526a5b"`, `against` `surface-lifted`, `field-fill`, `field-fill-disabled`, then the 15 station fills (`station-red` … `station-brown`) — 18 names; the ratios on the first three `"2.04"`, `"2.24"`, `"2.38"`; no warning for `handSet.light.bg`; tint 1; field-fill `#ebf2ed`. With `#526a5b` set instead: no warning, ratios `"4.70"`, `"5.17"`, `"5.49"`, and `4.54` to `5.11` on the station fills (`output-sage-stations.txt`). `groupAgainst` of its `against` is `[colour surface-lifted, colour field-fill, colour field-fill-disabled, station-fills 15]`.
   - **Pure blue cards** (light `surface` `#0000ff`): `handSet.light.surface` warns with fix `#e2ecff`, 22 names in `against`, every station dot among them; with the fix, nothing fails. `groupAgainst` gives 8 items: `field-line`, `primary-text`, `google-button-line`, `success`, `danger`, `station-dots 15`, `primary`, `focus`.
   - **Two hand-set colours failing one rule** (plan review H1; `two-hand.mjs ./derive-h1.mjs`): light `text` `#6a6a6a` and `surface-sunken` `#bbbbbb` — `handSet.light.text` fix `#4a4a4a` (its `against` holds `surface-sunken`, `track` and 12 station fills; `groupAgainst` gives `surface-sunken`, `track`, `station-fills 12`), and `handSet.light.surface-sunken` fix `#ebebeb`, not `null`. Taking only the text's fix: no warning. Taking only the sunken areas' fix: the sunken areas no longer warn, the text still does, now with fix `#5b5b5b`. `fixAll`: text `#4a4a4a`, sunken areas kept at `#bbbbbb`, no warning. The control (`two-hand.mjs ./derive-settle2.mjs`, the old rule): the sunken areas' fix was `null`.

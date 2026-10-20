@@ -55,7 +55,6 @@ const newMemo = (): Memo => ({
   luminances: new Map(),
 });
 
-/** How many defaults' memos are kept between calls, and how many entries each of a memo's maps keeps. */
 const KEPT_DEFAULTS = 1;
 const KEPT_ENTRIES = 500;
 
@@ -122,16 +121,15 @@ const TINT_TARGETS: Readonly<
   },
 };
 
-/** The grounds the button colour sits on. */
+/** The grounds link text is worked out against, beside the lifted surface; the focus ring takes the first two. */
 const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
 /** The brand fix also clears the number stepper's fill, on which the stepper paints its icon in the button colour. */
 const BRAND_FIX_GROUNDS = [...BRAND_GROUNDS, colourToken("stepper-button")];
 
 /**
  * One step of a lightness walk; `null` once the lightness is pinned at 0 or 1, since every later
- * step would repeat this colour. The reference also takes a first step that repeats; only #000000
- * starts pinned, and it maps to itself (checked over all 16.7M #rrggbb colours; receipt in the
- * slice 1 PR).
+ * step would repeat this colour. Only #000000 starts pinned, and it maps to itself (checked over
+ * all 16.7M #rrggbb colours; receipt in the slice 1 PR).
  */
 function stepped(L: number, dir: number, size: number): number | null {
   if (dir === 1 ? !(L < 1) : !(L > 0)) return null;
@@ -183,9 +181,9 @@ function walk(
 }
 
 /**
- * Walks `hex`'s lightness in 0.005 steps until it has `need` against every colour in `list`. The
- * reference stops after 200 steps; no #rrggbb walk takes more before its lightness is pinned
- * (checked over all 16.7M #rrggbb colours; receipt in the slice 1 PR), so this one needs no count.
+ * Walks `hex`'s lightness in 0.005 steps until it has `need` against every colour in `list`. No
+ * #rrggbb walk takes more than 200 steps before its lightness is pinned (checked over all 16.7M
+ * #rrggbb colours; receipt in the slice 1 PR), so this one needs no count.
  */
 function until(
   memo: Memo,
@@ -383,7 +381,7 @@ function failing(
   return failed;
 }
 
-/** The tint strengths tried, by repeated subtraction as the reference steps them: the last is 1.4e-16. */
+/** The tint strengths tried, by repeated subtraction: the last is 1.4e-16, not 0. */
 const TINT_STRENGTHS = Array.from({ length: 10 }).reduce<number[]>(
   (list) => [...list, list[list.length - 1]! - 0.1],
   [1],

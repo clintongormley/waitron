@@ -527,7 +527,9 @@ background and round corners.
    on light screens: #9f8b18 · Undo" (`05-fixed-light.png`), and Cancel or Undo puts the lemon back.
    Dark screens keep the lemon, which reads there. For a colour set by hand, the warning and its fix
    sit under its row ("Light screens: hard to read on Selected item, Field background,
-   Switched-off field background and the 15 station colours." with **Use #526a5b**); pressing it replaces the hand-set value
+   Switched-off field background and the 15 station colours." with **Use #526a5b**; 2026-10-20, with
+   the slice 1 pre-merge review's rules, the row also names the page and both card colours, section
+   6's worked example); pressing it replaces the hand-set value
    with the fixed shade and shows "Light screens: fixed from #8fa898 · Undo" until the editor
    closes. When two or more warnings with a fix show, a line above the form's buttons says "2
    colours are hard to read." with **Fix all** (`15-hand-set-and-dark-warnings-light.png`). The
@@ -1073,7 +1075,7 @@ All my call; the plan pins the exact numbers.
   (`packages/ui/src/components/wt-number-stepper.ts:96`) and, on hover, lays that fill under them
   (`:114`). With
   them it is 108 in light and 113 in dark. The brand colour now warns where it does not stand 3:1
-  from the page, both surfaces, the raised cards, the field fill and the stepper's fill, and its fix
+  from the page, both surfaces, the field fill and the stepper's fill, and its fix
   is searched against all five. Without the stepper's fill in that search, 51 of the brand sweep's
   363 warnings had no fix, Café Limón's and Bar Lucía's among them (`h4-sweep-warn-exact.mjs brand`
   and `h4-brand-examples.mjs` with `A841_H4_STEPPER_GROUND=0`). With it, Café Limón's fix is
@@ -1220,6 +1222,9 @@ answered A on 2026-10-20; section 19).
    tills show the pale sage. Mock-up `15-hand-set-and-dark-warnings-light.png`, which also shows her
    green warning for dark screens before she took that fix, and Fix all taking both; its sage row
    names the first three colours only (section 18).
+   (2026-10-20, with the slice 1 pre-merge review's rules: the sage also fails on the page, the
+   cards and the raised cards; its row names those too, and the cream page warns with no
+   fix, blocked by the sage, until `#526a5b` is taken.)
 
 **Extreme picks** (`node sweep-warn.mjs hand light` and `… hand dark` in the same folder, added for
 Q2: Bar Lucía, Tinted, with her dark fix `#417c59` taken, each of the 22 colours set by hand in turn
@@ -1255,7 +1260,7 @@ blue cards' fix is now `#ffffff`, because light cards must stand 2:1 from the ca
 (2026-10-20, with the slice 1 pre-merge review's rules, and Bar Lucía's dark fix now `#437e5b`: the
 light sweep has 82 cases with no warning and 94 with one, the dark 76 and 100, still none without a
 fix, none unexplained and none failing after Fix all (`h4-sweep-warn-exact.mjs hand light` and
-`… hand dark`). Without the stepper's fill in the brand fix's search, the dark sweep counted 147
+`… hand dark`). Without the stepper's fill in the brand fix's search, the reference's dark sweep counted 147
 brand-colour warnings with no fix and 110 cases failing after Fix all. Pure blue light cards warn
 against 24 colours, text and secondary text among them, and are still offered `#ffffff`. The sage
 Secondary text now also warns on the cream page it sits on: the page's warning has no fix while the

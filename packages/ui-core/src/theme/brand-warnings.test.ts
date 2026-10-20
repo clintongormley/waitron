@@ -17,7 +17,7 @@ const DARK_GREEN: ThemeChoices = {
 const BURGUNDY: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#7a1f2b", background: "tinted" };
 
 describe("the brand colour's readability warning", () => {
-  test("the lemon brand (#f2d300) warns in light against the page, the cards, the field fill and the stepper's fill, and its fix reads", () => {
+  test("the lemon brand (#f2d300) warns in light against the field fill, the page, both surfaces and the stepper's fill, and its fix reads", () => {
     const theme = deriveTheme(LEMON);
     expect(theme.warnings).toEqual([
       {
