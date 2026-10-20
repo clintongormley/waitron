@@ -102,6 +102,7 @@ import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
 
 /** The words of a table that needs clearing or moving. */
 const WAITING = {
@@ -249,6 +250,7 @@ export class TillFloorScreen extends LitElement {
     servicePeriodStyles,
     floorTrayStyles,
     signalChipStyles,
+    helpAnchorStyles,
     css`
       :host {
         display: block;
@@ -264,6 +266,12 @@ export class TillFloorScreen extends LitElement {
       @media ${unsafeCSS(PHONE_WIDTH)} {
         .screen {
           padding-inline: 0;
+        }
+
+        /* Room for the badge hanging past the trailing edge, whether help is on or off. */
+        .actions,
+        .layout-due {
+          margin-inline-end: calc(var(--wt-help-badge-target) / 2);
         }
       }
 
@@ -1927,7 +1935,7 @@ export class TillFloorScreen extends LitElement {
     const offer = zone?.layoutDue ?? null;
     if (zone === undefined || offer === null || !this.canChangeToday) return nothing;
     const { periodName } = offer;
-    return html`<div class="layout-due" data-layout-due>
+    return html`<div class="layout-due help-anchor" data-layout-due>
       <p role="status">
         ${
           periodName === null
@@ -1953,6 +1961,7 @@ export class TillFloorScreen extends LitElement {
       >
         ${t("floor.update_layout")}
       </wt-button>
+      ${helpBadge("help.floor.layout_due", t("floor.update_layout"))}
     </div>`;
   }
 
@@ -2073,7 +2082,7 @@ export class TillFloorScreen extends LitElement {
                 </nav>`
               : nothing
           }
-          <div class="actions">
+          <div class="actions help-anchor">
             ${
               this.#phone.matches
                 ? nothing
@@ -2087,6 +2096,14 @@ export class TillFloorScreen extends LitElement {
                   </wt-button>`
             }
             ${this.#zoneMenu(planned, activeKey, view)}
+            ${helpBadge(
+              view === "list"
+                ? "help.floor.tables_list"
+                : this.canChangeToday
+                  ? "help.floor.tables_map"
+                  : "help.floor.tables_map_view",
+              t("floor.map_label"),
+            )}
           </div>
         </div>
         ${this.#layoutBanner(activeKey)}
@@ -2238,6 +2255,11 @@ export class TillFloorScreen extends LitElement {
       .heading=${tableSentence(table, words.title, words.titleNamed)}
       @wt-close=${close}
     >
+      ${
+        !clear && this.#actsOn(kind)
+          ? helpBadge("help.floor.needs_moving", t("floor.needs_moving"), { slot: "help" })
+          : nothing
+      }
       <p>${t(words.body)}</p>
       <wt-button
         slot="footer"

@@ -16,6 +16,16 @@ export const helpEn = {
     "Counter orders in the zones this device serves that are not finished: sent but not paid, handed over but not paid, or paid with dishes sent to the kitchen but not yet handed over. Pay takes payment; Hand over, where it shows, records that the customer has taken the order.",
   "help.counter.guests":
     "Leave it empty for no guests line. With a number, the receipt shows the guests and what each person pays.",
+  "help.floor.tables_map":
+    "Tap a free table to seat guests, or a table in use to go back to its order. Hold a table and let go to see its details; hold and drag to move it for today.",
+  "help.floor.tables_map_view":
+    "Tap a free table to seat guests, or a table in use to go back to its order. Hold a table and let go to see its details.",
+  "help.floor.tables_list":
+    "Tap a card to seat guests at a free table, or to go back to a table in use. A card marked Needs clearing has its own button; one marked Needs moving does too, if you may change today's floor.",
+  "help.floor.layout_due":
+    "A different plan is due for this zone than the one today's floor was laid out from: the next period's, or one that was changed. Update layout moves the free tables to the new plan now. Tables with guests or still to clear keep their place until they are free, then show Needs moving. Tables taken off today stay off.",
+  "help.floor.needs_moving":
+    "Nobody can be seated at this table until this is settled. Leave it here keeps the table where it stands until the floor is next laid out, so it can be used straight away.",
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
   "help.more.profile":
@@ -48,6 +58,16 @@ export const helpEs: Record<HelpKey, string> = {
     "Pedidos de barra de las zonas que atiende este dispositivo que no están terminados: enviados sin cobrar, entregados sin cobrar, o cobrados con platos enviados a cocina pero sin entregar. Cobrar cobra el pedido; Entregar, donde aparece, anota que el cliente se lo ha llevado.",
   "help.counter.guests":
     "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
+  "help.floor.tables_map":
+    "Toca una mesa libre para sentar a los clientes, o una ocupada para volver a su pedido. Mantén pulsada una mesa y suéltala para ver sus detalles; mantenla y arrástrala para moverla hoy.",
+  "help.floor.tables_map_view":
+    "Toca una mesa libre para sentar a los clientes, o una ocupada para volver a su pedido. Mantén pulsada una mesa y suéltala para ver sus detalles.",
+  "help.floor.tables_list":
+    "Toca una tarjeta para sentar a los clientes en una mesa libre o volver a una ocupada. Una tarjeta Por recoger tiene su propio botón; una Por mover también, si puedes cambiar la sala de hoy.",
+  "help.floor.layout_due":
+    "A esta zona le toca un plano distinto del que se usó para preparar la sala de hoy: el del siguiente periodo, o uno que se ha cambiado. Actualizar plano coloca ya las mesas libres según el plano nuevo. Las mesas con clientes o por recoger se quedan donde están hasta quedar libres, y entonces aparecen Por mover. Las mesas quitadas hoy siguen quitadas.",
+  "help.floor.needs_moving":
+    "No se puede sentar a nadie en esta mesa hasta resolverlo. Dejar aquí mantiene la mesa donde está hasta la próxima vez que se prepare la sala, y así se puede usar ya.",
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.more.profile":
