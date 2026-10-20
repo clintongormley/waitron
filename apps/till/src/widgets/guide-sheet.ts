@@ -19,7 +19,6 @@ export class TillGuideSheet extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      /* The heading and the frame together fill the modal's body exactly. */
       .frame {
         display: flex;
         flex-direction: column;
@@ -67,7 +66,7 @@ export class TillGuideSheet extends LitElement {
     if (page === null) return;
     this.#pageListeners = new AbortController();
     const { signal } = this.#pageListeners;
-    // A plain event, carrying no key or position: listeners above can count it, not act on it.
+    // Only the type is copied: no key and no position.
     const relay = (event: Event) =>
       this.dispatchEvent(new Event(event.type, { bubbles: true, composed: true }));
     page.addEventListener("pointerdown", relay, { signal });

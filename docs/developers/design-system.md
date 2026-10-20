@@ -2279,7 +2279,8 @@ columns and tabs; and the "a help badge inside a menu row, and a menu that chang
 only by that screen's own tests: SumUp's affiliate badge by the "the affiliate
 help is hidden until help is on, then hangs over the heading's top trailing corner" case in
 `packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; the till's screen badges by
-the `*.help.test.ts` files beside each till screen and `menu-browser.ts`; nothing checks a new one.
+the `*.help.test.ts` files beside the counter, floor and table-order screens, `menu-browser.ts` and
+`till-shell.ts`; nothing checks a new one.
 
 ### Forms
 
