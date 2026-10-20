@@ -942,12 +942,7 @@ export class TillBillPayDialog extends LitElement {
   /** Whether Continue can ask: a handheld offers a method, and Whole bill has something to pay. */
   #canAsk(): boolean {
     if (!this.handheld) return true;
-    return (
-      this.#methods().length > 0 &&
-      (this.chosenWay !== "whole" ||
-        (this.balance !== null &&
-          compareDecimal(decimal(this.balance.outstanding), decimal("0")) > 0))
-    );
+    return this.#methods().length > 0 && (this.chosenWay !== "whole" || this.#owing());
   }
 
   #readyReader(): FixedReader | null {
