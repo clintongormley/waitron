@@ -343,6 +343,18 @@ describe("till-floor-screen: zone tabs", () => {
     expect(getComputedStyle(buttonOf(el, "z3")).backgroundColor).toBe("rgb(1, 2, 3)");
   });
 
+  it("draws a filled forgotten tab's icon in the filled tab's text colour", async () => {
+    const { el, host } = await mount([
+      seated("t1", "z1"),
+      seated("t2", "z2", { timingBand: "forgotten" }),
+    ]);
+    host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-on-danger", "rgb(7, 8, 9)");
+
+    const icon = tabOf(el, "z2").querySelector("wt-icon")!;
+    expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
+  });
+
   it("leaves the zone on screen plain", async () => {
     const { el } = await mount([seated("t1", "z1", { timingBand: "forgotten" }), free("t2", "z2")]);
     expect(stateOf(el, "z1")).toBeNull();

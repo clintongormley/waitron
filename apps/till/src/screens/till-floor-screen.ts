@@ -472,6 +472,7 @@ export class TillFloorScreen extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
+      .zone-tab wt-icon,
       [data-tabs-edge] wt-icon {
         color: inherit;
       }
