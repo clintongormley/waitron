@@ -88,8 +88,10 @@ const TINT_TARGETS: Readonly<
   },
 };
 
-/** The grounds the button colour sits on; its fix shade is worked out against them. */
+/** The grounds the button colour sits on. */
 const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
+/** The brand fix also clears the number stepper's fill, on which the stepper paints its icon in the button colour. */
+const BRAND_FIX_GROUNDS = [...BRAND_GROUNDS, colourToken("stepper-button")];
 
 /**
  * One step of a lightness walk; `null` once the lightness is pinned at 0 or 1, since every later
@@ -213,7 +215,9 @@ function deriveAt(
   const grounds = BRAND_GROUNDS.map(get);
   const primary =
     fixed[PRIMARY] ??
-    (choices.brandFix[mode] === true ? brandFixShade(memo, brand, mode, grounds) : brand);
+    (choices.brandFix[mode] === true
+      ? brandFixShade(memo, brand, mode, BRAND_FIX_GROUNDS.map(get))
+      : brand);
   const ink = dark ? fromOklch({ L: 0.16, C: Math.min(C0, 0.04), H }) : "#ffffff";
   const onPrimary =
     fixed[colourToken("on-primary")] ??

@@ -323,6 +323,11 @@ table fills, and the success and danger dots 3:1 on the surface (482-498); stati
 on the surface and each fill, and the focus colour 3:1 on every station fill and the lifted surface
 (531-576). No test holds a button's fill against the page, or the text on a button: those are
 Waitron's own rules in section 9.
+(2026-10-20, slice 1 pre-merge review: no rule here held text or secondary text on the page or the
+cards, though a card's header paints secondary text on the raised cards
+(`packages/ui-core/src/components/wt-card.ts:22-28`). The shared list now holds text and secondary
+text at 4.5:1 or more on the page, the cards and the raised cards, and section 9's button rules
+gained the raised cards and the number stepper's fill.)
 
 **Pages a person could call "Settings" today** (re-read for the Q1 answer, 2026-10-19, on main
 ade4b3a3c):
@@ -465,6 +470,8 @@ background and round corners.
    paints, section 11), and so does a button colour of the dark version's own ("· dark screens
    #5fa77a, set by hand", section 7); a warning saved with "Save anyway" shows as a line under the
    rows (step 7). Mock-up `01-appearance-card-{light,dark}.png`.
+   (2026-10-20: with the slice 1 pre-merge review's rules, section 6, Bar Lucía's dark fix paints
+   `#437e5b`, not `#417c59`, and Café Limón's light fix below `#9d8a15`, not `#9f8b18`.)
 2. **Edit** opens the card in place, like the Defaults card. A line under its heading names what
    is being edited: "Theme in use: Bar Lucía. Saving changes every screen." (editing a theme that
    is not in use, section 8b, says "Not in use. Saving changes no screen until you use it.").
@@ -1059,6 +1066,21 @@ All my call; the plan pins the exact numbers.
   (2026-10-20: main's #1920 added the calm card edge, `--wt-color-table-calm-edge`, held 2:1 or
   more on the cards and 1.4:1 or more on the borders; with those two rules it is 100 in light and
   105 in dark. `derive-h3.mjs` in the same folder is the reference with them.)
+  (2026-10-20, slice 1 pre-merge review: three rules were missing. Text and secondary text 4.5:1 or
+  more on the page, the cards and the raised cards; the button colour 3:1 or more on the raised
+  cards; and the button colour 3:1 or more on the number stepper's fill,
+  `--wt-color-stepper-button`, since the stepper paints its + and − in the button colour
+  (`packages/ui/src/components/wt-number-stepper.ts:96`) and, on hover, lays that fill under them
+  (`:114`). With
+  them it is 108 in light and 113 in dark. The brand colour now warns where it does not stand 3:1
+  from the page, both surfaces, the raised cards, the field fill and the stepper's fill, and its fix
+  is searched against all five. Without the stepper's fill in that search, 51 of the brand sweep's
+  363 warnings had no fix, Café Limón's and Bar Lucía's among them (`h4-sweep-warn-exact.mjs brand`
+  and `h4-brand-examples.mjs` with `A841_H4_STEPPER_GROUND=0`). With it, Café Limón's fix is
+  `#9d8a15` (3.45:1 on white, 3.23:1 on the page, black text on it 6.08:1; the lemon stands 1.31:1
+  on the stepper's fill) and Bar Lucía's dark fix is `#437e5b` (white text on it 4.80:1); each
+  warning below also names the raised cards and the stepper's fill. `derive-h4.mjs` in the same
+  folder is the reference with these rules, and `output-h4-*.txt` there hold its outputs.)
   The prototype's `warn` (added for Q2) works out a set as picked and lists the warnings with their
   fixes; `checks.txt` there holds its output for every picture.
   - Bar Lucía, `#1e5b3a`, tinted: light buttons are `#1e5b3a` with white text at 8.04:1, and no
@@ -1084,6 +1106,11 @@ All my call; the plan pins the exact numbers.
   tint, had the tint weakened in every light case (the bar track fell to 1.38:1 on the page) and 44
   cases failing on black and near-black brands; the light tint and the lightness search were
   changed until the runs above. The build's guard test repeats these sweeps (section 15).
+  (2026-10-20, with the slice 1 pre-merge review's rules: `warned 363 (brand colours warning on light
+  112/216, on dark 73/216), warnings with no fix 0, fix taken but still failing 0, cases with an
+  unexplained failing rule 0`, and no tint weakened. The three new warnings are `#ff00cc`, Neutral
+  and Tinted, and `#ff3399`, Neutral, on light screens, each against the stepper's fill alone
+  (`h4-sweep-warn-exact.mjs brand`, `h4-brand-sweep-diff.mjs`, `h4-brand-sweep-tint.mjs`).)
 
 ### Colours set by hand
 
@@ -1225,6 +1252,15 @@ blue cards' fix is now `#ffffff`, because light cards must stand 2:1 from the ca
 (relative luminance 0.463): a card passes only at a luminance of 0.976 or more (`#fdfdfd` does,
 `#fcfcfc` does not) or 0.2065 or less (`h3-sweep-warn-exact.mjs`, `calm-edge.mjs`,
 `calm-edge-sweep-diff.mjs` and their `output-calm-edge*.txt` in the slice 1 plan's reference folder).)
+(2026-10-20, with the slice 1 pre-merge review's rules, and Bar Lucía's dark fix now `#437e5b`: the
+light sweep has 82 cases with no warning and 94 with one, the dark 76 and 100, still none without a
+fix, none unexplained and none failing after Fix all (`h4-sweep-warn-exact.mjs hand light` and
+`… hand dark`). Without the stepper's fill in the brand fix's search, the dark sweep counted 147
+brand-colour warnings with no fix and 110 cases failing after Fix all. Pure blue light cards warn
+against 24 colours, text and secondary text among them, and are still offered `#ffffff`. The sage
+Secondary text now also warns on the cream page it sits on: the page's warning has no fix while the
+sage is set, names the sage as what blocks it, and goes when the sage's fix `#526a5b` is taken
+(`h4-pins-moved.mjs`, `h4-mockup-15.mjs`).)
 
 ## 7. Light, Dark and Follow device: every theme has a light and a dark version
 
@@ -1807,6 +1843,11 @@ it because some controls show their state by fill alone — the pressed Theme bu
 `--wt-color-primary`" (`design-system.md:3294-3297`) — and a switch's track is the same colour.
 Waitron's light blue stands 4.33:1 on the page and 4.63:1 on the surface, with white text on it at
 4.63:1 (derive.mjs `ratio`).
+(2026-10-20, slice 1 pre-merge review: the fill rule also holds on the raised cards,
+`--wt-color-surface-raised`, and a third rule holds the button colour 3:1 or more on the number
+stepper's fill, `--wt-color-stepper-button`, on which the stepper paints its icon in that colour.
+Waitron's light blue stands 4.63:1 on the raised cards and 4.05:1 on the stepper's fill; its dark
+`#4c8dff` 4.74:1 and 4.55:1 (`h4-waitron-palette.mjs` in the slice 1 plan's reference folder).)
 
 **Text in the button colour.** The 15 places that paint text in `--wt-color-primary` (section 3) are
 outside these rules, and Waitron's own blue already reads under 4.5:1 on its page. My call: the build
@@ -1883,6 +1924,10 @@ Worked examples:
 - **Bar Lucía, sage "Secondary text", light screens** (section 6, worked example step 4). The row
   warns, with **Use #526a5b**. Taken, the hand-set value becomes `#526a5b`; saved anyway, `#8fa898`
   is stored as typed and light screens show the pale sage at about 2 to 1.
+- (2026-10-20, slice 1 pre-merge review's rules, section 6: Café Limón's fix is `#9d8a15` and Bar
+  Lucía's `#437e5b`; both warnings also name the raised cards and the stepper's fill; and the
+  sage row is joined by a warning on the cream page, with no fix while the sage is set, which goes
+  when the sage's fix is taken.)
 
 **No shade passes.** Where no lightness of a colour's hue passes, the warning says "{Light / Dark}
 screens: no shade of this colour can be read on {names}. Pick another colour." and offers no fix.
@@ -2315,11 +2360,14 @@ and administrators change it.
   bringing back the brand colour as picked and its warning (`/tmp/a841q2/check5.mjs` in the
   prototype: the fix leaves, the hand-set `#5a9c74` paints with no warning, and after Use worked-out
   colour the green `#1e5b3a` paints and warns with the fix `#417c59`).
+  (2026-10-20: with the slice 1 pre-merge review's rules that fix is `#437e5b`, section 6.)
 - Server: `PUT` refuses invalid choices with `theme.invalid` naming the field (a hand-set value as
   `handSet.light.bg`, a fix as `brandFix.light`, a fix with Waitron's brand colour, a fix beside a
   hand-set Main buttons for the same mode); stores a valid but hard-to-read choice as sent — the
   lemon, unfixed — and answers it with its warning in keys (`field: "brandColor"`, `mode: "light"`,
-  `against: ["field-fill", "bg", "surface"]`, `fix: "#9f8b18"`), never with `theme.invalid` and
+  `against: ["field-fill", "bg", "surface"]`, `fix: "#9f8b18"`; 2026-10-20, with the slice 1
+  pre-merge review's rules, section 6: `against` also holds `"surface-raised"` and
+  `"stepper-button"`, and `fix` is `"#9d8a15"`), never with `theme.invalid` and
   never with English names; answers the same warning from `GET`, to a supervisor too; serves that
   choice from `/api/theme` as picked; refuses without `layout.configure`; a supervisor's `GET` is
   answered and its `PUT` refused; a configuration import with an invalid theme row is refused and
@@ -2720,6 +2768,9 @@ heard only by screen readers; the "·" kept on the same line as Undo or Use the 
 device" stays on one line. Round 9 redrew 03, 13, 18, 26, 29, 37 and 38 so a link that wraps onto a
 line of its own (Undo at phone width, Use the brand colour) drops the "·". In the editor pictures only the preview shows the draft;
 the dashboard around the card, the card included, keeps the saved look (section 4, step 4):
+(2026-10-20: these pictures show the fixes `#9f8b18` and `#417c59`; with the slice 1 pre-merge
+review's rules the build offers `#9d8a15` and `#437e5b` (section 6), and picture 15's light side
+gains a third warning, on the cream page. Not redrawn.)
 
 | File | Shows |
 | --- | --- |

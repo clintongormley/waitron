@@ -94,7 +94,7 @@ describe("colours set by hand", () => {
 
     const lightOwn = deriveTheme(withHand(DARK_GREEN, "light", { primary: "#5fa77a" }));
     expect(changedTokens(plain, lightOwn, "light")).toHaveLength(8);
-    expect(failingIn(plain, "dark")).toHaveLength(3);
+    expect(failingIn(plain, "dark")).toHaveLength(5);
   });
 
   test("a hand-set Main buttons colour drops the brand fix, and the fix returns as an offer without it", () => {
@@ -106,7 +106,7 @@ describe("colours set by hand", () => {
     const workedOut = deriveTheme(withHand(normalised, "dark", {}));
     expect(workedOut.dark[P("primary")]).toBe("#1e5b3a");
     expect(workedOut.warnings).toEqual([
-      expect.objectContaining({ field: "brandColor", mode: "dark", fix: "#417c59" }),
+      expect.objectContaining({ field: "brandColor", mode: "dark", fix: "#437e5b" }),
     ]);
   });
 

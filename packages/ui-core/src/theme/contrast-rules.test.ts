@@ -16,6 +16,7 @@ import { THEME_COLOURS, colourToken } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
 
 const SIZES: Record<ContrastGroupId, readonly [light: number, dark: number]> = {
+  "body-text": [6, 6],
   "lifted-surface": [6, 6],
   "sunken-surface": [1, 1],
   "bar-track": [3, 3],
@@ -36,7 +37,8 @@ const SIZES: Record<ContrastGroupId, readonly [light: number, dark: number]> = {
   "station-dots": [240, 240],
   "station-focus": [16, 16],
   "button-text": [1, 1],
-  "button-fill": [2, 2],
+  "button-fill": [3, 3],
+  "stepper-icon": [1, 1],
   "focus-ring": [2, 2],
 };
 
@@ -66,8 +68,8 @@ describe("the rule groups", () => {
   }
 
   test("all the rules, in table order", () => {
-    expect(allRules("light")).toHaveLength(384);
-    expect(allRules("dark")).toHaveLength(390);
+    expect(allRules("light")).toHaveLength(392);
+    expect(allRules("dark")).toHaveLength(398);
     expect(allRules("dark")).toEqual(CONTRAST_GROUPS.flatMap((group) => rulesIn(group.id, "dark")));
   });
 
@@ -140,8 +142,8 @@ describe.each(MODES)("Waitron's own palette (%s)", (mode) => {
 describe("the rules naming a colour the theme writes", () => {
   const themeTokens = new Set<string>(THEME_COLOURS.map(colourToken));
   test.each([
-    ["light", 100],
-    ["dark", 105],
+    ["light", 108],
+    ["dark", 113],
   ] as const)("%s", (mode, count) => {
     expect(THEME_RULES[mode]).toEqual(
       allRules(mode).filter((rule) => themeTokens.has(rule.a) || themeTokens.has(rule.b)),

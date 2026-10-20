@@ -99,6 +99,21 @@ worktree's token files (`A841_WT=<this worktree> node <script>`, Node v26.11.1, 
 `derive-h2.mjs` with the edge's two rules added after success and danger on the cards. The counts
 this plan gives as 382 / 388 and 98 / 103 are now 384 / 390 and 100 / 105.)
 
+(2026-10-20, after the slice 1 pre-merge review: the pins that moved come from `derive-h4.mjs`,
+sha256 `edc1e36b89b549ceb4a9965ab6b89bedd2f6c391d67addb3ff6979e5b3dadef6`, which is `derive-h3.mjs`
+with three rule changes, in the port's group order: text and text-muted 4.5:1 or more on bg,
+surface and surface-raised, first; primary 3:1 or more on surface-raised too, in `button-fill`; and
+primary 3:1 or more on stepper-button, after `button-fill`. Its brand fix also searches against
+stepper-button (`A841_H4_STEPPER_GROUND=0` turns that off, for the comparison only). Its fix round 1
+copy is `fix-round-1-h4.mjs`, and `t9/pins2-h4.mjs` and `t9/pins3-h4.mjs` regenerate the two
+fixtures. The counts this plan gives as 384 / 390 and 100 / 105 are now 392 / 398 and 108 / 113,
+in 24 groups. Among the numbers the tasks below give: the dark-green brand's dark fix is `#437e5b`
+(white text `"4.80"`), not `#417c59`; the lemon's light fix is `#9d8a15` (black text `"6.08"`,
+`"3.45"` on white, `"3.23"` on the page), not `#9f8b18`; both brands' warnings add
+`"surface-raised", "stepper-button"` to the end of `against`; the brand sweep has 363 warnings, 112 brand colours warning
+in light and 73 in dark; and the one-colour hand sweep 82 / 94 in light and 76 / 100 in dark
+(`output-h4-*.txt` in the same folder).)
+
 What each change did to the outputs, measured:
 
 - Change 2: with and without it, the worked examples (`ex.mjs`, `ex2.mjs`, `ex3.mjs`) printed the
@@ -449,6 +464,11 @@ button rules (spec lines 1787-1794). `≥` is at-least, `>` above, `≤` at-most
 | 19 | `button-text` | new | both | on-primary on primary ≥ 4.5 | 1 / 1 |
 | 20 | `button-fill` | new | both | primary vs bg, surface ≥ 3 | 2 / 2 |
 | 21 | `focus-ring` | new | both | focus vs bg, surface ≥ 3 | 2 / 2 |
+
+(2026-10-20, after the slice 1 pre-merge review: a group `body-text` comes first, both modes,
+text, text-muted on bg, surface, surface-raised ≥ 4.5, 6 / 6; `button-fill` is primary vs bg,
+surface, surface-raised ≥ 3, 3 / 3; and a group `stepper-icon` follows it, both modes, primary on
+stepper-button ≥ 3, 1 / 1. Main's #1920 had already added `calm-edge`, 2 / 2, after `table-dots`.)
 
 Groups 1-18 total 377 light and 383 dark; Task 4 checks them, by name, comparison and bound,
 against the old file.

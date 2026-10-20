@@ -112,8 +112,8 @@ test("the sweep's totals match the reference's", () => {
     warnedDark: totals.warnedDark.size,
   }).toEqual({
     cases: 864,
-    warnings: 360,
-    warnedLight: 111,
+    warnings: 363,
+    warnedLight: 112,
     warnedDark: 73,
     noFix: 0,
     failingAfterFix: 0,

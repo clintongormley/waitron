@@ -112,9 +112,9 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
 
   test("the dark brand fix paints the fix's shade in dark and leaves light alone", () => {
     const theme = deriveTheme({ ...DARK_GREEN, brandFix: { dark: true } });
-    expect(theme.dark[P("primary")]).toBe("#417c59");
+    expect(theme.dark[P("primary")]).toBe("#437e5b");
     expect(theme.dark[P("on-primary")]).toBe("#ffffff");
-    expect(ratio("#ffffff", theme.dark[P("primary")]!)).toBe("4.94");
+    expect(ratio("#ffffff", theme.dark[P("primary")]!)).toBe("4.80");
     expect(theme.dark[P("bg")]).toBe("#0b110d");
     expect(theme.light).toEqual(deriveTheme(DARK_GREEN).light);
     expectFullList(theme);
@@ -192,7 +192,7 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
     const frozen = deepFreeze({ ...DARK_GREEN, brandFix: { dark: true as const } });
     const first = deriveTheme(frozen);
     expect(deriveTheme(frozen)).toEqual(first);
-    expect(first.dark[P("primary")]).toBe("#417c59");
+    expect(first.dark[P("primary")]).toBe("#437e5b");
   });
 });
 
@@ -205,11 +205,11 @@ describe("the lemon brand (#f2d300), Neutral", () => {
 
     const fixed = deriveTheme({ ...LEMON, brandFix: { light: true } });
     const primary = fixed.light[P("primary")]!;
-    expect(primary).toBe("#9f8b18");
+    expect(primary).toBe("#9d8a15");
     expect(fixed.light[P("on-primary")]).toBe("#000000");
-    expect(ratio("#000000", primary)).toBe("6.18");
-    expect(ratio(primary, "#ffffff")).toBe("3.40");
-    expect(ratio(primary, fixed.light[P("bg")]!)).toBe("3.17");
+    expect(ratio("#000000", primary)).toBe("6.08");
+    expect(ratio(primary, "#ffffff")).toBe("3.45");
+    expect(ratio(primary, fixed.light[P("bg")]!)).toBe("3.23");
     expect(fixed.dark[P("primary")]).toBe("#f2d300");
     expectFullList(picked);
     expectFullList(fixed);
@@ -253,7 +253,8 @@ describe("the tint gives way", () => {
       ["bg", "surface-sunken", "border", "track", "field-fill", "field-fill-disabled"].map(
         (colour) => theme.light[P(colour)],
       ),
-    ).toEqual(["#f7f7f8", "#6f7178", "#d6d9e0", "#6e7178", "#f0f1f4", "#f7f7f8"]);
+    ).toEqual(["#f7f7f8", "#d6d9e0", "#d6d9e0", "#cdd0d8", "#f0f1f4", "#f7f7f8"]);
+    expect(theme.light[P("text")]).toBe("#59595a");
   });
 
   test("not at all on Waitron's real palette", () => {

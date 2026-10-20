@@ -5,6 +5,7 @@ import { THEME_COLOUR_TOKENS, colourToken } from "./tokens.js";
 export type RuleKind = "at-least" | "above" | "at-most";
 
 export type ContrastGroupId =
+  | "body-text"
   | "lifted-surface"
   | "sunken-surface"
   | "bar-track"
@@ -26,6 +27,7 @@ export type ContrastGroupId =
   | "station-focus"
   | "button-text"
   | "button-fill"
+  | "stepper-icon"
   | "focus-ring";
 
 /** `a` is the colour drawn on top, `b` the one under it; both are full token names. */
@@ -102,6 +104,11 @@ function group(
 const onOwn = (fills: readonly string[]): Pair[] => fills.map((fill) => [`on-${fill}`, fill]);
 
 export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
+  group("body-text", MODES, [
+    "at-least",
+    4.5,
+    each(["text", "text-muted"], ["bg", "surface", "surface-raised"]),
+  ]),
   group(
     "lifted-surface",
     MODES,
@@ -216,7 +223,12 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
   ]),
   group("station-focus", MODES, ["at-least", 3, each(["focus"], [...STATIONS, "surface-lifted"])]),
   group("button-text", MODES, ["at-least", 4.5, [["on-primary", "primary"]]]),
-  group("button-fill", MODES, ["at-least", 3, each(["primary"], ["bg", "surface"])]),
+  group("button-fill", MODES, [
+    "at-least",
+    3,
+    each(["primary"], ["bg", "surface", "surface-raised"]),
+  ]),
+  group("stepper-icon", MODES, ["at-least", 3, [["primary", "stepper-button"]]]),
   group("focus-ring", MODES, ["at-least", 3, each(["focus"], ["bg", "surface"])]),
 ];
 

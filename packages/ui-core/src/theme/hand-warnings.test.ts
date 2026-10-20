@@ -74,21 +74,44 @@ describe("a colour set by hand that is hard to read", () => {
     const theme = derive(sage);
     expect(theme.warnings).toEqual([
       {
+        field: "handSet.light.bg",
+        mode: "light",
+        against: ["text-muted"],
+        fix: null,
+        blockedBy: ["text-muted"],
+      },
+      {
         field: "handSet.light.text-muted",
         mode: "light",
-        against: ["surface-lifted", "field-fill", "field-fill-disabled", ...STATION_FILLS],
+        against: [
+          "bg",
+          "surface",
+          "surface-raised",
+          "surface-lifted",
+          "field-fill",
+          "field-fill-disabled",
+          ...STATION_FILLS,
+        ],
         fix: "#526a5b",
         blockedBy: [],
       },
     ]);
     expect(
-      ["surface-lifted", "field-fill", "field-fill-disabled"].map((key) =>
-        ratio("#8fa898", theme.light[P(key)]!),
-      ),
-    ).toEqual(["2.04", "2.24", "2.38"]);
+      [
+        "bg",
+        "surface",
+        "surface-raised",
+        "surface-lifted",
+        "field-fill",
+        "field-fill-disabled",
+      ].map((key) => ratio("#8fa898", theme.light[P(key)]!)),
+    ).toEqual(["2.27", "2.55", "2.55", "2.04", "2.24", "2.38"]);
     expect(theme.tintStrength?.light).toBe(1);
     expect(theme.light[P("field-fill")]).toBe("#ebf2ed");
-    expect(groupAgainst(theme.warnings[0]!.against)).toEqual([
+    expect(groupAgainst(theme.warnings[1]!.against)).toEqual([
+      { kind: "colour", key: "bg" },
+      { kind: "colour", key: "surface" },
+      { kind: "colour", key: "surface-raised" },
       { kind: "colour", key: "surface-lifted" },
       { kind: "colour", key: "field-fill" },
       { kind: "colour", key: "field-fill-disabled" },
@@ -98,10 +121,15 @@ describe("a colour set by hand that is hard to read", () => {
     const fixed = derive(handLight({ bg: "#f8f1e1", "text-muted": "#526a5b" }));
     expect(fixed.warnings).toEqual([]);
     expect(
-      ["surface-lifted", "field-fill", "field-fill-disabled"].map((key) =>
-        ratio("#526a5b", fixed.light[P(key)]!),
-      ),
-    ).toEqual(["4.70", "5.17", "5.49"]);
+      [
+        "bg",
+        "surface",
+        "surface-raised",
+        "surface-lifted",
+        "field-fill",
+        "field-fill-disabled",
+      ].map((key) => ratio("#526a5b", fixed.light[P(key)]!)),
+    ).toEqual(["5.22", "5.88", "5.88", "4.70", "5.17", "5.49"]);
     const onStations = STATION_FILLS.map((key) =>
       contrastRatio("#526a5b", WAITRON_DEFAULTS.light[P(key)]!),
     );
@@ -109,14 +137,16 @@ describe("a colour set by hand that is hard to read", () => {
     expect(Math.max(...onStations).toFixed(2)).toBe("5.11");
   });
 
-  test("pure blue cards (#0000ff) warn against 22 colours, and their fix clears every rule", () => {
+  test("pure blue cards (#0000ff) warn against 24 colours, and their fix clears every rule", () => {
     const theme = derive(handLight({ surface: "#0000ff" }));
     expect(theme.warnings).toHaveLength(1);
     const warning = theme.warnings[0]!;
     expect(warning).toMatchObject({ field: "handSet.light.surface", fix: "#ffffff" });
-    expect(warning.against).toHaveLength(22);
+    expect(warning.against).toHaveLength(24);
     expect(warning.against).toEqual(expect.arrayContaining(STATION_DOTS));
     expect(groupAgainst(warning.against)).toEqual([
+      { kind: "colour", key: "text" },
+      { kind: "colour", key: "text-muted" },
       { kind: "colour", key: "field-line" },
       { kind: "colour", key: "primary-text" },
       { kind: "colour", key: "google-button-line" },
@@ -184,7 +214,7 @@ describe("a colour set by hand that is hard to read", () => {
       {
         field: "handSet.dark.primary",
         mode: "dark",
-        against: ["field-fill", "bg", "surface"],
+        against: ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         fix: "#9e4048",
         blockedBy: [],
       },
@@ -242,6 +272,94 @@ describe("the calm card edge, a colour no theme writes", () => {
   );
 });
 
+describe("the raised cards, the text on them and the number stepper's fill", () => {
+  test("Main buttons (#888888) on light raised cards set by hand to #dddddd (2.61:1) warn on the cards, and the fix clears it", () => {
+    const grey: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#888888" };
+    expect(ratio("#888888", "#dddddd")).toBe("2.61");
+    expect(derive(withHand(grey, "light", { "surface-raised": "#dddddd" })).warnings).toEqual([
+      {
+        field: "handSet.light.surface-raised",
+        mode: "light",
+        against: ["primary"],
+        fix: "#eeeeee",
+        blockedBy: [],
+      },
+    ]);
+    expect(derive(withHand(grey, "light", { "surface-raised": "#eeeeee" })).warnings).toEqual([]);
+  });
+
+  test("dark raised cards set by hand to #454545 warn on Waitron's buttons, and the secondary text moves until it reads on them", () => {
+    const theme = derive(withHand(WAITRON_CHOICES, "dark", { "surface-raised": "#454545" }));
+    expect(theme.warnings).toEqual([
+      {
+        field: "handSet.dark.surface-raised",
+        mode: "dark",
+        against: ["primary"],
+        fix: "#424242",
+        blockedBy: [],
+      },
+    ]);
+    expect(ratio(WAITRON_DEFAULTS.dark[P("text-muted")]!, "#454545")).toBe("3.97");
+    expect(theme.dark[P("text-muted")]).toBe("#acb2be");
+    expect(ratio("#acb2be", "#454545")).toBe("4.50");
+  });
+
+  test("light raised cards set by hand to #d4d4d4 move the secondary text until a card header reads at 4.5:1", () => {
+    const theme = derive(withHand(WAITRON_CHOICES, "light", { "surface-raised": "#d4d4d4" }));
+    expect(theme.warnings).toEqual([]);
+    expect(ratio(WAITRON_DEFAULTS.light[P("text-muted")]!, "#d4d4d4")).toBe("4.13");
+    expect(theme.light[P("text-muted")]).toBe("#565c68");
+    expect(ratio("#565c68", "#d4d4d4")).toBe("4.53");
+  });
+
+  test("Fix all on light raised cards set by hand to #c0c0c0 leaves every rule passing, the card header's text included", () => {
+    const choices = withHand(WAITRON_CHOICES, "light", { "surface-raised": "#c0c0c0" });
+    expect(derive(choices).warnings).toEqual([
+      {
+        field: "handSet.light.surface-raised",
+        mode: "light",
+        against: ["google-button-line", "primary"],
+        fix: "#d4d4d4",
+        blockedBy: [],
+      },
+    ]);
+    const all = fixAll(WAITRON_DEFAULTS, choices);
+    expect(all.handSet.light).toEqual({ "surface-raised": "#d4d4d4" });
+    expect(canFixAll(WAITRON_DEFAULTS, choices)).toBe(true);
+    const fixed = derive(all);
+    expect(fixed.warnings).toEqual([]);
+    expect(failingIn(fixed, "light")).toEqual([]);
+    expect(
+      contrastRatio(fixed.light[P("text-muted")]!, fixed.light[P("surface-raised")]!),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test.each([
+    ["light", "#012663"],
+    ["dark", "#013c9b"],
+  ] as const)(
+    "a %s stepper fill set by hand to the Main buttons' own blue warns, and its fix clears it",
+    (mode, fix) => {
+      const primary = WAITRON_DEFAULTS[mode][P("primary")]!;
+      const choices = withHand(WAITRON_CHOICES, mode, { "stepper-button": primary });
+      expect(derive(choices).warnings).toEqual([
+        {
+          field: `handSet.${mode}.stepper-button`,
+          mode,
+          against: ["primary"],
+          fix,
+          blockedBy: [],
+        },
+      ]);
+      expect(canFixAll(WAITRON_DEFAULTS, choices)).toBe(true);
+      expect(derive(withHand(WAITRON_CHOICES, mode, { "stepper-button": fix })).warnings).toEqual(
+        [],
+      );
+      expect(contrastRatio(primary, fix)).toBeGreaterThanOrEqual(3);
+    },
+  );
+});
+
 describe("what blocks a colour set by hand that no shade fixes", () => {
   test("grey secondary text (#808080) on a black disabled field (#000000) is blocked by the field", () => {
     const theme = derive(handLight({ "text-muted": "#808080", "field-fill-disabled": "#000000" }));
@@ -251,12 +369,12 @@ describe("what blocks a colour set by hand that no shade fixes", () => {
       fix: null,
       blockedBy: ["field-fill-disabled"],
     });
-    expect(theme.warnings[0]!.against).toHaveLength(17);
+    expect(theme.warnings[0]!.against).toHaveLength(20);
 
     const alone = derive(handLight({ "text-muted": "#808080" }));
     expect(alone.warnings).toHaveLength(1);
     expect(alone.warnings[0]).toMatchObject({ field: "handSet.light.text-muted", fix: "#636363" });
-    expect(alone.warnings[0]!.against).toHaveLength(18);
+    expect(alone.warnings[0]!.against).toHaveLength(21);
   });
 
   test("light text (#aaaaaa) on black sunken areas (#000000) is blocked by the sunken areas", () => {
@@ -324,11 +442,11 @@ describe("the brand colour's fix beside colours set by hand", () => {
   test("a hand-set colour keeps its fix while the brand colour as picked warns", () => {
     const lemon: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
     const brandAlone = derive(lemon).warnings;
-    expect(brandAlone.map(({ field, fix }) => [field, fix])).toEqual([["brandColor", "#9f8b18"]]);
+    expect(brandAlone.map(({ field, fix }) => [field, fix])).toEqual([["brandColor", "#9d8a15"]]);
 
     const theme = derive(withHand(lemon, "light", { "text-muted": "#8fa898" }));
     expect(theme.warnings.map(({ field, fix }) => [field, fix])).toEqual([
-      ["brandColor", "#9f8b18"],
+      ["brandColor", "#9d8a15"],
       ["handSet.light.text-muted", "#526a5b"],
     ]);
     expect(theme.warnings[0]).toEqual(brandAlone[0]);
@@ -356,7 +474,7 @@ describe("the brand colour's fix beside colours set by hand", () => {
       {
         field: "brandColor",
         mode: "dark",
-        against: ["field-fill", "bg", "surface"],
+        against: ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         fix: "#737373",
         blockedBy: [],
       },

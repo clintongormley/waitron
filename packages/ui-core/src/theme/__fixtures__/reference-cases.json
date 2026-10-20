@@ -149,7 +149,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "surface"],
+        "against": ["field-fill", "surface", "surface-raised", "stepper-button"],
         "fix": "#2d7f75",
         "blockedBy": []
       }
@@ -222,7 +222,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#8a8a8a",
         "blockedBy": []
       }
@@ -297,7 +297,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": null,
         "blockedBy": []
       },
@@ -377,7 +377,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#737373",
         "blockedBy": []
       }
@@ -450,7 +450,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#179a92",
         "blockedBy": []
       }
@@ -525,7 +525,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#0da10b",
         "blockedBy": []
       },
@@ -607,8 +607,8 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["bg", "surface"],
-        "fix": "#3b9ba9",
+        "against": ["bg", "surface", "surface-raised", "stepper-button"],
+        "fix": "#3596a4",
         "blockedBy": []
       },
       {
@@ -689,7 +689,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#8a8a8a",
         "blockedBy": []
       },
@@ -697,6 +697,9 @@
         "field": "handSet.light.text",
         "mode": "light",
         "against": [
+          "bg",
+          "surface",
+          "surface-raised",
           "surface-lifted",
           "surface-sunken",
           "track",
@@ -785,22 +788,22 @@
         "field-label-focus": "#a2a2a2",
         "field-value": "#ffffff",
         "field-fill-disabled": "#1f2229",
-        "stepper-button": "#262626"
+        "stepper-button": "#6d6d6d"
       }
     },
     "warnings": [
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#4f9b5a",
         "blockedBy": []
       },
       {
         "field": "handSet.dark.primary",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
-        "fix": "#5d5d5d",
+        "against": ["field-fill", "bg", "surface", "surface-raised"],
+        "fix": "#606060",
         "blockedBy": []
       }
     ],
@@ -872,7 +875,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#8a8a8a",
         "blockedBy": []
       }
@@ -950,7 +953,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#b5555c",
         "blockedBy": []
       },
@@ -1034,7 +1037,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["bg", "surface"],
+        "against": ["bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#b6b6b6",
         "blockedBy": []
       },
@@ -1130,7 +1133,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["bg", "surface"],
+        "against": ["bg", "surface", "surface-raised", "stepper-button"],
         "fix": null,
         "blockedBy": []
       },
@@ -1219,14 +1222,14 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#1097b9",
         "blockedBy": []
       },
       {
         "field": "handSet.dark.primary",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#306c49",
         "blockedBy": []
       }
@@ -1316,7 +1319,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#0693cf",
         "blockedBy": []
       },
@@ -1490,7 +1493,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#8a8a8a",
         "blockedBy": []
       },
@@ -1583,6 +1586,8 @@
         "field": "handSet.light.surface",
         "mode": "light",
         "against": [
+          "text",
+          "text-muted",
           "field-line",
           "primary-text",
           "google-button-line",
@@ -1612,7 +1617,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#737373",
         "blockedBy": []
       }
@@ -1774,7 +1779,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg"],
+        "against": ["field-fill", "bg", "surface-raised", "stepper-button"],
         "fix": null,
         "blockedBy": []
       },
@@ -1782,6 +1787,8 @@
         "field": "handSet.light.surface",
         "mode": "light",
         "against": [
+          "text",
+          "text-muted",
           "primary-text",
           "google-button-line",
           "success",
@@ -1900,7 +1907,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#b5555c",
         "blockedBy": []
       }
@@ -1977,7 +1984,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": null,
         "blockedBy": []
       },
@@ -2075,10 +2082,17 @@
     },
     "warnings": [
       {
+        "field": "brandColor",
+        "mode": "dark",
+        "against": ["stepper-button"],
+        "fix": "#437e5b",
+        "blockedBy": []
+      },
+      {
         "field": "handSet.dark.bg",
         "mode": "dark",
         "against": ["surface-lifted", "primary"],
-        "fix": "#ffffff",
+        "fix": null,
         "blockedBy": []
       },
       {
@@ -2091,8 +2105,8 @@
       {
         "field": "handSet.dark.surface-raised",
         "mode": "dark",
-        "against": ["surface-lifted", "danger-disabled"],
-        "fix": "#121212",
+        "against": ["surface-lifted", "danger-disabled", "primary"],
+        "fix": null,
         "blockedBy": []
       },
       {
@@ -2182,7 +2196,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg"],
+        "against": ["field-fill", "bg", "stepper-button"],
         "fix": "#447f5c",
         "blockedBy": []
       },
@@ -2190,6 +2204,8 @@
         "field": "handSet.dark.surface",
         "mode": "dark",
         "against": [
+          "text",
+          "text-muted",
           "primary-text",
           "danger-disabled",
           "success",
@@ -2211,9 +2227,9 @@
       {
         "field": "handSet.dark.surface-raised",
         "mode": "dark",
-        "against": ["primary-text", "danger-disabled"],
+        "against": ["text", "text-muted", "primary-text", "danger-disabled"],
         "fix": null,
-        "blockedBy": ["surface", "on-primary-disabled"]
+        "blockedBy": []
       }
     ],
     "tint": null
@@ -2293,7 +2309,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill"],
+        "against": ["field-fill", "surface-raised", "stepper-button"],
         "fix": "#747474",
         "blockedBy": []
       }
@@ -2369,14 +2385,22 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#8a8a8a",
         "blockedBy": []
       },
       {
         "field": "handSet.dark.bg",
         "mode": "dark",
-        "against": ["field-line", "primary-text", "google-button-line", "primary", "focus"],
+        "against": [
+          "text",
+          "text-muted",
+          "field-line",
+          "primary-text",
+          "google-button-line",
+          "primary",
+          "focus"
+        ],
         "fix": "#023a41",
         "blockedBy": []
       },
@@ -2548,7 +2572,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#b5555c",
         "blockedBy": []
       }
@@ -2625,6 +2649,9 @@
         "field": "handSet.light.text",
         "mode": "light",
         "against": [
+          "bg",
+          "surface",
+          "surface-raised",
           "surface-lifted",
           "highlight",
           "station-red",
@@ -2739,7 +2766,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": null,
         "blockedBy": []
       },
@@ -2837,7 +2864,7 @@
       {
         "field": "handSet.light.bg",
         "mode": "light",
-        "against": ["primary-text", "google-button-line", "primary"],
+        "against": ["text", "text-muted", "primary-text", "google-button-line", "primary"],
         "fix": "#d4d4d4",
         "blockedBy": []
       },
@@ -2845,6 +2872,8 @@
         "field": "handSet.light.surface",
         "mode": "light",
         "against": [
+          "text",
+          "text-muted",
           "primary-text",
           "google-button-line",
           "success",
@@ -2880,7 +2909,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill"],
+        "against": ["field-fill", "surface-raised", "stepper-button"],
         "fix": "#8e4ef0",
         "blockedBy": []
       }
@@ -2913,7 +2942,7 @@
         "track": "#cdd0d8",
         "border": "#d6d9e0",
         "text": "#16181d",
-        "text-muted": "#5c626e",
+        "text-muted": "#191e28",
         "primary": "#1f6feb",
         "primary-hover": "#1a5fd0",
         "on-primary": "#ffffff",
@@ -2965,6 +2994,8 @@
         "field": "handSet.light.surface",
         "mode": "light",
         "against": [
+          "text",
+          "text-muted",
           "primary-text",
           "google-button-line",
           "success",
@@ -3069,7 +3100,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#777777",
         "blockedBy": []
       },
@@ -3168,6 +3199,8 @@
         "field": "handSet.dark.surface",
         "mode": "dark",
         "against": [
+          "text",
+          "text-muted",
           "primary-text",
           "primary-disabled",
           "danger-disabled",
@@ -3189,7 +3222,7 @@
       {
         "field": "handSet.dark.surface-raised",
         "mode": "dark",
-        "against": ["primary-text", "primary-disabled", "danger-disabled"],
+        "against": ["text", "text-muted", "primary-text", "primary-disabled", "danger-disabled"],
         "fix": "#2e2e2e",
         "blockedBy": []
       }
@@ -3267,6 +3300,8 @@
         "field": "handSet.dark.surface",
         "mode": "dark",
         "against": [
+          "text",
+          "text-muted",
           "field-line",
           "primary-text",
           "primary-disabled",
@@ -3298,7 +3333,15 @@
       {
         "field": "handSet.dark.surface-raised",
         "mode": "dark",
-        "against": ["primary-text", "primary-disabled", "danger-disabled", "google-button-line"],
+        "against": [
+          "text",
+          "text-muted",
+          "primary-text",
+          "primary-disabled",
+          "danger-disabled",
+          "google-button-line",
+          "primary"
+        ],
         "fix": "#01343d",
         "blockedBy": []
       }
@@ -3404,7 +3447,7 @@
         "track": "#cdd0d8",
         "border": "#d6d9e0",
         "text": "#16181d",
-        "text-muted": "#5c626e",
+        "text-muted": "#171c26",
         "primary": "#1f6feb",
         "primary-hover": "#1a5fd0",
         "on-primary": "#ffffff",
@@ -3492,7 +3535,7 @@
         "field-label-focus": "#696969",
         "field-value": "#000000",
         "field-fill-disabled": "#f7f7f8",
-        "stepper-button": "#f0f0f0"
+        "stepper-button": "#949494"
       },
       "dark": {
         "bg": "#101216",
@@ -3523,14 +3566,14 @@
       {
         "field": "handSet.light.primary",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised"],
         "fix": "#929292",
         "blockedBy": []
       },
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#447f5c",
         "blockedBy": []
       }
@@ -3624,6 +3667,9 @@
         "field": "handSet.light.text",
         "mode": "light",
         "against": [
+          "bg",
+          "surface",
+          "surface-raised",
           "surface-lifted",
           "field-fill",
           "highlight",

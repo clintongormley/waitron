@@ -245,9 +245,19 @@
     },
     "warnings": [
       {
+        "field": "brandColor",
+        "mode": "light",
+        "against": ["stepper-button"],
+        "fix": "#95630a",
+        "blockedBy": []
+      },
+      {
         "field": "handSet.light.text-muted",
         "mode": "light",
         "against": [
+          "bg",
+          "surface",
+          "surface-raised",
           "surface-lifted",
           "field-fill",
           "field-fill-disabled",
@@ -445,7 +455,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg"],
+        "against": ["field-fill", "bg", "surface-raised", "stepper-button"],
         "fix": "#409d0f",
         "blockedBy": []
       },
@@ -453,6 +463,8 @@
         "field": "handSet.light.surface",
         "mode": "light",
         "against": [
+          "text",
+          "text-muted",
           "primary-text",
           "danger",
           "station-blue-dot",
@@ -539,7 +551,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#86904e",
         "blockedBy": []
       }
@@ -719,6 +731,13 @@
         "against": ["field-fill"],
         "fix": null,
         "blockedBy": []
+      },
+      {
+        "field": "handSet.light.stepper-button",
+        "mode": "light",
+        "against": ["primary"],
+        "fix": null,
+        "blockedBy": []
       }
     ],
     "tint": null
@@ -756,7 +775,7 @@
         "track": "#cdd0d8",
         "border": "#d6d9e0",
         "text": "#16181d",
-        "text-muted": "#4d535e",
+        "text-muted": "#242933",
         "primary": "#444444",
         "primary-hover": "#343434",
         "on-primary": "#ffffff",
@@ -883,7 +902,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["field-fill", "bg", "surface"],
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#737373",
         "blockedBy": []
       },
@@ -979,7 +998,7 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill"],
+        "against": ["field-fill", "stepper-button"],
         "fix": "#828aa4",
         "blockedBy": []
       },
@@ -1135,7 +1154,7 @@
       "dark": {
         "bg": "#101216",
         "surface": "#13161c",
-        "surface-raised": "#22262e",
+        "surface-raised": "#12161d",
         "surface-lifted": "#463421",
         "surface-sunken": "#101216",
         "track": "#333945",
@@ -1154,15 +1173,15 @@
         "field-label-focus": "#bf996e",
         "field-value": "#a8a8a8",
         "field-fill-disabled": "#1f2229",
-        "stepper-button": "#322313"
+        "stepper-button": "#211304"
       }
     },
     "warnings": [
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
-        "fix": "#b373c5",
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
+        "fix": "#b272c3",
         "blockedBy": []
       }
     ],
@@ -1317,7 +1336,7 @@
       {
         "field": "brandColor",
         "mode": "dark",
-        "against": ["bg", "surface"],
+        "against": ["bg", "surface", "surface-raised", "stepper-button"],
         "fix": "#c4c4c4",
         "blockedBy": []
       },
@@ -1408,14 +1427,21 @@
       {
         "field": "brandColor",
         "mode": "light",
-        "against": ["field-fill", "bg", "surface"],
-        "fix": "#b18064",
+        "against": ["field-fill", "bg", "surface", "surface-raised", "stepper-button"],
+        "fix": "#af7e63",
         "blockedBy": []
       },
       {
         "field": "handSet.dark.surface-sunken",
         "mode": "dark",
         "against": ["text"],
+        "fix": null,
+        "blockedBy": []
+      },
+      {
+        "field": "handSet.dark.stepper-button",
+        "mode": "dark",
+        "against": ["primary"],
         "fix": null,
         "blockedBy": []
       }

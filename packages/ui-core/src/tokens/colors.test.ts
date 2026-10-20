@@ -138,6 +138,13 @@ test("a nested theme root does not inherit the outer root's scheme", async () =>
   expect(token(inner, "--wt-color-bg")).toBe("#f7f7f8");
 });
 
+test.each(["light", "dark"] as const)(
+  "text and secondary text read at 4.5:1 or more on the page and both surfaces (%s)",
+  (theme) => {
+    expect(failures("body-text", theme, mount(theme))).toEqual([]);
+  },
+);
+
 test("the lifted surface stands apart from every other surface and keeps text readable, in both themes", () => {
   for (const theme of ["light", "dark"] as const) {
     const el = mount(theme);
@@ -545,6 +552,13 @@ test.each(["light", "dark"] as const)(
       ...failures("button-fill", theme, el),
       ...failures("focus-ring", theme, el),
     ]).toEqual([]);
+  },
+);
+
+test.each(["light", "dark"] as const)(
+  "the number stepper's icon stands 3:1 or more on its hover fill (%s)",
+  (theme) => {
+    expect(failures("stepper-icon", theme, mount(theme))).toEqual([]);
   },
 );
 
