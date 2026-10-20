@@ -5,7 +5,8 @@
 **Review path: FULL.** `floorRingStyles`, a `@waitron/ui` export that `apps/till` reads
 (`apps/till/src/screens/till-floor-screen.ts:20,275`), changes what it draws — Waiting's outline
 turns thin and every pulsing ring dims to a colour token instead of fading its opacity — and
-`packages/ui-core` loses one token (`--wt-opacity-pulse-dim`) and gains three. Both are
+`packages/ui-core` loses one token (`--wt-opacity-pulse-dim`) and gains three, which `apps/till`'s
+till bar also reads (its Waiting tab dims to the new amber dim colour, driver ruling D1). Both are
 cross-package contracts, so every task gets its per-task review and `/finish-branch` runs the full
 wave (two Codex angles). No `FloorTable`, `FloorChip`, `TableSignal` or component property changes;
 a task that finds it must change one stops and reports. **No migration, nothing fiscal, one pull
@@ -14,7 +15,7 @@ request.** Branch `feat/a757-4b-owner-look-changes`, worktree
 `0f2788281`. Implementers are dispatched as `subagent_type: "implementer"`.
 
 **Goal:** the five owner answers of 2026-10-20 on the list card and the unplaced token, before slice
-5 (the map and zone tabs) builds on them.
+5 (the map and zone tabs) builds on them, plus the driver's three rulings below.
 
 **Architecture:** the card's outline comes from the most urgent state that draws one, not from the
 most urgent state; `floor-ring.ts` draws Waiting half as thick and dims a pulsing ring to a per-theme
@@ -44,6 +45,16 @@ and `4b-owner-changes-dark.png` (drawn with this plan), beside `04-pulse-speeds*
 
 The driver's ruling: all five go in this small pull request, before slice 5. The PR says so ("a
 small follow-up before slice 5").
+
+The driver's further rulings (2026-10-20, plan review):
+
+- **D1.** The till bar's Waiting tab, which today fades its amber border to `transparent` half-way
+  (`apps/till/src/widgets/till-shell.ts:209-216`) and so passes through brown in dark, dims to the
+  same `--wt-color-warning-pulse-dim` as the floor rings. In scope (Decision 7, Task 2).
+- **D2.** The dashboard's «Retenido hasta marchar» follows «en espera» (Decision 6). Settled, not an
+  open point.
+- **D3.** The Waiting chip already says «En espera»; build as the owner decided and ask the owner
+  after (Open point 1).
 
 ## Global constraints
 
@@ -87,7 +98,9 @@ small follow-up before slice 5").
    token's for every table: the token rings forgotten, overdue, `fireDue`, warm in that order
    (`packages/ui/src/components/wt-table-token.ts:216-222`) from `timingBand: lateBand(table)` and
    `fireDue: this.#fireDue(table)` (`till-floor-screen.ts:1995,2003`), the same facts
-   `tableStates` reads. Task 3 pins the bill-and-waiting case on both. **On the map** the same rule
+   `tableStates` reads — for every table the list draws as an ordinary card (a table needing
+   clearing or moving gets `#waitingCard`, which draws no ring, while its token still rings by
+   band; that is unchanged and slice 5's). Task 3 pins the bill-and-waiting case on both. **On the map** the same rule
    is slice 5's (Task 6 adds it to slice 5's list).
 2. **Point 3 — Waiting's outline is thin, the others thick.** Waiting: an inset ring
    `calc(var(--wt-space-1) / 2)` wide (2 px), steady. Time to fire, Overdue and Forgotten keep
@@ -117,9 +130,14 @@ small follow-up before slice 5").
    var(--ring-dim) } }` on a ring with `color: var(--wt-color-warning); --ring-dim:
    var(--wt-color-warning-pulse-dim)`, paused at 0 / 1000 / 2000 ms of 2000 → computed `color`
    `rgb(242, 178, 76)` / `rgb(185, 170, 148)` / `rgb(242, 178, 76)`, `box-shadow` followed it, opacity
-   `1` throughout; a `calc(var(--wt-space-1) / 2)` ring with `--wt-space-1: 4px` computed `2px`. Had
-   the per-element `var()` not resolved in the keyframe, the half-way colour would have stayed
-   `rgb(242, 178, 76)`. Pictured in `4b-owner-changes-dark.png` panel 3 (before and after). The
+   `1` throughout; a `calc(var(--wt-space-1) / 2)` ring with `--wt-space-1: 4px` computed `2px`.
+   Control, re-run in plan review (same browser): a ring whose `--ring-dim` is unset went half-way
+   to `rgb(0, 0, 0)`, the colour it inherits (an unresolved `var()` in `color` falls back to
+   `inherit`), not to the dim colour — so a ring class that forgets `--ring-dim` dims to the
+   text colour, and Task 2's per-ring test is what catches it. The same probe animated a border
+   from `#f2b24c` with `50% { border-color: transparent }` (today's till bar) to `rgba(242, 178, 76,
+   0.5)` at a quarter and `rgba(0, 0, 0, 0)` half-way, and with `50% { border-color:
+   var(--wt-color-warning-pulse-dim) }` to `rgb(185, 170, 148)` half-way (D1). Pictured in `4b-owner-changes-dark.png` panel 3 (before and after). The
    pulse in dark now changes colour more than brightness: CIEDE2000 18.1 / 18.5 between full and dim,
    against 40.4 / 39.4 in light (Open point 2).
 4. **Point 2, the calm edge — measured.** `.card.calm` reads `--wt-color-primary-disabled`
@@ -143,16 +161,24 @@ small follow-up before slice 5").
    marcha» (`apps/till/src/i18n/help-strings.ts:76`) — so it becomes «… llega a cocina en espera
    hasta que se marcha». "EVERYWHERE" also reaches the dashboard's course setting,
    `courses.held_until_fired` «Retenido hasta marchar» (`apps/dashboard/src/i18n/strings.ts:4334`),
-   the same meaning (a course held until fired): it becomes «En espera hasta marchar». Every other
+   the same meaning (a course held until fired): it becomes «En espera hasta marchar» (driver
+   ruling D2). Every other
    «retenid…» in the tree is fiscal (AEAT `retenido`), a held card payment
    (`payments.held.heading`, `payment.hold_not_found`), a printer holding a job, or test fixture
    names — not held dishes — and stays (`git grep -n -i retenid -- ':!packages/fiscal-verifactu'
    ':!docs'`, read 2026-10-20).
-7. **What this does not touch:** the till bar's Waiting tab still fades its border to transparent
-   (`apps/till/src/widgets/till-shell.ts:209-216`), and the kitchen screen and the pass keep their
-   own forgotten flash (slice 4 Decision 12); the Spanish Waiting chip `signal.wait_warm` stays «En
-   espera» (Open point 1). No `FloorTable` change: the token draws the thin Waiting ring and the new dim
-   colours through `floorRingStyles` with no change of its own.
+7. **The till bar's Waiting tab (D1).** Its `waiting-attention` keyframe
+   (`apps/till/src/widgets/till-shell.ts:213-217`) changes from `50% { border-color: transparent }` to
+   `50% { border-color: var(--wt-color-warning-pulse-dim) }`; name, duration token and the
+   reduced-motion rule unchanged. In dark it now drains toward grey instead of passing through brown.
+   **In light it changes too:** half-way the border no longer vanishes but is the pale amber
+   `#dccbb3` (1.59:1 on white) — the light floor ring's dimmest colour; the LOOK pictures it. Nothing
+   pins today's `transparent` (`git grep -n "waiting-attention" -- apps` finds only the keyframe and
+   the name check at `till-shell.counter-cleanup.test.ts:165`).
+8. **What this does not touch:** the kitchen screen and the pass keep their own forgotten flash
+   (slice 4 Decision 12); the Spanish Waiting chip `signal.wait_warm` stays «En espera» (D3, Open
+   point 1). No `FloorTable` change: the token draws the thin Waiting ring and the new dim colours
+   through `floorRingStyles` with no change of its own.
 
 ## Review focus
 
@@ -179,6 +205,8 @@ Each is allowed because an owner answer changes the behaviour it pins; the PR li
 | `packages/ui/src/floor-ring.test.ts:98-115` "paints the ring from the danger and warning tokens" | the `waiting` row expects `3.5px` (half of `7px`), the other three keep `7px` | point 3 |
 | `floor-ring.test.ts:148-161` "dims to the dim token half-way and is whole at the ends" | sets `--wt-color-danger-pulse-dim: rgb(9, 8, 7)` instead of `--wt-opacity-pulse-dim`; half-way the ring's `color` is `rgb(9, 8, 7)` and `opacity` `1`; at 0 the `color` is the danger value | point 2 |
 | `apps/till/src/screens/till-floor-screen.precedence.test.ts:136-149` "rings a forgotten card fast, keeps its badge, and dims the ring to the token half-way" | sets `--wt-color-danger-pulse-dim` instead of `--wt-opacity-pulse-dim`; half-way `color` is that value, `opacity` `1` | point 2 |
+| `precedence.test.ts:151-157` "rings a card whose reminder is due in amber, pulsing slowly" | before reading `boxShadow`, pause the ring's animation at `currentTime = 0`; the `rgb(4, 5, 6)` assertion unchanged | point 2 (the ring's colour now moves, so an unpaused read is only right while the animation is still pending) |
+| `packages/ui/src/components/wt-table-token.test.ts:614-620` "rings a table whose reminder is due in amber, slowly" | the same pause at `0` before the `color` read; assertion unchanged | point 2 |
 | `precedence.test.ts:172-191` "draws only the most urgent state's ring" | t3 (bill + warm wait): was no ring; now one `[data-ring="waiting"]`, no `wt-pulse-*`, `data-top` still `bill`; t2's single forgotten ring kept | point 1 |
 | `precedence.test.ts:418-436` "says Nothing needed, muted, with a check…" and `:438-463` "keeps the solid edge…" | `--wt-color-primary-disabled` → `--wt-color-table-calm-edge` (set both; the edge equals the calm-edge value, not the disabled one) | point 2 |
 | `precedence.test.ts:477-484` "a paid party needing nothing shows Paid, with no check" | renamed "a paid party needing nothing shows Paid and Nothing needed"; `[data-nothing-needed]` present; `[data-paid]` and `calm` kept | point 4 |
@@ -187,8 +215,15 @@ No other existing assertion should change: the held-chip cases read `es[...]`
 (`till-floor-screen.held.test.ts:212-213`, `signal-chips.test.ts:107-109`); the help case reads
 `text["help.order.send"]` (`till-table-order-screen.help.test.ts:89`); the dashboard reads
 `t("courses.held_until_fired")` (`course-list.test.ts:1235`, `courses-screen.test.ts:134`);
-`wt-table-token` tests assert ring kinds and pulse classes, not widths or opacity. Any other red case
-is a stop.
+`wt-table-token` tests assert ring kinds and pulse classes, not widths or opacity, except the colour
+read listed above; the till bar's tests check the animation's name and duration, not its colours.
+Any other red case is a stop.
+
+Why the two pauses: probed 2026-10-20 (plan review) in Chromium 156 — a ring with the new colour
+keyframe read synchronously after insertion gave the exact start colour (animation `pending`,
+`currentTime` 0), still exact one frame later, `rgb(20, 21, 22)` instead of `rgb(19, 20, 21)` after
+~67 ms and `rgb(54, 51, 48)` after ~317 ms. Today both reads happen before the first frame, so they
+probably pass unpaused; the pause makes them independent of that.
 
 ---
 
@@ -233,15 +268,22 @@ is a stop.
   `PULSE` map unchanged)
 - Modify: `packages/ui-core/src/tokens/structure.css:42` (delete `--wt-opacity-pulse-dim`),
   `packages/ui-core/src/tokens/structure.test.ts` (as listed)
-- Test: `packages/ui/src/floor-ring.test.ts`; edit `apps/till/src/screens/till-floor-screen.precedence.test.ts:136-149`
-  (listed) in this task, so no suite goes red between tasks
+- Modify: `apps/till/src/widgets/till-shell.ts:213-217` — the `waiting-attention` keyframe's 50%
+  border colour (Decision 7, D1)
+- Test: `packages/ui/src/floor-ring.test.ts`, `apps/till/src/widgets/till-shell.counter-cleanup.test.ts`;
+  edit `apps/till/src/screens/till-floor-screen.precedence.test.ts:136-157` and
+  `packages/ui/src/components/wt-table-token.test.ts:614-620` (listed) in this task, so no suite goes
+  red between tasks
 
 **Interfaces — consumes:** Task 1's tokens. **Produces:** `floorRingStyles` where
 `.ring-forgotten, .ring-overdue { color: var(--wt-color-danger); --ring-dim: var(--wt-color-danger-pulse-dim); }`,
 `.ring-fire, .ring-waiting { color: var(--wt-color-warning); --ring-dim: var(--wt-color-warning-pulse-dim); }`,
 `.ring-waiting { box-shadow: inset 0 0 0 calc(var(--wt-space-1) / 2) currentColor; }`, and
 `@keyframes wt-pulse { 50% { color: var(--ring-dim); } }` (name, classes, timing and the
-reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring, not a token.
+reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring, not a token. Keep
+colour words out of that comment: `wt-table-token`'s styles include `floorRingStyles`, and
+`no-hardcoded-chrome.test.ts:46-48` refuses `grey`, `brown`, `red` and nine other colour names
+anywhere in the CSS text, comments included.
 
 - [ ] **Step 1: Write the failing tests** in `floor-ring.test.ts`, and edit the two listed cases:
   - `"draws Waiting's outline half as thick as the others"` — `--wt-space-1: 8px` → waiting's
@@ -250,19 +292,29 @@ reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring,
     `--wt-color-danger-pulse-dim: rgb(9, 8, 7)`, `--wt-color-warning-pulse-dim: rgb(6, 5, 4)`; the
     `overdue` and `fire` rings paused at half their duration: `color` is `rgb(9, 8, 7)` and
     `rgb(6, 5, 4)`, `boxShadow` contains it, `opacity` `"1"`.
+  - The edited `floor-ring.test.ts:148-161` case sets `--wt-color-danger: rgb(1, 2, 3)` as well,
+    so "at 0 the `color` is the danger value" reads `rgb(1, 2, 3)`, not a theme value.
   - `structure.test.ts`: drop the name and delete the 30% case (listed).
-  - `till-floor-screen.precedence.test.ts:136-149`: the dim token swap (listed).
+  - `till-floor-screen.precedence.test.ts:136-149`: the dim token swap (listed); `:151-157` and
+    `wt-table-token.test.ts:614-620`: pause at 0 before the colour read (listed).
+  - `till-shell.counter-cleanup.test.ts`, new case `"A738 Waiting dims its border to the amber dim
+    colour half-way, never to transparent"` — `waitingCount: 2`, motion allowed; on the host set
+    `--wt-color-warning: rgb(4, 5, 6)`, `--wt-color-warning-pulse-dim: rgb(7, 8, 9)` and
+    `--wt-duration-pulse-slow: 2000ms`; pause the button's animation: at 1000 its
+    `borderTopColor` is `rgb(7, 8, 9)` (today `rgba(0, 0, 0, 0)`), at 0 `rgb(4, 5, 6)`.
 - [ ] **Step 2: Run, watch the new and edited cases fail.**
-  `pnpm --filter @waitron/ui exec vitest run src/floor-ring.test.ts` and
-  `pnpm --filter @waitron/ui-core exec vitest run src/tokens/structure.test.ts`
+  `pnpm --filter @waitron/ui exec vitest run src/floor-ring.test.ts`,
+  `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.counter-cleanup.test.ts` and
+  `pnpm --filter @waitron/ui-core exec vitest run src/tokens/structure.test.ts` (the last only
+  loses a name and a case, so it stays green)
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** both commands, plus
   `pnpm --filter @waitron/ui exec vitest run src/components/wt-table-token.test.ts src/components/wt-table-token.a11y.test.ts src/no-hardcoded-chrome.test.ts src/base-styles.test.ts`
-  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.precedence.test.ts`
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.precedence.test.ts src/widgets/till-shell`
   and `pnpm exec vitest run scripts/style-token-names.test.ts` — PASS; `git grep -n
   "opacity-pulse-dim" -- apps packages scripts` prints nothing.
 - [ ] **Step 5:** typecheck `@waitron/ui`, `@waitron/ui-core` and `@waitron/till`; prettier; commit —
-  `"Waiting's outline is thin, and a pulsing ring dims to a colour instead of fading (A757 slice 4b)"`.
+  `"Waiting's outline is thin, and a pulsing ring and the Waiting tab dim to a colour instead of fading (A757 slice 4b)"`.
 
 ### Task 3: the card keeps the waiting outline under a state that draws none
 
@@ -282,7 +334,9 @@ reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring,
     `"keeps the thin waiting outline under %s"` → one `[data-ring]`, `waiting`, no `wt-pulse-*`,
     `data-top` the higher kind (`unavailable`, `bill`, `ready`, `step`, `not-sent`).
   - `"Time to fire over a wait draws only its own ring"` — reminder due a minute past plus a warm
-    wait → one ring, `fire`, `wt-pulse-slow`.
+    wait → one ring, `fire`, `wt-pulse-slow`. This one passes today (top is already `fire`); it
+    guards the new rule against picking `waiting` (the last ring) instead of the first. Check it by
+    deletion: reverse the search order and watch it fail.
   - `"rings a bill-and-waiting table the same on the card and in the tray"` — list view: card ring
     `waiting`; map view with that table unplaced: the tray token's `[data-ring="waiting"]`.
   - Edit `:172-191` as listed.
@@ -326,9 +380,11 @@ reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring,
 - [ ] **Step 1: Write the failing tests**, reading every word from the catalogues:
   - `strings.test.ts`, `"the floor's held chip says held with the order screen's word"` — with
     `const held = es["table.group_held"].toLowerCase()`: `es["floor.held"].replace("{n}", "2")` is
-    `` `2 ${held}` ``, `es["floor.held_one"]` is `` `1 ${held}` ``, and each `held_fire_in` value
-    starts with `` `{n} ${held} · ` `` / `` `1 ${held} · ` `` and ends with the part after « · » of
-    today's value, unchanged.
+    `` `2 ${held}` ``, `es["floor.held_one"]` is `` `1 ${held}` ``, `es["floor.held_fire_in"]`
+    starts with `` `{n} ${held} · ` `` and `es["floor.held_fire_in_one"]` with `` `1 ${held} · ` ``,
+    and the two share the same tail after « · », which contains `{m}`. No Spanish literal in the
+    test (the countdown wording itself stays as it is today, «marchar en {m} min»; Step 4's held
+    and signal-chip suites, which read `es[...]`, cover the substitution).
   - `help-strings.test.ts`, `"the order screen's Send help calls a held group by the same word"` —
     `helpEs["help.order.send"]` contains `es["table.group_held"].toLowerCase()`.
 - [ ] **Step 2: Run, watch them fail.**
@@ -352,13 +408,16 @@ reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring,
   the two `-pulse-dim` tokens (a short clause: the list card's calm edge; the colour a floor ring
   dims to). Structure list (`:475`): drop `--wt-opacity-pulse-dim`. `:503-504`: the ring "dims it
   to `--wt-color-danger-pulse-dim` or `--wt-color-warning-pulse-dim` half-way, at full opacity — in
-  dark, a fade to grey, not to the card". The floor paragraph (`:849`): "the most urgent state that
+  dark, a fade to grey, not to the card"; `:506-507`: the till bar's Waiting tab "keeps its own
+  keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`". The
+  floor paragraph (`:849`): "the most urgent state that
   draws an outline decides it — Forgotten red, pulsing fast; Overdue red and Time to fire amber,
   pulsing slowly, all thick; Waiting a thin steady amber, kept under a state that draws none";
   the calm edge reads `--wt-color-table-calm-edge`; delete ", unless its party has paid".
 - [ ] **Step 2: the spec.** A dated line (`**2026-10-2x:**`, the landing date, naming this plan)
   after each of the slice-4 dated paragraphs: §4's (`:283`) — the outline rule (Decision 1); §5.2's
-  (`:373`) — Waiting thin, the dim colour tokens, `--wt-opacity-pulse-dim` retired; §9's (`:550`) —
+  (`:373`) — Waiting thin, the dim colour tokens, `--wt-opacity-pulse-dim` retired, and A738's
+  Waiting tab dims its border to the amber dim colour instead of to transparent (D1); §9's (`:550`) —
   the calm edge token, and a paid party also says ✓ Nothing needed (owner, 2026-10-20). After §5.1's
   slice-3 paragraph (`:335`; §5.1 names «2 retenidos» at `:297`): the Spanish held chip is «2 en
   espera · marchar en 4 min» (owner, 2026-10-20).
@@ -374,7 +433,7 @@ reduced-motion rule unchanged). One comment at `--ring-dim`: it is set per ring,
 - [ ] **Step 4: `docs/backlog.md`.** A757 (`:2143-2161`): the landed list gains "a follow-up to
   slice 4, the owner's look changes and the Spanish word for held dishes" with this plan's path.
 - [ ] **Step 5: check for missed claims.**
-  `git grep -n -i -E "opacity-pulse-dim|primary-disabled.*calm|calm.*primary-disabled|unless its party has paid|retenid|one outline|draws one" -- docs/developers docs/backlog.md docs/backlog apps/server/src/guide`
+  `git grep -n -i -E "opacity-pulse-dim|primary-disabled.*calm|calm.*primary-disabled|unless its party has paid|retenid|one outline|draws one|waiting-attention|Waiting tab" -- docs/developers docs/backlog.md docs/backlog apps/server/src/guide`
   — every hit is true after this change, fiscal, or history in a dated plan. `pnpm exec prettier
   --file-info` on each file. Commit — `"Docs: A757 slice 4b, the owner's look changes"`.
 
@@ -391,10 +450,13 @@ its duration (dim), `reducedMotion` set explicitly, size and language restored i
   Nothing needed; Held counting down; Paid + nothing needed; Take order. Light and dark, 390 and
   1280, bright, dim and reduced motion. Spanish at 390 in both themes, with one card holding a warm
   wait and a held course counting down. A map view with an unplaced bill-and-waiting table and an
-  unplaced due table in the tray, both themes.
+  unplaced due table in the tray, both themes. The till bar with its Waiting tab holding an order,
+  both themes, at 0 and half its pulse (D1: dark drains toward grey; light now stays a pale amber
+  instead of vanishing).
 - [ ] **Step 2: Measure and look.** Record per picture: ring kind and `boxShadow` width (Waiting 2 px,
   others 4 px); computed ring `color` and `opacity` at the dim frame (dark `rgb(189, 155, 160)` /
-  `rgb(185, 170, 148)`, opacity 1); calm edge `rgb(77, 106, 166)` in dark; `scrollWidth` equal to the
+  `rgb(185, 170, 148)`, opacity 1); the Waiting tab's `borderTopColor` at its dim frame
+  (`rgb(185, 170, 148)` dark, `rgb(220, 203, 179)` light); calm edge `rgb(77, 106, 166)` in dark; `scrollWidth` equal to the
   viewport; every mark inside its card. Compare beside `4b-owner-changes*.png` and slice 4's
   `built-4/` dark pictures. Note in the report whether the dark pulse still reads as a pulse (Open
   point 2). A defect is fixed test-first in the file that owns it and committed.
@@ -406,7 +468,8 @@ its duration (dim), `reducedMotion` set explicitly, size and language restored i
 
 ## Open points for the owner (each with the default this plan builds)
 
-1. **Spanish «En espera» now names two things on one card.** The Waiting chip (a fired dish waiting
+1. **Spanish «En espera» now names two things on one card** (driver ruling D3: built as decided,
+   asked after). The Waiting chip (a fired dish waiting
    5 minutes) already says «En espera» (`signal.wait_warm`, `strings.ts:2615`), and so does the till
    bar's Waiting tab (`shell.waiting`). With the held chip changed as decided, a table with a wait and
    a held course shows «⏱ En espera» and «⏸ 2 en espera · marchar en 4 min»
@@ -416,8 +479,7 @@ its duration (dim), `reducedMotion` set explicitly, size and language restored i
 2. **In dark, the pulse is now mostly a change of colour, not brightness** (Decision 3: CIEDE2000
    about 18 between bright and dim, against about 40 in light). Default: as drawn. The LOOK says
    whether it still reads as moving.
-3. **The dashboard's course setting** «Retenido hasta marchar» becomes «En espera hasta marchar» under
-   "EVERYWHERE" (Decision 6). Default: changed; easy to revert if the owner meant the till only.
-4. **The till bar's Waiting tab** still fades its amber border to nothing (Decision 7), so in dark it
-   passes through brown too. Default: unchanged (A738's, not a floor ring); one line to align if the
-   owner wants it.
+3. **Listed so the owner sees them, not questions** (driver rulings): the dashboard's course
+   setting «Retenido hasta marchar» becomes «En espera hasta marchar» (D2, Decision 6); the till
+   bar's Waiting tab dims its border to the amber dim colour like the floor rings (D1, Decision 7),
+   which in light means its border no longer vanishes half-way but turns pale amber.
