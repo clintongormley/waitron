@@ -4148,7 +4148,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   in). Slice 3 landed (#1871: the box serves the guides at `/help/<en|es>/<page>`, in English and
   Spanish, and three Products badges link to their sections). Slice 4a landed (#1907: the "?" on
   the till's bar, help off on lock, badges in the till's More and person menus). Slice 4b landed
-  (#NNNN: badges on Counter, Floor and Order, and the guide sheet). Next: slice 5, in the design's
+  (#1911: badges on Counter, Floor and Order, and the guide sheet). Next: slice 5, in the design's
   §8 order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows

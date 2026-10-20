@@ -1134,7 +1134,7 @@ help about anything you want very quickly."
   (PR 4a is Tasks 1–5).
 - **Left open by 4a:** on a till at phone width the "?" leaves the tab strip 8 px wide at 320 px
   with a long name; whether the person's name should give room is the owner's question, A921.
-- **Slice 4b landed (#NNNN).** With help on, the till's screens carry badges: Counter's Park, Guests
+- **Slice 4b landed (#1911).** With help on, the till's screens carry badges: Counter's Park, Guests
   field and Parked orders and Waiting orders headings; the dishes' search field on Counter and Order,
   whose box links to the Products guide's "Read a dish's nutrition at the till"; Floor's tables
   toolbar, layout banner and Needs moving window; Order's Fire / Send all group. A guide link opens
@@ -1143,7 +1143,7 @@ help about anything you want very quickly."
   server. `wt-modal`'s side padding and `wt-disclosure`'s top padding are at least half the badge's
   square, so the till's 32 px badge fits inside them. Plan:
   [2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md) (PR 4b is
-  Tasks 6–12). Slice 4 is complete: 4a #1907, 4b #NNNN.
+  Tasks 6–12). Slice 4 is complete: 4a #1907, 4b #1911.
 - **Left open by 4b:** help on Counter's payment buttons waits for A739, which is redesigning the
   payment window (plan, decision 11); once A739 lands, add it there.
 - **Left open by 4b:** `till-shell` does not clear its guide when it is removed; the sheet closes on
