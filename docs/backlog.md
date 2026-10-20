@@ -2220,12 +2220,34 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   **A758-1 built the rules** ([plan](superpowers/plans/2026-10-19-a758-reason-rules.md)): Void and Comp
   reasons, Comp role lists, limits that ask for a PIN, the bill's comp limit in euros, nine starter
   reasons (English only, owner 2026-10-19; their translation at setup is A918), and the till naming
-  whose PIN it needs. Left: A758-2 (the page), A758-3 (the report),
+  whose PIN it needs. **A758-2 built the page** ([plan](superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
+  Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
+  it left open. Left: A758-3 (the report),
   A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
   "collect it at the counter" slices.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
+
+- **A923. The voids and comps list is a plain table (left open by A758-2).** It has no column
+  chooser, Filters or remembered view, and its own CSS keeps the row menu on a phone's screen,
+  because the shared reorder helper (`ReorderController`) cannot reach `wt-data-table`'s rows. The other way is to teach
+  `wt-data-table` to reorder rows (a `packages/ui` change), giving every reorderable list one
+  table. Owner to choose.
+
+- **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
+  A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word
+  carries the meaning. Owner to confirm, or `wt-lozenge` gains token colours.
+
+- **A925. Words on the voids and comps page that no picture drew (left open by A758-2).** The
+  Delete question's sentences, the hint shown while searching («Borra la búsqueda para cambiar el
+  orden.»), the Spanish intro and the limits («{percent}% por artículo», «{amount} por cuenta»), in
+  `packages/adjustments/src/dashboard/strings.ts`. Owner to read them.
+
+- **A926. A deleted reason re-added under the same name starts its limits' count again (left open
+  by A758-2).** The item and bill limits count earlier comps by the reason's id
+  (`packages/adjustments/src/record.ts`), and a re-added reason has a new one, so on an open bill
+  its limits start from nothing. Accepted for now (plan Decision 2); revisit if a venue meets it.
 
 - **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been
   started (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish

@@ -1375,8 +1375,9 @@ and its count do), a fired dish removed before preparation started not listed, a
 screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. The
 owner answered the last question on 2026-10-19 (§11, D28): a cash refund only on a device whose
 profile takes cash, as today; no question is open. **A758-1 built the rules** ([plan](../superpowers/plans/2026-10-19-a758-reason-rules.md));
-A758-2 to A758-5 and the §3.8 and "collect it at the counter" slices follow, and A909–A912 and A918 are what it
-left open. The notes below are the review as written before the
+A909–A912 and A918 are what it left open. **A758-2 built the page** ([plan](../superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
+Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
+it left open. A758-3 to A758-5 and the §3.8 and "collect it at the counter" slices follow. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.
@@ -1448,10 +1449,10 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
 
 **Then the page:**
 
-- **Its own page under Service** (owner, 2026-10-16), leaving Venue settings without tabs (A755).
+- **Its own page under Service** (owner, 2026-10-16; built by A758-2). Venue settings keeps two
+  tabs, Venue details and Kitchen.
 - **The list:** a search bar, drag handles instead of Move up and Move down, a cleaner layout.
-- **Delete, not Disable.** The DELETE route only switches a reason off today
-  (`deactivateAdjustmentReason`, `packages/adjustments/src/routes.ts:258`). A recorded adjustment
+- **Delete, not Disable** (built by A758-2). A recorded adjustment
   keeps its own copy of the reason's name and rules (`reason_name`, `policy_snapshot`, no foreign key:
   `packages/adjustments/src/schema/adjustments.ts:60-64`), so deleting leaves history intact. Real
   Delete through `wt-delete-dialog`, as courses and stations; the Status column, Status filter and
