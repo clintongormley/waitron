@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
@@ -388,5 +389,129 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
     } finally {
       await page.viewport(1280, 900);
     }
+  });
+});
+
+describe("till-floor-screen: the calm card", () => {
+  const seated = (
+    id: string,
+    over: Partial<TableState> = {},
+    partyOver: Partial<TableParty> = {},
+  ) =>
+    table({
+      id,
+      label: `Table ${id.slice(1)}`,
+      party: party({ id: `v${id.slice(1)}`, tableIds: [id], ...partyOver }),
+      ...over,
+    });
+  const calm = (el: TillFloorScreen, id = "t2") => card(el, id).classList.contains("calm");
+  const nothingNeeded = (el: TillFloorScreen, id = "t2") =>
+    card(el, id).querySelector<HTMLElement>("[data-nothing-needed]");
+
+  it("says Nothing needed, muted, with a check, on a seated table that needs nothing", async () => {
+    const { el, host } = await mountFloor([table()]);
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-primary-disabled", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
+    const line = nothingNeeded(el)!;
+    expect(line.textContent!.trim()).toBe("Nothing needed");
+    const icon = line.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-icon[name=floor-check]",
+    )!;
+    await icon.updateComplete;
+    const svg = icon.shadowRoot!.querySelector("svg")!;
+    expect(svg.querySelector("path")).not.toBeNull();
+    expect(getComputedStyle(line).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(svg).fill).toBe("rgb(1, 2, 3)");
+    expect(calm(el)).toBe(true);
+    expect(getComputedStyle(card(el)).borderLeftColor).toBe("rgb(7, 8, 9)");
+  });
+
+  it("keeps the solid edge, and no check, once anything is needed", async () => {
+    const draft = { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 };
+    const ids = ["t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"];
+    const { el, host } = await mountFloor(
+      [
+        seated("t2", { timingBand: "overdue" }),
+        seated("t3", {
+          signals: [{ kind: "held_unavailable", groupId: "g3", lineNames: ["Steak"] }],
+        }),
+        seated("t4", {}, { reminder: { groupId: "g4", dueAt: past } }),
+        seated("t5", { signals: [{ kind: "bill_requested", requestedAt: past }] }),
+        seated("t6", { readyToServe: 1 }),
+        seated("t7", { signals: [{ kind: "take_order" }] }),
+        seated("t8", {}, { unsentDrafts: [draft] }),
+        seated("t9", { timingBand: "fresh", signals: [longWait("warm")] }),
+      ],
+      { reducedMotion: false },
+    );
+    host.style.setProperty("--wt-color-primary-disabled", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
+    for (const id of ids) {
+      expect(nothingNeeded(el, id), id).toBeNull();
+      expect(calm(el, id), id).toBe(false);
+      expect(getComputedStyle(card(el, id)).borderLeftColor, id).toBe("rgb(10, 11, 12)");
+    }
+  });
+
+  it("a held course counting down is calm and shows its held chip, not the check", async () => {
+    const { el } = await mountFloor([
+      table({
+        signals: [{ kind: "held", count: 2 }],
+        party: party({ reminder: { groupId: "g2", dueAt: ahead } }),
+      }),
+    ]);
+    expect(nothingNeeded(el)).toBeNull();
+    expect(calm(el)).toBe(true);
+    expect(card(el).querySelector('[data-chip="held"]')).not.toBeNull();
+  });
+
+  it("a paid party needing nothing shows Paid, with no check", async () => {
+    const { el } = await mountFloor([
+      table({ hasOpenTab: false, party: party({ outstanding: "0.00" }) }),
+    ]);
+    expect(card(el).querySelector("[data-paid]")).not.toBeNull();
+    expect(nothingNeeded(el)).toBeNull();
+    expect(calm(el)).toBe(true);
+  });
+
+  it("a free table is not calm and says Free", async () => {
+    const { el } = await mountFloor([
+      table({
+        state: "free",
+        condition: "free",
+        hasOpenTab: false,
+        tabLineCount: undefined,
+        tabTotal: undefined,
+        party: null,
+      }),
+    ]);
+    expect(calm(el)).toBe(false);
+    expect(nothingNeeded(el)).toBeNull();
+    expect(card(el).textContent).toContain("Free");
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    try {
+      const { el } = await mountFloor([table()]);
+      expect(nothingNeeded(el)!.textContent!.trim()).toBe(es["floor.nothing_needed"]);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("paints Reserved on the map's reserved tokens", async () => {
+    const { el, host } = await mountFloor([table({ nextReservation: { time: "21:30" } })]);
+    host.style.setProperty("--wt-color-table-reserved", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-on-table-reserved", "rgb(10, 11, 12)");
+    host.style.setProperty("--wt-color-surface-raised", "rgb(13, 14, 15)");
+    host.style.setProperty("--wt-color-text", "rgb(16, 17, 18)");
+    host.style.setProperty("--wt-color-primary", "rgb(19, 20, 21)");
+    const chip = getComputedStyle(card(el).querySelector("[data-reserved]")!);
+    expect(chip.backgroundColor).toBe("rgb(7, 8, 9)");
+    expect(chip.borderTopColor).toBe("rgb(7, 8, 9)");
+    expect(chip.color).toBe("rgb(10, 11, 12)");
   });
 });

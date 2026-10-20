@@ -412,6 +412,10 @@ export class TillFloorScreen extends LitElement {
         border-left-color: var(--wt-color-primary);
       }
 
+      .card.calm {
+        border-left-color: var(--wt-color-primary-disabled);
+      }
+
       .card.state-delivery-pending {
         border-left-color: var(--wt-color-danger);
       }
@@ -501,13 +505,25 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* "Reserved HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
-         chip (theme text on a neutral fill, so contrast stays token-fixed). Mirrors @waitron/ui's
-         wt-table-token .badge.reserved so the list card and the map token match. */
+      /* Mirrors @waitron/ui's wt-table-token .badge.reserved. */
       .badge.reserved {
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-        border: 1px solid var(--wt-color-primary);
+        background: var(--wt-color-table-reserved);
+        color: var(--wt-color-on-table-reserved);
+        border: 1px solid var(--wt-color-table-reserved);
+      }
+
+      .calm-line {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .calm-line wt-icon {
+        flex: none;
+        color: inherit;
       }
 
       /* "N en camino" -- dispatched by the pass, awaiting the waiter (KDS-3 §3c). The TOP-precedence hint,
@@ -2359,8 +2375,9 @@ export class TillFloorScreen extends LitElement {
     const ring = top === undefined ? null : (RING_OF[top] ?? null);
     const moving = !this.#prefersReducedMotion();
     const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
+    const calm = top === "held" || top === "nothing-needed" ? " calm" : "";
     return html`<button
-      class="card state-${table.state}${edge}"
+      class="card state-${table.state}${edge}${calm}"
       data-table=${table.id}
       data-top=${top ?? nothing}
       @click=${() => this.#openTable(table)}
@@ -2369,13 +2386,21 @@ export class TillFloorScreen extends LitElement {
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       ${this.#partyName(table)} ${this.#occupancy(table)}
       <span class="badges"
-        >${byPrecedence(this.#marks(table), (mark) => mark.kind).map(({ mark }) => mark)}</span
+        >${byPrecedence(this.#marks(table, top), (mark) => mark.kind).map(({ mark }) => mark)}</span
       >
     </button>`;
   }
 
-  #marks(table: TableState): CardMark[] {
+  #marks(table: TableState, top: TableStateKind | undefined): CardMark[] {
     const marks: CardMark[] = [];
+    if (top === "nothing-needed" && !partyPaid(table)) {
+      marks.push({
+        kind: "nothing-needed",
+        mark: html`<span class="calm-line" data-nothing-needed
+          ><wt-icon name="floor-check" size="sm"></wt-icon>${t("floor.nothing_needed")}</span
+        >`,
+      });
+    }
     if (lateBand(table) === "forgotten") {
       marks.push({
         kind: "forgotten",

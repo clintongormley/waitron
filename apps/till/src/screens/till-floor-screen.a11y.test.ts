@@ -414,6 +414,32 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with a calm table, a held one and a reserved one, on the list", async () => {
+    const [owing] = partyTables as [TableState];
+    const quiet: TableState = { ...owing, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const tables: TableState[] = [
+      quiet,
+      {
+        ...quiet,
+        id: "t10",
+        label: "10",
+        signals: [{ kind: "held", count: 2 }],
+        party: { ...quiet.party!, id: "v10", tableIds: ["t10"] },
+      },
+      {
+        ...quiet,
+        id: "t11",
+        label: "11",
+        nextReservation: { time: "21:30" },
+        party: { ...quiet.party!, id: "v11", tableIds: ["t11"] },
+      },
+    ];
+    const list = await mountWidget<TillFloorScreen>("till-floor-screen", { zones, tables }, theme);
+    expect(list.el.shadowRoot!.querySelector("[data-nothing-needed]")).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector("[data-reserved]")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations with signals side by side and the stations' summary, on the list", async () => {
     const signalled = partyTables.map((table): TableState =>
       table.party === null
