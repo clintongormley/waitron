@@ -884,6 +884,16 @@ describe("the pay sheet's NFC button", () => {
     expect(FakeNdefReader.instances[0]!.signal?.aborted).toBe(false);
   });
 
+  it("a second press while the prompt is up starts no second scan", async () => {
+    installNfc("prompt");
+    FakeNdefReader.scanResult = () => new Promise(() => {});
+    const { el } = await phoneApp();
+    const button = (await nfcButton(el))!;
+    button.click();
+    button.click();
+    expect(FakeNdefReader.instances).toHaveLength(1);
+  });
+
   it("a refused prompt takes the button away", async () => {
     installNfc("prompt");
     FakeNdefReader.scanResult = () =>
