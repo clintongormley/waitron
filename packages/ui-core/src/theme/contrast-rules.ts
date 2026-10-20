@@ -20,6 +20,7 @@ export type ContrastGroupId =
   | "calendar-days"
   | "table-text"
   | "table-dots"
+  | "calm-edge"
   | "station-text"
   | "station-dots"
   | "station-focus"
@@ -192,6 +193,12 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
     onOwn(["free", "seated", "bill", "clearing", "reserved"].map((fill) => `table-${fill}`)),
   ]),
   group("table-dots", MODES, ["at-least", 3, each(["success", "danger"], ["surface"])]),
+  group(
+    "calm-edge",
+    MODES,
+    ["at-least", 2, [["table-calm-edge", "surface"]]],
+    ["at-least", 1.4, [["table-calm-edge", "border"]]],
+  ),
   group("station-text", MODES, [
     "at-least",
     4.5,

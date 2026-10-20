@@ -94,6 +94,11 @@ worktree's token files (`A841_WT=<this worktree> node <script>`, Node v26.11.1, 
 **The reference is `derive-h2.mjs`**, sha256
 `dc8936f1b53bbd5c8a88692c8d4be6382c765992c19a5fe44cd685aea7e20e34`.
 
+(2026-10-20, after main's #1920 added the calm card edge: the pins that moved come from
+`derive-h3.mjs`, sha256 `1564985761b4b5116ebfad3a04f58fe2b57a30ea15cf0485108c9508b4c86568`, which is
+`derive-h2.mjs` with the edge's two rules added after success and danger on the cards. The counts
+this plan gives as 382 / 388 and 98 / 103 are now 384 / 390 and 100 / 105.)
+
 What each change did to the outputs, measured:
 
 - Change 2: with and without it, the worked examples (`ex.mjs`, `ex2.mjs`, `ex3.mjs`) printed the

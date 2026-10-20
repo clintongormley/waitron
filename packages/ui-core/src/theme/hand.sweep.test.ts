@@ -90,8 +90,8 @@ for (const mode of MODES) {
 // Reads the totals the tests above collect, so it holds only when every one of them ran first, in order.
 test("the one-colour sweep's totals match the reference's", () => {
   expect(single).toEqual({
-    light: { cases: 176, noWarning: 87, handWarned: 89 },
-    dark: { cases: 176, noWarning: 78, handWarned: 98 },
+    light: { cases: 176, noWarning: 86, handWarned: 90 },
+    dark: { cases: 176, noWarning: 77, handWarned: 99 },
     noFix: 0,
     unexplained: 0,
     failingAfterFixAll: 0,

@@ -1056,6 +1056,9 @@ All my call; the plan pins the exact numbers.
   and 103 in dark (corrected 2026-10-20 by the slice 1 plan,
   `docs/superpowers/plans/2026-10-20-a841-1-theme-derivation.md`, whose reference in
   `~/waitron-campaign/a841-plan1-probes/` reproduces every colour this section gives; the corrections below cite it).
+  (2026-10-20: main's #1920 added the calm card edge, `--wt-color-table-calm-edge`, held 2:1 or
+  more on the cards and 1.4:1 or more on the borders; with those two rules it is 100 in light and
+  105 in dark. `derive-h3.mjs` in the same folder is the reference with them.)
   The prototype's `warn` (added for Q2) works out a set as picked and lists the warnings with their
   fixes; `checks.txt` there holds its output for every picture.
   - Bar Lucía, `#1e5b3a`, tinted: light buttons are `#1e5b3a` with white text at 8.04:1, and no
@@ -1215,6 +1218,13 @@ lightened to `#e2ecff`, where every rule passes (`/tmp/a841q2/check2.mjs`). The 
 is still simple — step 2 moves one worked-out colour at a time and only when that lowers the number
 of failing rules, and the fix search tries lightness in steps of a hundredth — so the plan decides
 how the real one searches.
+(2026-10-20, after main's #1920 added the calm card edge's two rules: the light sweep has 86 cases
+with no warning and 90 with one, the dark 77 and 99, still none without a fix, none unexplained and
+none failing after Fix all; the new warnings are light cards `#ffff00` and dark borders `#ff0000`. Pure
+blue cards' fix is now `#ffffff`, because light cards must stand 2:1 from the calm edge `#8fb7f5`
+(relative luminance 0.463): a card passes only at a luminance of 0.976 or more (`#fdfdfd` does,
+`#fcfcfc` does not) or 0.2065 or less (`h3-sweep-warn-exact.mjs`, `calm-edge.mjs`,
+`calm-edge-sweep-diff.mjs` and their `output-calm-edge*.txt` in the slice 1 plan's reference folder).)
 
 ## 7. Light, Dark and Follow device: every theme has a light and a dark version
 

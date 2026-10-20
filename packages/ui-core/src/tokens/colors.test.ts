@@ -426,9 +426,7 @@ describe.each(["light", "dark"] as const)("floor ring and calm edge colours (%s)
   const edge = "--wt-color-table-calm-edge";
 
   test("the calm edge stands 2:1 or more from the surface and 1.4:1 or more from its border", () => {
-    const el = mount(theme);
-    expect(ratio(token(el, edge), token(el, "--wt-color-surface"))).toBeGreaterThanOrEqual(2);
-    expect(ratio(token(el, edge), token(el, "--wt-color-border"))).toBeGreaterThanOrEqual(1.4);
+    expect(failures("calm-edge", theme, mount(theme))).toEqual([]);
   });
 
   test("the calm edge reads as a different blue from the seated edge", () => {

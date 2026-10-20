@@ -5,9 +5,9 @@ import { expect, test } from "vitest";
 
 test("the contrast rules build when their module loads", async () => {
   const { THEME_RULES, CONTRAST_GROUPS } = await import("./contrast-rules.js");
-  expect(THEME_RULES.light).toHaveLength(98);
-  expect(THEME_RULES.dark).toHaveLength(103);
-  expect(CONTRAST_GROUPS).toHaveLength(21);
+  expect(THEME_RULES.light).toHaveLength(100);
+  expect(THEME_RULES.dark).toHaveLength(105);
+  expect(CONTRAST_GROUPS).toHaveLength(22);
 });
 
 test("Waitron's values are read from the token text when their module loads", async () => {

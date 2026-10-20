@@ -113,7 +113,7 @@ describe("a colour set by hand that is hard to read", () => {
     const theme = derive(handLight({ surface: "#0000ff" }));
     expect(theme.warnings).toHaveLength(1);
     const warning = theme.warnings[0]!;
-    expect(warning).toMatchObject({ field: "handSet.light.surface", fix: "#e2ecff" });
+    expect(warning).toMatchObject({ field: "handSet.light.surface", fix: "#ffffff" });
     expect(warning.against).toHaveLength(22);
     expect(warning.against).toEqual(expect.arrayContaining(STATION_DOTS));
     expect(groupAgainst(warning.against)).toEqual([
@@ -127,7 +127,7 @@ describe("a colour set by hand that is hard to read", () => {
       { kind: "colour", key: "focus" },
     ]);
 
-    const fixed = derive(handLight({ surface: "#e2ecff" }));
+    const fixed = derive(handLight({ surface: "#ffffff" }));
     expect(fixed.warnings).toEqual([]);
     expect(failingIn(fixed, "light")).toEqual([]);
   });
@@ -163,7 +163,7 @@ describe("a colour set by hand that is hard to read", () => {
   test("a rule between the brand colour and black cards (#000000) is the cards' warning only", () => {
     const theme = derive(handLight({ surface: "#000000" }));
     expect(theme.warnings).toHaveLength(1);
-    expect(theme.warnings[0]).toMatchObject({ field: "handSet.light.surface", fix: "#ebebeb" });
+    expect(theme.warnings[0]).toMatchObject({ field: "handSet.light.surface", fix: "#ffffff" });
     expect(theme.warnings[0]!.against).toContain("primary");
   });
 
@@ -190,6 +190,56 @@ describe("a colour set by hand that is hard to read", () => {
       },
     ]);
   });
+});
+
+describe("the calm card edge, a colour no theme writes", () => {
+  const EDGE = { light: "#8fb7f5", dark: "#4d6aa6" } as const;
+
+  test.each([
+    ["light", "#7399d6"],
+    ["dark", "#38538d"],
+  ] as const)(
+    "a %s border set by hand to the edge's own blue warns, and its fix clears it",
+    (mode, fix) => {
+      expect(WAITRON_DEFAULTS[mode][P("table-calm-edge")]).toBe(EDGE[mode]);
+      expect(derive(withHand(WAITRON_CHOICES, mode, { border: EDGE[mode] })).warnings).toEqual([
+        { field: `handSet.${mode}.border`, mode, against: ["table-calm-edge"], fix, blockedBy: [] },
+      ]);
+      expect(derive(withHand(WAITRON_CHOICES, mode, { border: fix })).warnings).toEqual([]);
+      expect(contrastRatio(fix, EDGE[mode])).toBeGreaterThanOrEqual(1.4);
+    },
+  );
+
+  test("light cards set by hand to #fafafa warn against the edge alone and are offered white; #fdfdfd does not warn", () => {
+    expect(derive(withHand(WAITRON_CHOICES, "light", { surface: "#fafafa" })).warnings).toEqual([
+      {
+        field: "handSet.light.surface",
+        mode: "light",
+        against: ["table-calm-edge"],
+        fix: "#ffffff",
+        blockedBy: [],
+      },
+    ]);
+    expect(ratio("#fafafa", EDGE.light)).toBe("1.96");
+    expect(derive(withHand(WAITRON_CHOICES, "light", { surface: "#fdfdfd" })).warnings).toEqual([]);
+  });
+
+  test.each([
+    ["light", "#c1d9fd"],
+    ["dark", "#6583c1"],
+  ] as const)(
+    "a worked-out %s border on the edge's own blue moves until it stands apart",
+    (mode, settled) => {
+      const contrived: WaitronDefaults = {
+        ...WAITRON_DEFAULTS,
+        [mode]: { ...WAITRON_DEFAULTS[mode], [P("border")]: EDGE[mode] },
+      };
+      const theme = derive(WAITRON_CHOICES, contrived);
+      expect(theme.warnings).toEqual([]);
+      expect(theme[mode][P("border")]).toBe(settled);
+      expect(contrastRatio(settled, EDGE[mode])).toBeGreaterThanOrEqual(1.4);
+    },
+  );
 });
 
 describe("what blocks a colour set by hand that no shade fixes", () => {
