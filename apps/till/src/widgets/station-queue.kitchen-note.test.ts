@@ -16,6 +16,7 @@ const group = {
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   items: [
     {
+      allergy: null,
       id: "item-a",
       workingOrderLineId: "line-a",
       state: "queued",

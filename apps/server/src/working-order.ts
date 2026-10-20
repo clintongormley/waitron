@@ -5,7 +5,7 @@ import {
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
-import type { AllergyCommand, TicketAllergyCopy } from "@waitron/module";
+import type { AllergyCommand, KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
 import {
   assertPartyAllergyAnswered,
   normaliseAllergyPatch,
@@ -7325,6 +7325,7 @@ export interface QueueGroup {
 }
 
 export interface StationQueueItem {
+  allergy: KitchenAllergyBlock | null;
   lastMove?: StationQueueMove;
   id: string;
   workingOrderLineId: string;
@@ -7656,6 +7657,10 @@ export async function listStationQueues(
     // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
+  const allergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    rows.map((row) => row.itemId),
+  );
   const numberLabels = await readGroupNumberLabels(
     tx,
     rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
@@ -7755,6 +7760,7 @@ export async function listStationQueues(
         : undefined;
     group.items.push({
       id: row.itemId,
+      allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       workingOrderLineId: row.workingOrderLineId,
       ...optional("lastMove", lastMove),
       state: row.state,
@@ -7794,6 +7800,7 @@ export async function listStationQueues(
 
 /** One item on the cross-station expo board. */
 export interface ExpoItem {
+  allergy: KitchenAllergyBlock | null;
   optionSnapshots?: OptionSnapshot[];
   id: string;
   /** The same KITCHEN name the stations read. */
@@ -7962,6 +7969,10 @@ export async function readPassBoard(
       ticketItems.id,
     );
 
+  const allergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    rows.map((row) => row.itemId),
+  );
   const numberLabels = await readGroupNumberLabels(
     tx,
     rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
@@ -8067,6 +8078,7 @@ export async function readPassBoard(
     );
     section.items.push({
       id: row.itemId,
+      allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
       qty: thousandthsToDecimal(row.quantity),

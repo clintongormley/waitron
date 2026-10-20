@@ -61,6 +61,7 @@ const cocinaQueue: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-1",
         workingOrderLineId: "wol-1",
         state: "queued",
@@ -84,6 +85,7 @@ const barraQueue: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-2",
         workingOrderLineId: "wol-2",
         state: "preparing",
@@ -894,6 +896,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         thresholds: DEFAULT_THRESHOLDS,
         items: [
           {
+            allergy: null,
             id: "it-h",
             workingOrderLineId: "wl-h",
             state: "queued",
@@ -1041,6 +1044,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         thresholds: DEFAULT_THRESHOLDS,
         items: [
           {
+            allergy: null,
             id: "ti-a",
             workingOrderLineId: "wl-a",
             state: "queued",
@@ -1050,6 +1054,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             firedAt: "2026-08-17T10:00:00.000Z",
           },
           {
+            allergy: null,
             id: "ti-b",
             workingOrderLineId: "wl-b",
             state: "queued",
@@ -1158,6 +1163,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
       thresholds: DEFAULT_THRESHOLDS,
       items: [
         {
+          allergy: null,
           id: "ti-fired-queued",
           workingOrderLineId: "wl-1",
           state: "queued",
@@ -1167,6 +1173,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
           firedAt,
         },
         {
+          allergy: null,
           id: "ti-held",
           workingOrderLineId: "wl-2",
           state: "queued",
@@ -1176,6 +1183,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
           firedAt: null,
         },
         {
+          allergy: null,
           id: "ti-already-preparing",
           workingOrderLineId: "wl-3",
           state: "preparing",

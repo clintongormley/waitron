@@ -50,6 +50,7 @@ const groups: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-1",
         workingOrderLineId: "wol-1",
         state: "queued",
@@ -59,6 +60,7 @@ const groups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "ti-2",
         workingOrderLineId: "wol-2",
         state: "preparing",
@@ -68,6 +70,7 @@ const groups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "ti-3",
         workingOrderLineId: "wol-3",
         state: "ready",
@@ -88,6 +91,7 @@ const groups: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-4",
         workingOrderLineId: "wol-4",
         state: "queued",

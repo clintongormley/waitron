@@ -3,6 +3,7 @@ import type {
   AllergyMoveRead,
   AllergyPatch,
   AllergySendTarget,
+  KitchenAllergyBlock,
   PartyAllergyRead,
 } from "@waitron/module";
 import type { FinishTableResolution } from "./finish-table-types.js";
@@ -1518,6 +1519,7 @@ export interface QueueGroup {
 
 /** One ticket item on a station's queue; `id` is the per-line bump target. */
 export interface StationQueueItem {
+  allergy: KitchenAllergyBlock | null;
   lastMove?: {
     fromStationName: string;
     personName: string | null;
@@ -1829,6 +1831,7 @@ export interface DevDeviceList {
  * `stationName`, so the expediter sees which station is lagging.
  */
 export interface ExpoItem {
+  allergy: KitchenAllergyBlock | null;
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
   optionSnapshots?: OptionSnapshot[];

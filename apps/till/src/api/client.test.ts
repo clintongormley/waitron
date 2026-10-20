@@ -1778,6 +1778,7 @@ describe("TillApi", () => {
             away: false,
             items: [
               {
+                allergy: null,
                 id: "ti-1",
                 name: { "es-ES": "Paella" },
                 qty: "2.000",
@@ -3324,6 +3325,7 @@ describe("TillApi", () => {
               },
               items: [
                 {
+                  allergy: null,
                   id: "ti-1",
                   workingOrderLineId: "wol-1",
                   state: "queued",
@@ -3682,6 +3684,7 @@ describe("TillApi: a seated party", () => {
             stage: "not_started" as const,
             components: [
               {
+                allergy: null,
                 id: "ticket-1",
                 lineId: "line-1",
                 state: "queued" as const,
@@ -3888,6 +3891,7 @@ describe("TillApi: a seated party", () => {
 
   const groups = [
     {
+      allergy: null,
       courseIds: [],
       id: "g1",
       position: 1,
@@ -3900,6 +3904,7 @@ describe("TillApi: a seated party", () => {
       summary: "2 × Caña",
     },
     {
+      allergy: null,
       courseIds: [],
       id: "g2",
       position: 2,
@@ -4102,6 +4107,7 @@ describe("TillApi: a seated party", () => {
       reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
       groups: [
         {
+          allergy: null,
           id: "g1",
           position: 1,
           displayNumber: 1,
@@ -4704,6 +4710,7 @@ describe("TillApi: a party's drafts", () => {
       revision: 5,
       groups: [
         {
+          allergy: null,
           courseIds: [],
           id: "g1",
           position: 1,

@@ -21,6 +21,7 @@ const order: ExpoOrder = {
       away: false,
       items: [
         {
+          allergy: null,
           id: "item-a",
           name: "Burger",
           qty: "1.000",

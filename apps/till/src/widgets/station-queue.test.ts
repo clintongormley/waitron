@@ -27,6 +27,7 @@ const groupA: StationQueueGroup = {
   thresholds: DEFAULT_THRESHOLDS,
   items: [
     {
+      allergy: null,
       id: "ti-1",
       workingOrderLineId: "wol-1",
       state: "queued",
@@ -36,6 +37,7 @@ const groupA: StationQueueGroup = {
       firedAt: "2026-08-17T10:00:00.000Z",
     },
     {
+      allergy: null,
       id: "ti-2",
       workingOrderLineId: "wol-2",
       state: "preparing",
@@ -57,6 +59,7 @@ const groupB: StationQueueGroup = {
   thresholds: DEFAULT_THRESHOLDS,
   items: [
     {
+      allergy: null,
       id: "ti-3",
       workingOrderLineId: "wol-3",
       state: "ready",
@@ -426,6 +429,7 @@ describe("till-station-queue", () => {
       thresholds: DEFAULT_THRESHOLDS,
       items: [
         {
+          allergy: null,
           id: "ti-x",
           workingOrderLineId: "wol-x",
           state: "queued",
@@ -456,6 +460,7 @@ describe("till-station-queue", () => {
       status: "placed",
       items: [
         {
+          allergy: null,
           id: "ti-9",
           workingOrderLineId: "wol-9",
           state: "queued",
@@ -556,6 +561,7 @@ describe("till-station-queue", () => {
       status: "placed",
       items: [
         {
+          allergy: null,
           id: "ti-c",
           workingOrderLineId: "wol-c",
           state: "queued",
@@ -638,6 +644,7 @@ describe("till-station-queue", () => {
       status: "placed",
       items: [
         {
+          allergy: null,
           id: "ti-a",
           workingOrderLineId: "wol-a",
           state: "queued",
@@ -660,6 +667,7 @@ describe("till-station-queue", () => {
       status: "placed",
       items: [
         {
+          allergy: null,
           id: "ti-p",
           workingOrderLineId: "wol-p",
           state: "queued",
@@ -751,6 +759,7 @@ describe("till-station-queue", () => {
       status: "placed",
       items: [
         {
+          allergy: null,
           id: "ti-v",
           workingOrderLineId: "wol-v",
           state: "queued",
@@ -1168,6 +1177,7 @@ const coursedOrder: StationQueueGroup = {
   thresholds: DEFAULT_THRESHOLDS,
   items: [
     {
+      allergy: null,
       id: "it-main",
       workingOrderLineId: "wl-main",
       state: "queued",
@@ -1178,6 +1188,7 @@ const coursedOrder: StationQueueGroup = {
       firedAt: null,
     },
     {
+      allergy: null,
       id: "it-start",
       workingOrderLineId: "wl-start",
       state: "preparing",
@@ -1188,6 +1199,7 @@ const coursedOrder: StationQueueGroup = {
       firedAt: "2026-08-17T10:00:00.000Z",
     },
     {
+      allergy: null,
       id: "it-bread",
       workingOrderLineId: "wl-bread",
       state: "queued",
@@ -1787,6 +1799,7 @@ const partyOrder: StationQueueGroup = {
   party: { id: "v-4", revision: 12 },
   items: [
     {
+      allergy: null,
       id: "it-steak",
       workingOrderLineId: "wl-steak",
       state: "queued",
@@ -1797,6 +1810,7 @@ const partyOrder: StationQueueGroup = {
       firedAt: null,
     },
     {
+      allergy: null,
       id: "it-salad",
       workingOrderLineId: "wl-salad",
       state: "preparing",
@@ -1807,6 +1821,7 @@ const partyOrder: StationQueueGroup = {
       firedAt: "2026-08-17T10:00:00.000Z",
     },
     {
+      allergy: null,
       id: "it-moved",
       workingOrderLineId: "wl-moved",
       state: "queued",
@@ -1816,6 +1831,7 @@ const partyOrder: StationQueueGroup = {
       firedAt: "2026-08-17T10:00:00.000Z",
     },
     {
+      allergy: null,
       id: "it-flan",
       workingOrderLineId: "wl-flan",
       state: "queued",
@@ -1826,6 +1842,7 @@ const partyOrder: StationQueueGroup = {
       firedAt: null,
     },
     {
+      allergy: null,
       id: "it-fish",
       workingOrderLineId: "wl-fish",
       state: "queued",
@@ -2236,6 +2253,7 @@ describe("till-station-queue — moving a dish to another station", () => {
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-fired",
         workingOrderLineId: "wol-fired",
         state: "queued",
@@ -2245,6 +2263,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "ti-held",
         workingOrderLineId: "wol-held",
         state: "queued",
@@ -2254,6 +2273,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         firedAt: null,
       },
       {
+        allergy: null,
         id: "ti-preparing",
         workingOrderLineId: "wol-preparing",
         state: "preparing",
@@ -2263,6 +2283,7 @@ describe("till-station-queue — moving a dish to another station", () => {
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "ti-ready",
         workingOrderLineId: "wol-ready",
         state: "ready",
@@ -2274,6 +2295,7 @@ describe("till-station-queue — moving a dish to another station", () => {
       // An extra prepared at its own station is its own queue item, named "for" its dish
       // (apps/server/src/split-off-extras.queue.test.ts); the till moves dishes only.
       {
+        allergy: null,
         id: "ti-extra",
         workingOrderLineId: "wol-extra",
         state: "queued",
@@ -2369,6 +2391,7 @@ describe("till-station-queue — moving a dish to another station", () => {
 
 describe("till-station-queue — where Move sits", () => {
   const dish = (id: string, name: string): StationQueueItem => ({
+    allergy: null,
     id,
     workingOrderLineId: `wol-${id}`,
     state: "queued",

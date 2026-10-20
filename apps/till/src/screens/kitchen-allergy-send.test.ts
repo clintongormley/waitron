@@ -27,6 +27,7 @@ const group = {
   state: "held" as const,
 };
 const stationItem = {
+  allergy: null,
   id: "ticket-1",
   workingOrderLineId: "line-1",
   state: "queued" as const,
@@ -47,6 +48,7 @@ const stationGroup: StationQueueGroup = {
   items: [{ ...stationItem, group }],
 };
 const expoItem = {
+  allergy: null,
   id: "ticket-1",
   name: "Soup",
   qty: "1.000",
