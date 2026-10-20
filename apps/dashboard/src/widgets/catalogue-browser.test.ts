@@ -230,16 +230,6 @@ it("hands the courses to the products list", async () => {
   expect(el.shadowRoot!.querySelector("dashboard-product-list")!.courses).toEqual(courses);
 });
 
-/** The Made at cell of a row, found by its column heading. */
-async function madeAtText(el: CatalogueBrowser, key: string) {
-  const root = (await tableOf(el)).shadowRoot!;
-  const index = [...root.querySelectorAll("thead th")].findIndex((cell) =>
-    cell.textContent!.trim().startsWith("Made at"),
-  );
-  expect(index).toBeGreaterThanOrEqual(0);
-  const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
-  return [...row.querySelectorAll("td")][index]!.textContent!.replace(/\s+/g, " ").trim();
-}
 /** The red asterisk on a category's row, or null when the row has none. */
 async function unroutedMarker(el: CatalogueBrowser, key: string) {
   const row = (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${key}"]`);
@@ -272,50 +262,12 @@ const routingWith = (overrides: Partial<RoutingFixture> = {}): RoutingModel => (
   ...overrides,
 });
 
-it("shows each category's route from the routing it holds, and redraws it when routing changes", async () => {
-  const el = await mountBrowser({ routing: routingWith() });
-  expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
-  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
-  await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:b")).toBe("Bar from Drinks");
-  el.routing = routingWith({
-    cells: [
-      {
-        row: { kind: "category", categoryId: "d" },
-        zoneId: null,
-        target: { kind: "no_preparation" },
-      },
-    ],
-  });
-  expect(await madeAtText(el, "folder:d")).toBe("No preparation set on this category");
-  expect(await madeAtText(el, "folder:b")).toBe("No preparation from Drinks");
-});
-
-it("works the route out again when the products or the categories change", async () => {
-  const routing = routingWith();
-  const el = await mountBrowser({
-    routing: routingWith({
-      cells: [
-        ...routing.cells,
-        {
-          row: { kind: "product", productId: "juice" },
-          zoneId: null,
-          target: { kind: "station", stationId: "kitchen" },
-        },
-      ],
-    }),
-  });
-  expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
-  el.products = [
-    ...PRODUCTS,
-    { ...PRODUCTS[0]!, id: "juice", name: "Juice", primaryCategoryId: "d", categoryId: "d" },
-  ];
-  expect(await madeAtText(el, "folder:d")).toBe(
-    "Bar set on this category · some items made elsewhere",
-  );
-  el.categories = [...CATEGORIES, folder("w", "Wine", "d")];
-  await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:w")).toBe("Bar from Drinks");
+it("works the asterisk out again when the categories change", async () => {
+  const el = await mountBrowser({ routing: routingWith({ defaultStationId: null }) });
+  expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
+  el.categories = [...CATEGORIES, folder("s", "Soups", "f")];
+  await toggleCategory(el, "f");
+  expect(await unroutedMarker(el, "folder:s")).not.toBeNull();
 });
 
 it("decides the asterisk from default recovery for a switched-off station", async () => {
@@ -339,11 +291,8 @@ it("decides the asterisk from default recovery for a switched-off station", asyn
     });
   const el = await mountBrowser({ routing: barOff(true) });
   await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:d")).toBe("Kitchen set on this category");
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
-  expect(await madeAtText(el, "folder:b")).toBe("Kitchen from Drinks");
   expect(await unroutedMarker(el, "folder:b")).toBeNull();
-  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routing = barOff(false);
   expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
@@ -359,20 +308,24 @@ it("clears the asterisk on a category that falls through to a switched-on defaul
       ],
     });
   const el = await mountBrowser({ routing: kitchenOn(true) });
-  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routing = kitchenOn(false);
-  expect(await madeAtText(el, "folder:f")).toBe("Nowhere");
   expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
 });
 
-it("leaves categories blank while routing loads, and says so when its read failed", async () => {
+it("marks no category while routing loads, and says so above the list when its read failed", async () => {
   const el = await mountBrowser();
-  expect(await madeAtText(el, "folder:d")).toBe("");
+  const line = () => el.shadowRoot!.querySelector('[data-test="routing-unavailable"]');
+  await tableOf(el);
+  expect(line()).toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routingFailed = true;
-  expect(await madeAtText(el, "folder:d")).toBe("Kitchen routing unavailable");
-  expect(await madeAtText(el, ROOT_KEY)).toBe("");
+  await el.updateComplete;
+  expect(line()).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
 });
 
 async function nameCell(el: CatalogueBrowser, key: string) {

@@ -15,7 +15,6 @@ import type { Course, Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
-import type { FolderMadeAt } from "./folder-made-at.js";
 import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -437,220 +436,6 @@ describe("product-list", () => {
     ]);
   });
 
-  it("names a switched-off station with no replacement instead of nowhere", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "mojito" })],
-      madeAt: {
-        mojito: {
-          stationId: null,
-          stationName: "Cocktail bar",
-          noPreparation: false,
-          noReplacement: true,
-          unavailableStationId: "cocktail",
-          variesByZone: false,
-        },
-      },
-    });
-    const root = await tableRoot(el);
-    expect(cellUnder(root, "mojito", "Made at").textContent).toContain(
-      "No replacement (Cocktail bar is disabled)",
-    );
-  });
-  it("names a switched-off station holding a placeholder or a replacement pattern as it is", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "mojito" })],
-      madeAt: {
-        mojito: {
-          stationId: null,
-          stationName: "{from} $& $1",
-          noPreparation: false,
-          noReplacement: true,
-          unavailableStationId: "cocktail",
-          variesByZone: false,
-        },
-      },
-    });
-    const root = await tableRoot(el);
-    expect(cellUnder(root, "mojito", "Made at").querySelector("a")?.textContent?.trim()).toBe(
-      "No replacement ({from} $& $1 is disabled)",
-    );
-  });
-  it("shows the made-at station, zone variation, and Routing link", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "lager" }), product({ id: "mojito" })],
-      madeAt: {
-        lager: {
-          stationId: "bar",
-          stationName: "Bar",
-          noPreparation: false,
-          noReplacement: false,
-          unavailableStationId: null,
-          variesByZone: false,
-        },
-        mojito: {
-          stationId: "cocktail",
-          stationName: "Cocktail bar",
-          noPreparation: false,
-          noReplacement: false,
-          unavailableStationId: null,
-          variesByZone: true,
-        },
-      },
-    });
-    const root = await tableRoot(el);
-    expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
-    const cell = cellUnder(root, "mojito", "Made at");
-    expect(cell.textContent).toContain("Cocktail bar · varies by service zone");
-    expect(cell.querySelector("a")?.getAttribute("href")).toBe(
-      "/manage/prep-stations/view/routing",
-    );
-  });
-  it("leaves a product's cell blank, without a link, when the made-at read has no entry for it", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "lager" }), product({ id: "ale", active: false })],
-      madeAt: {
-        lager: {
-          stationId: "bar",
-          stationName: "Bar",
-          noPreparation: false,
-          noReplacement: false,
-          unavailableStationId: null,
-          variesByZone: false,
-        },
-      },
-    });
-    const root = await tableRoot(el);
-    await showArchived(el);
-    const cell = cellUnder(root, "ale", "Made at");
-    expect(cell.textContent!.trim()).toBe("");
-    expect(cell.querySelector("a")).toBeNull();
-    expect(cellUnder(root, "lager", "Made at").textContent).toContain("Bar");
-  });
-  it("says nowhere, with the Routing link, for a product the made-at read routes to no station", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "bread" })],
-      madeAt: {
-        bread: {
-          stationId: null,
-          stationName: null,
-          noPreparation: false,
-          noReplacement: false,
-          unavailableStationId: null,
-          variesByZone: false,
-        },
-      },
-    });
-    const root = await tableRoot(el);
-    const cell = cellUnder(root, "bread", "Made at");
-    expect(cell.textContent!.trim()).toBe("Nowhere");
-    expect(cell.querySelector("a")?.getAttribute("href")).toBe(
-      "/manage/prep-stations/view/routing",
-    );
-  });
-  describe("a click on a Made at cell's blank space beside its short link", () => {
-    /** The cell's padding corner, and the padding past the link's end on its line. */
-    function blankPoints(root: ShadowRoot, cell: HTMLElement) {
-      const box = cell.getBoundingClientRect();
-      const anchor = cell.querySelector<HTMLElement>('[part~="maker-link"]')!;
-      const link = anchor.getBoundingClientRect();
-      expect(link.right).toBeLessThan(box.right - 4);
-      const points = [
-        { x: 2, y: 2 },
-        { x: (link.right + box.right) / 2 - box.x, y: link.top + link.height / 2 - box.y },
-      ];
-      for (const position of points) {
-        const hit = root.elementFromPoint(box.x + position.x, box.y + position.y);
-        expect(anchor.contains(hit), JSON.stringify(position)).toBe(false);
-      }
-      return points;
-    }
-    /** Records a click the link receives, and stops it leaving the test page. */
-    function linkClicks(cell: HTMLElement): () => number {
-      let count = 0;
-      cell.querySelector("a")!.addEventListener("click", (event) => {
-        event.preventDefault();
-        count += 1;
-      });
-      return () => count;
-    }
-
-    it("does not open the product editor, while the link still takes its own click", async () => {
-      setLocale("en");
-      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-        products: [product({ id: "lager" })],
-        madeAt: {
-          lager: {
-            stationId: "bar",
-            stationName: "Bar",
-            noPreparation: false,
-            noReplacement: false,
-            unavailableStationId: null,
-            variesByZone: false,
-          },
-        },
-      });
-      const root = await tableRoot(el);
-      const edits = vi.fn();
-      el.addEventListener("edit-product", edits);
-      const cell = cellUnder(root, "lager", "Made at");
-      const clicks = linkClicks(cell);
-      for (const position of blankPoints(root, cell)) {
-        // Forced, so a row activator lying over the point takes the click rather than stalling it.
-        await userEvent.click(cell, { position, force: true });
-        await el.updateComplete;
-      }
-      expect(edits).not.toHaveBeenCalled();
-      expect(clicks()).toBe(0);
-      await userEvent.click(cell.querySelector("a")!);
-      expect(clicks()).toBe(1);
-      expect(edits).not.toHaveBeenCalled();
-      // The control: the Price cell beside it still opens the editor.
-      await userEvent.click(cellUnder(root, "lager", "Price"), {
-        position: { x: 2, y: 2 },
-        force: true,
-      });
-      expect(edits).toHaveBeenCalledTimes(1);
-    });
-
-    it("does not open or close the category, while the link still takes its own click", async () => {
-      setLocale("en");
-      const { table, root } = await mountTree({
-        folderMadeAt: new Map<string, FolderMadeAt>([
-          [
-            "d",
-            { maker: { kind: "station", stationName: "Bar" }, source: null, someElsewhere: false },
-          ],
-        ]),
-      });
-      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
-      const expanded = row.getAttribute("aria-expanded");
-      const cell = cellUnder(root, "folder:d", "Made at");
-      const clicks = linkClicks(cell);
-      for (const position of blankPoints(root, cell)) {
-        await userEvent.click(cell, { position, force: true });
-        await table.updateComplete;
-        expect(row.getAttribute("aria-expanded"), JSON.stringify(position)).toBe(expanded);
-      }
-      expect(clicks()).toBe(0);
-      await userEvent.click(cell.querySelector("a")!);
-      await table.updateComplete;
-      expect(clicks()).toBe(1);
-      expect(row.getAttribute("aria-expanded")).toBe(expanded);
-      // The control: the Price cell beside it still opens or closes the category.
-      await userEvent.click(cellUnder(root, "folder:d", "Price"), {
-        position: { x: 2, y: 2 },
-        force: true,
-      });
-      await table.updateComplete;
-      expect(row.getAttribute("aria-expanded")).not.toBe(expanded);
-    });
-  });
-
   it("shows a unit name holding placeholder and replacement-pattern text as it is", async () => {
     const odd: Unit = {
       staffName: "Staff unit",
@@ -707,7 +492,6 @@ describe("product-list", () => {
       ]),
     ).toEqual([
       ["course", true],
-      ["made-at", true],
       ["price", true],
       ["modifiers", true],
       ["ordering", true],
@@ -2055,92 +1839,6 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
 });
 
 describe("the product list at phone width", () => {
-  it.each(["en-GB", "es-ES"])(
-    "keeps a category's made-at link and its detail clear of pinned actions after scrolling at 390 px (%s)",
-    async (locale) => {
-      const width = window.innerWidth,
-        height = window.innerHeight;
-      const before = currentLocale();
-      try {
-        setLocale(locale);
-        await page.viewport(390, 844);
-        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-          categories: [drinks],
-          folderMadeAt: new Map<string, FolderMadeAt>([
-            [
-              "d",
-              {
-                maker: { kind: "no_replacement", stationName: "Downstairs cocktail bar" },
-                source: { kind: "inherited", name: "Bebidas-y-cocteles-de-la-casa" },
-                someElsewhere: true,
-              },
-            ],
-          ]),
-        });
-        const root = await tableRoot(el);
-        const scroll = root.querySelector<HTMLElement>(".scroll")!;
-        const cell = cellUnder(root, "folder:d", t("product.made_at"));
-        scroll.scrollLeft = cell.offsetLeft;
-        const actions = root.querySelector<HTMLElement>(
-          'tr[data-row-key="folder:d"] td[data-pinned="end"]',
-        )!;
-        for (const part of [
-          cell.querySelector("a")!,
-          cell.querySelector('[part~="maker-detail"]')!,
-        ]) {
-          const box = part.getBoundingClientRect();
-          expect(box.left).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().left);
-          expect(box.right).toBeLessThanOrEqual(actions.getBoundingClientRect().left);
-        }
-      } finally {
-        setLocale(before);
-        await page.viewport(width, height);
-      }
-    },
-  );
-  it.each(["en-GB", "es-ES"])(
-    "keeps the full made-at link clear of pinned actions after scrolling at 390 px (%s)",
-    async (locale) => {
-      const width = window.innerWidth,
-        height = window.innerHeight;
-      const before = currentLocale();
-      try {
-        setLocale(locale);
-        await page.viewport(390, 844);
-        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-          products: [product({ id: "mojito" })],
-          madeAt: {
-            mojito: {
-              stationId: "bar",
-              stationName: "Downstairs bar",
-              noPreparation: false,
-              noReplacement: false,
-              unavailableStationId: null,
-              variesByZone: true,
-            },
-          },
-        });
-        const root = await tableRoot(el);
-        const scroll = root.querySelector<HTMLElement>(".scroll")!;
-        const cell = cellUnder(root, "mojito", t("product.made_at"));
-        scroll.scrollLeft = cell.offsetLeft;
-        const link = cell.querySelector("a")!;
-        const actions = root.querySelector<HTMLElement>(
-          'tr[data-row-key="mojito"] td[data-pinned="end"]',
-        )!;
-        expect(link.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-          scroll.getBoundingClientRect().left,
-        );
-        expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(
-          actions.getBoundingClientRect().left,
-        );
-        expect(link.getBoundingClientRect().height).toBeGreaterThan(30);
-      } finally {
-        setLocale(before);
-        await page.viewport(width, height);
-      }
-    },
-  );
   // A long unbroken product name widens the name column past a phone's screen.
   const phoneProducts = () => [
     product({ id: "a" }),
@@ -3757,16 +3455,6 @@ describe("a product's variants in the list", () => {
         product({ id: "chorizo", name: "Iberian chorizo", primaryCategoryId: "deli" }),
       ],
       categories: [{ id: "deli", name: "Deli", parentId: null, color: null }],
-      madeAt: {
-        thin: {
-          stationId: "deli",
-          stationName: "Deli counter",
-          noPreparation: false,
-          noReplacement: false,
-          unavailableStationId: null,
-          variesByZone: false,
-        },
-      },
       ...props,
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -3909,14 +3597,6 @@ describe("a product's variants in the list", () => {
   it("shows a variant's price, availability, menu and effective allergens, leaving its other cells empty", async () => {
     showColumns("allergens", "dietary");
     setLocale("en");
-    const route = {
-      stationId: "deli",
-      stationName: "Deli counter",
-      noPreparation: false,
-      noReplacement: false,
-      unavailableStationId: null,
-      variesByZone: false,
-    };
     // Thin cut is sold out while its product is not, so its Availability cell is its own.
     const soldOutThin = cecina();
     soldOutThin.variants = soldOutThin.variants.map((variant) =>
@@ -3924,11 +3604,9 @@ describe("a product's variants in the list", () => {
     );
     const { table, root } = await mountDeli({
       products: [soldOutThin],
-      madeAt: { thin: route, cecina: route },
     });
     await openVariants(root, table, "cecina");
     for (const header of [
-      t("product.made_at"),
       t("editor.modifiers"),
       t("product.ordering"),
       t("product.dietary_info"),
@@ -3955,7 +3633,6 @@ describe("a product's variants in the list", () => {
     ).toBe("unavailable");
     expect(cellUnder(root, "cecina", t("product.availability")).textContent!.trim()).toBe("");
     expect(root.querySelector('[data-test="actions-thin"]')).not.toBeNull();
-    expect(cellUnder(root, "cecina", t("product.made_at")).textContent!.trim()).not.toBe("");
   });
 
   describe("lists a product's variants in the product's own order, whatever sorts the table", () => {
@@ -4472,7 +4149,7 @@ describe("the Products tree's Name column", () => {
     );
     localStorage.setItem(
       "waitron.products.table:column-order",
-      JSON.stringify(["reporting-category", "price", "made-at"]),
+      JSON.stringify(["reporting-category", "price", "ordering"]),
     );
     const { root } = await mountDeep();
     const headings = [...root.querySelectorAll("thead th:not(.select)")].map((th) =>
@@ -4481,10 +4158,34 @@ describe("the Products tree's Name column", () => {
     expect(headings[1]).toBe("Course");
     expect(headings[2]).toBe(t("product.price"));
     expect(headings.indexOf(t("product.price"))).toBeLessThan(
-      headings.indexOf(t("product.made_at")),
+      headings.indexOf(t("product.ordering")),
     );
     expect(headings).not.toContain(t("editor.main_category"));
     expect(headings).not.toContain(t("editor.modifiers"));
+  });
+
+  it("ignores a saved Made at column choice, order and filter", async () => {
+    setLocale("en");
+    localStorage.setItem("waitron.products.table:columns", JSON.stringify({ "made-at": true }));
+    localStorage.setItem(
+      "waitron.products.table:column-order",
+      JSON.stringify(["made-at", "price"]),
+    );
+    sessionStorage.setItem(
+      "waitron.products.table",
+      JSON.stringify({ filters: { "made-at": ["bar"] } }),
+    );
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "lager" }), product({ id: "mojito" })],
+    });
+    const root = await tableRoot(el);
+    const headings = [...root.querySelectorAll("thead th:not(.select)")].map((th) =>
+      th.textContent!.replace(/[▲▼]/g, "").trim(),
+    );
+    expect(headings).not.toContain("Made at");
+    expect(root.querySelector('input[data-column="made-at"]')).toBeNull();
+    expect(headings[2]).toBe(t("product.price"));
+    expect(rowKeys(root).sort()).toEqual(["lager", "mojito"]);
   });
 
   it.each(["Food / Meat", "Food › Meat", "Food > Meat"])(
@@ -4525,222 +4226,6 @@ describe("the Products tree's Name column", () => {
     await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
     expect(rowKeys(root)).not.toContain("folder:m");
   });
-});
-
-describe("a category's Made at", () => {
-  const bar = { kind: "station" as const, stationName: "Bar" };
-  type Entries = [string, FolderMadeAt][];
-  async function mountMadeAt(entries: Entries, props: Partial<ProductList> = {}) {
-    setLocale("en");
-    const mounted = await mountTree({ folderMadeAt: new Map(entries), ...props });
-    await openRow(mounted.el, "folder:d");
-    return mounted;
-  }
-  const madeAtCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.made_at"));
-  const detailOf = (root: ShadowRoot, key: string) =>
-    madeAtCell(root, key).querySelector('[part~="maker-detail"]')?.textContent?.trim();
-
-  it("names the station the category's cell sends it to, set on that category, linked to the Routing tab", async () => {
-    const { root } = await mountMadeAt([
-      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
-    ]);
-    const link = madeAtCell(root, "folder:d").querySelector("a")!;
-    expect(link.textContent!.trim()).toBe("Bar");
-    expect(link.getAttribute("href")).toBe("/manage/prep-stations/view/routing");
-    expect(detailOf(root, "folder:d")).toBe("set on this category");
-  });
-
-  it("names the category an inherited cell comes from", async () => {
-    const { root } = await mountMadeAt([
-      ["b", { maker: bar, source: { kind: "inherited", name: "Drinks" }, someElsewhere: false }],
-    ]);
-    expect(madeAtCell(root, "folder:b").querySelector("a")!.textContent!.trim()).toBe("Bar");
-    expect(detailOf(root, "folder:b")).toBe("from Drinks");
-  });
-
-  it("keeps a category name with a replacement pattern literal", async () => {
-    const { root } = await mountMadeAt([
-      ["b", { maker: bar, source: { kind: "inherited", name: "$& Co" }, someElsewhere: false }],
-    ]);
-    expect(detailOf(root, "folder:b")).toBe("from $& Co");
-  });
-
-  it("keeps a switched-off station's name with a placeholder or a replacement pattern literal", async () => {
-    const { root } = await mountMadeAt([
-      [
-        "d",
-        {
-          maker: { kind: "no_replacement", stationName: "{from} $& $1" },
-          source: { kind: "own" },
-          someElsewhere: false,
-        },
-      ],
-    ]);
-    expect(madeAtCell(root, "folder:d").querySelector("a")!.textContent!.trim()).toBe(
-      "No replacement ({from} $& $1 is disabled)",
-    );
-  });
-
-  it("marks a route that falls to the default station", async () => {
-    const { root } = await mountMadeAt([
-      [
-        "f",
-        {
-          maker: { kind: "station", stationName: "Kitchen" },
-          source: { kind: "default" },
-          someElsewhere: false,
-        },
-      ],
-    ]);
-    expect(madeAtCell(root, "folder:f").querySelector("a")!.textContent!.trim()).toBe("Kitchen");
-    expect(detailOf(root, "folder:f")).toBe("default station");
-  });
-
-  it("marks a route a cell decides by where the cell is, never as an exception", async () => {
-    const { root } = await mountMadeAt([
-      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
-      ["f", { maker: bar, source: { kind: "inherited", name: "Drinks" }, someElsewhere: false }],
-    ]);
-    expect(detailOf(root, "folder:d")).toBe("set on this category");
-    expect(detailOf(root, "folder:f")).toBe("from Drinks");
-  });
-
-  it("uses the product rows' words for no preparation, no replacement and nowhere", async () => {
-    const { root } = await mountMadeAt([
-      ["d", { maker: { kind: "no_preparation" }, source: { kind: "own" }, someElsewhere: false }],
-      [
-        "b",
-        {
-          maker: { kind: "no_replacement", stationName: "Cocktail bar" },
-          source: { kind: "own" },
-          someElsewhere: false,
-        },
-      ],
-      ["f", { maker: { kind: "nowhere" }, source: null, someElsewhere: false }],
-    ]);
-    expect(madeAtCell(root, "folder:d").querySelector("a")!.textContent!.trim()).toBe(
-      "No preparation",
-    );
-    expect(madeAtCell(root, "folder:b").querySelector("a")!.textContent!.trim()).toBe(
-      "No replacement (Cocktail bar is disabled)",
-    );
-    const nowhere = madeAtCell(root, "folder:f");
-    expect(nowhere.querySelector("a")!.textContent!.trim()).toBe("Nowhere");
-    expect(nowhere.querySelector('[part~="maker-detail"]')).toBeNull();
-  });
-
-  it("says some items are made elsewhere when the baseline is not a promise for everything inside", async () => {
-    const { root } = await mountMadeAt([
-      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: true }],
-      ["f", { maker: { kind: "nowhere" }, source: null, someElsewhere: true }],
-    ]);
-    expect(detailOf(root, "folder:d")).toBe("set on this category · some items made elsewhere");
-    expect(detailOf(root, "folder:f")).toBe("some items made elsewhere");
-  });
-
-  it("draws the detail smaller and muted, under the station", async () => {
-    const { el, root } = await mountMadeAt([
-      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
-    ]);
-    const detail = madeAtCell(root, "folder:d").querySelector<HTMLElement>(
-      '[part~="maker-detail"]',
-    )!;
-    const style = getComputedStyle(detail);
-    expect(style.display).toBe("block");
-    // Resolved against the mounted host, which carries the tokens.
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-text-muted)";
-    probe.style.fontSize = "var(--wt-font-size-sm)";
-    el.parentElement!.append(probe);
-    onTestFinished(() => probe.remove());
-    expect(style.color).toBe(getComputedStyle(probe).color);
-    expect(style.fontSize).toBe(getComputedStyle(probe).fontSize);
-  });
-
-  it("leaves a category's cell blank while routing has not loaded", async () => {
-    const { root } = await mountMadeAt([]);
-    const cell = madeAtCell(root, "folder:d");
-    expect(cell.textContent!.trim()).toBe("");
-    expect(cell.querySelector("a")).toBeNull();
-  });
-
-  it("says routing could not be read, without a link, when its read failed", async () => {
-    const { root } = await mountMadeAt([], { routingFailed: true });
-    const cell = madeAtCell(root, "folder:d");
-    expect(cell.textContent!.trim()).toBe("Kitchen routing unavailable");
-    expect(cell.querySelector("a")).toBeNull();
-    expect(cell.querySelector('[part~="maker-detail"]')).not.toBeNull();
-  });
-
-  it("leaves All products without a station in every state", async () => {
-    for (const props of [
-      { folderMadeAt: new Map<string, FolderMadeAt>() },
-      { routingFailed: true },
-    ]) {
-      const { root } = await mountMadeAt(
-        [["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }]],
-        props,
-      );
-      expect(madeAtCell(root, ROOT_KEY).textContent!.trim()).toBe("");
-      cleanupWidgets();
-    }
-  });
-
-  it("keeps a product row's own value and its Routing link beside the categories'", async () => {
-    const { root } = await mountMadeAt(
-      [["d", { maker: { kind: "no_preparation" }, source: { kind: "own" }, someElsewhere: true }]],
-      {
-        madeAt: {
-          cola: {
-            stationId: "kitchen",
-            stationName: "Kitchen",
-            noPreparation: false,
-            noReplacement: false,
-            unavailableStationId: null,
-            variesByZone: true,
-          },
-        },
-      },
-    );
-    const cell = madeAtCell(root, "cola");
-    expect(cell.textContent!.trim()).toBe("Kitchen · varies by service zone");
-    expect(cell.querySelector("a")!.getAttribute("href")).toBe(
-      "/manage/prep-stations/view/routing",
-    );
-  });
-
-  it("speaks Spanish", async () => {
-    const { el, root } = await mountMadeAt([
-      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: true }],
-    ]);
-    setLocale("es");
-    el.requestUpdate();
-    await el.updateComplete;
-    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(detailOf(root, "folder:d")).toBe(
-      "asignada a esta categoría · algunos productos se preparan en otro sitio",
-    );
-  });
-});
-
-it("falls back as product rows do when a switched-off station's or a category's name is not known", async () => {
-  setLocale("en");
-  const { el } = await mountTree({
-    folderMadeAt: new Map<string, FolderMadeAt>([
-      [
-        "d",
-        {
-          maker: { kind: "no_replacement", stationName: null },
-          source: { kind: "inherited", name: null },
-          someElsewhere: false,
-        },
-      ],
-    ]),
-  });
-  const root = await tableRoot(el);
-  expect(cellUnder(root, "folder:d", "Made at").textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "No replacement (Nowhere is disabled) from Unavailable selection",
-  );
 });
 
 describe("a refresh during a drag", () => {
@@ -5932,7 +5417,7 @@ describe("stable column inputs", () => {
     root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     await table.updateComplete;
     const filters = [...root.querySelectorAll<WtCombobox>("wt-combobox")];
-    expect(filters.length).toBe(5);
+    expect(filters.length).toBe(4);
     await Promise.all(filters.map((filter) => filter.updateComplete));
     const widths = filters.map((filter) =>
       vi.spyOn(filter as unknown as { widthTexts(): string[] }, "widthTexts"),
@@ -5941,7 +5426,7 @@ describe("stable column inputs", () => {
     await el.updateComplete;
     await table.updateComplete;
     await Promise.all(filters.map((filter) => filter.updateComplete));
-    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0, 0]);
+    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0]);
     expect(table.columns).toBe(columns);
     setLocale("es");
     el.requestUpdate();
@@ -6101,16 +5586,6 @@ it.each(["leave", "cancel", "Escape", "disconnect", "fits"])(
 );
 
 describe("product-list filters (A463)", () => {
-  const station = (stationId: string | null, stationName: string | null, more = {}) => ({
-    stationId,
-    stationName,
-    noPreparation: false,
-    noReplacement: false,
-    unavailableStationId: null,
-    variesByZone: false,
-    ...more,
-  });
-
   /** Every filter section in the panel, in the order the panel draws them. */
   async function filterKeys(el: ProductList): Promise<string[]> {
     const root = await tableRoot(el);
@@ -6127,12 +5602,10 @@ describe("product-list filters (A463)", () => {
   it("draws the filters in the order of the default columns", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "a" })],
-      madeAt: { a: station("bar", "Bar") },
       courses: [starters, mains],
     });
     expect(await filterKeys(el)).toEqual([
       "course",
-      "made-at",
       "modifiers",
       "ordering",
       "allergens",
@@ -6290,103 +5763,6 @@ describe("product-list filters (A463)", () => {
       expect(cellUnder(root, "a-soup", "Course").textContent!.trim()).toBe("Main courses");
       expect(filterOptions(root, "course")).toContainEqual(["mains", "Main courses"]);
     });
-  });
-
-  it("offers one Made at choice per station and keeps the products the column shows there", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "a-beer", name: "A beer", variants: [bunVariant] }),
-        product({ id: "b-soup", name: "B soup" }),
-        product({ id: "c-stew", name: "C stew" }),
-        product({ id: "d-bread", name: "D bread" }),
-        product({ id: "e-water", name: "E water" }),
-      ],
-      madeAt: {
-        "a-beer": station("bar", "Bar"),
-        "b-soup": station("kitchen", "Kitchen"),
-        "c-stew": station(null, "Grill", {
-          noReplacement: true,
-          unavailableStationId: "grill",
-        }),
-        "d-bread": station(null, null),
-        "e-water": station(null, null, { noPreparation: true }),
-      },
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    expect(filterOptions(root, "made-at")).toEqual([
-      ["", "Any station"],
-      ["bar", "Bar"],
-      ["grill", "Grill"],
-      ["kitchen", "Kitchen"],
-    ]);
-    await choose(el, "made-at", ["kitchen"]);
-    expect(rowKeys(root)).toEqual(["b-soup"]);
-    await choose(el, "made-at", ["grill"]);
-    expect(rowKeys(root)).toEqual(["c-stew"]);
-    await choose(el, "made-at", ["bar"]);
-    expect(rowKeys(root)).toEqual(["a-beer"]);
-    // A variant shows no station of its own and goes with its product.
-    root.querySelector<HTMLElement>('tr[data-row-key="a-beer"] .tree-toggle')!.click();
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["a-beer", "a-beer:small"]);
-    await choose(el, "made-at", ["bar", "grill", "kitchen"]);
-    expect(rowKeys(root)).toEqual(["a-beer", "a-beer:small", "b-soup", "c-stew"]);
-    await choose(el, "made-at", []);
-    expect(rowKeys(root)).toEqual([
-      "a-beer",
-      "a-beer:small",
-      "b-soup",
-      "c-stew",
-      "d-bread",
-      "e-water",
-    ]);
-  });
-
-  it("offers a switched-off station that only products with no replacement name", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "a-beer", name: "A beer" }),
-        product({ id: "b-stew", name: "B stew" }),
-      ],
-      madeAt: {
-        "a-beer": station("bar", "Bar"),
-        "b-stew": station(null, "Kitchen", {
-          noReplacement: true,
-          unavailableStationId: "kitchen",
-        }),
-      },
-    });
-    const root = await tableRoot(el);
-    expect(filterOptions(root, "made-at")).toEqual([
-      ["", "Any station"],
-      ["bar", "Bar"],
-      ["kitchen", "Kitchen"],
-    ]);
-    await choose(el, "made-at", ["kitchen"]);
-    expect(rowKeys(root)).toEqual(["b-stew"]);
-  });
-
-  it("offers the stations a live routing update names, not the ones it replaced", async () => {
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "a", name: "A" })],
-      madeAt: { a: station("bar", "Bar") },
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    await choose(el, "made-at", ["bar"]);
-    el.madeAt = { a: station("kitchen", "Kitchen") };
-    await el.updateComplete;
-    await table.updateComplete;
-    expect(filterOptions(root, "made-at")).toEqual([
-      ["", "Any station"],
-      ["kitchen", "Kitchen"],
-    ]);
-    await choose(el, "made-at", ["kitchen"]);
-    expect(rowKeys(root)).toEqual(["a"]);
   });
 
   it("keeps products with or without modifiers", async () => {

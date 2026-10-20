@@ -417,7 +417,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await showArchived(el);
     const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
     expect(toggle.getBoundingClientRect().height).toBeGreaterThan(0);
-    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(5);
+    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(4);
     await expectNoA11yViolations(host);
   });
 
@@ -633,53 +633,6 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     expect(cells.every((cell) => cell.part.contains("drop-into"))).toBe(true);
     await expectNoA11yViolations(host);
     at(over, "pointercancel");
-  });
-});
-
-describe.each(["light", "dark"] as const)("product made-at link a11y (%s)", (theme) => {
-  async function mountMadeAt() {
-    await page.viewport(1280, 844);
-    const { el, host } = await mountWidget<ProductList>(
-      "dashboard-product-list",
-      {
-        products: [{ ...products[0]!, primaryCategoryId: null, variants: [] }],
-        madeAt: {
-          p1: {
-            stationId: "s1",
-            stationName: "Cocina",
-            noPreparation: false,
-            noReplacement: false,
-            unavailableStationId: null,
-            variesByZone: false,
-          },
-        },
-      },
-      theme,
-    );
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    await table.updateComplete;
-    const row = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p1"]')!;
-    expect(row.classList.contains("clickable")).toBe(true);
-    expect(row.querySelector('[part~="maker-link"]')!.textContent).toContain("Cocina");
-    return { host, table, row };
-  }
-
-  it("reads on a row highlighted by focus inside it", async () => {
-    const { host, row } = await mountMadeAt();
-    const trigger = row.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="actions-p1"]',
-    )!;
-    trigger.focus();
-    expect(row.matches(":focus-within")).toBe(true);
-    await expectNoA11yViolations(host);
-  });
-
-  it("reads on a row highlighted by the pointer", async () => {
-    const { host, row } = await mountMadeAt();
-    const cell = row.querySelector('[part~="maker-link"]')!.closest("td")!;
-    await userEvent.hover(cell);
-    expect(row.matches(":hover")).toBe(true);
-    await expectNoA11yViolations(host);
   });
 });
 

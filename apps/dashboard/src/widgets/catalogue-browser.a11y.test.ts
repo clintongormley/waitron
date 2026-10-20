@@ -252,7 +252,7 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
   it.each([
     ["routed", false],
     ["unreadable", true],
-  ] as const)("renders categories' Made at %s accessibly", async (_state, failed) => {
+  ] as const)("renders the categories' routing marks %s accessibly", async (_state, failed) => {
     const { el, host } = await mountWidget<CatalogueBrowser>(
       "dashboard-catalogue-browser",
       {
@@ -303,7 +303,13 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
       .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
       .click();
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelector('[part~="maker-detail"]')).not.toBeNull();
+    if (failed) {
+      expect(el.shadowRoot!.querySelector('[data-test="routing-unavailable"]')).not.toBeNull();
+    } else {
+      const beer = table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]');
+      expect(beer).not.toBeNull();
+      expect(beer!.querySelector('[part~="unrouted-folder"]')).toBeNull();
+    }
     await expectNoA11yViolations(host);
   });
 });
