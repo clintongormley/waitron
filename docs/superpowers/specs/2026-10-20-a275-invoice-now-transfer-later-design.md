@@ -437,7 +437,7 @@ erase the invoice, debt or money trail.
 ## 10. Research premise and the attached asesor question
 
 This design uses the owner's chosen premise from the repository research. On 2026-10-20, the
-driver re-read the BOE consolidation's article 11.1 and checked the stored 14-word quotation below;
+driver re-read the BOE consolidation's article 11.1 and checked the stored quotation below;
 that bounded text check does not verify the wider tax treatment or provide fresh legal advice. “Answered” in that research is not evidence that the
 venue's asesor gave advice or approved this product. The shortened questionnaire says no enquiry
 had been sent when recorded. Old research language about current software is not current evidence.
