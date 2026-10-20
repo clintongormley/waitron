@@ -308,7 +308,9 @@ product code, `luminance` in `category-color.ts:1-9`, and in `colors.test.ts:13-
 the calculations in the context of these guidelines" (<https://www.w3.org/TR/WCAG22/>, definition of
 relative luminance).
 
-**The contrast rules Waitron's palette is tested against** (`packages/ui-core/src/tokens/colors.test.ts`):
+**The contrast rules Waitron's palette is tested against** (`packages/ui-core/src/tokens/colors.test.ts`;
+2026-10-20, A841 slice 1: these rules now live in `packages/ui-core/src/theme/contrast-rules.ts`, and
+the `colors.test.ts` line numbers in this document predate that move):
 the lifted surface stands 1.1:1 from the page and both surfaces, with text, muted text and danger at
 4.5:1 on it (134-150); text on the sunken surface 4.5:1 (152-157); the bar track 1.4:1 from the page
 and surface, text 4.5:1 on it (171-177); a field's line 3:1 on the fill, the surface and the page,

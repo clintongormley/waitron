@@ -123,7 +123,6 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
   test("every light and dark token equals the reference's", () => {
     const theme = deriveTheme(DARK_GREEN);
     expect(theme.tintStrength).toEqual({ light: 1, dark: 1 });
-    // ~/waitron-campaign/a841-plan1-probes/output-tinted-full.txt
     expect(theme.light).toEqual({
       [P("bg")]: "#f0f9f3",
       [P("surface")]: "#ffffff",
@@ -243,7 +242,6 @@ describe("the tint gives way", () => {
     expectFullList(theme);
   });
 
-  // From the reference: ~/waitron-campaign/a841-plan1-probes/t9/tint0-ref.mjs, output-tint0.txt.
   test("to nothing when no strength clears the rule, keeping Waitron's own hues", () => {
     const textOnPage = {
       ...WAITRON_DEFAULTS,

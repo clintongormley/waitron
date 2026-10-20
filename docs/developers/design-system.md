@@ -130,7 +130,7 @@ overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-dan
 ### Colour
 
 The contrast rules the palette is held to are listed once, in
-`packages/ui-core/src/theme/contrast-rules.ts`: these cases run all of them against the browser's
+`packages/ui-core/src/theme/contrast-rules.ts`: `packages/ui-core/src/tokens/colors.test.ts` runs all of them against the browser's
 resolved tokens, and the theme derivation runs the ones that read a colour a theme writes against a
 venue's colours.
 

@@ -77,7 +77,6 @@ describe("the brand colour's readability warning", () => {
     expect(deriveTheme(WAITRON_CHOICES).warnings).toEqual([]);
   });
 
-  // From the reference: ~/waitron-campaign/a841-plan1-probes/t9/waitron-primary-ref.mjs.
   test("Waitron's own brand colour never warns, even on a palette where it fails", () => {
     const pageColouredButtons = {
       ...WAITRON_DEFAULTS,

@@ -1,4 +1,3 @@
-// A port of the A841 slice-1 plan's reference, ~/waitron-campaign/a841-plan1-probes/derive-h2.mjs.
 import {
   contrastRatio,
   fromOklch,
@@ -53,7 +52,8 @@ const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colo
 /**
  * One step of a lightness walk; `null` once the lightness is pinned at 0 or 1, since every later
  * step would repeat this colour. The reference also takes a first step that repeats; only #000000
- * starts pinned, and it maps to itself (`t9/walk-cap.mjs` in the reference's folder).
+ * starts pinned, and it maps to itself (checked over all 16.7M #rrggbb colours; receipt in the
+ * slice 1 PR).
  */
 function stepped(L: number, dir: number, size: number): number | null {
   if (dir === 1 ? !(L < 1) : !(L > 0)) return null;
@@ -63,7 +63,7 @@ function stepped(L: number, dir: number, size: number): number | null {
 /**
  * Walks `hex`'s lightness in 0.005 steps until it has `need` against every colour in `list`. The
  * reference stops after 200 steps; no #rrggbb walk takes more before its lightness is pinned
- * (`t9/walk-cap.mjs`), so this one needs no count.
+ * (checked over all 16.7M #rrggbb colours; receipt in the slice 1 PR), so this one needs no count.
  */
 function until(hex: string, dir: number, list: readonly string[], need: number): string {
   const grounds = list.map(relativeLuminance);

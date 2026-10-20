@@ -77,8 +77,7 @@ describe("fromOklch", () => {
     expect(fromOklch({ L: 0.7, C: 0.4, H: 2 })).toBe("#9da81c");
   });
 
-  // From the reference's fromOklch; a 61st round, or a 59th-round stop, answers differently
-  // (~/waitron-campaign/a841-plan1-probes/t9/rounds.mjs, output-rounds.txt; Task 1's review).
+  // From the reference's fromOklch; a 61st round, or a 59th-round stop, answers differently.
   test("gives up on the chroma after 60 rounds and drops it", () => {
     expect(fromOklch({ L: 0.0978, C: 0.4114, H: -3.0531 })).toBe("#030303");
     expect(fromOklch({ L: 0.0612, C: 0.334, H: -2.5203 })).toBe("#000102");

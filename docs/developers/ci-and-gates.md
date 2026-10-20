@@ -338,8 +338,9 @@ file db's selection leaves out. Nor do ui's and db's merged scores count every m
 span crosses a `HEAVY_FILES` range boundary is mutated by no shard — 2 in db and 26 in ui at the
 2026-10-12 splits, as counted by that day's Codex review by instrumenting each split file whole and
 by range. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
-package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's, ui's and ui-core's
-bars, so a step that reached the same command through a variable would be invisible to it.
+package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for the sharded
+packages' bars and their shards' upload paths, so a step that reached the same command or path
+through a variable would be invisible to it, and it never runs Stryker to see a report written.
 
 `packages/shared`'s score is taken without `src/conventions.test.ts`: its `vitest.config.ts`
 excludes that file whenever `STRYKER_MUTATOR_WORKER` is set, which Stryker 10 sets on the worker
@@ -354,7 +355,9 @@ unchanged, it was not run at all (that run counted 396 tests, the package's 449 
 53), and neither was a probe suite whose only input was `?raw` source. Any mutation-tested package
 with a suite that imports a mutated file and reads its package's `src` as text could read Stryker's
 instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.test.ts` imports `./clock.js`, which fiscal's
-`mutate` list names, and reads `./*.ts` as raw text. Only `packages/shared` was checked.
+`mutate` list names, and reads `./*.ts` as raw text. `packages/ui-core` leaves out
+`src/theme/sources.test.ts` the same way, and `src/theme/*.sweep.test.ts` so a theme mutant does
+not rerun the sweeps. Only `packages/shared` was checked.
 
 ### Mutation testing runs nightly at 05:00 UTC
 

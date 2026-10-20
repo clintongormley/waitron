@@ -12,12 +12,9 @@ import {
 import { colourToken, THEME_COLOURS } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
 
-// Inputs that tell apart code shapes the hand-written cases do not, found by searching drawn
-// choices or built by hand; every expected value was computed by the reference with fix round 1's
-// rulings on: ~/waitron-campaign/a841-plan1-probes/t9/pins2.mjs, run on cases-all2.tsv, output
-// output-pins2b.json, equal as parsed JSON to this fixture. A `label` of the form file:line:col is
-// where the search found the input, in the source before Task 9, except one tagged "(Task 9 run 3)",
-// which points into the source during Task 9; the others describe a built case.
+// Inputs that tell apart code shapes the hand-written cases do not; the expected values are the
+// reference implementation's output. A file:line:col label names where a search found the input in
+// an earlier revision of the theme source, not a line in the current one.
 
 interface ReferenceCase {
   readonly label: string;
@@ -33,9 +30,6 @@ interface ReferenceCase {
 
 // Made-up palettes (Waitron's values with one to three replaced) reach rules no input drawn on
 // Waitron's real palette failed, such as one between worked-out colours after a fix's settling.
-// Fifteen were found by csearch.mjs, labelled file:line:col in the source after Task 9's first
-// round; the last is the reviewer's example, built by hand. Values from pins3.mjs run on cases3.tsv,
-// output output-pins3.json, equal as parsed JSON to the second fixture.
 function holds(reference: ReferenceCase) {
   const defaults: WaitronDefaults = {
     ...WAITRON_DEFAULTS,

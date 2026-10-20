@@ -77,8 +77,8 @@ export default defineConfig({
       ...configDefaults.exclude,
       "**/.stryker-tmp/**",
       "test/**",
-      // Under Stryker `src` holds instrumented copies, which sources.test.ts would read as the
-      // theme's source text.
+      // Under Stryker every mutant of the theme would rerun the sweeps, and `src` holds instrumented
+      // copies, which sources.test.ts would read as the theme's source text.
       ...(process.env.STRYKER_MUTATOR_WORKER === undefined
         ? []
         : ["src/theme/*.sweep.test.ts", "src/theme/sources.test.ts"]),
