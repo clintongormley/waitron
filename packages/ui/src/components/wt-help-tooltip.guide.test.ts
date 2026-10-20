@@ -123,12 +123,9 @@ describe.each(["always", "help-mode"] as const)("a %s badge", (mode) => {
       seen.push(event.defaultPrevented);
       event.preventDefault();
     };
-    document.addEventListener("click", record);
-    try {
-      await userEvent.click(link!);
-    } finally {
-      document.removeEventListener("click", record);
-    }
+    // On the link itself: the badge stops the click there (wt-help-tooltip.guide-event.test.ts).
+    link!.addEventListener("click", record);
+    await userEvent.click(link!);
     expect(seen).toEqual([false]);
     await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
   });
