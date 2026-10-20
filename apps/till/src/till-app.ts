@@ -11618,6 +11618,20 @@ export class TillApp extends LitElement {
     }
   }
 
+  /** A reason the server no longer accepts may have been deleted or changed, so the list is read
+   * again; if that read fails, the reasons already shown stay. */
+  async #rereadCancelReasons(refused: CancellingItem): Promise<void> {
+    this.cancellingItem = { ...refused, reasonsLoading: true };
+    let reasons = refused.reasons;
+    try {
+      reasons = await refused.api.listAdjustmentReasons();
+    } catch {
+      // The refusal already says to choose another reason.
+    }
+    if (this.#itemCancellationShown(refused))
+      this.cancellingItem = { ...this.cancellingItem!, reasons, reasonsLoading: false };
+  }
+
   async #previewItemCancellation(open: CancellingItem, choice: CancelItemChoice): Promise<void> {
     this.cancellingItem = { ...open, busy: true, refusal: "", refusalField: null };
     try {
@@ -11816,7 +11830,7 @@ export class TillApp extends LitElement {
       if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
     } else {
       const field = refusalField(code, "cancel", false);
-      this.cancellingItem = {
+      const refused: CancellingItem = {
         ...open,
         busy: false,
         approval: undefined,
@@ -11829,6 +11843,8 @@ export class TillApp extends LitElement {
               )
             : open.reasons,
       };
+      if (REASON_REFUSALS.has(code)) await this.#rereadCancelReasons(refused);
+      else this.cancellingItem = refused;
       if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
     }
   }

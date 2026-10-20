@@ -552,7 +552,7 @@ export class TillCancelItemDialog extends LitElement {
                   .options=${this.#offeredReasons().map((reason) => ({ value: reason.id, label: reason.name }))}
                   .value=${this.draft.reasonId}
                   .disabled=${this.#busy() || this.reasonsLoading}
-                  .error=${reasonInvalid ? t("adjust.reason_required") : this.shownRefusalField === "reason" ? this.shownRefusal : ""}
+                  .error=${this.shownRefusalField === "reason" ? this.shownRefusal : reasonInvalid ? t("adjust.reason_required") : ""}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     this.#set({ reasonId: event.detail.value, note: "" });

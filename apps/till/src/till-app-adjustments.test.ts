@@ -1884,6 +1884,80 @@ describe("till-app: service cancellation consent", () => {
     ).toBe(false);
   });
 
+  it("offers the reasons read again after the server refuses a charged cancellation's reason as deleted", async () => {
+    const replacement: AdjustmentReason = { ...mistake, id: "r-new", name: "Replacement" };
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
+    });
+    const reasons = vi.fn().mockResolvedValueOnce([mistake]).mockResolvedValue([replacement]);
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    const widget = cancelDialog(el)!;
+    await widget.updateComplete;
+    const field = widget.shadowRoot!.querySelector("wt-combobox")!;
+    expect(field.options.map((row) => row.value)).toEqual(["r-new"]);
+    expect(field.error).toBe(codeMessage("adjustment_reason.not_found"));
+  });
+
+  it("keeps the reasons shown and the refusal when they cannot be read again after a reason refusal", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.action_not_allowed" }),
+    });
+    const reasons = vi
+      .fn()
+      .mockResolvedValueOnce([mistake])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    const widget = cancelDialog(el)!;
+    await widget.updateComplete;
+    expect(widget.reasons).toEqual([mistake]);
+    expect(widget.reasonsLoading).toBe(false);
+    expect(widget.refusal).toBe(codeMessage("adjustment.action_not_allowed"));
+  });
+
+  it("keeps a reasons read answering after its refused cancellation closed out of a reopened one", async () => {
+    let answer!: (value: AdjustmentReason[]) => void;
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment_reason.not_found" }),
+    });
+    const reasons = vi
+      .fn()
+      .mockResolvedValueOnce([mistake])
+      .mockReturnValueOnce(new Promise<AdjustmentReason[]>((resolve) => (answer = resolve)))
+      .mockResolvedValue([mistake]);
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    const refused = cancelDialog(el)!;
+    emit(refused, "cancel-item-close");
+    await flush(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    const current = cancelDialog(el)!;
+    expect(current).not.toBe(refused);
+    expect(current.reasons).toEqual([mistake]);
+    answer([{ ...mistake, id: "r-new", name: "Replacement" }]);
+    await flush(el);
+    expect(cancelDialog(el)).toBe(current);
+    expect(current.reasons).toEqual([mistake]);
+    expect(current.refusal).toBe("");
+  });
+
   it("reveals a newly required cancel note after the server refuses the stale reason definition", async () => {
     const methods = apiFor(consent(), {
       cancelItem: vi
