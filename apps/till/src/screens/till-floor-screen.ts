@@ -106,7 +106,7 @@ import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/s
 import {
   byPrecedence,
   lateBand,
-  topState,
+  tableStates,
   type TableStateKind,
 } from "../state/table-precedence.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
@@ -2370,8 +2370,10 @@ export class TillFloorScreen extends LitElement {
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#waitingCard(table, "clear");
     if (needsMovingToday(table)) return this.#waitingCard(table, "move");
-    const top = topState(table, this.#drawnAt);
-    const ring = top === undefined ? null : (RING_OF[top] ?? null);
+    const states = tableStates(table, this.#drawnAt);
+    const top = states[0];
+    const ringKind = states.find((kind) => RING_OF[kind] !== undefined);
+    const ring = ringKind === undefined ? null : RING_OF[ringKind]!;
     const moving = !this.#prefersReducedMotion();
     const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
     const calm = top === "held" || top === "nothing-needed" ? " calm" : "";

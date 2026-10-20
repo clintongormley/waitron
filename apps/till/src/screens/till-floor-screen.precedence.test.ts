@@ -190,8 +190,77 @@ describe("till-floor-screen: the card's ring", () => {
     expect(rings).toHaveLength(1);
     expect(rings[0]!.dataset.ring).toBe("forgotten");
     expect(pulses(rings[0]!)).toEqual(["wt-pulse-fast"]);
-    expect(ringOf(card(el, "t3"))).toBeNull();
+    const waiting = card(el, "t3").querySelectorAll<HTMLElement>("[data-ring]");
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]!.dataset.ring).toBe("waiting");
+    expect(pulses(waiting[0]!)).toEqual([]);
     expect(card(el, "t3").dataset.top).toBe("bill");
+  });
+
+  it.each([
+    [
+      "unavailable",
+      { signals: [{ kind: "held_unavailable", groupId: "g3", lineNames: ["Steak"] }] },
+    ],
+    ["bill", { signals: [{ kind: "bill_requested", requestedAt: past }] }],
+    ["ready", { readyToServe: 1 }],
+    ["step", { signals: [{ kind: "take_order" }] }],
+    [
+      "not-sent",
+      {
+        party: party({
+          unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+        }),
+      },
+    ],
+  ] as [string, Partial<TableState>][])(
+    "keeps the thin waiting outline under %s",
+    async (top, over) => {
+      const { el } = await mountFloor(
+        [table({ ...over, signals: [...(over.signals ?? []), longWait("warm")] })],
+        { reducedMotion: false },
+      );
+      const rings = card(el).querySelectorAll<HTMLElement>("[data-ring]");
+      expect(rings).toHaveLength(1);
+      expect(rings[0]!.dataset.ring).toBe("waiting");
+      expect(pulses(rings[0]!)).toEqual([]);
+      expect(card(el).dataset.top).toBe(top);
+    },
+  );
+
+  it("Time to fire over a wait draws only its own ring", async () => {
+    const { el } = await mountFloor([table({ party: due, signals: [longWait("warm")] })], {
+      reducedMotion: false,
+    });
+    const rings = card(el).querySelectorAll<HTMLElement>("[data-ring]");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.dataset.ring).toBe("fire");
+    expect(pulses(rings[0]!)).toEqual(["wt-pulse-slow"]);
+    expect(card(el).dataset.top).toBe("fire");
+  });
+
+  it("rings a bill-and-waiting table the same on the card and in the tray", async () => {
+    const signals: TableSignal[] = [
+      { kind: "bill_requested", requestedAt: past },
+      longWait("warm"),
+    ];
+    const list = await mountFloor([table({ signals })], { reducedMotion: false });
+    expect(ringOf(card(list.el))!.dataset.ring).toBe("waiting");
+    cleanupWidgets();
+    const map = await mountFloor(
+      [
+        table({ id: "t1", label: "Table 1", party: null, state: "free", today: today() }),
+        table({ signals, today: today({ placement: null }) }),
+      ],
+      { reducedMotion: false },
+    );
+    const token = map.el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("[data-tray-table=t2] wt-table-token")!;
+    await token.updateComplete;
+    const rings = token.shadowRoot!.querySelectorAll<HTMLElement>("[data-ring]");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.dataset.ring).toBe("waiting");
   });
 
   it("outlines a card from its wait chip when the floored band has not caught up", async () => {
