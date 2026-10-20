@@ -2404,6 +2404,38 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       await tick(el, 3);
       expect(reads()).toBe(2);
     });
+
+    it("the first card declined after a second card was received still ends the run of shares", async () => {
+      const getBillBalance = vi.fn(async () => ownIs("pending"));
+      const { el } = await pendingShare(getBillBalance);
+      const pendingSecond = { ...second, state: "pending" as const };
+      await nextGuest(el, {
+        ...takenOf(pendingSecond, { reserved: "80.00", outstanding: "40.00" }),
+        outcome: "timeout",
+      });
+      getBillBalance.mockResolvedValue(bothAt("pending", { ...second, state: "received" }));
+      await tick(el);
+      expect(text(inDialog(el, "[data-pay-next]"))).toBe(
+        t("bill_pay.next_share").replace("{n}", "3").replace("{m}", "3"),
+      );
+      getBillBalance.mockResolvedValue(
+        balanceOf({
+          received: "40.00",
+          outstanding: "80.00",
+          payments: [
+            paymentOf({ ...own, state: "declined" }),
+            paymentOf({ ...second, state: "received" }),
+          ],
+        }),
+      );
+
+      await tick(el);
+
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_not_charged"));
+      expect(text(inDialog(el, "[data-pay-next]"))).toBe(t("bill_pay.next"));
+      await press(el, "[data-pay-next]");
+      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+    });
   });
 
   /** A whole-bill card sent from the phone and answered that it is still at the reader, then a
@@ -2468,6 +2500,30 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     expect(getFiledTicket).toHaveBeenCalledTimes(2);
   });
 
+  it("a ticket read that fails after another tick has come is tried again, and the ticket then shows", async () => {
+    let fail: () => void = () => {};
+    const getFiledTicket = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (fail = () => reject(new TypeError("Failed to fetch")))),
+      )
+      .mockResolvedValue(invoiceOf("120.00"));
+    const el = await settlingCard(getFiledTicket);
+    await tick(el);
+    expect(getFiledTicket).toHaveBeenCalledTimes(1);
+    await tick(el);
+    expect(getFiledTicket).toHaveBeenCalledTimes(1);
+
+    fail();
+    await flush(el);
+    expect(ticketView(el)).toBeNull();
+    await tick(el);
+
+    expect(getFiledTicket).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    expect(dialog(el)).toBeNull();
+  });
+
   it("a ticket read answered after the sheet closed shows nothing", async () => {
     let answer: () => void = () => {};
     const getFiledTicket = vi.fn(
@@ -2485,6 +2541,26 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     expect(dialog(el)).toBeNull();
     expect(ticketView(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
+  });
+
+  it("an older read answering after a newer one changes nothing", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el } = await pendingShare(getBillBalance);
+    let answerOlder: () => void = () => {};
+    getBillBalance.mockImplementationOnce(
+      () => new Promise<BillBalance>((resolve) => (answerOlder = () => resolve(ownIs("pending")))),
+    );
+    await tick(el);
+    getBillBalance.mockResolvedValue(ownIs("received"));
+    vi.mocked(api.previewBillPayment).mockRejectedValueOnce({ code: "bill.not_open" });
+    await press(el, "[data-pay-next]");
+    await press(el, "[data-pay-continue]");
+    await vi.waitFor(() => expect(dialog(el)!.balance!.payments[0]!.state).toBe("received"));
+
+    answerOlder();
+    await flush(el);
+
+    expect(dialog(el)!.balance!.payments[0]!.state).toBe("received");
   });
 
   it("closing the sheet stops the reads", async () => {

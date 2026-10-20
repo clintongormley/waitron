@@ -528,8 +528,9 @@ export class TillBillPayDialog extends LitElement {
   #shareRun: { of: number; paid: number } | null = null;
   /** The count of the equal share last sent to be taken, until its answer. */
   #sharePaying: number | null = null;
-  /** The run counts a card still in progress, which may yet be declined. */
-  #runHoldsPending = false;
+  /** The cards the run counted while still in progress, by the `taken` that showed each: one may
+   * yet be declined. */
+  #runPending = new Set<PayTaken>();
   /** Take the next was pressed since the payment last taken. */
   #leftTaken = false;
 
@@ -712,12 +713,15 @@ export class TillBillPayDialog extends LitElement {
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("refusal")) {
       this.shownRefusal = this.refusal;
+      const shownPending = (changed.get("taken") as PayTaken | null | undefined)?.pending;
       if (
-        this.#runHoldsPending &&
+        (this.#runPending.size > 0 || shownPending !== undefined) &&
         (this.refusal?.code === "declined" || this.refusal?.code === "payment_failed")
       )
         this.#endRun();
     }
+    if (changed.has("taken") && this.taken?.settled === true)
+      this.#runPending.delete(changed.get("taken") as PayTaken);
     if (changed.has("taken") && this.taken !== null) this.#accept(this.taken);
     if (changed.has("refunded") && this.refunded !== null) this.#endRun();
     if (changed.has("balance") && !this.#owing()) this.nextOffered = false;
@@ -747,17 +751,22 @@ export class TillBillPayDialog extends LitElement {
     );
   }
 
-  /** A card the run counted while it was in progress was not charged after the sheet moved on.
-   * The run ends; the count it lowered goes only while the form is off screen. */
-  cardNotCharged(): void {
-    if (!this.#runHoldsPending) return;
+  /** A card in progress, shown as `taken`, ended after the sheet moved on. Charged, the run no
+   * longer waits on it; not charged, a run that counted it ends, and the count it lowered goes
+   * only while the form is off screen. */
+  cardEnded(taken: PayTaken, charged: boolean): void {
+    if (!this.#runPending.has(taken)) return;
+    if (charged) {
+      this.#runPending.delete(taken);
+      return;
+    }
     if (this.nextOffered && this.#sharesLeft() > 0 && this.people === String(this.#sharesLeft())) {
       this.people = "";
       this.#entryBaseline = this.#draft();
       this.#entry?.commit(this.#entryBaseline);
     }
     this.#shareRun = null;
-    this.#runHoldsPending = false;
+    this.#runPending.clear();
   }
 
   /** Only the `taken` that arrives counts toward the run of shares, so the app's own earlier call
@@ -779,16 +788,19 @@ export class TillBillPayDialog extends LitElement {
   #offerNext(taken: PayTaken): void {
     const paying = this.#sharePaying;
     this.#sharePaying = null;
-    if (taken.settled === true) this.#runHoldsPending = false;
-    else if (paying === null) this.#shareRun = null;
-    else {
+    if (taken.settled !== true && paying === null) {
+      this.#shareRun = null;
+      this.#runPending.clear();
+    } else if (taken.settled !== true && paying !== null) {
       const run = this.#shareRun;
-      this.#shareRun =
-        run !== null && run.of - run.paid === paying
-          ? { of: run.of, paid: run.paid + 1 }
-          : { of: paying, paid: 1 };
+      if (run !== null && run.of - run.paid === paying)
+        this.#shareRun = { of: run.of, paid: run.paid + 1 };
+      else {
+        this.#shareRun = { of: paying, paid: 1 };
+        this.#runPending.clear();
+      }
+      if (taken.pending !== undefined) this.#runPending.add(taken);
     }
-    if (taken.pending !== undefined) this.#runHoldsPending = true;
     const left = this.#sharesLeft();
     if (left > 0) this.people = String(left);
     this.nextOffered = this.#owing();
@@ -804,7 +816,7 @@ export class TillBillPayDialog extends LitElement {
   #endRun(): void {
     if (this.#sharesLeft() > 0 && this.people === String(this.#sharesLeft())) this.people = "";
     this.#shareRun = null;
-    this.#runHoldsPending = false;
+    this.#runPending.clear();
     this.nextOffered = false;
   }
 

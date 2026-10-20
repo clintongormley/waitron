@@ -1060,12 +1060,11 @@ interface PendingBillPayment extends Submission {
   };
 }
 
-/** The timed re-read of the card payments dialog `dialogId` sent that are still pending, the one
- * whose answer it last showed with the `taken` it showed, and whether a read is out. */
+/** The timed re-read of the card payments dialog `dialogId` sent that are still pending, each
+ * with the `taken` that showed it in progress, and whether a tick is out. */
 interface PendingReread {
   dialogId: number;
-  paymentIds: Set<string>;
-  shown: { paymentId: string; taken: PayTaken };
+  pending: Map<string, PayTaken>;
   timer: ReturnType<typeof setInterval>;
   out: boolean;
 }
@@ -16207,15 +16206,13 @@ export class TillApp extends LitElement {
     if (!this.handheldMode) return;
     const running = this.#pendingReread;
     if (running?.dialogId === dialogId) {
-      running.paymentIds.add(paymentId);
-      running.shown = { paymentId, taken };
+      running.pending.set(paymentId, taken);
       return;
     }
     this.#stopPendingReread();
     const reread: PendingReread = {
       dialogId,
-      paymentIds: new Set([paymentId]),
-      shown: { paymentId, taken },
+      pending: new Map([[paymentId, taken]]),
       out: false,
       timer: setInterval(() => void this.#pendingTick(reread), PENDING_REREAD_MS),
     };
@@ -16230,8 +16227,9 @@ export class TillApp extends LitElement {
   /**
    * One timed read. Passive: it never counts as activity. A failed read changes nothing and the
    * next tick tries again; an answer older than the balance the dialog shows, or sent before the
-   * bill's last send ended, is dropped. Each watched payment no longer pending stops being watched
-   * and its outcome is shown; the reads stop when none is left.
+   * bill's last send ended, is dropped. A tick is out until every outcome it found is shown. Each
+   * watched payment no longer pending stops being watched once its outcome is shown; the reads
+   * stop when none is left.
    */
   async #pendingTick(reread: PendingReread): Promise<void> {
     if (this.#pendingReread !== reread || reread.out) return;
@@ -16240,16 +16238,22 @@ export class TillApp extends LitElement {
       this.#stopPendingReread();
       return;
     }
-    const { billId } = open;
-    const sentAt = ++this.#payTicks;
     reread.out = true;
+    try {
+      await this.#pendingRead(reread, open.billId);
+    } finally {
+      reread.out = false;
+    }
+    if (this.#pendingReread === reread && reread.pending.size === 0) this.#stopPendingReread();
+  }
+
+  async #pendingRead(reread: PendingReread, billId: string): Promise<void> {
+    const sentAt = ++this.#payTicks;
     let balance: BillBalance;
     try {
       balance = await this.api.getBillBalance(billId);
     } catch {
       return;
-    } finally {
-      reread.out = false;
     }
     if (
       this.#pendingReread !== reread ||
@@ -16258,35 +16262,31 @@ export class TillApp extends LitElement {
     )
       return;
     await this.#showBillPayingBalance(reread.dialogId, billId, balance, sentAt);
-    for (const id of [...reread.paymentIds]) {
+    for (const [id, taken] of [...reread.pending]) {
       const payment = balance.payments.find((shown) => shown.id === id);
       if (payment?.state === "pending") continue;
-      reread.paymentIds.delete(id);
-      if (payment !== undefined) await this.#onPendingEnded(reread, payment, balance);
+      if (payment === undefined || (await this.#onPendingEnded(reread, taken, payment, balance)))
+        reread.pending.delete(id);
     }
-    if (this.#pendingReread === reread && reread.paymentIds.size === 0) this.#stopPendingReread();
   }
 
   /**
-   * A card the dialog sent, no longer pending. While the dialog still shows that card's own
-   * answer, it shows this one in its place: taken, refused, or for a card that settled the bill
-   * the ticket, as an answer at once would. Once the dialog has moved on — another send, or the
-   * next guest's form started — what it shows stays, and its notice says what became of the card.
+   * A card the dialog sent, no longer pending, which `taken` showed in progress. While the dialog
+   * still shows that `taken`, it shows this outcome in its place: taken, refused, or for a card
+   * that settled the bill the ticket, as an answer at once would. Once the dialog has moved on —
+   * another send, or the next guest's form started — what it shows stays, and its notice says what
+   * became of the card. Answers false when the ticket could not be read, to try again.
    */
   async #onPendingEnded(
     reread: PendingReread,
+    taken: PayTaken,
     payment: BillPaymentView,
     balance: BillBalance,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const dialog = () => this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog");
     const own = () => {
       const now = this.#billPayingNow(reread.dialogId);
-      return now !== null &&
-        reread.shown.paymentId === payment.id &&
-        now.taken === reread.shown.taken &&
-        dialog()?.showsTaken !== false
-        ? now
-        : null;
+      return now?.taken === taken && dialog()?.showsTaken !== false ? now : null;
     };
     const before = own();
     if (before !== null && payment.state === "received" && balance.status === "settled") {
@@ -16294,14 +16294,13 @@ export class TillApp extends LitElement {
       try {
         ticket = await this.api.getFiledTicket(before.billId);
       } catch {
-        reread.paymentIds.add(payment.id);
-        return;
+        return false;
       }
       const now = own();
       if (now !== null) {
         dialog()?.paymentAccepted();
         await this.#showPaidTicket(now, ticket);
-        return;
+        return true;
       }
     }
     const now = own();
@@ -16317,12 +16316,11 @@ export class TillApp extends LitElement {
               refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
             }),
       };
-      return;
+      return true;
     }
     const shown = this.#billPayingNow(reread.dialogId);
-    if (shown === null) return;
-    if (shown.taken === reread.shown.taken && reread.shown.paymentId === payment.id)
-      this.billPaying = { ...shown, taken: null };
+    if (shown === null) return true;
+    if (shown.taken === taken) this.billPaying = { ...shown, taken: null };
     const amount = formatMoney(payment.applied, currentLocale());
     this.nfcNotice =
       payment.state === "received"
@@ -16331,7 +16329,8 @@ export class TillApp extends LitElement {
             message: t("bill_pay.late_not_charged").replace("{amount}", () => amount),
             tone: "error",
           };
-    if (payment.state !== "received") dialog()?.cardNotCharged();
+    dialog()?.cardEnded(taken, payment.state === "received");
+    return true;
   }
 
   /**

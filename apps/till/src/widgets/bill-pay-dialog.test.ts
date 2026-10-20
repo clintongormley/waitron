@@ -2827,9 +2827,10 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
   it("a card in progress not charged after the sheet moved on ends the run, clearing the count the form will open on", async () => {
     const el = await handheld();
     await share(el, "3");
-    await pay(el, "41.60", { change: null, pending: "20.80" });
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
 
-    el.cardNotCharged();
+    el.cardEnded(pending, false);
     await el.updateComplete;
 
     expect(next(el)).not.toBeNull();
@@ -2840,24 +2841,70 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
   it("a card in progress not charged leaves the count in a form already open", async () => {
     const el = await handheld();
     await share(el, "3");
-    await pay(el, "41.60", { change: null, pending: "20.80" });
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
     await click(el, "[data-pay-next]");
 
-    el.cardNotCharged();
+    el.cardEnded(pending, false);
     await el.updateComplete;
 
     expect(field(el, "people")!.value).toBe("2");
   });
 
-  it("a card not charged ends no run that holds no card in progress", async () => {
+  it("a card not charged ends no run that did not count it in progress", async () => {
     const el = await handheld();
     await share(el, "3");
     await pay(el, "41.60");
 
-    el.cardNotCharged();
+    el.cardEnded({ change: null, pending: "20.80" }, false);
     await el.updateComplete;
 
     expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it("a card counted in progress that is not charged ends the run, though a later card was received since", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const first = { change: null, pending: "20.80" };
+    await pay(el, "41.60", first);
+    await click(el, "[data-pay-next]");
+    await pay(el, "20.80", { change: null, pending: "20.80" });
+    el.taken = { change: null, settled: true };
+    await el.updateComplete;
+    expect(text(next(el))).toBe(nextShare(3, 3));
+
+    el.cardEnded(first, false);
+    await el.updateComplete;
+
+    expect(text(next(el))).toBe(t("bill_pay.next"));
+    await click(el, "[data-pay-next]");
+    expect(field(el, "people")!.value).toBe("");
+  });
+
+  it("a card in progress outside a run of shares that is then declined says so on the form", async () => {
+    const el = await handheld();
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+    expect(next(el)).not.toBeNull();
+
+    el.taken = null;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(next(el)).toBeNull();
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+  });
+
+  it("a card counted in progress and then charged no longer ends the run on a later decline", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
+
+    el.cardEnded(pending, true);
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(next(el)).not.toBeNull();
   });
 
   it("the sheet's notice shows beside the next-guest offer too", async () => {
