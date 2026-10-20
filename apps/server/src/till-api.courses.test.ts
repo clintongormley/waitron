@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
+  ticketItems,
   kitchenTimingDefaults,
   locations,
   parties,
@@ -44,7 +45,6 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
-// Entrantes (earliest) auto-fires; Principales is held until `fireCourse`.
 let entCourseId: string;
 let priCourseId: string;
 // The products offered in the counter zone (a parked order's) and in a tables zone (a tab's). One
@@ -304,7 +304,7 @@ async function billBody(tabId: string, body: object): Promise<string> {
 }
 
 describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => {
-  it("auto-fires the earliest course + the loose line, holds the later course, and the queue carries course + firedAt", async () => {
+  it("fires every counter course and the loose line while retaining course facts in the queue", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
     const station = await cocinaId();
     const items = await queueItemsByName(orderId, station);
@@ -322,13 +322,12 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     });
     expect(items.get(SOPA)!.firedAt).not.toBeNull();
 
-    // The later course (Principales) is HELD — the object is present but firedAt is null (greyed).
     expect(items.get(FILETE)!.course).toEqual({
       id: priCourseId,
       name: "Principales",
       displayOrder: 1,
     });
-    expect(items.get(FILETE)!.firedAt).toBeNull();
+    expect(items.get(FILETE)!.firedAt).not.toBeNull();
   });
 
   it("a HELD item cannot advance (409 ticket.item_held); the waiter releasing its line releases it, and it then advances", async () => {
@@ -672,13 +671,12 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(items.get(SOPA)!.stationName).toBe("Cocina");
     expect(items.get(FILETE)!.stationName).toBe("Cocina");
 
-    // Entrantes auto-fired → its course rolls up fired:true; the held Principales rolls up fired:false.
     const ent = order.courses.find((c) => c.courseId === entCourseId)!;
     const pri = order.courses.find((c) => c.courseId === priCourseId)!;
     expect(ent.fired).toBe(true);
-    expect(pri.fired).toBe(false);
+    expect(pri.fired).toBe(true);
     expect(items.get(SOPA)!.firedAt).not.toBeNull();
-    expect(items.get(FILETE)!.firedAt).toBeNull();
+    expect(items.get(FILETE)!.firedAt).not.toBeNull();
 
     // Nothing dispatched yet → away:false everywhere, and the loose PAN line sits in the null course.
     expect(ent.away).toBe(false);
@@ -707,6 +705,58 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.awayAt).toBeNull();
     expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
   });
+
+  it.each(["queued", "ready", "held", "unknown", "malformed"] as const)(
+    "retired course Away cannot dispatch or rewrite %s work on repeated requests",
+    async (state) => {
+      const orderId =
+        state === "held" ? await tabWithSopaAndFilete() : await placeOrder([SOPA, FILETE]);
+      if (state === "ready") {
+        const ready = await app.request(`/api/orders/${orderId}/courses/${entCourseId}/ready`, {
+          method: "POST",
+          headers: { cookie },
+        });
+        expect(ready.status).toBe(200);
+      }
+      const courseId =
+        state === "held"
+          ? priCourseId
+          : state === "unknown"
+            ? randomUUID()
+            : state === "malformed"
+              ? "not-a-uuid"
+              : entCourseId;
+      const stored = () =>
+        withTransaction(suite.db, async (tx) => ({
+          order: await tx.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
+          lines: await tx
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, orderId)),
+          items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+        }));
+      const before = await stored();
+      expect(before.items).toHaveLength(2);
+      expect(before.items.every((item) => item.awayAt === null)).toBe(true);
+      if (state === "held") {
+        expect(before.items.find((item) => item.courseId === priCourseId)!.firedAt).toBeNull();
+      }
+      if (state === "ready") {
+        expect(before.items.find((item) => item.courseId === entCourseId)!.state).toBe("ready");
+      }
+      for (const sessionCookie of [cookie, ""]) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await app.request(`/api/orders/${orderId}/courses/${courseId}/away`, {
+            method: "POST",
+            headers: { cookie: sessionCookie },
+          });
+          expect(response.status).toBe(404);
+          expect(await response.text()).toBe("404 Not Found");
+          expect(await stored()).toEqual(before);
+        }
+      }
+    },
+  );
 
   it("retired Away returns 404; retained Ready keeps its target validation and unknown-course no-op", async () => {
     const orderId = await placeOrder([SOPA]);

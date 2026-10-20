@@ -12,7 +12,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { bumpCourseReady, fireCourse, markCourseAway, markServed } from "./working-order.js";
+import { bumpCourseReady, fireCourse, markServed } from "./working-order.js";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -84,7 +84,7 @@ async function laterCourse(venue: Venue, ...products: ("burger" | "water")[]) {
 }
 
 describe("releasing split-off extras", () => {
-  it("fires both held records by course, then readies and sends them away together", async () => {
+  it("fires both held records by course and readies them together without dispatch", async () => {
     const venue = await setupSplitExtrasVenue();
     const courseId = await laterCourse(venue, "burger");
     await withTransaction(db, async (tx) => {
@@ -105,8 +105,7 @@ describe("releasing split-off extras", () => {
         "ready",
         "ready",
       ]);
-      await markCourseAway(tx, venue.cfg, venue.party.tabId, courseId);
-      expect((await rows(tx, venue.party.tabId)).items.every((item) => item.awayAt !== null)).toBe(
+      expect((await rows(tx, venue.party.tabId)).items.every((item) => item.awayAt === null)).toBe(
         true,
       );
     });

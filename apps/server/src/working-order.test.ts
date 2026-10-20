@@ -72,7 +72,6 @@ import {
   listExpoQueue,
   listHeldOrders,
   listStationQueue,
-  markCourseAway,
   parkOrder,
   readStoredOrder,
   priceStoredOrderForIssuance,
@@ -4941,7 +4940,6 @@ async function courseItemsFor(
     productId: string | null;
     courseId: string | null;
     firedAt: string | null;
-    // KDS-3: the pass's dispatch marker (`null` = not away), read by the expo-verb tests.
     awayAt: string | null;
     state: string;
   }[]
@@ -5570,16 +5568,16 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
-      // Cook it through to READY, then dispatch it to the floor (away). markCourseAway stamps away_at ONLY
-      // on state='ready' items, so an away line is state='ready' — caught by the started-check's `ready`
-      // disjunct (NOT a no-op: a dispatched/served line cannot be cleanly recalled).
       const item = byLine(await courseItemsFor(tx, tabId), starter);
       await advanceTicketItem(tx, cfg, item.id, "preparing");
       await advanceTicketItem(tx, cfg, item.id, "ready");
-      await markCourseAway(tx, cfg, tabId, ent.id);
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: "2026-10-20T12:00:00.000Z" })
+        .where(eq(ticketItems.id, item.id));
       const away = byLine(await courseItemsFor(tx, tabId), starter);
       expect(away.state).toBe("ready");
-      expect(away.awayAt).not.toBeNull(); // actually dispatched to the floor
+      expect(away.awayAt).not.toBeNull();
 
       await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
         code: "ticket.already_started",
@@ -6188,15 +6186,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   });
 });
 
-// The pass's two coordination verbs. `bumpCourseReady` is the whole-course "it's all
-// plated" bump: {@link advanceTicket}'s set-based shape keyed on COURSE (order + course_id) not station,
-// advancing every FIRED, not-yet-ready item across ALL its stations straight to `ready` (skipping HELD
-// items and no-op when none match). `markCourseAway` stamps `away_at` on every READY item of the
-// course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
-// idempotent via `away_at IS NULL`. These cases prove the set-based logic, the held-skip and the
-// ready-only dispatch.
-// ---------------------------------------------------------------------------------------------------
-
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
  *  course routed to DIFFERENT stations, placed so both items fire and sit `queued`. The cross-station
  *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
@@ -6216,8 +6205,8 @@ async function firedCourseAcrossTwoStations(
   return { orderId, courseId: ent.id };
 }
 
-describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)", () => {
-  it("bumps a whole course ready across stations, then marks it away", async () => {
+describe("bumpCourseReady — course preparation without dispatch", () => {
+  it("bumps a whole course ready across stations without dispatching it", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
@@ -6233,13 +6222,11 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       items = await courseItemsFor(tx, orderId);
       expect(items.every((i) => i.state === "ready")).toBe(true);
 
-      await markCourseAway(tx, cfg, orderId, courseId);
-      items = await courseItemsFor(tx, orderId);
-      expect(items.every((i) => i.awayAt !== null)).toBe(true);
+      expect(items.every((i) => i.awayAt === null)).toBe(true);
     });
   });
 
-  it("bumpCourseReady skips held items; markCourseAway only aways ready items", async () => {
+  it("skips held items and leaves ready and newly fired items undispatched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6264,55 +6251,45 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, starter).state).toBe("ready");
 
-      // markCourseAway dispatches only PLATED (ready) items: Entrantes' item is ready → away.
-      await markCourseAway(tx, cfg, orderId, ent.id);
-      items = await courseItemsFor(tx, orderId);
-      expect(byLine(items, starter).awayAt).not.toBeNull();
+      expect(byLine(items, starter).awayAt).toBeNull();
 
-      // Now the ready-only guard: fire Principales (so its main is fired, still `queued`) and dispatch it.
-      // The main is fired but NOT ready, so it does NOT go away.
       await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
-      await markCourseAway(tx, cfg, orderId, pri.id);
       items = await courseItemsFor(tx, orderId);
-      expect(byLine(items, main).state).toBe("queued"); // fired but not plated
-      expect(byLine(items, main).awayAt).toBeNull(); // only ready items go away
+      expect(byLine(items, main).state).toBe("queued");
+      expect(byLine(items, main).awayAt).toBeNull();
     });
   });
 
-  it("markCourseAway rejects an unknown course with course.not_found (requireCourse existence check)", async () => {
+  it("leaves every item unchanged for an unknown course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const cafe = await makeProduct(tx, cfg, catalogueId, {});
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
-
-      const missing = randomUUID();
-      await expect(markCourseAway(tx, cfg, orderId, missing)).rejects.toMatchObject({
-        code: "course.not_found",
-        params: { courseId: missing },
-      });
+      const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
+      const before = await courseItemsFor(tx, orderId);
+      await bumpCourseReady(tx, cfg, orderId, randomUUID());
+      expect(await courseItemsFor(tx, orderId)).toEqual(before);
+      expect(before.every((i) => i.state === "queued")).toBe(true);
     });
   });
 
-  it("markCourseAway is idempotent (already-away untouched); bumpCourseReady no-ops on an unknown course", async () => {
+  it("keeps original ready timestamps and item facts on a repeated bump", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
-
-      // bumpCourseReady on an UNKNOWN course is a no-op (no throw, no rows) — the bulk-bump convenience,
-      // unlike markCourseAway which requires the course. The order's items are untouched.
-      await bumpCourseReady(tx, cfg, orderId, randomUUID());
-      expect((await courseItemsFor(tx, orderId)).every((i) => i.state === "queued")).toBe(true);
-
       await bumpCourseReady(tx, cfg, orderId, courseId);
-      await markCourseAway(tx, cfg, orderId, courseId);
-      const first = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
-      expect([...first.values()].every((a) => a !== null)).toBe(true);
-
-      // Re-dispatch — the `away_at IS NULL` predicate matches nothing already-away, so no stamp moves.
-      await markCourseAway(tx, cfg, orderId, courseId);
-      const second = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
-      for (const [id, away] of first) expect(second.get(id)).toBe(away);
+      const read = () =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId));
+      const readied = await read();
+      expect(readied).toHaveLength(2);
+      expect(
+        readied.every((i) => i.state === "ready" && i.readyAt !== null && i.awayAt === null),
+      ).toBe(true);
+      await tx
+        .update(ticketItems)
+        .set({ readyAt: "2026-10-20T12:00:00.000Z" })
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const first = await read();
+      await bumpCourseReady(tx, cfg, orderId, courseId);
+      expect(await read()).toEqual(first);
     });
   });
 });

@@ -2864,40 +2864,6 @@ export async function bumpCourseReady(
 }
 
 /**
- * Dispatch ready items of a course by stamping away_at once. Require an existing
- * course in this venue, including deleted courses with plated food remaining.
- * Items still cooking and items already away are unchanged.
- */
-export async function markCourseAway(
-  tx: Transaction,
-  cfg: TillConfig,
-  orderId: string,
-  courseId: string,
-  firer?: Firer,
-  attendance?: OrderAttendance,
-): Promise<void> {
-  await requireCourse(tx, cfg, courseId);
-  const changed = await tx
-    .update(ticketItems)
-    .set({ awayAt: nowIso() })
-    .where(
-      and(
-        eq(ticketItems.workingOrderId, orderId),
-        eq(ticketItems.courseId, courseId),
-        eq(ticketItems.state, "ready"),
-        isNull(ticketItems.awayAt),
-      ),
-    )
-    .returning({ orderId: ticketItems.workingOrderId });
-  await captureKitchenActivity(
-    tx,
-    attendance,
-    firer && "personId" in firer ? firer.personId : undefined,
-    changed.map((row) => row.orderId),
-  );
-}
-
-/**
  * One line of a round. `hold` and `release` are {@link fireLines}' flags for the line.
  */
 export type TabRoundLine = {
@@ -8312,11 +8278,6 @@ export async function listTablesWithState(
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired, made-here or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
-             -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
-             -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
-             -- ti-on-line join as ready_to_serve, so no wol multiplication; an away item is still ready
-             -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
-             -- en-camino > listos precedence off the two counts.
              cast(count(*) filter (where ti.away_at is not null and wol.served_at is null) as int) as en_route,
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
