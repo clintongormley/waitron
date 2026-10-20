@@ -8127,7 +8127,10 @@ export interface TableState {
   readyToServe: number;
   /** Those unserved lines the pass has sent away. Such a line counts in `readyToServe` too. */
   enRoute: number;
-  /** The worst age band over those unserved lines; a counter delivery does not feed it. */
+  /**
+   * The worst age band over those unserved lines that were fired; a counter delivery does not feed
+   * it.
+   */
   timingBand: TimingBand;
   today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
@@ -8214,10 +8217,10 @@ export async function listTablesWithState(
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
              -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved
-             -- kitchen line with a ticket item (ti.id is not null), a HELD one included, one JSON object per
-             -- line -- never a band label (§3's raw-material-in-SQL, classified-in-JS split), reduced
-             -- with classifyBand/worstBand in JS below. A line never sent has no ticket_items row and
-             -- is excluded, same as a served one.
+             -- kitchen line whose ticket item was fired (ti.fired_at is not null), so a HELD one does not
+             -- age here, one JSON object per line -- never a band label (§3's raw-material-in-SQL,
+             -- classified-in-JS split), reduced with classifyBand/worstBand in JS below. A line never
+             -- sent has no ticket_items row and is excluded, same as a served one.
              --
              -- json_group_array returns JSON TEXT rather than a value the driver parses, so the
              -- row mapping parses it.
@@ -8228,7 +8231,7 @@ export async function listTablesWithState(
                  'overdueAfterMinutes', coalesce(kst.overdue_after_minutes, ktd.overdue_after_minutes),
                  'forgottenAfterMinutes', coalesce(kst.forgotten_after_minutes, ktd.forgotten_after_minutes)
                )
-             ) filter (where wol.served_at is null and ti.id is not null) as unserved_lines
+             ) filter (where wol.served_at is null and ti.fired_at is not null) as unserved_lines
       from party_tables pt
       join family f on f.root = pt.party_id
       join working_orders wo

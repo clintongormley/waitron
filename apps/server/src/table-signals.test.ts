@@ -429,6 +429,24 @@ describe("the floor's attention signals", () => {
     expect(row.signals).toEqual([]);
   });
 
+  it("does not let an old held dish turn the table's band, while an old fired one does", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, mesa2);
+    await order(v, tabId, "Caña");
+    await holdGroup(v, partyId, "Burger");
+    const at = new Date(Date.now() - 16 * 60_000).toISOString();
+    await inTx(v, (tx) =>
+      tx.update(ticketItems).set({ queuedAt: at }).where(isNull(ticketItems.firedAt)),
+    );
+
+    expect((await floorRow(v, mesa2)).timingBand).toBe("fresh");
+
+    await queuedAgo(v, tabId, 16);
+
+    expect((await floorRow(v, mesa2)).timingBand).toBe("forgotten");
+  });
+
   it("names the held group and the staff name of a dish that became unavailable in it, cancels nothing, and clears once it is available again", async () => {
     const v = await setupPartyVenue(suite.db);
     const mesa2 = await v.table("Mesa 2");
