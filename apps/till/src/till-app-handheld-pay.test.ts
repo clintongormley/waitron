@@ -680,6 +680,86 @@ describe("an unanswered presented payment on a handheld", () => {
   }
 
   /** Signs out, signs in as Luis, opens the table again and presses the bill's Pay. */
+  /** A share taken from the open bill's sheet gets no answer — or, with `out`, is still waiting for
+   * one — the sheet is closed, and the bill is then presented: the table is opened again on it. */
+  async function partUnconfirmedThenPresented(out = false) {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const takeBillPayment = out
+      ? vi.fn(() => new Promise<BillPaymentResult>(() => {}))
+      : vi.fn().mockRejectedValue(noAnswer());
+    const { el } = await mountApp(
+      onPhone({
+        getPartyBills,
+        takeBillPayment,
+        previewBillPayment: vi.fn().mockResolvedValue({
+          ...wholeCard,
+          applied: "40.00",
+          charged: "40.00",
+        }),
+      }),
+    );
+    await pressPaySheet(el, await openPhoneTable(el));
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    if (out) expect(takeBillPayment).toHaveBeenCalledOnce();
+    else
+      await expect
+        .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+        .toBe(t("bill_pay.unconfirmed"));
+    const original = structuredClone(
+      (takeBillPayment.mock.calls.at(-1) as unknown as [string, BillPaymentRequest])[1],
+    );
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    getPartyBills.mockResolvedValue([placedBill]);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const order = tableOrder(el);
+    await showBillFooter(order);
+    return { el, order, takeBillPayment, original };
+  }
+
+  it("Pay on a bill presented after a share got no answer opens that share, locked on Check again", async () => {
+    const { el, order, takeBillPayment, original } = await partUnconfirmedThenPresented();
+
+    await pressPaySheet(el, order);
+
+    expect(presented(el)).toBeNull();
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
+    takeBillPayment.mockResolvedValueOnce(
+      takenOf(
+        { method: "card", entry: "reader", applied: "40.00", tendered: null, change: null },
+        { received: "40.00", outstanding: "80.00" },
+      ),
+    );
+    await press(el, "[data-pay-confirm]");
+    expect(takeBillPayment.mock.calls.at(-1)![1]).toEqual(original);
+    expect(api.collectOrder).not.toHaveBeenCalled();
+  });
+
+  it("Pay on a bill presented while a share is still waiting for its answer opens that share, held, and sends nothing", async () => {
+    const { el, order, takeBillPayment } = await partUnconfirmedThenPresented(true);
+    const sends = takeBillPayment.mock.calls.length;
+
+    await pressPaySheet(el, order);
+
+    expect(presented(el)).toBeNull();
+    await vi.waitFor(() => expect(dialog(el)?.confirmationLocked).toBe(true));
+    expect(dialog(el)!.busy).toBe(true);
+    expect(inDialog(el, "[data-pay-continue]")).toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
+    await press(el, "[data-pay-confirm]");
+    expect(takeBillPayment).toHaveBeenCalledTimes(sends);
+    expect(api.collectOrder).not.toHaveBeenCalled();
+    expect(api.pay).not.toHaveBeenCalled();
+  });
+
   async function signInAgainAndReopen(el: TillApp): Promise<void> {
     emit(shell(el), "logout");
     await flush(el);
@@ -4752,10 +4832,28 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     expect(bottom(el)).toBe(t("bill_pay.not_checked"));
   }
 
-  it.each([
-    ["still unanswered", false],
-    ["after its Check again was refused reader.not_held", true],
-  ] as const)(
+  it("on the presented path, Pay after a bill payment on that bill got no answer opens that payment locked on Check again, and charges nothing", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const pay = vi.fn().mockRejectedValue(notHeld());
+    const { el, order } = await billUnanswered({ getPartyBills, pay });
+    getPartyBills.mockResolvedValue([billOf({ status: "placed" })]);
+    dialog(el)!.dispatchEvent(new CustomEvent("bill-pay-close", { bubbles: true, composed: true }));
+    order.dispatchEvent(
+      new CustomEvent("pay-presented", {
+        detail: { workingOrderId: billOf().workingOrderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settled(el);
+
+    expect(presented(el)).toBeNull();
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
+    expect(pay).not.toHaveBeenCalled();
+  });
+
+  it.each([["after its Check again was refused reader.not_held", true]] as const)(
     "on the presented path, a press refused reader.not_held after a bill payment on that bill got no answer, %s, never says nothing was charged",
     async (_name, checkAgain) => {
       const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
