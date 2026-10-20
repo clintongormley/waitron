@@ -727,25 +727,29 @@ describe("the whole table shows its state", () => {
     expect(inside(cue, within(el, "shape", "t")!)).toBe(true);
   });
 
-  it("keeps the name and the cue clear of an outline drawn inside the shape", async () => {
-    // Thickness inside the shape's edge at --wt-space-1 4px: overdue 4 + 1, waiting 2 + 1, dashes 4.
+  it("keeps the name and the cue clear, left and right, of an outline drawn inside the shape", async () => {
+    // Each side's thickness at the default --wt-space-1, 4px: overdue 4 + 1, waiting 2 + 1, dashes 4.
     const thickness = { overdue: 5, waiting: 3, clearing: 4 } as const;
     const clear = (inner: Element, shape: Element, by: number) => {
       const a = inner.getBoundingClientRect();
       const b = shape.getBoundingClientRect();
       return a.left >= b.left + by && a.right <= b.right - by;
     };
+    const long = { icon: "floor-timer", text: "x".repeat(40) } as const;
     for (const outline of ["overdue", "waiting", "clearing"] as const) {
-      const long = { icon: "floor-timer", text: "x".repeat(40) } as const;
       const el = await sized(60, { fill: "ready", outline, cue: long });
-      host.style.setProperty("--wt-space-1", "4px");
       const shape = within(el, "shape", "t")!;
       expect(clear(within(el, "caption", "t")!, shape, thickness[outline]), outline).toBe(true);
       const named = await sized(30, { fill: "ready", outline, label: "x".repeat(20), cue: long });
-      host.style.setProperty("--wt-space-1", "4px");
       const name = within(named, "name", "t")!;
       expect(clear(name, within(named, "shape", "t")!, thickness[outline]), outline).toBe(true);
     }
+    const width = (el: WtFloorMap, part: string) =>
+      within(el, part, "t")!.getBoundingClientRect().width;
+    const plain = await sized(60, { fill: "ready", cue: long });
+    expect(width(plain, "caption")).toBeCloseTo(width(plain, "shape"), 1);
+    const plainName = await sized(30, { fill: "ready", label: "x".repeat(20), cue: long });
+    expect(width(plainName, "name")).toBeCloseTo(width(plainName, "shape"), 1);
   });
 
   it("a cue with no text draws its icon alone", async () => {

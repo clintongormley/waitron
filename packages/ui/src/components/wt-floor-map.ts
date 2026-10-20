@@ -371,7 +371,7 @@ export class WtFloorMap extends LitElement {
         line-height: 1.2;
       }
 
-      /* Clear of the thickest outline drawn inside the shape, Overdue's, so no icon sits on it. */
+      /* Clear, left and right, of the thickest outline drawn inside the shape: Overdue's. */
       [part="table"]:has(> [part="shape"][data-outline]) > [part="name"],
       [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"] {
         max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
