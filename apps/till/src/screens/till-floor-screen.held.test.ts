@@ -83,6 +83,16 @@ const at = (offsetMs: number) => new Date(now + offsetMs).toISOString();
 const onMap = { today: today() };
 type Token = HTMLElement & { updateComplete: Promise<unknown> };
 
+/** How many lines a mark's words take. */
+function wordLines(mark: HTMLElement): number {
+  const range = document.createRange();
+  const words = [...mark.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+  )!;
+  range.selectNodeContents(words);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
 function held(reminder: ReleaseReminder | null, over: Partial<TableState> = {}): TableState {
   return seated({ signals: [{ kind: "held", count: 2 }], ...over }, { reminder });
 }
@@ -159,6 +169,19 @@ describe("till-floor-screen: a table holding dishes", () => {
     expect(style.backgroundColor).toBe("rgb(10, 20, 30)");
     expect(style.borderTopColor).toBe("rgb(10, 20, 30)");
     expect(style.color).toBe("rgb(200, 210, 220)");
+  });
+
+  it("keeps the held and Time to fire icons at full size when a narrow card wraps their words", async () => {
+    const el = await mountAt([
+      held({ groupId: "g2", dueAt: at(240_000) }),
+      held({ groupId: "g2", dueAt: at(0) }, { id: "t5", label: "5" }),
+    ]);
+    for (const id of ["t4", "t5"]) card(el, id).style.width = "100px";
+    for (const mark of [heldOn(el)!, fireDue(el, "t5")!]) {
+      expect(wordLines(mark)).toBeGreaterThan(1);
+      const icon = mark.querySelector("wt-icon")!.getBoundingClientRect();
+      expect(icon.width).toBe(icon.height);
+    }
   });
 
   it("shows the held chip and its countdown on an unplaced table's token", async () => {

@@ -39,6 +39,10 @@ export const floorChipStyles = css`
     border-color: var(--wt-color-danger);
   }
 
+  .chip wt-icon {
+    flex: none;
+  }
+
   .chip.tone-muted {
     border-color: var(--wt-color-text-muted);
   }

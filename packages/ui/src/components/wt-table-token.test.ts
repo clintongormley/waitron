@@ -18,6 +18,16 @@ function table(overrides: Partial<FloorTable> = {}): FloorTable {
   };
 }
 
+/** How many lines a mark's words take. */
+function wordLines(mark: HTMLElement): number {
+  const range = document.createRange();
+  const words = [...mark.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+  )!;
+  range.selectNodeContents(words);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
 async function mountToken(
   t: FloorTable,
   labels?: TableTokenLabels,
@@ -207,6 +217,16 @@ describe("the fire-due chip", () => {
     expect(chip(labelled)!.textContent!.trim()).toBe("Time to fire");
   });
 
+  test("keeps its icon at full size when its words wrap", async () => {
+    const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
+      fireDue: "Time to fire",
+    });
+    el.style.width = "60px";
+    expect(wordLines(chip(el)!)).toBeGreaterThan(1);
+    const icon = chip(el)!.querySelector("wt-icon")!.getBoundingClientRect();
+    expect(icon.width).toBe(icon.height);
+  });
+
   test("spaces the fire icon from its words by the smallest spacing token", async () => {
     const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
       fireDue: "Time to fire",
@@ -301,6 +321,20 @@ describe("the signal chips", () => {
     expect(held!.textContent!.trim()).toBe("Held 2");
     host.style.setProperty("--wt-space-1", "7px");
     expect(getComputedStyle(held!).columnGap).toBe("7px");
+  });
+
+  test("keeps a chip's icon at full size when its words wrap", async () => {
+    const el = await mountToken(
+      table({
+        state: "open-tab",
+        chips: [{ key: "held", text: "Held 2 · fire in 4 min", tone: "muted", icon: "held" }],
+      }),
+    );
+    el.style.width = "90px";
+    const [held] = chips(el);
+    expect(wordLines(held!)).toBeGreaterThan(1);
+    const icon = held!.querySelector("wt-icon")!.getBoundingClientRect();
+    expect(icon.width).toBe(icon.height);
   });
 
   test("a primary-filled chip paints on the primary and on-primary tokens", async () => {

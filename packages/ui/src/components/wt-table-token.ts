@@ -206,6 +206,10 @@ export class WtTableToken extends LitElement {
         border: 1px solid var(--wt-color-primary);
       }
 
+      .badge.fire-due wt-icon {
+        flex: none;
+      }
+
       .badge.fire-due {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
