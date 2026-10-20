@@ -24,9 +24,31 @@ describe("signalChips", () => {
   it("says a forgotten wait unless the caller already shows its own Forgotten badge", () => {
     const forgotten = [{ kind: "long_wait" as const, band: "forgotten" as const }];
     expect(signalChips(forgotten)).toEqual([
-      { key: "long-wait", text: "Forgotten", tone: "danger" },
+      { key: "long-wait", text: "Forgotten", tone: "danger", icon: "floor-timer" },
     ]);
     expect(signalChips(forgotten, { forgottenShown: true })).toEqual([]);
+  });
+
+  it.each<[string, TableSignal, string]>([
+    ["wait", { kind: "long_wait", band: "warm" }, "floor-timer"],
+    ["unavailable", { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] }, "floor-out"],
+    [
+      "bill requested",
+      { kind: "bill_requested", requestedAt: "2026-09-30T19:59:00.000Z" },
+      "floor-bill",
+    ],
+    [
+      "ready",
+      { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+      "floor-ready",
+    ],
+  ])("draws the %s chip with its icon", (_name, signal, icon) => {
+    expect(signalChips([signal]).map((chip) => chip.icon)).toEqual([icon]);
+  });
+
+  it("draws the overdue wait with the timer, and Take order with no icon", () => {
+    expect(signalChips([{ kind: "long_wait", band: "overdue" }])[0]?.icon).toBe("floor-timer");
+    expect(signalChips([{ kind: "take_order" }])[0]?.icon).toBeUndefined();
   });
 });
 

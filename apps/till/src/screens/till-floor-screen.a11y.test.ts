@@ -515,6 +515,40 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with every chip's icon, on the list", async () => {
+    const iconned = partyTables.map((table): TableState =>
+      table.party === null
+        ? table
+        : {
+            ...table,
+            timingBand: "forgotten",
+            party: {
+              ...table.party,
+              unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+            },
+            signals: [
+              {
+                kind: "ready",
+                byStation: [{ stationId: "bar", stationName: "Bar", count: 3 }],
+              },
+              { kind: "long_wait", band: "overdue" },
+              { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
+              { kind: "bill_requested", requestedAt: "2026-09-29T20:00:00.000Z" },
+            ],
+          },
+    );
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: iconned },
+      theme,
+    );
+    for (const name of ["floor-timer", "floor-out", "floor-bill", "floor-ready", "floor-unsent"]) {
+      expect(list.el.shadowRoot!.querySelector(`wt-icon[name="${name}"]`)).not.toBeNull();
+    }
+    expect(list.el.shadowRoot!.querySelector("[data-forgotten] wt-icon")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations rendering a planned zone's map", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",

@@ -521,7 +521,8 @@ export class TillFloorScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .calm-line wt-icon {
+      .calm-line wt-icon,
+      .badge wt-icon {
         flex: none;
         color: inherit;
       }
@@ -537,7 +538,7 @@ export class TillFloorScreen extends LitElement {
 
       /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
-         neutral chip (the a11y-safe pattern wt-table-token's status chip uses); there is no on-success token. */
+         neutral chip (the a11y-safe pattern wt-table-token's status chip uses). */
       .badge.ready {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -545,11 +546,6 @@ export class TillFloorScreen extends LitElement {
       }
 
       /* Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
-      .badge.fire-due wt-icon {
-        flex: none;
-        color: inherit;
-      }
-
       .badge.fire-due {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
@@ -2406,7 +2402,9 @@ export class TillFloorScreen extends LitElement {
     if (lateBand(table) === "forgotten") {
       marks.push({
         kind: "forgotten",
-        mark: html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`,
+        mark: html`<span class="badge forgotten" data-forgotten
+          ><wt-icon name="floor-timer" size="sm"></wt-icon>${t("floor.forgotten")}</span
+        >`,
       });
     }
     if (this.#fireDue(table)) {
@@ -2422,7 +2420,9 @@ export class TillFloorScreen extends LitElement {
     for (const draft of table.party?.unsentDrafts ?? []) {
       marks.push({
         kind: "not-sent",
-        mark: html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`,
+        mark: html`<span class="badge unsent" data-unsent
+          ><wt-icon name="floor-unsent" size="sm"></wt-icon>${unsentText(draft)}</span
+        >`,
       });
     }
     if (table.nextReservation !== null) {
