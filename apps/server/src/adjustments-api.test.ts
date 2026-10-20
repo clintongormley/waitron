@@ -1120,7 +1120,7 @@ describe("the route's own rules", () => {
 });
 
 describe("what the till reads", () => {
-  it("lists the active reasons in the operator's language", async () => {
+  it("lists the reasons in the operator's language", async () => {
     const answer = await send(venue.app, venue.cookie.staff, "GET", "/api/adjustment-reasons");
     expect(answer.status).toBe(200);
     const names = (answer.json as unknown as { name: string }[]).map((reason) => reason.name);

@@ -228,6 +228,7 @@ describe("adjustment reason management routes", () => {
     expect((await db.execute(recorded)).rows).toEqual(before);
     expect(await reasonCount()).toBe(0);
   });
+
   it("reads a reason's delete impact for a manager or an admin, and refuses anyone else", async () => {
     const fx = await fixture();
     const comp = (await (

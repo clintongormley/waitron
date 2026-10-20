@@ -453,6 +453,7 @@ it("the Voids and comps page follows its permission rather than every enabled mo
   session.permissions = ["venue.view", "adjustment.manage"];
   document.dispatchEvent(new Event("visibilitychange"));
   await vi.waitFor(() => expect(page()).not.toBeNull());
+  await search(el, "adjustment");
   expect(result(el, "settings:adjustment-reasons")).toBeNull();
   await search(el, "kitchen");
   expect(

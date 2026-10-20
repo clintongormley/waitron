@@ -79,12 +79,12 @@ it.each(["en", "es"] as const)(
   },
 );
 
-it("words any other refusal by its code", () => {
-  setLocale("en");
+it.each(["en", "es"] as const)("words any other refusal by its code in %s", (locale) => {
+  setLocale(locale);
   const { refusal } = reasonDeleteCopy();
   expect(
     refusal({ code: "adjustment_reason.not_found", params: { withNote: 1 }, targets: [] }),
-  ).toBe(ADJUSTMENTS_CODE_MESSAGES["adjustment_reason.not_found"]!.en);
+  ).toBe(ADJUSTMENTS_CODE_MESSAGES["adjustment_reason.not_found"]![locale]);
 });
 
 it.each(["en", "es"] as const)("names an item's targets with its count in %s", (locale) => {

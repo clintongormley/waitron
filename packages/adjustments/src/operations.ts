@@ -102,9 +102,9 @@ function reasonValues(input: AdjustmentReasonInput) {
 }
 
 /**
- * What refuses a change to a Void reason that would leave the venue no Void reason, or none that
+ * The fault in a change to a Void reason that would leave the venue no Void reason, or none that
  * asks for a note (A758 D27): `withNote` says which. `after` is the reason's state once changed,
- * `null` once deleted; a reason that was not a Void reason is never refused.
+ * `null` once deleted. Returns null when there is no fault.
  */
 export async function voidKeptFault(
   tx: Transaction,

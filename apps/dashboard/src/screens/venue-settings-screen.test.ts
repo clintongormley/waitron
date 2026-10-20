@@ -54,11 +54,8 @@ async function select(el: VenueSettingsScreen, key: string): Promise<void> {
 }
 
 describe("the Venue settings page", () => {
-  it("has no Tables tab", () => {
+  it("has no Tables tab and no Adjustment reasons tab: Voids and comps is a page of its own", () => {
     expect(isVenueSettingsTab("tables")).toBe(false);
-  });
-
-  it("has no Adjustment reasons tab: Voids and comps is a page of its own", () => {
     expect(VENUE_SETTINGS_TABS).toEqual(["venue-details", "kitchen"]);
   });
 
