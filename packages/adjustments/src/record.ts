@@ -81,7 +81,8 @@ export interface ReasonTotals {
   priorReductionOnBill: Decimal;
 }
 
-/** This reason's earlier reductions on the bill, bill-level discounts included. */
+/** This reason's earlier comps and discounts on the bill, bill-level discounts included. Its cancels
+ * are left out: a reason changed from Void to Comp keeps its id. */
 export async function readReasonTotals(
   tx: Transaction,
   query: { workingOrderId: string; reasonId: string },
@@ -90,7 +91,8 @@ export async function readReasonTotals(
   const reduction = await tx.execute<{ total: string }>(sql`
     select cast(coalesce(sum(reduction), 0) as text) as total
     from adjustments
-    where working_order_id = ${workingOrderId} and reason_id = ${reasonId}`);
+    where working_order_id = ${workingOrderId} and reason_id = ${reasonId}
+      and action <> 'cancel'`);
   return { priorReductionOnBill: rawCentsToDecimal(reduction.rows[0]!.total) };
 }
 
@@ -109,7 +111,7 @@ export interface ReasonItemShares {
  * A row that covered part of its line counts only on the rows it carved off and theirs, not on the
  * rest of the line. The reason's rows on the whole bill are answered apart, as `bill`. A split
  * made by anything other than an adjustment is not recorded here, so a row split that way starts
- * with none.
+ * with none. The reason's cancels count nowhere, as in {@link readReasonTotals}.
  */
 export async function readReasonItemShares(
   tx: Transaction,
@@ -130,6 +132,7 @@ export async function readReasonItemShares(
     from lineage
     join adjustments row on row.line_id = lineage.line_id
       and row.working_order_id = ${workingOrderId} and row.reason_id = ${reasonId}
+      and row.action <> 'cancel'
     where row.quantity = row.line_quantity or exists (
       select 1 from json_each(row.splits) carve
       join lineage carved on carved.seed = lineage.seed

@@ -232,6 +232,16 @@ describe("readReasonTotals", () => {
     await record(comp(other, reason));
     expect((await totals(order, reason.id)).priorReductionOnBill).toBe("28.99");
   });
+
+  it("leaves out the reason's cancels, which a reason changed from Void to Comp still holds", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    await record(comp(order, reason, { action: "cancel" }));
+    await record(
+      comp(order, reason, { reduction: decimal("1.00"), afterAmount: decimal("11.00") }),
+    );
+    expect((await totals(order, reason.id)).priorReductionOnBill).toBe("1.00");
+  });
 });
 
 describe("readReasonItemShares", () => {
@@ -272,6 +282,18 @@ describe("readReasonItemShares", () => {
     expect(await shareOf(order, reason.id, line)).toBe(1000);
     await record(percent(order, reason, line, 500));
     expect(await shareOf(order, reason.id, carved)).toBe(3500);
+  });
+
+  it("leaves out the reason's cancel of the line a row was split from", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const another = await seedReason(db);
+    const [line, carved] = [randomUUID(), randomUUID()];
+    const onLine = { ...comp(order, reason).line!, id: line, quantity: "2" };
+    await record(comp(order, another, { line: onLine, splits: [{ from: line, to: carved }] }));
+    await record(comp(order, reason, { line: { ...onLine, quantity: "1" }, action: "cancel" }));
+    await record(percent(order, reason, carved, 1000));
+    expect(await shareOf(order, reason.id, carved)).toBe(1000);
   });
 
   it("follows a split a bill discount made back to the row it came from", async () => {

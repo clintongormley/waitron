@@ -1452,6 +1452,44 @@ describe("cumulative limits (plan D6)", () => {
     });
   });
 
+  it("does not count a cancel the reason made as a Void reason toward its €5 as a Comp reason", async () => {
+    const reasonId = await inTx(venue, async (tx) => {
+      return (await createAdjustmentReason(tx, { ...REASONS.houseVoid, name: "Turned comp" })).id;
+    });
+    const { billId } = await bill([{ name: "Burger" }, { name: "Burger" }], { release: "hold" });
+    const kept = await lineIdOf(venue, billId, 2);
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "cancel", reasonId });
+    await inTx(venue, (tx) =>
+      updateAdjustmentReason(tx, reasonId, {
+        ...REASONS.house,
+        name: "Turned comp",
+        names: {},
+        actions: ["discount_amount"],
+        maxAmount: decimal("5.00"),
+        approverRoles: ["manager", "admin"],
+      }),
+    );
+    const off = (amount: string): Ask => ({
+      lineId: kept,
+      action: "discount_amount",
+      amount,
+      reasonId,
+      operatorId: venue.staffId,
+    });
+    expect(await preview(billId, off("5.01"))).toMatchObject({
+      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    });
+
+    await adjust(billId, off("1.00"));
+
+    expect(
+      (await recordedOn(billId)).map((row) => [row.reasonId, row.action, row.approvedBy]),
+    ).toEqual([
+      [reasonId, "cancel", null],
+      [reasonId, "discount_amount", null],
+    ]);
+  });
+
   it("asks for a second 30% on one line under a 50% item limit, and applies it with a manager's PIN", async () => {
     const { billId } = await bill([{ name: "Salad" }]);
     const discount = async (approver?: AdjustmentArgs["approver"]) => ({
