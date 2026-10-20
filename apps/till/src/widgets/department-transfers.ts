@@ -1,3 +1,4 @@
+import { orderLabel } from "./order-label.js";
 import { staffPresentationName } from "@waitron/catalogue/src/product-presentation.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -462,13 +463,17 @@ export class TillDepartmentTransfers extends LitElement {
   }
 
   #summary(row: DepartmentTransfer, incoming: boolean) {
+    const label =
+      row.summary === undefined
+        ? null
+        : orderLabel({ label: row.summary.tabLabel, tableLabel: row.summary.tableLabel });
     return html`<div class="description">
       <p>${incoming ? t("department_transfer.incoming_notice") : t(statusKeys[row.status])}</p>
       ${
         row.summary === undefined
           ? nothing
           : html`<p>
-                ${t("department_transfer.tab").replace("{number}", String(row.summary.orderNumber))}${row.summary.tabLabel === null ? "" : ` — ${row.summary.tabLabel}`}
+                ${t("department_transfer.tab").replace("{number}", String(row.summary.orderNumber))}${label === null ? "" : ` — ${label}`}
               </p>
               <p>${row.summary.sourceDepartmentName} → ${row.summary.destinationDepartmentName}</p>`
       }
@@ -482,6 +487,10 @@ export class TillDepartmentTransfers extends LitElement {
   #currentTab() {
     if (this.selected === undefined) return nothing;
     const detail = this.detail;
+    const label =
+      detail === undefined
+        ? null
+        : orderLabel({ label: detail.tab.label, tableLabel: detail.request.summary?.tableLabel });
     return html`<section>
       ${this.loading ? html`<p role="status">${t("login.loading")}</p>` : nothing}
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
@@ -490,7 +499,7 @@ export class TillDepartmentTransfers extends LitElement {
           ? nothing
           : html`
               <h3 data-current-tab>
-                ${t("department_transfer.tab").replace("{number}", String(detail.tab.orderNumber))}${detail.tab.label === null ? "" : ` — ${detail.tab.label}`}
+                ${t("department_transfer.tab").replace("{number}", String(detail.tab.orderNumber))}${label === null ? "" : ` — ${label}`}
               </h3>
               <h3>${t("department_transfer.lines")}</h3>
               <ul data-current-lines>

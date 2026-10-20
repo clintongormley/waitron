@@ -1324,8 +1324,8 @@ seated, joined, paid and taken off. Three additions the owner asked for:
   Waiting tab; a colour change instead under reduced motion.
 - **Item counts by state in the order lists.** Held orders' rows read "4 · €24.50", where 4 is the
   number of LINES (`itemCount`, `apps/server/src/working-order.ts`), unlabelled. Show instead the
-  number of items ordered, then how many are held, waiting, ready and so on — in Held, Waiting and
-  the other lists A765 names.
+  number of items ordered, then how many are held, waiting, ready and so on in Held, Waiting and
+  Transfers (A757 slice 6).
 
 ## A893. Owner review of every table state and its look, after A757 lands
 
@@ -2271,16 +2271,6 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 - **Added 2026-10-16 (owner):** Floor's pills today include the Counter zone, which has no floor
   plan (`buildZoneTabs` takes every zone, `till-floor-screen.ts`); only table zones belong there.
   List and the ⋮ menu sit on their own row above the pills; they move onto the pills' row.
-
-## A765. Say which table an order belongs to
-
-**A765 (owner, 2026-10-16).** In Held orders a party's bill is listed as "#2" with its count and
-total; it shows no Move to table (`order.partyId !== null`, `apps/till/src/widgets/held-orders.ts`),
-but nothing says which table it is. `HeldOrderSummary` (`apps/server/src/working-order.ts`) carries
-the party id and no table name. The server sends the table's name (a joined table's combined
-name) with each order, and every list that shows orders names it: Held orders first, then Waiting,
-Transfers, the Pass and the payment panel — check each. A757's item counts change the same rows;
-build after A757's board if it has been decided, else name the table alone.
 
 ## A669. An allergy at the table
 
