@@ -569,6 +569,34 @@ describe("setting the order", () => {
     await el.updateComplete;
   }
 
+  /** Presses on a reason's grip. Each move aims just inside a target row's edge as it rested
+   * before the press: a sliding row is drawn away from where it rests, and a row's middle is
+   * crossed only while that row is at most twice the dragged row's height. A row's outer edge stays
+   * put while the rows between it and the dragged row trade places. */
+  function pointerDrag(el: AdjustmentReasonsScreen, id: string) {
+    const rest = new Map(
+      [...table(el).querySelectorAll<HTMLElement>("tbody tr[data-reason]")].map((row) => [
+        row.dataset.reason!,
+        row.getBoundingClientRect(),
+      ]),
+    );
+    const to = async (clientY: number) => {
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true, pointerId: 9, clientY }),
+      );
+      await el.updateComplete;
+    };
+    grip(el, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }));
+    return {
+      down: (target: string) => to(rest.get(target)!.bottom - 1),
+      up: (target: string) => to(rest.get(target)!.top + 1),
+      release: async () => {
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+        await el.updateComplete;
+      },
+    };
+  }
+
   /** A save that answers only when the test says so. */
   function heldSave(): { save: ReturnType<typeof vi.fn>; answer: () => void } {
     let answer!: () => void;
@@ -605,21 +633,12 @@ describe("setting the order", () => {
   it("saves a pointer drag once, on drop", async () => {
     const api = fakeApi();
     const el = await mount(api);
-    grip(el, "e").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }));
-    for (const target of ["c", "d"]) {
-      const box = table(el).querySelector(`tr[data-reason="${target}"]`)!.getBoundingClientRect();
-      document.dispatchEvent(
-        new PointerEvent("pointermove", {
-          bubbles: true,
-          pointerId: 9,
-          clientY: box.top + box.height / 2,
-        }),
-      );
-      await el.updateComplete;
-    }
+    const drag = pointerDrag(el, "e");
+    await drag.down("c");
+    await drag.down("d");
     expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
     expect(api.reorderReasons).not.toHaveBeenCalled();
-    document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+    await drag.release();
     await settle(el);
     expect(api.reorderReasons.mock.calls).toEqual([[["c", "d", "e", "o"]]]);
     expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
@@ -650,6 +669,62 @@ describe("setting the order", () => {
     expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
   });
 
+  it("sends no move queued behind a refused one", async () => {
+    let refuse!: (error: unknown) => void;
+    const save = vi.fn(() => new Promise<void>((_, reject) => (refuse = reject)));
+    const api = fakeApi({ reorderReasons: save });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    await arrowDown(el, "e");
+    expect(save).toHaveBeenCalledTimes(1);
+    refuse({ code: "x" });
+    await settle(el);
+    expect(alert(el)).toBe("The new order could not be saved.");
+    expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps saying the move was refused when the list cannot be read again either", async () => {
+    const api = fakeApi({
+      listReasons: vi.fn().mockResolvedValueOnce(reasons).mockRejectedValue({ code: "x" }),
+      reorderReasons: vi.fn().mockRejectedValue({ code: "x" }),
+    });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+    expect(alert(el)).toBe("The new order could not be saved.");
+  });
+
+  it("holds a live list while a later move is unanswered, after a save answered once the screen had gone", async () => {
+    const liveData = new LiveData();
+    const { save, answer } = heldSave();
+    const api = fakeApi({ liveData, reorderReasons: save });
+    const el = await mount(api);
+    try {
+      await arrowDown(el, "e");
+      const host = el.parentElement!;
+      el.remove();
+      answer();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      host.append(el);
+      await settle(el);
+      let release!: () => void;
+      save.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+      await arrowDown(el, "e");
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      const reads = api.listReasons.mock.calls.length;
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      release();
+      await settle(el);
+    } finally {
+      liveData.clear();
+    }
+  });
+
   it("holds a live list while a move is unanswered, then reads again", async () => {
     const liveData = new LiveData();
     const { save, answer } = heldSave();
@@ -662,12 +737,9 @@ describe("setting the order", () => {
       await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
       await settle(el);
       expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
-      const held = api.listReasons.mock.calls.length;
-      api.listReasons.mockResolvedValue([complaint, entryError, employee, retired]);
+      api.listReasons.mockResolvedValue([employee, complaint, entryError, retired]);
       answer();
-      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(held));
-      await settle(el);
-      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "c", "e", "o"]));
     } finally {
       liveData.clear();
     }
@@ -677,21 +749,9 @@ describe("setting the order", () => {
     const liveData = new LiveData();
     const api = fakeApi({ liveData });
     const el = await mount(api);
-    /** Each place's middle, measured before anything moves: a row sliding into place is drawn
-     * away from where it rests. */
-    const places = ["e", "c"].map((id) => {
-      const box = table(el).querySelector(`tr[data-reason="${id}"]`)!.getBoundingClientRect();
-      return box.top + box.height / 2;
-    });
-    const to = async (place: number) => {
-      document.dispatchEvent(
-        new PointerEvent("pointermove", { bubbles: true, pointerId: 9, clientY: places[place] }),
-      );
-      await el.updateComplete;
-    };
     try {
-      grip(el, "e").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }));
-      await to(1);
+      const drag = pointerDrag(el, "e");
+      await drag.down("c");
       expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
       const reads = api.listReasons.mock.calls.length;
       api.listReasons.mockResolvedValue([employee, entryError, complaint, retired]);
@@ -699,9 +759,9 @@ describe("setting the order", () => {
       await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
       await settle(el);
       expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
-      await to(0);
+      await drag.up("e");
       expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
-      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+      await drag.release();
       await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "e", "c", "o"]));
       expect(api.reorderReasons).not.toHaveBeenCalled();
     } finally {

@@ -1396,7 +1396,8 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   override render() {
-    const alert = this.loadError ?? this.actionError;
+    // A read's failure never replaces an action's; a read's recovery clears only its own.
+    const alert = this.actionError ?? this.loadError;
     return html`<h1>${t("adjustments.title")}</h1>
       <p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}

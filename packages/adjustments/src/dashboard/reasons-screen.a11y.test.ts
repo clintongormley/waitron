@@ -151,9 +151,17 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
-  test("the list with its grips", async () => {
+  test("the grips disabled while searching", async () => {
     const el = await screen(theme);
-    expect(el.shadowRoot!.querySelectorAll('tbody [data-test^="drag-"]')).toHaveLength(3);
+    const input = el
+      .shadowRoot!.querySelector("[name=search]")!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "o";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await settle(el);
+    const grips = [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-test^="drag-"]')];
+    expect(grips.length).toBeGreaterThan(0);
+    expect(grips.every((grip) => grip.disabled)).toBe(true);
     await expectNoA11yViolations(host);
   });
 
