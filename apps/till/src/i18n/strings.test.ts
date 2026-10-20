@@ -146,9 +146,23 @@ describe("the advice for a whole payment refused while an unanswered bill paymen
     },
   );
 
-  it("calls it a payment in Spanish, as bill_pay.unconfirmed does", () => {
-    expect(catalogues["es-ES"]!["bill_pay.unconfirmed_elsewhere"]).toMatch(
-      /^Un pago de esta cuenta/,
-    );
-  });
+  it.each(["en-GB", "es-ES"])(
+    "bill_pay.unconfirmed_elsewhere_handheld (%s) names a handheld's Pay button, then Check again",
+    (locale) => {
+      const strings = catalogues[locale]!;
+      const message = strings["bill_pay.unconfirmed_elsewhere_handheld"]!;
+      expect(message).toContain(strings["action.pay"]!);
+      expect(message).not.toContain(strings["bill_pay.way_items"]!);
+      expect(message.indexOf(strings["action.pay"]!)).toBeLessThan(
+        message.indexOf(strings["bill_pay.recheck"]!),
+      );
+    },
+  );
+
+  it.each(["bill_pay.unconfirmed_elsewhere", "bill_pay.unconfirmed_elsewhere_handheld"] as const)(
+    "%s calls it a payment in Spanish, as bill_pay.unconfirmed does",
+    (key) => {
+      expect(catalogues["es-ES"]![key]).toMatch(/^Un pago de esta cuenta/);
+    },
+  );
 });

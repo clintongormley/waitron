@@ -794,8 +794,6 @@ describe("an unanswered presented payment on a handheld", () => {
   ] as const)(
     "%s sent from a presented sheet still open when a bill payment began holding the bill is refused on the sheet",
     async (_name, detail: PresentedPayDetail) => {
-      // The bill payment is started by the order screen's own event: on the screen the presented
-      // sheet covers the button that sends it.
       const takeBillPayment = vi.fn(() => new Promise<BillPaymentResult>(() => {}));
       const { el } = await mountApp(
         onPhone({
@@ -830,6 +828,47 @@ describe("an unanswered presented payment on a handheld", () => {
       expect(api.pay).not.toHaveBeenCalled();
     },
   );
+
+  it("a whole payment from find-bill refused for a share that got no answer names the handheld's Pay, which reopens the share on Check again", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(noAnswer());
+    const { el } = await mountApp(
+      onPhone({
+        takeBillPayment,
+        previewBillPayment: vi
+          .fn()
+          .mockResolvedValue({ ...wholeCard, applied: "40.00", charged: "40.00" }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+
+    emit(order, "find-bill-pay", {
+      workingOrderId: "wo-4",
+      tender: { method: "cash", amount: "120.00" },
+      invoiced: true,
+    });
+    await flush(el);
+
+    expect((el as unknown as { findBillError?: unknown }).findBillError).toBe(
+      "bill_pay.unconfirmed_elsewhere_handheld",
+    );
+    expect(api.collectOrder).not.toHaveBeenCalled();
+    expect(api.recordSale).not.toHaveBeenCalled();
+    await showBillFooter(order);
+    await pressPaySheet(el, order);
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
+  });
 
   async function signInAgainAndReopen(el: TillApp): Promise<void> {
     emit(shell(el), "logout");

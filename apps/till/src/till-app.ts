@@ -3060,10 +3060,14 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** What a new payment on `billId` is refused with while a bill payment holds it. */
-  #holdRefusal(billId: string): "bill_pay.sending" | "bill_pay.unconfirmed_elsewhere" | null {
+  /** What a new payment on `billId` is refused with while a bill payment holds it: the button
+   * named to reopen that payment is the one this device draws on the bill. */
+  #holdRefusal(billId: string): StringKey | null {
     if (!this.#billPaymentHeld(billId)) return null;
-    return this.#paymentsOut.has(billId) ? "bill_pay.sending" : "bill_pay.unconfirmed_elsewhere";
+    if (this.#paymentsOut.has(billId)) return "bill_pay.sending";
+    return this.handheldMode
+      ? "bill_pay.unconfirmed_elsewhere_handheld"
+      : "bill_pay.unconfirmed_elsewhere";
   }
 
   /** The presented sheet `open` shows the hold's refusal, answering whether one holds its bill. */
