@@ -1,4 +1,11 @@
-import { contrastRatio, fromOklch, luminanceRatio, relativeLuminance, toOklch } from "./colour.js";
+import {
+  type Oklch,
+  contrastRatio,
+  fromOklch,
+  luminanceRatio,
+  relativeLuminance,
+  toOklch,
+} from "./colour.js";
 import {
   type ContrastRule,
   type RuleResult,
@@ -12,27 +19,67 @@ import { type ThemeColour, THEME_COLOUR_TOKENS, colourToken, cornerRadii } from 
 
 export const PRIMARY = colourToken("primary");
 
+/** A colour's shades, nearest first, with each one's relative luminance at the same index. */
+export interface Shades {
+  readonly colours: readonly string[];
+  readonly luminances: readonly number[];
+}
+
 /**
- * Answers that repeat within one call, each a pure function of its key under that call's
- * defaults. Nothing empties it, so it lives for one call only.
+ * Answers that repeat, within one call and between calls. Each is a pure function of its key and
+ * the defaults the memo was made for, so dropping an entry only means working it out again.
  */
 export interface Memo {
   readonly settles: Map<string, ModeResult>;
+  readonly fixes: Map<string, string | null>;
   readonly walks: Map<string, string>;
+  readonly paths: Map<string, Path>;
   readonly hovers: Map<string, string>;
+  readonly brands: Map<string, BrandShades>;
+  readonly tints: Map<string, Readonly<Record<string, string>>>;
   readonly pushes: Map<string, string>;
-  readonly shades: Map<string, readonly string[]>;
+  readonly shades: Map<string, Shades>;
   readonly luminances: Map<string, number>;
 }
 
-export const newMemo = (): Memo => ({
+const newMemo = (): Memo => ({
   settles: new Map(),
+  fixes: new Map(),
   walks: new Map(),
+  paths: new Map(),
   hovers: new Map(),
+  brands: new Map(),
+  tints: new Map(),
   pushes: new Map(),
   shades: new Map(),
   luminances: new Map(),
 });
+
+/** How many defaults' memos are kept between calls, and how many entries each of a memo's maps keeps. */
+const KEPT_DEFAULTS = 1;
+const KEPT_ENTRIES = 500;
+
+/** Keyed by the defaults' content rather than the object, so a caller changing it in place gets a new memo. */
+const memos = new Map<string, Memo>();
+
+/**
+ * Runs `work` with the memo for `defaults`. A call leaves the most recently used memos, each cut
+ * to its newest entries; nothing is dropped while a call runs.
+ */
+export function withMemo<T>(defaults: WaitronDefaults, work: (memo: Memo) => T): T {
+  const key = JSON.stringify(defaults);
+  const memo = memos.get(key) ?? newMemo();
+  memos.delete(key);
+  memos.set(key, memo);
+  try {
+    return work(memo);
+  } finally {
+    for (const old of [...memos.keys()].slice(0, -KEPT_DEFAULTS)) memos.delete(old);
+    for (const map of Object.values(memo) as Map<string, unknown>[]) {
+      for (const old of [...map.keys()].slice(0, -KEPT_ENTRIES)) map.delete(old);
+    }
+  }
+}
 
 export function remember<T>(cache: Map<string, T>, key: string, make: () => T): T {
   let found = cache.get(key);
@@ -43,24 +90,11 @@ export function remember<T>(cache: Map<string, T>, key: string, make: () => T): 
   return found;
 }
 
-/** The results `checkRules` gives for `rules` that fail. */
-export function failingIn(
-  memo: Memo,
-  rules: readonly ContrastRule[],
-  colourOf: (token: string) => string,
-): RuleResult[] {
-  const luminance = (token: string) => {
-    const hex = colourOf(token);
-    return remember(memo.luminances, hex, () => relativeLuminance(hex));
-  };
-  const failed: RuleResult[] = [];
-  for (const rule of rules) {
-    const ratio = luminanceRatio(luminance(rule.a), luminance(rule.b));
-    const pass = passes(rule, ratio);
-    if (!pass) failed.push({ rule, ratio, pass });
-  }
-  return failed;
-}
+export const luminanceOf = (memo: Memo, hex: string): number =>
+  remember(memo.luminances, hex, () => relativeLuminance(hex));
+
+const contrastOf = (memo: Memo, a: string, b: string) =>
+  luminanceRatio(luminanceOf(memo, a), luminanceOf(memo, b));
 
 const STATION_FILLS = STATIONS.map(colourToken);
 
@@ -104,24 +138,48 @@ function stepped(L: number, dir: number, size: number): number | null {
   return Math.min(1, Math.max(0, L + dir * size));
 }
 
-/** Steps `from`'s lightness until `done` holds, the lightness is pinned, or `steps` run out. */
+/** The colours a lightness walk passes through, worked out only as far as a walk has gone. */
+export interface Path {
+  readonly start: Oklch;
+  readonly colours: string[];
+  readonly luminances: number[];
+  L: number;
+  pinned: boolean;
+}
+
+/** Steps `from`'s lightness until `done` holds of a colour's luminance, the lightness is pinned, or `steps` run out. */
 function walk(
+  memo: Memo,
   from: string,
   dir: number,
   size: number,
   steps: number,
-  done: (colour: string) => boolean,
+  done: (luminance: number) => boolean,
 ): string {
-  const start = toOklch(from);
-  let L = start.L;
-  let out = from;
-  for (let i = 0; i < steps && !done(out); i++) {
-    const next = stepped(L, dir, size);
-    if (next === null) break;
-    L = next;
-    out = fromOklch({ ...start, L });
+  const path = remember(memo.paths, JSON.stringify([from, dir, size]), () => {
+    const start = toOklch(from);
+    return {
+      start,
+      colours: [from],
+      luminances: [luminanceOf(memo, from)],
+      L: start.L,
+      pinned: false,
+    };
+  });
+  for (let i = 0; ; i++) {
+    if (i >= steps || done(path.luminances[i]!)) return path.colours[i]!;
+    if (i + 1 < path.colours.length) continue;
+    const next = path.pinned ? null : stepped(path.L, dir, size);
+    if (next === null) {
+      path.pinned = true;
+      return path.colours[i]!;
+    }
+    const colour = fromOklch({ ...path.start, L: next });
+    const luminance = luminanceOf(memo, colour);
+    path.L = next;
+    path.colours.push(colour);
+    path.luminances.push(luminance);
   }
-  return out;
 }
 
 /**
@@ -137,11 +195,15 @@ function until(
   need: number,
 ): string {
   return remember(memo.walks, JSON.stringify([hex, dir, need, list]), () => {
-    const grounds = list.map(relativeLuminance);
-    return walk(hex, dir, 0.005, Infinity, (colour) => {
-      const own = relativeLuminance(colour);
-      return Math.min(...grounds.map((ground) => luminanceRatio(own, ground))) >= need;
-    });
+    const grounds = list.map((ground) => luminanceOf(memo, ground));
+    return walk(
+      memo,
+      hex,
+      dir,
+      0.005,
+      Infinity,
+      (own) => Math.min(...grounds.map((ground) => luminanceRatio(own, ground))) >= need,
+    );
   });
 }
 
@@ -167,6 +229,57 @@ function brandFixShade(memo: Memo, brand: string, mode: Mode, grounds: readonly 
   return until(memo, brand, mode === "dark" ? +1 : -1, grounds, 3);
 }
 
+/** The colours `deriveAt` takes from the brand colour alone. */
+export interface BrandShades {
+  readonly H: number;
+  readonly C0: number;
+  readonly lifted: string;
+  readonly stepper: string;
+  readonly ink: string;
+  readonly disabled: string;
+  readonly onDisabled: string;
+}
+
+const brandShades = (memo: Memo, mode: Mode, brand: string): BrandShades =>
+  remember(memo.brands, JSON.stringify([mode, brand]), () => {
+    const dark = mode === "dark";
+    const { H, C: C0 } = toOklch(brand);
+    return {
+      H,
+      C0,
+      lifted: fromOklch({ L: dark ? 0.34 : 0.935, C: Math.min(C0, dark ? 0.04 : 0.035), H }),
+      stepper: fromOklch({ L: dark ? 0.27 : 0.955, C: Math.min(C0, 0.035), H }),
+      ink: dark ? fromOklch({ L: 0.16, C: Math.min(C0, 0.04), H }) : "#ffffff",
+      disabled: fromOklch({ L: dark ? 0.31 : 0.8, C: Math.min(C0, dark ? 0.04 : 0.09), H }),
+      onDisabled: dark ? fromOklch({ L: 0.72, C: 0.03, H }) : "#ffffff",
+    };
+  });
+
+/** Waitron's tinted colours of `mode` moved `tintStrength` of the way toward the brand's hue. */
+const tintsOf = (
+  memo: Memo,
+  defaults: WaitronDefaults,
+  mode: Mode,
+  brand: string,
+  tintStrength: number,
+): Readonly<Record<string, string>> =>
+  remember(memo.tints, JSON.stringify([mode, brand, tintStrength]), () => {
+    const { H, C0 } = brandShades(memo, mode, brand);
+    const out: Record<string, string> = {};
+    for (const [key, [L, C]] of Object.entries(TINT_TARGETS[mode]) as [
+      ThemeColour,
+      readonly [number, number],
+    ][]) {
+      const from = toOklch(defaults[mode][colourToken(key)]!);
+      out[colourToken(key)] = fromOklch({
+        L: from.L + (L - from.L) * tintStrength,
+        C: from.C + (Math.min(C, C0) - from.C) * tintStrength,
+        H,
+      });
+    }
+    return Object.freeze(out);
+  });
+
 function deriveAt(
   memo: Memo,
   defaults: WaitronDefaults,
@@ -179,38 +292,17 @@ function deriveAt(
   const chosen = choices.brandColor;
   const brand = fixed[PRIMARY] ?? chosen ?? d[PRIMARY]!;
   const dark = mode === "dark";
-  const { H, C: C0 } = toOklch(brand);
   const out: Record<string, string> = {};
   const get = (token: string) => (out[token] ?? d[token])!;
-  const blend = (def: string, L: number, C: number) => {
-    const from = toOklch(def);
-    return fromOklch({
-      L: from.L + (L - from.L) * tintStrength,
-      C: from.C + (Math.min(C, C0) - from.C) * tintStrength,
-      H,
-    });
-  };
   if (choices.background === "tinted" && tintStrength > 0) {
-    for (const [key, [L, C]] of Object.entries(TINT_TARGETS[mode]) as [
-      ThemeColour,
-      readonly [number, number],
-    ][]) {
-      out[colourToken(key)] = blend(d[colourToken(key)]!, L, C);
-    }
+    Object.assign(out, tintsOf(memo, defaults, mode, brand, tintStrength));
   }
   Object.assign(out, fixed);
   if (chosen === null && !(PRIMARY in fixed)) return out;
 
-  out[colourToken("surface-lifted")] = fromOklch({
-    L: dark ? 0.34 : 0.935,
-    C: Math.min(C0, dark ? 0.04 : 0.035),
-    H,
-  });
-  out[colourToken("stepper-button")] = fromOklch({
-    L: dark ? 0.27 : 0.955,
-    C: Math.min(C0, 0.035),
-    H,
-  });
+  const shades = brandShades(memo, mode, brand);
+  out[colourToken("surface-lifted")] = shades.lifted;
+  out[colourToken("stepper-button")] = shades.stepper;
   Object.assign(out, fixed);
   const grounds = BRAND_GROUNDS.map(get);
   const primary =
@@ -218,12 +310,12 @@ function deriveAt(
     (choices.brandFix[mode] === true
       ? brandFixShade(memo, brand, mode, BRAND_FIX_GROUNDS.map(get))
       : brand);
-  const ink = dark ? fromOklch({ L: 0.16, C: Math.min(C0, 0.04), H }) : "#ffffff";
+  const { ink } = shades;
   const onPrimary =
     fixed[colourToken("on-primary")] ??
-    (contrastRatio(ink, primary) >= 4.5
+    (contrastOf(memo, ink, primary) >= 4.5
       ? ink
-      : contrastRatio("#000000", primary) >= contrastRatio("#ffffff", primary)
+      : contrastOf(memo, "#000000", primary) >= contrastOf(memo, "#ffffff", primary)
         ? "#000000"
         : "#ffffff");
   const lifted = get(colourToken("surface-lifted"));
@@ -244,12 +336,8 @@ function deriveAt(
     [colourToken("primary-text")]: primaryText,
     [colourToken("focus")]: focus,
     [colourToken("field-label-focus")]: primaryText,
-    [colourToken("primary-disabled")]: fromOklch({
-      L: dark ? 0.31 : 0.8,
-      C: Math.min(C0, dark ? 0.04 : 0.09),
-      H,
-    }),
-    [colourToken("on-primary-disabled")]: dark ? fromOklch({ L: 0.72, C: 0.03, H }) : "#ffffff",
+    [colourToken("primary-disabled")]: shades.disabled,
+    [colourToken("on-primary-disabled")]: shades.onDisabled,
   });
   Object.assign(out, fixed);
   return out;
@@ -263,12 +351,37 @@ export interface ModeResult {
   readonly tintStrength: number;
 }
 
-const failing = (
+/** Each mode's rules with the tokens they name listed once, so each token's luminance is looked up once. */
+const INDEXED = Object.fromEntries(
+  (Object.keys(THEME_RULES) as Mode[]).map((mode) => {
+    const named = [...new Set(THEME_RULES[mode].flatMap((rule) => [rule.a, rule.b]))];
+    const rules = THEME_RULES[mode].map((rule) => ({
+      rule,
+      a: named.indexOf(rule.a),
+      b: named.indexOf(rule.b),
+    }));
+    return [mode, { named, rules }];
+  }),
+) as Record<Mode, { named: string[]; rules: { rule: ContrastRule; a: number; b: number }[] }>;
+
+/** The rules of `mode` that fail on `tokens`, Waitron's values filling the rest, in rule order. */
+function failing(
   memo: Memo,
   defaults: WaitronDefaults,
   mode: Mode,
   tokens: Record<string, string>,
-) => failingIn(memo, THEME_RULES[mode], (token) => (tokens[token] ?? defaults[mode][token])!);
+): RuleResult[] {
+  const { named, rules } = INDEXED[mode];
+  const luminances = named.map((token) =>
+    luminanceOf(memo, (tokens[token] ?? defaults[mode][token])!),
+  );
+  const failed: RuleResult[] = [];
+  for (const { rule, a, b } of rules) {
+    const ratio = luminanceRatio(luminances[a]!, luminances[b]!);
+    if (!passes(rule, ratio)) failed.push({ rule, ratio, pass: false });
+  }
+  return failed;
+}
 
 /** The tint strengths tried, by repeated subtraction as the reference steps them: the last is 1.4e-16. */
 const TINT_STRENGTHS = Array.from({ length: 10 }).reduce<number[]>(
@@ -280,10 +393,10 @@ const TINT_STRENGTHS = Array.from({ length: 10 }).reduce<number[]>(
 function push(memo: Memo, rule: ContrastRule, from: string, against: string): string {
   return remember(memo.pushes, JSON.stringify([rule.kind, rule.need, from, against]), () => {
     const within = rule.kind === "at-most";
-    const ground = relativeLuminance(against);
-    const darker = ground > relativeLuminance(from);
-    return walk(from, within === darker ? +1 : -1, within ? 0.002 : 0.005, 200, (colour) =>
-      passes(rule, luminanceRatio(relativeLuminance(colour), ground)),
+    const ground = luminanceOf(memo, against);
+    const darker = ground > luminanceOf(memo, from);
+    return walk(memo, from, within === darker ? +1 : -1, within ? 0.002 : 0.005, 200, (own) =>
+      passes(rule, luminanceRatio(own, ground)),
     );
   });
 }
@@ -296,7 +409,18 @@ export function settleMode(
   mode: Mode,
   hand: Readonly<Record<string, string>>,
 ): ModeResult {
-  const key = JSON.stringify([
+  return remember(memo.settles, settleKey(choices, mode, hand), () =>
+    settleAfresh(memo, defaults, choices, mode, hand),
+  );
+}
+
+/** Every choice settling `mode` reads; the defaults are the memo's. */
+export const settleKey = (
+  choices: ThemeChoices,
+  mode: Mode,
+  hand: Readonly<Record<string, string>>,
+): string =>
+  JSON.stringify([
     mode,
     choices.brandColor,
     choices.background,
@@ -304,8 +428,6 @@ export function settleMode(
     choices.brandFix[mode] === true,
     [...THEME_COLOUR_TOKENS].map((token) => hand[token] ?? null),
   ]);
-  return remember(memo.settles, key, () => settleAfresh(memo, defaults, choices, mode, hand));
-}
 
 function settleAfresh(
   memo: Memo,
@@ -383,5 +505,9 @@ function settleAfresh(
   const tokens: Record<string, string> = {};
   for (const token of THEME_COLOUR_TOKENS) tokens[token] = colourIn(written, token);
   Object.assign(tokens, cornerRadii(choices.corners, defaults));
-  return { tokens, failures: fails, tintStrength: strength };
+  return Object.freeze({
+    tokens: Object.freeze(tokens),
+    failures: Object.freeze(fails),
+    tintStrength: strength,
+  });
 }

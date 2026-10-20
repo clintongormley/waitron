@@ -1,6 +1,6 @@
 import { hexToRgb } from "./colour.js";
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
-import { type Memo, newMemo, settleMode } from "./derive.js";
+import { type Memo, type ModeResult, settleMode, withMemo } from "./derive.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
 import { type Corners, type ThemeColour, THEME_COLOURS, handTokens } from "./tokens.js";
 
@@ -76,27 +76,23 @@ export function normaliseChoices(choices: ThemeChoices): ThemeChoices {
 
 export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices): DerivedTheme {
   const normalised = normaliseChoices(choices);
-  const memo = newMemo();
-  const light = settleMode(
-    memo,
-    defaults,
-    normalised,
-    "light",
-    handTokens(normalised.handSet.light),
-  );
-  const dark = settleMode(memo, defaults, normalised, "dark", handTokens(normalised.handSet.dark));
-  return {
-    light: light.tokens,
-    dark: dark.tokens,
-    warnings: [
-      ...warningsFor(memo, defaults, normalised, "light", light),
-      ...warningsFor(memo, defaults, normalised, "dark", dark),
-    ],
-    tintStrength:
-      normalised.background === "tinted"
-        ? { light: light.tintStrength, dark: dark.tintStrength }
-        : null,
-  };
+  return withMemo(defaults, (memo) => {
+    const [light, dark] = MODES.map((mode) =>
+      settleMode(memo, defaults, normalised, mode, handTokens(normalised.handSet[mode])),
+    ) as [ModeResult, ModeResult];
+    return {
+      light: { ...light.tokens },
+      dark: { ...dark.tokens },
+      warnings: [
+        ...warningsFor(memo, defaults, normalised, "light", light),
+        ...warningsFor(memo, defaults, normalised, "dark", dark),
+      ],
+      tintStrength:
+        normalised.background === "tinted"
+          ? { light: light.tintStrength, dark: dark.tintStrength }
+          : null,
+    };
+  });
 }
 
 /**
@@ -104,7 +100,7 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
  * the fix of the colour drawn on top if it has one, else of the other; then settles again.
  */
 export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeChoices {
-  return fixAllIn(newMemo(), defaults, choices);
+  return withMemo(defaults, (memo) => fixAllIn(memo, defaults, choices));
 }
 
 function fixAllIn(memo: Memo, defaults: WaitronDefaults, choices: ThemeChoices): ThemeChoices {
@@ -132,10 +128,15 @@ function fixAllIn(memo: Memo, defaults: WaitronDefaults, choices: ThemeChoices):
 
 /** Whether Fix and save is offered: Fix all leaves no warning. */
 export function canFixAll(defaults: WaitronDefaults, choices: ThemeChoices): boolean {
-  const memo = newMemo();
-  const fixed = fixAllIn(memo, defaults, choices);
-  return MODES.every(
-    (mode) =>
-      !warns(fixed, mode, settleMode(memo, defaults, fixed, mode, handTokens(fixed.handSet[mode]))),
-  );
+  return withMemo(defaults, (memo) => {
+    const fixed = fixAllIn(memo, defaults, choices);
+    return MODES.every(
+      (mode) =>
+        !warns(
+          fixed,
+          mode,
+          settleMode(memo, defaults, fixed, mode, handTokens(fixed.handSet[mode])),
+        ),
+    );
+  });
 }
