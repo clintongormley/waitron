@@ -99,9 +99,9 @@ import type {
   TodayPlacement,
 } from "../api/client.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
-import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
+import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
-import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
 
 /** The words of a table that needs clearing or moving. */
@@ -137,8 +137,10 @@ function shownPartyName(table: TableState): string | undefined {
 }
 
 /** The table's own Forgotten badge already says a forgotten wait. */
-function tableChips(table: TableState) {
-  return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
+function tableChips(table: TableState, now: number) {
+  const chips = signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
+  const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
+  return held === null ? chips : [...chips, held];
 }
 
 /** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. */
@@ -545,8 +547,8 @@ export class TillFloorScreen extends LitElement {
 
       /* Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
       .badge.fire-due {
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
         border: 1px solid var(--wt-color-warning);
       }
 
@@ -629,7 +631,7 @@ export class TillFloorScreen extends LitElement {
    */
   @property({ attribute: false }) reducedMotion?: boolean;
   /** Injectable clock for whether a party's release reminder is due; unset reads the real one and
-   * redraws the floor when the next reminder falls due. */
+   * redraws the floor when the next reminder falls due, and each minute a held countdown changes. */
   @property({ attribute: false }) now?: number;
 
   @state() private activeZone: string | undefined = undefined;
@@ -792,14 +794,19 @@ export class TillFloorScreen extends LitElement {
     return reminderDueAt(table.party?.reminder) <= this.#drawnAt;
   }
 
-  /** The server's floor does not change when a reminder falls due, so the screen redraws itself then. */
+  /** The server's floor does not change when a reminder falls due or a held countdown's minutes
+   * change, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
     if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
     for (const table of this.tables) {
       const dueAt = reminderDueAt(table.party?.reminder);
-      if (dueAt > this.#drawnAt && dueAt < next) next = dueAt;
+      if (dueAt <= this.#drawnAt || dueAt === Number.POSITIVE_INFINITY) continue;
+      const at = table.signals.some((signal) => signal.kind === "held")
+        ? nextCountdownChange(dueAt, this.#drawnAt)
+        : dueAt;
+      if (at < next) next = at;
     }
     if (next === Number.POSITIVE_INFINITY) return;
     this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(next));
@@ -1998,7 +2005,7 @@ export class TillFloorScreen extends LitElement {
         unsentDrafts: table.party?.unsentDrafts.map(unsentText),
         partyName: shownPartyName(table),
         fireDue: this.#fireDue(table),
-        chips: tableChips(table),
+        chips: tableChips(table, this.#drawnAt),
       },
     );
   }
@@ -2396,10 +2403,12 @@ export class TillFloorScreen extends LitElement {
         }
         ${
           this.#fireDue(table)
-            ? html`<span class="badge fire-due" data-fire-due>${t("floor.fire_due")}</span>`
+            ? html`<span class="badge fire-due" data-fire-due
+                ><wt-icon name="fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
+              >`
             : nothing
         }
-        ${renderFloorChips(tableChips(table))}
+        ${renderFloorChips(tableChips(table, this.#drawnAt))}
       </span>
     </button>`;
   }

@@ -358,6 +358,33 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with held dishes counting down and a reminder due, on the list", async () => {
+    const now = Date.parse("2026-09-29T20:00:00.000Z");
+    const marked = partyTables.map((table, index): TableState =>
+      table.party === null
+        ? table
+        : {
+            ...table,
+            signals: [{ kind: "held", count: 2 }],
+            party: {
+              ...table.party,
+              reminder: {
+                groupId: "g2",
+                dueAt: new Date(index === 0 ? now + 240_000 : now).toISOString(),
+              },
+            },
+          },
+    );
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: marked, now },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelector('[data-chip="held"]')).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector("[data-fire-due] wt-icon[name=fire]")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations with signals side by side and the stations' summary, on the list", async () => {
     const signalled = partyTables.map((table): TableState =>
       table.party === null
