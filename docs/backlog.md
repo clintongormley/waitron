@@ -5653,6 +5653,18 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Other `uses:` steps that fetch over the network have no step time limit, and the runner's
+  own action download at job set-up is bounded only by long limits of its own (left open by
+  A935).** Each relies on its job's limit alone, as checkout did; a step `timeout-minutes` cannot
+  reach the set-up download.
+  [Detail](backlog/ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935)
+
+- **Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)**,
+  and in which phase they stalled is unknown: the action passes no `--progress`, so its log is
+  silent while it waits. On a recurrence, read the bounded checkout's log: a low-speed failure
+  (`Operation too slow`) means a transfer stall; a step timeout says only that the attempt ran
+  out of time, not in which phase.
+
 - **The deployment-status guard mistakes `up` inside a temporary path for a compose action.**
   `scripts/waitron-sh.test.mjs:508` tests raw log text with `compose .*up`; an A738 hook failed
   on `waitron-sh-bupOFl` while every logged compose action was `ps`. Setting an owned temporary

@@ -10,9 +10,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // Shell rather than `.mjs`, decided on how the two callers invoke it:
 //
 //   * The hook runs this step FIRST, before `pnpm install` and before the classifier.
-//   * licence.yml's `dco` job is `actions/checkout` plus one `run:` step — no pnpm, no setup-node,
-//     nothing installed. A `.mjs` script would make a REQUIRED status check depend either on
-//     whatever node the runner image happens to ship or on a setup step.
+//   * licence.yml's `dco` job installs no pnpm and no setup-node — nothing installed. A `.mjs`
+//     script would make a REQUIRED status check depend either on whatever node the runner image
+//     happens to ship or on a setup step.
 //
 // So it is exercised the way both callers exercise it: spawned as a program, against throwaway git
 // repositories built here. Nothing measures its coverage — v8 sees JavaScript in this process, and

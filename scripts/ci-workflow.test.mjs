@@ -28,11 +28,11 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
-// case reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit
-// case, two apt cases, a `--with-deps` case and the pnpm-setup cases reading every .yml file in
-// .github/workflows/. A transcription tests this file's copy of a workflow rather than the
-// workflow. Each extraction carries a guard that it found something, because a silently-empty
+// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
+// reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
+// two apt cases, a `--with-deps` case, the pnpm-setup cases and the checkout cases reading every
+// .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
+// the workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
 //
@@ -2239,7 +2239,9 @@ function unquoted(value) {
 
 /**
  * Each step under a `steps:` key, with its `name:`, its `timeout-minutes:` value as written, and the
- * first line, unquoted, or `|`/`>` block of its `run:`, shell comments cut.
+ * first line, unquoted, or `|`/`>` block of its `run:`, shell comments cut. Also its `id:`, `uses:`,
+ * `if:` and `continue-on-error:` values, unquoted (`undefined` when absent), and its `env:` and
+ * `with:` blocks as objects of the unquoted `key: value` lines one indent deeper (`{}` when absent).
  */
 function workflowSteps(text) {
   const workflowLines = text.split("\n");
@@ -2267,20 +2269,40 @@ function workflowSteps(text) {
       if (indent < dash || (indent === dash && !/^\s*- /.test(current))) break;
       if (indent === dash) {
         const keyIndent = dash + 1 + current.slice(dash + 1).search(/\S/);
-        step = { line: at + 1, name: undefined, run: [], keyIndent };
+        step = { line: at + 1, name: undefined, run: [], keyIndent, env: {}, with: {} };
         steps.push(step);
-      } else if (indent !== step.keyIndent) continue;
+      } else if (indent !== step.keyIndent) {
+        if (step.mapping === undefined) continue;
+        step.mapping.indent ??= indent;
+        if (indent !== step.mapping.indent) continue;
+        const [, mapKey, mapValue] = /^([\w.-]+):\s*(.*)$/.exec(current.trim()) ?? [];
+        if (mapKey !== undefined) step[step.mapping.key][mapKey] = unquoted(mapValue.trim());
+        continue;
+      }
+      step.mapping = undefined;
       const [, key, value] = /^([\w-]+):\s*(.*)$/.exec(current.slice(step.keyIndent)) ?? [];
       if (key === "name") step.name = value.trim();
       if (key === "timeout-minutes") step.timeoutMinutes = value.trim();
+      if (key === "id") step.id = unquoted(value.trim());
+      if (key === "uses") step.uses = unquoted(value.trim());
+      if (key === "if") step.if = unquoted(value.trim());
+      if (key === "continue-on-error") step.continueOnError = unquoted(value.trim());
+      if ((key === "env" || key === "with") && /^(#.*)?$/.test(value.trim()))
+        step.mapping = { key, indent: undefined };
       if (key !== "run") continue;
       if (/^[|>][-+\d]*\s*(#.*)?$/.test(value)) blockIndent = step.keyIndent;
       else step.run.push(unquoted(value));
     }
   });
-  return steps.map(({ line, name, run, timeoutMinutes }) => ({
+  return steps.map(({ line, name, run, timeoutMinutes, ...settings }) => ({
     step: name ?? `the step at line ${line}`,
     timeoutMinutes,
+    id: settings.id,
+    uses: settings.uses,
+    if: settings.if,
+    continueOnError: settings.continueOnError,
+    env: settings.env,
+    with: settings.with,
     command: run
       .filter((runLine) => !/^\s*#/.test(runLine))
       .map((runLine) => runLine.replace(/\s#.*$/, ""))
@@ -2351,6 +2373,52 @@ const workflowsDir = join(repoRoot, ".github", "workflows");
 const workflowFiles = readdirSync(workflowsDir)
   .filter((name) => /\.ya?ml$/.test(name))
   .sort();
+
+describe("the workflow step reader", () => {
+  it("reads a step's id, condition, action, settings, environment and inputs", () => {
+    const text =
+      "on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n" +
+      "      - id: checkout\n" +
+      "        name: Check out\n" +
+      '        uses: "actions/checkout@v7"\n' +
+      "        if: steps.x.outcome == 'failure'\n" +
+      "        timeout-minutes: 2\n" +
+      "        continue-on-error: true\n" +
+      "        env:\n" +
+      "          # a comment\n" +
+      "          GIT_HTTP_LOW_SPEED_LIMIT: 1000\n" +
+      "\n" +
+      "          GIT_HTTP_LOW_SPEED_TIME: '20'\n" +
+      "        with:\n" +
+      "          fetch-depth: 0\n" +
+      "      - name: plain\n" +
+      "        run: echo hi\n";
+    expect(workflowSteps(text)).toEqual([
+      {
+        step: "Check out",
+        timeoutMinutes: "2",
+        command: "",
+        id: "checkout",
+        uses: "actions/checkout@v7",
+        if: "steps.x.outcome == 'failure'",
+        continueOnError: "true",
+        env: { GIT_HTTP_LOW_SPEED_LIMIT: "1000", GIT_HTTP_LOW_SPEED_TIME: "20" },
+        with: { "fetch-depth": "0" },
+      },
+      {
+        step: "plain",
+        timeoutMinutes: undefined,
+        command: "echo hi",
+        id: undefined,
+        uses: undefined,
+        if: undefined,
+        continueOnError: undefined,
+        env: {},
+        with: {},
+      },
+    ]);
+  });
+});
 
 /**
  * Every job runs under a `permissions:` block of its own or its workflow's, never the repository's
@@ -2849,6 +2917,25 @@ describe("CI image provenance", () => {
 });
 
 /**
+ * One workflow's jobs, each a two-space key under the top-level `jobs:` line with the lines from it
+ * to the next job or the next top-level key, and `start`, the index of its first line in the
+ * workflow. Empty when there is no `jobs:` line.
+ */
+function jobBlocks(text) {
+  const workflowLines = text.split("\n");
+  const jobsKey = workflowLines.indexOf("jobs:");
+  const blocks = [];
+  if (jobsKey === -1) return blocks;
+  for (const [offset, line] of workflowLines.slice(jobsKey + 1).entries()) {
+    if (/^\S/.test(line) && !/^#/.test(line)) break;
+    const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
+    if (id !== undefined) blocks.push({ id, lines: [], start: jobsKey + 1 + offset });
+    blocks.at(-1)?.lines.push(line);
+  }
+  return blocks;
+}
+
+/**
  * One workflow's pnpm setups: every non-comment `uses: pnpm/action-setup` line, every step whose
  * `run:` command names `scripts/ci-setup-pnpm.sh` and whether it carries a positive
  * `timeout-minutes`, the jobs with a step running `pnpm`, and those of them whose first such step
@@ -2861,20 +2948,10 @@ function pnpmSetups(text) {
     .map((line, index) => ({ line: index + 1, text: line }))
     .filter(({ text: line }) => /^\s*(?:-\s+)?uses:\s*["']?pnpm\/action-setup\b/.test(line))
     .map(({ line }) => line);
-  const jobsKey = workflowLines.indexOf("jobs:");
-  const jobBlocks = [];
-  if (jobsKey !== -1) {
-    for (const line of workflowLines.slice(jobsKey + 1)) {
-      if (/^\S/.test(line) && !/^#/.test(line)) break;
-      const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
-      if (id !== undefined) jobBlocks.push({ id, lines: [] });
-      jobBlocks.at(-1)?.lines.push(line);
-    }
-  }
   const setups = [];
   const pnpmJobs = [];
   const lateJobs = [];
-  for (const { id, lines } of jobBlocks) {
+  for (const { id, lines } of jobBlocks(text)) {
     const steps = workflowSteps(lines.join("\n"));
     for (const { command, timeoutMinutes } of steps) {
       if (!/\bscripts\/ci-setup-pnpm\.sh\b/.test(command)) continue;
@@ -2999,5 +3076,269 @@ describe("the workflows' pnpm setups", () => {
     expect(found.flatMap(({ name, lateJobs }) => lateJobs.map((job) => `${name}: ${job}`))).toEqual(
       [],
     );
+  });
+});
+
+/**
+ * One workflow's checkouts: an entry `{ job, step, shape }` for each first attempt of an
+ * `actions/checkout@` step, where `step` is its `workflowSteps` label and `shape` is `"bounded"`
+ * when it runs as the three steps in docs/developers/ci-and-gates.md, "Every checkout is bounded",
+ * or else the first reason it does not. A checkout two steps after a first attempt, whose `if:`
+ * names that attempt's id, is its second attempt and is not judged on its own.
+ */
+function checkoutAttempts(text) {
+  const isCheckout = (step) => step?.uses?.startsWith("actions/checkout@") ?? false;
+  const minutes = (step) => /^([1-9]\d*)\s*(?:#.*)?$/.exec(step?.timeoutMinutes ?? "")?.[1];
+  const positive = (value) => /^[1-9]\d*$/.test(value ?? "");
+  const same = (a, b) =>
+    JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+  const shapeOf = (first, stop, second) => {
+    if (minutes(first) === undefined) return "no time limit";
+    if (Number(minutes(first)) > 2) return "time limit too long";
+    if (Number(minutes(first)) < 2) return "time limit too short";
+    if (
+      !positive(first.env.GIT_HTTP_LOW_SPEED_LIMIT) ||
+      !positive(first.env.GIT_HTTP_LOW_SPEED_TIME)
+    )
+      return "no low-speed limit";
+    if (first.id === undefined || first.continueOnError !== "true") return "a stall fails the job";
+    const failed = `steps.${first.id}.outcome == 'failure'`;
+    if (
+      stop?.if !== failed ||
+      !stop.command.includes("pgrep '^git(-remote-https?)?$'") ||
+      !stop.command.includes("GITHUB_WORKSPACE") ||
+      !stop.command.includes("kill -9")
+    )
+      return "leftover git not stopped";
+    if (second?.uses !== first.uses || second.if !== failed) return "no second attempt";
+    if (
+      minutes(second) === undefined ||
+      Number(minutes(second)) > 2 ||
+      !same(second.env, first.env)
+    )
+      return "second attempt unbounded";
+    if (!same(second.with, first.with)) return "second attempt differs";
+    if (second.continueOnError === "true") return "second attempt cannot fail the job";
+    return "bounded";
+  };
+  const attempts = [];
+  for (const { id: job, lines, start } of jobBlocks(text)) {
+    const steps = workflowSteps("\n".repeat(start) + lines.join("\n"));
+    for (let at = 0; at < steps.length; at += 1) {
+      const [first, stop, second] = steps.slice(at, at + 3);
+      if (!isCheckout(first)) continue;
+      attempts.push({ job, step: first.step, shape: shapeOf(first, stop, second) });
+      if (
+        first.id !== undefined &&
+        isCheckout(second) &&
+        (second.if ?? "").includes(`steps.${first.id}.`)
+      )
+        at += 2;
+    }
+  }
+  return attempts;
+}
+
+/**
+ * Every `actions/checkout` runs as three steps — a first attempt under a 2-minute step limit with
+ * git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a second
+ * attempt only when the first failed — because the action retries a fetch that fails but waits on
+ * one that stalls (receipt: docs/developers/ci-and-gates.md, "Every checkout is bounded"). Weaker
+ * than its name: it reads each workflow as TEXT and never runs one, so a checkout inside a
+ * composite action or a called workflow outside `.github/workflows/`, or reached through an
+ * expression or a YAML anchor, is not seen; it checks that the low-speed numbers are positive
+ * whole numbers, not that they are the right size; and it checks the stop step's words, not
+ * whether it stops anything. It also refuses valid YAML no site uses: a quoted
+ * `timeout-minutes: "2"`, an `if:` wrapped in `${{ }}`, and a low-speed value followed by a
+ * `# comment`.
+ */
+describe("the workflows' checkouts", () => {
+  const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
+  const bounded = `      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+`;
+  const [firstAttempt, stopStep, secondAttempt] = bounded.split(/(?=^ {6}- )/m);
+  const withDepth = (step) => `${step}        with:\n          fetch-depth: 0\n`;
+  const first = (shape) => ({ job: "a", step: "Check out the code", shape });
+  const second = (shape) => ({ job: "a", step: "Check out the code, second attempt", shape });
+
+  it("passes the bounded shape", () => {
+    expect(checkoutAttempts(workflow(bounded))).toEqual([first("bounded")]);
+  });
+
+  it("passes the bounded shape with the same inputs on both attempts", () => {
+    const text = workflow(withDepth(firstAttempt) + stopStep + withDepth(secondAttempt));
+    expect(checkoutAttempts(text)).toEqual([first("bounded")]);
+  });
+
+  it("does not count a commented-out checkout", () => {
+    expect(checkoutAttempts(workflow("      # - uses: actions/checkout@v7\n"))).toEqual([]);
+  });
+
+  it("refuses a lone checkout", () => {
+    expect(checkoutAttempts(workflow("      - uses: actions/checkout@v7\n"))).toEqual([
+      { job: "a", step: "the step at line 6", shape: "no time limit" },
+    ]);
+  });
+
+  it("does not count a job's time limit as the checkout's", () => {
+    const text =
+      "on: push\njobs:\n  a:\n    runs-on: x\n    timeout-minutes: 10\n    steps:\n" +
+      "      - name: Check out the code\n        uses: actions/checkout@v7\n";
+    expect(checkoutAttempts(text)).toEqual([first("no time limit")]);
+  });
+
+  it.each([
+    [
+      "a first attempt with a 30-minute limit",
+      bounded.replace("timeout-minutes: 2", "timeout-minutes: 30"),
+      [first("time limit too long")],
+    ],
+    [
+      "a first attempt with a 1-minute limit",
+      bounded.replace("timeout-minutes: 2", "timeout-minutes: 1"),
+      [first("time limit too short")],
+    ],
+    [
+      "a second attempt with a 30-minute limit",
+      firstAttempt + stopStep + secondAttempt.replace("timeout-minutes: 2", "timeout-minutes: 30"),
+      [first("second attempt unbounded")],
+    ],
+    [
+      "a stop step finding only processes named exactly git",
+      bounded.replace("pgrep '^git(-remote-https?)?$'", "pgrep -x git"),
+      [first("leftover git not stopped")],
+    ],
+    [
+      "a low-speed window of 0 seconds",
+      bounded.replace("GIT_HTTP_LOW_SPEED_TIME: 20", "GIT_HTTP_LOW_SPEED_TIME: 0"),
+      [first("no low-speed limit")],
+    ],
+    [
+      "no continue-on-error",
+      bounded.replace("        continue-on-error: true\n", ""),
+      [first("a stall fails the job")],
+    ],
+    [
+      "a stop step waiting on another step",
+      firstAttempt +
+        stopStep.replace("steps.checkout.outcome", "steps.other.outcome") +
+        secondAttempt,
+      [first("leftover git not stopped")],
+    ],
+    [
+      "a second attempt that always runs",
+      firstAttempt +
+        stopStep +
+        secondAttempt.replace("        if: steps.checkout.outcome == 'failure'\n", ""),
+      [first("no second attempt"), second("a stall fails the job")],
+    ],
+    [
+      "a second attempt with no time limit",
+      firstAttempt + stopStep + secondAttempt.replace("        timeout-minutes: 2\n", ""),
+      [first("second attempt unbounded")],
+    ],
+    [
+      "a second attempt without the low-speed limit",
+      firstAttempt + stopStep + secondAttempt.replace(/ {8}env:\n(?: {10}.*\n)+/, ""),
+      [first("second attempt unbounded")],
+    ],
+    [
+      "a full history on the first attempt only",
+      withDepth(firstAttempt) + stopStep + secondAttempt,
+      [first("second attempt differs")],
+    ],
+    [
+      "a second attempt that cannot fail the job",
+      firstAttempt +
+        stopStep +
+        secondAttempt.replace(
+          "        timeout-minutes: 2\n",
+          "$&        continue-on-error: true\n",
+        ),
+      [first("second attempt cannot fail the job")],
+    ],
+    [
+      "a first attempt without the low-speed byte rate",
+      firstAttempt.replace("          GIT_HTTP_LOW_SPEED_LIMIT: 1000\n", "") +
+        stopStep +
+        secondAttempt,
+      [first("no low-speed limit")],
+    ],
+    [
+      "a first attempt with no id",
+      bounded.replace("      - id: checkout\n        name:", "      - name:"),
+      [first("a stall fails the job"), second("a stall fails the job")],
+    ],
+    [
+      "a stop step not limited to the job's own directory",
+      bounded.replace('"$GITHUB_WORKSPACE"', '"$PWD"'),
+      [first("leftover git not stopped")],
+    ],
+    [
+      "a stop step that does not force the kill",
+      bounded.replace("kill -9", "kill"),
+      [first("leftover git not stopped")],
+    ],
+    [
+      "a second attempt using another version of the action",
+      firstAttempt + stopStep + secondAttempt.replace("actions/checkout@v7", "actions/checkout@v6"),
+      [first("no second attempt")],
+    ],
+    [
+      "no stop step",
+      firstAttempt + secondAttempt,
+      [first("leftover git not stopped"), second("a stall fails the job")],
+    ],
+    ["no second attempt", firstAttempt + stopStep, [first("no second attempt")]],
+    [
+      "a double-quoted action and condition",
+      bounded
+        .replaceAll("uses: actions/checkout@v7", 'uses: "actions/checkout@v7"')
+        .replaceAll(
+          "if: steps.checkout.outcome == 'failure'",
+          `if: "steps.checkout.outcome == 'failure'"`,
+        ),
+      [first("bounded")],
+    ],
+  ])("reads %s", (_shape, steps, expected) => {
+    expect(checkoutAttempts(workflow(steps))).toEqual(expected);
+  });
+
+  const found = workflowFiles.map((name) => ({
+    name,
+    attempts: checkoutAttempts(readFileSync(join(workflowsDir, name), "utf8")),
+  }));
+
+  it("finds checkouts to check", () => {
+    expect(found.find(({ name }) => name === "ci.yml").attempts.length).toBeGreaterThan(0);
+    expect(found.flatMap(({ attempts }) => attempts).length).toBeGreaterThan(0);
+  });
+
+  it("bounds and retries every checkout in every workflow", () => {
+    expect(
+      found.flatMap(({ name, attempts }) =>
+        attempts
+          .filter(({ shape }) => shape !== "bounded")
+          .map(({ job, shape }) => `${name}: job ${job}: ${shape}`),
+      ),
+      'run each checkout as the three steps in docs/developers/ci-and-gates.md, "Every checkout is bounded"',
+    ).toEqual([]);
   });
 });

@@ -34,7 +34,25 @@ jobs:
       COMPOSE_FILE: deploy/compose.yml
       COMPOSE_PROJECT_NAME: waitron-ci
     steps:
-      - uses: actions/checkout@v7
+      # Each checkout is three steps: docs/developers/ci-and-gates.md, "Every checkout is bounded".
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
 
       # deploy/.env is where waitron.sh puts a real box's and it is gitignored, so compose reads it
       # with no flag. It carries the two tags this job builds, so compose runs those rather than

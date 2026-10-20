@@ -23,9 +23,8 @@
 # that has to agree.
 #
 # Shell rather than node, decided on how the callers invoke it. The hook runs this step FIRST,
-# before `pnpm install` and the classifier; licence.yml's `dco` job is `actions/checkout` plus one
-# `run:` step, with no
-# pnpm and no setup-node, and it produces a REQUIRED status check. A node script would put an
+# before `pnpm install` and the classifier; licence.yml's `dco` job installs no pnpm
+# and no setup-node, and it produces a REQUIRED status check. A node script would put an
 # interpreter under both of those. Tested by scripts/check-signoff.test.mjs, which spawns this file
 # the way both callers do, against throwaway git repositories.
 missing=0
