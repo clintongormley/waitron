@@ -131,6 +131,12 @@ function paddingBox(el: HTMLElement) {
   return { left, top, right: left + el.clientWidth, bottom: top + el.clientHeight };
 }
 
+/** Two frames, so an intersection observer has delivered what the first one saw. */
+const nextFrames = () =>
+  new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
 const originalUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
@@ -584,6 +590,72 @@ describe("till-floor-screen: the zone strip's edge", () => {
         expect(edgeOf(el, "start")?.getAttribute("aria-label")).toBe("Show Upstairs lounge");
       },
     );
+  });
+
+  it("marks a tab a slow swipe cuts by a fraction of a pixel, then more", async () => {
+    await onPhone(
+      [seated("t1", "z1"), seated("t4", "z4", { readyToServe: 2 })],
+      async (el, host) => {
+        await expect
+          .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
+          .toBe("Show Garden terrace");
+        const strip = stripOf(el);
+        const cut = () =>
+          tabOf(el, "z4").closest(".zone-tab")!.getBoundingClientRect().right -
+          paddingBox(strip).right;
+        strip.scrollLeft += Math.ceil(cut());
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        // With no edge drawn, narrow the screen by under a pixel so that at whole-pixel scroll
+        // positions the tab goes from shown to cut by under half a pixel.
+        const shownBy = cut();
+        const target = Math.ceil(shownBy) - 0.75;
+        host.style.width = `${host.getBoundingClientRect().width - (target - shownBy)}px`;
+        const from = strip.scrollLeft - Math.floor(-cut());
+        for (let step = 0; step <= 11; step++) {
+          strip.scrollLeft = from - step;
+          // Read before the frame, which may draw the edge and narrow the strip.
+          if (step === 0) expect(cut()).toBeLessThanOrEqual(0);
+          if (step === 1) {
+            expect(cut()).toBeGreaterThan(0);
+            expect(cut()).toBeLessThanOrEqual(0.5);
+          }
+          await nextFrames();
+        }
+        expect(cut()).toBeGreaterThan(10);
+        await expect
+          .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
+          .toBe("Show Garden terrace");
+      },
+    );
+  });
+
+  it("brings a tab wider than the strip, cut at both ends, to its start", async () => {
+    const wide = [zone("z1", "Inside", 0), zone("z2", "Upstairs private dining room", 1)];
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(320, 844);
+    try {
+      const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+        zones: wide,
+        tables: [seated("t1", "z1"), seated("t2", "z2", { readyToServe: 2 })],
+        now,
+        reducedMotion: false,
+      });
+      await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+      const strip = stripOf(el);
+      const tab = () => tabOf(el, "z2").closest(".zone-tab")!.getBoundingClientRect();
+      const box = () => paddingBox(strip);
+      expect(tab().width).toBeGreaterThan(box().right - box().left);
+      strip.scrollLeft += Math.ceil(tab().left - box().left) + 10;
+      await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+      expect(tab().left).toBeLessThan(box().left);
+      expect(tab().right).toBeGreaterThan(box().right);
+      await userEvent.click(edgeOf(el, "start")!);
+      const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+      await expect.poll(() => tab().left - reach).toBeGreaterThanOrEqual(box().left - 1);
+      expect(tab().left - reach).toBeLessThanOrEqual(box().left + 1);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 
   it("watches the new tabs when the zones grow", async () => {

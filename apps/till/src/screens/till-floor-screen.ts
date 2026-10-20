@@ -275,9 +275,6 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
 
 type TabsEdge = "start" | "end";
 
-/** Half a pixel or less cut off is layout rounding, not a tab out of sight. */
-const SUBPIXEL = 0.5;
-
 const tabKey = (zoneTab: Element): string =>
   zoneTab.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
 
@@ -2382,11 +2379,20 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
+  /** "nearest" leaves a tab wider than the strip where it is once it sticks out of both ends, so
+   * such a tab is brought to the strip's start instead. */
   #showTab(key: string): void {
-    [...this.shadowRoot!.querySelectorAll<HTMLElement>("wt-button.tab")]
-      .find((button) => button.dataset.zone === key)
-      ?.closest(".zone-tab")
-      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    const strip = this.#tabsStrip!;
+    const tab = [...strip.querySelectorAll<HTMLElement>("wt-button.tab")]
+      .find((button) => button.dataset.zone === key)!
+      .closest(".zone-tab")!;
+    const style = getComputedStyle(strip);
+    const room =
+      strip.clientWidth -
+      parseFloat(style.scrollPaddingInlineStart) -
+      parseFloat(style.scrollPaddingInlineEnd);
+    const inline = tab.getBoundingClientRect().width > room ? "start" : "nearest";
+    tab.scrollIntoView({ inline, block: "nearest" });
   }
 
   /** Re-reads which tabs the strip cuts off whenever the strip or its tabs are redrawn anew. */
@@ -2422,8 +2428,8 @@ export class TillFloorScreen extends LitElement {
     const sides = new Map<string, TabsEdge>();
     for (const tab of strip.querySelectorAll(".zone-tab")) {
       const box = tab.getBoundingClientRect();
-      if (box.left < left - SUBPIXEL) sides.set(tabKey(tab), "start");
-      else if (box.right > right + SUBPIXEL) sides.set(tabKey(tab), "end");
+      if (box.left < left) sides.set(tabKey(tab), "start");
+      else if (box.right > right) sides.set(tabKey(tab), "end");
     }
     const same =
       sides.size === this.#hiddenTabs.size &&
