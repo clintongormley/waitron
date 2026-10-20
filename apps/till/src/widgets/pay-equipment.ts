@@ -102,6 +102,7 @@ export function payScanView(
     <till-equipment-scanner
       kind="any"
       @equipment-scanned=${(event: CustomEvent<EquipmentCode>) => {
+        event.stopPropagation();
         back();
         host.dispatchEvent(
           new CustomEvent<EquipmentCode>("pay-equipment-sticker", {

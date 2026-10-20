@@ -2136,6 +2136,22 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
       expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("contribution");
       expect(field(el, "amount")!.value).toBe("10");
     });
+
+    it("the scanner's own event stops at the sheet, which sends only the sticker", async () => {
+      const el = await scanning();
+      const scanned = capture<unknown>(el, "equipment-scanned");
+
+      scanner(el)!.dispatchEvent(
+        new CustomEvent("equipment-scanned", {
+          detail: { id: "r3", kind: "reader" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(scanned).toEqual([]);
+    });
   });
 
   it("shows none of this on a counter till", async () => {
