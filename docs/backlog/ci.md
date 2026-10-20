@@ -587,3 +587,22 @@ root (standing rule: a flaky test is fixed, never re-run to green).
 printers-screen files on 2026-10-10, then passed alone and in the seven later runs; its error was
 not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root
 (standing rule: a flaky test is fixed, never re-run to green).
+
+## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
+
+List them with
+
+```sh
+grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact|download-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml
+```
+
+On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`, `download-artifact`,
+`docker/*` and `codeql-action` steps carried a step `timeout-minutes`; they rely on their job's
+limit alone, as checkout did. The set-up download ("Download action repository …") is retried by
+the runner, three attempts, each under a 20-minute limit (runner v2.337.0
+`src/Runner.Worker/ActionManager.cs` L1647–1658: `retryCount < 3`,
+`int timeoutSeconds = 20 * 60;`) — longer than most of our jobs' limits, which run from 5 to 50
+minutes (`grep -h -E '^    timeout-minutes:' .github/workflows/*.yml`) — and a step
+`timeout-minutes` cannot reach it. Whether the job's own limit covers set-up was not measured.
+Receipt for the checkout half:
+[ci-and-gates.md](../developers/ci-and-gates.md#every-checkout-is-bounded).

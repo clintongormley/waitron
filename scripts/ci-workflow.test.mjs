@@ -3084,13 +3084,7 @@ describe("the workflows' pnpm setups", () => {
  * `actions/checkout@` step, where `step` is its `workflowSteps` label and `shape` is `"bounded"`
  * when it runs as the three steps in docs/developers/ci-and-gates.md, "Every checkout is bounded",
  * or else the first reason it does not. A checkout two steps after a first attempt, whose `if:`
- * names that attempt's id, is its second attempt and is not judged on its own. Weaker than its
- * name: it reads each workflow as TEXT and never runs one, so a checkout inside a composite action
- * or a called workflow outside `.github/workflows/`, or reached through an expression or a YAML
- * anchor, is not seen; it checks that the low-speed numbers are positive whole numbers, not that
- * they are the right size; and it checks the stop step's words, not whether it stops anything. It
- * also refuses valid YAML no site uses: a quoted `timeout-minutes: "2"`, an `if:` wrapped in
- * `${{ }}`, and a low-speed value followed by a `# comment`.
+ * names that attempt's id, is its second attempt and is not judged on its own.
  */
 function checkoutAttempts(text) {
   const isCheckout = (step) => step?.uses?.startsWith("actions/checkout@") ?? false;
@@ -3145,6 +3139,19 @@ function checkoutAttempts(text) {
   return attempts;
 }
 
+/**
+ * Every `actions/checkout` runs as three steps — a first attempt under a 2-minute step limit with
+ * git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a second
+ * attempt only when the first failed — because the action retries a fetch that fails but waits on
+ * one that stalls (receipt: docs/developers/ci-and-gates.md, "Every checkout is bounded"). Weaker
+ * than its name: it reads each workflow as TEXT and never runs one, so a checkout inside a
+ * composite action or a called workflow outside `.github/workflows/`, or reached through an
+ * expression or a YAML anchor, is not seen; it checks that the low-speed numbers are positive
+ * whole numbers, not that they are the right size; and it checks the stop step's words, not
+ * whether it stops anything. It also refuses valid YAML no site uses: a quoted
+ * `timeout-minutes: "2"`, an `if:` wrapped in `${{ }}`, and a low-speed value followed by a
+ * `# comment`.
+ */
 describe("the workflows' checkouts", () => {
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
   const bounded = `      - id: checkout

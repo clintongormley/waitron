@@ -175,10 +175,10 @@ hook, or how tests are scheduled:
 - **Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes`
   with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a
   second attempt run only when the first failed.** The action retries a fetch that fails but
-  waits on one that stalls with no limit of its own. Cost: on 2026-10-20 a `test-dashboard (2)`
-  fetch printed nothing for 353 s and `test-server (4)` sat in checkout until its 10-minute
-  limit. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`, weaker than their name —
-  they read text and never run a workflow. Receipt:
+  waits on one that stalls with no limit of its own. Cost: run 39446310822's `test-dashboard (2)`
+  fetch printed nothing for 353 s, and run 39440790729's `test-server (4)` sat in checkout until
+  its 10-minute limit. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`, weaker than
+  their name — they read text and never run a workflow. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-checkout-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.

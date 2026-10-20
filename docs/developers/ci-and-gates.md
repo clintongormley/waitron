@@ -1382,8 +1382,11 @@ attempts. There are two layers of limit:
 1. **git's own low-speed limit.** git reads `GIT_HTTP_LOW_SPEED_LIMIT` and `_TIME` from the step's
    environment, which the action passes to every git it runs. A transfer that moves less than
    1000 bytes a second for 20 s is ended by git with exit 128, and the action's built-in retry runs
-   the fetch again — three fetches at most, 10–20 s apart. Worst case 3 × 20 + 2 × 20 = 100 s,
-   inside the step's 120 s.
+   the fetch again — three fetches at most, 10–20 s apart. For a transfer silent from the start,
+   the worst case is 3 × 20 + 2 × 20 = 100 s, inside the step's 120 s. A fetch that moves data
+   first and then stalls takes longer (a review on 2026-10-20, in an `ubuntu:24.04` container
+   against a local server that sent 20 KB/s for 25 s and then nothing, measured one fetch at
+   51.3 s), so three of them can reach the step's limit, which then ends them.
 2. **The step's `timeout-minutes: 2`**, for a stall git's limit cannot see: a TLS handshake that
    never completes, or a TCP connect to an address that never answers (both measured below).
    `continue-on-error` lets the job go on; the stop step kills the first attempt's git processes,
@@ -1391,14 +1394,14 @@ attempts. There are two layers of limit:
    the job if it fails.
 
 Worst case for one checkout: 2 + 2 minutes. The low-speed limit is set on the two checkout steps
-only, so no other git call in a job changes behaviour. Each workflow file carries one pointer
+only, so no other step's git sees it. Each workflow file carries one pointer
 comment to this section rather than one per site.
 
 A first attempt that fails leaves `##[error]` annotations on a run that still passes. That is the
 trace of the stall, kept on purpose. The steps carry names, so the jobs API reports `Check out the
-code` and `Check out the code, second attempt`, no longer `Run actions/checkout@v7`; nothing in
-this repository read the old name (`grep -rn "Run actions/" scripts/ .github/` found nothing on
-2026-10-20), but a tool outside it that does must use the new names.
+code` and `Check out the code, second attempt`, no longer `Run actions/checkout@v7`; nothing under
+`scripts/` or `.github/` read the old name (`grep -rn "Run actions/" scripts/ .github/` found
+nothing on 2026-10-20), but a tool elsewhere that does must use the new names.
 
 #### The stalls (2026-10-20)
 
@@ -1575,14 +1578,15 @@ against the job's limit in `ci.yml`:
 
 One stall that ends the first attempt at its limit adds at most about 120 s (the healthy ~10 s
 checkout is already inside the figures), which fits every row; the least room is in `typecheck`
-and `test-server (8)`. Two stalls end the job at the second attempt's failure, about 4 minutes in —
-before every job's limit, so the job reports a failed checkout rather than a cancellation. A third
-attempt would push a triple stall past the 5-minute jobs' limits.
+(156 s) and `lint` (197 s). Two stalls end the job at the second attempt's failure, about 4
+minutes in — before every job's limit, so the job reports a failed checkout rather than a
+cancellation. A third attempt would push a triple stall past the 5-minute jobs' limits.
 
 The step limit cannot be 90 s: github/docs `workflow-syntax.md` (commit `c67a9362`), under
 `jobs.<job_id>.steps[*].timeout-minutes`: "Fractional values are not supported. `timeout-minutes`
 must be a positive integer." One minute would cut the low-speed retries short (three 20 s windows
-plus two waits need up to 100 s), so 2 minutes it is.
+plus two waits need 100 s for a transfer silent from the start, and more for one that moved data
+first), so 2 minutes it is.
 
 #### Why not another shape
 
@@ -1601,8 +1605,8 @@ plus two waits need up to 100 s), so 2 minutes it is.
 - **YAML anchors to shorten the copies:** every guard in `scripts/ci-workflow.test.mjs` reads text
   and would see `- *alias` as an empty step; not tried on GitHub.
 - **Step limit only, no low-speed limit:** every silent stall would cost the full 2 minutes before
-  the retry; with the limit, the action ends it itself in about 100 s at worst and retries inside
-  the same step.
+  the retry; with the limit, the action ends a transfer silent from the start in about 100 s at
+  worst and retries inside the same step.
 - **Low-speed limit only:** P4 and P7 — a connect or handshake stall is not ended by it, and P7
   waited 300 s per fetch, three fetches.
 
@@ -1612,7 +1616,9 @@ The checkout cases in `scripts/ci-workflow.test.mjs` ("the workflows' checkouts"
 their name: they read every workflow as TEXT and never run one; a checkout in a composite action,
 a called workflow outside `.github/workflows/`, or written through an anchor or expression is not
 seen; they hold the first attempt to exactly 2 minutes and the second to at most 2, but do not
-judge the low-speed numbers, nor whether the stop step stops anything.
+judge the low-speed numbers, nor whether the stop step stops anything. They also refuse valid
+YAML no site uses: a quoted `timeout-minutes: "2"`, an `if:` wrapped in `${{ }}`, and a low-speed
+value followed by a `# comment`.
 
 Deletion proof, 2026-10-20, in a throwaway detached worktree of `79c8459cc`: with the stop step
 deleted from `licence.yml`'s first job, `pnpm exec vitest run scripts/ci-workflow.test.mjs -t

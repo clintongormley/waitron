@@ -39,8 +39,9 @@ both attempts. Two layers:
 1. **git's own low-speed limit** (`GIT_HTTP_LOW_SPEED_LIMIT`/`_TIME`, read by git from the step's
    environment, which the action passes through to every git it runs). A transfer that moves less
    than 1000 bytes a second for 20 s is ended by git with exit 128, and the action's built-in
-   retry runs the fetch again — three fetches at most, 10–20 s apart. Worst case 3 × 20 + 2 × 20 =
-   100 s, inside the step's 120 s.
+   retry runs the fetch again — three fetches at most, 10–20 s apart. For a transfer silent from
+   the start, the worst case is 3 × 20 + 2 × 20 = 100 s, inside the step's 120 s; a fetch that
+   moves data first and then stalls takes longer, and the step's limit then ends it.
 2. **The step's `timeout-minutes: 2`**, for any stall git's limit cannot see (measured below: a TLS
    handshake that never completes is waited on for 300 s, and a TCP connect to an address that
    never answers is not ended by the low-speed limit either). `continue-on-error` lets the job go
@@ -266,7 +267,7 @@ plus two waits need up to 100 s), so 2 minutes it is.
    retry, and a 2-minute step limit for anything else.
 3. 2 minutes per attempt and two attempts. 90 s is not expressible (whole minutes only); 1 minute
    would cut the action's own retries short. One stall adds up to about 120 s, which leaves room in
-   every job measured — least in `typecheck` (144 s of 300) and `test-server (8)` (399 s of 600);
+   every job measured — least in `typecheck` (144 s of 300) and `lint` (283 s of 480);
    see "How much room the jobs have". Two stalls fail the job at the second attempt, about 4
    minutes in, before any job's limit. A third attempt would push a triple stall past the
    5-minute jobs' limits.
@@ -278,11 +279,11 @@ plus two waits need up to 100 s), so 2 minutes it is.
 5. A first attempt that fails leaves `##[error]` annotations on a run that still passes (seen in
    both probes). That is the trace of the stall, kept on purpose.
 6. The checkout steps get names (`Check out the code`, `…, second attempt`), so the jobs API no
-   longer reports `Run actions/checkout@v7`. Nothing in this repository reads that name
-   (`grep -rn "Run actions/" scripts/ .github/` found nothing); a campaign tool outside it that
-   does must use the new names.
-7. The low-speed limit is set on the two checkout steps only, not workflow-wide, so no other git
-   call in a job changes behaviour.
+   longer reports `Run actions/checkout@v7`. Nothing under `scripts/` or `.github/` reads that name
+   (`grep -rn "Run actions/" scripts/ .github/` found nothing); a tool elsewhere that does must
+   use the new names.
+7. The low-speed limit is set on the two checkout steps only, not workflow-wide, so no other
+   step's git sees it.
 8. `codeql.yml` is changed too: it is ours (see Global constraints), and Task 6 runs it on the probe
    branch before landing.
 9. One pointer comment per workflow file to the receipt, not a comment at each site.
