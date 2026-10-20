@@ -25,6 +25,9 @@ you receive an **Allergy changed** notice with the new block. Removing the assig
 its guest or choosing No allergies produces **Allergy removed** instead. Configured kitchen
 printers receive a correction slip as well.
 
+Adding or removing an extra can change a dish's clash warning too. If the warning changes for work
+your station still holds, you receive a correction while the original copy stays with the dish.
+
 Read the correction alongside the original dish before you acknowledge it. For example, changing
 Alex's note to Fresh tools leaves Separate pan on the original card and puts Fresh tools in the
 notice. Acknowledging dismisses the notice; it does not rewrite the original card. An unacknowledged

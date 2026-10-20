@@ -27,6 +27,10 @@ recibes un aviso de **Alergia cambiada** con el bloque nuevo. Quitar la asignaci
 persona o elegir Sin alergias genera **Alergia eliminada**. Las impresoras de cocina configuradas
 también reciben un ticket de corrección.
 
+Añadir o quitar un extra también puede cambiar el aviso de conflicto de un plato. Si cambia para
+un trabajo que tu estación aún tiene pendiente, recibes una corrección y la copia original sigue
+acompañando al plato.
+
 Lee la corrección junto al plato original antes de confirmar el aviso. Por ejemplo, cambiar la
 nota de Alex a Utensilios limpios deja Sartén aparte en la tarjeta original y pone Utensilios
 limpios en el aviso. Confirmar retira el aviso; no reescribe la tarjeta original. Un aviso de

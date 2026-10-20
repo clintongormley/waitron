@@ -19,6 +19,7 @@ import {
   notifyKitchenAllergyDestination,
   freezeKitchenAllergies,
   freezeKitchenAllergyItems,
+  refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
 import {
   readLineCancellations,
@@ -6222,6 +6223,14 @@ async function applyLineEdits(
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
   for (const { groupId, lineId } of joinedHeld) await correctJoin(tx, cfg, groupId, [lineId]);
+  await refreshKitchenAllergyClashes(
+    tx,
+    cfg,
+    orderId,
+    changes
+      .filter((change) => change.addedAt !== null || change.removedChildren.length > 0)
+      .map((change) => change.parent.id),
+  );
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);
     await tx

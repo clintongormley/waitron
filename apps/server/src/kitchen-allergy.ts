@@ -41,6 +41,43 @@ function canonicalAllergens(maps: readonly (AllergenMap | null | undefined)[]): 
   );
 }
 
+async function readAsServedAllergens(
+  tx: Transaction,
+  parents: readonly string[],
+): Promise<ReadonlyMap<string, AllergenMap>> {
+  if (parents.length === 0) return new Map();
+  const lines = await tx
+    .select({
+      id: workingOrderLines.id,
+      parentId: workingOrderLines.parentLineId,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(workingOrderLines)
+    .where(
+      or(
+        inArray(workingOrderLines.id, [...parents]),
+        inArray(workingOrderLines.parentLineId, [...parents]),
+      ),
+    );
+  const nutrition = await readLineNutrition(
+    tx,
+    lines.map((line) => line.id),
+  );
+  const cancelled = await readLineCancellations(
+    tx,
+    lines.map((line) => line.id),
+  );
+  const byParent = new Map<string, (AllergenMap | null | undefined)[]>();
+  for (const line of lines) {
+    if (line.quantity <= (cancelled.get(line.id) ?? 0)) continue;
+    const parentId = line.parentId ?? line.id;
+    const entries = byParent.get(parentId) ?? [];
+    entries.push(nutrition.get(line.id)?.allergens);
+    byParent.set(parentId, entries);
+  }
+  return new Map([...byParent].map(([id, maps]) => [id, canonicalAllergens(maps)]));
+}
+
 export async function resolveKitchenAllergyBlocks(
   tx: Transaction,
   cfg: TillConfig,
@@ -67,32 +104,7 @@ export async function resolveKitchenAllergyBlocks(
     );
   if (tickets.length === 0) return new Map();
   const parents = [...new Set(tickets.map((ticket) => ticket.parentId ?? ticket.lineId))];
-  const lines = await tx
-    .select({
-      id: workingOrderLines.id,
-      parentId: workingOrderLines.parentLineId,
-      quantity: workingOrderLines.quantity,
-    })
-    .from(workingOrderLines)
-    .where(
-      or(inArray(workingOrderLines.id, parents), inArray(workingOrderLines.parentLineId, parents)),
-    );
-  const nutrition = await readLineNutrition(
-    tx,
-    lines.map((line) => line.id),
-  );
-  const cancelled = await readLineCancellations(
-    tx,
-    lines.map((line) => line.id),
-  );
-  const byParent = new Map<string, (AllergenMap | null | undefined)[]>();
-  for (const line of lines) {
-    if (line.quantity <= (cancelled.get(line.id) ?? 0)) continue;
-    const parentId = line.parentId ?? line.id;
-    const entries = byParent.get(parentId) ?? [];
-    entries.push(nutrition.get(line.id)?.allergens);
-    byParent.set(parentId, entries);
-  }
+  const byParent = await readAsServedAllergens(tx, parents);
   const guestsByLine = new Map<string, PartyAllergyGuest>();
   const survivors = new Map<string, string>();
   for (const partyId of new Set(tickets.map((ticket) => ticket.partyId!)))
@@ -115,7 +127,7 @@ export async function resolveKitchenAllergyBlocks(
       continue;
     }
     const allergens = canonicalAllergens([guest.allergens]);
-    const served = canonicalAllergens(byParent.get(parentId) ?? []);
+    const served = byParent.get(parentId) ?? {};
     const clashes = Object.fromEntries(
       Object.entries(served).filter(([code]) => Object.hasOwn(allergens, code)),
     );
@@ -211,12 +223,76 @@ export async function enqueueKitchenAllergyChanges(
   cfg: TillConfig,
   changes: AllergyChangeSet,
 ): Promise<void> {
+  return enqueueKitchenAllergyUpdates(tx, cfg, changes, "guest");
+}
+
+export async function refreshKitchenAllergyClashes(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  workingLineIds: readonly string[],
+): Promise<void> {
+  if (workingLineIds.length === 0) return;
+  const [order] = await tx
+    .select({ partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
+  if (order?.partyId == null) return;
+  await enqueueKitchenAllergyUpdates(
+    tx,
+    cfg,
+    {
+      partyId: await survivingParty(tx, order.partyId),
+      workingLineIds: [...workingLineIds],
+    },
+    "ingredients",
+  );
+}
+
+async function changedIngredientBlocks(
+  tx: Transaction,
+  rows: readonly { id: string; lineId: string; parentId: string | null }[],
+  frozen: ReadonlyMap<string, TicketAllergyCopy>,
+): Promise<ReadonlyMap<string, KitchenAllergyBlock | null>> {
+  const nutrition = await readAsServedAllergens(tx, [
+    ...new Set(rows.map((row) => row.parentId ?? row.lineId)),
+  ]);
+  return new Map(
+    rows.map((row) => {
+      // An ingredient edit changes the overlap, not the guest instructions already confirmed.
+      const current = frozen.get(row.id)!.currentBlock;
+      if (current === null) return [row.id, null];
+      const clashes = Object.fromEntries(
+        Object.entries(nutrition.get(row.parentId ?? row.lineId) ?? {}).filter(([code]) =>
+          Object.hasOwn(current.allergens, code),
+        ),
+      );
+      if (fingerprint({ clashes }) === fingerprint({ clashes: current.clashes }))
+        return [row.id, current];
+      const labels = (language: "en" | "es") => ({
+        ...current.labels[language],
+        clashes: Object.entries(clashes).map(([code, entry]) =>
+          kitchenAllergenLabel(code, entry, language),
+        ),
+      });
+      return [row.id, { ...current, clashes, labels: { en: labels("en"), es: labels("es") } }];
+    }),
+  );
+}
+
+async function enqueueKitchenAllergyUpdates(
+  tx: Transaction,
+  cfg: TillConfig,
+  changes: Pick<AllergyChangeSet, "partyId" | "workingLineIds">,
+  source: "guest" | "ingredients",
+): Promise<void> {
   if (changes.workingLineIds.length === 0) return;
   const family = await partyFamily(tx, changes.partyId);
   const rows = await tx
     .select({
       id: ticketItems.id,
       lineId: workingOrderLines.id,
+      parentId: workingOrderLines.parentLineId,
       orderId: ticketItems.workingOrderId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
@@ -253,11 +329,14 @@ export async function enqueueKitchenAllergyChanges(
     rows.map((row) => row.id),
   );
   const selected = rows.filter((row) => frozen.has(row.id));
-  const after = await resolveKitchenAllergyBlocks(
-    tx,
-    cfg,
-    selected.map((row) => row.id),
-  );
+  const after =
+    source === "guest"
+      ? await resolveKitchenAllergyBlocks(
+          tx,
+          cfg,
+          selected.map((row) => row.id),
+        )
+      : await changedIngredientBlocks(tx, selected, frozen);
   const cancelled = await readLineCancellations(
     tx,
     selected.map((row) => row.lineId),

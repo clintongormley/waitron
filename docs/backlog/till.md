@@ -1790,6 +1790,10 @@ as separate notices; acknowledging one does not replace the original card. Aller
 available until acknowledged, outside the ordinary day and fifty-notice limits. HOLD exposure is
 station-specific: a queued paper job establishes the copy for that station. A new station receives
 an outstanding current-versus-original correction even if the old station acknowledged its copy.
+An extra added to or removed from sent work recalculates the current clash and sends a correction
+when it changes. Preserve the original block and the already confirmed guest wording; preserving a
+whole old current block would hide a newly introduced allergen. The added-extra capture cases
+exercise both same-station and separately routed work, removal and unticked controls.
 
 The release requires no outstanding pre-live kitchen work. The migrations retain predecessor rows
 but do not invent historical originals; reset a development venue with outstanding work before

@@ -50,6 +50,8 @@ import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { ALLERGEN_NAMES, ALLERGEN_KIND_NAMES } from "./i18n/kitchen-allergy.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { routeProductTo } from "./testing/zone-offers.js";
+import { printedLines } from "./testing/decode-ticket.js";
+import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import {
   OPERATOR,
   inTx,
@@ -248,7 +250,7 @@ function addExtra(ask: SubmitGroupsInput, extra: Awaited<ReturnType<typeof extra
   };
 }
 
-const extraBlock = {
+const extraBlock: KitchenAllergyBlock = {
   who: guest.who,
   allergens: { milk: {}, nuts: { kinds: ["almonds"] } },
   note: guest.note,
@@ -497,7 +499,7 @@ describe("A669 capture", () => {
       expect(rows[0]!.lineId).toBe(original.lineId);
       expect(rows[0]!.frozen).toBe(rows[0]!.id);
       expect(rows[0]!.original).toEqual(original.original);
-      expect(rows[0]!.current).toEqual(original.current);
+      expect(rows[0]!.current).toEqual(extraBlock);
       expect(rows[1]).toEqual({
         id: expect.any(String),
         lineId: expect.any(String),
@@ -505,6 +507,100 @@ describe("A669 capture", () => {
         original: extraBlock,
         current: extraBlock,
       });
+    },
+  );
+
+  it.each([false, true])(
+    "corrects a newly introduced extra clash without rewriting the original, separate station=%s",
+    async (separate) => {
+      await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: {} }));
+      const extra = await extraFixture(separate);
+      await printer();
+      const p = await party();
+      const ask = await command(p);
+      addExtra(ask, extra);
+      const selection = ask.groups[0]!.lines[0]!.extras;
+      ask.groups[0]!.lines[0]!.extras = [];
+      await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
+      const original = copies(p.tabId)[0]!;
+      const originalBlock = {
+        ...extraBlock,
+        clashes: {},
+        labels: {
+          en: { ...extraBlock.labels.en, clashes: [] },
+          es: { ...extraBlock.labels.es, clashes: [] },
+        },
+      };
+      expect(original.original).toEqual(originalBlock);
+      const confirmed = separate
+        ? { who: "Corrected guest", note: "Confirmed tools" }
+        : { who: guest.who, note: guest.note };
+      const current = { ...extraBlock, ...confirmed };
+      const cleared = { ...originalBlock, ...confirmed };
+      if (separate)
+        await inTx(v, (tx) => VENUE_SERVICE.setTicketAllergyCurrent(tx, original.id, cleared));
+      const oldJobs = await v.db.select().from(printJobs);
+      await inTx(v, async (tx) => {
+        const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
+        await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        });
+      });
+      const rows = copies(p.tabId);
+      const parent = rows.find((row) => row.lineId === original.lineId)!;
+      expect(parent.original).toEqual(originalBlock);
+      expect(parent.current).toEqual(current);
+      const notices = await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId));
+      expect(
+        notices
+          .filter((notice) => notice.kind === "allergy_changed")
+          .map(({ stationId, quantity, allergyBlock }) => ({ stationId, quantity, allergyBlock })),
+      ).toEqual([{ stationId, quantity: "1.000", allergyBlock: current }]);
+      if (separate)
+        expect(
+          await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, extra.stationId)),
+        ).toEqual([]);
+      const jobs = await v.db.select().from(printJobs);
+      for (const old of oldJobs) expect(jobs.find((job) => job.id === old.id)).toEqual(old);
+      const corrections = jobs.filter((job) =>
+        printedLines(job.payload).join("\n").includes(KITCHEN_ALLERGY_WORDS.es.changed),
+      );
+      expect(corrections).toHaveLength(1);
+      expect(printedLines(corrections[0]!.payload).join(" ").replace(/\s+/g, " ")).toContain(
+        KITCHEN_ALLERGY_WORDS.es.clash.replace(
+          "{allergens}",
+          extraBlock.labels.es.clashes.join(", ").toLocaleUpperCase("es"),
+        ),
+      );
+      await inTx(v, async (tx) => {
+        const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
+        const [line] = await tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, original.lineId));
+        await updateOrderLine(tx, v.cfg, p.tabId, line!.lineNo, { extras: [] }, order!.revision, {
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        });
+      });
+      expect(copies(p.tabId)).toEqual([
+        {
+          id: expect.any(String),
+          lineId: original.lineId,
+          frozen: expect.any(String),
+          original: originalBlock,
+          current: cleared,
+        },
+      ]);
+      const afterRemoval = await inTx(v, (tx) =>
+        VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId),
+      );
+      expect(
+        afterRemoval
+          .filter((notice) => notice.kind === "allergy_changed")
+          .map((notice) => notice.allergyBlock),
+      ).toEqual([current, cleared]);
     },
   );
 
@@ -522,6 +618,39 @@ describe("A669 capture", () => {
       enqueueKitchenTickets(tx, v.cfg, p.tabId, [{ workingOrderLineId: old.lineId, stationId }]),
     );
     expect(copies(p.tabId)).toEqual([old]);
+  });
+
+  it("an unticked dish stays unticked when a clashing extra is added", async () => {
+    const extra = await extraFixture(true);
+    const p = await party();
+    const ask = await command(p);
+    addExtra(ask, extra);
+    const selection = ask.groups[0]!.lines[0]!.extras;
+    ask.groups[0]!.lines[0]!.extras = [];
+    ask.allergy!.ticks[0]!.guestIndex = null;
+    await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
+    await inTx(v, async (tx) => {
+      const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
+      await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
+        operatorId: OPERATOR,
+        expectedEdit: await readBillEditState(tx, p.tabId),
+      });
+    });
+    const rows = copies(p.tabId);
+    expect(rows).toHaveLength(2);
+    for (const row of rows)
+      expect(row).toEqual({
+        id: expect.any(String),
+        lineId: expect.any(String),
+        frozen: row.id,
+        original: null,
+        current: null,
+      });
+    expect(
+      (await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId))).filter(
+        (notice) => notice.kind.startsWith("allergy_"),
+      ),
+    ).toEqual([]);
   });
 
   it("retains distinct original and current blocks for a replaced dish and its kept routed extra", async () => {
