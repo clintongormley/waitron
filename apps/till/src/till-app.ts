@@ -2915,7 +2915,21 @@ export class TillApp extends LitElement {
     () => {
       this.nfcNotice = { message: t("equipment.nfc_unavailable"), tone: "error" };
     },
+    (state) => {
+      if (state === "granted" && this.#nfcAsked)
+        this.nfcNotice = { message: t("equipment.nfc_hint"), tone: "info" };
+      if (state !== "prompt") this.#nfcAsked = false;
+      this.nfcPermission = state;
+    },
   );
+  @state() private nfcPermission: PermissionState | null = null;
+  /** Set by a press of the sheet's NFC button, so only the grant it asked for shows the hint. */
+  #nfcAsked = false;
+
+  #askNfc(): void {
+    this.#nfcAsked = true;
+    void this.#equipmentNfc.requestScan();
+  }
 
   #syncEquipmentNfc(): void {
     if (this.isConnected && !this.equipmentOpen && document.visibilityState === "visible")
@@ -9499,6 +9513,7 @@ export class TillApp extends LitElement {
         .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guests ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
         .handheld=${this.handheldMode}
         .notice=${this.nfcNotice}
+        .askNfc=${this.nfcPermission === "prompt"}
         .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
         .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
         .tableName=${this.#payingTableName(open)}
@@ -9512,6 +9527,7 @@ export class TillApp extends LitElement {
           this.#onPayEquipmentPick(event.detail)}
         @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
           void this.#pickUpSticker(event.detail)}
+        @pay-equipment-nfc=${() => this.#askNfc()}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -9538,6 +9554,7 @@ export class TillApp extends LitElement {
       .equipment=${this.deviceEquipment}
       .canScan=${canScan()}
       .notice=${this.nfcNotice}
+      .askNfc=${this.nfcPermission === "prompt"}
       .fixedReader=${this.#fixedPayReader()}
       .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
       .equipmentSaving=${this.payEquipmentSaving}
@@ -9549,6 +9566,7 @@ export class TillApp extends LitElement {
         this.#onPayEquipmentPick(event.detail)}
       @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
         void this.#pickUpSticker(event.detail)}
+      @pay-equipment-nfc=${() => this.#askNfc()}
       @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
       @presented-pay-resend=${() => void this.#onPresentedResend()}
       @presented-pay-close=${() => this.#closePresented(open.id)}

@@ -14,6 +14,23 @@ import { TillApi } from "./api/client.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import type { DeviceEquipment } from "./api/client.js";
+import type { TillPayEquipment } from "./widgets/pay-equipment.js";
+import { mountWidget } from "./widgets/test-helpers.js";
+import {
+  BARRA,
+  billOf,
+  equipmentItem,
+  flush,
+  LECTOR_2,
+  openTable,
+  resetBillPayDrafts,
+  roleOf,
+  showBillFooter,
+  stubApi,
+  text,
+  till,
+} from "../test/bill-pay-app.js";
 
 beforeEach(() => {
   setLocale("en");
@@ -774,5 +791,137 @@ describe("NFC throughout the till", () => {
       selection: { id: READER_ID },
       via: "scan",
     });
+  });
+});
+
+describe("the pay sheet's NFC button", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const equipment: DeviceEquipment = {
+    roles: [
+      roleOf("receipt", BARRA, [BARRA]),
+      roleOf("card_terminal", LECTOR_2, [LECTOR_2, LECTOR_3]),
+    ],
+  };
+
+  async function phoneApp(overrides: Record<string, unknown> = {}) {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        formFactor: "phone-portrait",
+        capabilities: ["print-receipt", "integrated-card-payment", "take-cash"],
+        cardProvider: "sumup_cloud",
+        activeReaders: [{ id: "r2", name: "Lector 2", provider: "sumup_cloud" }],
+        defaultReaderId: "r2",
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", name: "Phone", formFactor: "phone-portrait" }),
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipment),
+      setDeviceEquipment: vi.fn().mockResolvedValue(equipment),
+      ...overrides,
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flush(el);
+    return { el, api };
+  }
+
+  const sheet = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-bill-pay-dialog, till-presented-pay-dialog",
+    )!;
+  async function nfcButton(el: TillApp): Promise<HTMLElement | null> {
+    await sheet(el).updateComplete;
+    const row = sheet(el).shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+    await row.updateComplete;
+    return row.shadowRoot!.querySelector<HTMLElement>("[data-pay-nfc]");
+  }
+
+  beforeEach(() => resetBillPayDrafts());
+
+  it("the pay sheet's NFC button ends with one live reader and one selection per tap", async () => {
+    const permission = installNfc("prompt");
+    const { el, api } = await phoneApp();
+    expect(FakeNdefReader.instances).toEqual([]);
+    const button = await nfcButton(el);
+    expect(button).not.toBeNull();
+
+    button!.click();
+    // Still inside the press: the browser ties the permission prompt to this click.
+    expect(FakeNdefReader.instances).toHaveLength(1);
+    expect(FakeNdefReader.instances[0]!.signal?.aborted).toBe(false);
+
+    Object.assign(permission, { state: "granted" });
+    permission.dispatchEvent(new Event("change"));
+    await flush(el);
+    const live = FakeNdefReader.instances.filter((nfc) => !nfc.signal!.aborted);
+    expect(live).toHaveLength(1);
+    expect(await nfcButton(el)).toBeNull();
+    expect(text(sheet(el).shadowRoot!.querySelector("[data-pay-notice]"))).toBe(
+      t("equipment.nfc_hint"),
+    );
+    expect(sheet(el).shadowRoot!.querySelector("[data-pay-notice]")!.getAttribute("role")).toBe(
+      "status",
+    );
+
+    live[0]!.read(`waitron-equipment:reader:${READER_ID}`);
+    await flush(el);
+    expect(vi.mocked(api.setDeviceEquipment)).toHaveBeenCalledOnce();
+  });
+
+  it("a presented bill's sheet asks for NFC from its row too", async () => {
+    installNfc("prompt");
+    const { el } = await phoneApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
+    });
+    expect(sheet(el).localName).toBe("till-presented-pay-dialog");
+    (await nfcButton(el))!.click();
+    expect(FakeNdefReader.instances).toHaveLength(1);
+    expect(FakeNdefReader.instances[0]!.signal?.aborted).toBe(false);
+  });
+
+  it("a refused prompt takes the button away", async () => {
+    installNfc("prompt");
+    FakeNdefReader.scanResult = () =>
+      Promise.reject(new DOMException("refused", "NotAllowedError"));
+    const { el } = await phoneApp();
+    (await nfcButton(el))!.click();
+    await flush(el);
+    expect(await nfcButton(el)).toBeNull();
+  });
+
+  it("NFC already granted when the till starts shows no button and no hint", async () => {
+    installNfc("granted");
+    const { el } = await phoneApp();
+    expect(await nfcButton(el)).toBeNull();
+    expect(sheet(el).shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
+  });
+
+  it("a grant the button did not ask for shows no hint", async () => {
+    const permission = installNfc("prompt");
+    const { el } = await phoneApp();
+    expect(await nfcButton(el)).not.toBeNull();
+    Object.assign(permission, { state: "granted" });
+    permission.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(await nfcButton(el)).toBeNull();
+    expect(FakeNdefReader.instances.filter((nfc) => !nfc.signal!.aborted)).toHaveLength(1);
+    expect(sheet(el).shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
+  });
+
+  it("a denied permission never shows the button", async () => {
+    installNfc("denied");
+    const { el } = await phoneApp();
+    expect(await nfcButton(el)).toBeNull();
+  });
+
+  it("a browser without Web NFC never shows the button", async () => {
+    vi.stubGlobal("NDEFReader", undefined);
+    const { el } = await phoneApp();
+    expect(await nfcButton(el)).toBeNull();
   });
 });

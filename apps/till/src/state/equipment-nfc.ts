@@ -11,19 +11,25 @@ interface NfcReader extends EventTarget {
 export class EquipmentNfc {
   #lifetime?: AbortController;
   #scan?: AbortController;
+  #Reader?: new () => NfcReader;
 
   constructor(
     private readonly onCode: (code: EquipmentCode | null) => void,
     private readonly onReadError: () => void,
     private readonly onUnavailable: () => void,
+    private readonly onPermission: (state: PermissionState | null) => void,
   ) {}
 
   async start(): Promise<void> {
     if (this.#lifetime !== undefined) return;
     const Reader = (window as Window & { NDEFReader?: new () => NfcReader }).NDEFReader;
-    if (Reader === undefined) return;
+    if (Reader === undefined) {
+      this.onPermission(null);
+      return;
+    }
     const lifetime = new AbortController();
     this.#lifetime = lifetime;
+    this.#Reader = Reader;
     let permission: PermissionStatus;
     try {
       permission = await navigator.permissions.query({ name: "nfc" as PermissionName });
@@ -32,6 +38,7 @@ export class EquipmentNfc {
     }
     if (lifetime.signal.aborted) return;
     const update = () => {
+      this.onPermission(permission.state);
       if (permission.state !== "granted") {
         this.#scan?.abort();
         this.#scan = undefined;
@@ -43,6 +50,16 @@ export class EquipmentNfc {
     };
     permission.addEventListener("change", update, { signal: lifetime.signal });
     update();
+  }
+
+  /** Called from a click while the permission is "prompt": `scan()` runs before this returns, so
+   * the browser's prompt belongs to the click, and the later grant finds this scan already live. */
+  requestScan(): Promise<void> {
+    if (this.#lifetime === undefined || this.#Reader === undefined || this.#scan !== undefined)
+      return Promise.resolve();
+    const scan = new AbortController();
+    this.#scan = scan;
+    return this.#listen(this.#Reader, scan);
   }
 
   async #listen(Reader: new () => NfcReader, scan: AbortController): Promise<void> {
@@ -68,10 +85,12 @@ export class EquipmentNfc {
       );
       reader.addEventListener("readingerror", this.onReadError, { signal: scan.signal });
       await reader.scan({ signal: scan.signal });
-    } catch {
+    } catch (error) {
       if (this.#scan !== scan) return;
       scan.abort();
       this.#scan = undefined;
+      if ((error as { name?: string } | null)?.name === "NotAllowedError")
+        this.onPermission("denied");
       this.onUnavailable();
     }
   }
