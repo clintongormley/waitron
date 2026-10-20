@@ -102,6 +102,23 @@ What constrains the next change to the wizard:
   device walkthrough (item 1 of _What to work on next_) and tick it off per operating system in
   [ui-review.md](../ui-review.md).
 
+### A834 link qualification, 2026-10-20
+
+The macOS link now uses `/en/`, matching Windows and Firefox. A headless Chromium opening of
+all three URLs returned HTTP 200 and `html lang="en-GB"`; opening the old macOS `/eu/` URL
+returned `html lang="eu-ES"`. This qualifies the site language, not a translated article or a
+certificate export. The existing walkthrough above remains open.
+
+| FNMT page opened | Source wording | Observation |
+| --- | --- | --- |
+| [Windows export](https://www.sede.fnmt.gob.es/en/preguntas-frecuentes/exp-imp-y-elim-de-certificados/-/asset_publisher/EwGOMAWPq4DV/content/1501-como-puedo-exportar-un-certificado-digital-con-google-chrome-en-windows-) | “Para exportar un certificado con Google Chrome” | English site controls; Spanish article text. |
+| [macOS export](https://www.sede.fnmt.gob.es/en/preguntas-frecuentes/android-mac/-/asset_publisher/1RphW9IeUoAH/content/1379-como-puedo-exportar-mi-certificado-desde-el-llavero-de-mac-) | “Para exportar su certificado personal” | English site controls; Spanish article text. |
+| [Firefox export](https://www.sede.fnmt.gob.es/en/preguntas-frecuentes/exp-imp-y-elim-de-certificados/-/asset_publisher/EwGOMAWPq4DV/content/1399-como-puedo-exportar-mi-certificado-con-mozilla-firefox-) | “Acudir al almacén de certificados” | English site controls; Spanish article text. |
+
+`pnpm --filter @waitron/setup exec vitest run src/screens/cert-screen.test.ts` checks that both
+setup languages render three FNMT links under `/en/` and retain the three article identifiers.
+It does not fetch FNMT or check its translations.
+
 ## Switching setup mode does not clean up what the server already holds
 
 **Still open after #334:**
