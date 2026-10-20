@@ -58,21 +58,15 @@ describe("a newly set-up venue's till", () => {
       approverRoles,
     });
     expect(listed.json).toEqual([
-      voidReason("Error al marcar"),
-      voidReason("Producto agotado"),
-      voidReason("Cambio del cliente"),
-      voidReason("No servido"),
-      voidReason("Otro motivo", true),
-      compReason("Queja del cliente", supervisorUp, supervisorUp),
-      compReason("Invitación", managerUp, managerUp),
-      compReason(
-        "Comida de personal",
-        every,
-        managerUp,
-        ["discount_percent", "discount_amount"],
-        5000,
-      ),
-      compReason("Descuento", managerUp, managerUp),
+      voidReason("Entry error"),
+      voidReason("Item not available"),
+      voidReason("Customer changed mind"),
+      voidReason("Not served"),
+      voidReason("Other", true),
+      compReason("Complaint", supervisorUp, supervisorUp),
+      compReason("On the house", managerUp, managerUp),
+      compReason("Staff meal", every, managerUp, ["discount_percent", "discount_amount"], 5000),
+      compReason("Discount", managerUp, managerUp),
     ]);
     const reasonId = (listed.json as unknown as { id: string }[])[0]!.id;
 

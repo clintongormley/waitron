@@ -34,7 +34,7 @@ function reasons() {
 }
 
 describe("ADJUSTMENTS_PROVISIONING", () => {
-  it("gives a new venue the nine starter reasons, in order, named in the venue's language", async () => {
+  it("gives a new venue the nine starter reasons, in order, named in English only even where the venue's language is Spanish", async () => {
     const node = await provisionedNode(["es-ES", "en-GB"]);
 
     const report = await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
@@ -65,17 +65,19 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       ["comp", "Discount", managerUp, managerUp, null, false],
     ]);
     expect(seeded.map((reason) => reason.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(seeded.map((reason) => [reason.name, reason.names])).toEqual([
-      ["Error al marcar", { en: "Entry error", es: "Error al marcar" }],
-      ["Producto agotado", { en: "Item not available", es: "Producto agotado" }],
-      ["Cambio del cliente", { en: "Customer changed mind", es: "Cambio del cliente" }],
-      ["No servido", { en: "Not served", es: "No servido" }],
-      ["Otro motivo", { en: "Other", es: "Otro motivo" }],
-      ["Queja del cliente", { en: "Complaint", es: "Queja del cliente" }],
-      ["Invitación", { en: "On the house", es: "Invitación" }],
-      ["Comida de personal", { en: "Staff meal", es: "Comida de personal" }],
-      ["Descuento", { en: "Discount", es: "Descuento" }],
-    ]);
+    expect(seeded.map((reason) => [reason.name, reason.names])).toEqual(
+      [
+        "Entry error",
+        "Item not available",
+        "Customer changed mind",
+        "Not served",
+        "Other",
+        "Complaint",
+        "On the house",
+        "Staff meal",
+        "Discount",
+      ].map((name) => [name, { en: name }]),
+    );
     const all = ["comp", "discount_percent", "discount_amount"];
     expect(seeded.map((reason) => reason.actions)).toEqual([
       ["cancel"],
@@ -92,12 +94,16 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
     expect(await db.select().from(adjustmentSettings)).toEqual([]);
   });
 
-  it("names it in English where the venue's first invoice language is not Spanish", async () => {
+  it("names it in English only where the venue's first invoice language is English", async () => {
     const node = await provisionedNode(["en-GB", "es-ES"]);
 
     await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));
 
-    expect((await reasons()).map((reason) => reason.name)).toEqual([
+    const seeded = await reasons();
+    expect(seeded.map((reason) => reason.names)).toEqual(
+      seeded.map((reason) => ({ en: reason.name })),
+    );
+    expect(seeded.map((reason) => reason.name)).toEqual([
       "Entry error",
       "Item not available",
       "Customer changed mind",
