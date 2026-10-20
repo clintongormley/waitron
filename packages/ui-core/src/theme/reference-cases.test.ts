@@ -16,7 +16,8 @@ import { WAITRON_DEFAULTS } from "./waitron.js";
 // choices or built by hand; every expected value was computed by the reference with fix round 1's
 // rulings on: ~/waitron-campaign/a841-plan1-probes/t9/pins2.mjs, run on cases-all2.tsv, output
 // output-pins2b.json, equal as parsed JSON to this fixture. A `label` of the form file:line:col is
-// where the search found the input, in the source before Task 9; the others describe a built case.
+// where the search found the input, in the source before Task 9, except one tagged "(Task 9 run 3)",
+// which points into the source during Task 9; the others describe a built case.
 
 interface ReferenceCase {
   readonly label: string;
