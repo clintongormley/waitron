@@ -136,6 +136,20 @@ async function pressPaySheet(el: TillApp, order: Element): Promise<void> {
   await flush(el);
 }
 
+const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
+  portable: true,
+  provider: "sumup",
+});
+const MARC = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
+const presented = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+const inPresented = (el: TillApp, selector: string) =>
+  presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
+const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
+const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
+
 async function rowSummary(el: TillApp): Promise<string> {
   const row = inDialog(el, "till-pay-equipment") as
     (HTMLElement & { updateComplete: Promise<unknown> }) | null;
@@ -258,10 +272,6 @@ describe("till-app: paying a table from a handheld", () => {
 });
 
 describe("a presented bill on a handheld", () => {
-  const presented = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
-  const inPresented = (el: TillApp, selector: string) =>
-    presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
   const placedBill = billOf({ status: "placed", receiptAvailable: true });
   const ticket = () => invoiceOf("120.00", "F2");
   const editOfBill = expect.objectContaining({ billId: "wo-4" });
@@ -619,10 +629,6 @@ describe("a presented bill on a handheld", () => {
 });
 
 describe("an unanswered presented payment on a handheld", () => {
-  const presented = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
-  const inPresented = (el: TillApp, selector: string) =>
-    presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
   const placedBill = billOf({ status: "placed", receiptAvailable: true });
   const noAnswer = () => new TypeError("Failed to fetch");
   const asked = {
@@ -873,12 +879,6 @@ describe("till-app: a counter till's simulated card outcome", () => {
 });
 
 describe("till-app: a pick from the sheet", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
-  const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
-    portable: true,
-    provider: "sumup",
-  });
-
   function readers(chosen: EquipmentItem): DeviceEquipment {
     return {
       roles: [
@@ -904,7 +904,6 @@ describe("till-app: a pick from the sheet", () => {
 
   const row = (el: TillApp) =>
     inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
-  const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
   async function savingNote(el: TillApp): Promise<string> {
     await dialog(el)!.updateComplete;
     await row(el)!.updateComplete;
@@ -1205,12 +1204,7 @@ describe("till-app: a pick from the sheet", () => {
 });
 
 describe("till-app: a pick from the sheet that fails", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
   const COCINA = equipmentItem("p2", "Cocina");
-  const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
-    portable: true,
-    provider: "sumup",
-  });
 
   function equipmentOf(reader: EquipmentItem): DeviceEquipment {
     return {
@@ -1223,7 +1217,6 @@ describe("till-app: a pick from the sheet that fails", () => {
 
   const row = (el: TillApp) =>
     inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
-  const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
   async function field(el: TillApp, name: string): Promise<WtCombobox> {
     await dialog(el)!.updateComplete;
     await row(el)!.updateComplete;
@@ -1473,8 +1466,6 @@ async function nfcReader(): Promise<FakeNdefReader> {
 }
 
 describe("till-app: a pick from the presented bill's sheet", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
-
   function readers(chosen: EquipmentItem): DeviceEquipment {
     return {
       roles: [
@@ -1484,8 +1475,6 @@ describe("till-app: a pick from the presented bill's sheet", () => {
     };
   }
 
-  const presented = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
   const row = (el: TillApp) =>
     presented(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
   const take = (el: TillApp) =>
@@ -1609,7 +1598,6 @@ describe("till-app: a pick from the presented bill's sheet", () => {
 });
 
 describe("till-app: a sticker scanned from the sheet", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
   const PORTABLE = equipmentItem(PRINTER_ID, "Portable printer", { portable: true });
 
   function equipmentOf(reader: EquipmentItem, printer: EquipmentItem): DeviceEquipment {
@@ -1765,7 +1753,6 @@ describe("till-app: a sticker scanned from the sheet", () => {
 });
 
 describe("till-app: a sticker's notice inside the sheet", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
   const pickedUp = (name: string) => t("equipment.picked_up").replace("{item}", name);
 
   function readers(chosen: EquipmentItem): DeviceEquipment {
@@ -1961,8 +1948,6 @@ describe("till-app: a sticker's notice inside the sheet", () => {
   });
 
   it("a tap on a presented bill's locked sheet shows above its buttons", async () => {
-    const presented = (el: TillApp) =>
-      el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
     const { el, order } = await phoneSheet({
       getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
       collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
@@ -2558,8 +2543,6 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     );
     return el;
   }
-  const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
-  const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
 
   it("a received card that settles a full invoice's bill shows the ticket, as a card answered at once does", async () => {
     const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00", "F1"));
@@ -2864,8 +2847,6 @@ describe("the paid screen on a handheld", () => {
   const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
   const simplified = () => invoiceOf("120.00", "F2");
   const full = () => invoiceOf("120.00", "F1");
-  const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
-  const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
   const inPaid = (el: TillApp, selector: string) =>
     paidView(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
   const sharePaid = (n: number) =>
@@ -3552,8 +3533,6 @@ describe("the paid screen on a handheld", () => {
 });
 
 describe("till-app: a phone's first payment picks up the one free reader (default 18)", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
-
   /** No reader chosen, and `offered` the profile's only reader. */
   const firstUse = (offered: EquipmentItem = LECTOR_2): DeviceEquipment => ({
     roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", null, [offered])],
@@ -3582,8 +3561,6 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     return { setDeviceEquipment, answers };
   }
 
-  const presented = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
   /** The open sheet: the bill's dialog, else the presented bill's. */
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
   const row = (el: TillApp) =>
@@ -4018,9 +3995,6 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
 });
 
 describe("till-app: why the sheet's reader has gone (default 19)", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
-  const MARC = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
-
   const withReader = (reader: RoleEquipment): DeviceEquipment => ({
     roles: [roleOf("receipt", BARRA, [BARRA]), reader],
   });
@@ -4037,8 +4011,6 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
   });
   const dropped = withReader(roleOf("card_terminal", null, [LECTOR_3]));
 
-  const presented = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
   const row = (el: TillApp) =>
     sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
@@ -4262,8 +4234,6 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
 });
 
 describe("till-app: a reader refused at Take payment, and a printer that has gone (default 19)", () => {
-  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
-  const MARC = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
   const TERRAZA = equipmentItem("p2", "Terraza");
   const BARRA_OFF = { ...BARRA, available: false };
 
@@ -4280,8 +4250,6 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
   };
   const notHeld = () => ({ code: "reader.not_held", status: 409 });
 
-  const presented = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
   const row = (el: TillApp) =>
     sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
