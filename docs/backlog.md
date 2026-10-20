@@ -560,11 +560,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
     machine's addresses after an archive restore too.
 
-- **A832. Check whether a refused Cloud restore clears the "old server is stopped" tick.** Left
-  open by #646. One browser run: refuse a Cloud restore and look at the Cloud screen's "old server
-  and surviving peers are stopped" confirmation. If the tick clears, keep it ticked after a
-  refusal; if it already stays ticked, delete this entry.
-
 - **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
   the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
