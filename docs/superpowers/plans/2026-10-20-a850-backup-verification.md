@@ -573,10 +573,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `apps/server/src/backup-verification-secrets.ts`, `apps/server/src/backup-verification-secrets.test.ts`.
 **Consumes:** required RECOVERY_FILES, optional state rules, owner declarations and Task 11 vault checks. **Produces:** `verifyBackupStateSecrets` and `verifyBackupKeyPlacement` signatures above; Task 23 calls the latter after actual private placement.
 
-- [ ] RED `requires all six recovery files`, `matches both CA and server private keys to certificates`, `checks server chain under captured CA`, `validates optional backup.env and modules.json without installing old destination`, `refuses cloud-connection and cloud-staff material`, `unseals selected-node state without publishing it`, `actual placed-layout keys equal captured effective keys`, `account key only in backup.env is unsupported`, `conflicting vault overrides cannot falsely pass`. Malformed keypair must fail even if PEM parsing passes; missing application key blocks success. Other nodes' opaque sealed rows retain an explicit node-local preservation rule.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-secrets.test.ts`; expect missing export then omitted-secret/key-mismatch denial red.
-- [ ] Implement offline key parsing/matching and CA signature checks without signing, issuing or networking. Validate archived configuration with pure parsers and no access to the old backup destination. Implement `verifyBackupKeyPlacement` using shared captured key resolution and actual `loadBoxEnv({}, placedStateDir)`, with the real host key derivation; Task 23 calls it after private placement. Include a passing redundant/equal override, a later-file override whose omission changes key bytes, an account key present only in backup.env, and a matching secrets/trading configuration. Refuse changed usability as unsupported/target_incompatible; the tests must inspect actual placed-layout resolution, not compare two calls to the same synthetic resolver. Authenticate selected `node_sealed_state` when present using the supplied matching archive recovery key through a separate private host call using the defined `sealedState` argument before accepting its check. Missing row is allowed only under its declared absence rule; no live env fallback. GREEN same command, scanning returned objects and captured stdout/stderr for secret/path sentinels.
-- [ ] Commit `git commit -s -m "feat(server): verify private recovery state material"`.
+- [x] RED `requires all six recovery files`, `matches both CA and server private keys to certificates`, `checks server chain under captured CA`, `validates optional backup.env and modules.json without installing old destination`, `refuses cloud-connection and cloud-staff material`, `unseals selected-node state without publishing it`, `actual placed-layout keys equal captured effective keys`, `account key only in backup.env is unsupported`, `conflicting vault overrides cannot falsely pass`. Malformed keypair must fail even if PEM parsing passes; missing application key blocks success. Other nodes' opaque sealed rows retain an explicit node-local preservation rule.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-secrets.test.ts`; expect missing export then omitted-secret/key-mismatch denial red.
+- [x] Implement offline key parsing/matching and CA signature checks without signing, issuing or networking. Validate archived configuration with pure parsers and no access to the old backup destination. Implement `verifyBackupKeyPlacement` using shared captured key resolution and actual `loadBoxEnv({}, placedStateDir)`, with the real host key derivation; Task 23 calls it after private placement. Include a passing redundant/equal override, a later-file override whose omission changes key bytes, an account key present only in backup.env, and a matching secrets/trading configuration. Refuse changed usability as unsupported/target_incompatible; the tests must inspect actual placed-layout resolution, not compare two calls to the same synthetic resolver. Authenticate selected `node_sealed_state` when present using the supplied matching archive recovery key through a separate private host call using the defined `sealedState` argument before accepting its check. Missing row is allowed only under its declared absence rule; no live env fallback. GREEN same command, scanning returned objects and captured stdout/stderr for secret/path sentinels.
+- [x] Commit `git commit -s -m "feat(server): verify private recovery state material"`.
 
 ### Task 23: Orchestrate measured verification with cleanup-gated output
 
@@ -934,3 +934,29 @@ lockfile. The fixtures were formatted and the applicable source and explicit pla
 passed. Their TypeScript parse trees and nontrivia token sequences matched before and after;
 a deliberately changed value differed in both comparisons. The installed control tree preceded
 that fixture formatting. The complete Task 21 inventory remains pending Task 14.
+
+### Task 22 host-secret checkpoint, 20 October 2026
+
+The host reader now checks all required recovery files, both TLS key/certificate pairs, the CA's
+self-signature and the server's issuer/signature. Expired or not-yet-valid material requires renewal
+and returns unavailable. Parseable unrelated keys return invalid; unexpected reader faults propagate
+for the orchestration layer to classify as unavailable. Optional backup settings and module
+configuration are parsed without opening a backup destination; archived Cloud authority files are
+refused.
+
+Selected-node sealed state is authenticated with its supplied recovery key and its host material
+and identity are checked privately. The caller must establish the selected row's absence before
+omitting that argument. Other nodes' sealed bytes remain under the core owner's complete row
+comparison, without claiming their keys are available. Task 23 must wire the selected-row read and
+these checks into the complete artifact flow.
+
+The placement check uses the real scratch files through `loadBoxEnv({}, placedStateDir)` and the
+host's vault/account derivation. It compares current/previous key bytes and versions and account
+keys with the shared captured-input resolution. Equal redundant overrides pass; an excluded
+`backup.env` override that changes usable keys refuses qualification. No key is moved or resealed.
+
+The new suite passed 85 tests and measured all 97 statements, 78 branches, 9 functions and 80 lines
+in its source. Eight focused server suites passed 274 tests. Nineteen independent omissions in an
+installed disposable copy failed their intended expectations beside an accepting control; the
+restored copy passed all 85 cases. These are host-reader checks, not complete artifact, authority,
+runtime or joint release acceptance. No existing test assertion or ordinary restore code changed.
