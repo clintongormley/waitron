@@ -317,12 +317,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1).
   [Detail](backlog/fiscal.md#when-the-business-e-invoicing-regime-starts)
 
-- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN NOW (owner,
-  2026-10-17). Design from the research's answer to Q42: the invoice is issued at the meal, and the
-  bill stays open as "awaiting transfer" until someone marks it paid; no proforma first for a
-  consumer. The design goes back to the owner with one short confirmation question for the asesor
-  attached, before any build.
-  [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
+- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN PROPOSED,
+  awaiting owner policy answers and full approval. Issue at the meal, track the debt and record
+  later bank receipts. The [proposal](superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md)
+  recommends partial receipts and audited recording reversals; question 1 asks about that scope.
+  [Pictures](backlog/mockups/a275-invoice-now-transfer-later/README.md) accompany it. No plan or build;
+  public F1 still needs A231 enablement. [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal

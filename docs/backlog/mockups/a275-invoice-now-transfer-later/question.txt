@@ -1,0 +1,26 @@
+A275: invoice now, receive a bank transfer later. QUESTION 1 OF 5, then full-design approval.
+
+The invoice is issued at the meal. That is already your decision. These are proposed pictures,
+not implemented screens; all details are synthetic. The EUR 5,000 full-invoice example still
+needs the separate A231 enablement gates.
+
+Should the first version record partial transfers and reverse mistaken payment entries?
+
+Recommended A: yes. Record EUR 2,000 arriving today and EUR 3,000 later against the same
+EUR 5,000 invoice. Keep each receipt date. If a payment was entered by mistake, reverse that
+recording with a reason and reopen the debt. This does not send money back to the customer.
+It requires a retained money ledger and more integration with reports and paid/unpaid views.
+
+B: the smaller first version accepts only one receipt for the whole remaining balance.
+It does not record instalments or reopen a mistaken completed settlement. We would revise
+the design to state those limits before asking for full approval.
+
+Start with 05-partial-choice-en-light-390.png. Then 03-received shows the EUR 2,000 entry,
+02-awaiting shows the debt list, 01-issue shows the meal-time action, and 04-close shows the
+meal and receipt on separate days. English/Spanish, light/dark and phone/desktop versions
+are included; choose the files ending -390 for phone viewing.
+
+Reply A (recommended), B, or say what you would change. Later questions cover roles,
+delivery failures, terms and never-paid debts, one at a time. No plan or build before
+approval of the whole revised design. The short adviser confirmation is attached in
+the design; nobody has been contacted.

@@ -216,30 +216,27 @@ Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.p
 
 ## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
 
-The owner, 2026-10-06: a large bill (their example, €5,000) is rarely paid on the spot; the customer
-gets the invoice and pays later, for instance by bank transfer — or, as the owner has seen in Italy,
-gets a proforma and the invoice only once the money arrives. [Q42](../compliance/asesor-questions.md#q42-a-bill-paid-later-by-bank-transfer--invoice-now-or-a-proforma-and-the-invoice-on-payment-added-2026-10-06)
-asks the asesor whether both are lawful and which is recommended, for full invoices (F1, A231) and
-simplified invoices (F2) alike, with non-payment and deposits. The research recorded in
-the Q42 row (the Word copy's §1.10) of `docs/compliance/asesor-questions.md` → "What happened to
-each question sent on 6 October" answers it: invoicing now and being paid later
-is lawful; a proforma first and the invoice on payment is not, for a consumer. **Owner, 2026-10-17:
-start the design now** from that answer — the invoice is issued at the meal, and the bill stays open
-as "awaiting transfer" until it is marked paid. The design returns to the owner with one short
-confirmation question for the asesor attached, before any build.
+**Design proposed, 2026-10-20; owner answers and full approval remain due.** The owner chose invoice
+at the meal on 2026-10-17 from Q42's recorded research. The bill remains awaiting transfer until
+money is recorded; no consumer proforma-first path is proposed. The
+[design](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md) and
+[pictures](mockups/a275-invoice-now-transfer-later/README.md) cover F1/F2, debtor/contact details,
+delivery, due dates, dashboard reconciliation, reports and never-paid debts. One short asesor
+confirmation is attached to the design, not sent.
 
-Already built, to reuse: filing an order's invoice with no payment (`issueUnpaidInvoice`,
-`apps/server/src/working-order.ts`); the amount due on each issued invoice (`apps/server/src/sale-due.ts`);
-collecting a placed order's issued invoice later (`collectOrder`, `apps/server/src/till-sale.ts`);
-unpaid departure, which issues an F2 for the full amount and records what it owes (Q28); the Orders
-screen's Unpaid filter and Still owed column (`apps/server/src/orders-list.ts`); and a `transfer`
-tender method in the schema (`packages/db/src/schema/sales.ts`). Missing: a till action that issues an
-invoice for the customer to pay later (today only invoice-first placing and an unpaid departure
-issue one before payment); recording a payment by transfer with its reference (collecting
-accepts only cash or card, `sale.unsupported_tender`); collecting part of what an issued invoice
-owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement that does not match what is due, or a second one);
-whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
-invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
+The recommendation supports partial bank receipts and explicit recording reversals through a new
+module ledger. That is a proposed cross-component scope choice, not existing incremental settlement.
+The first owner question compares it with a smaller, single-complete-balance version. Subsequent
+questions cover roles, delivery exceptions, terms/limits and operational writeoff; ask one at a time,
+then obtain approval of the entire revised design before planning or building. No protected fiscal
+writer, assertion or invariant change is authorised.
+
+Current-source audit: `issueUnpaidInvoice` already selects/snapshots the invoice and reserves delivery;
+`settleSale` requires the complete balance and refuses another settlement. The current daily close
+separates issued invoices from money recorded. Full F1 implementation landed in A231, but public F1
+is still disabled and its enablement gates remain. The historical Q42 software description predates
+that implementation; the design cites current call chains and labels runtime behavior unverified.
+This publication does not enable F1 or claim the proposed partial-receipt/reporting behavior is built.
 
 ## Pin the clock's future-finished sample refusal
 
