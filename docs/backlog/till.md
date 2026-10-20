@@ -2348,8 +2348,9 @@ known parent/active-extra clashes and English/Spanish names by value. Fired work
 printer; HOLD and added-HOLD corrections freeze only where paper is queued. Paper formatting
 prints the captured blocks, and replacement tickets retain both original and current copies.
 Station and pass reads return the original copy, with explicit null for unticked or unexposed
-work; signed-in and device HTTP checks cover these reads. Screens, remaining lifecycle
-preservation and change delivery remain.
+work; signed-in and device HTTP checks cover these reads. Station and pass screens show those
+originals; station notices show the corrected block or removal, through the existing
+acknowledgement path. Remaining lifecycle preservation and change delivery remain.
 
 **Remaining: A669-4.** Freeze the guest details beside each ticket item and render the allergy
 heading, block and clash at both paper widths and on station/pass screens. Enqueue acknowledged

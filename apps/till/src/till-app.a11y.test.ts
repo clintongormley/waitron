@@ -182,6 +182,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
             items: [
               {
                 id: "ti-1",
+                allergy: null,
                 workingOrderLineId: "wol-1",
                 state: "queued",
                 descriptions: { "es-ES": "Paella" },

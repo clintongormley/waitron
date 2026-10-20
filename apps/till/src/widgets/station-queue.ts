@@ -1,3 +1,8 @@
+import {
+  kitchenAllergyBlock,
+  kitchenAllergyMarker,
+  kitchenAllergyStyles,
+} from "./kitchen-allergy-block.js";
 import { groupName } from "./group-name.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -29,6 +34,8 @@ export const CROSS_ICON_PATH =
 const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
   "notice-recalled": "M6 2 1.5 6 6 10V7h4a2.5 2.5 0 0 1 0 5H6v2h4a4.5 4.5 0 0 0 0-9H6Z",
   "notice-void": CROSS_ICON_PATH,
+  "notice-allergy_changed": "M7 1H9V10H7ZM7 12H9V14H7Z",
+  "notice-allergy_removed": CROSS_ICON_PATH,
   "notice-changed": "M11.3 1.9 14.1 4.7 5.8 13H3V10.2ZM2 14.5H14V15.5H2Z",
   "notice-moved": "M2 7H10.6L7.3 3.7 8.7 2.3 14.4 8 8.7 13.7 7.3 12.3 10.6 9H2Z",
   "notice-rerouted": "M2 7H10.6L7.3 3.7 8.7 2.3 14.4 8 8.7 13.7 7.3 12.3 10.6 9H2Z",
@@ -105,6 +112,7 @@ export class TillStationQueue extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    kitchenAllergyStyles,
     orderNumberStyles,
     css`
       :host {
@@ -868,6 +876,7 @@ export class TillStationQueue extends LitElement {
                 ${change.after === null ? nothing : html`<span class="notice-note">${t("kitchen_note.after")}: ${change.after}</span>`}
               `
         }
+        ${notice.kind === "allergy_changed" ? kitchenAllergyBlock(notice.allergyBlock!) : nothing}
         ${notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
         ${moved === null ? nothing : html`<span class="notice-moved">${moved}</span>`}
         ${rerouted === null ? nothing : html`<span class="notice-rerouted">${rerouted}</span>`}
@@ -908,6 +917,7 @@ export class TillStationQueue extends LitElement {
         >
           <div class="ticket-head">
             <span class="number">${orderNumber(group.orderNumber, group.formerNumbers)}</span>
+            ${kitchenAllergyMarker(group.items.some((item) => item.allergy !== null))}
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
@@ -1091,7 +1101,8 @@ export class TillStationQueue extends LitElement {
 
   #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const tag = html`<span class="number"
-      >${orderNumber(group.orderNumber, group.formerNumbers)}${group.label ? html` · ${group.label}` : nothing}</span
+      >${orderNumber(group.orderNumber, group.formerNumbers)}${group.label ? html` · ${group.label}` : nothing}
+      ${kitchenAllergyMarker(item.allergy !== null)}</span
     >`;
     return this.#renderLine(group, item, tag);
   }
@@ -1128,6 +1139,7 @@ export class TillStationQueue extends LitElement {
     const modifiers = this.#modifiers(item);
     const crossRefs = queueCrossRefs(item, "line");
     const allergens = this.#allergens(item);
+    const allergy = kitchenAllergyBlock(item.allergy);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
     const next = NEXT[item.state];
@@ -1136,14 +1148,14 @@ export class TillStationQueue extends LitElement {
         ? html`<span
             class="line state-${item.state} ${held ? "held" : "terminal"}"
             data-item=${item.id}
-            >${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
+            >${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}</span
           >`
         : html`<button
             class="line state-${item.state}"
             data-item=${item.id}
             @click=${() => this.#bump(group, item, next)}
           >
-            ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}
+            ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}
             <span class="visually-hidden">${this.#bumpLabel(group)}</span>
           </button>`;
     if (!this.#movable(item)) return line;

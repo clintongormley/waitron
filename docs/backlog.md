@@ -2359,7 +2359,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   defines storage, paper, boards and notices. Storage declarations and a populated-predecessor
   upgrade check, first-exposure capture and frozen-block paper formatting are implemented on the
   kitchen branch, including preservation across ticket replacement. Station and pass reads return
-  the original frozen blocks in batches. Screen rendering, correction delivery and the remaining
+  the original frozen blocks in batches. Station and pass screens render those blocks, and station
+  notices render the corrected block separately. Correction delivery and the remaining
   split/recall/rerouting work remain. Kitchen Spanish wording
   still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),

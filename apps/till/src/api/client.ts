@@ -1581,7 +1581,8 @@ export interface ElsewhereItem {
 }
 
 /** What a kitchen notice tells a station about sent work. */
-export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rerouted";
+export type KitchenNoticeKind =
+  "recalled" | "void" | "changed" | "moved" | "rerouted" | "allergy_changed" | "allergy_removed";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
@@ -1589,6 +1590,7 @@ export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rer
  * copied as it stood when the notice was recorded.
  */
 export interface KitchenNotice {
+  allergyBlock?: KitchenAllergyBlock | null;
   orderNoteChange?: { before: string | null; after: string | null };
   id: string;
   stationId: string;
