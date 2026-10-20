@@ -4059,3 +4059,15 @@ gains only `staffName: "Staff unit"` and `staffAbbreviation: "su"`; its original
 maps, price/precision/hardware values and all consumer assertions remain unchanged. Authority:
 unit option A / Tasks 2–3. The six consuming allergy suites are run after this addition. No
 production behavior or allergy contract is changed.
+
+
+### Draft restoration fixture after the absent-map correction
+
+Current-head run `39404643616` failed five cases in `apps/till/src/state/draft-lines.test.ts`.
+The earlier Task 12 fixture update had copied `doneness staff` and `onions staff` into absent
+list customer maps. The shared `optionSnapshotOf` now correctly preserves absent maps, so
+`burgerLine` restores those two entries to their original main-branch `null` values. Every
+existing assertion, selection/id, quantity, price and no-merge/stale-version check stays intact.
+The complete 43-case file reproduced five failures before this fixture correction. Authority:
+Task 12's unchanged representation/reader boundary and the earlier current-head CI correction
+above; staff fallback remains separately frozen and asserted in `held-options.test.ts`.

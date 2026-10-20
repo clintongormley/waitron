@@ -230,7 +230,7 @@ const burgerLine = (): OrderLine => ({
   optionSnapshots: [
     {
       listName: { en: "doneness staff" },
-      listCustomerName: { en: "doneness staff" },
+      listCustomerName: null,
       listKitchenName: "doneness KDS",
       labelName: { en: "rare staff" },
       labelCustomerName: { en: "rare menu" },
@@ -238,7 +238,7 @@ const burgerLine = (): OrderLine => ({
     },
     {
       listName: { en: "onions staff" },
-      listCustomerName: { en: "onions staff" },
+      listCustomerName: null,
       listKitchenName: "onions KDS",
       labelName: { en: "none staff" },
       labelCustomerName: { en: "none menu" },
