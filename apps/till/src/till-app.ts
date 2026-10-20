@@ -2906,7 +2906,7 @@ export class TillApp extends LitElement {
       else {
         this.#onInteraction();
         if (this.operatorName === "" || this.#loginPending) this.#pendingNfc = code;
-        else void this.#pickUpNfc(code);
+        else void this.#pickUpSticker(code);
       }
     },
     () => {
@@ -2923,7 +2923,7 @@ export class TillApp extends LitElement {
     else this.#equipmentNfc.stop();
   }
 
-  async #pickUpNfc(code: EquipmentCode): Promise<void> {
+  async #pickUpSticker(code: EquipmentCode): Promise<void> {
     const permitted = this.deviceEquipment?.roles.find(
       (role) =>
         (code.kind === "reader"
@@ -4898,7 +4898,7 @@ export class TillApp extends LitElement {
       if (replaced()) return;
       const code = this.#pendingNfc;
       this.#pendingNfc = undefined;
-      if (code !== undefined) void this.#pickUpNfc(code);
+      if (code !== undefined) void this.#pickUpSticker(code);
     });
     const firstTab = this.#homeScreen();
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
@@ -9493,6 +9493,8 @@ export class TillApp extends LitElement {
         .equipmentErrors=${this.payEquipmentErrors}
         @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
           this.#onPayEquipmentPick(event.detail)}
+        @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
+          void this.#pickUpSticker(event.detail)}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -9527,6 +9529,8 @@ export class TillApp extends LitElement {
       .confirmation=${this.#unansweredWholePayments.get(open.billId)}
       @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
         this.#onPayEquipmentPick(event.detail)}
+      @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
+        void this.#pickUpSticker(event.detail)}
       @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
       @presented-pay-resend=${() => void this.#onPresentedResend()}
       @presented-pay-close=${() => this.#closePresented(open.id)}

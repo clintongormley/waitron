@@ -24,7 +24,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "./pay-equipment.js";
+import { payScanView } from "./pay-equipment.js";
 import type { PayEquipmentRole } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
@@ -486,6 +486,8 @@ export class TillBillPayDialog extends LitElement {
   @state() private guestsAttempted = false;
   @state() private askingSecondCard = false;
   @state() private rowOpen = false;
+  /** The row's QR has put the camera in place of the body. */
+  @state() private scanning = false;
   #rowWanted = false;
 
   #leave?: LeaveCoordinator;
@@ -967,22 +969,26 @@ export class TillBillPayDialog extends LitElement {
       @wt-close=${(event: Event) => this.#close(event)}
     >
       <div class="body">
-        ${this.#balance()}
-        ${
-          this.taken === null
-            ? nothing
-            : html`<p class="taken" role="status" data-pay-taken>${this.#takenText(this.taken)}</p>`
-        }
-        ${
-          this.refunded === null
-            ? nothing
-            : html`<p class="taken" role="status" data-pay-refunded>
-                ${this.#refundedText(this.refunded)}
-              </p>`
-        }
-        ${this.#payments()} ${this.#step()}
+        ${this.scanning ? payScanView(this, () => (this.scanning = false)) : this.#body()}
       </div>
     </wt-dialog>`;
+  }
+
+  #body(): TemplateResult {
+    return html`${this.#balance()}
+    ${
+      this.taken === null
+        ? nothing
+        : html`<p class="taken" role="status" data-pay-taken>${this.#takenText(this.taken)}</p>`
+    }
+    ${
+      this.refunded === null
+        ? nothing
+        : html`<p class="taken" role="status" data-pay-refunded>
+            ${this.#refundedText(this.refunded)}
+          </p>`
+    }
+    ${this.#payments()} ${this.#step()}`;
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1487,6 +1493,7 @@ export class TillBillPayDialog extends LitElement {
       .fixedReader=${this.fixedReader}
       @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
         (this.rowOpen = event.detail.open)}
+      @pay-equipment-qr=${() => (this.scanning = true)}
     ></till-pay-equipment>`;
   }
 

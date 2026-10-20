@@ -5,9 +5,12 @@ import { baseStyles } from "@waitron/ui";
 import type { ComboboxOption } from "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "./equipment-scanner.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
 import type { DeviceEquipment, EquipmentItem } from "../api/client.js";
+import type { EquipmentCode } from "../state/equipment-nfc.js";
 import {
   payPrinterOf,
   payReaderOf,
@@ -21,6 +24,32 @@ export interface PayEquipmentPick {
   role: PayEquipmentRole;
   id: string;
   takeOver: boolean;
+}
+
+/**
+ * The camera a pay sheet shows in place of its body after the row's QR: either kind of sticker is
+ * read, and `pay-equipment-sticker` carries it to the app, which sends it as an NFC tap.
+ */
+export function payScanView(host: HTMLElement, back: () => void): TemplateResult {
+  return html`<p data-pay-scan-heading><b>${t("equipment.scan_qr")}</b></p>
+    <till-equipment-scanner
+      kind="any"
+      @equipment-scanned=${(event: CustomEvent<EquipmentCode>) => {
+        back();
+        host.dispatchEvent(
+          new CustomEvent<EquipmentCode>("pay-equipment-sticker", {
+            detail: { kind: event.detail.kind, id: event.detail.id },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }}
+    ></till-equipment-scanner>
+    <wt-form-actions>
+      <wt-button variant="secondary" data-pay-scan-back @click=${back}>
+        ${t("pay_equipment.scan_back")}
+      </wt-button>
+    </wt-form-actions>`;
 }
 
 /**

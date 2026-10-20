@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -299,6 +299,111 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     await row(el)!.updateComplete;
     row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
     expect(scans).toHaveLength(1);
+  });
+});
+
+describe("till-presented-pay-dialog: the row's QR", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const scanner = (el: TillPresentedPayDialog) => root(el).querySelector("till-equipment-scanner");
+  const stepper = (el: TillPresentedPayDialog) =>
+    root(el).querySelector<HTMLElement & { value: string }>('wt-number-stepper[name="guests"]');
+
+  async function typeGuests(el: TillPresentedPayDialog, value: string): Promise<void> {
+    const input = stepper(el)!.shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await el.updateComplete;
+  }
+
+  async function pressQr(el: TillPresentedPayDialog): Promise<void> {
+    await row(el)!.updateComplete;
+    row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+    await el.updateComplete;
+  }
+
+  async function scanning(over: Partial<TillPresentedPayDialog> = {}) {
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+    const el = await mount({ canScan: true, asksGuests: true, receiptGuests: 4, ...over });
+    return el;
+  }
+
+  it("opens the camera in place of the form, for either kind of sticker", async () => {
+    setLocale("es");
+    const el = await scanning();
+    await pressQr(el);
+
+    expect(scanner(el)!.getAttribute("kind")).toBe("any");
+    expect(text(root(el).querySelector("[data-pay-scan-heading]"))).toBe("Escanear código QR");
+    expect(text(root(el).querySelector("[data-pay-scan-back]"))).toBe("Volver");
+    expect(row(el)).toBeNull();
+    expect(root(el).querySelector("[data-presented-pay-take]")).toBeNull();
+    expect(methods(el)).toEqual([]);
+  });
+
+  it("Volver brings back the method, the cash handed over and the guests", async () => {
+    const el = await scanning();
+    await pick(el, "cash");
+    await type(el, "tendered", "70");
+    await typeGuests(el, "6");
+    await pressQr(el);
+
+    root(el).querySelector<HTMLElement>("[data-pay-scan-back]")!.click();
+    await el.updateComplete;
+
+    expect(scanner(el)).toBeNull();
+    expect(root(el).querySelector<HTMLInputElement>('input[name="method"]:checked')!.value).toBe(
+      "cash",
+    );
+    expect(field(el, "tendered")!.value).toBe("70");
+    expect(stepper(el)!.value).toBe("6");
+  });
+
+  it("Volver keeps another machine's operation number", async () => {
+    const el = await scanning();
+    await pick(el, "manual");
+    await type(el, "externalRef", "operation-17");
+    await pressQr(el);
+
+    root(el).querySelector<HTMLElement>("[data-pay-scan-back]")!.click();
+    await el.updateComplete;
+
+    expect(root(el).querySelector<HTMLInputElement>('input[name="method"]:checked')!.value).toBe(
+      "manual",
+    );
+    expect(field(el, "externalRef")!.value).toBe("operation-17");
+  });
+
+  it("a sticker read sends its kind and id, and the form comes back", async () => {
+    const el = await scanning();
+    await pick(el, "cash");
+    await type(el, "tendered", "70");
+    await pressQr(el);
+    const stickers = capture<unknown>(el, "pay-equipment-sticker");
+
+    scanner(el)!.dispatchEvent(
+      new CustomEvent("equipment-scanned", {
+        detail: { id: "p1", kind: "printer" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+
+    expect(stickers).toEqual([{ kind: "printer", id: "p1" }]);
+    expect(scanner(el)).toBeNull();
+    expect(field(el, "tendered")!.value).toBe("70");
+  });
+
+  it("the locked sheet offers no QR", async () => {
+    const el = await scanning({
+      confirmation: { tender: { method: "cash", amount: "70.00" }, outstanding: "62.40" },
+    });
+
+    expect(row(el)).toBeNull();
+    expect(root(el).querySelector("[data-pay-qr]")).toBeNull();
+    expect(scanner(el)).toBeNull();
   });
 });
 

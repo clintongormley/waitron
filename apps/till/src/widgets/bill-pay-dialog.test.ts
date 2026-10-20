@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -2036,6 +2036,89 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
       'wt-combobox[name="cardReaderId"]',
     )!;
     expect(combobox.disabled).toBe(true);
+  });
+
+  describe("the row's QR", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    async function scanning() {
+      vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+      const el = await handheld({ canScan: true, way: "contribution" });
+      await type(el, "amount", "10");
+      await pick(el, "method", "cash");
+      await type(el, "tendered", "20");
+      await row(el)!.updateComplete;
+      row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+      await el.updateComplete;
+      return el;
+    }
+    const scanner = (el: TillBillPayDialog) => root(el).querySelector("till-equipment-scanner");
+    const radios = (el: TillBillPayDialog, name: string) => [
+      ...root(el).querySelectorAll<HTMLInputElement>(`input[name="${name}"]`),
+    ];
+
+    it("opens the camera in place of the form, for either kind of sticker", async () => {
+      setLocale("es");
+      const el = await scanning();
+
+      expect(scanner(el)).not.toBeNull();
+      expect(scanner(el)!.getAttribute("kind")).toBe("any");
+      expect(text(root(el).querySelector("[data-pay-scan-heading]"))).toBe("Escanear código QR");
+      expect(text(button(el, "[data-pay-scan-back]"))).toBe("Volver");
+      expect(root(el).querySelector("[data-pay-way]")).toBeNull();
+      expect(row(el)).toBeNull();
+      expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
+    });
+
+    it("Volver brings the form back as it was: way, amount and method kept", async () => {
+      const el = await scanning();
+
+      await click(el, "[data-pay-scan-back]");
+
+      expect(scanner(el)).toBeNull();
+      expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("contribution");
+      expect(field(el, "amount")!.value).toBe("10");
+      expect(radios(el, "method").find((radio) => radio.checked)!.value).toBe("cash");
+      expect(field(el, "tendered")!.value).toBe("20");
+    });
+
+    it("from the confirmation, Volver brings the confirmation back", async () => {
+      vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+      const el = await handheld({ canScan: true });
+      await previewed(el, cardPreview);
+      await row(el)!.updateComplete;
+      row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+      await el.updateComplete;
+      expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
+
+      await click(el, "[data-pay-scan-back]");
+
+      expect(text(button(el, "[data-pay-confirm]"))).toBe(
+        t("bill_pay.take_on_reader")
+          .replace("{amount}", () => money("20.80"))
+          .replace("{reader}", () => "Lector 2")
+          .replace(/\s+/g, " "),
+      );
+    });
+
+    it("a sticker read sends its kind and id, and the form comes back", async () => {
+      const el = await scanning();
+      const stickers = capture<unknown>(el, "pay-equipment-sticker");
+
+      scanner(el)!.dispatchEvent(
+        new CustomEvent("equipment-scanned", {
+          detail: { id: "r3", kind: "reader" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(stickers).toEqual([{ kind: "reader", id: "r3" }]);
+      expect(scanner(el)).toBeNull();
+      expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("contribution");
+      expect(field(el, "amount")!.value).toBe("10");
+    });
   });
 
   it("shows none of this on a counter till", async () => {

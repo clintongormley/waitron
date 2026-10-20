@@ -20,7 +20,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "./pay-equipment.js";
+import { payScanView } from "./pay-equipment.js";
 import type { PayEquipmentRole } from "./pay-equipment.js";
 import type { RetainedTender } from "./tender-pay.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
@@ -175,6 +175,8 @@ export class TillPresentedPayDialog extends LitElement {
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
   @state() private shownRefusal: PayRefusal | null = null;
   @state() private rowOpen = false;
+  /** The row's QR has put the camera in place of the form. */
+  @state() private scanning = false;
   #rowWanted = false;
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<EntryDraft>;
@@ -375,7 +377,13 @@ export class TillPresentedPayDialog extends LitElement {
       @wt-close=${(event: Event) => this.#close(event)}
     >
       <div class="body">
-        ${this.confirmation === undefined ? this.#form() : this.#locked(this.confirmation)}
+        ${
+          this.confirmation !== undefined
+            ? this.#locked(this.confirmation)
+            : this.scanning
+              ? payScanView(this, () => (this.scanning = false))
+              : this.#form()
+        }
       </div>
     </wt-dialog>`;
   }
@@ -582,6 +590,7 @@ export class TillPresentedPayDialog extends LitElement {
       .fixedReader=${this.fixedReader}
       @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
         (this.rowOpen = event.detail.open)}
+      @pay-equipment-qr=${() => (this.scanning = true)}
     ></till-pay-equipment>`;
   }
 

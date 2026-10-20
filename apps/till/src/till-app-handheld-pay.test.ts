@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { formatEquipmentCode } from "@waitron/shared";
 import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
@@ -18,7 +19,8 @@ import type {
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
-import { FakeNdefReader, installNfc, READER_ID } from "../test/equipment-nfc.js";
+import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
+import { cameraFilming } from "../test/qr-camera.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   balanceOf,
@@ -1507,5 +1509,146 @@ describe("till-app: a pick from the presented bill's sheet", () => {
     expect(dialog(el)!.equipmentSaving).toBeNull();
     expect(dialog(el)!.equipmentBusy).toBe(false);
     expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+  });
+});
+
+describe("till-app: a sticker scanned from the sheet", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const PORTABLE = equipmentItem(PRINTER_ID, "Portable printer", { portable: true });
+
+  function equipmentOf(reader: EquipmentItem, printer: EquipmentItem): DeviceEquipment {
+    return {
+      roles: [
+        roleOf("receipt", printer, [BARRA, PORTABLE]),
+        roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3]),
+      ],
+    };
+  }
+
+  let filming: { stop: () => void } | undefined;
+  afterEach(() => {
+    filming?.stop();
+    filming = undefined;
+    vi.restoreAllMocks();
+  });
+
+  function film(text: string): void {
+    const camera = cameraFilming(text);
+    filming = camera;
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+  }
+
+  async function scanFromSheet(
+    setDeviceEquipment: unknown,
+  ): Promise<{ el: TillApp; before: string }> {
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(LECTOR_2, BARRA)),
+        setDeviceEquipment,
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    const before = await rowSummary(el);
+    const row = inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment;
+    row.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+    await flush(el);
+    return { el, before };
+  }
+
+  it("a reader's sticker is sent as a scan, and the row then names the reader", async () => {
+    film(formatEquipmentCode("reader", READER_ID));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_3, BARRA));
+    const { el } = await scanFromSheet(setDeviceEquipment);
+
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual({
+      kind: "reader",
+      selection: { id: READER_ID },
+      via: "scan",
+    });
+    await flush(el);
+    expect(inDialog(el, "till-equipment-scanner")).toBeNull();
+    expect(await rowSummary(el)).toContain("Lector 3");
+  });
+
+  it("a reader's sticker still out holds Continuar", async () => {
+    film(formatEquipmentCode("reader", READER_ID));
+    let answer!: () => void;
+    const setDeviceEquipment = vi.fn(
+      () =>
+        new Promise<DeviceEquipment>(
+          (resolve) => (answer = () => resolve(equipmentOf(LECTOR_3, BARRA))),
+        ),
+    );
+    const { el } = await scanFromSheet(setDeviceEquipment);
+
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    await flush(el);
+    expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(true);
+
+    answer();
+    await flush(el);
+    expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+  });
+
+  it("a printer's sticker is sent as a printer scan", async () => {
+    film(formatEquipmentCode("printer", PRINTER_ID));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_2, PORTABLE));
+    const { el } = await scanFromSheet(setDeviceEquipment);
+
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual({
+      kind: "printer",
+      selection: { id: PRINTER_ID },
+      via: "scan",
+    });
+    await flush(el);
+    expect(await rowSummary(el)).toContain("Portable printer");
+  });
+
+  it("a reader's sticker scanned from the presented bill's sheet is sent the same way", async () => {
+    film(formatEquipmentCode("reader", READER_ID));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_3, BARRA));
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(LECTOR_2, BARRA)),
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+        setDeviceEquipment,
+      }),
+    );
+    await pressPaySheet(el, await openPhoneTable(el));
+    const sheet = el.shadowRoot!.querySelector<TillPresentedPayDialog>(
+      "till-presented-pay-dialog",
+    )!;
+    await sheet.updateComplete;
+    const row = sheet.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+    await row.updateComplete;
+    row.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual({
+      kind: "reader",
+      selection: { id: READER_ID },
+      via: "scan",
+    });
+    await flush(el);
+    expect(sheet.shadowRoot!.querySelector("till-equipment-scanner")).toBeNull();
+    expect(text(sheet.shadowRoot!.querySelector("[data-presented-pay-take]"))).toContain(
+      "Lector 3",
+    );
+  });
+
+  it("a printer's sticker refused changes nothing in the row", async () => {
+    film(formatEquipmentCode("printer", PRINTER_ID));
+    const setDeviceEquipment = vi
+      .fn()
+      .mockRejectedValue({ code: "device.binding_invalid", status: 400 });
+    const { el, before } = await scanFromSheet(setDeviceEquipment);
+
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    await flush(el);
+    expect(before).toContain("Barra");
+    expect(await rowSummary(el)).toBe(before);
   });
 });
