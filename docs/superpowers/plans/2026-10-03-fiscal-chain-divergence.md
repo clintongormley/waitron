@@ -407,6 +407,10 @@ Review: FULL. Ends `needs-owner-review` (it can start a chain).
   unreachable AEAT raises nothing and blocks nothing.
 **A364 update, 2026-10-07:** the owner removes the till's authority-clock notices.
 Measured drift remains an administrator alert; the till does not poll for it.
+**A798 update, 2026-10-20:** reversed for one case by the owner (A798 question 3, answer (b)): a box
+clock that reads more than a minute earlier than the last recorded sale stops payments and shows
+staff a red strip; every other wrong clock still warns only. See [the A798 design, revision 5, §4.8
+and §6](../specs/2026-10-19-a798-degraded-trading-design.md).
 
 - [ ] **Failing case**: the readiness test reports a legal-name or tax-id mismatch from AEAT's answer
   as its own outcome.

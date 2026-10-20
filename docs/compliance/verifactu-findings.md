@@ -165,6 +165,9 @@ Two consequences:
 - **Do not block invoicing on clock drift.** A till days offline should keep trading. mdiago
   accepts internal drift and does not gate on it; the AEAT check happens later, at submission,
   when the device is by definition back online.
+  **A798 update, 2026-10-20:** the owner chose one exception — a box clock that reads more than a
+  minute earlier than the last recorded sale stops payments until it is fixed or a manager confirms
+  it ([A798 design, revision 5, §4.8](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md)).
 - **The two margins are different things.** One minute is the standard the system must be built
   to; 240 seconds is the tolerance a submission is judged against. Conflating them would lead to
   gating sales on a threshold that is not the one AEAT applies.

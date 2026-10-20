@@ -1,7 +1,17 @@
 # A798 — Degraded but trading: what the box does, and tells staff, when a part fails
 
-Status: **design proposal, revision 4; questions 1 and 2 answered, one owner question open (§9).
-Nothing is built; the build is planned as its own item once the questions are answered.**
+Status: **design decided, revision 5; all three owner questions answered (§9). Nothing is built; the
+build is planned as its own item, A798-B, in the slices of §8.**
+
+Revision 5, 2026-10-20: the owner's answer to question 3 applied — (b), stop taking payments while
+the box's clock reads earlier than its last recorded sale. For that case only, this reverses the
+earlier rules that a wrong clock warns and never stops a sale (D8) and that staff see no clock notice
+(A364); the reversal is recorded in §6. Every till and handheld shows a red strip; every payment and
+every other action that writes a fiscal record is refused, while orders and the kitchen carry on;
+the managers get an alert and an email; the stop clears when the clock no longer reads earlier, or
+when a manager confirms on the Box status page that the clock is right and the last sale's time was
+not (§4.8; pictures 8 and 9). The choices the owner's answer did not settle are defaults, listed in
+§6 under "Decisions revision 5 makes", each open to the owner's override.
 
 Revision 4, 2026-10-19: the owner's answer to question 2 applied — (a), every device at two minutes.
 Once one of a printer's tickets has waited two minutes, every till and handheld shows the amber strip
@@ -25,7 +35,8 @@ Backlog entry: `docs/backlog.md`, "A798" under _The box: backups, upgrades and r
 drawn in HTML with the apps' colour and spacing tokens, not screenshots; each is labelled "today" or
 "proposed". The generator is kept outside the repository.
 
-File references are to `main` at `ad57a6bb9`. **(read)** marks a conclusion from reading code, not
+File references are to `main` at `ad57a6bb9`, except those revision 5 added (§4.8, experiment 6 of
+§12), which are to `main` at `be39179b0`. **(read)** marks a conclusion from reading code, not
 from running it. Part of the reading was done by search helpers; every citation this design leans
 on was re-read. Results measured by the round-2 claim check, and not re-run here, say so. The
 experiments run for this design are in §12, each with what the failing case would have printed. All
@@ -84,8 +95,10 @@ The proposal (§4):
    itself and can never commit half a transaction, and a start that frees space before it does
    anything else (pictures 1 and 5). The box keeps no spare space: once the disk is full, every save
    is refused at once until someone frees space.
-4. **Clock:** a named refusal for a clock the fiscal rules cannot accept (picture 6), and checks that
-   notice a clock behind the chain with no internet. What the box does then is question 3.
+4. **Clock:** a named refusal for a clock the fiscal rules cannot accept (picture 6), and — the
+   owner's answer to question 3 — a stop on taking payment while the box's clock reads earlier than
+   its last recorded sale, noticed with no internet (§4.8; pictures 8 and 9). Orders and the kitchen
+   carry on. A manager can lift the stop when the clock is right and the last sale's time was not.
 5. Everything for a box that is still trading lives in the dashboard. The recovery page keeps its one
    job, a box that will not start.
 
@@ -240,7 +253,9 @@ The per-module "can a till sell without this" field the old design asked for is 
   reads Orden art. 3 as switching off the art. 7.f clock duty in Veri*Factu mode (`:364-367`), so the
   minute is the owner's product threshold, borrowed from art. 7.f, not a legal duty in this mode.
   A364 (owner, 2026-10-07) then removed the till's clock notices: "Measured drift remains an
-  administrator alert; the till does not poll for it" (`:370-371`).
+  administrator alert; the till does not poll for it" (`:370-371`). **Revision 5 reverses both for
+  one case, a clock that reads earlier than the last recorded sale** (the owner's answer to question
+  3; §4.8, §6).
 - **Other parts lean on the clock too.** A679's approved series naming works out names from the
   hour, and a future clock "can select a future hour and misdate subsequent work"
   (`docs/superpowers/specs/2026-10-16-a679-hour-coded-series-design.md:74`, `:83`). A box at 2001
@@ -368,9 +383,11 @@ Which failures cross the line, and what the device shows:
 | Bucket stream stopped or behind | No | The copy is outside the sale | Nothing for staff; the manager's bell |
 | Printer down | No | Printing is a queue | Amber strip on every device at two minutes (question 2) |
 | Card reader or provider down | No | Cash and "Otro datáfono" remain | The payment's own message, as today |
-| Clock wrong but after 28-10-2024 | No | Records are written with the wrong time | Nothing for staff (A364); the manager's bell; question 3 for a clock behind the chain |
+| Clock earlier than the last recorded sale by more than a minute | **Payments stop, by the owner's choice** (question 3) | The record could be written, but with a time earlier than the one before it | Red strip "No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado"; every payment refused with `clock.behind_chain`; orders and the kitchen carry on (§4.8, picture 8) |
+| Clock otherwise wrong, but after 28-10-2024 | No | Records are written with the wrong time | Nothing for staff (A364); the manager's bell |
 
-**No card is charged while the line is crossed.** When the disk or the clock is red, the box refuses
+**No card is charged while the line is crossed.** When the disk or the clock is red (before
+28-10-2024, or earlier than the last recorded sale), the box refuses
 at both checks before the reader: `till-sale.ts:1225-1226` for a sale, and `beginBillPayment`
 (`bill-payments.ts:1068-1069`) for a card payment on a bill. So a connected reader is never charged
 for a sale that cannot be recorded; today it is, for a clock before 28-10-2024 (§2.5, §11). A card taken on another machine can still have
@@ -417,7 +434,8 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
 - **Where the notices come from.** The core supplies the disk and printer notices: printing is not a
   module (`packages/composition/src/modules.ts:106` lists none), and the printer alerts are the
   server's own (`apps/server/src/boot.ts:2059`; `alert-sources.ts:395`, `:673`). The Veri*Factu
-  module supplies the unsent count and the clock-before-28-10-2024 notice through the new seat (§5).
+  module supplies the unsent count, the clock-before-28-10-2024 notice and the clock-behind-the-last-
+  sale notice through the new seat (§5).
 - **The notices** — one wording each, used in every picture (Spanish as shown; English for the
   English till):
 
@@ -425,6 +443,7 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
 | --- | --- | --- | --- |
 | Red | A write fails because the disk is full | No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado | Nothing can be saved: the box is out of space · Tell a manager |
 | Red | The clock is before 28-10-2024 | No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado | Sales can't be recorded: the box's clock is wrong · Tell a manager |
+| Red | The clock reads more than a minute earlier than the last recorded sale (§4.8) | No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado | Payments stopped: the box's clock reads earlier than its last sale · Tell a manager |
 | Amber | Less than 2 GB free on the box's disk (§4.6) | Queda poco espacio en el equipo · Avisa al encargado | The box is nearly out of space · Tell a manager |
 | Amber | One of a printer's tickets has waited two minutes (question 2) | Impresora Cocina no imprime · desde 21:16 | Kitchen printer not printing · since 21:16 |
 | Blue | A record is waiting after a failed send | 12 ventas sin enviar a Hacienda · Se reintenta solo | 12 sales not yet sent to the tax agency · Retried automatically |
@@ -435,7 +454,11 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
   box, which never sends (`apps/server/src/onboarding-policy.ts:12-13`), nor while records merely wait
   out AEAT's own wait between sends (§2.2), which is not an outage. It says "Se reintenta solo" rather
   than "every hour", because the retries start at one minute and double (§2.2).
-- **A clock that is wrong but usable puts nothing on the strip**, following A364 (§6, default 12).
+- **A clock that is wrong but usable puts nothing on the strip**, following A364 (§6, default 12) —
+  except one that reads earlier than the last recorded sale, which is red (§4.8).
+- **Two reds at once**: the disk's shows first, since nothing at all can be saved; the clock's waits
+  behind "+1". A clock before 28-10-2024 shows its own notice rather than the behind-the-last-sale
+  one, since it is the cause staff would have to report.
 
 ### 4.3 The dashboard: the bell, the Box status page, and email
 
@@ -448,9 +471,11 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
     up nothing can be saved. See what is using it on the Box status page."
   - `storage.disk_full` (error): "El equipo no tiene espacio en disco: no se puede guardar nada." /
     "The box is out of disk space: nothing can be saved."
-  - `clock.unusable` (error: the date is before 28-10-2024), `clock.behind_chain` (warning, emailed:
-    earlier than the last record) and `clock.disagrees` (warning: two or more devices disagree with the
-    box), §4.5. They sit beside today's `fiscal.clock_drift`.
+  - `clock.unusable` (error: the date is before 28-10-2024), `clock.behind_chain` (error, emailed:
+    the clock reads earlier than the last record, and payments have stopped; wording in §4.8 c) and
+    `clock.disagrees` (warning: two or more devices disagree with the box), §4.5. They sit beside
+    today's `fiscal.clock_drift`, which the bell leaves out while `clock.behind_chain` is open (§4.8 c).
+  - `clock.behind_chain_confirmed` (warning, a recorded incident): a manager lifted the stop (§4.8 b).
   - `reader.offline` (warning): "{reader} está sin conexión." / "{reader} is offline." — the check
     already gets this answer and ignores it (§2.4).
 - **The Box status page** (picture 4), under Ajustes beside Diagnóstico, for people with
@@ -495,17 +520,23 @@ AEAT's certificate and so gets no time from AEAT (A679 forbids switching that ch
 saved AEAT time cannot be carried forward, because a counter that only goes forward restarts when the
 box does; one device "agrees with itself", and a phone set by hand would set invoice dates; and
 stamping only sales would leave payments, working time, the business day and session expiry on the
-wrong clock. The container also runs as the unprivileged user `waitron` (`deploy/Dockerfile:269`) and
-cannot set the system clock (read).
+wrong clock. The container also runs as the unprivileged user `waitron` (`deploy/Dockerfile:269`,
+re-read at `be39179b0`), and `deploy/compose.yml` grants it no extra capability (read: no `cap_add`);
+experiment 6 (§12) measured that such a process holds none of the capabilities, so not the one that
+sets the clock.
 
 What the box does instead:
-1. **Before 28-10-2024 is a red stop**, whatever question 3's answer: the red strip, the named refusal
+1. **Before 28-10-2024 is a red stop**, as before question 3 was answered: the red strip, the named refusal
    with today's card advice kept, `clock.unusable` and an email (picture 6). The Veri*Factu module
    supplies it, since the date is its rule.
 2. **Detect a clock behind the chain, with no internet.** When the box's clock is earlier than the
    last record's time by more than a minute, one of two clocks was wrong: this one, or the one that
    stamped the last record. A clock that ran ahead and was then put right looks exactly the same. The
    Veri*Factu module, which owns the chain, runs this check. It does not notice a clock that is ahead.
+   The one-minute margin stays: it is D8's tolerance and the margin today's comparison with AEAT
+   uses (`apps/server/src/time-health.ts:91`), and it lets the small backward steps a time sync
+   makes pass without stopping a venue. Within it, a record may carry a time up to a minute earlier
+   than the one before, as D8 already accepts a minute's error.
 3. **Use devices only as witnesses.** Requests from a till would carry the device's own time (none
    does today). When at least two devices that spoke in the last few minutes agree with each other and
    the box differs from both by more than a minute, the box raises `clock.disagrees` for the manager.
@@ -513,10 +544,13 @@ What the box does instead:
    a witness" (owner, 2026-10-03; `2026-10-03-fiscal-chain-divergence-design.md:350-357`). A device's
    clock is only as good as its own source; a tablet on wifi alone has no mobile network to set it.
 4. **AEAT**, as today, whenever something is sent; and `timedatectl` where the box image provides it.
-5. **A clock behind the chain** is question 3. Any other wrong clock follows D8 and A364: it keeps
+5. **A clock behind the chain stops payments** — the owner's answer to question 3, reversing D8 and
+   A364 for this case only (§4.8, §6). Any other wrong clock still follows D8 and A364: it keeps
    selling, the manager is warned, staff see nothing.
-6. **The box image (B3)** should keep its clock synchronised; that belongs to the image, not this
-   design, and is now one of B3's image constraints (`docs/backlog/box.md:356-359`).
+6. **The box image (B3)** should keep its clock synchronised, and keep time through a power cut; that
+   belongs to the image and the hardware, not this design, and is one of B3's image constraints
+   (`docs/backlog/box.md`, "Box image constraints (B3)"). Since revision 5 a box that loses its time
+   stops taking payment until the clock is set, which raises the stakes of that constraint.
 
 ### 4.6 The disk
 
@@ -555,7 +589,7 @@ What the box does instead:
    never touches a backup the owner configured, the database's rows, or anything fiscal. The page
    names the real fillers with sizes where the box can measure them: the database, backups kept on
    this box, and "fuera de Waitron" for the rest of the disk, which on a box is mostly old Docker
-   images. Deleting old images after an upgrade is a follow-up for `deploy/waitron.sh` (slice 9).
+   images. Deleting old images after an upgrade is a follow-up for `deploy/waitron.sh` (slice 10).
 
 ### 4.7 A full disk at start (picture 5)
 
@@ -585,14 +619,240 @@ that where the disk fills decides what fails.
 The first revision gave the page a "Liberar espacio y arrancar" button. It is gone: the start now does
 that by itself, so the page needs no new action anyone on the network could press.
 
+### 4.8 A clock behind the last sale: payments stop (question 3; pictures 8 and 9)
+
+The owner's answer (2026-10-19): "STOP SELLING until the clock is fixed — every till red while the
+box's clock reads earlier than its last recorded sale." Read here as: while the box's clock reads
+more than a minute earlier (§4.5 item 2) than the last fiscal record this box wrote, whatever its
+kind — a sale, or a credit (factura rectificativa) — since every kind joins the same chain and is
+stamped by the same clock (§2.5).
+
+Two examples run through this section:
+- **The clock is wrong.** On Sunday 18 October 2026 the last sale is recorded at 23:40. On Monday
+  morning, after a power cut, the box starts with its clock at 14 March 2025 09:12.
+- **The clock is right; the last sale's time was not.** On Sunday night the box's clock was a day
+  ahead, so the last sale was stamped Monday 19 October 23:40. On Monday morning the clock is put
+  right and reads Monday 09:12 — fourteen and a half hours before that stamp. Waiting for real time
+  to pass it would stop the venue until 23:40 that night.
+
+**This is an internal check.** It compares the box's own clock with a record in its own database,
+with no network involved, so it does not break CLAUDE.md §5's "nothing EXTERNAL may block a sale".
+What can depend on the outside is getting out of it: in the first example, until someone sets the
+clock (part b).
+
+#### a. What staff see on each till and handheld
+
+- **The red strip** on every signed-in till and handheld, from the next equipment read (every 15
+  seconds, §4.2): "No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al
+  encargado" (EN "Payments stopped: the box's clock reads earlier than its last sale · Tell a
+  manager"). Kitchen screens get no strip and keep working (§4.2).
+- **A payment press is refused** with a new code, `clock.behind_chain`, carrying the two times
+  (`clockAt`, `lastRecordAt`). The till shows:
+  "Venta no registrada: la hora del equipo (14/03/2025 09:12) es anterior a la última venta
+  (18/10/2026 23:40). El pedido sigue abierto; avisa al encargado. Si ya has cobrado en otro
+  datáfono, no vuelvas a cobrar: regístralo cuando se arregle."
+  (EN "Sale not recorded: the box's clock (14/03/2025 09:12) reads earlier than the last sale
+  (18/10/2026 23:40). The order stays open; tell a manager. If you already charged on another card
+  machine, don't charge again: record it once this is fixed.")
+  The till shows these words rather than `sale.error`'s "inténtalo de nuevo", which would be wrong
+  until the clock is fixed. Unlike the clock-before-28-10-2024 refusal, it does not tell staff to
+  refund a card taken on another machine: this stop is expected to end, and the payment can then be
+  recorded with "Otro datáfono" without charging again.
+- **A card that was being charged when the stop began** (part e): "Cobrado con tarjeta, pero la venta
+  no se ha registrado: la hora del equipo es anterior a la última venta. No vuelvas a cobrar. Cuando
+  se arregle, pulsa Cobrar: se registra sin cobrar otra vez." (EN "Card charged, but the sale is not
+  recorded: the box's clock reads earlier than its last sale. Don't charge again. Once it is fixed,
+  press Pay: it is recorded without charging again.")
+- **Any other refused action** (a guest leaving without paying, a credit — part e) shows the same
+  code with "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al
+  encargado." (EN "Can't be recorded: the box's clock reads earlier than its last sale. Tell a
+  manager.")
+- **The payment buttons keep their look.** The box's refusal is the guard and the strip says why;
+  a device learns of the stop only on its 15-second read, so buttons drawn quiet from that read
+  would lag the box anyway (§6, revision 5 decision 9).
+- **The code.** It names the domain concept, the clock, beside its siblings `clock.degraded` and
+  `clock.jump_detected` (`packages/fiscal/src/errors.ts:9`, `:12`) and this design's `clock.unusable`
+  and `clock.disagrees`. It is new: a search of `packages`, `apps` and `scripts` finds no
+  `behind_chain` anywhere. It is one code for the refusal and the alert, as `storage.disk_full` is
+  (§4.6). The Veri*Factu module throws it, so it is declared in that module's error registry.
+
+#### b. Who can fix it, and how
+
+What cannot set the clock, each with its source:
+- **The box's own server.** It runs as the unprivileged user `waitron` (`deploy/Dockerfile:269`),
+  `deploy/compose.yml` adds no capability, and such a process holds none (§12, experiment 6).
+- **AEAT.** Its replies are compared, never used to set the time (§4.5); at 2001 the box cannot even
+  check AEAT's certificate (§2.5).
+- **A device.** A device's clock never becomes a record's time (§4.5 item 3; D7's precedent).
+- **The dashboard.** It gets no "set the box's clock" action. A clock that anyone holding a dashboard
+  permission can set from a page is a way to give sales whatever date they choose; and it would need
+  a helper on the host holding the clock-setting capability, which nothing has today. (This
+  design's reasoning, not a legal reading.)
+- **The recovery page.** It is served only when the box will not start (§2.8), and has no login
+  (§4.1). A box that is trading never shows it.
+
+What does fix it:
+1. **When the clock is wrong (first example), the operating system's clock is set.**
+   - **Connect the box to the internet.** Where the box's operating system keeps its clock in step
+     with internet time, that corrects it, and the stop clears by itself on the next check (part d).
+     Nothing in `deploy/` turns that on today (§2.5); whether a hand-built Debian box has it on by
+     default was not checked. So the build adds it to `deploy/waitron.sh install`, which is already
+     run with `sudo` on the host (`deploy/waitron.sh:3-9`, `as_root` at `:48`): it switches on the host's
+     time synchronisation where the system provides it, and prints a line when it does not (§8,
+     slice 10). B3's image makes it standing.
+   - **With no internet, or a box that does not synchronise,** whoever installed the box sets its
+     clock from the operating system: they have a terminal, the operator does not (default 2). The
+     Box status page and the email say so plainly (picture 9).
+   - **A box whose clock is wrong after every power cut** needs hardware that keeps time without
+     power; that is added to B3's constraints (`docs/backlog/box.md`).
+2. **When the clock is right and the last sale's time was not (second example), a manager confirms
+   it** on the Box status page:
+   - **Who:** anyone holding `system.manage` — managers and admins
+     (`packages/identity/src/permissions.ts:56-76`) — the permission the Box status page already
+     needs (§4.3) and that the Veri*Factu module's dashboard already uses
+     (`packages/fiscal-verifactu/src/dashboard/index.ts:15`). No new permission, keeping the list
+     short and coarse.
+   - **Where:** the dashboard only, on the Box status page's Reloj row, button "La hora del equipo es
+     correcta". Not on a till with a manager's PIN: the decision needs both times and the evidence
+     read with care, which a dialog on a till mid-service does not invite.
+   - **What it shows:** the box's clock, the last record's time, and the witnesses the box has — the
+     latest comparison with AEAT made since the stop began (§2.5), and the clocks of devices that
+     spoke in the last five minutes (§4.5 item 3).
+   - **When it is not offered:** when AEAT's latest comparison since the stop began, or two or more
+     of those devices agreeing with each other within a minute, put the box's clock more than a
+     minute out. Then the evidence says the clock is wrong, and the row says to get it set (picture
+     9, top). With no witness at all — no internet, no device reporting — it is offered, and the
+     dialog says the box could not check.
+   - **What it does:** records who confirmed, when (on the box's clock), both times, which record it
+     names, and the witnesses shown; then lifts the stop for that last record only. The next record
+     carries the box's clock, earlier than the one before it. From then on the chain's last record
+     has the right time and the check passes by itself, so the confirmation has nothing left to do
+     and needs no expiry. If the clock later goes behind again, that is a new stop.
+   - **What it never changes:** no stored record, its time, its fingerprint or its link to the
+     record before; the chain; the box's clock; the invoice numbers. The fiscal records stay
+     append-only (CLAUDE.md §5).
+   - **Where it is kept:** as a recorded incident, `clock.behind_chain_confirmed`, whose sale column
+     names the last record's sale — so it survives a restart, appears in the bell, keeps two
+     confirmations of different records from colliding, and needs no new table (§7). Weaker than an
+     append-only table: incidents carry no trigger, and nothing in the database stops a row being
+     rewritten (`packages/db/src/schema/incidents.ts:14-16`). The plan may choose an append-only
+     table instead, at the cost of a migration.
+   - **The dialog** (picture 9): "¿La hora del equipo es correcta?", the four facts, then "La última
+     venta tiene una hora que aún no ha llegado: la marcó un reloj adelantado. Si confirmas, se
+     vuelve a cobrar y las ventas siguientes llevan la hora del equipo, anterior a la de esa venta.
+     No se cambia ninguna venta registrada. Queda anotado que lo has confirmado tú." Buttons
+     "Cancelar" and "Confirmar: la hora es correcta". (EN "Is the box's clock right?" … "The last
+     sale carries a time that has not come yet: a clock that ran ahead stamped it. If you confirm,
+     payments resume and the next sales carry the box's clock, earlier than that sale's. No recorded
+     sale is changed. It is noted that you confirmed it.")
+   - **A question for the asesor, not the owner:** whether AEAT accepts a chain in which one record's
+     generation time is earlier than the one before. Revision 4 already called this unknown (§9,
+     question 3); the confirmation is the one path that writes such a record.
+
+#### c. What the managers' alert and email say
+
+- **The alert, `clock.behind_chain`**: error; area "Equipo" (Box) like the other new box alerts
+  (§4.3); seen by holders of `system.manage`, the people who can act on it. It is an ongoing alert,
+  worked out on each read like `fiscal.clock_drift` (`apps/server/src/time-health.ts:102`), not a
+  recorded incident, so CLAUDE.md's area-claim rule for recorded incident codes does not bite; its
+  English and Spanish go in `apps/dashboard/src/i18n/alert-messages.ts`, like every alert's:
+  - "La hora del equipo ({clockAt}) es anterior a la última venta ({lastRecordAt}), así que no se
+    puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del equipo."
+  - "The box's clock ({clockAt}) reads earlier than its last sale ({lastRecordAt}), so no payment can
+    be taken. Orders and the kitchen still work. Sort it out on the Box status page."
+  - Go-to: Estado del equipo.
+- **`fiscal.clock_drift` is left out of the bell while this alert is open.** Its words end "you can
+  continue selling" / "puedes seguir vendiendo" (`alert-messages.ts:28-31`), which would be false.
+  The precedent is `backup.stream_behind`, left out when another alert already explains it
+  (CLAUDE.md §5).
+- **The confirmation, `clock.behind_chain_confirmed`**: a recorded incident, warning. Its area claim
+  already exists — core claims the `clock.` prefix for the fiscal area, seen with `fiscal.view`
+  (`packages/db/src/alerts.ts:4-9`) — and it needs English and Spanish wording; the file that
+  records it joins the guard's hand-kept list (`scripts/alert-codes.test.ts`, weaker than its name:
+  it reads text in listed files). New code.
+  - "{person} confirmó que la hora del equipo ({clockAt}) era correcta, aunque la última venta tenía
+    una hora posterior ({lastRecordAt}). Se volvió a cobrar con la hora del equipo."
+  - "{person} confirmed the box's clock ({clockAt}) was right, although the last sale carried a later
+    time ({lastRecordAt}). Payments resumed on the box's clock."
+- **The email**, to everyone with `system.manage` and an email address, once per stop (§4.3):
+  - Subject: "No se puede cobrar en {venue}: la hora del equipo es anterior a la última venta" /
+    "Payments stopped at {venue}: the box's clock reads earlier than its last sale".
+  - Body: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}).
+    Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a
+    cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): conecta el
+    equipo a internet para que la corrija, o llama a quien lo instaló. • Si la hora del equipo es
+    correcta y la de la última venta estaba adelantada: confírmalo en Estado del equipo. [Abrir
+    Estado del equipo]"
+  - EN: "The box's clock ({clockAt}) reads earlier than its last recorded sale ({lastRecordAt}). Since
+    then no device can take payment. Orders can still be taken and sent to the kitchen. What to do:
+    • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it
+    corrects itself, or call whoever installed it. • If the box's clock is right and the last sale's
+    time was ahead: confirm it on the Box status page. [Open the Box status page]"
+  - With no internet the email cannot leave the box. The one-minute watch (part d) tries again each
+    minute until the stop's one email is accepted by the mail server. The bell, served on the
+    venue's own network, is what a manager on site sees first.
+
+#### d. How the box decides the clock is fixed
+
+- **What it compares.** The box's clock reading — the same one that would stamp the next record
+  (`systemClock`, `apps/server/src/till-backend.ts:14`) — with the generation time of the last record
+  on this box's chain: the record the chain head names for this node (`cadenas`, read in
+  `packages/fiscal-verifactu/src/chain.ts:86-96`, moved on at `:220-223`), and its
+  `fecha_hora_huso_gen_registro` (`packages/fiscal-verifactu/src/schema/registros.ts:93`). More than a
+  minute earlier is stopped. A node with no record yet is never stopped. The "last record" is the
+  last one written, not the latest time in the table, so once a new record is written the comparison
+  moves on to it.
+- **When it checks.** On every notice read (each signed-in device every 15 seconds, §4.2); at both
+  checks before a card reader (part e); inside the chain's append, the one place every record kind
+  passes through (`chain.ts:178-180`), so no route can write a record past the stop, whoever calls
+  it; and on a one-minute watch that raises the alert and sends the email. Every input is on the
+  box, so it works with no internet; it survives a restart because the record is stored, not
+  remembered.
+- **What clears it.** Either (1) the clock no longer reads more than a minute earlier than that
+  record — because it was set right, or because real time caught up with a record stamped ahead; or
+  (2) a confirmation names that same record (part b). The strip goes on each device's next read, the
+  alert on the bell's next read.
+- **What does not clear it.** Devices and AEAT are evidence for the confirmation, never a reason to
+  lift the stop by themselves.
+- **The 28-10-2024 rule is checked first.** While it holds, its own notice shows and no confirmation
+  is offered, because the tax rules refuse the record whatever a manager says.
+
+#### e. What happens to orders already open
+
+The rule: **every action that takes money or writes a fiscal record is refused; everything else
+carries on.** (read, not run, for each line below)
+
+| Action | During the stop | Why |
+| --- | --- | --- |
+| Open a table, add or change dishes, move or join tables | Works | Writes no fiscal record |
+| Send to the kitchen; kitchen tickets and screens | Works; times print on the box's clock | Placing an order writes no record: `placeOrder` (`apps/server/src/working-order.ts:6400-6444`) never reaches `recordSale` |
+| Print the bill a guest checks before paying | Works; its time is the box's clock | It is not an invoice; the routes that write records are `recordSale`'s callers (`till-sale.ts`, `bill-payments.ts`, `working-order.ts`) and `cancel-credit.ts`, and printing a bill is none of them |
+| Take payment of any kind — cash, the connected reader, "Otro datáfono", a part payment on a bill | Refused, `clock.behind_chain`, before any reader is asked | At the sale's check before the reader (`apps/server/src/till-sale.ts:1236`) and in `beginBillPayment` (`apps/server/src/bill-payments.ts:1037`); the chain's own check catches any other path |
+| Collect an order whose invoice was already filed | Refused | It writes no new record (`till-sale.ts:2035`), but the payment is dated by the same clock and would land in the wrong business day |
+| Parts of a bill already paid | Stay paid; the bill stays open | Nothing is undone |
+| A card already being charged when the stop begins | The charge completes; the record is refused; the order stays locked against a second charge | On a sale, the order stays locked (`order.payment_in_flight`, `till-sale.ts:1207-1215`) and pressing Pay once fixed files the sale without charging again: a captured payment with no sale takes the recovery path (`till-sale.ts:1163-1172`), which skips the check before the reader, and its record passes the chain's check once the clock is fixed. On a bill, the box's pending-payment pass retries the completion each time and files it by itself once fixed, raising `payment.bill_settle_failed` meanwhile (`apps/server/src/bill-payments-loop.ts:153-195`, `:199-220`) |
+| A guest leaves without paying | Refused | It files an invoice with no payment (`issueUnpaidInvoice`, `working-order.ts:6484`, called at `apps/server/src/unpaid-departure.ts:128`) |
+| Credit an invoice, refund | Refused | A credit writes a record (`recordCorrection`, `apps/server/src/cancel-credit.ts:64`); a refund moves money |
+| Clock in, clock out | Works; the event time is the box's clock | Not a sale, and the working-time record is a legal duty of its own. Its recorded time already cannot run backwards (clamped, `packages/workforce/src/chain.ts:119-122`); a supervisor corrects the event times afterwards with `workforce.correct` (`packages/workforce/src/permissions.ts:2`) |
+| Reprint a receipt, open the drawer by hand | As today | Writes no record and takes no money |
+
+Why this default: it is the narrowest reading of "stop selling" that still stops every payment and
+every record, so no money changes hands that would need a record the box will not write, and the
+fiscal chain never runs backwards without a manager's name on it. Tables mid-meal keep being served
+and the kitchen keeps cooking what was ordered; the stop costs the venue its takings for its
+duration, not its service. Refusing everything that saves would stop the kitchen for a reason that
+has nothing to do with the kitchen.
+
 ---
 
 ## 5. The module seat this needs, and the field it does not
 
 **A seat is needed.** The notices and the Box status rows are not all the core's to give:
 
-- The unsent count, **Reintentar ahora**, the clock-behind-the-chain check and the 28-10-2024 rule all
-  belong to the Veri*Factu module. A generic route cannot name its outbox (`envios`) or its chain;
+- The unsent count, **Reintentar ahora**, the clock-behind-the-chain check with its stop, refusal and
+  manager's confirmation (§4.8), and the 28-10-2024 rule all belong to the Veri*Factu module. The
+  two checks before a card reader reach the stop through the fiscal seat, as they already pass the
+  backend to `selectOrderInvoice` (`apps/server/src/till-sale.ts:1236-1237`). A generic route cannot name its outbox (`envios`) or its chain;
   CLAUDE.md §3 keeps the composition list the only place that names every module, and generic code
   reaches the regime through its seats.
 - The bell already works this way: the Veri*Factu module supplies its submission alerts through the
@@ -668,13 +928,75 @@ Each is a default, not a question; the owner may overrule any.
     owner only?)").
 12. **A clock that is wrong but usable warns the manager and refuses nothing** — D8 (owner,
     2026-10-03) and A364 (owner, 2026-10-07: "Measured drift remains an administrator alert; the till
-    does not poll for it"), both in `2026-10-03-fiscal-chain-divergence-design.md:364-371`, `:753-756`.
+    does not poll for it"), both in `2026-10-03-fiscal-chain-divergence-design.md:364-371`, `:753-756`
+    — **except a clock that reads earlier than the last recorded sale**, which stops payments and
+    shows staff a red strip (the reversal below).
 13. **The box never corrects its own time** (§4.5).
 14. **Devices are witnesses, never a source of time** — the precedent of D7 (owner, 2026-10-03).
 15. **The Box status page sits under Ajustes beside Diagnóstico**, its own page (§4.3).
 16. **The start's clean-up threshold**: the start deletes its leftovers below 256 MiB free (§4.7). A
     guess for a box with a disk of tens of gigabytes; the build may change it with a measurement.
     The 2 GB warning is the owner's (question 1), not a default.
+
+### The reversal of D8 and A364, for one case (owner, 2026-10-19)
+
+The owner's answer to question 3, verbatim: "(b) STOP SELLING until the clock is fixed — every till
+red while the box's clock reads earlier than its last recorded sale. This REVERSES the earlier clock
+rule for this case only (a clock behind the last sale); record the reversal in the design's
+decisions section and in any CLAUDE.md / backlog text that states the old rule."
+
+- **D8** ("A clock out of tolerance warns, and never refuses a sale", owner 2026-10-03) no longer
+  holds for a clock that reads more than a minute earlier than the last recorded sale: that clock
+  stops every payment and every other action that writes a fiscal record (§4.8).
+- **A364** ("Measured drift remains an administrator alert; the till does not poll for it", owner
+  2026-10-07) no longer holds for the same case: staff see a red strip, on the equipment read every
+  device already makes.
+- **Both still hold for every other wrong clock** — ahead, or behind real time but not behind the
+  last sale — which sells, warns the manager, and shows staff nothing.
+- Where the old rules are stated as current, a dated pointer to this revision is added:
+  `2026-10-03-fiscal-chain-divergence-design.md` (D8, and the A364 note under P7), the plans
+  `2026-10-03-fiscal-chain-divergence.md` and `2026-10-04-fiscal-prevention-and-offline-recovery.md`,
+  the design `2026-10-04-fiscal-prevention-and-offline-recovery-design.md` (its D8 row), and
+  `docs/compliance/verifactu-findings.md` ("Do not block invoicing on clock drift"). CLAUDE.md does
+  not state either rule (searched).
+
+### Decisions revision 5 makes
+
+The owner's answer did not settle these; each is a default the owner may override.
+
+1. **"Last recorded sale" means the last fiscal record this box wrote**, of any kind, read from the
+   chain head — not the latest time in the table, so a new record moves the comparison on (§4.8 d).
+2. **The one-minute margin stays** (§4.5 item 2): D8's tolerance and AEAT comparison's margin; it
+   ignores the small backward steps a time sync makes.
+3. **What stops: every payment and every action that writes a fiscal record; orders, the kitchen,
+   printing a bill and clocking in carry on** (§4.8 e) — the narrowest reading that still stops every
+   record, so tables mid-meal keep being served.
+4. **Collecting an invoice already filed is refused too**, though it writes no new record: its
+   payment would be dated by the wrong clock and land in the wrong business day.
+5. **A card charged before the stop is recorded after it, not refunded**: the record is refused, the
+   order stays locked, and Pay files it without a second charge once fixed; on a bill the box files
+   it by itself. Likewise staff are told to record a card taken on another machine later, not to
+   refund it, since this stop is expected to end.
+6. **Clock-ins carry on**, with the box's (wrong) time, corrected afterwards by a supervisor: the
+   working-time record is a legal duty of its own, and refusing it would breach that duty.
+7. **A manager may lift the stop when the clock is right** — the case the owner's answer does not
+   name, where waiting could stop a venue for hours. Holders of `system.manage`, on the dashboard
+   only, recorded with their name; it never changes a record, the chain or the box's clock.
+8. **The confirmation is refused when the evidence says the clock is wrong** (AEAT's comparison since
+   the stop began, or two devices agreeing with each other), and offered with a warning when there
+   is no evidence. Devices and AEAT never lift the stop by themselves.
+9. **Payment buttons keep their look**; the box's refusal is the guard and the strip says why.
+10. **No "set the clock" action anywhere in Waitron**: a clock a page can set is a way to date sales
+    at will. Fixing a wrong clock means the internet (once `waitron.sh install` turns on the host's
+    time synchronisation) or whoever installed the box.
+11. **The confirmation is kept as a recorded incident**, so no migration; an append-only table would
+    be stronger, and the plan may choose it.
+12. **The alert is an error in the "Equipo" area for `system.manage`**; `fiscal.clock_drift`, whose
+    words say selling continues, is left out of the bell while it is open.
+13. **The email is retried each minute until sent once**, so a box with no internet sends it when the
+    connection returns.
+14. **Only the Veri*Factu module stops**: the check reads its chain. A box whose fiscal seat writes no
+    records has nothing to compare and is never stopped.
 
 ---
 
@@ -688,10 +1010,10 @@ Each is a default, not a question; the owner may overrule any.
   table like the certificate reminders' (`packages/fiscal-verifactu/src/schema/certificate-reminders.ts`),
   and so a migration; this design does not ask for that.
 - The clock checks keep their results in memory, like AEAT's comparison today
-  (`time-health.ts:48-58`); the chain check reads the last record, which is already stored.
-
-If the owner's answers change any of this — question 3's option (a) changes how a record's time is
-chosen, though not what is stored — the plan says so before building.
+  (`time-health.ts:48-58`); the chain check reads the last record, which is already stored, so the
+  stop survives a restart without a new table.
+- A manager's confirmation (§4.8 b) is a row in the existing `incidents` table. If the plan prefers
+  an append-only table for it, that is a migration, and the plan says so before building.
 
 ---
 
@@ -718,17 +1040,30 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    contract (till ↔ box), fiscal invariants (reads the outbox through the seat)._
 7. **Box status page**, **Reintentar ahora** and **Liberar**. _Risk: auth (`system.manage`), fiscal
    invariants (nudging the drain)._
-8. **Clock checks** (minimum date, chain, devices, `clock.*` alerts), then question 3's answer.
-   _Risk: fiscal invariants; if question 3 is (a), fiscal core, which the owner lands._
-9. **Emails for the red conditions and the 2 GB disk warning**, `reader.offline`, the printer notice
-   (question 2), and deleting old Docker images after an upgrade in `deploy/waitron.sh`. _Risk: none listed._
+8. **The clock-behind stop** (§4.8 a, d, e): the chain check inside the append and at both checks
+   before a reader, the `clock.behind_chain` refusal and its till wording, the red notice, the alert
+   and email, and leaving `fiscal.clock_drift` out while it is open. Tests: a sale, a bill payment,
+   an unpaid departure and a credit each refused with the clock a day behind the last record; a card
+   captured before the stop recorded without a second charge once the clock moves on; orders,
+   kitchen sends and clock-ins still accepted; and a control a minute inside the margin that sells.
+   _Risk: fiscal invariants (every path that writes a record), cross-package contract (the seat and
+   a refusal's parameters)._
+9. **Devices report their clock, `clock.disagrees`, the minimum-date checks, and the manager's
+   confirmation** (§4.5 item 3, §4.8 b): the witness reading, the confirmation route behind
+   `system.manage`, its refusal on contrary evidence, the incident `clock.behind_chain_confirmed`,
+   and the Reloj row and dialog on the Box status page. _Risk: fiscal invariants (lifts the stop),
+   auth (`system.manage`)._
+10. **Emails for the red conditions and the 2 GB disk warning**, `reader.offline`, the printer notice
+    (question 2), and in `deploy/waitron.sh`: deleting old Docker images after an upgrade, and
+    switching on the host's time synchronisation at install where the system provides it, printing a
+    line when it does not (§4.8 b). _Risk: none listed._
 
 ---
 
 ## 9. Questions for the owner
 
-Three, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. Questions
-1 and 2 are answered; question 3 is the open one.
+Three, one at a time. Each had a recommendation; the pictures are in the mock-ups folder. All three
+are answered.
 
 ### Question 1 of 3 — When the disk fills, should the box free its reserve by itself?
 
@@ -763,6 +1098,12 @@ sending food needs to know to walk to the kitchen. Two minutes is already the wa
 the manager's alert use.
 
 ### Question 3 of 3 — When the box's clock is behind its last sale, what should it do?
+
+Owner's answer (2026-10-19): (b) stop selling until the clock is fixed — every till red while the
+box's clock reads earlier than its last recorded sale, reversing the earlier clock rule for this case
+only. The owner asked the design to say what staff see, who can fix it and how, what the managers'
+alert and email say, how the box decides the clock is fixed, and what happens to orders already open:
+§4.8 a to e; the reversal is recorded in §6; pictures 8 and 9.
 
 _Example._ After a power cut on Saturday morning the box's clock comes back reading 14 March 2025, a
 year and a half behind. Last night's last sale was recorded at 23:40 on 18 October 2026, so one of
@@ -804,9 +1145,15 @@ known; it becomes a question for the asesor, and if the answer is no, (a) comes 
 - **Restore, reset or image rollback from the recovery page** — separate backlog entries
   ("Resetting a box without a terminal", "Automatic upgrades that can be undone until the first
   order").
-- **Time synchronisation in the box image** — B3 (`docs/backlog.md:5039-5041`), whose image
-  constraints now name it (`docs/backlog/box.md:356-359`) — and the HTTPS certificate minted before
-  the clock is set (`docs/backlog.md:5088-5089`).
+- **Time synchronisation in the box image, and a clock that keeps time through a power cut** — B3,
+  whose image constraints name both (`docs/backlog/box.md`, "Box image constraints (B3)"); this
+  design only switches synchronisation on at `waitron.sh install` (§8, slice 10) — and the HTTPS
+  certificate minted before the clock is set (`docs/backlog.md`, "A box that mints its certificate
+  before NTP sync").
+- **Setting the box's clock from a page.** Rejected, not deferred (§4.8 b; §6, revision 5 decision 10).
+- **Whether AEAT accepts a chain whose record times run backwards once**, as a manager's confirmation
+  allows (§4.8 b): a question for the asesor, to add to `docs/compliance/asesor-questions.md` when
+  the build is planned.
 - **The SumUp 15-minute wait** after an uncertain card (§2.4) is a payments decision.
 - **The receipt printer's paid-screen line** is A796's ("No se ha podido imprimir", Revision 4
   default 12) and the counter's is A739's.
@@ -891,3 +1238,17 @@ All in scratch folders outside the repository (`mktemp -d`); nothing was committ
    default unique clash (2067); and `false` for `RAISE(ROLLBACK)` (1811), `INSERT OR ROLLBACK` (2067)
    and `ON CONFLICT ROLLBACK` (1299). Each `true` line is the control for its neighbours: the same
    code (1811, 2067, 1299) appears on both sides, so the code alone cannot tell them apart.
+6. **Whether a container process can set the clock** (revision 5). Docker 29.3.0 (Docker Desktop's
+   Linux machine on macOS), image `node:26.11.1-slim`, reading the process's effective capability
+   set from `/proc/self/status` and testing bit 25, the clock-setting capability (`cap_sys_time`).
+   Command shape: `docker run --rm <flags> node:26.11.1-slim sh -c 'id -u; grep CapEff
+   /proc/self/status; node -e "…bit 25 of CapEff…"'`. Printed:
+   - `--user 1000:1000` (an unprivileged user, as the box's `USER waitron` is): `1000`,
+     `CapEff: 0000000000000000`, `cap_sys_time (bit 25) effective: false`;
+   - no flags (root, Docker's default set): `CapEff: 00000000a80425fb`, bit 25 `false`;
+   - control, `--cap-add SYS_TIME`: `CapEff: 00000000aa0425fb`, bit 25 `true`.
+   - The failing case — a container process that could set the clock — would have printed bit 25
+     `true` without the flag; the control shows the probe prints `true` when the capability is there.
+     Nothing tried to set the clock: Docker Desktop's machine is shared with other sessions. Not run
+     on a real box or on the Waitron image itself, whose `node` carries only `cap_net_bind_service`
+     (`deploy/Dockerfile:168`).

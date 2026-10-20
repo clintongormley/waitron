@@ -369,6 +369,10 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   name mismatch".
   **A364 update, 2026-10-07:** the owner removes the till's authority-clock notices.
   Measured drift remains an administrator alert; the till does not poll for it.
+  **A798 update, 2026-10-20:** reversed for one case by the owner (A798 question 3, answer (b)): a
+  box clock that reads more than a minute earlier than the last recorded sale stops payments and
+  shows staff a red strip; every other wrong clock still warns only. See [the A798 design, revision
+  5, §4.8 and §6](2026-10-19-a798-degraded-trading-design.md).
 
   - **The setup wizard's fiscal test shows AEAT's reason when it is refused** (owner, 2026-10-03).
     Today its screen (`apps/setup/src/screens/fiscal-test-screen.ts`) receives only accepted,
@@ -754,6 +758,10 @@ Each has the recommended default this design is written to.
    2026-10-03): yes, with a tolerance of one minute** — the Orden art. 7.f standard, well inside the
    240 seconds reported (unconfirmed) for AEAT's warning 2004, and early enough to catch a clock that
    would date a sale made just before midnight on the next day, which AEAT refuses.
+   **A798 update, 2026-10-20:** reversed for one case by the owner (A798 question 3, answer (b)): a
+   box clock that reads more than a minute earlier than the last recorded sale stops payments and
+   shows staff a red strip; every other wrong clock still warns only. See [the A798 design, revision
+   5, §4.8 and §6](2026-10-19-a798-degraded-trading-design.md).
 9. **D9 — How new series are named** (P3). **DECIDED (owner, 2026-10-03): short codes that
    increment** (`FS`, then `FS-2`, `FS-3`), each checked free against the database, the selling
    devices and AEAT before use; setup refuses a prefix AEAT already holds for the tax id; and a daily

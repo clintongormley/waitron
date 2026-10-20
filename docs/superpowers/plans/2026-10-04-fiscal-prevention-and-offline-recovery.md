@@ -636,6 +636,10 @@ stream `pointer.ts`/`supervisor.ts`; till receipt-result handling and durable de
   and unavailable reads. Lane A's receipt overlap is explicitly waived by the campaign queue.
 **A364 update, 2026-10-07:** the owner removes the till's authority-clock notices.
 Measured drift remains an administrator alert; the till does not poll for it.
+**A798 update, 2026-10-20:** reversed for one case by the owner (A798 question 3, answer (b)): a box
+clock that reads more than a minute earlier than the last recorded sale stops payments and shows
+staff a red strip; every other wrong clock still warns only. See [the A798 design, revision 5, §4.8
+and §6](../specs/2026-10-19-a798-degraded-trading-design.md).
 
 - [x] W41s-10c implementation checkpoint, 2026-10-05 (not landed): show saved AEAT rejection
   codes and messages, including a repeated readiness attempt while the refusal is still saved.

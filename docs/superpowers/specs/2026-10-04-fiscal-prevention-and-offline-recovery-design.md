@@ -134,7 +134,7 @@ These are proposed requirements, not a claim that all current paths have been ve
 | D5: surviving old-chain records filed unchanged | Retain its adviser and live-probe conditions. It cannot file missing records. |
 | D6: Fiscal filing screen under Reporting | Retain location, permission and owner review. Show unresolved invoices separately from queue progress. |
 | D7: external checks and device witnesses | Keep useful evidence optional during offline recovery. A signed external bucket witness differs from a file on the restored disk. Online fencing is additional protection; changing identity alone does not fence the old machine. |
-| D8: clock warning without blocking sales | Retain the one-minute warning decision. |
+| D8: clock warning without blocking sales | Retain the one-minute warning decision. **A798 update, 2026-10-20:** except a clock that reads more than a minute earlier than the last recorded sale, which stops payments (owner, A798 question 3 (b); [A798 design, revision 5, §4.8](2026-10-19-a798-degraded-trading-design.md)). |
 | D9: short series checked against local/device/AEAT history | Replace the allocation method with §2–3. Lookups supply evidence, not reservations. Add the agreed emergency prefix and explicit later short-series change. |
 
 **Implemented, 2026-10-06 (W41s-3; owner review pending).** A pointer, not a revision of the

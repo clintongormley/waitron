@@ -116,8 +116,8 @@ come after the list above:
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
-  installer (B3); what the box does when a part fails but it can still sell (A798,
-  [designed](superpowers/specs/2026-10-19-a798-degraded-trading-design.md); awaiting the owner's answers).
+  installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
+  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) decided, revision 5).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5188,13 +5188,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
-- **A798. Degraded but trading: what the box does, and tells staff, when a part fails but it can still sell.**
-  [Design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) and
-  [mock-ups](backlog/mockups/a798-degraded-trading/README.md) await the owner's answer to one
-  question (what to do when the clock is behind the last sale). Two were answered on 2026-10-19: no
-  reserved space on the disk, a warning and an email at 2 GB free; and when a printer stops, every
-  till and handheld is told at two minutes. It adds a module seat for staff notices; no migration. The build is planned
-  separately.
+- **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
+  it can still sell.** Design decided (revision 5, 2026-10-20; no owner questions open); the build is
+  to be planned as its own item, in the design's §8 slices:
+  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
+  [mock-ups](backlog/mockups/a798-degraded-trading/README.md). The owner's three answers: no reserved
+  space on the disk, a warning and an email at 2 GB free; when a printer stops, every till and
+  handheld is told at two minutes; and while the box's clock reads earlier than its last recorded
+  sale, payments stop on every device — reversing D8 and A364 for that case only — until the clock is
+  set or a manager confirms it is right (design §4.8; the defaults that answer left open are in §6).
+  It adds a module seat for staff notices; no migration. Not started.
 
 - **Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
   a module that fails at start, undoing the last module change, and a migration that applied only in

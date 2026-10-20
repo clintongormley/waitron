@@ -356,7 +356,11 @@ today); generalise archive entry routing off declared source ids when a second n
 - **The box image keeps its clock synchronised, with no terminal** (A798). Nothing in `deploy/` sets up
   time synchronisation today (grep for NTP, chrony, timesyncd, timedatectl), and the server's
   `timedatectl` probe reports "unavailable" where the command is absent
-  (`apps/server/src/time-health.ts:34-43`).
+  (`apps/server/src/time-health.ts:34-43`). Since A798's revision 5 (owner, 2026-10-19) a box whose clock
+  reads earlier than its last recorded sale stops taking payment until the clock is set, so the
+  image should also keep time through a power cut (hardware with a battery-backed clock), and set
+  it as soon as it is online. A798-B switches the host's synchronisation on at `waitron.sh install`;
+  the image makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Kiosk options, none built: Chromium in the box image, now the owner's lean for every box (B3,
