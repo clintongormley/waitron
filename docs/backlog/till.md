@@ -2276,8 +2276,9 @@ the server boundary, shared dialog, table submit/release adapters, editor and li
 The table heading and line marks share that view; stale confirmations refresh the party metadata
 without replacing the dish draft. Release requests have a network deadline separate from the
 time spent answering; an open allergy form retains its answer for retry. Sold-out, changed-draft
-and station-routing refusals return to their dish recovery handlers. Kitchen callers and lifecycle
-integration remain.
+and station-routing refusals return to their dish recovery handlers. The send's groups and allergy
+ticks use the dish ids returned by its final save. A stale group Fire shows the refreshed dishes and
+requires another confirmation before sending their assignments. Kitchen callers and lifecycle integration remain.
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.

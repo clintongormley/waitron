@@ -10,10 +10,13 @@ import {
   catalogue,
   dialog,
   draft,
+  emit,
   mountApp,
   openTable,
+  party,
   resetAllergyFixture,
   server,
+  table,
   tableOrder,
 } from "../test/allergy-app-fixture.js";
 
@@ -21,6 +24,119 @@ const originalLocale = currentLocale();
 beforeEach(() => {
   setLocale("en");
   resetAllergyFixture();
+});
+
+it("uses reminted ids from the final save for both allergy ticks and draft groups", async () => {
+  let resolveSave!: () => void;
+  const saved = new Promise<void>((resolve) => {
+    resolveSave = resolve;
+  });
+  const save = vi.fn(async (...args: Parameters<typeof server.saveDraft>) => {
+    const answer = await server.saveDraft(...args);
+    answer.draft!.lines[0]!.id = "authoritative-steak";
+    server.drafts[0]!.lines[0]!.id = "authoritative-steak";
+    server.linesById.set("authoritative-steak", answer.draft!.lines[0]!);
+    await saved;
+    return answer;
+  });
+  const preview = vi.fn(async (_id: string, target: AllergySendTarget) => {
+    const view = allergyView("allergies", target);
+    view.snapshot.guests = [
+      { id: "guest-1", position: 0, who: "Blue shirt", allergens: { milk: {} }, note: null },
+    ];
+    return view;
+  });
+  const { el } = await mountApp({ saveDraft: save, previewPartyAllergy: preview });
+  await openTable(el);
+  await addDish(el);
+  await userEvent.click(
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+  );
+  await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(preview).not.toHaveBeenCalled();
+  expect(api.submitDraft).not.toHaveBeenCalled();
+  expect(draft(el).sending).toBe(true);
+  const draftId = server.drafts[0]!.id;
+  resolveSave();
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(preview.mock.calls[0]![1]).toEqual({
+    kind: "draft",
+    draftId,
+    lineIds: ["authoritative-steak"],
+  });
+  await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>('[data-tick="0:0"]')!);
+  await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+  await vi.waitFor(() => expect(api.submitDraft).toHaveBeenCalledOnce());
+  expect(api.submitDraft!.mock.calls[0]![2]).toMatchObject({
+    draftRevision: 1,
+    expectedEdit: { draftRevision: 1, draftId },
+    groups: [{ release: "hold", lineIds: ["authoritative-steak"] }],
+    allergy: { ticks: [{ line: { kind: "draft", id: "authoritative-steak" }, guestIndex: 0 }] },
+  });
+});
+
+it("reconsiders a changed group after a stale fire without carrying a removed dish tick", async () => {
+  let revision = 3;
+  const preview = vi.fn(async (_id: string, target: AllergySendTarget) => {
+    const view = allergyView("allergies", target);
+    view.snapshot.revision = revision;
+    view.snapshot.guests = [
+      { id: "guest-1", position: 0, who: "Blue shirt", allergens: { milk: {} }, note: null },
+    ];
+    view.dishes[0] = {
+      ...view.dishes[0]!,
+      line: { kind: "working", id: revision === 3 ? "old-dish" : "arriving-dish" },
+      name: revision === 3 ? "Steak" : "Soup",
+      billId: revision === 3 ? "wo-4" : "other-bill",
+      offeredBefore: false,
+    };
+    return view;
+  });
+  const release = vi
+    .fn()
+    .mockImplementationOnce(async () => {
+      revision = 4;
+      throw { code: "party.out_of_date" };
+    })
+    .mockResolvedValue({ revision: 5 });
+  const { el } = await mountApp({ previewPartyAllergy: preview, fireGroup: release });
+  const screen = await openTable(el);
+  api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+  api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+  api.readCurrentOrders!.mockResolvedValue({
+    revision: 4,
+    hasGroups: true,
+    nextDisplayNumber: 2,
+    retainedCourses: [],
+    groups: [],
+    ungrouped: [],
+    reminder: null,
+  });
+  emit(screen, "fire-group", { groupId: "held-group" });
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  const form = dialog(el)!;
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>('[data-tick="0:0"]')!);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+  await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+  await vi.waitFor(() => expect(form.busy).toBe(false));
+  expect(release).toHaveBeenCalledOnce();
+  expect(form.shadowRoot!.textContent).toContain("Soup");
+  expect(form.shadowRoot!.querySelector<HTMLInputElement>('[data-tick="0:0"]')!.checked).toBe(
+    false,
+  );
+  expect(release.mock.calls[0]![2]).toMatchObject({
+    expectedPartyRevision: 3,
+    allergy: { ticks: [{ line: { kind: "working", id: "old-dish" }, guestIndex: 0 }] },
+  });
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>('[data-tick="0:0"]')!);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+  await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(2));
+  expect(release.mock.calls[1]![2]).toMatchObject({
+    expectedPartyRevision: 4,
+    allergy: { ticks: [{ line: { kind: "working", id: "arriving-dish" }, guestIndex: 0 }] },
+  });
+  expect(release.mock.calls[1]![2].submissionId).not.toBe(release.mock.calls[0]![2].submissionId);
+  await vi.waitFor(() => expect(dialog(el)).toBeNull());
 });
 afterEach(() => {
   cleanupWidgets();
