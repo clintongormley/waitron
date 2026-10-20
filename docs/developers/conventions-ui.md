@@ -266,6 +266,12 @@ because a till runs full screen and has no tab bar to come back by (the design,
   heading's height, and a page opened at a section scrolled the body to the section and the heading
   out of view (`apps/till/src/widgets/guide-sheet.fragment.test.ts`). Close and Escape both close it, and focus goes
   back to the badge that opened it. A badge outside `till-shell` reaches no sheet and opens a tab.
+- Focus inside the frame is in another document, which the till's own listeners never hear. So on
+  every page the frame loads from the till's origin, the sheet listens for Escape, which closes it
+  the way Close does, and for touches and keys, which it dispatches again from itself so the till
+  counts them as activity and does not sign the reader out as idle. It stops listening when it
+  closes. It cannot reach into a page from another origin, so there it does neither
+  (`apps/till/src/widgets/guide-sheet.test.ts`).
 - The page is served by the box on the till's own origin, and its policy allows same-origin framing
   (`frame-ancestors 'self'`, above). In development the till's Vite server sends `/help` to the
   server (`apps/till/vite.config.ts`, pinned by `scripts/dev-proxy-config.test.ts`).

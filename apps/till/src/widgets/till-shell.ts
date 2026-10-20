@@ -1022,7 +1022,7 @@ export class TillShell extends LitElement {
       </div>
       <till-guide-sheet
         .href=${this.guideHref}
-        @till-guide-close=${() => this.#onGuideClose()}
+        @guide-close=${() => this.#onGuideClose()}
       ></till-guide-sheet>
     `;
   }

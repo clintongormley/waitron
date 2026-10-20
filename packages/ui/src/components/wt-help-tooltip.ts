@@ -176,6 +176,7 @@ export class WtHelpTooltip extends LitElement {
   };
 
   private onGuideClick(event: MouseEvent): void {
+    event.stopPropagation();
     const open = this.dispatchEvent(
       new CustomEvent<{ href: string }>("wt-guide-open", {
         detail: { href: this.guideHref },
@@ -184,7 +185,6 @@ export class WtHelpTooltip extends LitElement {
         cancelable: true,
       }),
     );
-    event.stopPropagation();
     if (!open) event.preventDefault();
     this.popup.hidePopover();
   }

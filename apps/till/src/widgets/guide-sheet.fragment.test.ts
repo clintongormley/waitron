@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import type { WtModal } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -8,12 +8,17 @@ import type { TillGuideSheet } from "./guide-sheet.js";
 
 const originalLocale = currentLocale();
 const urls: string[] = [];
+let viewport = { width: 0, height: 0 };
+
+beforeEach(() => {
+  viewport = { width: window.innerWidth, height: window.innerHeight };
+});
 
 afterEach(async () => {
   cleanupWidgets();
   setLocale(originalLocale);
   for (const url of urls.splice(0)) URL.revokeObjectURL(url);
-  await page.viewport(1280, 900);
+  await page.viewport(viewport.width, viewport.height);
 });
 
 /** A same-origin page whose `#far` section starts well below the first screen, as a guide's
