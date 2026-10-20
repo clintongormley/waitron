@@ -129,6 +129,11 @@ overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-dan
 
 ### Colour
 
+The contrast rules the palette is held to are listed once, in
+`packages/ui-core/src/theme/contrast-rules.ts`: these cases run all of them against the browser's
+resolved tokens, and the theme derivation runs the ones that read a colour a theme writes against a
+venue's colours.
+
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
 `--wt-color-surface-sunken`, `--wt-color-track`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
 `--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-danger`,
