@@ -788,12 +788,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
   should go deeper (a shared table rule, so the Products tree changes too).
 
-- **Menu-root default fallback when content languages are unset (A420 review).**
-  `updateMenuDetails` validates against English; section and include-folder writers use
-  their supplied venue fallback. Decide whether the menu-root writer should take that
-  fallback too. `content-translations.test.ts`, “existing menu, section and folder checks
-  expose the unset default fallback”, exercises the difference. Inline saves already use
-  their resolved venue context.
+- **Menu-root enabled-language fallback when content languages are unset (A420 review).**
+  `updateMenuDetails` checks map keys using English as its fallback; section and include-folder
+  writers use their supplied venue fallback. Decide whether the menu-root writer should take
+  that fallback too. `content-translations.test.ts`, “menu, section and folder writes keep enabled
+  maps optional with %s configuration”, retains the unset-configuration difference. Inline saves
+  use their resolved venue context.
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs
@@ -1357,9 +1357,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
   action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 
-- **A refused customer name cannot say which value it refused.** `content.translation_required`
-  carries only the language, so the editor resolves the field from the body it submitted — exact for
-  one missing value, the first of several otherwise. An owner call if it ever bites.
+- **Retire the product editor's required-translation refusal mapping.** Customer names are
+  optional, but `catalogue-screen.ts` still handles `content.translation_required` through
+  `productEditorTranslationField`. Trace the product routes before removing that branch and its
+  tests. Media still validates required image names and translates its refusal to
+  `image.translation_required` with an explicit `names` field.
 
 - **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line

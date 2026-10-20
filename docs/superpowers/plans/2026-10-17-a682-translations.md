@@ -559,7 +559,7 @@ Extend `defaultLanguageDescriptions(text: Readonly<Record<string,string>>, keys:
 **Files:** No new product/config/guard changes are planned here. Read current `docs/developers/ci-and-gates.md`, `workflow-guide.md`, `finish-branch` and `land-branch` skills when executing. The owner already authorized inline implementation/finish/land; the driver retains reservation and publication control.
 
 - [x] Review the entire diff against this plan/spec. Keep a **Changed test checks** receipt: for each changed existing assertion, record old behavior, approved requirement that changes it, replacement assertion and focused command/result. Missing-text refusal → success with exact stored partial/empty maps is authorized; weakening ownership/archive/atomic retry/audience/price/VAT/fiscal/root-guard assertions is not. Retain all unrelated behavioral assertions. No coverage excludes, ignores or deleted tests to manufacture green.
-- [ ] Run focused tests for the latest implementation fixes, normal scoped typechecks and migration checks indicated above. Do not repeat all focused commands just for ceremony once unchanged passing evidence exists. Let the normal pre-push hook run its install/format/lint/root-coverage/scoped-types gate once, without `--no-verify`; no whole-workspace local tests merely to finish. Current-head CI supplies mandatory package coverage. Country/module/catalogue changes affect dependents: inspect actual selected scope, including media, provisioning/setup, venue-service, server, dashboard and till. Root/fiscal guards stay unchanged.
+- [x] Run focused tests for the latest implementation fixes, normal scoped typechecks and migration checks indicated above. Do not repeat all focused commands just for ceremony once unchanged passing evidence exists. Let the normal pre-push hook run its install/format/lint/root-coverage/scoped-types gate once, without `--no-verify`; no whole-workspace local tests merely to finish. Current-head CI supplies mandatory package coverage. Country/module/catalogue changes affect dependents: inspect actual selected scope, including media, provisioning/setup, venue-service, server, dashboard and till. Root/fiscal guards stay unchanged.
 - [x] Announce ready for `finish-branch`, then continue it because it is authorized. After initial rebase use **one final Claude whole-branch run-it review** in an installed throwaway checkout of the complete candidate. Driver arranges that review; don't spawn routine task reviewers. Read completed findings, fix supported findings inline with RED/GREEN and signed commits, then focused verification. Approval survives later unrelated rebases; no repeated whole review solely for a rebase.
 - [ ] Open/update the one production PR, describe reset implications and snapshot/fiscal boundary precisely, and wait for required current-head CI/coverage and resolved conversations. Check SHA with `gh pr view --json headRefOid,statusCheckRollup` and `gh run list --json databaseId,headSha,status,conclusion`. A passing filtered selection is not evidence a package test ran; read job/merge coverage results. No Cloud push/full-suite exception is invoked since this PR changes Waitron only.
 - [ ] Under **H11**, driver serializes main landing with other lanes. Refresh reservations/main, rebase only for actual conflicts/shared code changes per house rules, install after rebase, preserve G/C/E integration, use the normal hook and current-head CI. Land under the already granted authorization through `land-branch`; install in main after pull. Remove only this branch/worktree/managed resources, verify remote feature branch is gone, and stop only processes this implementation started (recorded pids), never names or another lane's resources.
@@ -598,3 +598,16 @@ wording. An independent owner-kind test now catches deletion of the existing wri
 raw Save versus normalized-map byte boundaries were measured against a real database and
 documented. Current owning suites pass; protected fiscal checks remain unchanged. Normal push
 checks, exact-head CI, serialized landing and merge CI remain outstanding.
+
+
+## 2026-10-20 current-head CI correction
+
+The first run found old canonical-language fixture keys, an exact unit-save body missing its
+required staff pair, and redundant staff copies in absent option customer maps. Focused RED/GREEN
+checks retain the original fiscal sale-path and protected suites unchanged. The full changed-check
+appendix records each correction; the original server null-map assertions are restored. Frozen
+staff names already supply the absent-map fallback through the unchanged reader. Its obsolete
+comment about the till retaining whole customer maps is pruned without a runtime change.
+The final guide/backlog audit removes the fulfilled guide duty and keeps the unset-language
+fallback and dead product-refusal-mapping follow-ups precise. Current-head CI and landing remain
+execution duties; this checkpoint is not a green-CI claim.

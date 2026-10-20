@@ -1120,10 +1120,6 @@ help about anything you want very quickly."
     `escapeHtml` to a file of its own would end that; a reviewer called it optional.
   - The failed-start recovery page (started from `apps/server/src/node-entry.ts`, outside
     `bootServer`) does not serve the guides.
-  - The first half of the Languages and photos guide, before "Add a photograph once", has not been
-    checked against the code, because A682 rewrites it. A682 updates
-    `apps/server/src/guide/en/content-and-images.md` and `es/content-and-images.md`, and the lines
-    about translations in `en/modifiers.md` and `es/modifiers.md`.
 - **Slice 4a landed (#1907).** The till's bar has the Help switch (on a till first in the session
   row, before the person's menu; on a handheld after the language chooser), never in More and never
   on the kitchen display, kiosk mode or the lock screen. On a handheld at phone width, when the bar
