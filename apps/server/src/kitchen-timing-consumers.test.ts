@@ -17,6 +17,7 @@ import {
   OPERATOR,
   order,
   seat,
+  seatWithNoAllergies,
   setupPartyVenue,
 } from "./testing/party-venue.js";
 import { serveLine } from "./testing/serve-line.js";
@@ -243,7 +244,7 @@ describe("effective kitchen timing across consumers", () => {
 
   it("ages a released held group's dish from its release on the kitchen's boards and the overdue report", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { partyId, tabId } = await seat(v, await v.table("Held"));
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Held"));
     const placed = await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, partyId, {
         groups: [{ lines: [{ menuItemId: v.item("Burger"), quantity: "1" }], release: "hold" }],
