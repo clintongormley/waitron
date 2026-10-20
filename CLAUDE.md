@@ -205,7 +205,8 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes.** A rebuild
+- **A migration can fail on a box that already has a trigger naming what it changes.** `applyMigrations` removes the change feed first for
+  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild
   of a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
   than its name — its rows are synthetic and counted, not compared, and it installs today's
   change-feed list, and today's append-only list less the tables the previous step lacked, at every
