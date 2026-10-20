@@ -6,6 +6,7 @@ import {
   rulesIn,
   type ContrastGroupId,
 } from "../theme/contrast-rules.js";
+import { contrastRatio } from "../theme/colour.js";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 // The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same way.
 import { applyTokens } from "./index.js";
@@ -455,6 +456,88 @@ describe.each(["light", "dark"] as const)("floor ring and calm edge colours (%s)
 
   test("the OS preference gives them the same values as the explicit theme", async () => {
     const names = [edge, ...PULSE_DIMS.map(([dim]) => dim)];
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
+
+const TAB_TINTS = [
+  ["--wt-color-tab-danger-tint", "--wt-color-danger"],
+  ["--wt-color-tab-warning-tint", "--wt-color-warning"],
+  ["--wt-color-tab-bill-tint", "--wt-color-table-bill"],
+  ["--wt-color-tab-ready-tint", "--wt-color-success"],
+  ["--wt-color-tab-seated-tint", "--wt-color-table-seated"],
+] as const;
+
+describe.each(["light", "dark"] as const)("map and zone tab colours (%s)", (theme) => {
+  const calm = "--wt-color-table-calm";
+
+  test("the calm fill keeps its text at 4.5:1 and its edge line at 3:1", () => {
+    const el = mount(theme);
+    expect(
+      contrastRatio(token(el, "--wt-color-on-table-calm"), token(el, calm)),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(token(el, "--wt-color-field-line"), token(el, calm)),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  test("calm and free are different colours", () => {
+    const el = mount(theme);
+    expect(deltaE2000(token(el, calm), token(el, "--wt-color-table-free"))).toBeGreaterThanOrEqual(
+      10,
+    );
+  });
+
+  test("text on a ready table reads at 4.5:1", () => {
+    const el = mount(theme);
+    expect(
+      contrastRatio(token(el, "--wt-color-on-success"), token(el, "--wt-color-success")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("each tab tint keeps the text at 4.5:1 and its bar at 3:1", () => {
+    const el = mount(theme);
+    for (const [tint, bar] of TAB_TINTS) {
+      expect(
+        contrastRatio(token(el, "--wt-color-text"), token(el, tint)),
+        tint,
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(token(el, bar), token(el, tint)), tint).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("each tab tint is its bar colour at 18% over the surface", () => {
+    const el = mount(theme);
+    const channels = (hex: string) => {
+      expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+      return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    };
+    const surface = channels(token(el, "--wt-color-surface"));
+    for (const [tint, bar] of TAB_TINTS) {
+      const barChannels = channels(token(el, bar));
+      channels(token(el, tint)).forEach((channel, i) =>
+        expect(
+          Math.abs(channel - Math.round(0.18 * barChannels[i]! + 0.82 * surface[i]!)),
+          `${tint} channel ${i}`,
+        ).toBeLessThanOrEqual(1),
+      );
+    }
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = [
+      calm,
+      "--wt-color-on-table-calm",
+      "--wt-color-on-success",
+      ...TAB_TINTS.map(([tint]) => tint),
+    ];
     await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
     const explicit = mount(theme);
     const fromTheme = names.map((name) => token(explicit, name));

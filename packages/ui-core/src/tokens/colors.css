@@ -123,6 +123,15 @@
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
+  /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+  --wt-color-table-calm: #e4ecfb;
+  --wt-color-on-table-calm: #16181d;
+  --wt-color-on-success: #ffffff;
+  --wt-color-tab-danger-tint: #f1d8d7;
+  --wt-color-tab-warning-tint: #eae0d1;
+  --wt-color-tab-bill-tint: #e8dcf2;
+  --wt-color-tab-ready-tint: #d6e8e1;
+  --wt-color-tab-seated-tint: #d7e5fb;
   --wt-color-highlight: #fff3b0;
   --wt-color-on-highlight: #241500;
 }
@@ -243,6 +252,15 @@
     --wt-color-table-calm-edge: #4d6aa6;
     --wt-color-danger-pulse-dim: #bd9ba0;
     --wt-color-warning-pulse-dim: #b9aa94;
+    /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+    --wt-color-table-calm: #22304a;
+    --wt-color-on-table-calm: #eceef2;
+    --wt-color-on-success: #06190f;
+    --wt-color-tab-danger-tint: #422e31;
+    --wt-color-tab-warning-tint: #40372a;
+    --wt-color-tab-bill-tint: #383347;
+    --wt-color-tab-ready-tint: #223a35;
+    --wt-color-tab-seated-tint: #22304a;
     --wt-color-highlight: #614a0f;
     --wt-color-on-highlight: #fff3b0;
   }
@@ -363,6 +381,15 @@
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
+  /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+  --wt-color-table-calm: #e4ecfb;
+  --wt-color-on-table-calm: #16181d;
+  --wt-color-on-success: #ffffff;
+  --wt-color-tab-danger-tint: #f1d8d7;
+  --wt-color-tab-warning-tint: #eae0d1;
+  --wt-color-tab-bill-tint: #e8dcf2;
+  --wt-color-tab-ready-tint: #d6e8e1;
+  --wt-color-tab-seated-tint: #d7e5fb;
   --wt-color-highlight: #fff3b0;
   --wt-color-on-highlight: #241500;
 }
@@ -482,6 +509,15 @@
   --wt-color-table-calm-edge: #4d6aa6;
   --wt-color-danger-pulse-dim: #bd9ba0;
   --wt-color-warning-pulse-dim: #b9aa94;
+  /* The map's calm fill, the text on a ready table, and a zone tab's tint for each state's colour. */
+  --wt-color-table-calm: #22304a;
+  --wt-color-on-table-calm: #eceef2;
+  --wt-color-on-success: #06190f;
+  --wt-color-tab-danger-tint: #422e31;
+  --wt-color-tab-warning-tint: #40372a;
+  --wt-color-tab-bill-tint: #383347;
+  --wt-color-tab-ready-tint: #223a35;
+  --wt-color-tab-seated-tint: #22304a;
   --wt-color-highlight: #614a0f;
   --wt-color-on-highlight: #fff3b0;
 }
