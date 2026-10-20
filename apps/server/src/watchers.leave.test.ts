@@ -81,7 +81,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
         new Date(),
       ),
     );
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(false);
+    expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
     await inTx(v, (tx) =>
       markPassItems(
         tx,

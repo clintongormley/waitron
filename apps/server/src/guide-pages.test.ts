@@ -93,7 +93,7 @@ describe("guide pages", () => {
     const html = await response.text();
     expect(html).toContain(`<html lang="${lang}">`);
     expect(html).toContain(`<title>${KITCHEN_ALLERGY_WORDS[lang].guideTitle} · Waitron</title>`);
-    for (const id of ["allergy-copies", "corrections", "held-work", "reprints"])
+    for (const id of ["allergy-copies", "corrections", "held-work", "reprints", "service-lifetime"])
       expect(html).toContain(`<section id="${id}"`);
   });
 

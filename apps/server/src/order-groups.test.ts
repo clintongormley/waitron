@@ -3911,7 +3911,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     ]);
   });
 
-  it("shows a group split across two bills under its own number on each bill, and rolls its away up", async () => {
+  it("keeps a split group visible on both bills after legacy Away stamps", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     await ready(v, s.partyId, s.cold);
@@ -3924,8 +3924,9 @@ describe("the kitchen and the pass read a party's groups", () => {
       fired: true,
       away: true,
     });
-    // The check holds only the away croquette, so it has left the pass.
-    expect(board.find((row) => row.orderId === s.checkId)).toBeUndefined();
+    expect(board.find((row) => row.orderId === s.checkId)!.groups).toMatchObject([
+      { groupId: s.cold, position: 2, fired: true, away: true },
+    ]);
   });
 
   it("puts a fired line in no group in one section with no group, first", async () => {

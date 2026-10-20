@@ -226,7 +226,7 @@ describe("pass screen", () => {
     expect(await orderIds()).toEqual({ screen: [], monitor: [] });
   });
 
-  it("Done on one device leaves the dish on another, and undoing removes only that device's mark", async () => {
+  it("legacy Done marks stay device-specific but never hide food from either pass", async () => {
     const { v, grill, outside } = await terraceVenue();
     const [a, b] = await passDevices(v, 2);
     const [burger] = await inTx(v, (tx) =>
@@ -243,7 +243,7 @@ describe("pass screen", () => {
     await inTx(v, (tx) =>
       markPassItems(tx, v.cfg, { deviceId: a!, personId: null }, EVERY, [burger!.id], true, at),
     );
-    expect(ids(await read(a!))).not.toContain(burger!.id);
+    expect(ids(await read(a!))).toContain(burger!.id);
     expect(ids(await read(b!))).toContain(burger!.id);
     expect(await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).toEqual(expoBefore);
     const person = randomUUID();
@@ -272,7 +272,7 @@ describe("pass screen", () => {
       ),
     );
     expect(ids(await read(a!))).toContain(burger!.id);
-    expect(ids(await read(b!))).not.toContain(burger!.id);
+    expect(ids(await read(b!))).toContain(burger!.id);
     expect(
       await inTx(v, (tx) =>
         tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, burger!.id)),
@@ -282,7 +282,7 @@ describe("pass screen", () => {
     ]);
   });
 
-  it("keeps a device's Done mark on a ticket item copied by a quantity split", async () => {
+  it("legacy split marks do not hide either resulting ticket item", async () => {
     const v = await setupPartyVenue(suite.db);
     const [device, other] = await passDevices(v, 2);
     const party = await seat(v, await v.table("Split table"));
@@ -322,7 +322,9 @@ describe("pass screen", () => {
       tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, device!)),
     );
     expect(new Set(marks.map((mark) => mark.ticketItemId))).toEqual(new Set(itemIds));
-    expect((await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).orders).toEqual([]);
+    expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).sort()).toEqual(
+      [...itemIds].sort(),
+    );
     expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, other!, EVERY))).sort()).toEqual(
       [...itemIds].sort(),
     );
@@ -358,7 +360,7 @@ describe("a pass's sections", () => {
     });
   });
 
-  it("a pass monitor drops a course whose dishes are all away and keeps the order's waiting course", async () => {
+  it("a pass monitor keeps both courses after a legacy Away stamp", async () => {
     const { v, grill, counterId } = await twoSectionVenue();
     const counterItems = await inTx(v, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, counterId)),
@@ -371,7 +373,13 @@ describe("a pass's sections", () => {
         .where(eq(ticketItems.id, starter.id)),
     );
     const board = await inTx(v, (tx) => listPassMonitor(tx, v.cfg, EVERY));
-    expect(sections(board)[counterId]).toEqual({ courses: [["Mains", ["BURG"]]], groups: [] });
+    expect(sections(board)[counterId]).toEqual({
+      courses: [
+        ["Starters", ["CANA"]],
+        ["Mains", ["BURG"]],
+      ],
+      groups: [],
+    });
   });
 });
 
@@ -397,7 +405,7 @@ describe("markPassItems", () => {
 });
 
 describe("pass monitor", () => {
-  it("lists its scope's dishes, keeps no marks, and drops a section whose dishes are all away", async () => {
+  it("lists its scoped dishes independently of legacy Done and Away stamps", async () => {
     const { v, grill, terrace, outside, inside, counterId } = await terraceVenue();
     const [device] = await passDevices(v, 1);
     const grillOnly: PassScope = { stationIds: [grill], zoneIds: null };
@@ -445,7 +453,7 @@ describe("pass monitor", () => {
       outside.tabId,
     );
     expect((await read(grillOnly)).orders.map((o) => o.orderId).sort()).toEqual(
-      [inside.tabId, counterId].sort(),
+      [outside.tabId, inside.tabId, counterId].sort(),
     );
     expect(ids(await read(EVERY))).toContain(burger!.id);
   });

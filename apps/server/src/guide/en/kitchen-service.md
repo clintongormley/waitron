@@ -52,3 +52,16 @@ from the instructions you confirm for that send.
 A reprint repeats the original allergy block. It does not issue another correction notice, so
 check the station's outstanding notices separately. Splitting dishes between bills keeps the
 copies with the resulting kitchen work; it does not replace the guest's instructions.
+
+## Keep food visible until service ends {#service-lifetime}
+
+A paid bill can still have food waiting for its guests. The pass and its monitor keep that food
+visible until you mark it served or finish the table's service. If tables have joined another
+party, their paid bills stay visible until the surviving party finishes.
+
+When you serve one of two dishes on a line, the pass shows the one still to serve. Undo restores
+the served quantity without restarting the kitchen's preparation or ready time. A cancelled
+quantity no longer counts as food to serve, even when its charge stays on the bill.
+
+A counter order stays visible after payment until you collect or close it. Each pass still shows
+only the stations and service zones assigned to it.

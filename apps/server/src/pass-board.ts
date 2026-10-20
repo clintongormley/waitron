@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, gte, inArray, isNull, notExists, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, type SQL } from "drizzle-orm";
 import { AppError, worstBand } from "@waitron/shared";
 import { passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -48,30 +48,15 @@ export function passScopeOf(screen: ResolvedKitchenScreen): PassScope {
   };
 }
 
-/** The pass screen: dishes kept until this device marks them Done. */
+/** The pass retains unserved food until service ends, independently of device marks. */
 export async function listPassScreen(
   tx: Transaction,
   cfg: TillConfig,
   deviceId: string,
   scope: PassScope,
 ): Promise<{ orders: PassOrder[] }> {
-  const kept = await scopedItems(tx, cfg, scope, (stationScope) =>
-    and(
-      isNull(workingOrderLines.servedAt),
-      stationScope,
-      notExists(
-        tx
-          .select({ id: passItemMarks.ticketItemId })
-          .from(passItemMarks)
-          .where(
-            and(
-              eq(passItemMarks.deviceId, deviceId),
-              eq(passItemMarks.ticketItemId, ticketItems.id),
-            ),
-          ),
-      ),
-    ),
-  );
+  void deviceId;
+  const kept = await scopedItems(tx, cfg, scope);
   if (!kept.length) return { orders: [] };
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
@@ -99,21 +84,23 @@ export async function listPassScreen(
   };
 }
 
-/** The pass monitor: the every-station read narrowed to the scope; no marks. With
- *  no Done to clear them, a section whose dishes here are all away drops off. */
+/** The monitor shares the pass's service lifetime and cannot mark work complete. */
 export async function listPassMonitor(
   tx: Transaction,
   cfg: TillConfig,
   scope: PassScope,
 ): Promise<{ orders: ExpoOrder[] }> {
-  const kept = await scopedItems(tx, cfg, scope, (stationScope) => stationScope);
-  const waiting = new Set(kept.filter((item) => item.awayAt === null).map((item) => item.orderId));
-  if (!waiting.size) return { orders: [] };
+  const kept = await scopedItems(tx, cfg, scope);
+  if (!kept.length) return { orders: [] };
   const ids = new Set(kept.map((item) => item.id));
-  const orders = await readPassBoard(tx, cfg.locationId, inArray(workingOrders.id, [...waiting]));
+  const orders = await readPassBoard(
+    tx,
+    cfg.locationId,
+    inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
+  );
   const section = <T extends ExpoCourse | ExpoGroup>(part: T): T | null => {
     const items = part.items.filter((item) => ids.has(item.id));
-    return items.some((item) => item.awayAt === null) ? { ...part, items } : null;
+    return items.length ? { ...part, items } : null;
   };
   return {
     orders: orders.map((order) =>
@@ -197,12 +184,11 @@ function liveKitchenDishAt(cfg: TillConfig): SQL | undefined {
   return and(eq(workingOrders.locationId, cfg.locationId), liveKitchenDish());
 }
 
-/** The live kitchen dishes the scope sees, filtered further by `where`. */
+/** The live kitchen dishes the scope sees. */
 async function scopedItems(
   tx: Transaction,
   cfg: TillConfig,
   scope: PassScope,
-  where: (stationScope: SQL | undefined) => SQL | undefined,
 ): Promise<{ id: string; orderId: string; awayAt: string | null }[]> {
   if (scope.stationIds?.length === 0 || scope.zoneIds?.length === 0) return [];
   const candidates = await tx
@@ -220,11 +206,9 @@ async function scopedItems(
     .where(
       and(
         liveKitchenDishAt(cfg),
-        where(
-          scope.stationIds === null
-            ? undefined
-            : inArray(ticketItems.stationId, [...scope.stationIds]),
-        ),
+        scope.stationIds === null
+          ? undefined
+          : inArray(ticketItems.stationId, [...scope.stationIds]),
       ),
     );
   if (scope.zoneIds === null) return candidates;
@@ -300,6 +284,6 @@ function withSections<C extends ExpoCourse, G extends ExpoGroup>(
     ...order,
     courses,
     groups,
-    worstBand: worstBand(visible.filter((item) => item.awayAt === null).map((item) => item.band)),
+    worstBand: worstBand(visible.map((item) => item.band)),
   };
 }

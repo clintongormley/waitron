@@ -6008,7 +6008,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
-  it("drops a FULLY-away order but keeps one that still has a not-yet-away item", async () => {
+  it("keeps every unserved item after partial and whole-order legacy Away stamps", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6021,19 +6021,21 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(a), line(b)]);
       const items = await courseItemsFor(tx, orderId);
 
-      // One item away → the order stays (a not-yet-away item remains).
       await tx
         .update(ticketItems)
         .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[0]!.id));
       expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
 
-      // The last item away → the whole order is fully dispatched and leaves the pass.
       await tx
         .update(ticketItems)
         .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[1]!.id));
-      expect(await listExpoQueue(tx, cfg)).toEqual([]);
+      const board = await listExpoQueue(tx, cfg);
+      expect(board.map((order) => order.orderId)).toEqual([orderId]);
+      expect(
+        board[0]!.courses.flatMap((course) => course.items.map((item) => item.id)).sort(),
+      ).toEqual(items.map((item) => item.id).sort());
     });
   });
 

@@ -29,17 +29,21 @@ function isPage(name: string): name is Page {
 }
 
 describe("the user guides", () => {
-  it.each(GUIDE_LANGUAGES)("the kitchen guide in %s registers its allergy sections", (lang) => {
-    expect(GUIDE_PAGES).toContain("kitchen-service");
-    const markdown = readGuide(root, lang, "kitchen-service");
-    expect(markdown).toBeDefined();
-    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
-      "allergy-copies",
-      "corrections",
-      "held-work",
-      "reprints",
-    ]);
-  });
+  it.each(GUIDE_LANGUAGES)(
+    "the kitchen guide in %s registers its allergy and service sections",
+    (lang) => {
+      expect(GUIDE_PAGES).toContain("kitchen-service");
+      const markdown = readGuide(root, lang, "kitchen-service");
+      expect(markdown).toBeDefined();
+      expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+        "allergy-copies",
+        "corrections",
+        "held-work",
+        "reprints",
+        "service-lifetime",
+      ]);
+    },
+  );
 
   it.each(GUIDE_PAGES)("every page renders in English: %s", (page) => {
     expect(english(page).sections.length).toBeGreaterThan(0);

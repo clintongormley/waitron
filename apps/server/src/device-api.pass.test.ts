@@ -135,13 +135,13 @@ describe("the pass screen's device routes", () => {
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
   });
 
-  it("keeps Done per device: a kitchen display's mark records no person, and its undo restores only its own board", async () => {
+  it("legacy marks record their device and person without hiding food from either board", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
     const marked = await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true });
     expect(marked.status).toBe(204);
-    expect(items(await read(f.app, f.a.cookie))).toEqual([]);
+    expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
     expect(items(await read(f.app, f.b.cookie))).toEqual([itemId]);
     expect(
       await inTx(f.v, (tx) =>
@@ -155,7 +155,7 @@ describe("the pass screen's device routes", () => {
       204,
     );
     expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
-    expect(items(await read(f.app, f.b.cookie))).toEqual([]);
+    expect(items(await read(f.app, f.b.cookie))).toEqual([itemId]);
   });
 
   it("on a till, needs a signed-in session to read or mark, and the mark records the person", async () => {
@@ -184,7 +184,7 @@ describe("the pass screen's device routes", () => {
         tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, till.id)),
       ),
     ).toMatchObject([{ ticketItemId: itemId, doneByPersonId: person!.id }]);
-    expect(items(await read(f.app, signedIn))).toEqual([]);
+    expect(items(await read(f.app, signedIn))).toEqual([itemId]);
   });
 
   it("refuses Done on a dish outside the device's stations or zones, as its read leaves it out", async () => {
@@ -257,7 +257,7 @@ describe("the pass screen's device routes", () => {
         tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, counterOnly.id)),
       ),
     ).toMatchObject([{ ticketItemId: counterItem!.id }]);
-    expect(items(await read(f.app, counterOnly.cookie))).toEqual([]);
+    expect(items(await read(f.app, counterOnly.cookie))).toEqual([counterItem!.id]);
     expect(items(await read(f.app, f.a.cookie)).sort()).toEqual(
       [tableItemId, counterItem!.id].sort(),
     );

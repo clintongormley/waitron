@@ -234,9 +234,7 @@ describe("effective kitchen timing across consumers", () => {
     expect((await floorRow(v, inheritedTable)).timingBand).toBe("fresh");
     expect((await floorRow(v, inheritedTable)).signals).toEqual([]);
     await inTx(v, async (tx) => {
-      expect(
-        (await listExpoQueue(tx, v.cfg)).find((row) => row.orderId === a.tabId)!.worstBand,
-      ).toBe("fresh");
+      expect((await listExpoQueue(tx, v.cfg)).map((row) => row.orderId)).not.toContain(a.tabId);
       expect((await readBillSignals(tx, [a.tabId], now)).get(a.tabId)).toEqual([]);
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });

@@ -58,3 +58,18 @@ Una reimpresión repite el bloque de alergias original. No genera otro aviso de 
 comprueba por separado los avisos pendientes de la estación. Dividir los platos entre cuentas
 conserva las copias con el trabajo de cocina resultante; no sustituye las instrucciones de la
 persona.
+
+## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
+
+Una cuenta cobrada puede tener comida pendiente de servir. El pase y su monitor conservan esa
+comida hasta que la marques como servida o termines el servicio de la mesa. Si las mesas se han
+unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
+que las reúne.
+
+Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
+Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.
+Una cantidad anulada deja de contar como comida pendiente, aunque se conserve su importe en la
+cuenta.
+
+Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o cierres. Cada
+pase sigue mostrando solo las estaciones y zonas de servicio que tiene asignadas.

@@ -236,8 +236,8 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       .update(ticketItems)
       .set({ state: "ready", awayAt: nowIso() })
       .where(eq(ticketItems.id, burger!.id));
-    const afterHandover = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
-    expect(afterHandover.map((order) => order.orderId)).not.toContain(order!.id);
+    const afterLegacyAway = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
+    expect(afterLegacyAway.map((order) => order.orderId)).toContain(order!.id);
   });
 
   it("removes an order with only a made-here item from expo", async () => {

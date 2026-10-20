@@ -2419,10 +2419,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-  is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
-  station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
-  each slice. The plan carries A797's completed Q42 amendments; A797's design was revised on
-  2026-10-21 (§7 there splits the work), and its redrawn pictures and owner FYI remain a UI prerequisite. A803's pass/station tail follows this build.
+  is being built in Lane G, starting with service lifetime (PR A). Add Requested and pass release,
+  remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
+  each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain
+  a UI prerequisite. A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

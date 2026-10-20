@@ -86,6 +86,7 @@ import {
   and,
   eq,
   exists,
+  gt,
   inArray,
   isNotNull,
   isNull,
@@ -7902,37 +7903,34 @@ export interface ExpoOrder {
   worstBand: TimingBand;
 }
 
-/**
- * The cross-station expo read: every order in the venue that is not abandoned, not collected, and
- * has at least one kitchen item not yet away (open, placed and settled orders alike), its kitchen items gathered
- * across all stations and sectioned by group in position order for a seated party's bill, by course
- * for any other. A surviving order carries all its kitchen items, away ones included, so a per-section `away`
- * flag can be rolled up. `locationId` scopes only the table found for an order of no party.
- */
+/** The venue's remaining kitchen work, with each party retained through its surviving family. */
 export async function listExpoQueue(
   tx: Transaction,
   cfg: TillConfig,
   locationId?: string,
 ): Promise<ExpoOrder[]> {
-  const loc = locationId ?? cfg.locationId;
-  return readPassBoard(
-    tx,
-    loc,
-    sql`exists (
-      select 1 from ${ticketItems} tix
-      where tix.working_order_id = ${workingOrders.id}
-        and tix.made_here = 0
-        and tix.away_at is null)`,
-  );
+  return readPassBoard(tx, locationId ?? cfg.locationId, sql`1 = 1`);
 }
 
-/** Not made at the till, of an order neither abandoned nor collected, at any location. Whether the
- *  dish is away or served is the caller's filter. */
+/** Ticket quantities already exclude service cancellations; serving consumes only that active work. */
 export function liveKitchenDish(): SQL | undefined {
   return and(
     eq(ticketItems.madeHere, false),
     ne(workingOrders.status, "abandoned"),
     isNull(workingOrders.collectedAt),
+    gt(firedQuantity, workingOrderLines.servedQuantity),
+    or(
+      isNull(workingOrders.partyId),
+      sql`exists (
+        with recursive service_family(id, state, next) as (
+          select id, state, merged_into_party_id from parties where id = ${workingOrders.partyId}
+          union
+          select p.id, p.state, p.merged_into_party_id
+          from parties p join service_family f on p.id = f.next
+        )
+        select 1 from service_family where state = 'open'
+      )`,
+    ),
   );
 }
 
@@ -7956,7 +7954,7 @@ export async function readPassBoard(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: firedQuantity,
+      quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
