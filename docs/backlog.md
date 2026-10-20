@@ -2358,7 +2358,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The [reviewed kitchen plan](superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
   defines storage, paper, boards and notices. Storage declarations and a populated-predecessor
   upgrade check, first-exposure capture and frozen-block paper formatting are implemented on the
-  kitchen branch. Ticket replacement preservation, boards and correction delivery remain. Kitchen Spanish wording
+  kitchen branch, including preservation across ticket replacement. Boards, correction delivery
+  and the remaining split/recall/rerouting work remain. Kitchen Spanish wording
   still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

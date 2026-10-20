@@ -522,6 +522,89 @@ describe("A669 capture", () => {
     expect(copies(p.tabId)).toEqual([old]);
   });
 
+  it("retains distinct original and current blocks for a replaced dish and its kept routed extra", async () => {
+    await printer();
+    const p = await party();
+    const extra = await extraFixture(true);
+    const ask = await command(p);
+    addExtra(ask, extra);
+    await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
+    const original = copies(p.tabId);
+    expect(original).toHaveLength(2);
+    for (const row of original)
+      await inTx(v, (tx) =>
+        VENUE_SERVICE.setTicketAllergyCurrent(tx, row.id, {
+          ...row.original!,
+          who: "Latest guest",
+          note: "Latest pan instruction",
+        }),
+      );
+    const expected = copies(p.tabId);
+    const money = () =>
+      v.db
+        .select({
+          id: workingOrderLines.id,
+          quantity: workingOrderLines.quantity,
+          price: workingOrderLines.unitPriceGross,
+          total: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, p.tabId))
+        .orderBy(workingOrderLines.lineNo);
+    const moneyBefore = await money();
+    const oldJobs = await v.db.select().from(printJobs);
+    await inTx(v, async (tx) => {
+      const [order] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, p.tabId));
+      await updateOrderLine(tx, v.cfg, p.tabId, 1, { note: "New dish note" }, order!.revision, {
+        operatorId: OPERATOR,
+        expectedEdit: await readBillEditState(tx, p.tabId),
+      });
+    });
+    const after = copies(p.tabId);
+    expect(after).toHaveLength(2);
+    for (const row of expected) {
+      const replacement = after.find((next) => next.lineId === row.lineId)!;
+      expect(replacement.frozen).toBe(replacement.id);
+      expect(replacement.original).toEqual(row.original);
+      expect(replacement.current).toEqual(row.current);
+    }
+    expect(await money()).toEqual(moneyBefore);
+    const jobs = await v.db.select().from(printJobs);
+    for (const old of oldJobs) expect(jobs.find((job) => job.id === old.id)).toEqual(old);
+  });
+
+  it("retains an explicit frozen null when replacement happens after a later assignment", async () => {
+    const p = await party();
+    const commandInput = await command(p, "fire", false);
+    await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, commandInput));
+    const old = expectCopies(p.tabId, null);
+    const snapshot = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
+    await inTx(v, (tx) =>
+      VENUE_SERVICE.setAllergyLineTicks(tx, p.partyId, [
+        {
+          guestId: snapshot.guests[0]!.id,
+          draftLineId: null,
+          workingLineId: old.lineId,
+        },
+      ]),
+    );
+    await inTx(v, async (tx) => {
+      const [order] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, p.tabId));
+      await updateOrderLine(tx, v.cfg, p.tabId, 1, { note: "Changed note" }, order!.revision, {
+        operatorId: OPERATOR,
+        expectedEdit: await readBillEditState(tx, p.tabId),
+      });
+    });
+    const replacement = expectCopies(p.tabId, null);
+    expect(replacement.lineId).toBe(old.lineId);
+  });
+
   it("keeps counter entry free of party allergy copies", async () => {
     const orderId = randomUUID();
     await inTx(v, async (tx) => {
@@ -775,13 +858,14 @@ describe("A669 capture", () => {
 
   it("uses inherited variant nutrition when the variant has no own profile", async () => {
     const variants = await inTx(v, async (tx) => {
+      const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
       const values = await setProductVariants(
         tx,
         v.productId("Burger"),
         [
           {
             name: "Large staff name",
-            customerName: { [v.cfg.locale]: "Large customer name" },
+            customerName: { [defaultLanguage]: "Large customer name" },
             kitchenName: "LARGE KITCHEN",
             image: null,
             unitPrice: null,

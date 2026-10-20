@@ -6,7 +6,7 @@ import {
   type AllergenMap,
   type Transaction,
 } from "@waitron/db";
-import type { KitchenAllergyBlock, PartyAllergyGuest } from "@waitron/module";
+import type { KitchenAllergyBlock, PartyAllergyGuest, TicketAllergyCopy } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readLineNutrition } from "./line-nutrition.js";
@@ -139,6 +139,22 @@ export async function freezeKitchenAllergies(
       originalBlock: block,
       currentBlock: block,
     })),
+  );
+}
+
+export async function attachKitchenAllergyCopies(
+  tx: Transaction,
+  tickets: readonly { id: string; workingOrderLineId: string }[],
+  copies: ReadonlyMap<string, TicketAllergyCopy> | undefined,
+): Promise<void> {
+  if (copies === undefined || copies.size === 0) return;
+  // Attach before first-exposure capture: a replacement keeps even an explicit frozen null.
+  await VENUE_SERVICE.recordTicketAllergies(
+    tx,
+    tickets.flatMap((ticket) => {
+      const copy = copies.get(ticket.workingOrderLineId);
+      return copy === undefined ? [] : [{ ticketItemId: ticket.id, ...copy }];
+    }),
   );
 }
 

@@ -5,7 +5,7 @@ import {
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
-import type { AllergyCommand } from "@waitron/module";
+import type { AllergyCommand, TicketAllergyCopy } from "@waitron/module";
 import {
   assertPartyAllergyAnswered,
   normaliseAllergyPatch,
@@ -13,7 +13,11 @@ import {
 } from "./party-allergy.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
-import { freezeKitchenAllergies, freezeKitchenAllergyItems } from "./kitchen-allergy.js";
+import {
+  attachKitchenAllergyCopies,
+  freezeKitchenAllergies,
+  freezeKitchenAllergyItems,
+} from "./kitchen-allergy.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -1755,6 +1759,7 @@ export async function insertSplitExtras(
   zoneId: string | null,
   dishes: readonly DishKitchenPlace[],
   routing: RoutingOnce,
+  keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>,
 ): Promise<
   { workingOrderLineId: string; stationId: string; firedAt: string | null; quantity: number }[]
 > {
@@ -1831,6 +1836,7 @@ export async function insertSplitExtras(
       madeHere: ticketItems.madeHere,
     });
     for (const row of inserted) if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
+    await attachKitchenAllergyCopies(tx, inserted, keepAllergies);
     await freezeKitchenAllergies(
       tx,
       cfg,
@@ -1899,6 +1905,7 @@ export async function fireLines(
     unroutable?: "skip";
     keepStations?: ReadonlyMap<string, string>;
     keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
+    keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>;
     routing?: RoutingOnce;
   } = {},
 ): Promise<FireableLine[]> {
@@ -2122,6 +2129,7 @@ export async function fireLines(
     values.length === 0
       ? []
       : await tx.insert(ticketItems).values(values).returning({
+          id: ticketItems.id,
           workingOrderLineId: ticketItems.workingOrderLineId,
           stationId: ticketItems.stationId,
           firedAt: ticketItems.firedAt,
@@ -2131,6 +2139,7 @@ export async function fireLines(
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
   }
+  await attachKitchenAllergyCopies(tx, inserted, options.keepAllergies);
 
   const firingDishes = dishPlaces.filter((dish) => dish.firedAt !== null);
   const releasedExtras =
@@ -2168,6 +2177,7 @@ export async function fireLines(
     serviceContext?.zoneId ?? null,
     dishPlaces,
     routing,
+    options.keepAllergies,
   );
 
   // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
@@ -5946,6 +5956,19 @@ async function applyLineEdits(
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
   const keepSentNumber = new Map<number, string[]>();
+  const replacing = changes
+    .filter(({ action }) => action === "change")
+    .flatMap(({ parent, kept }) => [parent, ...kept.map(({ child }) => child)]);
+  const oldAllergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    replacing.flatMap((line) => (line.ticket === null ? [] : [line.ticket.id])),
+  );
+  const keepAllergies = new Map<string, TicketAllergyCopy>(
+    replacing.flatMap((line) => {
+      const copy = line.ticket === null ? undefined : oldAllergies.get(line.ticket.id);
+      return copy === undefined ? [] : [[line.id, copy]];
+    }),
+  );
   for (const change of changes.filter(({ action }) => action === "free" || action === "change")) {
     const { parent, quantity, note, optionSnapshots, kept } = change;
     await tx
@@ -6158,7 +6181,12 @@ async function applyLineEdits(
     direction: "added",
   });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
-  await fireLines(tx, cfg, orderId, fireNow, { keepStations, keepMadeHere, routing });
+  await fireLines(tx, cfg, orderId, fireNow, {
+    keepStations,
+    keepMadeHere,
+    keepAllergies,
+    routing,
+  });
   for (const [sent, lineIds] of keepSentNumber)
     await tx
       .update(ticketItems)
