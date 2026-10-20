@@ -7,7 +7,6 @@ import { baseStyles } from "../base-styles.js";
 import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
 import {
   type FloorMapCue,
-  type FloorMapDot,
   type FloorMapFill,
   type FloorMapOutline,
   type FloorMapPulse,
@@ -33,11 +32,10 @@ export interface FloorMapTable {
   label: string;
   placement: PlanPlacement;
   fill: FloorMapFill;
-  dot?: FloorMapDot | null;
-  outline?: FloorMapOutline | null;
-  pulse?: FloorMapPulse | null;
+  outline: FloorMapOutline | null;
+  pulse: FloorMapPulse | null;
   /** Drawn under the name on a table big enough for both (`showsCue`). */
-  cue?: FloorMapCue | null;
+  cue: FloorMapCue | null;
   joinId: string | null;
   /** Today's name when it differs from `label`. */
   name?: string;
@@ -398,19 +396,6 @@ export class WtFloorMap extends LitElement {
         border-radius: var(--wt-radius-sm);
       }
 
-      [part="dot"] {
-        position: absolute;
-        z-index: 2;
-        top: 0;
-        right: 0;
-        width: var(--wt-space-3);
-        height: var(--wt-space-3);
-        border: calc(var(--wt-space-1) / 2) solid var(--wt-color-surface);
-        border-radius: 50%;
-        transform: translate(50%, -50%);
-        animation: dot-flash 1s infinite;
-      }
-
       [part="allergy"] {
         position: absolute;
         z-index: 2;
@@ -428,30 +413,6 @@ export class WtFloorMap extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         transform: translate(-50%, -50%);
         pointer-events: none;
-      }
-
-      [part="dot"][data-dot="ready"] {
-        background-color: var(--wt-color-success);
-      }
-
-      [part="dot"][data-dot="forgotten"] {
-        background-color: var(--wt-color-danger);
-      }
-
-      [part="dot"][data-still] {
-        animation: none;
-      }
-
-      @keyframes dot-flash {
-        50% {
-          opacity: 0;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        [part="dot"] {
-          animation: none;
-        }
       }
     `,
   ];
@@ -969,7 +930,6 @@ export class WtFloorMap extends LitElement {
     const named = group.drawsName && showsName(drawn, view.scale);
     const cue = named && showsCue(drawn, view.scale) ? (first.cue ?? null) : null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
-    const dot = members.find((m) => m.dot != null)?.dot ?? null;
     const allergy = members.some((member) => member.allergy);
     return html`<button
       type="button"
@@ -1009,9 +969,6 @@ export class WtFloorMap extends LitElement {
           : named
             ? html`<span part="name" data-fill=${merged ? first.fill : nothing}>${label}</span>`
             : nothing
-      }
-      ${
-        dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
       }
     </button>`;
   }

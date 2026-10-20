@@ -394,7 +394,7 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
 });
 
 // The till map's table fills.
-const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
+const TABLE_FILLS = ["free", "seated", "bill", "reserved", "calm"].map(
   (fill) => `--wt-color-table-${fill}`,
 );
 
@@ -403,13 +403,18 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
     expect(failures("table-text", theme, mount(theme))).toEqual([]);
   });
 
-  test("the five fills are different colours", () => {
+  test("the table fills are different colours", () => {
     const el = mount(theme);
     expect(new Set(TABLE_FILLS.map((fill) => token(el, fill))).size).toBe(TABLE_FILLS.length);
   });
 
-  test("the dots are readable on the surface ring at 3:1 or more", () => {
-    expect(failures("table-dots", theme, mount(theme))).toEqual([]);
+  test("an outline or a pulse ring reads 3:1 or more on the surface", () => {
+    const el = mount(theme);
+    for (const mark of ["--wt-color-danger", "--wt-color-warning"])
+      expect(
+        contrastRatio(token(el, mark), token(el, "--wt-color-surface")),
+        mark,
+      ).toBeGreaterThanOrEqual(3);
   });
 
   test("the OS preference gives them the same values as the explicit theme", async () => {

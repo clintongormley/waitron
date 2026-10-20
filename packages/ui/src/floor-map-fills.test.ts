@@ -13,7 +13,6 @@ const TOKENS: Record<FloorMapFill, readonly [string, string]> = {
   free: ["--wt-color-table-free", "--wt-color-on-table-free"],
   seated: ["--wt-color-table-seated", "--wt-color-on-table-seated"],
   bill: ["--wt-color-table-bill", "--wt-color-on-table-bill"],
-  clearing: ["--wt-color-table-clearing", "--wt-color-on-table-clearing"],
   reserved: ["--wt-color-table-reserved", "--wt-color-on-table-reserved"],
   calm: ["--wt-color-table-calm", "--wt-color-on-table-calm"],
   ready: ["--wt-color-success", "--wt-color-on-success"],
@@ -43,12 +42,11 @@ describe("floor map fills", () => {
     }
   });
 
-  it("lists the ten fills", () => {
+  it("lists the nine fills", () => {
     expect(FLOOR_MAP_FILLS).toEqual([
       "free",
       "seated",
       "bill",
-      "clearing",
       "reserved",
       "calm",
       "ready",

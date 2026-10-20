@@ -21,7 +21,9 @@ const t = (
   label: id,
   placement: { x: 0, y: 0, width: 6, height: 6, shape: "rect", rotation: 0, ...placement },
   fill: "free",
-  dot: null,
+  outline: null,
+  pulse: null,
+  cue: null,
   joinId: null,
   description: "Free",
   ...over,
@@ -63,33 +65,54 @@ async function mountMap(
 }
 
 describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme) => {
-  test("A669 allergy marks alongside ready and forgotten dots, including a merge", async () => {
-    await mountMap(theme, [
-      t("T1", { x: 0 }, { allergy: true, fill: "seated", dot: "ready" }),
-      t("T2", { x: 8 }, { allergy: true, fill: "seated", dot: "forgotten", joinId: "j" }),
-      t("T3", { x: 14 }, { allergy: true, fill: "seated", dot: "forgotten", joinId: "j" }),
-      t("T4", { x: 30, width: 1, height: 1 }, { allergy: true }),
-    ]);
+  test("A669 allergy marks alongside pulses, including a merge", async () => {
+    await mountMap(
+      theme,
+      [
+        t("T1", { x: 0 }, { allergy: true, fill: "calm", pulse: "overdue" }),
+        t("T2", { x: 8 }, { allergy: true, fill: "danger", pulse: "forgotten", joinId: "j" }),
+        t("T3", { x: 14 }, { allergy: true, fill: "danger", pulse: "forgotten", joinId: "j" }),
+        t("T4", { x: 30, width: 1, height: 1 }, { allergy: true }),
+      ],
+      false,
+    );
     const root = host.querySelector("wt-floor-map")!.shadowRoot!;
     expect(root.querySelectorAll('[part="allergy"]')).toHaveLength(3);
+    expect(root.querySelectorAll("[data-pulse]")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 
-  test("one table in each fill", async () => {
+  test("one table in each of the nine fills", async () => {
     await mountMap(
       theme,
       FLOOR_MAP_FILLS.map((fill, i) =>
         t(`T${i + 1}`, { x: i * 8, shape: i % 2 ? "round" : "rect" }, { fill }),
       ),
     );
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    expect(root.querySelectorAll('[part="table"]')).toHaveLength(9);
     await expectNoA11yViolations(host);
   });
 
-  test("a ready dot and a forgotten dot", async () => {
-    await mountMap(theme, [
-      t("T1", { x: 0 }, { fill: "seated", dot: "ready", description: "Seated, 2 ready" }),
-      t("T2", { x: 8 }, { fill: "seated", dot: "forgotten", description: "Seated, forgotten" }),
-    ]);
+  test("each outline and pulse, with a cue on every fill", async () => {
+    const looks: Partial<FloorMapTable>[] = [
+      { fill: "calm", outline: "overdue", pulse: "overdue" },
+      { fill: "ready", outline: "waiting" },
+      { fill: "free", outline: "clearing" },
+      { fill: "danger", outline: "clearing", pulse: "forgotten" },
+      { fill: "warning", pulse: "fire" },
+    ];
+    await mountMap(
+      theme,
+      looks.map((look, i) =>
+        t(`T${i + 1}`, { x: i * 8 }, { ...look, cue: { icon: "floor-timer", text: "5" } }),
+      ),
+      false,
+    );
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    expect(root.querySelectorAll('[part="cue"]')).toHaveLength(looks.length);
+    expect(root.querySelectorAll("[data-pulse]")).toHaveLength(3);
+    expect(root.querySelectorAll("[data-outline]")).toHaveLength(4);
     await expectNoA11yViolations(host);
   });
 

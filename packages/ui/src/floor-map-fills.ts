@@ -6,7 +6,6 @@ export const FLOOR_MAP_FILLS = [
   "free",
   "seated",
   "bill",
-  "clearing",
   "reserved",
   "calm",
   "ready",
@@ -15,7 +14,6 @@ export const FLOOR_MAP_FILLS = [
   "plain",
 ] as const;
 export type FloorMapFill = (typeof FLOOR_MAP_FILLS)[number];
-export type FloorMapDot = "ready" | "forgotten";
 export type FloorMapOutline = "overdue" | "waiting" | "clearing";
 export type FloorMapPulse = FloorPulse;
 export interface FloorMapCue {
@@ -37,11 +35,6 @@ export const floorMapFillStyles: CSSResult = css`
   [data-fill="bill"] {
     background-color: var(--wt-color-table-bill);
     color: var(--wt-color-on-table-bill);
-  }
-
-  [data-fill="clearing"] {
-    background-color: var(--wt-color-table-clearing);
-    color: var(--wt-color-on-table-clearing);
   }
 
   [data-fill="reserved"] {

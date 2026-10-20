@@ -9,7 +9,9 @@ const t = (id: string, label: string, placement: Partial<PlanPlacement> = {}): F
   label,
   placement: { x: 0, y: 0, width: 8, height: 4, shape: "rect", rotation: 0, ...placement },
   fill: "free",
-  dot: null,
+  outline: null,
+  pulse: null,
+  cue: null,
   joinId: null,
   description: "Free",
 });

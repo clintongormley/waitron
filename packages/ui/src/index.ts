@@ -112,7 +112,6 @@ export type { GestureHandlers, GesturePoint } from "./gestures.js";
 export { FLOOR_MAP_FILLS, floorMapFillStyles } from "./floor-map-fills.js";
 export type {
   FloorMapCue,
-  FloorMapDot,
   FloorMapFill,
   FloorMapOutline,
   FloorMapPulse,

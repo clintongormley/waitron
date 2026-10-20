@@ -197,7 +197,7 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
   group("table-text", MODES, [
     "at-least",
     4.5,
-    onOwn(["free", "seated", "bill", "clearing", "reserved"].map((fill) => `table-${fill}`)),
+    onOwn(["free", "seated", "bill", "reserved", "calm"].map((fill) => `table-${fill}`)),
   ]),
   group("table-dots", MODES, ["at-least", 3, each(["success", "danger"], ["surface"])]),
   group(

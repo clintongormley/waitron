@@ -16,7 +16,9 @@ const t = (
   label,
   placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0, ...placement },
   fill: "free",
-  dot: null,
+  outline: null,
+  pulse: null,
+  cue: null,
   joinId: null,
   description: "Free",
   ...over,
@@ -50,13 +52,16 @@ const button = (el: WtFloorMap, id: string) =>
 const within = (el: WtFloorMap, part: string, id: string) =>
   button(el, id).querySelector<HTMLElement>(`[part="${part}"]`);
 
-it("A669 draws an allergy mark beside the existing dot and removes it on refresh", async () => {
-  const allergic = t("t1", "T1", {}, { allergy: true, fill: "seated", dot: "ready" });
+it("A669 draws an allergy mark beside the existing pulse and removes it on refresh", async () => {
+  const allergic = t("t1", "T1", {}, { allergy: true, fill: "seated", pulse: "forgotten" });
   const el = await map([allergic, t("t2", "T2", { x: 12 })], {
     copy: { allergy: "Allergy warning" },
+    reducedMotion: false,
   });
   expect(within(el, "allergy", "t1")?.textContent).toBe("!");
-  expect(within(el, "dot", "t1")?.dataset["dot"]).toBe("ready");
+  expect(button(el, "t1").querySelector<HTMLElement>("[data-pulse]")?.dataset["pulse"]).toBe(
+    "forgotten",
+  );
   expect(button(el, "t1").getAttribute("aria-label")).toBe("T1, Free, Allergy warning");
   expect(within(el, "allergy", "t2")).toBeNull();
   el.tables = [{ ...allergic, allergy: false }];
@@ -285,77 +290,14 @@ it("outlines every table in the field-line colour", async () => {
   expect(style.borderTopStyle).toBe("solid");
 });
 
-it("shows one dot in its colour", async () => {
-  const el = await map([
-    t("r", "R", {}, { dot: "ready" }),
-    t("f", "F", { x: 10 }, { dot: "forgotten" }),
-    t("n", "N", { x: 20 }),
-  ]);
-  host.style.setProperty("--wt-color-success", "rgb(1, 1, 1)");
-  host.style.setProperty("--wt-color-danger", "rgb(2, 2, 2)");
-  host.style.setProperty("--wt-color-surface", "rgb(3, 3, 3)");
-  const ready = within(el, "dot", "r")!;
-  expect(ready.dataset["dot"]).toBe("ready");
-  expect(getComputedStyle(ready).backgroundColor).toBe("rgb(1, 1, 1)");
-  expect(getComputedStyle(ready).borderTopColor).toBe("rgb(3, 3, 3)");
-  expect(getComputedStyle(within(el, "dot", "f")!).backgroundColor).toBe("rgb(2, 2, 2)");
-  expect(within(el, "dot", "n")).toBeNull();
-  expect(button(el, "r").querySelectorAll('[part="dot"]')).toHaveLength(1);
-});
-
-it("sits the dot on the table's top-right corner", async () => {
-  const el = await map([t("r", "R", {}, { dot: "ready" })]);
-  const dot = within(el, "dot", "r")!.getBoundingClientRect();
-  const box = button(el, "r").getBoundingClientRect();
-  expect(dot.left + dot.width / 2).toBeCloseTo(box.right);
-  expect(dot.top + dot.height / 2).toBeCloseTo(box.top);
-});
-
-it("shows a merge's dot whichever member carries it", async () => {
-  const el = await map([
-    t("four", "4", { x: 0 }, { joinId: "j1" }),
-    t("ten", "10", { x: 8 }, { joinId: "j1", dot: "ready" }),
-  ]);
-  expect(within(el, "dot", "four")!.dataset["dot"]).toBe("ready");
-});
-
-it("draws a dot above a touching table listed after it", async () => {
-  const el = await map([t("a", "A", { x: 0 }, { dot: "ready" }), t("b", "B", { x: 8 })]);
-  const dot = within(el, "dot", "a")!;
-  // The dot takes no taps; letting it be hit here makes the hit test read the paint order.
-  dot.style.pointerEvents = "auto";
-  const box = dot.getBoundingClientRect();
-  const hit = el.shadowRoot!.elementFromPoint(box.right - 2, box.top + box.height / 2);
-  expect(hit).toBe(dot);
-});
-
-it("keeps the dot under a later sibling that covers the map", async () => {
-  const outer = await mount(
-    '<div style="position: relative"><wt-floor-map style="width: 600px; height: 300px"></wt-floor-map><div style="position: absolute; inset: 0"></div></div>',
-  );
-  const el = outer.firstElementChild as WtFloorMap;
-  const cover = outer.lastElementChild!;
-  el.tables = [t("r", "R", {}, { dot: "ready" })];
-  await settled(el);
-  const dot = within(el, "dot", "r")!;
-  dot.style.pointerEvents = "auto";
-  const box = dot.getBoundingClientRect();
-  expect(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)).toBe(cover);
-});
-
-it("flashes the dot unless motion is reduced", async () => {
-  const el = await map([t("r", "R", {}, { dot: "ready" })], { reducedMotion: false });
-  expect(getComputedStyle(within(el, "dot", "r")!).animationName).not.toBe("none");
-  expect(getComputedStyle(within(el, "dot", "r")!).animationDuration).toBe("1s");
-  el.reducedMotion = true;
-  await el.updateComplete;
-  expect(getComputedStyle(within(el, "dot", "r")!).animationName).toBe("none");
-});
-
-it("follows the browser's motion setting when told nothing", async () => {
-  const el = await map([t("r", "R", {}, { dot: "ready" })]);
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  expect(getComputedStyle(within(el, "dot", "r")!).animationName === "none").toBe(reduced);
+it("no table draws a dot", async () => {
+  // A caller built against the old type still sends `dot`.
+  const stale = {
+    ...t("f", "F", {}, { fill: "danger", pulse: "forgotten" }),
+    dot: "forgotten",
+  } as unknown as FloorMapTable;
+  const el = await map([stale], { reducedMotion: true });
+  expect(el.shadowRoot!.querySelectorAll('[part="dot"]')).toHaveLength(0);
 });
 
 const pulseOf = (el: WtFloorMap, id: string) =>

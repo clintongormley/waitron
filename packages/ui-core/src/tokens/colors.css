@@ -114,8 +114,6 @@
   --wt-color-on-table-seated: #ffffff;
   --wt-color-table-bill: #7e3fb8;
   --wt-color-on-table-bill: #ffffff;
-  --wt-color-table-clearing: #f5a623;
-  --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
   /* The list card's calm left edge, and the colours a pulsing floor ring and the till bar's
@@ -245,8 +243,6 @@
     --wt-color-on-table-seated: #06101f;
     --wt-color-table-bill: #c39bf0;
     --wt-color-on-table-bill: #1d0b33;
-    --wt-color-table-clearing: #f5b34a;
-    --wt-color-on-table-clearing: #241500;
     --wt-color-table-reserved: #4a3a1c;
     --wt-color-on-table-reserved: #eceef2;
     --wt-color-table-calm-edge: #4d6aa6;
@@ -374,8 +370,6 @@
   --wt-color-on-table-seated: #ffffff;
   --wt-color-table-bill: #7e3fb8;
   --wt-color-on-table-bill: #ffffff;
-  --wt-color-table-clearing: #f5a623;
-  --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
   --wt-color-table-calm-edge: #8fb7f5;
@@ -502,8 +496,6 @@
   --wt-color-on-table-seated: #06101f;
   --wt-color-table-bill: #c39bf0;
   --wt-color-on-table-bill: #1d0b33;
-  --wt-color-table-clearing: #f5b34a;
-  --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #4a3a1c;
   --wt-color-on-table-reserved: #eceef2;
   --wt-color-table-calm-edge: #4d6aa6;
