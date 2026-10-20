@@ -411,10 +411,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/fiscal-verifactu/src/backup-verification-chain.ts`, `packages/fiscal-verifactu/src/backup-verification-chain.test.ts`; modify `packages/fiscal-verifactu/package.json` (direct store dependency).
 **Consumes:** Task 2 queries, existing row decoder/fromRegistroRow and pure verifyHuella, all captured SIF/head rows. **Produces:** `verifyBackupFiscalChains(before:BackupQuery,after:BackupQuery):Promise<boolean>`.
 
-- [ ] RED `detects corruption older than the newest two records`, `checks all four predecessor fields`, `rejects gaps duplicate genesis and missing head`, `accepts re-registration with reset current pointer`, `detects tail loss from captured head`, `checks inactive and non-source nodes`. Use genuine alta/anulación/rectification/substitution history, multiple SIFs, and current SIF with no sales; a non-huella field edit must fail preservation.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-chain.test.ts`; expect missing export then last-two-only/missing-head denial red.
-- [ ] Implement full node sequence iteration, checking rebuilt records with existing `@waitron/verifactu` validate at their recorded generation instant (the policy used at `chain.ts:189`), and SIF boundaries derived from stored identities, genesis per legitimate segment and no invented cross-registration link. Match head sequence and pointer to current SIF's tip or legitimate reset-empty state; preserve every historical segment/tip before/after. Never call operational verifyChain/head readers or edit protected writers. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(fiscal): verify complete captured fiscal chains"`.
+- [x] RED `detects corruption older than the newest two records`, `checks all four predecessor fields`, `rejects gaps duplicate genesis and missing head`, `accepts re-registration with reset current pointer`, `detects tail loss from captured head`, `checks inactive and non-source nodes`. Use genuine alta/anulación/rectification/substitution history, multiple SIFs, and current SIF with no sales; a non-huella field edit must fail preservation.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-chain.test.ts`; expect missing export then last-two-only/missing-head denial red.
+- [x] Implement full node sequence iteration, checking rebuilt records with existing `@waitron/verifactu` validate at their recorded generation instant (the policy used at `chain.ts:189`), and SIF boundaries derived from stored identities, genesis per legitimate segment and no invented cross-registration link. Match head sequence and pointer to current SIF's tip or legitimate reset-empty state; preserve every historical segment/tip before/after. Never call operational verifyChain/head readers or edit protected writers. GREEN same command.
+- [x] Commit `git commit -s -m "feat(fiscal): verify complete captured fiscal chains"`.
 
 ### Task 9: Check registrations, allocations and captured public signatures
 
@@ -769,3 +769,23 @@ Observed commands on this task's tree:
 
 No original test file changed. The full verifier, remaining owners, qualified recovery, whole-branch
 review, current-head CI and joint release remain open; this task does not qualify a backup.
+
+### Task 8 execution checkpoint — 2026-10-20
+
+The independent query-only fiscal reader now walks every captured node and SIF
+segment, reconstructs and validates every record at its recorded generation
+instant, compares all four predecessor fields and the stored head, and preserves
+complete record, identity and head rows before and after migration. Re-registration
+keeps the node sequence and accepts a reset pointer only when the current identity
+has no recorded work. Reusing an earlier segment and linking across registrations
+refuse. No operational verifier or head creator is called.
+
+Focused tests cover genuine alta, void, correction and substitution records,
+retired segments, an empty current identity, older corruption, consistent but
+replaced histories, missing/shortened heads and malformed stored values. Thirteen
+independent guard omissions in an installed disposable candidate failed their
+intended assertions beside accepting controls; the restored suite passed. The
+existing writer/golden/immutability files remain unchanged. The exact command logs,
+counts and coverage are in Lane E's local Task 8 receipt ledger. This reader alone
+is not artifact qualification: registration/allocation/signature evidence, secrets,
+full module aggregation, placement/cleanup and v2 recovery remain later tasks.

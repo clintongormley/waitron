@@ -22,6 +22,7 @@
     "@waitron/fiscal": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/ui": "workspace:*",
     "@waitron/verifactu": "^0.2.1",
