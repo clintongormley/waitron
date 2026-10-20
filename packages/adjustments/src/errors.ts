@@ -30,5 +30,8 @@ declare module "@waitron/shared" {
      * an extra that is not a whole count for each dish, of which no part can be taken, only the
      * whole. `lineNo` is the line asked about. */
     "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
+    /** A configuration bundle row the venue could not hold; `field` is `table.column`, or the
+     * table alone when no row keeps a switched-on Void reason asking for a note. */
+    "setup.request_invalid": { field: string };
   }
 }

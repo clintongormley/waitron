@@ -10,7 +10,7 @@ import {
   decimalToCents,
   type Decimal,
 } from "@waitron/shared";
-import { isPercentBp, isRoleList, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
+import { reasonShapeFault, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
 import { adjustmentReasons, type ReasonKind } from "./schema/reasons.js";
 import "./errors.js";
 
@@ -74,41 +74,12 @@ function nonBlankNames(names: Record<string, string>): Record<string, string> {
   return kept;
 }
 
-/** A Void reason only cancels, and carries no roles or limits: a cancel's rule is the refund
- * permission. A Comp reason never cancels. */
-function assertKindFits(input: AdjustmentReasonInput): void {
-  const { actions } = input;
-  if (input.kind === "void") {
-    if (actions.length !== 1 || actions[0] !== "cancel") throw invalid("actions");
-    if (input.applyRoles.length > 0) throw invalid("applyRoles");
-    if (input.approverRoles.length > 0) throw invalid("approverRoles");
-    if (input.maxPercentBp !== null) throw invalid("maxPercentBp");
-    if (input.maxAmount !== null) throw invalid("maxAmount");
-    return;
-  }
-  if (
-    actions.length === 0 ||
-    new Set(actions).size !== actions.length ||
-    actions.includes("cancel")
-  )
-    throw invalid("actions");
-  if (!isRoleList(input.applyRoles)) throw invalid("applyRoles");
-  if (!isRoleList(input.approverRoles)) throw invalid("approverRoles");
-}
-
 /** The row values for `input`, refused field by field where the policy would be meaningless. */
 function reasonValues(input: AdjustmentReasonInput) {
   const name = input.name.trim();
   if (name === "") throw invalid("name");
-  assertKindFits(input);
-  const percent = input.maxPercentBp;
-  if (percent !== null && !isPercentBp(percent)) {
-    throw invalid("maxPercentBp");
-  }
-  // Design §3.1: a Comp whose most off one item is under 100% cannot offer Free.
-  if (percent !== null && percent < 10000 && input.actions.includes("comp")) {
-    throw invalid("maxPercentBp");
-  }
+  const fault = reasonShapeFault(input);
+  if (fault !== null) throw invalid(fault);
   const amount = input.maxAmount;
   if (
     amount !== null &&
@@ -122,7 +93,7 @@ function reasonValues(input: AdjustmentReasonInput) {
     names: nonBlankNames(input.names),
     kind: input.kind,
     actions: input.actions,
-    maxPercent: percent,
+    maxPercent: input.maxPercentBp,
     maxAmount: amount === null ? null : decimalToCents(amount),
     applyRoles: input.applyRoles,
     approverRoles: input.approverRoles,

@@ -30,6 +30,49 @@ export function isRoleList(roles: readonly string[]): roles is PersonRoleValue[]
   );
 }
 
+/** What a reason's kind decides about its other fields. `maxAmount` is read only for whether it is
+ * set. */
+export interface ReasonShape {
+  kind: ReasonKind;
+  actions: readonly string[];
+  applyRoles: readonly string[];
+  approverRoles: readonly string[];
+  maxPercentBp: number | null;
+  maxAmount: unknown;
+}
+
+export type ReasonShapeField =
+  "actions" | "applyRoles" | "approverRoles" | "maxPercentBp" | "maxAmount";
+
+/**
+ * The first field a reason may not hold, or null. A Void reason only cancels, and carries no roles
+ * or limits: a cancel's rule is the refund permission. A Comp reason never cancels, and one whose
+ * most off one item is under 100% cannot offer Free (design §3.1).
+ */
+export function reasonShapeFault(shape: ReasonShape): ReasonShapeField | null {
+  const { actions } = shape;
+  if (shape.kind === "void") {
+    if (actions.length !== 1 || actions[0] !== "cancel") return "actions";
+    if (shape.applyRoles.length > 0) return "applyRoles";
+    if (shape.approverRoles.length > 0) return "approverRoles";
+    if (shape.maxPercentBp !== null) return "maxPercentBp";
+    if (shape.maxAmount !== null) return "maxAmount";
+    return null;
+  }
+  if (
+    actions.length === 0 ||
+    new Set(actions).size !== actions.length ||
+    !actions.every((action) => (COMP_ACTIONS as readonly string[]).includes(action))
+  )
+    return "actions";
+  if (!isRoleList(shape.applyRoles)) return "applyRoles";
+  if (!isRoleList(shape.approverRoles)) return "approverRoles";
+  const percent = shape.maxPercentBp;
+  if (percent !== null && (!isPercentBp(percent) || (percent < 10000 && actions.includes("comp"))))
+    return "maxPercentBp";
+  return null;
+}
+
 export interface AdjustmentReason {
   id: string;
   name: string;

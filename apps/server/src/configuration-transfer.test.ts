@@ -1887,6 +1887,37 @@ it("refuses a bundle whose only Void reason asking for a note was switched off",
   expect(persisted.rows[0]!.count).toBe(0);
 });
 
+it("refuses a bundle whose only Void reason asking for a note cannot cancel", async () => {
+  const { transferred, versions } = await starterReasonsBundle("B19283750", async (tx) => {
+    // Straight to the row: the operations refuse a Void reason that does not cancel.
+    await tx
+      .update(adjustmentReasons)
+      .set({ actions: ["comp"] })
+      .where(and(eq(adjustmentReasons.kind, "void"), eq(adjustmentReasons.noteRequired, true)));
+  });
+  expect(
+    transferred.tables
+      .adjustment_reasons!.filter((row) => row.kind === "void" && row.note_required === 1)
+      .map((row) => [row.active, row.actions]),
+  ).toEqual([[1, '["comp"]']]);
+  const target = venue("B19283751");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "adjustment_reasons.actions" },
+  });
+  const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+    select count(*) as count from tenants where tax_id = ${target.taxId}
+  `);
+  expect(persisted.rows[0]!.count).toBe(0);
+});
+
 it("transfers staff roles, who holds them and a painted season week under new ids", async () => {
   const source = await applyVenue(planVenue(venue("B24681390"), ALL_MODULES), {
     db: suite.db,
