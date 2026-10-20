@@ -3060,6 +3060,20 @@ export class TillApp extends LitElement {
     );
   }
 
+  /** What a new payment on `billId` is refused with while a bill payment holds it. */
+  #holdRefusal(billId: string): "bill_pay.sending" | "bill_pay.unconfirmed_elsewhere" | null {
+    if (!this.#billPaymentHeld(billId)) return null;
+    return this.#paymentsOut.has(billId) ? "bill_pay.sending" : "bill_pay.unconfirmed_elsewhere";
+  }
+
+  /** The presented sheet `open` shows the hold's refusal, answering whether one holds its bill. */
+  #presentedHeld(open: PresentedPaying): boolean {
+    const held = this.#holdRefusal(open.billId);
+    if (held === null) return false;
+    this.#showPresentedRefusal(open.id, { code: held, text: t(held) });
+    return true;
+  }
+
   /** Out on the bill from a dialog other than `dialogId`. */
   #paymentOutElsewhere(billId: string, dialogId: number): boolean {
     const out = this.#paymentsOut.get(billId);
@@ -7643,10 +7657,9 @@ export class TillApp extends LitElement {
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
-    if (this.#billPaymentHeld(workingOrderId)) {
-      this.findBillError = this.#paymentsOut.has(workingOrderId)
-        ? "bill_pay.sending"
-        : "bill_pay.unconfirmed_elsewhere";
+    const held = this.#holdRefusal(workingOrderId);
+    if (held !== null) {
+      this.findBillError = held;
       return;
     }
     const observation = this.#collectionObservation;
@@ -15846,10 +15859,9 @@ export class TillApp extends LitElement {
   ): Promise<boolean> {
     if (this.submitting || this.activeTabId === undefined) return false;
     const id = this.activeTabId;
-    if (this.#billPaymentHeld(id)) {
-      this.errorKey = this.#paymentsOut.has(id)
-        ? "bill_pay.sending"
-        : "bill_pay.unconfirmed_elsewhere";
+    const held = this.#holdRefusal(id);
+    if (held !== null) {
+      this.errorKey = held;
       return false;
     }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
@@ -16003,6 +16015,7 @@ export class TillApp extends LitElement {
     if (open === null || this.submitting) return;
     const bill = this.partyBills.find((row) => row.workingOrderId === open.billId);
     if (bill === undefined) return;
+    if (this.#presentedHeld(open)) return;
     const detail = (event as CustomEvent<PresentedPayDetail>).detail;
     this.presentedPaying = { ...open, refusal: null };
     if (detail.method === "card") {
@@ -16037,7 +16050,7 @@ export class TillApp extends LitElement {
     const open = this.#presentedNow();
     if (open === null || this.submitting) return;
     const held = this.#unansweredWholePayments.get(open.billId);
-    if (held === undefined) return;
+    if (held === undefined || this.#presentedHeld(open)) return;
     this.presentedPaying = { ...open, refusal: null };
     const paid = await this.#payWholeTab(
       { ...held.tender, ...(held.guests === undefined ? {} : { guests: held.guests }) },
@@ -16058,15 +16071,9 @@ export class TillApp extends LitElement {
     guests: number | null | undefined,
   ): Promise<void> {
     if (this.submitting) return;
-    const billId = bill.workingOrderId;
-    if (this.#billPaymentHeld(billId)) {
-      this.errorKey = this.#paymentsOut.has(billId)
-        ? "bill_pay.sending"
-        : "bill_pay.unconfirmed_elsewhere";
-      return;
-    }
     this.submitting = true;
     this.errorKey = undefined;
+    const billId = bill.workingOrderId;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
     const api = this.api;

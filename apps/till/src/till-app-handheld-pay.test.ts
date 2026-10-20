@@ -787,6 +787,50 @@ describe("an unanswered presented payment on a handheld", () => {
     );
   });
 
+  it.each([
+    ["cash", asked.cash],
+    ["another card machine", asked.manual],
+    ["a card on the reader", { method: "card", readerId: "r2", guests: 4 }],
+  ] as const)(
+    "%s sent from a presented sheet still open when a bill payment began holding the bill is refused on the sheet",
+    async (_name, detail: PresentedPayDetail) => {
+      // The bill payment is started by the order screen's own event: on the screen the presented
+      // sheet covers the button that sends it.
+      const takeBillPayment = vi.fn(() => new Promise<BillPaymentResult>(() => {}));
+      const { el } = await mountApp(
+        onPhone({
+          getPartyBills: vi.fn().mockResolvedValue([placedBill]),
+          takeBillPayment,
+          previewBillPayment: vi
+            .fn()
+            .mockResolvedValue({ ...wholeCard, applied: "40.00", charged: "40.00" }),
+        }),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      emit(order, "bill-pay", { way: "share", lines: [] });
+      await flush(el);
+      await press(el, 'input[name="way"][value="share"]');
+      await type(el, "people", "3");
+      await press(el, 'input[name="method"][value="card"]');
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      expect(takeBillPayment).toHaveBeenCalledOnce();
+
+      emit(presented(el)!, "presented-pay", detail);
+      await flush(el);
+      await presented(el)!.updateComplete;
+
+      expect(
+        presented(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "wt-form-actions",
+        )!.error,
+      ).toBe(t("bill_pay.sending"));
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      expect(api.pay).not.toHaveBeenCalled();
+    },
+  );
+
   async function signInAgainAndReopen(el: TillApp): Promise<void> {
     emit(shell(el), "logout");
     await flush(el);
