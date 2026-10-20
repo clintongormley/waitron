@@ -463,10 +463,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/fiscal-verifactu/src/backup-verification-secrets.ts`, `packages/fiscal-verifactu/src/backup-verification-secrets.test.ts`; Task 10 subsequently wires its result into the fiscal aggregate.
 **Consumes:** Task 11 private credential reader and existing offline PFX opener. **Produces:** `verifyBackupFiscalSecrets(context:BackupVerificationContext):Promise<BackupModuleResult>` for Task 10's complete fiscal contribution.
 
-- [ ] RED `opens captured PFX without signing or network`, `preserves all certificate-install and reminder evidence`, `source-node credential matches latest applicable install`, `valid expired material requires future renewal not corruption`, `damaged material blocks success`. Other nodes' local history is preserved without pretending their keys are available; absent required source key stays unavailable.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-secrets.test.ts src/certificate-file.test.ts`; expect missing export then ignored-PFX denial red.
-- [ ] Implement offline private-key/certificate parsing and source relationship checks. Never call `checkWithAuthority`, install/renew, transport or signing. Preserve every historical install field. Distinguish malformed known material, unsupported encryption and inconclusive key inputs. Task 10 wires this already-tested reader into the real fiscal contribution; GREEN same command, with literal secret/fiscal identity sentinels absent from results.
-- [ ] Commit `git commit -s -m "feat(fiscal): verify captured certificate material offline"`.
+- [x] RED `opens captured PFX without signing or network`, `preserves all certificate-install and reminder evidence`, `source-node credential matches latest applicable install`, `valid expired material requires future renewal not corruption`, `damaged material blocks success`. Other nodes' local history is preserved without pretending their keys are available; absent required source key stays unavailable.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-secrets.test.ts src/certificate-file.test.ts`; expect missing export then ignored-PFX denial red.
+- [x] Implement offline private-key/certificate parsing and source relationship checks. Never call `checkWithAuthority`, install/renew, transport or signing. Preserve every historical install field. Distinguish malformed known material, unsupported encryption and inconclusive key inputs. Task 10 wires this already-tested reader into the real fiscal contribution; GREEN same command, with literal secret/fiscal identity sentinels absent from results.
+- [x] Commit `git commit -s -m "feat(fiscal): verify captured certificate material offline"`.
 
 ### Task 13: Check identity secrets and authenticator state
 
@@ -821,3 +821,11 @@ The original56 db expectations remain exact. Four core result-shape assertions g
 secret check while preserving all previous status/data values and behavioral assertions.
 Certificate/identity/provider secrets, real artifact orchestration and target-bound recovery remain
 open. These checks neither activate fiscal identity nor qualify an artifact by themselves.
+
+### Task 12 implementation checkpoint
+
+The query-only certificate reader opens captured PFX material, checks the source node and latest
+installation fields before and after migration, and compares complete installation/reminder rows.
+It accepts intact expired or future-valid material without renewal. Missing vault keys or an
+unconfirmed PFX passphrase remain unavailable; unsupported encryption remains unsupported.
+The fiscal contribution still needs Task 10 wiring; this is not artifact qualification.
