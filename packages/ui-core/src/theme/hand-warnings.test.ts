@@ -287,43 +287,37 @@ describe("the brand colour's fix beside colours set by hand", () => {
     expect(fixed.warnings).toEqual(brandAlone);
   });
 
-  // Two warnings with no fix search every shade several times: about 4 s in Chromium, and the
-  // default 15 s ran out in Stryker's instrumented dry run.
-  test(
-    "offers the button colour its fix flag paints, against colours not set by hand",
-    { timeout: 60_000 },
-    () => {
-      const choices = withHand({ ...WAITRON_CHOICES, brandColor: "#000000" }, "dark", {
-        "field-value": "#2c2c2c",
-        "field-line": "#000001",
-        border: "#0d121c",
-      });
-      expect(derive(choices).warnings).toEqual([
-        {
-          field: "brandColor",
-          mode: "dark",
-          against: ["field-fill", "surface"],
-          fix: "#737373",
-          blockedBy: [],
-        },
-        {
-          field: "handSet.dark.field-line",
-          mode: "dark",
-          against: ["field-fill", "surface"],
-          fix: "#585e6a",
-          blockedBy: [],
-        },
-        {
-          field: "handSet.dark.field-value",
-          mode: "dark",
-          against: ["field-fill"],
-          fix: null,
-          blockedBy: ["field-line"],
-        },
-      ]);
-      expect(derive({ ...choices, brandFix: { dark: true } }).dark[P("primary")]).toBe("#737373");
-    },
-  );
+  test("offers the button colour its fix flag paints, against colours not set by hand", () => {
+    const choices = withHand({ ...WAITRON_CHOICES, brandColor: "#000000" }, "dark", {
+      "field-value": "#2c2c2c",
+      "field-line": "#000001",
+      border: "#0d121c",
+    });
+    expect(derive(choices).warnings).toEqual([
+      {
+        field: "brandColor",
+        mode: "dark",
+        against: ["field-fill", "bg", "surface"],
+        fix: "#737373",
+        blockedBy: [],
+      },
+      {
+        field: "handSet.dark.field-line",
+        mode: "dark",
+        against: ["field-fill", "surface", "bg"],
+        fix: "#585e6a",
+        blockedBy: [],
+      },
+      {
+        field: "handSet.dark.field-value",
+        mode: "dark",
+        against: ["field-fill"],
+        fix: "#777777",
+        blockedBy: [],
+      },
+    ]);
+    expect(derive({ ...choices, brandFix: { dark: true } }).dark[P("primary")]).toBe("#737373");
+  });
 });
 
 describe("groupAgainst", () => {

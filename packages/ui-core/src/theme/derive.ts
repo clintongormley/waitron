@@ -220,6 +220,8 @@ export function settleMode(
   const brandOwned = choices.brandColor !== null && !isHand(PRIMARY);
   const ownRule = ({ rule }: RuleResult) =>
     brandOwned && (rule.a === PRIMARY || rule.b === PRIMARY);
+  const picked = (result: RuleResult) =>
+    isHand(result.rule.a) || isHand(result.rule.b) || ownRule(result);
   const tintIn = (result: RuleResult) => {
     const { a, b } = result.rule;
     return (
@@ -243,8 +245,11 @@ export function settleMode(
     written = deriveAt(defaults, choices, mode, strength, { ...work, ...hand });
     fails = failing(defaults, mode, written);
     const count = fails.length;
-    const fewer = (token: string, value: string) =>
-      failing(
+    const failingNow = new Set(fails.map(({ rule }) => rule));
+    // Departs from the reference: a move never newly fails a rule naming no colour the owner picked,
+    // so every rule left failing names the brand colour or a hand-set value.
+    const fewer = (token: string, value: string) => {
+      const after = failing(
         defaults,
         mode,
         deriveAt(defaults, choices, mode, strength, {
@@ -252,7 +257,12 @@ export function settleMode(
           [token]: value,
           ...hand,
         }),
-      ).length < count;
+      );
+      return (
+        after.length < count &&
+        after.every((result) => picked(result) || failingNow.has(result.rule))
+      );
+    };
     let moved = false;
     for (const result of fails) {
       if (ownRule(result)) continue;

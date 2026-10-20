@@ -716,7 +716,9 @@ hand-set `primary` is the colour the whole `BRAND_FAMILY` is worked out from, ev
 `brandColor: null`; step 1 skips any rule naming a hand-set colour; step 2 is ported from `settle`
 (`:257-282`): a worked-out colour named in a failing rule moves — never `--wt-color-primary`, never a
 meaning colour, never for a rule naming the brand colour as picked — when moving it alone passes
-that rule (by `passes`) and leaves fewer rules failing; at most 60 rounds.
+that rule (by `passes`) and leaves fewer rules failing; at most 60 rounds. (Fix round 1, ruling I2:
+nor when it newly fails a rule naming no owner-picked colour — the reference traded one there, e.g.
+dark `bg` moved for a hand-set line and broke `google-button-line` on it; `random.sweep.test.ts` holds it.)
 
 - [ ] **Step 1: Write the failing tests** in `hand-set.test.ts` (values from `output-h1.txt`,
   `output-ex4.txt`, `output-ex5.txt`, `output-within.txt`):
