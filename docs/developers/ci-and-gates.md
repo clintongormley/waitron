@@ -1575,8 +1575,8 @@ plus two waits need up to 100 s), so 2 minutes it is.
 The checkout cases in `scripts/ci-workflow.test.mjs` ("the workflows' checkouts"), weaker than
 their name: they read every workflow as TEXT and never run one; a checkout in a composite action,
 a called workflow outside `.github/workflows/`, or written through an anchor or expression is not
-seen; they hold each attempt to at most 2 minutes but do not judge the low-speed numbers, nor
-whether the stop step stops anything.
+seen; they hold the first attempt to exactly 2 minutes and the second to at most 2, but do not
+judge the low-speed numbers, nor whether the stop step stops anything.
 
 Deletion proof, 2026-10-20, in a throwaway detached worktree of `79c8459cc`: with the stop step
 deleted from `licence.yml`'s first job, `pnpm exec vitest run scripts/ci-workflow.test.mjs -t

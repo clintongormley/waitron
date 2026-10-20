@@ -28,11 +28,11 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
-// case reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit
-// case, two apt cases, a `--with-deps` case, the pnpm-setup cases and the checkout cases reading
-// every .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than the
-// workflow. Each extraction carries a guard that it found something, because a silently-empty
+// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
+// reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
+// two apt cases, a `--with-deps` case, the pnpm-setup cases and the checkout cases reading every
+// .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
+// the workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
 //
@@ -3088,7 +3088,9 @@ describe("the workflows' pnpm setups", () => {
  * name: it reads each workflow as TEXT and never runs one, so a checkout inside a composite action
  * or a called workflow outside `.github/workflows/`, or reached through an expression or a YAML
  * anchor, is not seen; it checks that the low-speed numbers are positive whole numbers, not that
- * they are the right size; and it checks the stop step's words, not whether it stops anything.
+ * they are the right size; and it checks the stop step's words, not whether it stops anything. It
+ * also refuses valid YAML no site uses: a quoted `timeout-minutes: "2"`, an `if:` wrapped in
+ * `${{ }}`, and a low-speed value followed by a `# comment`.
  */
 function checkoutAttempts(text) {
   const isCheckout = (step) => step?.uses?.startsWith("actions/checkout@") ?? false;
@@ -3099,6 +3101,7 @@ function checkoutAttempts(text) {
   const shapeOf = (first, stop, second) => {
     if (minutes(first) === undefined) return "no time limit";
     if (Number(minutes(first)) > 2) return "time limit too long";
+    if (Number(minutes(first)) < 2) return "time limit too short";
     if (
       !positive(first.env.GIT_HTTP_LOW_SPEED_LIMIT) ||
       !positive(first.env.GIT_HTTP_LOW_SPEED_TIME)
@@ -3199,6 +3202,11 @@ describe("the workflows' checkouts", () => {
       "a first attempt with a 30-minute limit",
       bounded.replace("timeout-minutes: 2", "timeout-minutes: 30"),
       [first("time limit too long")],
+    ],
+    [
+      "a first attempt with a 1-minute limit",
+      bounded.replace("timeout-minutes: 2", "timeout-minutes: 1"),
+      [first("time limit too short")],
     ],
     [
       "a second attempt with a 30-minute limit",
