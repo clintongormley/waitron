@@ -1,4 +1,4 @@
-import { css, html, type TemplateResult } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { isValidGuestCount, MAX_GUEST_COUNT } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-number-stepper.js";
@@ -41,6 +41,8 @@ export function guestsStepper(field: {
   disabled: boolean;
   error: string;
   onChange: (event: Event) => void;
+  /** A help badge, placed in the stepper's `help` slot. */
+  help?: TemplateResult;
 }): TemplateResult {
   return html`<wt-number-stepper
     name="guests"
@@ -56,5 +58,6 @@ export function guestsStepper(field: {
     .disabled=${field.disabled}
     .error=${field.error}
     @wt-change=${field.onChange}
-  ></wt-number-stepper>`;
+    >${field.help ?? nothing}</wt-number-stepper
+  >`;
 }

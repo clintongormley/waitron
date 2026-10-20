@@ -362,13 +362,13 @@ test("wt-dialog: with no heading there is no help slot", async () => {
   expect(tooltip!.assignedSlot).toBeNull();
 });
 
-test("wt-modal at phone width: a full-width field's badge adds no sideways scroll", async () => {
+test("wt-modal at phone width: a full-width field's badge adds no sideways scroll, at the dashboard's size and the till's", async () => {
   await page.viewport(390, 844);
   try {
-    const measure = async (badgeStyle: string) => {
+    const measure = async (modalStyle: string) => {
       const { el } = await openDialog(
-        '<wt-modal heading="Product"><wt-input label="Name" name="name">' +
-          `<wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Name" style="${badgeStyle}">What it is called.</wt-help-tooltip>` +
+        `<wt-modal heading="Product" style="${modalStyle}"><wt-input label="Name" name="name">` +
+          '<wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Name">What it is called.</wt-help-tooltip>' +
           "</wt-input></wt-modal>",
       );
       const tooltip = el.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
@@ -384,9 +384,25 @@ test("wt-modal at phone width: a full-width field's badge adds no sideways scrol
     cleanup();
     setHelpMode(false);
 
-    // A 32px badge hangs further out than the padding, so the measurement can see overflow.
-    const till = await measure("--wt-help-badge-target: 32px");
-    expect(till.scrollWidth, JSON.stringify(till)).toBeGreaterThan(till.clientWidth);
+    // A till's 32px badge: the modal's padding grows to half its target, so it stays inside too.
+    const till = await measure("--wt-help-badge-target: 32px; --wt-help-badge-size: 24px");
+    expect(till.scrollWidth, JSON.stringify(till)).toBe(till.clientWidth);
+    cleanup();
+    setHelpMode(false);
+
+    // Control: the same badge in an unpadded box does overflow, so the measurement can see it.
+    const scroller = await mount(
+      '<div style="overflow: auto; --wt-help-badge-target: 32px; --wt-help-badge-size: 24px">' +
+        '<div style="position: relative; height: 48px">' +
+        '<wt-help-tooltip mode="help-mode" aria-label="Help: Name">What it is called.</wt-help-tooltip>' +
+        "</div></div>",
+    );
+    const badge = scroller.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    await badge.updateComplete;
+    await turnHelp(true, badge);
+    expect(badge.checkVisibility()).toBe(true);
+    const bare = { scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth };
+    expect(bare.scrollWidth, JSON.stringify(bare)).toBeGreaterThan(bare.clientWidth);
   } finally {
     await page.viewport(1280, 900);
   }

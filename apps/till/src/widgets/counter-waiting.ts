@@ -6,6 +6,7 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder } from "../api/client.js";
 
@@ -34,9 +35,14 @@ export class TillCounterWaiting extends LitElement {
     baseStyles,
     orderPreviewStyles,
     orderNumberStyles,
+    helpAnchorStyles,
     css`
       :host {
         display: block;
+      }
+
+      .title-anchor {
+        width: fit-content;
       }
 
       .title {
@@ -217,7 +223,10 @@ export class TillCounterWaiting extends LitElement {
   override render() {
     if (this.orders.length === 0) return nothing;
     return html`
-      <h2 class="title">${t("waiting.title")}</h2>
+      <div class="title-anchor help-anchor">
+        <h2 class="title">${t("waiting.title")}</h2>
+        ${helpBadge("help.counter.waiting_orders", t("waiting.title"))}
+      </div>
       ${this.orders.map((order) => this.#row(order))}
     `;
   }

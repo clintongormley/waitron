@@ -263,11 +263,12 @@ called weaker than its name, the topic file lists what it does not see.
 - **The user guides live in `apps/server/src/guide/<language>/`, and the box serves them at
   `/help/<language>/<page>`.** A change to a screen updates its guide in English and, where a twin
   exists, Spanish; every section heading carries a `{#id}` both languages share, and a link from the
-  dashboard app goes through `apps/dashboard/src/help-guide.ts`. Guards: `apps/server/src/guide-content.test.ts`
+  dashboard goes through `apps/dashboard/src/help-guide.ts`, one from the till through
+  `apps/till/src/help-guide.ts`. Guards: `apps/server/src/guide-content.test.ts`
   and `scripts/guide-links.test.ts`, both weaker than their names — the first checks that the guides
   render and that their ids, links and twins' ids match, never that a guide or its twin says what
   the screen does or was updated with it; the second's check that only `help-guide.ts` writes a
-  guide path reads only `apps/dashboard/src`, as text. See
+  guide path reads only `apps/dashboard/src` and `apps/till/src`, as text. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
   try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;

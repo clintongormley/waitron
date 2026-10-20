@@ -175,7 +175,17 @@ export class WtHelpTooltip extends LitElement {
     if (!event.composedPath().includes(this)) this.popup.hidePopover();
   };
 
-  private onGuideClick(): void {
+  private onGuideClick(event: MouseEvent): void {
+    event.stopPropagation();
+    const open = this.dispatchEvent(
+      new CustomEvent<{ href: string }>("wt-guide-open", {
+        detail: { href: this.guideHref },
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+    if (!open) event.preventDefault();
     this.popup.hidePopover();
   }
 

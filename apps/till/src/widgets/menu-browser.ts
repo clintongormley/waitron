@@ -39,6 +39,7 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
+import { helpBadge } from "./help-badge.js";
 import { productName, unitName } from "./product-name.js";
 import { hasSomethingToSell, pickProduct } from "./product-pick.js";
 
@@ -843,7 +844,11 @@ export class TillMenuBrowser extends LitElement {
           label=${t("menu.search")}
           .value=${this.query}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
-        ></wt-input>
+          >${helpBadge("help.menu.dishes", t("menu.search"), {
+            guide: "products.nutrition-at-the-till",
+            slot: "help",
+          })}</wt-input
+        >
         <slot name="filters"></slot>
       </div>
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}

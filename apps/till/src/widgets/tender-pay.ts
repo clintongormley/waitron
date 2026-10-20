@@ -42,6 +42,7 @@ import type { PropertyValues } from "lit";
 import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
 import { trackDialog } from "./track-dialog.js";
+import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 
 /**
  * For `cash`, `amount` is the FULL operator-entered tendered amount, never the total — the
@@ -140,6 +141,7 @@ export class TillTenderPay extends LitElement {
     segmentedOptionStyles,
     formMessageStyles,
     guestsStepperStyles,
+    helpAnchorStyles,
     css`
       :host {
         display: block;
@@ -988,6 +990,7 @@ export class TillTenderPay extends LitElement {
       disabled: this.busy,
       error: this.#guestsHeld() ? t("seat.guest_count_invalid") : "",
       onChange: (event) => this.#onGuestsChange(event),
+      help: helpBadge("help.counter.guests", t("seat.guest_count"), { slot: "help" }),
     });
   }
 
@@ -1021,15 +1024,17 @@ export class TillTenderPay extends LitElement {
             : nothing
         }
         ${this.#renderInvoiceButton(disabled)}
-        <wt-button
-          class="hold"
-          variant="secondary"
-          size="md"
-          ?disabled=${disabled}
-          @click=${() => this.#startHolding()}
+        <span class="help-anchor"
+          ><wt-button
+            class="hold"
+            variant="secondary"
+            size="md"
+            ?disabled=${disabled}
+            @click=${() => this.#startHolding()}
+          >
+            ${t("action.hold")} </wt-button
+          >${helpBadge("help.counter.park", t("action.hold"))}</span
         >
-          ${t("action.hold")}
-        </wt-button>
         ${this.#renderReceiptLanguageButton(disabled)}
       </div>
     `;

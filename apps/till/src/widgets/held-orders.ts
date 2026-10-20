@@ -19,6 +19,7 @@ import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { FloorZone, HeldOrderSummary, TableState } from "../api/client.js";
 
@@ -46,9 +47,14 @@ export class TillHeldOrders extends LitElement {
     tableTargetStyles,
     signalChipStyles,
     orderNumberStyles,
+    helpAnchorStyles,
     css`
       :host {
         display: block;
+      }
+
+      .title-anchor {
+        width: fit-content;
       }
 
       .title {
@@ -350,7 +356,10 @@ export class TillHeldOrders extends LitElement {
   override render() {
     const moving = this.moving;
     return html`
-      <h2 class="title">${t("held.title")}</h2>
+      <div class="title-anchor help-anchor">
+        <h2 class="title">${t("held.title")}</h2>
+        ${helpBadge("help.counter.parked_orders", t("held.title"))}
+      </div>
       ${
         this.orders.length === 0
           ? html`<p class="empty">${t("held.empty")}</p>`

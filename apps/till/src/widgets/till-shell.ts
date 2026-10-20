@@ -28,6 +28,7 @@ import "@waitron/ui/src/components/wt-help-switch.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
+import "./guide-sheet.js";
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
@@ -93,6 +94,25 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
+    this.addEventListener("wt-guide-open", (event) =>
+      this.#onGuideOpen(event as CustomEvent<{ href: string }>),
+    );
+  }
+
+  /** The guide a help box's link asked for, shown over the till rather than in a new tab. */
+  @state() private guideHref = "";
+  #guideBadge?: HTMLElement;
+
+  #onGuideOpen(event: CustomEvent<{ href: string }>): void {
+    event.preventDefault();
+    this.#guideBadge = event.composedPath()[0] as HTMLElement;
+    this.guideHref = event.detail.href;
+  }
+
+  #onGuideClose(): void {
+    this.guideHref = "";
+    this.#guideBadge?.shadowRoot?.querySelector("button")?.focus();
+    this.#guideBadge = undefined;
   }
 
   static override styles = [
@@ -1000,6 +1020,10 @@ export class TillShell extends LitElement {
           </div>
         </div>
       </div>
+      <till-guide-sheet
+        .href=${this.guideHref}
+        @guide-close=${() => this.#onGuideClose()}
+      ></till-guide-sheet>
     `;
   }
 }

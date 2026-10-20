@@ -165,8 +165,8 @@ a venue and serves the real till.
 > PIN. So "No refunds" below no longer covers a bill payment given back before its invoice.
 >
 > **2026-10-01 (lane B item B16):** the counter's held-orders card also lists the counter orders
-> still waiting — sent to the kitchen but not paid, handed over but not paid, or paid but not handed
-> over — with **Hand over** and **Pay**. An order sent without payment can be handed over before it
+> still waiting — sent to the kitchen but not paid, handed over but not paid, or paid with dishes sent
+> to the kitchen but not yet handed over — with **Hand over** and **Pay**. An order sent without payment can be handed over before it
 > is paid; Pay loads it into the basket to take its payment.
 
 **In scope (slice 1 / 7a):** one walk-up **cash** sale — choose products, weigh or count them, take
