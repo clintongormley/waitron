@@ -1,7 +1,8 @@
 # A796 — Paying at the table from a handheld (payments slice 2)
 
-Status: **design decided; no owner questions open (§9). Nothing is built; the build is to be
-planned as its own item.**
+Status: **design decided; no owner questions open (§9).**
+
+Built: #1921, 2026-10-20.
 
 Revision 4, 2026-10-19: the owner answered Revision 3's six questions (relayed by the campaign
 watcher, about 12:10–12:22):
