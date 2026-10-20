@@ -117,7 +117,8 @@ come after the list above:
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
-  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) decided, revision 5).
+  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 5; one owner
+  question open).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5189,15 +5190,18 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
-  it can still sell.** Design decided (revision 5, 2026-10-20; no owner questions open); the build is
-  to be planned as its own item, in the design's §8 slices:
+  it can still sell.** Design revision 5 (2026-10-20, with its review round); **one owner question
+  open**, question 4: when the box's clock is right but the last sale's time was ahead, may a manager
+  restart payments (recommended: only with fresh proof from AEAT or two devices, and at most 24 hours
+  behind). The build is to be planned as its own item, in the design's §8 slices:
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
   [mock-ups](backlog/mockups/a798-degraded-trading/README.md). The owner's three answers: no reserved
   space on the disk, a warning and an email at 2 GB free; when a printer stops, every till and
   handheld is told at two minutes; and while the box's clock reads earlier than its last recorded
-  sale, payments stop on every device — reversing D8 and A364 for that case only — until the clock is
-  set or a manager confirms it is right (design §4.8; the defaults that answer left open are in §6).
-  It adds a module seat for staff notices; no migration. Not started.
+  sale, every action that takes or gives back money, or would write a fiscal record, stops on every
+  device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the
+  defaults that answer left open are in §6). It adds a module seat for staff notices and one
+  migration in the Veri*Factu module's set. Not started.
 
 - **Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
   a module that fails at start, undoing the last module change, and a migration that applied only in
