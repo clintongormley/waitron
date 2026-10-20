@@ -443,20 +443,20 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/credentials/src/backup-verification.ts`, `packages/credentials/src/backup-verification.test.ts`, `packages/credentials/src/backup-key-inputs.ts`, `packages/credentials/src/backup-key-inputs.test.ts`, `packages/composition/src/credentials-backup-verification.ts`; modify `packages/credentials/src/index.ts`, `packages/credentials/package.json` (store dependency), `packages/composition/src/modules.ts`.
 **Consumes:** Task 2 query, all three archived env inputs through `resolveBackupKeyInputs`, existing keyring/cipher/payload readers. **Produces:** owner-owned `CREDENTIALS_BACKUP_POLICY` with the contribution's declarations but no callback; `verifyBackupCredentials(query:BackupQuery,keyInputs:Readonly<Record<string,string>>):Promise<"passed"|"invalid"|"unsupported"|"unavailable">`; `readBackupCredential(query:BackupQuery,keyInputs:Readonly<Record<string,string>>,purpose:string):Promise<Readonly<Record<string,string>>|null>`; composition's `CREDENTIALS_BACKUP_VERIFICATION:BackupVerificationContribution` wraps those exports and converts inconclusive status to `BackupCheckUnavailable`.
 
-- [ ] RED `authenticates all rows including previous key versions`, `key shape alone cannot pass`, `wrong AAD tag or payload refuses`, `unknown purpose is unsupported`, `deprecated purposes remain covered`, `missing external key is unavailable`, `all readers use later-file vault-key precedence`. Missing row is null; an undecryptable row must never masquerade as absent. Assert no reseal/rotation/writes.
-- [ ] Run `pnpm --filter @waitron/credentials exec vitest run src/backup-verification.test.ts src/backup-key-inputs.test.ts`; expect missing export then wrong-key acceptance assertion red.
-- [ ] Implement shared captured-key resolution and authenticated decrypt using each row's own key version and purpose AAD, then exact payload checks. Missing/wrong key without independent confirmation is unavailable, not corruption. Never return secrets in a module result. **Do not import module into credentials:** `packages/module/package.json` depends on fiscal, whose `packages/fiscal/package.json` depends on credentials; that would close a loop, and credentials' fiscal-import restriction remains intact. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-- [ ] Commit `git commit -s -m "feat(credentials): verify every captured vault row"`.
+- [x] RED `authenticates all rows including previous key versions`, `key shape alone cannot pass`, `wrong AAD tag or payload refuses`, `unknown purpose is unsupported`, `deprecated purposes remain covered`, `missing external key is unavailable`, `all readers use later-file vault-key precedence`. Missing row is null; an undecryptable row must never masquerade as absent. Assert no reseal/rotation/writes.
+- [x] Run `pnpm --filter @waitron/credentials exec vitest run src/backup-verification.test.ts src/backup-key-inputs.test.ts`; expect missing export then wrong-key acceptance assertion red.
+- [x] Implement shared captured-key resolution and authenticated decrypt using each row's own key version and purpose AAD, then exact payload checks. Missing/wrong key without independent confirmation is unavailable, not corruption. Never return secrets in a module result. **Do not import module into credentials:** `packages/module/package.json` depends on fiscal, whose `packages/fiscal/package.json` depends on credentials; that would close a loop, and credentials' fiscal-import restriction remains intact. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
+- [x] Commit `git commit -s -m "feat(credentials): verify every captured vault row"`.
 
 ### Task 11a: Check the source membership private/public key pair
 
 **Files:** modify `packages/db/src/backup-evidence.ts`, `packages/db/src/backup-evidence.test.ts`, `packages/db/src/index.ts`, `packages/composition/src/core-backup-verification.ts`; create `packages/composition/src/core-backup-verification.test.ts`.
 **Consumes:** Tasks 6/11 queries, shared key inputs and authenticated credential reader. **Produces:** `verifyBackupMembershipIdentity(input:{before:BackupQuery;after:BackupQuery;nodeId:string;privateKey:string|null}):Promise<boolean>` in db, wired into core's secret obligation.
 
-- [ ] RED `malformed membership PKCS8 refuses`, `valid unrelated Ed25519 key refuses`, `matching source identity passes without signing`, `one missing key half refuses`, `explicit keyless source follows its absence rule`. Compare source public halves before and after migration; require zero generation/signing/writes and no secret output.
-- [ ] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts` and `pnpm --filter @waitron/composition exec vitest run src/core-backup-verification.test.ts`; expect missing key-check export then false acceptance red.
-- [ ] Extend the core declaration with `vault:membership.node_key` and the declared env inputs. Add db-owned `verifyBackupMembershipIdentity(input:{before:BackupQuery;after:BackupQuery;nodeId:string;privateKey:string|null}):Promise<boolean>`: parse canonical base64 PKCS8 DER, require Ed25519, derive SPKI with `createPublicKey` without signing, and compare with the source node's captured public key before and after migration. Composition's core adapter obtains the private string through the credentials reader and passes it privately to that db function; db imports no credentials/module/membership package. Missing private key with a recorded public key, private key without its public half, malformed or valid-but-unrelated key refuses. Both absent is accepted only for an explicitly keyless source with no captured membership obligation requiring that identity; test the absence rule and a normal matching identity. Core cannot pass before this obligation is wired. Never generate, establish, endorse, rotate or sign an identity. GREEN the same commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-- [ ] Commit `git commit -s -m "feat(db): verify captured membership key usability"`.
+- [x] RED `malformed membership PKCS8 refuses`, `valid unrelated Ed25519 key refuses`, `matching source identity passes without signing`, `one missing key half refuses`, `explicit keyless source follows its absence rule`. Compare source public halves before and after migration; require zero generation/signing/writes and no secret output.
+- [x] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts` and `pnpm --filter @waitron/composition exec vitest run src/core-backup-verification.test.ts`; expect missing key-check export then false acceptance red.
+- [x] Extend the core declaration with `vault:membership.node_key` and the declared env inputs. Add db-owned `verifyBackupMembershipIdentity(input:{before:BackupQuery;after:BackupQuery;nodeId:string;privateKey:string|null}):Promise<boolean>`: parse canonical base64 PKCS8 DER, require Ed25519, derive SPKI with `createPublicKey` without signing, and compare with the source node's captured public key before and after migration. Composition's core adapter obtains the private string through the credentials reader and passes it privately to that db function; db imports no credentials/module/membership package. Missing private key with a recorded public key, private key without its public half, malformed or valid-but-unrelated key refuses. Both absent is accepted only for an explicitly keyless source with no captured membership obligation requiring that identity; test the absence rule and a normal matching identity. Core cannot pass before this obligation is wired. Never generate, establish, endorse, rotate or sign an identity. GREEN the same commands plus `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
+- [x] Commit `git commit -s -m "feat(db): verify captured membership key usability"`.
 
 ### Task 12: Check fiscal certificate data without signing or AEAT
 
@@ -805,3 +805,19 @@ The latter's JSON summary includes credentials-backup-verification.ts. Root cycl
 These are module foundations, not artifact qualification, placed-key parity or a release handoff.
 The original public-export whole-shape assertion gains five API names; existing entries remain.
 Installed omission controls and final checkpoint receipts are recorded in the campaign ledger.
+
+### Task 11a execution checkpoint — 20 October 2026
+
+The core owner now authenticates the captured membership private key and checks its canonical
+Ed25519 PKCS8 representation against the source public half before and after migration. A private
+key without a public half, an unrelated pair or malformed material refuses. Explicitly keyless
+sources need no retained membership obligation requiring that identity; unrelated membership is
+accepted. Missing or inconclusive vault inputs remain unavailable.
+
+Observed db98PASS with scoped reader coverage99.44/98.75/100/100; full composition86PASS with
+100/98.36/100/100. Root3364 and protocol/target176PASS. Twelve installed omission/effect probes
+failed at their intended assertions with accepting controls; restored focused suites122PASS.
+The original56 db expectations remain exact. Four core result-shape assertions gain the required
+secret check while preserving all previous status/data values and behavioral assertions.
+Certificate/identity/provider secrets, real artifact orchestration and target-bound recovery remain
+open. These checks neither activate fiscal identity nor qualify an artifact by themselves.

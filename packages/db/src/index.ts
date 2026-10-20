@@ -239,6 +239,7 @@ export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./
 export {
   compareBackupTables,
   verifyCoreBackupData,
+  verifyBackupMembershipIdentity,
   CORE_BACKUP_TABLE_POLICIES,
 } from "./backup-evidence.js";
 export type { BackupTablePolicy } from "./backup-evidence.js";

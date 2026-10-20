@@ -1,12 +1,14 @@
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { openBackupQuery, type BackupQuery, type BackupValue } from "@waitron/store";
-import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
-import { generateKeyPairSync } from "node:crypto";
+import { generateNodeKeyPair, signDocumentBody, endorseKey } from "@waitron/membership";
+import crypto, { generateKeyPairSync } from "node:crypto";
+import { syncBuiltinESMExports } from "node:module";
 import { jobOrigin } from "@waitron/shared";
 import {
   compareBackupTables,
   verifyCoreBackupData,
+  verifyBackupMembershipIdentity,
   CORE_BACKUP_TABLE_POLICIES,
 } from "./backup-evidence.js";
 import { CORE_CLASSIFICATION } from "./classification.js";
@@ -647,3 +649,227 @@ function copyTable(
     );
   }
 }
+
+describe("backup membership private/public identity", () => {
+  const before = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const after = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const pair = generateKeyPairSync("ed25519");
+  const foreign = generateKeyPairSync("ed25519");
+  const privateKey = pair.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
+  const publicKey = pair.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  function seed(key: string | null = publicKey) {
+    for (const suite of [before, after]) {
+      suite.db.run(
+        sql`insert into locations (id,name,invoice_locales,operation_description) values ('venue','Fixture venue','["en"]','Restaurant')`,
+      );
+      suite.db.run(
+        sql`insert into nodes (id,location_id,name,public_key,created_at) values ('source','venue','Source',${key},'2026-10-20T00:00:00Z')`,
+      );
+    }
+  }
+  const verify = (key: string | null = privateKey) =>
+    queries(before.db, after.db, (a, b) =>
+      verifyBackupMembershipIdentity({ before: a, after: b, nodeId: "source", privateKey: key }),
+    );
+
+  it("matching source identity passes without signing generating or writing", async () => {
+    seed();
+    const original = before.db.all(sql`select * from nodes`);
+    const signer = vi.spyOn(crypto, "sign").mockImplementation(() => {
+      throw new Error("Signing is forbidden");
+    });
+    const generator = vi.spyOn(crypto, "generateKeyPairSync").mockImplementation(() => {
+      throw new Error("Generation is forbidden");
+    });
+    const asyncGenerator = vi.spyOn(crypto, "generateKeyPair").mockImplementation(() => {
+      throw new Error("Generation is forbidden");
+    });
+    syncBuiltinESMExports();
+    try {
+      expect(await verify()).toBe(true);
+      expect(signer).not.toHaveBeenCalled();
+      expect(generator).not.toHaveBeenCalled();
+      expect(asyncGenerator).not.toHaveBeenCalled();
+      expect(before.db.all(sql`select * from nodes`)).toEqual(original);
+      expect(after.db.all(sql`select * from nodes`)).toEqual(original);
+    } finally {
+      vi.restoreAllMocks();
+      syncBuiltinESMExports();
+    }
+  });
+  it.each([
+    "not-base64",
+    "",
+    Buffer.from("not a key").toString("base64"),
+    privateKey + "\n",
+    privateKey + "=",
+    Buffer.concat([Buffer.from(privateKey, "base64"), Buffer.from([0])]).toString("base64"),
+  ])("malformed or noncanonical PKCS8 refuses: %s", async (key) => {
+    seed();
+    expect(await verify(key)).toBe(false);
+  });
+  it("valid unrelated Ed25519 private key refuses", async () => {
+    seed();
+    expect(
+      await verify(foreign.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64")),
+    ).toBe(false);
+  });
+  it("a valid non-Ed25519 PKCS8 refuses", async () => {
+    const other = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    seed(other.publicKey.export({ format: "der", type: "spki" }).toString("base64"));
+    expect(
+      await verify(other.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64")),
+    ).toBe(false);
+  });
+  it("one missing key half refuses", async () => {
+    seed();
+    expect(await verify(null)).toBe(false);
+    for (const suite of [before, after]) suite.db.run(sql`update nodes set public_key=null`);
+    expect(await verify()).toBe(false);
+  });
+  it.each(["changed", "null", "absent"])(
+    "compares both captured and migrated public halves: %s",
+    async (mode) => {
+      seed();
+      if (mode === "absent") after.db.run(sql`delete from nodes`);
+      else
+        after.db.run(
+          sql`update nodes set public_key=${mode === "null" ? null : foreign.publicKey.export({ format: "der", type: "spki" }).toString("base64")}`,
+        );
+      expect(await verify()).toBe(false);
+    },
+  );
+  it("explicit keyless source is accepted only without membership obligations", async () => {
+    seed(null);
+    expect(await verify(null)).toBe(true);
+    before.db.run(
+      sql`insert into node_roles (node_id,mode,updated_at) values ('source','primary','2026-10-20T00:00:00Z')`,
+    );
+    expect(await verify(null)).toBe(false);
+  });
+  it("keyless source with retained endorsement refuses", async () => {
+    seed(null);
+    after.db.run(sql`update nodes set endorsement='{}'`);
+    expect(await verify(null)).toBe(false);
+  });
+  it("missing source is not an explicitly keyless source", async () => {
+    expect(await verify(null)).toBe(false);
+  });
+  it.each(["unrelated", "member", "signer", "endorsed", "endorser", "revoked"])(
+    "keyless source accounts for retained document obligations: %s",
+    async (mode) => {
+      seed(null);
+      const keys = generateNodeKeyPair();
+      const body = {
+        term: 1,
+        nodes: [
+          {
+            nodeId: mode === "member" ? "source" : "other",
+            contactUrl: "https://other.invalid",
+            standing: "serving-primary" as const,
+          },
+        ],
+        ...(mode === "revoked" ? { revoked: ["source"] } : {}),
+      };
+      const document = {
+        body,
+        signerNodeId: mode === "signer" ? "source" : "other",
+        signature: signDocumentBody(body, keys.privateKey),
+        endorsements:
+          mode === "endorsed"
+            ? [endorseKey("source", publicKey, "other", keys.privateKey)]
+            : mode === "endorser"
+              ? [endorseKey("third", publicKey, "source", privateKey)]
+              : [],
+      };
+      for (const suite of [before, after]) {
+        suite.db.run(
+          sql`insert into nodes (id,location_id,name,public_key,created_at) values ('other','venue','Other',${keys.publicKey},'2026-10-20T00:00:00Z')`,
+        );
+        suite.db.run(
+          sql`insert into node_membership (id,term,document,updated_at) values (1,1,${JSON.stringify(document)},'2026-10-20T00:00:00Z')`,
+        );
+      }
+      expect(await verify(null)).toBe(mode === "unrelated");
+    },
+  );
+  it.each(["{broken", "null", "{}"])(
+    "malformed captured membership cannot justify keyless admission: %s",
+    async (document) => {
+      seed(null);
+      after.db.run(
+        sql`insert into node_membership (id,term,document,updated_at) values (1,1,${document},'2026-10-20T00:00:00Z')`,
+      );
+      expect(await verify(null)).toBe(false);
+    },
+  );
+  it.each(["source", "other"])(
+    "keyless source inspects who endorsed other retained nodes: %s",
+    async (endorser) => {
+      seed(null);
+      const keys = generateNodeKeyPair();
+      const endorsement = endorseKey("other", keys.publicKey, endorser, privateKey);
+      before.db.run(
+        sql`insert into nodes (id,location_id,name,public_key,endorsement,created_at) values ('other','venue','Other',${keys.publicKey},${JSON.stringify(endorsement)},'2026-10-20T00:00:00Z')`,
+      );
+      expect(await verify(null)).toBe(endorser !== "source");
+    },
+  );
+  it.each(["{broken", "null", "1", "[]", "{}", '{"endorsedBy":1}', Buffer.from("blob")])(
+    "malformed other-node endorsements cannot justify keyless admission: %s",
+    async (endorsement) => {
+      seed(null);
+      before.db.run(
+        sql`insert into nodes (id,location_id,name,endorsement,created_at) values ('other','venue','Other',${endorsement},'2026-10-20T00:00:00Z')`,
+      );
+      expect(await verify(null)).toBe(false);
+    },
+  );
+  it("binary document bytes cannot justify keyless admission", async () => {
+    seed(null);
+    before.db.run(
+      sql`insert into node_membership (id,term,document,updated_at) values (1,1,${Buffer.from("{}")},'2026-10-20T00:00:00Z')`,
+    );
+    expect(await verify(null)).toBe(false);
+  });
+  it("noncanonical public material and a different source identity refuse", async () => {
+    seed(publicKey + "\n");
+    expect(await verify()).toBe(false);
+    expect(
+      await queries(before.db, after.db, (a, b) =>
+        verifyBackupMembershipIdentity({ before: a, after: b, nodeId: "unrecorded", privateKey }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("membership source with no captured table or optional membership state", () => {
+  const missing = useVenueDb({ migrations: [] });
+  const keyless = useVenueDb({
+    migrations: [],
+    resetPerTest: false,
+    setup: async (db) => {
+      db.run("create table nodes (id text, public_key text, endorsement text)");
+      db.run("insert into nodes values ('source',null,null)");
+    },
+  });
+  it("does not infer a keyless source from an absent node table on either side", async () => {
+    for (const [a, b] of [
+      [missing.db, keyless.db],
+      [keyless.db, missing.db],
+    ]) {
+      expect(
+        await queries(a!, b!, (before, after) =>
+          verifyBackupMembershipIdentity({ before, after, nodeId: "source", privateKey: null }),
+        ),
+      ).toBe(false);
+    }
+  });
+  it("admits an explicit keyless node before optional membership tables exist", async () => {
+    expect(
+      await queries(keyless.db, keyless.db, (before, after) =>
+        verifyBackupMembershipIdentity({ before, after, nodeId: "source", privateKey: null }),
+      ),
+    ).toBe(true);
+  });
+});

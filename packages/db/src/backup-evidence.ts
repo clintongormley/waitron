@@ -1,7 +1,7 @@
 import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { SOURCES } from "@waitron/shared";
 import { isMembershipDocument, verifyMembershipDocument } from "@waitron/membership";
-import { createPublicKey } from "node:crypto";
+import { createPrivateKey, createPublicKey } from "node:crypto";
 import { isTable } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { DeploymentEnvironment } from "./deployment.js";
@@ -286,4 +286,96 @@ export async function verifyCoreBackupData(input: {
     if (!(await membershipValid(query)) || !(await amendmentsValid(query))) return false;
   }
   return true;
+}
+
+async function keylessMembership(query: BackupQuery, nodeId: string): Promise<boolean> {
+  if (await hasTable(query, "node_roles")) {
+    if (await first(query, "select 1 from node_roles where node_id = ? limit 1", [nodeId]))
+      return false;
+  }
+  for await (const row of query.rows(
+    "select endorsement from nodes where endorsement is not null",
+  )) {
+    if (typeof row.endorsement !== "string") return false;
+    let endorsement: unknown;
+    try {
+      endorsement = JSON.parse(row.endorsement);
+    } catch {
+      return false;
+    }
+    if (
+      endorsement === null ||
+      typeof endorsement !== "object" ||
+      Array.isArray(endorsement) ||
+      !("endorsedBy" in endorsement) ||
+      typeof endorsement.endorsedBy !== "string" ||
+      endorsement.endorsedBy === nodeId
+    )
+      return false;
+  }
+  if (!(await hasTable(query, "node_membership"))) return true;
+  for await (const row of query.rows("select document from node_membership")) {
+    if (typeof row.document !== "string") return false;
+    let document: unknown;
+    try {
+      document = JSON.parse(row.document);
+    } catch {
+      return false;
+    }
+    if (
+      !isMembershipDocument(document) ||
+      document.signerNodeId === nodeId ||
+      document.body.nodes.some((node) => node.nodeId === nodeId) ||
+      document.body.revoked?.includes(nodeId) ||
+      document.endorsements.some((entry) => entry.nodeId === nodeId || entry.endorsedBy === nodeId)
+    )
+      return false;
+  }
+  return true;
+}
+
+export async function verifyBackupMembershipIdentity(input: {
+  before: BackupQuery;
+  after: BackupQuery;
+  nodeId: string;
+  privateKey: string | null;
+}): Promise<boolean> {
+  if (!(await hasTable(input.before, "nodes")) || !(await hasTable(input.after, "nodes")))
+    return false;
+  const before = await first(
+    input.before,
+    "select public_key, endorsement from nodes where id = ?",
+    [input.nodeId],
+  );
+  const after = await first(input.after, "select public_key, endorsement from nodes where id = ?", [
+    input.nodeId,
+  ]);
+  if (before === undefined || after === undefined || !same(before.public_key, after.public_key))
+    return false;
+  if (input.privateKey === null) {
+    return (
+      before.public_key === null &&
+      before.endorsement === null &&
+      after.endorsement === null &&
+      (await keylessMembership(input.before, input.nodeId)) &&
+      (await keylessMembership(input.after, input.nodeId))
+    );
+  }
+  if (typeof before.public_key !== "string") return false;
+  try {
+    const bytes = Buffer.from(input.privateKey, "base64");
+    if (bytes.toString("base64") !== input.privateKey) return false;
+    const key = createPrivateKey({ key: bytes, format: "der", type: "pkcs8" });
+    if (
+      key.asymmetricKeyType !== "ed25519" ||
+      !key.export({ format: "der", type: "pkcs8" }).equals(bytes)
+    )
+      return false;
+    return (
+      createPublicKey(key).export({ format: "der", type: "spki" }).toString("base64") ===
+      before.public_key
+    );
+  } catch {
+    return false;
+  }
 }
