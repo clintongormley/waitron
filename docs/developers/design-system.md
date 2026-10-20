@@ -120,8 +120,10 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 
 Overriding `--wt-color-primary` leaves every token that holds Waitron's blue as its own value at
 that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus`,
-`--wt-color-field-label-focus` and `--wt-color-primary-disabled` — and overriding `--wt-color-danger` leaves `--wt-color-danger-hover`
-and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a light and a dark value (see Tokens → Colour).
+`--wt-color-field-label-focus`, `--wt-color-primary-disabled` and `--wt-color-table-calm-edge` — and
+overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-danger-disabled` and
+`--wt-color-danger-pulse-dim` at Waitron's red (and overriding `--wt-color-warning` leaves
+`--wt-color-warning-pulse-dim` at Waitron's amber). Set each one too, with a light and a dark value (see Tokens → Colour).
 
 ## Tokens
 
@@ -340,7 +342,8 @@ in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 o
 `--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is
 15 or more by CIEDE2000 from its full colour and no more than 10 CIELAB lightness below it; and
 that the `prefers-color-scheme` blocks give the same values. A further case holds that each light
-dim colour is its full colour at 30% over `--wt-color-surface`.
+dim colour is its full colour at 30% over `--wt-color-surface`, and another that the light calm
+edge is `--wt-color-primary-disabled`.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when some open alert is a warning and none is an error. Text on it uses `--wt-color-on-warning`.
