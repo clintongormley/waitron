@@ -385,6 +385,27 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with a bill-requested card outlined as waiting, on the list", async () => {
+    const [owing] = partyTables as [TableState];
+    const billed: TableState = {
+      ...owing,
+      pendingToServe: 0,
+      readyToServe: 0,
+      enRoute: 0,
+      signals: [
+        { kind: "bill_requested", requestedAt: "2026-09-29T20:00:00.000Z" },
+        { kind: "long_wait", band: "warm" },
+      ],
+    };
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: [billed] },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelector('[data-ring="waiting"]')).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations with held dishes counting down and a reminder due, on the list", async () => {
     const now = Date.parse("2026-09-29T20:00:00.000Z");
     const marked = partyTables.map((table, index): TableState =>
@@ -437,6 +458,19 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     const list = await mountWidget<TillFloorScreen>("till-floor-screen", { zones, tables }, theme);
     expect(list.el.shadowRoot!.querySelector("[data-nothing-needed]")).not.toBeNull();
     expect(list.el.shadowRoot!.querySelector("[data-reserved]")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
+  it("has no violations with a paid table that needs nothing, on the list", async () => {
+    const [, paid] = partyTables as [TableState, TableState];
+    const quiet: TableState = { ...paid, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: [quiet] },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelector("[data-paid]")).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector("[data-nothing-needed]")).not.toBeNull();
     await expectNoA11yViolations(list.host);
   });
 

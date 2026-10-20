@@ -212,7 +212,7 @@ export class TillShell extends LitElement {
       }
       @keyframes waiting-attention {
         50% {
-          border-color: transparent;
+          border-color: var(--wt-color-warning-pulse-dim);
         }
       }
       @media (prefers-reduced-motion: reduce) {

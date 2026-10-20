@@ -2109,6 +2109,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
   adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
 
+- **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
+  `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
+  reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
+  (`held.title` «Pedidos aparcados»). Proposed: «Aparca, envía o cancela…».
+
 - **A921. On a narrow till, should the person's name give room to the tab strip? (question for the
   owner, left open by A582 slice 4a).** Since 4a the till's bar has the Help switch before the
   person's menu, and nothing else left the bar for it, so at phone width the tab strip, which
@@ -2147,15 +2152,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slices 1 (Needs clearing per department), 2 (retire venue-made statuses), 3 (the
-  held mark and its countdown), 4 (the order of precedence, two pulse speeds and the calm card) and
-  7 (service steps: the settings) landed (plans
-  `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`,
-  `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`,
-  `docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`,
-  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md` and
-  `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 5, 6 and 8 are left
-  (design §11).
+  2026-10-17.** Slices 1–4, a follow-up to slice 4, and 7 have landed; slices 5, 6 and 8 are left
+  (design §11; plans in the detail).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)

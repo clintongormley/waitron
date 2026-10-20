@@ -109,8 +109,40 @@ test("paints the ring from the danger and warning tokens", async () => {
   ] as const) {
     const shadow = getComputedStyle(ringOf(await probe(name, false, tokens))).boxShadow;
     expect(shadow, name).toContain(colour);
-    expect(shadow, name).toContain("7px");
+    expect(shadow, name).toContain(name === "waiting" ? "3.5px" : "7px");
     expect(shadow, name).toContain("inset");
+  }
+});
+
+test("draws Waiting's outline half as thick as the others", async () => {
+  const tokens = { "--wt-space-1": "8px" };
+  for (const name of RINGS) {
+    const shadow = getComputedStyle(ringOf(await probe(name, false, tokens))).boxShadow;
+    expect(shadow, name).toContain(name === "waiting" ? "4px" : "8px");
+    expect(shadow, name).not.toContain(name === "waiting" ? "8px" : "4px");
+  }
+});
+
+test("dims each colour to its own theme token, at full opacity", async () => {
+  const tokens = {
+    "--wt-color-danger-pulse-dim": "rgb(9, 8, 7)",
+    "--wt-color-warning-pulse-dim": "rgb(6, 5, 4)",
+    "--wt-duration-pulse-slow": "2000ms",
+    "--wt-duration-pulse-fast": "2000ms",
+  };
+  for (const [name, dim] of [
+    ["forgotten", "rgb(9, 8, 7)"],
+    ["overdue", "rgb(9, 8, 7)"],
+    ["fire", "rgb(6, 5, 4)"],
+  ] as const) {
+    const ring = ringOf(await probe(name, true, tokens));
+    const [animation] = ring.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 1000;
+    const style = getComputedStyle(ring);
+    expect(style.color, name).toBe(dim);
+    expect(style.boxShadow, name).toContain(dim);
+    expect(style.opacity, name).toBe("1");
   }
 });
 
@@ -148,15 +180,18 @@ test("pulses at each speed's token", async () => {
 test("dims to the dim token half-way and is whole at the ends", async () => {
   const ring = ringOf(
     await probe("overdue", true, {
-      "--wt-opacity-pulse-dim": "0.4",
+      "--wt-color-danger": "rgb(1, 2, 3)",
+      "--wt-color-danger-pulse-dim": "rgb(9, 8, 7)",
       "--wt-duration-pulse-slow": "2000ms",
     }),
   );
   const [animation] = ring.getAnimations();
   animation!.pause();
   animation!.currentTime = 1000;
-  expect(getComputedStyle(ring).opacity).toBe("0.4");
+  expect(getComputedStyle(ring).color).toBe("rgb(9, 8, 7)");
+  expect(getComputedStyle(ring).opacity).toBe("1");
   animation!.currentTime = 0;
+  expect(getComputedStyle(ring).color).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(ring).opacity).toBe("1");
 });
 

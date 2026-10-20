@@ -4331,7 +4331,7 @@ export const es: Record<StringKey, string> = {
   "kitchen.bump_line": "Por artículo",
   "kitchen.bump_ticket": "Comanda completa",
   "kitchen.courses_title": "Cursos",
-  "courses.held_until_fired": "Retenido hasta marchar",
+  "courses.held_until_fired": "En espera hasta marchar",
   "courses.goes_to_fire_now": "No · va a Marchar ya",
   "kitchen.course_name": "Nombre",
   "kitchen.new_course": "Nuevo curso",

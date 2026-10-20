@@ -137,7 +137,7 @@ describe("till-floor-screen: the card's ring", () => {
     const { el, host } = await mountFloor([table({ timingBand: "forgotten" })], {
       reducedMotion: false,
     });
-    host.style.setProperty("--wt-opacity-pulse-dim", "0.4");
+    host.style.setProperty("--wt-color-danger-pulse-dim", "rgb(9, 8, 7)");
     host.style.setProperty("--wt-duration-pulse-fast", "2000ms");
     const ring = card(el).querySelector<HTMLElement>('[data-ring="forgotten"]')!;
     expect(pulses(ring)).toEqual(["wt-pulse-fast"]);
@@ -145,7 +145,8 @@ describe("till-floor-screen: the card's ring", () => {
     const [animation] = ring.getAnimations();
     animation!.pause();
     animation!.currentTime = 1000;
-    expect(getComputedStyle(ring).opacity).toBe("0.4");
+    expect(getComputedStyle(ring).color).toBe("rgb(9, 8, 7)");
+    expect(getComputedStyle(ring).opacity).toBe("1");
   });
 
   it("rings a card whose reminder is due in amber, pulsing slowly", async () => {
@@ -153,6 +154,9 @@ describe("till-floor-screen: the card's ring", () => {
     host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
     const ring = card(el).querySelector<HTMLElement>('[data-ring="fire"]')!;
     expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
+    const [animation] = ring.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 0;
     expect(getComputedStyle(ring).boxShadow).toContain("rgb(4, 5, 6)");
   });
 
@@ -169,7 +173,7 @@ describe("till-floor-screen: the card's ring", () => {
     expect(shadow).not.toContain("rgb(1, 2, 3)");
   });
 
-  it("draws only the most urgent state's ring", async () => {
+  it("draws only the ring of the most urgent state that has one", async () => {
     const { el } = await mountFloor(
       [
         table({ timingBand: "forgotten", party: due }),
@@ -186,8 +190,77 @@ describe("till-floor-screen: the card's ring", () => {
     expect(rings).toHaveLength(1);
     expect(rings[0]!.dataset.ring).toBe("forgotten");
     expect(pulses(rings[0]!)).toEqual(["wt-pulse-fast"]);
-    expect(ringOf(card(el, "t3"))).toBeNull();
+    const waiting = card(el, "t3").querySelectorAll<HTMLElement>("[data-ring]");
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]!.dataset.ring).toBe("waiting");
+    expect(pulses(waiting[0]!)).toEqual([]);
     expect(card(el, "t3").dataset.top).toBe("bill");
+  });
+
+  it.each([
+    [
+      "unavailable",
+      { signals: [{ kind: "held_unavailable", groupId: "g3", lineNames: ["Steak"] }] },
+    ],
+    ["bill", { signals: [{ kind: "bill_requested", requestedAt: past }] }],
+    ["ready", { readyToServe: 1 }],
+    ["step", { signals: [{ kind: "take_order" }] }],
+    [
+      "not-sent",
+      {
+        party: party({
+          unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 }],
+        }),
+      },
+    ],
+  ] as [string, Partial<TableState>][])(
+    "keeps the thin waiting outline under %s",
+    async (top, over) => {
+      const { el } = await mountFloor(
+        [table({ ...over, signals: [...(over.signals ?? []), longWait("warm")] })],
+        { reducedMotion: false },
+      );
+      const rings = card(el).querySelectorAll<HTMLElement>("[data-ring]");
+      expect(rings).toHaveLength(1);
+      expect(rings[0]!.dataset.ring).toBe("waiting");
+      expect(pulses(rings[0]!)).toEqual([]);
+      expect(card(el).dataset.top).toBe(top);
+    },
+  );
+
+  it("Time to fire over a wait draws only its own ring", async () => {
+    const { el } = await mountFloor([table({ party: due, signals: [longWait("warm")] })], {
+      reducedMotion: false,
+    });
+    const rings = card(el).querySelectorAll<HTMLElement>("[data-ring]");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.dataset.ring).toBe("fire");
+    expect(pulses(rings[0]!)).toEqual(["wt-pulse-slow"]);
+    expect(card(el).dataset.top).toBe("fire");
+  });
+
+  it("rings a bill-and-waiting table the same on the card and in the tray", async () => {
+    const signals: TableSignal[] = [
+      { kind: "bill_requested", requestedAt: past },
+      longWait("warm"),
+    ];
+    const list = await mountFloor([table({ signals })], { reducedMotion: false });
+    expect(ringOf(card(list.el))!.dataset.ring).toBe("waiting");
+    cleanupWidgets();
+    const map = await mountFloor(
+      [
+        table({ id: "t1", label: "Table 1", party: null, state: "free", today: today() }),
+        table({ signals, today: today({ placement: null }) }),
+      ],
+      { reducedMotion: false },
+    );
+    const token = map.el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("[data-tray-table=t2] wt-table-token")!;
+    await token.updateComplete;
+    const rings = token.shadowRoot!.querySelectorAll<HTMLElement>("[data-ring]");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.dataset.ring).toBe("waiting");
   });
 
   it("outlines a card from its wait chip when the floored band has not caught up", async () => {
@@ -419,7 +492,8 @@ describe("till-floor-screen: the calm card", () => {
     const { el, host } = await mountFloor([table()]);
     host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
-    host.style.setProperty("--wt-color-primary-disabled", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-table-calm-edge", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-primary-disabled", "rgb(13, 14, 15)");
     host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
     const line = nothingNeeded(el)!;
     expect(line.textContent!.trim()).toBe("Nothing needed");
@@ -453,7 +527,8 @@ describe("till-floor-screen: the calm card", () => {
       ],
       { reducedMotion: false },
     );
-    host.style.setProperty("--wt-color-primary-disabled", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-table-calm-edge", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-primary-disabled", "rgb(13, 14, 15)");
     host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
     for (const id of ids) {
       expect(nothingNeeded(el, id), id).toBeNull();
@@ -474,12 +549,13 @@ describe("till-floor-screen: the calm card", () => {
     expect(card(el).querySelector('[data-chip="held"]')).not.toBeNull();
   });
 
-  it("a paid party needing nothing shows Paid, with no check", async () => {
+  it("a paid party needing nothing shows Paid and Nothing needed", async () => {
     const { el } = await mountFloor([
       table({ hasOpenTab: false, party: party({ outstanding: "0.00" }) }),
     ]);
     expect(card(el).querySelector("[data-paid]")).not.toBeNull();
-    expect(nothingNeeded(el)).toBeNull();
+    expect(nothingNeeded(el)).not.toBeNull();
+    expect(card(el).querySelector(".badges")!.firstElementChild).toBe(nothingNeeded(el));
     expect(calm(el)).toBe(true);
   });
 

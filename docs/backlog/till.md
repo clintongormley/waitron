@@ -1289,16 +1289,19 @@ slice 3, the held mark and its countdown, landed (plan
 `docs/backlog/mockups/a757-table-states/built-3/`); slice 4, the order of precedence, two pulse
 speeds and the calm card, landed (plan
 `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`; pictures as built in
-`docs/backlog/mockups/a757-table-states/built-4/`).
+`docs/backlog/mockups/a757-table-states/built-4/`); a follow-up to slice 4, the owner's look
+changes and the Spanish word for held dishes, landed (plan
+`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`; pictures drawn for it in
+`docs/backlog/mockups/a757-table-states/4b-owner-changes.png` and `4b-owner-changes-dark.png`;
+pictures as built in `docs/backlog/mockups/a757-table-states/built-4b/`).
 
 What slice 5 (the map and the zone tabs) must also do, left by slice 4 (its plan's Decisions and
 Open points):
 
-- decide whether the list card's calm left edge moves from `--wt-color-primary-disabled` to the
-  map's new pale blue once slice 5 adds it (Open point 1);
-- give the unplaced token the full order of precedence, through a new `FloorTable` field, so a tray
-  table with the bill requested and a dish waiting is no longer outlined amber while its list card
-  is not (Open point 6);
+- decide the map's own Nothing needed fill; the card's edge keeps `--wt-color-table-calm-edge`, a
+  line colour;
+- on the map, keep the Waiting outline under a state that draws none (the owner's answer to #1918,
+  point 1, 2026-10-20);
 - put the icons picture 07 draws on the wait, unavailable, bill, ready and unsent chips, once the
   map's cue icons are registered (Open point 7);
 - decide how the map draws a table with a counter delivery waiting and no party, and a table that
@@ -1371,14 +1374,16 @@ owner, on the running till:
 - the zone tabs carrying a hidden zone's most urgent state, and the toolbar edge's "›" for a tab
   scrolled out of sight (A757 §7);
 - Nothing needed's calm look (A757 §9).
-- the choices slice 4 made where the pictures are silent (its plan's Open points 1–5, 8 and 11,
-  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`), and three points from its look
-  (2026-10-20, pictures in `docs/backlog/mockups/a757-table-states/built-4/`): in dark the calm left
-  edge (`--wt-color-primary-disabled`) is close to the card's own surface and nearly invisible; in
-  dark the pulsing red and amber rings turn a dull brown at their dimmest; and at 1280 px every list
+- the choices slice 4 made where the pictures are silent (its plan's Open points 4, 8 and 11,
+  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`; Open point 4's ring no longer
+  dims "to 30%" — since A757 slice 4b it dims to a colour, `--wt-color-danger-pulse-dim` or
+  `--wt-color-warning-pulse-dim`), and one point from its look
+  (2026-10-20, pictures in `docs/backlog/mockups/a757-table-states/built-4/`): at 1280 px every list
   card in a row stretches to its tallest neighbour, so one busy card makes the calm ones beside it
-  tall and mostly empty. The grid rule behind the last dates from 2026-08-21 (`git blame`) and this
-  slice did not change it; I believe the stretching predates slice 4.
+  tall and mostly empty. The grid rule behind it dates from 2026-08-21 (`git blame`) and slice 4 did
+  not change it; I believe the stretching predates slice 4.
+- the Open points of slice 4's follow-up, the owner's look changes
+  (`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
 - two spacing points from A757 slice 2's look (2026-10-20, pictures in
   `docs/backlog/mockups/a757-table-states/built-2/`): in the table drawer, "Still to pay at this
   table" sits right against the "Mark bill requested" button; and at 390 px the floor's list cards

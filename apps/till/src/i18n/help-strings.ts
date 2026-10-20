@@ -73,7 +73,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.order.send":
-    "Marchar envía a cocina las líneas marcadas para hacerlas ya, como un grupo. Enviar todo envía todas las líneas: las de Marchar ya se hacen enseguida, y cada Grupo llega a cocina retenido hasta que se marcha. Una línea bloqueada, que ya no se ofrece o que aún necesita estación no se envía.",
+    "Marchar envía a cocina las líneas marcadas para hacerlas ya, como un grupo. Enviar todo envía todas las líneas: las de Marchar ya se hacen enseguida, y cada Grupo llega a cocina en espera hasta que se marcha. Una línea bloqueada, que ya no se ofrece o que aún necesita estación no se envía.",
   "help.more.profile":
     "Cambia este dispositivo a otro perfil para el que está aprobado. Antes, aparca o vacía el pedido en curso.",
   "help.more.settings":

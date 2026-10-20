@@ -44,7 +44,6 @@ test("defines the structural contract", () => {
     "--wt-tap-min",
     "--wt-opacity-disabled",
     "--wt-opacity-hover",
-    "--wt-opacity-pulse-dim",
     "--wt-dialog-max-width",
     "--wt-modal-max-width",
     "--wt-modal-compact-width",
@@ -80,14 +79,6 @@ test("a slow pulse is 2 s and a fast one 1 s, twice as quick", () => {
   const el = mount();
   expect(token(el, "--wt-duration-pulse-slow")).toBe("2000ms");
   expect(token(el, "--wt-duration-pulse-fast")).toBe("1000ms");
-});
-
-test("a pulse dims its ring to 30%, still visible", () => {
-  const el = mount();
-  const dim = Number(token(el, "--wt-opacity-pulse-dim"));
-  expect(dim).toBe(0.3);
-  expect(dim).toBeGreaterThan(0);
-  expect(dim).toBeLessThan(1);
 });
 
 test("the type scale is 12px small, 14px body, 18px large and 22px extra large", () => {

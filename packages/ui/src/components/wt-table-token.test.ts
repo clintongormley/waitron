@@ -617,6 +617,9 @@ describe("the outline ring", () => {
     host.style.setProperty("--wt-color-warning", "rgb(19, 20, 21)");
     const ring = el.shadowRoot!.querySelector('[data-ring="fire"]')!;
     expect(ring.classList.contains("wt-pulse-slow")).toBe(true);
+    const [animation] = ring.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 0;
     expect(getComputedStyle(ring).color).toBe("rgb(19, 20, 21)");
 
     const reduced = await mountToken(table({ fireDue: true }), undefined, true);

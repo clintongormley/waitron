@@ -39,7 +39,6 @@
 
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
-  --wt-opacity-pulse-dim: 0.3;
 
   /* How long a notice that goes by itself takes to fade out (wt-notice). */
   --wt-duration-fade: 400ms;

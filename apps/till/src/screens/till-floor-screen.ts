@@ -106,7 +106,7 @@ import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/s
 import {
   byPrecedence,
   lateBand,
-  topState,
+  tableStates,
   type TableStateKind,
 } from "../state/table-precedence.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
@@ -413,7 +413,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       .card.calm {
-        border-left-color: var(--wt-color-primary-disabled);
+        border-left-color: var(--wt-color-table-calm-edge);
       }
 
       .card.state-delivery-pending {
@@ -2370,8 +2370,9 @@ export class TillFloorScreen extends LitElement {
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#waitingCard(table, "clear");
     if (needsMovingToday(table)) return this.#waitingCard(table, "move");
-    const top = topState(table, this.#drawnAt);
-    const ring = top === undefined ? null : (RING_OF[top] ?? null);
+    const states = tableStates(table, this.#drawnAt);
+    const top = states[0];
+    const ring = states.map((kind) => RING_OF[kind]).find((r) => r !== undefined) ?? null;
     const moving = !this.#prefersReducedMotion();
     const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
     const calm = top === "held" || top === "nothing-needed" ? " calm" : "";
@@ -2392,7 +2393,7 @@ export class TillFloorScreen extends LitElement {
 
   #marks(table: TableState, top: TableStateKind | undefined): CardMark[] {
     const marks: CardMark[] = [];
-    if (top === "nothing-needed" && !partyPaid(table)) {
+    if (top === "nothing-needed") {
       marks.push({
         kind: "nothing-needed",
         mark: html`<span class="calm-line" data-nothing-needed

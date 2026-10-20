@@ -55,10 +55,6 @@ export function tableStates(table: TableState, now: number): TableStateKind[] {
   return PRECEDENCE.filter((kind) => active.has(kind));
 }
 
-export function topState(table: TableState, now: number): TableStateKind | undefined {
-  return tableStates(table, now)[0];
-}
-
 /** A stable sort by `PRECEDENCE`; items with no kind go after every kind. */
 export function byPrecedence<T>(
   items: readonly T[],
