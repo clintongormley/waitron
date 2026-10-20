@@ -20,8 +20,8 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { payNotice, payNoticeStyles, payScanView } from "./pay-equipment.js";
-import "./card-waiting.js";
+import { payNotice, payNoticeStyles, payScanView, readerButtonLabel } from "./pay-equipment.js";
+import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import type { RetainedTender } from "./tender-pay.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
@@ -182,11 +182,8 @@ export class TillPresentedPayDialog extends LitElement {
   /** The row's QR has put the camera in place of the form. */
   @state() private scanning = false;
   #rowWanted = false;
-  /** The reader the card payment out was sent to, and when; the phone's reader may change
-   * meanwhile. */
-  #sentReader: { id: string; name: string } | null = null;
-  #sentAt = 0;
-  #sentAmount = "";
+  /** The card payment out on a reader. */
+  #sent: SentCard | null = null;
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<EntryDraft>;
   readonly #baseline: EntryDraft = { tendered: "", externalRef: "" };
@@ -253,7 +250,7 @@ export class TillPresentedPayDialog extends LitElement {
     this.#rowWanted = wanted;
     // A send under way drops any question already asked about leaving.
     if (changed.has("busy") && this.busy) this.#entry?.commit(this.#baseline);
-    if (changed.has("busy") && !this.busy) this.#sentReader = null;
+    if (changed.has("busy") && !this.busy) this.#sent = null;
     this.#syncDraft();
   }
 
@@ -362,9 +359,7 @@ export class TillPresentedPayDialog extends LitElement {
     const ref = this.externalRef.trim();
     const reader =
       this.method === "card" ? readyPayReader(this.equipment, this.fixedReader)! : null;
-    this.#sentReader = reader === null ? null : { id: reader.id, name: reader.name };
-    this.#sentAt = Date.now();
-    this.#sentAmount = this.amount;
+    this.#sent = reader === null ? null : sentCard(reader, this.amount);
     const detail: PresentedPayDetail =
       reader !== null
         ? { method: "card", readerId: reader.id, ...guests }
@@ -393,12 +388,8 @@ export class TillPresentedPayDialog extends LitElement {
             ? this.#locked(this.confirmation)
             : this.scanning
               ? payScanView(this, () => (this.scanning = false), this.notice)
-              : this.busy && this.#sentReader !== null
-                ? html`<till-card-waiting
-                    .amount=${this.#money(this.#sentAmount)}
-                    .reader=${this.#sentReader.name}
-                    .since=${this.#sentAt}
-                  ></till-card-waiting>`
+              : this.busy && this.#sent !== null
+                ? cardWaitingView(this.#sent, this.notice)
                 : this.#form()
         }
       </div>
@@ -437,11 +428,11 @@ export class TillPresentedPayDialog extends LitElement {
           ${
             reader === null
               ? t("bill_pay.take")
-              : this.shownRefusal?.code === "declined"
-                ? t("bill_pay.retry_on_reader").replace("{reader}", () => reader.name)
-                : t("bill_pay.take_on_reader")
-                    .replace("{amount}", () => this.#money(this.amount))
-                    .replace("{reader}", () => reader.name)
+              : readerButtonLabel(
+                  reader.name,
+                  this.#money(this.amount),
+                  this.shownRefusal?.code === "declined",
+                )
           }
         </wt-button>
       </wt-form-actions>`;

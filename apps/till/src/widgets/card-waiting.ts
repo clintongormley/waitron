@@ -2,7 +2,32 @@ import { LitElement, css, html, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-spinner.js";
-import { t } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, t } from "../i18n/t.js";
+import { payNotice, type PayNotice } from "./pay-equipment.js";
+
+/** A card payment a pay sheet sent to a reader: the reader, the amount, and when. The phone's
+ * reader may change meanwhile; this one does not. */
+export interface SentCard {
+  readerName: string;
+  amount: string;
+  at: number;
+}
+
+export function sentCard(reader: { name: string }, amount: string): SentCard {
+  return { readerName: reader.name, amount, at: Date.now() };
+}
+
+/** What a pay sheet shows in place of its body while `sent` is at the reader: the panel, and
+ * under it a tap's notice, which has nowhere else to show while the sheet is open. */
+export function cardWaitingView(sent: SentCard, notice: PayNotice | null): TemplateResult {
+  return html`<till-card-waiting
+      .amount=${formatMoney(sent.amount, currentLocale())}
+      .reader=${sent.readerName}
+      .since=${sent.at}
+    ></till-card-waiting
+    >${payNotice(notice)}`;
+}
 
 /** `m:ss` for a count of whole seconds. */
 function elapsed(seconds: number): string {

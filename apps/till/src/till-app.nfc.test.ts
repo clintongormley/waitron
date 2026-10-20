@@ -921,6 +921,9 @@ describe("the pay sheet's NFC button", () => {
     expect(text(waiting()!.shadowRoot!.querySelector("[data-pay-waiting-on]"))).toBe(
       waitingOn("Lector 2"),
     );
+    expect(text(inDialog(el, "[data-pay-notice]"))).toBe(
+      t("equipment.picked_up").replace("{item}", "Lector 3"),
+    );
 
     answer({
       outcome: "declined",

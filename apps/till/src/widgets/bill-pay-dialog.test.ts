@@ -2389,6 +2389,31 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
     expect(confirmed).toEqual([{ readerId: "r2" }, { readerId: "r3" }]);
   });
 
+  it("shows a tap's notice under the panel while the card is at the reader", async () => {
+    const { el } = await sent();
+    el.notice = { message: t("equipment.picked_up").replace("{item}", "Lector 3"), tone: "info" };
+    await el.updateComplete;
+
+    expect(waiting(el)).not.toBeNull();
+    expect(text(root(el).querySelector("[data-pay-notice]"))).toBe(
+      t("equipment.picked_up").replace("{item}", "Lector 3"),
+    );
+  });
+
+  it("a retry after a decline shows the panel again, naming the reader it was sent to", async () => {
+    const { el } = await sent();
+    el.equipment = equipmentWith(LECTOR_3);
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    await click(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+    await waiting(el)?.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 3"));
+  });
+
   it("a send that gets no answer leaves the panel for the locked confirmation, as today", async () => {
     const { el } = await sent();
     el.confirmationLocked = true;

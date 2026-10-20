@@ -833,6 +833,17 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
     ]);
   });
 
+  it("shows a tap's notice under the panel while the card is at the reader", async () => {
+    const { el } = await sent();
+    el.notice = { message: t("equipment.picked_up").replace("{item}", "Lector 3"), tone: "info" };
+    await el.updateComplete;
+
+    expect(waiting(el)).not.toBeNull();
+    expect(text(root(el).querySelector("[data-pay-notice]"))).toBe(
+      t("equipment.picked_up").replace("{item}", "Lector 3"),
+    );
+  });
+
   it("a cash payment out shows no panel", async () => {
     const el = await mount();
     await pick(el, "cash");

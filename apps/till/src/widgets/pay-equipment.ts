@@ -46,6 +46,16 @@ export function payNotice(notice: PayNotice | null): TemplateResult | typeof not
       >`;
 }
 
+/** A pay sheet's charge button on a reader: "Cobrar {amount} en {reader}", or after a decline
+ * "Reintentar en {reader}", naming the reader it would charge now. */
+export function readerButtonLabel(reader: string, amount: string, declined: boolean): string {
+  return declined
+    ? t("bill_pay.retry_on_reader").replace("{reader}", () => reader)
+    : t("bill_pay.take_on_reader")
+        .replace("{amount}", () => amount)
+        .replace("{reader}", () => reader);
+}
+
 export const payNoticeStyles = css`
   .pay-notice {
     display: block;
