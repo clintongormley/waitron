@@ -1,4 +1,19 @@
 export type {
+  BackupModuleStatus,
+  BackupCheckCode,
+  BackupModuleCheck,
+  BackupModuleResult,
+  BackupEntries,
+  BackupVerificationContext,
+  BackupVerificationContribution,
+} from "./backup-verification.js";
+export {
+  BackupVerificationUnsupported,
+  BackupCheckUnavailable,
+  validateBackupVerificationContribution,
+  validateBackupModuleResult,
+} from "./backup-verification.js";
+export type {
   WaitronModule,
   NonDbSource,
   ModuleBackupContribution,

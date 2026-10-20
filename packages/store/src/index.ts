@@ -8,6 +8,8 @@ import { registerSearchFunction } from "./search-function.js";
 import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
 import { watchdogStopped } from "./venue-liveness.js";
 
+export type { BackupValue, BackupRow, BackupQuery } from "./backup-query.js";
+
 export {
   appendOnlyTriggerFaults,
   appendOnlyTriggers,
