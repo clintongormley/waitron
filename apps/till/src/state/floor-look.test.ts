@@ -527,16 +527,22 @@ describe("mapLook", () => {
 
 describe("reminderClock", () => {
   it("changes when a minute to fire changes or a reminder falls due, and not otherwise", () => {
+    // Due 20 s past a wall-clock minute, so the countdown's minutes and the clock's change apart.
+    const dueAt = now + 4 * 60_000 + 20_000;
     const tables = [
-      table({ id: "a", party: due(4) }),
+      table({
+        id: "a",
+        party: party({ reminder: { groupId: "g2", dueAt: new Date(dueAt).toISOString() } }),
+      }),
       table({ id: "b", party: due(null) }),
       table({ id: "c", ...free }),
     ];
-    const at = (offsetMs: number) => reminderClock(tables, now + offsetMs);
-    expect(at(0)).toBe(at(30_000));
-    expect(at(0)).not.toBe(at(61_000));
-    expect(at(4 * 60_000)).toBe(at(9 * 60_000));
-    expect(at(4 * 60_000 - 1)).not.toBe(at(4 * 60_000));
+    const at = (ms: number) => reminderClock(tables, ms);
+    const countdownMinute = dueAt - 60_000;
+    expect(at(countdownMinute - 1)).not.toBe(at(countdownMinute));
+    expect(at(now - 10_000)).toBe(at(now + 10_000));
+    expect(at(dueAt - 1)).not.toBe(at(dueAt));
+    expect(at(dueAt)).toBe(at(dueAt + 5 * 60_000));
     expect(reminderClock([table({ id: "c", ...free })], now)).toBe("");
   });
 });

@@ -54,7 +54,7 @@ export interface MapLook {
   description: string;
 }
 
-/** The kinds that bring a fill of their own; any other kind takes the next one's. */
+/** The kinds above Reserved that bring a fill of their own; any other kind takes the next one's. */
 const FILL_OF: Partial<Record<MapKind, FloorMapFill>> = {
   forgotten: "danger",
   unavailable: "warning",
@@ -110,7 +110,8 @@ function readyCount(table: TableState): number {
   return atStations > 0 ? atStations : table.enRoute;
 }
 
-// A merge's counts come from one member, never a sum (see `sources` in `floor-map.ts`).
+// A merge's counts come from one member, never a sum: the floor read repeats a party's counts on
+// every table it sits at (`group by pt.table_id`, apps/server/src/working-order.ts:8283).
 const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 
@@ -143,7 +144,11 @@ function unavailableDishes(members: readonly TableState[]): string {
     .join(", ");
 }
 
-/** A kind's words, as the card says them; counts read from one member of a merge. */
+/**
+ * A kind's words, as the card says them; counts read from one member of a merge. `kind` must be one
+ * of the members' own kinds (from `mapLook` or `mapKinds`): Held, Unavailable and Reserved read
+ * dishes or a booking that only such a member has.
+ */
 export function kindWords(kind: MapKind, members: readonly TableState[], now: number): string {
   const fixed = FIXED_WORDS[kind];
   if (fixed !== undefined) return t(fixed);
@@ -189,9 +194,7 @@ function cueOf(kind: MapKind, members: readonly TableState[], now: number): Floo
 }
 
 function fillOf(kinds: readonly MapKind[], members: readonly TableState[]): FloorMapFill {
-  const reserved = MAP_PRECEDENCE.indexOf("reserved");
   for (const kind of kinds) {
-    if (MAP_PRECEDENCE.indexOf(kind) >= reserved) break;
     const fill = FILL_OF[kind];
     if (fill !== undefined) return fill;
   }
@@ -232,7 +235,7 @@ export function mapLook(members: readonly TableState[], now: number): MapLook {
   };
 }
 
-/** Each table's minutes to fire, or "due": it changes exactly when a look can change with time. */
+/** Each table's minutes to fire, or "due": it changes whenever a look can change with time. */
 export function reminderClock(tables: readonly TableState[], now: number): string {
   return tables
     .flatMap((table) => {
