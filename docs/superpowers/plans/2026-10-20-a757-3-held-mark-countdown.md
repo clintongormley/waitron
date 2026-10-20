@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Review path: LIGHT** (design §11 item 3). **No migration.** **One pull request for the whole
-slice.** Branch `feat/a757-3-held-mark-countdown`, worktree
-`/Users/clintongormley/workspace/worktrees/waitron-feat-a757-3-held-mark-countdown`, from `main` at
-`33fa13a92`. Implementers are dispatched as `subagent_type: "implementer"`. **For the driver:** Task 2
+**Review path: FULL** (driver ruling, 2026-10-20, overriding design §11 item 3's LIGHT): Task 2
 adds a kind to `TableSignal` (`packages/shared`) and Task 3 adds an optional field and a tone to
-`FloorChip` (`packages/ui`). Both are additive, and their only consumers are `apps/server` and
-`apps/till` (`git grep -n "TableSignal\b" -- apps packages ':!*.test.ts'` and
-`git grep -ln "renderFloorChips\|FloorChipTone\|wt-table-token" -- apps packages` name nothing in
-`apps/dashboard`). The driver decides whether that is the "cross-package contract" risk trigger
-that would make the review FULL.
+`FloorChip` and restyles a `packages/ui` chip — a cross-package contract. So every task gets its
+per-task review, and `/finish-branch` runs the full wave. Both changes are additive, and their only
+consumers are `apps/server` and `apps/till` (`git grep -n "TableSignal\b" -- apps packages
+':!*.test.ts'` and `git grep -ln "renderFloorChips\|FloorChipTone\|wt-table-token" -- apps packages`
+name nothing in `apps/dashboard`). **No migration.** **One pull request for the whole slice.** Branch
+`feat/a757-3-held-mark-countdown`, worktree
+`/Users/clintongormley/workspace/worktrees/waitron-feat-a757-3-held-mark-countdown`, from `main` at
+`33fa13a92`. Implementers are dispatched as `subagent_type: "implementer"`.
 
 **Goal:** a table holding dishes says so on the floor — "⏸ Held 2", counting down "⏸ Held 2 · fire
 in 4 min" once its reminder has a time, and turning into a filled amber "▶ Time to fire" when due —
@@ -53,7 +53,10 @@ Chromium for `apps/till` and `packages/ui`).
 - Coverage bars 98/98/98/95 hold in `apps/server`, `apps/till` and `packages/ui`; `packages/ui` is
   mutation-tested, so each new style and the icon branch needs an assertion that fails without it.
 - **Changing an existing test assertion is a stop** unless this plan lists it under "Assertions
-  changed" in its task. Anything else that turns red is a stop and a report, not an edit.
+  changed" in its task. Anything else that turns red is a stop and a report, not an edit. Each
+  listed edit checks at least as much as before (no key, style or case dropped), and the pull
+  request's description lists every one of them — the five in Task 2 and the one in Task 3 — with
+  the spec line that changes what it pins.
 - Every commit `git commit -s`. Every task ends with its focused tests (read the `Tests` count — a
   run that prints none proves nothing), `pnpm --filter <pkg> typecheck` for each package it touched,
   and `pnpm exec prettier --check <changed files>`. Browser runs (`apps/till`, `packages/ui`): check
@@ -76,7 +79,10 @@ Chromium for `apps/till` and `packages/ui`).
    `apps/server/src/line-service-state.ts:20-31`) — exactly the filters `readReleaseReminders`
    applies (`order-groups.ts:1500-1569`), so a party with a reminder always has a held count. A
    counted dish counts its active quantity; a weighed dish (a non-zero `unit_precision`) counts one,
-   as the ready count does (`apps/server/src/table-signals.ts:89-94`) and §5.3 defines an item. The
+   as the ready count does (`apps/server/src/table-signals.ts:89-94`) and §5.3 defines an item —
+   but only while its active quantity is above 0: a weighed dish cancelled whole counts nothing,
+   as `readReleaseReminders` skips a group whose lines are all cancelled (`fullyCancelled`,
+   `order-groups.ts:1476,1562`), or the floor would say "Held 1" for nothing. The
    party's own groups, not its family's: drafts, held groups and the bill request are the party's own
    (`packages/shared/src/table-signals.ts:3-5`). Counted whatever the reminder setting —
    `readReleaseReminders` returns nothing at all with reminders off (`order-groups.ts:1507-1508`),
@@ -113,7 +119,8 @@ Chromium for `apps/till` and `packages/ui`).
    `fire`. A harness mounting one widget never loads an app's `main.ts`, so an app-registered icon
    draws an empty box there (`docs/developers/testing-guide.md`, "A screenshot is saved only to a
    path…", last paragraphs).
-8. **The quiet chip's border is `--wt-color-text-muted`** (a new tone, `neutral`): picture 03 draws
+8. **The quiet chip's border is `--wt-color-text-muted`** (a new tone, `muted`, named for its
+   border so it is not confused with the "neutral chip tokens" every tone paints on): picture 03 draws
    the held chip with a dark grey border, unlike the coloured tones. The LOOK task compares it.
 9. **The minute redraw is one timer**, at the next moment any table's shown minutes change, worked
    out again from the screen's clock on every draw (`#watchReminders`, `till-floor-screen.ts:785-796`,
@@ -149,6 +156,12 @@ once for the whole floor, not once per table" — so the count adds no per-table
 `pnpm --filter @waitron/server typecheck` passed; `pnpm --filter @waitron/till typecheck` failed
 only at `src/widgets/signal-chips.ts(24,36)`, the exhaustive switch Task 2 extends. Not measured:
 `apps/till` and `packages/ui` test runs.
+
+Re-run by the plan review (2026-10-20), in a second scratch copy made the same way: Task 1's
+probe failed `expected 'forgotten' to be 'fresh'` before the change and passed after it; then a
+throwaway `readHeldCounts` and `held` push left the same 60 files at `Tests 4 failed | 2841 passed
+(2845)`, the four the five edits in Task 2 cover; `@waitron/till` typecheck failed only at
+`src/widgets/signal-chips.ts(24,36)` and `@waitron/dashboard` typecheck passed.
 
 ## Review focus
 
@@ -235,14 +248,19 @@ dishes only.
     `unit_precision = 3, quantity = 350` → count 2; insert an extra line on the Burger
     (`parent_line_id` = the Burger line, same `group_id`, the columns
     `working-order-reads.sqlite.test.ts:196-207` fills) → still 2; cancel the Burger's last unit
-    (`quantity: 2000`) → count 1.
+    (UPDATE its cancellation row to `quantity: 2000` — `line_id` is that table's primary key,
+    `packages/db/src/schema/line-service-cancellations.ts:9`, so a second insert is refused) →
+    count 1; insert a cancellation of the whole weighed Paella (`quantity: 350`) → no `held`
+    signal at all (a weighed dish counts one only while some of it is left, Decision 2).
   - `"readHeldCounts answers an empty list without reading"` — `readHeldCounts(tx, [])` →
     `toEqual(new Map())`.
   In `signal-chips.test.ts`, add `{ kind: "held", count: 2 }` to a new case
   `"gives no chip for held dishes, which the floor draws with their countdown"` → `toEqual([])`.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts`
-  Expected: the new cases FAIL (no `held` signal; no `readHeldCounts` export).
+  Expected: the new cases FAIL (no `held` signal; no `readHeldCounts` export). Then
+  `pnpm --filter @waitron/till exec vitest run src/widgets/signal-chips.test.ts`: the new case
+  FAILS (with no `case "held":` the switch returns `undefined`, which `flatMap` keeps as an entry).
 - [ ] **Step 3: Implement** the kind, `readHeldCounts`, the push, and the till's `case "held":`.
 - [ ] **Step 4: Edit the five assertions listed below, then run.**
   `pnpm --filter @waitron/server exec vitest run src/table-signals.test.ts src/tables.test.ts src/kitchen-timing-consumers.test.ts src/till-api.groups.test.ts src/current-orders.test.ts`
@@ -264,10 +282,10 @@ marks: §5.1 "Every table with held dishes … shows a quiet chip"; all measured
 ### Task 3: floor chips draw an icon and a quiet tone; the due chip is filled amber
 
 **Files:**
-- Modify: `packages/ui/src/floor.ts:14-23` (`FloorChipTone` gains `"neutral"`; `FloorChip` gains
+- Modify: `packages/ui/src/floor.ts:14-23` (`FloorChipTone` gains `"muted"`; `FloorChip` gains
   `icon?: string`)
 - Modify: `packages/ui/src/floor-chips.ts` (import `./components/wt-icon.js` and register `held`
-  and `fire`; `.chip` gains `gap: var(--wt-space-1)`; `.chip.tone-neutral` border
+  and `fire`; `.chip` gains `gap: var(--wt-space-1)`; `.chip.tone-muted` border
   `var(--wt-color-text-muted)`; `renderFloorChips` draws
   `<wt-icon name=${chip.icon} size="sm"></wt-icon>` before the text when `icon` is set)
 - Modify: `packages/ui/src/components/wt-table-token.ts:209-213` (`.badge.fire-due`: background
@@ -276,20 +294,27 @@ marks: §5.1 "Every table with held dishes … shows a quiet chip"; all measured
 - Test: `packages/ui/src/components/wt-table-token.test.ts`, `wt-table-token.a11y.test.ts`
 
 **Interfaces — produces:** `FloorChip { key; text; tone; icon?: string }` — `icon` names a
-registered `wt-icon`; `FloorChipTone` adds `"neutral"`; icons `held` (path
+registered `wt-icon`; `FloorChipTone` adds `"muted"`; icons `held` (path
 `M4 3h3v10H4zM9 3h3v10H9z`) and `fire` (path `M5 3v10l8-5z`) registered whenever
 `@waitron/ui`'s floor chips load.
 
 - [ ] **Step 1: Write the failing tests** in `wt-table-token.test.ts`:
   - in "the signal chips": `"draws a chip's icon before its words, and none for a chip without one"`
-    — chips `[{ key: "held", text: "Held 2", tone: "neutral", icon: "held" }, { key: "ready", text: "Bar: 1 ready", tone: "success" }]`
+    — chips `[{ key: "held", text: "Held 2", tone: "muted", icon: "held" }, { key: "ready", text: "Bar: 1 ready", tone: "success" }]`
     → the held chip's first element child is `wt-icon[name=held]`, whose shadow root holds an
-    `svg path`; the ready chip holds no `wt-icon`; the held chip's `textContent.trim()` is `Held 2`.
-  - `"a neutral chip paints its words on the neutral chip tokens with --wt-color-text-muted as its border"`
+    `svg path`; the ready chip holds no `wt-icon`; the held chip's `textContent.trim()` is `Held 2`;
+    with `--wt-space-1` set on the host to `7px`, the held chip's computed `columnGap` is `7px`
+    (the new `gap`: `packages/ui` is mutation-tested, so a style with no assertion is a surviving
+    mutant).
+  - `"a muted chip paints its words on the neutral chip tokens with --wt-color-text-muted as its border"`
     — the shape of the tone cases at `:224-245`, with `--wt-color-text-muted`.
-  - in "the fire-due chip": `"draws the fire icon before its words, labelled or not"`.
+  - in "the fire-due chip": `"draws the fire icon before its words, labelled or not"` — in both
+    variants the chip's first element child is `wt-icon[name=fire]` whose shadow root holds an
+    `svg path` (so an empty registered path fails it), and the labelled one's text is still its
+    label.
   In `wt-table-token.a11y.test.ts`: `"a token with a held chip and its icon is accessible"` and
-  `"a token with the filled due chip is accessible"`, each in both themes, as the file's cases are.
+  `"a token with the filled due chip is accessible"`, each in both themes, as the file's cases are;
+  each first asserts its icon's `svg path` is drawn, so neither passes before Task 3's change.
 - [ ] **Step 2: Edit the one assertion listed below**, then run and watch the new cases and it fail.
   `pnpm --filter @waitron/ui exec vitest run src/components/wt-table-token.test.ts src/components/wt-table-token.a11y.test.ts`
 - [ ] **Step 3: Implement.**
@@ -300,11 +325,13 @@ registered `wt-icon`; `FloorChipTone` adds `"neutral"`; icons `held` (path
 
 **Assertions changed:** `wt-table-token.test.ts:180-193`, "paints its words on the neutral chip
 tokens with the warning token as its border": renamed `"paints its words on the warning and
-on-warning tokens"`; it sets `--wt-color-warning` and `--wt-color-on-warning` and expects
-`backgroundColor` and `borderTopColor` to be the warning value and `color` the on-warning value
+on-warning tokens"`; it sets `--wt-color-warning` and `--wt-color-on-warning` to two distinct
+values, keeps setting `--wt-color-surface-raised` and `--wt-color-text` to two more (so the old
+paint fails it), and expects `backgroundColor` and `borderTopColor` to be the warning value,
+`borderTopStyle` still `solid`, and `color` the on-warning value — four checks, as before
 (the spec changes what it checks: §5.1 "the filled amber ▶ Time to fire"). Not measured; any other
 red case is a stop. The existing "a token carrying a chip of every tone is accessible" (`a11y:124-140`)
-is left as it is; the neutral tone gets its own case.
+is left as it is; the muted tone gets its own case.
 
 ### Task 4: the held chip's words and the countdown's arithmetic
 
@@ -315,7 +342,7 @@ is left as it is; the neutral tone gets its own case.
 - Test: `apps/till/src/state/release-reminder.test.ts`, `apps/till/src/widgets/signal-chips.test.ts`
 
 **Interfaces:**
-- Consumes: `FloorChip` with `icon` and tone `"neutral"` (Task 3); the `held` signal (Task 2).
+- Consumes: `FloorChip` with `icon` and tone `"muted"` (Task 3); the `held` signal (Task 2).
 - Produces:
   - `minutesToFire(dueAt: number, now: number): number` — `Math.ceil((dueAt - now) / 60_000)`;
     for `dueAt > now` only.
@@ -323,7 +350,7 @@ is left as it is; the neutral tone gets its own case.
     change: `dueAt - (minutesToFire(dueAt, now) - 1) * 60_000` (equals `dueAt` in the last minute).
   - `heldChip(signals: readonly TableSignal[], dueAt: number, now: number): FloorChip | null` —
     `null` with no `held` signal, or when `dueAt <= now` (the Time to fire mark shows instead);
-    otherwise `{ key: "held", text, tone: "neutral", icon: "held" }`, `text` from
+    otherwise `{ key: "held", text, tone: "muted", icon: "held" }`, `text` from
     `countText(count, "floor.held", "floor.held_one")` when `dueAt` is `Infinity`, else from
     `countText(count, "floor.held_fire_in", "floor.held_fire_in_one")` with `{m}` replaced by
     `minutesToFire(dueAt, now)`. `dueAt` is `reminderDueAt(party?.reminder)` (`release-reminder.ts:7-10`),
@@ -335,11 +362,12 @@ is left as it is; the neutral tone gets its own case.
 
 - [ ] **Step 1: Write the failing tests.**
   `release-reminder.test.ts`: `minutesToFire` with `dueAt = D`: `D - 240_000` → 4, `D - 240_001` →
-  5, `D - 239_999` → 4, `D - 60_000` → 1, `D - 1` → 1. `nextCountdownChange`: from `D - 240_001` →
-  `D - 240_000`; from `D - 240_000` → `D - 180_000`; from `D - 30_000` → `D`.
+  5, `D - 241_000` → 5, `D - 239_999` → 4, `D - 60_000` → 1, `D - 1` → 1. `nextCountdownChange`:
+  from `D - 240_001` → `D - 240_000`; from `D - 240_000` → `D - 180_000`; from `D - 30_000` → `D`.
   `signal-chips.test.ts` (`setLocale("en")`, as the file's `beforeEach` does): no `held` signal →
-  `null`; held 2, `dueAt = now` → `null`; held 2, `Infinity` →
-  `toEqual({ key: "held", text: "Held 2", tone: "neutral", icon: "held" })`; held 2, 4 min ahead →
+  `null`; held 2, `dueAt = now` → `null`; held 2, `dueAt = now - 60_000` (past due) → `null`;
+  held 2, `Infinity` →
+  `toEqual({ key: "held", text: "Held 2", tone: "muted", icon: "held" })`; held 2, 4 min ahead →
   text `Held 2 · fire in 4 min`; held 1, 1 ms ahead → `Held 1 · fire in 1 min`; in Spanish
   (`setLocale("es")`), held 2, 4 min ahead → `es["floor.held_fire_in"]` with `{n}` 2 and `{m}` 4,
   and held 1 with no time → `es["floor.held_one"]`.
@@ -361,7 +389,9 @@ is left as it is; the neutral tone gets its own case.
   `.badge.fire-due` (`:536-541`) filled as the token's (Task 3) and the badge at `:2373-2377` draws
   `<wt-icon name="fire" size="sm"></wt-icon>` before its words; `#watchReminders` (`:785-796`)
   takes, for a table with a `held` signal and a due time ahead, `nextCountdownChange(dueAt, this.#drawnAt)`
-  instead of `dueAt`, and its doc comment says it also redraws each minute a countdown changes.
+  instead of `dueAt`, and its doc comment says it also redraws each minute a countdown changes;
+  the `now` property's doc comment (`:621-622`, "redraws the floor when the next reminder falls
+  due") says the same.
 - Create: `apps/till/src/screens/till-floor-screen.held.test.ts` (fixtures and `mountAt` as
   `till-floor-screen.parties.test.ts:10-80,568-595` build them)
 - Modify: `apps/till/src/screens/till-floor-screen.a11y.test.ts` (one new case in the
@@ -379,8 +409,9 @@ is left as it is; the neutral tone gets its own case.
     `Held 2 · fire in 1 min`.
   - `"turns into the filled Time to fire when due, and drops the held chip"` — due `at(0)` →
     `[data-fire-due]` text `Time to fire` holding `wt-icon[name=fire]`, no `[data-chip="held"]`;
-    with `--wt-color-warning` and `--wt-color-on-warning` set on the host, the badge's
-    `backgroundColor` and `color` follow them.
+    with `--wt-color-warning` and `--wt-color-on-warning` set on the host to distinct values, the
+    badge's `backgroundColor` and `borderTopColor` read the warning value and its `color` the
+    on-warning one.
   - `"shows the held chip and its countdown on an unplaced table's token"` — as
     `parties.test.ts:628-635` mounts the tray → the token's `[data-chip="held"]` text
     `Held 2 · fire in 4 min`.
@@ -388,7 +419,10 @@ is left as it is; the neutral tone gets its own case.
     locale after, CLAUDE.md §4).
   - On the screen's own clock (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`,
     `vi.setSystemTime(now)`, `vi.useRealTimers()` in `afterEach`, as `parties.test.ts:637-660` does —
-    no animation frame is faked):
+    no animation frame is faked). These cases mount with `mountAt(tables, "real")`, leaving `now`
+    unset: `#watchReminders` starts no timer at all while `now` is injected (`if (this.now !==
+    undefined || !this.isConnected) return;`, `till-floor-screen.ts:788`), so an injected clock
+    would make every one of them pass or fail for the wrong reason:
     - `"redraws each minute the countdown changes, with no new floor read"` — due `at(150_000)` →
       `fire in 3 min`; advance 30 000 ms → `fire in 2 min`; advance 60 000 → `fire in 1 min`;
       advance 60 000 → the due chip.
@@ -396,8 +430,11 @@ is left as it is; the neutral tone gets its own case.
       `{ dueAt: null }` and `{ dueAt: "not a time" }`; `vi.spyOn(el, "requestUpdate")`; advance
       120 000 ms → not called; the chip reads `Held 2`.
     - `"reads the time left now on coming back to the page"` — due `at(300_000)`; remove the
-      element, advance 120 000, put it back → `fire in 3 min`.
-  In `till-floor-screen.a11y.test.ts`: `"has no violations with held dishes counting down and a reminder due, on the list"`.
+      element, advance 120 000, put it back, `await vi.advanceTimersByTimeAsync(0)` (reconnecting
+      sets a timer already past due, which fires on the next turn) → `fire in 3 min`.
+  In `till-floor-screen.a11y.test.ts`: `"has no violations with held dishes counting down and a reminder due, on the list"`
+  — it first asserts the `[data-chip="held"]` chip and the `[data-fire-due]` badge's
+  `wt-icon[name=fire]` are drawn, so it cannot pass on a list that shows neither.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.held.test.ts src/screens/till-floor-screen.a11y.test.ts`
 - [ ] **Step 3: Implement.**
@@ -490,5 +527,4 @@ then copied to `/Users/clintongormley/waitron-campaign-c/a757-3-shots/`; notes i
 3. **The table details sheet** keeps only its "Time to fire" line (Decision 10). If the owner wants
    the held count there too, it is a one-line addition in slice 5, which owns the map and its
    details.
-4. **Review weight:** LIGHT per the design; the driver rules on the two additive cross-package
-   changes named in the header.
+4. **Review weight:** settled — FULL, by the driver's ruling (header).
