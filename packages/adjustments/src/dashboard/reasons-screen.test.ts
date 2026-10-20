@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setLocale } from "@waitron/dashboard-kit";
+import { setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
@@ -469,6 +469,75 @@ describe("the reasons list", () => {
     expect(api.updateReason).toHaveBeenCalledOnce();
     expect(api.listReasons).toHaveBeenCalledTimes(1);
     expect(background.listReasons).toHaveBeenCalledTimes(1);
+  });
+
+  it("searches every name of a reason, keeping list order", async () => {
+    const el = await mount(
+      fakeApi({
+        listReasons: vi.fn().mockResolvedValue([
+          reason({ id: "k", name: "Kitchen complaint", position: 0 }),
+          reason({ id: "e", name: "Entry error", position: 1 }),
+          reason({
+            id: "c",
+            name: "Complaint",
+            names: { en: "Complaint", es: "Grievance (es)" },
+            position: 2,
+          }),
+          reason({ id: "b", name: "Crème brûlée spilt", position: 3 }),
+        ]),
+      }),
+    );
+    const search = field(el, "search");
+    expect(search.tagName).toBe("WT-INPUT");
+    expect(search.getAttribute("type")).toBe("search");
+    expect(search.getAttribute("data-test")).toBe("search");
+    expect(el.shadowRoot!.querySelector(".toolbar")!.firstElementChild).toBe(search);
+    const hint = () => text(el.shadowRoot!.querySelector("p.hint")!);
+
+    await type(el, "search", "compl");
+    expect(rowKeys(el)).toEqual(["k", "c"]);
+    expect(hint()).toBe("Clear the search to change the order.");
+
+    await type(el, "search", "griev");
+    expect(rowKeys(el)).toEqual(["c"]);
+
+    await type(el, "search", "CREME");
+    expect(rowKeys(el)).toEqual(["b"]);
+
+    await type(el, "search", "zzz");
+    expect(rowKeys(el)).toEqual([]);
+    expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(tableNoMatches());
+    expect(hint()).toBe("Clear the search to change the order.");
+
+    await type(el, "search", "");
+    expect(rowKeys(el)).toEqual(["k", "e", "c", "b"]);
+    expect(el.shadowRoot!.querySelector('[data-test="no-matches"]')).toBeNull();
+    expect(hint()).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+  });
+
+  it("says the searching note in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(field(el, "search").getAttribute("label")).toBe(ES["adjustments.search"]);
+    await type(el, "search", "compl");
+    expect(text(el.shadowRoot!.querySelector("p.hint")!)).toBe(
+      ES["adjustments.order_note_searching"],
+    );
+  });
+
+  it("keeps the row menu on screen at phone width", async () => {
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockResolvedValue(pictureReasons()) }));
+    el.parentElement!.style.width = "390px";
+    await settle(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const wrap = table(el);
+    expect(wrap.scrollLeft).toBe(0);
+    expect(wrap.scrollWidth).toBeGreaterThan(wrap.clientWidth);
+    const wrapRight = wrap.getBoundingClientRect().right;
+    const menus = [...wrap.querySelectorAll("tbody tr[data-reason] wt-row-actions")];
+    expect(menus).toHaveLength(4);
+    for (const menu of menus)
+      expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(wrapRight + 0.5);
   });
 
   it("says the list could not be loaded", async () => {

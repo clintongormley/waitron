@@ -3,8 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
-import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
-import { formatMoney } from "@waitron/shared";
+import {
+  QueryController,
+  codeMessage,
+  codeOf,
+  currentLocale,
+  tableNoMatches,
+} from "@waitron/dashboard-kit";
+import { formatMoney, searchBy } from "@waitron/shared";
 import {
   baseStyles,
   ReorderController,
@@ -194,7 +200,10 @@ export class AdjustmentReasonsScreen extends LitElement {
       }
       .toolbar {
         display: flex;
-        justify-content: flex-end;
+        flex-wrap: wrap;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
         margin-block: var(--wt-space-3);
       }
       .empty {
@@ -217,6 +226,15 @@ export class AdjustmentReasonsScreen extends LitElement {
       }
       td.actions-cell {
         text-align: end;
+      }
+      td.actions-cell,
+      th.actions-cell {
+        position: sticky;
+        inset-inline-end: 0;
+        background: var(--wt-color-surface);
+      }
+      tr[data-dragging] td.actions-cell {
+        background: var(--wt-color-surface-lifted);
       }
       .reason-name {
         font-weight: var(--wt-font-weight-bold);
@@ -295,6 +313,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   @property({ attribute: false }) api!: AdjustmentsApi;
   @state() private reasons?: AdjustmentReason[];
+  @state() private search = "";
   @state() private loadError?: string;
   /** A refusal of a row action that saved at once. */
   @state() private actionError?: string;
@@ -920,7 +939,13 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   /** The rows drawn, in list order; called only once the reasons have loaded. */
   #shown(): AdjustmentReason[] {
-    return this.reasons!;
+    const found = new Set(
+      searchBy(this.search, this.reasons!, (reason) => [
+        reason.name,
+        ...Object.values(reason.names),
+      ]),
+    );
+    return this.reasons!.filter((reason) => found.has(reason));
   }
 
   #row(reason: AdjustmentReason) {
@@ -944,6 +969,12 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #table(rows: readonly AdjustmentReason[]) {
+    const note = t(
+      this.search.trim() === "" ? "adjustments.order_note" : "adjustments.order_note_searching",
+    );
+    if (rows.length === 0)
+      return html`<p role="status" data-test="no-matches">${tableNoMatches()}</p>
+        <p class="hint">${note}</p>`;
     return html`<div
         class="table-wrap"
         tabindex="0"
@@ -960,7 +991,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               <th scope="col">${t("adjustments.column.apply_roles")}</th>
               <th scope="col">${t("adjustments.column.approver_roles")}</th>
               <th scope="col">${t("adjustments.column.limits")}</th>
-              <th scope="col">
+              <th scope="col" class="actions-cell">
                 <span class="visually-hidden">${t("adjustments.column.actions")}</span>
               </th>
             </tr>
@@ -974,7 +1005,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           </tbody>
         </table>
       </div>
-      <p class="hint">${t("adjustments.order_note")}</p>`;
+      <p class="hint">${note}</p>`;
   }
 
   #fieldError(errors: FieldErrors, field: Field) {
@@ -1265,6 +1296,18 @@ export class AdjustmentReasonsScreen extends LitElement {
     >`;
   }
 
+  #renderSearch() {
+    return html`<wt-input
+      data-test="search"
+      name="search"
+      type="search"
+      autocomplete="off"
+      label=${t("adjustments.search")}
+      .value=${this.search}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => (this.search = event.detail.value)}
+    ></wt-input>`;
+  }
+
   override render() {
     const alert = this.loadError ?? this.actionError;
     return html`<h1>${t("adjustments.title")}</h1>
@@ -1276,7 +1319,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               <p data-test="empty">${t("adjustments.empty")}</p>
               ${this.#renderAdd()}
             </div>`
-          : html`<div class="toolbar">${this.#renderAdd()}</div>
+          : html`<div class="toolbar">${this.#renderSearch()} ${this.#renderAdd()}</div>
               ${this.reasons ? this.#table(this.#shown()) : nothing}`
       }
       ${this.#limitSection()} ${this.#modal()}`;

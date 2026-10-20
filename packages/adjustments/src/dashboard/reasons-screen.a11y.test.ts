@@ -151,6 +151,26 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
+  test("a search matching nothing", async () => {
+    const el = await screen(theme);
+    const search = el.shadowRoot!.querySelector("[name=search]")!;
+    const input = search.shadowRoot!.querySelector("input")!;
+    input.value = "zzz";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await settle(el);
+    expect(el.shadowRoot!.querySelector('[data-test="no-matches"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("the list at phone width", async () => {
+    const el = await screen(theme);
+    host.style.width = "390px";
+    await settle(el);
+    const wrap = el.shadowRoot!.querySelector<HTMLElement>('[data-test="reasons"]')!;
+    expect(wrap.scrollWidth).toBeGreaterThan(wrap.clientWidth);
+    await expectNoA11yViolations(host);
+  });
+
   test("the empty list", async () => {
     const el = await screen(theme, { listReasons: vi.fn().mockResolvedValue([]) });
     expect(el.shadowRoot!.querySelector('[data-test="empty"]')).not.toBeNull();
