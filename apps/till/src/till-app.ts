@@ -2919,6 +2919,8 @@ export class TillApp extends LitElement {
   @state() private equipmentRereads = 0;
   /** The pay sheet's own latest pick, which its field shows as saving. */
   @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
+  /** Why the pay sheet's own pick of a field was not saved, shown under that field. */
+  @state() private payEquipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
   /** A refusal is shown only in the dialog opening it was picked in. */
   #equipmentOpenings = 0;
   /** When a read of the equipment and a choice were out at once, either answer may be the older, so
@@ -9199,10 +9201,11 @@ export class TillApp extends LitElement {
   #onEquipmentChange(
     event: CustomEvent<EquipmentChange>,
     nfc?: { session: number; name: string },
+    sheet?: { role: PayEquipmentRole; payId: number },
   ): Promise<void> {
     const opening = this.#equipmentOpenings;
     this.equipmentWaiting++;
-    const step = () => this.#switchEquipment(event.detail, opening, nfc);
+    const step = () => this.#switchEquipment(event.detail, opening, nfc, sheet);
     const run = this.#equipmentQueue.then(step, step);
     this.#equipmentQueue = run;
     return run;
@@ -9214,6 +9217,7 @@ export class TillApp extends LitElement {
     change: EquipmentChange,
     opening: number,
     nfc?: { session: number; name: string },
+    sheet?: { role: PayEquipmentRole; payId: number },
   ): Promise<void> {
     const current = () =>
       nfc === undefined ||
@@ -9290,6 +9294,14 @@ export class TillApp extends LitElement {
         this.nfcNotice = {
           message: codeMessage(typeof code === "string" ? code : "server.internal"),
           tone: "error",
+        };
+      if (sheet !== undefined && sheet.payId === this.billPaying?.id)
+        this.payEquipmentErrors = {
+          ...this.payEquipmentErrors,
+          [sheet.role]:
+            typeof status !== "number"
+              ? t("pay_equipment.not_saved")
+              : codeMessage(typeof code === "string" ? code : "server.internal"),
         };
     } finally {
       limit.done();
@@ -9437,6 +9449,7 @@ export class TillApp extends LitElement {
         .fixedReader=${this.#fixedPayReader()}
         .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
         .equipmentSaving=${this.payEquipmentSaving}
+        .equipmentErrors=${this.payEquipmentErrors}
         @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
           this.#onPayEquipmentPick(event.detail)}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
@@ -9450,10 +9463,15 @@ export class TillApp extends LitElement {
 
   #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): void {
     this.payEquipmentSaving = { role, id };
+    const errors = { ...this.payEquipmentErrors };
+    delete errors[role];
+    this.payEquipmentErrors = errors;
     void this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {
         detail: { role, selection: { id }, via: "list", takeOver },
       }),
+      undefined,
+      { role, payId: this.billPaying!.id },
     );
   }
 
@@ -16123,6 +16141,7 @@ export class TillApp extends LitElement {
 
   #closeBillPaying(): void {
     this.billPaying = null;
+    this.payEquipmentErrors = {};
     this.#closeBillRefunding();
   }
 

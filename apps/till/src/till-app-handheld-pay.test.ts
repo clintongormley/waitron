@@ -5,6 +5,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
   AllocationPreview,
@@ -589,6 +590,188 @@ describe("till-app: a pick from the sheet", () => {
     answers[0]!();
     await flush(el);
     expect(cobrar().disabled).toBe(false);
+  });
+});
+
+describe("till-app: a pick from the sheet that fails", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const COCINA = equipmentItem("p2", "Cocina");
+
+  function equipmentOf(reader: EquipmentItem): DeviceEquipment {
+    return {
+      roles: [
+        roleOf("receipt", BARRA, [BARRA, COCINA]),
+        roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3]),
+      ],
+    };
+  }
+
+  const row = (el: TillApp) =>
+    inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
+  const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
+  async function field(el: TillApp, name: string): Promise<WtCombobox> {
+    await dialog(el)!.updateComplete;
+    await row(el)!.updateComplete;
+    return row(el)!.shadowRoot!.querySelector<WtCombobox>(`wt-combobox[name="${name}"]`)!;
+  }
+
+  async function openRow(el: TillApp): Promise<void> {
+    await row(el)!.updateComplete;
+    const change = row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
+    if (change !== null) await userEvent.click(change);
+    await flush(el);
+  }
+
+  async function pick(el: TillApp, name: string, label: string): Promise<void> {
+    await openRow(el);
+    const combobox = await field(el, name);
+    await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await combobox.updateComplete;
+    const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+      (each) => each.textContent!.trim().startsWith(label),
+    );
+    if (!option) throw new Error(`no option ${label}`);
+    await userEvent.click(option);
+    await flush(el);
+  }
+
+  async function phoneSheet(overrides: Record<string, unknown>) {
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(LECTOR_2)),
+        ...overrides,
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    return el;
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("a refused reader pick leaves the field on the stored reader and says why under it", async () => {
+    const setDeviceEquipment = vi
+      .fn()
+      .mockRejectedValue({ code: "reader.payment_in_progress", status: 409 });
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    await pick(el, "cardReaderId", "Lector 3");
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    const reader = await field(el, "cardReaderId");
+    expect(reader.value).toBe("r2");
+    expect(reader.error).toBe(codeMessage("reader.payment_in_progress"));
+    expect((await field(el, "receiptPrinterId")).error).toBe("");
+    expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("a refused printer pick says why under the printer field", async () => {
+    const setDeviceEquipment = vi
+      .fn()
+      .mockRejectedValue({ code: "device.binding_invalid", status: 400 });
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    await pick(el, "receiptPrinterId", "Cocina");
+
+    const printer = await field(el, "receiptPrinterId");
+    expect(printer.value).toBe("p1");
+    expect(printer.error).toBe(codeMessage("device.binding_invalid"));
+    expect((await field(el, "cardReaderId")).error).toBe("");
+    expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("a pick with no answer reads the equipment again, shows what it says, and says it was not saved", async () => {
+    const setDeviceEquipment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_2));
+    const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
+    const readsBefore = getDeviceEquipment.mock.calls.length;
+    getDeviceEquipment.mockResolvedValue(equipmentOf(LECTOR_3));
+
+    await pick(el, "cardReaderId", "Lector 3");
+    await flush(el);
+
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
+    const reader = await field(el, "cardReaderId");
+    expect(reader.value).toBe(READER_ID);
+    expect(reader.error).toBe(t("pay_equipment.not_saved"));
+    expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("the next pick of that field clears its message", async () => {
+    const setDeviceEquipment = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "reader.payment_in_progress", status: 409 })
+      .mockImplementation(() => new Promise<DeviceEquipment>(() => {}));
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    await pick(el, "cardReaderId", "Lector 3");
+    await flush(el);
+    expect((await field(el, "cardReaderId")).error).not.toBe("");
+    await pick(el, "cardReaderId", "Lector 3");
+    expect((await field(el, "cardReaderId")).error).toBe("");
+  });
+
+  it("closing the sheet clears a field's message", async () => {
+    const setDeviceEquipment = vi
+      .fn()
+      .mockRejectedValue({ code: "device.binding_invalid", status: 400 });
+    const el = await phoneSheet({ setDeviceEquipment });
+    await pick(el, "receiptPrinterId", "Cocina");
+    expect((await field(el, "receiptPrinterId")).error).not.toBe("");
+
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    await pressPaySheet(el, tableOrder(el));
+    await openRow(el);
+
+    expect((await field(el, "receiptPrinterId")).error).toBe("");
+  });
+
+  it("a refusal that answers after the sheet closed is not shown when it opens again", async () => {
+    let refuse: (error: unknown) => void = () => {};
+    const setDeviceEquipment = vi.fn(
+      () => new Promise<DeviceEquipment>((_resolve, reject) => (refuse = reject)),
+    );
+    const el = await phoneSheet({ setDeviceEquipment });
+    await pick(el, "receiptPrinterId", "Cocina");
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    await pressPaySheet(el, tableOrder(el));
+
+    refuse({ code: "device.binding_invalid", status: 400 });
+    await flush(el);
+    await openRow(el);
+
+    expect((await field(el, "receiptPrinterId")).error).toBe("");
+  });
+
+  it("a pick, an NFC tap, a logout, the pick answered and a sign-in leave no saving hint", async () => {
+    installNfc();
+    let answer: () => void = () => {};
+    const setDeviceEquipment = vi.fn(
+      () =>
+        new Promise<DeviceEquipment>((resolve) => (answer = () => resolve(equipmentOf(LECTOR_3)))),
+    );
+    const el = await phoneSheet({ setDeviceEquipment });
+    await pick(el, "cardReaderId", "Lector 3");
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await flush(el);
+
+    emit(shell(el), "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    answer();
+    await flush(el);
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await openRow(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect((await field(el, "cardReaderId")).hint).toBe("");
+    expect(row(el)!.shadowRoot!.querySelector('[data-pay-note="card_terminal"]')).toBeNull();
   });
 });
 
