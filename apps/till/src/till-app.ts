@@ -185,6 +185,7 @@ import "./widgets/make-now.js";
 import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
 import type {
+  BillPayConfirmDetail,
   TillBillPayDialog,
   PayLine,
   PayRefusal,
@@ -375,7 +376,6 @@ import type {
   CollectCardDetail,
   ConfirmPaymentDetail,
   ParkOrderDetail,
-  ReceiptGuestsDetail,
 } from "./widgets/tender-pay.js";
 import { defaultReceiptGuests } from "./state/receipt-guests.js";
 
@@ -15871,12 +15871,14 @@ export class TillApp extends LitElement {
     const open = this.billPaying!;
     if (open.busy) return;
     const asked = open.asked!;
-    const detail: ReceiptGuestsDetail =
-      (event as CustomEvent<ReceiptGuestsDetail | null>).detail ?? {};
+    const { readerId, ...detail }: BillPayConfirmDetail =
+      (event as CustomEvent<BillPayConfirmDetail | null>).detail ?? {};
     const confirmation = confirmationOf(
       paymentAsk(asked.choice, asked.pay, asked.allocation, open.expectedEdit),
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
-      asked.card,
+      asked.card?.entry === "reader" && readerId !== undefined
+        ? { ...asked.card, readerId }
+        : asked.card,
     );
     const key = open.billId;
     const previous = this.#unansweredPayments.get(key);

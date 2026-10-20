@@ -5138,6 +5138,143 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(inDialog(el, "[data-pay-collecting]")).toBeNull();
   });
 
+  describe("till-app: the charge names the reader the handheld's row shows (A796 Task 10b)", () => {
+    /** A handheld at the confirmation of a 40.00 payment by `method`, before Cobrar is pressed. */
+    async function handheldConfirming(
+      takeBillPayment: unknown,
+      method: "card" | "cash",
+    ): Promise<TillApp> {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: "phone-portrait",
+          capabilities: [
+            "print-receipt",
+            "integrated-card-payment",
+            "take-cash",
+          ] as CapabilityFlag[],
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "d1",
+          name: "Móvil",
+          formFactor: "phone-portrait",
+        }),
+        ...(method === "card"
+          ? { previewBillPayment: vi.fn().mockResolvedValue(cardPreview) }
+          : {}),
+        takeBillPayment,
+      });
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-table-order-screen")!, "bill-pay", {
+        way: "contribution",
+        lines: [],
+      });
+      await flush(el);
+      await type(el, "amount", "40");
+      await press(el, `input[name="method"][value="${method}"]`);
+      if (method === "cash") await type(el, "tendered", "50");
+      await press(el, "[data-pay-continue]");
+      return el;
+    }
+
+    async function confirm(el: TillApp, detail?: Record<string, unknown>): Promise<void> {
+      emit(dialog(el)!, "bill-pay-confirm", detail);
+      await flush(el);
+    }
+
+    const received = () =>
+      onReader("received", "received", { received: "40.00", outstanding: "80.00" });
+
+    it("a confirm carrying the row's reader charges that reader", async () => {
+      const el = await handheldConfirming(vi.fn().mockResolvedValue(received()), "card");
+      await confirm(el, { readerId: readers[1]!.id });
+
+      expect(sent()).toHaveLength(1);
+      expect(sent()[0]).toMatchObject({
+        method: "card",
+        entry: "reader",
+        readerId: readers[1]!.id,
+      });
+    });
+
+    it("a confirm carrying no reader sends the card entry as asked", async () => {
+      const el = await handheldConfirming(vi.fn().mockResolvedValue(received()), "card");
+      await confirm(el);
+
+      expect(sent()).toHaveLength(1);
+      expect(sent()[0]).toMatchObject({ method: "card", entry: "reader" });
+      expect(sent()[0]).not.toHaveProperty("readerId");
+    });
+
+    it("a cash payment sends no reader even when the confirm names one", async () => {
+      const el = await handheldConfirming(
+        vi
+          .fn()
+          .mockResolvedValue(
+            takenOf(
+              { method: "cash", applied: "40.00", tendered: "50.00", change: "10.00" },
+              { received: "40.00", outstanding: "80.00" },
+            ),
+          ),
+        "cash",
+      );
+      await confirm(el, { readerId: readers[1]!.id });
+
+      expect(sent()).toHaveLength(1);
+      expect(sent()[0]).toMatchObject({ method: "cash" });
+      expect(sent()[0]).not.toHaveProperty("readerId");
+      expect(sent()[0]).not.toHaveProperty("entry");
+    });
+
+    it("keeps the guests the confirm carries beside the reader", async () => {
+      const el = await handheldConfirming(vi.fn().mockResolvedValue(received()), "card");
+      await confirm(el, { readerId: readers[1]!.id, guests: 4 });
+
+      expect(sent()[0]).toMatchObject({ readerId: readers[1]!.id, guests: 4 });
+    });
+
+    it.each([
+      ["names another reader", { readerId: readers[0]!.id }],
+      ["names no reader", undefined],
+    ])(
+      "a locked resend whose confirm %s sends the original reader under the same submission id",
+      async (_label, resendDetail) => {
+        const answers: ((error: unknown) => void)[] = [];
+        const takeBillPayment = vi.fn(
+          () => new Promise<BillPaymentResult>((_resolve, reject) => answers.push(reject)),
+        );
+        const el = await handheldConfirming(takeBillPayment, "card");
+        await confirm(el, { readerId: readers[1]!.id });
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            answers[attempt]!(new TypeError("Failed to fetch"));
+            await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+        answers[2]!(new TypeError("Failed to fetch"));
+        await flush(el);
+        expect(dialog(el)!.confirmationLocked).toBe(true);
+        expect(sent()).toHaveLength(3);
+
+        await confirm(el, resendDetail);
+
+        expect(sent()).toHaveLength(4);
+        expect(sent()[3]).toEqual(sent()[0]);
+        expect(sent()[3]!.readerId).toBe(readers[1]!.id);
+      },
+    );
+  });
+
   describe("till-app: a reader refusal that cannot speak for an earlier attempt (A796 default 7)", () => {
     const received = () =>
       onReader("received", "received", { received: "40.00", outstanding: "80.00" });
