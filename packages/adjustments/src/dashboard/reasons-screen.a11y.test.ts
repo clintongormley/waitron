@@ -326,15 +326,20 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
   });
 
   test.each([
-    ["loading", () => new Promise<never>(() => {})],
-    ["ready", async () => impact()],
+    ["loading", () => new Promise<never>(() => {}), ".status[role=status]"],
+    ["ready", async () => impact(), "[data-irreversible]:not([data-group=refusals] ~ *)"],
     [
       "refused",
       async () =>
         impact([{ code: "adjustment_reason.void_required", params: { withNote: 1 }, targets: [] }]),
+      "[data-group=refusals] li",
     ],
-    ["after a failed read", () => Promise.reject({ code: "server.internal" })],
-  ] as const)("the delete question, %s", async (_state, read) => {
+    [
+      "after a failed read",
+      () => Promise.reject({ code: "server.internal" }),
+      '[data-test="delete-retry"]',
+    ],
+  ] as const)("the delete question, %s", async (_state, read, marker) => {
     const el = await screen(theme, {
       watchReasonDeleteImpact: vi.fn(
         (queries: QueryController, reasonId: string, apply: (value: DeleteImpact) => void) =>
@@ -346,7 +351,9 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
       ),
     });
     await press(el, "delete-e");
-    expect(el.shadowRoot!.querySelector("wt-delete-dialog")).not.toBeNull();
+    const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+    await dialog.updateComplete;
+    expect(dialog.shadowRoot!.querySelector(marker), marker).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

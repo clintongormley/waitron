@@ -91,7 +91,8 @@ const en = {
   "adjustments.error.void_required": "A venue keeps at least one Void reason.",
   "adjustments.error.void_required_note":
     "A venue keeps at least one Void reason that asks for a note.",
-  "adjustments.load_error": "The adjustment reasons could not be loaded.",
+  "adjustments.load_error": "The voids and comps could not be loaded.",
+  "adjustments.no_matches": "Nothing matches your search.",
   "adjustments.reorder_error": "The new order could not be saved.",
   "adjustments.limit.heading": "Limit on a bill's comps",
   "adjustments.limit.field": "Most comped on one bill",
@@ -250,7 +251,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.error.void_required": "El local necesita al menos un motivo de cancelación.",
   "adjustments.error.void_required_note":
     "El local necesita al menos un motivo de cancelación que pida una nota.",
-  "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
+  "adjustments.load_error": "No se pudieron cargar las cancelaciones y descuentos.",
+  "adjustments.no_matches": "Nada coincide con tu búsqueda.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",

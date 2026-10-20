@@ -3,13 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
-import {
-  QueryController,
-  codeMessage,
-  codeOf,
-  currentLocale,
-  tableNoMatches,
-} from "@waitron/dashboard-kit";
+import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { formatMoney, searchBy, type DeleteImpact } from "@waitron/shared";
 import {
   baseStyles,
@@ -214,10 +208,13 @@ export class AdjustmentReasonsScreen extends LitElement {
       .toolbar {
         display: flex;
         flex-wrap: wrap;
-        align-items: end;
+        align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
         margin-block: var(--wt-space-3);
+      }
+      .toolbar wt-input[name="search"] {
+        flex: 1 1 auto;
       }
       .empty {
         display: grid;
@@ -231,11 +228,19 @@ export class AdjustmentReasonsScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      .table-wrap {
+        background: var(--wt-color-surface);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+      }
       .handle-cell,
       td.actions-cell {
         width: 1%;
         padding-inline: 0;
         white-space: nowrap;
+      }
+      .handle-cell {
+        padding-inline: var(--wt-space-2) var(--wt-space-1);
       }
       td.actions-cell {
         text-align: end;
@@ -1177,7 +1182,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #table(rows: readonly AdjustmentReason[]) {
     const note = t(this.#searching ? "adjustments.order_note_searching" : "adjustments.order_note");
     if (rows.length === 0)
-      return html`<p role="status" data-test="no-matches">${tableNoMatches()}</p>
+      return html`<p role="status" data-test="no-matches">${t("adjustments.no_matches")}</p>
         <p class="hint">${note}</p>`;
     return html`<div
         class="table-wrap"

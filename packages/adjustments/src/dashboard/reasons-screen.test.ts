@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import {
-  LiveData,
-  codeMessage,
-  setLocale,
-  tableNoMatches,
-  type QueryController,
-} from "@waitron/dashboard-kit";
+import { LiveData, codeMessage, setLocale, type QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -523,6 +517,7 @@ describe("the reasons list", () => {
     expect(search.getAttribute("data-test")).toBe("search");
     expect(el.shadowRoot!.querySelector(".toolbar")!.firstElementChild).toBe(search);
     const hint = () => text(el.shadowRoot!.querySelector("p.hint")!);
+    expect(hint()).toBe("Drag ⋮⋮ to set the order the till lists them in.");
 
     await type(el, "search", "compl");
     expect(rowKeys(el)).toEqual(["k", "c"]);
@@ -536,7 +531,9 @@ describe("the reasons list", () => {
 
     await type(el, "search", "zzz");
     expect(rowKeys(el)).toEqual([]);
-    expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(tableNoMatches());
+    expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(
+      "Nothing matches your search.",
+    );
     expect(hint()).toBe("Clear the search to change the order.");
 
     await type(el, "search", "");
@@ -552,6 +549,10 @@ describe("the reasons list", () => {
     await type(el, "search", "compl");
     expect(text(el.shadowRoot!.querySelector("p.hint")!)).toBe(
       ES["adjustments.order_note_searching"],
+    );
+    await type(el, "search", "zzz");
+    expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(
+      "Nada coincide con tu búsqueda.",
     );
   });
 
@@ -572,7 +573,7 @@ describe("the reasons list", () => {
 
   it("says the list could not be loaded", async () => {
     const el = await mount(fakeApi({ listReasons: vi.fn().mockRejectedValue({ code: "x" }) }));
-    expect(alert(el)).toBe("The adjustment reasons could not be loaded.");
+    expect(alert(el)).toBe("The voids and comps could not be loaded.");
     expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
       "alert",
     );
@@ -1581,7 +1582,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledTimes(1);
     expect(modal(el)).toBeNull();
-    expect(alert(el)).toBe("The adjustment reasons could not be loaded.");
+    expect(alert(el)).toBe("The voids and comps could not be loaded.");
   });
 
   it("closes on Cancel without saving", async () => {
