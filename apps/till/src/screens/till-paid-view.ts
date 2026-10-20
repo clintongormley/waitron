@@ -232,6 +232,17 @@ export class TillPaidView extends LitElement {
               : nothing
           }
         </div>
+        ${
+          this.receiptReadFailed
+            ? html`<wt-button
+                variant="secondary"
+                data-test="refresh-receipt"
+                ?disabled=${this.busy}
+                @click=${() => this.#emit("refresh-receipt")}
+                >${t("invoice.check_print")}</wt-button
+              >`
+            : nothing
+        }
         ${this.#ticketAction()}
       </section>
       <div class="actions">

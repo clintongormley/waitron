@@ -121,6 +121,7 @@ import "./widgets/attendance-day-dialog.js";
 import type { FixEntryDetail } from "./widgets/attendance-day-dialog.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
+import "./screens/till-paid-view.js";
 import "./screens/till-refund-acknowledgment.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
@@ -388,7 +389,7 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
 type Screen = "lock" | "counter" | "floor" | "station";
 
-type Drill = { kind: "table-order" | "ticket" | TillDestination };
+type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
 
 type RefreshList = "held" | "station" | "waiting";
 
@@ -2844,6 +2845,8 @@ export class TillApp extends LitElement {
   @state() private originalReceiptPrint?: OriginalReceiptPrint;
   @state() private originalReceiptBusy = false;
   @state() private originalReceiptReadFailed = false;
+  /** The settled bill's payments the paid screen lists; empty on the presented path. */
+  @state() private paidPayments: BillPaymentView[] = [];
   @state() private invoiceDeliveries?: InvoiceDeliveryStatus | null;
   @state() private invoiceDeliveriesReadFailed = false;
   @state() private invoiceDeliveryBusy = false;
@@ -8545,20 +8548,23 @@ export class TillApp extends LitElement {
       this.#receiptPrintVisit === visit &&
       this.ticketWorkingOrderId === id &&
       this.#operatorSession === session &&
-      this.drill?.kind === "ticket"
+      (this.drill?.kind === "ticket" || this.drill?.kind === "paid")
     );
   }
 
+  /** A full invoice's original and delivery, or the paid screen's ticket. */
   async #refreshReceiptPrint(): Promise<void> {
     const id = this.ticketWorkingOrderId;
-    if (id === undefined || this.result?.invoiceType !== "F1" || this.originalReceiptBusy) return;
+    const full = this.result?.invoiceType === "F1";
+    if (id === undefined || (!full && this.drill?.kind !== "paid") || this.originalReceiptBusy)
+      return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     this.originalReceiptBusy = true;
     try {
       await Promise.all([
         this.#readReceiptPrint(id, session, visit),
-        this.#readInvoiceDeliveries(id, session, visit),
+        ...(full ? [this.#readInvoiceDeliveries(id, session, visit)] : []),
       ]);
     } finally {
       if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
@@ -8735,9 +8741,10 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     const full = this.result?.invoiceType === "F1";
+    const paid = this.drill?.kind === "paid";
     if (
       retry &&
-      (!full ||
+      (!(full || paid) ||
         this.originalReceiptPrint?.status !== "failed" ||
         !this.originalReceiptPrint.canRetry ||
         this.originalReceiptPrint.printerWithdrawn === true)
@@ -8751,11 +8758,11 @@ export class TillApp extends LitElement {
       else await this.api.printReceipt(id);
       if (!this.#ticketIsCurrent(id, session, visit)) return;
       this.originalReceiptAvailable = false;
-      if (full) {
+      if (full || paid) {
         this.originalReceiptPrint = undefined;
         await Promise.all([
           this.#readReceiptPrint(id, session, visit),
-          this.#readInvoiceDeliveries(id, session, visit),
+          ...(full ? [this.#readInvoiceDeliveries(id, session, visit)] : []),
         ]);
       }
     } catch {
@@ -15818,7 +15825,7 @@ export class TillApp extends LitElement {
       )
         return false;
       this.result = result;
-      this.#showTicket(id, !payment.invoiced);
+      this.#showTicket(id, !payment.invoiced, []);
       paid = true;
     } catch (error) {
       if (
@@ -15994,7 +16001,7 @@ export class TillApp extends LitElement {
       if (out.outcome === "captured") {
         this.#closePresented(id);
         this.result = out.ticket;
-        this.#showTicket(billId, bill.receiptAvailable !== true);
+        this.#showTicket(billId, bill.receiptAvailable !== true, []);
         return;
       }
       this.#showPresentedRefusal(id, { code: PRESENTED_CARD_REFUSALS[out.outcome] });
@@ -16299,7 +16306,7 @@ export class TillApp extends LitElement {
       const now = own();
       if (now !== null) {
         dialog()?.paymentAccepted();
-        await this.#showPaidTicket(now, ticket);
+        await this.#showPaidTicket(now, ticket, balance.payments);
         return true;
       }
     }
@@ -16539,7 +16546,7 @@ export class TillApp extends LitElement {
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     if (result.invoice !== undefined) {
-      await this.#showPaidTicket(open, result.invoice);
+      await this.#showPaidTicket(open, result.invoice, result.balance.payments);
       return;
     }
     const taken: PayTaken =
@@ -16569,10 +16576,14 @@ export class TillApp extends LitElement {
   }
 
   /** A payment that issued the bill's invoice: the dialog closes and the ticket shows. */
-  async #showPaidTicket(open: BillPaying, invoice: TillSaleResult): Promise<void> {
+  async #showPaidTicket(
+    open: BillPaying,
+    invoice: TillSaleResult,
+    payments: BillPaymentView[],
+  ): Promise<void> {
     this.#closeBillPaying();
     this.result = invoice;
-    this.#showTicket(open.billId);
+    this.#showTicket(open.billId, true, payments);
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
@@ -16861,7 +16872,15 @@ export class TillApp extends LitElement {
     this.drill = undefined;
   }
 
-  #showTicket(workingOrderId: string, invoiceIssuedNow = true): void {
+  /**
+   * `settled` is the bill's payments when this payment settled it: on a handheld a simplified
+   * invoice then shows the paid screen, whose Cerrar mesa frees the table.
+   */
+  #showTicket(
+    workingOrderId: string,
+    invoiceIssuedNow = true,
+    settled: BillPaymentView[] | null = null,
+  ): void {
     this.historicalReceipt = null;
     this.ticketWorkingOrderId = workingOrderId;
     this.#receiptPrintVisit++;
@@ -16876,8 +16895,18 @@ export class TillApp extends LitElement {
     this.invoiceEmailRefusal = undefined;
     this.#stopDeliveryReread();
     this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
-    this.#pushDrill({ kind: "ticket" });
+    const paid = settled !== null && this.handheldMode && this.result?.invoiceType === "F2";
+    this.paidPayments = paid ? settled : [];
+    this.#pushDrill({ kind: paid ? "paid" : "ticket" });
     void this.#refreshReceiptPrint();
+  }
+
+  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. */
+  #onBackToTable(): void {
+    if (this.drill?.kind !== "paid") return;
+    this.errorKey = undefined;
+    this.#popDrill();
+    void this.#loadPartyBills();
   }
 
   #onBackToCounter(): void {
@@ -17374,6 +17403,19 @@ export class TillApp extends LitElement {
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
+      case "paid":
+        return html`<till-paid-view
+          slot="drill"
+          .tableName=${this.#activeTableTitle()}
+          .total=${this.result!.total}
+          .payments=${this.paidPayments}
+          .receipt=${this.originalReceiptPrint ?? null}
+          .receiptReadFailed=${this.originalReceiptReadFailed}
+          .originalAvailable=${this.originalReceiptAvailable}
+          .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+          .busy=${this.originalReceiptBusy}
+          @back-to-table=${() => this.#onBackToTable()}
+        ></till-paid-view>`;
       case "hours":
         return html`<till-hours-screen
           slot="drill"

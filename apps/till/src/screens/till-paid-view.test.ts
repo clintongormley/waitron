@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { BillPaymentView, OriginalReceiptPrint } from "../api/client.js";
 import "./till-paid-view.js";
 import type { TillPaidView } from "./till-paid-view.js";
@@ -216,6 +216,34 @@ describe("till-paid-view", () => {
     expect((button(el, "finish-table") as HTMLElement & { disabled: boolean }).disabled).toBe(
       false,
     );
+  });
+
+  it("a failed read offers Check again, whatever the device may print, which sends refresh-receipt", async () => {
+    for (const canPrint of [true, false]) {
+      const el = await mount({ receipt: null, receiptReadFailed: true, canPrint });
+      const again = button(el, "refresh-receipt") as HTMLElement & { disabled: boolean };
+      expect(again.textContent!.trim()).toBe(t("invoice.check_print"));
+      const seen: CustomEvent[] = [];
+      document.addEventListener("refresh-receipt", (event) => seen.push(event as CustomEvent), {
+        once: true,
+      });
+      again.click();
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.bubbles).toBe(true);
+      expect(seen[0]!.composed).toBe(true);
+      el.busy = true;
+      await el.updateComplete;
+      expect(again.disabled).toBe(true);
+      cleanupWidgets();
+    }
+  });
+
+  it("a ticket read that answered offers no Check again", async () => {
+    const el = await mount({ receipt: sent("done") });
+    expect(button(el, "refresh-receipt")).toBeNull();
+    cleanupWidgets();
+    const reading = await mount({ receipt: null });
+    expect(button(reading, "refresh-receipt")).toBeNull();
   });
 
   it("speaks English", async () => {

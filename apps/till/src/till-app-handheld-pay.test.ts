@@ -18,6 +18,7 @@ import type {
   EquipmentChange,
   EquipmentItem,
   TillApi,
+  TillSaleResult,
 } from "./api/client.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
@@ -40,6 +41,7 @@ import {
   LECTOR_2,
   lock,
   money,
+  offers,
   paymentOf,
   roleOf,
   shell,
@@ -2483,6 +2485,22 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     expect(getFiledTicket).toHaveBeenCalledTimes(1);
   });
 
+  it("a received card that settles a simplified invoice's bill shows the paid screen, with the read's payments", async () => {
+    const getFiledTicket = vi
+      .fn()
+      .mockResolvedValue({ ...invoiceOf("120.00"), invoiceType: "F2" as const });
+    const el = await settlingCard(getFiledTicket);
+
+    await tick(el);
+
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull());
+    expect(ticketView(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-paid-view")!.payments).toEqual([
+      paymentOf({ ...own, applied: "120.00", state: "received" }),
+    ]);
+  });
+
   it("a ticket that cannot be read leaves the sheet as it is, and the next tick tries again", async () => {
     const getFiledTicket = vi
       .fn()
@@ -2658,4 +2676,405 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     expect(getBillBalance.mock.calls.length).toBe(before + 1);
   });
+});
+
+describe("the paid screen on a handheld", () => {
+  const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
+  const simplified = () => ({ ...invoiceOf("120.00"), invoiceType: "F2" as const });
+  const full = () => ({ ...invoiceOf("120.00"), invoiceType: "F1" as const });
+  const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
+  const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
+  const inPaid = (el: TillApp, selector: string) =>
+    paidView(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+  const sharePaid = (n: number) =>
+    paymentOf({
+      id: `pay-${n}`,
+      submissionId: `sub-${n}`,
+      method: "card",
+      entry: "reader",
+      applied: "40.00",
+      tendered: null,
+      change: null,
+    });
+  const shareOf = (outstanding: string, invoice?: TillSaleResult) =>
+    takenOf(
+      { method: "card", entry: "reader", applied: "40.00", tip: "0.00", change: null },
+      {
+        total: "120.00",
+        received: (120 - Number(outstanding)).toFixed(2),
+        outstanding,
+        ...(outstanding === "0.00"
+          ? { status: "settled" as const, payments: [1, 2, 3].map(sharePaid) }
+          : {}),
+      },
+      invoice,
+    );
+  const printed = { status: "done" as const, jobId: "job-1", canRetry: false };
+  const onRequest = {
+    listZoneOffers: vi.fn().mockResolvedValue({
+      ...offers,
+      context: { ...offers.context, receiptPrintMode: "on_request" },
+    }),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue({
+      ...offers,
+      context: { ...offers.context, receiptPrintMode: "on_request" },
+    }),
+  };
+
+  /** Three equal shares paid in turn from the phone, the third answered with `invoice`. */
+  async function threeShares(
+    invoice: TillSaleResult,
+    overrides: Record<string, unknown> = {},
+    tillOver: Record<string, unknown> = {},
+    theme?: "light" | "dark",
+  ) {
+    const stubs = onPhone(
+      {
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi
+          .fn()
+          .mockResolvedValueOnce(shareOf("80.00"))
+          .mockResolvedValueOnce(shareOf("40.00"))
+          .mockResolvedValueOnce(shareOf("0.00", invoice)),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+        printReceipt: vi.fn().mockResolvedValue(undefined),
+        retryReceipt: vi.fn().mockResolvedValue({ jobId: "job-2" }),
+        finishTable: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      },
+      tillOver,
+    );
+    api = stubApi(stubs);
+    const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    for (const next of [2, 3]) {
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await vi.waitFor(() =>
+        expect(text(inDialog(el, "[data-pay-next]"))).toBe(
+          t("bill_pay.next_share").replace("{n}", String(next)).replace("{m}", "3"),
+        ),
+      );
+      await press(el, "[data-pay-next]");
+    }
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+    return { el };
+  }
+
+  it("the third share's answer with a simplified invoice shows the paid screen with its three payments", async () => {
+    const { el } = await threeShares(simplified());
+
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    expect(ticketView(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+    expect(paidView(el)!.payments).toHaveLength(3);
+    expect(paidView(el)!.total).toBe("120.00");
+    expect(paidView(el)!.tableName).toBe(t("floor.table_title").replace("{table}", "4"));
+    expect(paidView(el)!.receipt).toEqual(printed);
+    expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledWith("wo-4");
+    expect(vi.mocked(api.getInvoiceDeliveries)).not.toHaveBeenCalled();
+    expect(vi.mocked(api.finishTable)).not.toHaveBeenCalled();
+  });
+
+  it("where receipts print on request, the original-print action prints it once and reads the ticket again", async () => {
+    const { el } = await threeShares(simplified(), {
+      ...onRequest,
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    await vi.waitFor(() => expect(inPaid(el, '[data-test="print-receipt"]')).not.toBeNull());
+
+    inPaid(el, '[data-test="print-receipt"]')!.click();
+    await flush(el);
+
+    expect(vi.mocked(api.printReceipt)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.printReceipt)).toHaveBeenCalledWith("wo-4");
+    expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(2);
+    expect(paidView(el)!.originalAvailable).toBe(false);
+  });
+
+  it("a ticket that failed to print is retried from the paid screen", async () => {
+    const { el } = await threeShares(simplified(), {
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValue({ status: "failed", jobId: "job-1", canRetry: true }),
+    });
+    await vi.waitFor(() => expect(inPaid(el, '[data-test="retry-receipt"]')).not.toBeNull());
+
+    inPaid(el, '[data-test="retry-receipt"]')!.click();
+    await flush(el);
+
+    expect(vi.mocked(api.retryReceipt)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.retryReceipt)).toHaveBeenCalledWith("wo-4");
+    expect(vi.mocked(api.printReceipt)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["where receipts print on request", true],
+    ["where receipts print by themselves", false],
+  ] as const)(
+    "%s, a device that may not print is offered neither the original print nor a retry",
+    async (_, requested) => {
+      const { el } = await threeShares(
+        simplified(),
+        {
+          ...(requested ? onRequest : {}),
+          getReceiptPrintStatus: vi
+            .fn()
+            .mockResolvedValue({ status: "failed", jobId: "job-1", canRetry: true }),
+        },
+        { capabilities: phoneCapabilities.filter((flag) => flag !== "print-receipt") },
+      );
+      await vi.waitFor(() => expect(paidView(el)?.receipt).not.toBeNull());
+      expect(paidView(el)!.originalAvailable).toBe(requested);
+      expect(paidView(el)!.canPrint).toBe(false);
+      expect(inPaid(el, '[data-test="print-receipt"]')).toBeNull();
+      expect(inPaid(el, '[data-test="retry-receipt"]')).toBeNull();
+      expect(inPaid(el, '[data-test="reprint"]')).toBeNull();
+    },
+  );
+
+  it("a failed ticket read is checked again from the paid screen", async () => {
+    const getReceiptPrintStatus = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(printed);
+    const { el } = await threeShares(simplified(), { getReceiptPrintStatus });
+    await vi.waitFor(() => expect(paidView(el)?.receiptReadFailed).toBe(true));
+    expect(text(inPaid(el, "[data-paid-ticket-status]"))).toBe(t("invoice.print_status_failed"));
+
+    inPaid(el, '[data-test="refresh-receipt"]')!.click();
+    await flush(el);
+
+    expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
+    expect(paidView(el)!.receiptReadFailed).toBe(false);
+    expect(text(inPaid(el, "[data-paid-ticket-status]"))).toBe(t("paid.ticket_sent"));
+  });
+
+  it("Reimprimir queues a copy of the ticket", async () => {
+    const { el } = await threeShares(simplified());
+    await vi.waitFor(() => expect(inPaid(el, '[data-test="reprint"]')).not.toBeNull());
+
+    inPaid(el, '[data-test="reprint"]')!.click();
+    await flush(el);
+
+    expect(vi.mocked(api.reprint)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.reprint).mock.calls[0]![0]).toBe("wo-4");
+  });
+
+  it("Cerrar mesa finishes the table once", async () => {
+    const { el } = await threeShares(simplified());
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+
+    inPaid(el, '[data-test="finish-table"]')!.click();
+    await flush(el);
+
+    expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.finishTable).mock.calls[0]![0]).toBe("v1");
+  });
+
+  it("Volver a la mesa returns to the table's order without a new history entry", async () => {
+    const { el } = await threeShares(simplified());
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    try {
+      inPaid(el, '[data-test="back-to-table"]')!.click();
+      await flush(el);
+
+      expect(paidView(el)).toBeNull();
+      expect(tableOrder(el)).not.toBeNull();
+      expect(tableOrder(el).checkVisibility()).toBe(true);
+      expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(reads + 1);
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+      expect(vi.mocked(api.finishTable)).not.toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+      replace.mockRestore();
+    }
+  });
+
+  it("a full invoice still shows the ticket view", async () => {
+    const { el } = await threeShares(full());
+
+    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    expect(paidView(el)).toBeNull();
+  });
+
+  it("a share that leaves money owing shows no paid screen", async () => {
+    const { el } = await mountApp(
+      onPhone({
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue(shareOf("80.00")),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-next]")).not.toBeNull());
+    expect(paidView(el)).toBeNull();
+    expect(ticketView(el)).toBeNull();
+  });
+
+  it("the sheet's own card still at the reader shows no paid screen", async () => {
+    const { el } = await mountApp(
+      onPhone({
+        takeBillPayment: vi.fn().mockResolvedValue({
+          ...takenOf(
+            { method: "card", entry: "reader", applied: "120.00", state: "pending", change: null },
+            { reserved: "120.00", outstanding: "0.00" },
+          ),
+          outcome: "timeout",
+        }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+    expect(paidView(el)).toBeNull();
+    expect(ticketView(el)).toBeNull();
+  });
+
+  it("a counter till paying a bill with a simplified invoice still shows the ticket view and reads no ticket", async () => {
+    const getReceiptPrintStatus = vi.fn();
+    const { el } = await mountApp({
+      getReceiptPrintStatus,
+      takeBillPayment: vi
+        .fn()
+        .mockResolvedValue(
+          takenOf(
+            { applied: "120.00", tendered: "120.00", change: "0.00" },
+            { received: "120.00", outstanding: "0.00", status: "settled" },
+            simplified(),
+          ),
+        ),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "120");
+    await type(el, "tendered", "120");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    expect(paidView(el)).toBeNull();
+    expect(getReceiptPrintStatus).not.toHaveBeenCalled();
+  });
+
+  describe("on the presented path", () => {
+    it("a simplified invoice shows the paid screen, with no list of payments", async () => {
+      const { el } = await payPresented(simplified());
+
+      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+      expect(ticketView(el)).toBeNull();
+      expect(paidView(el)!.payments).toEqual([]);
+      expect(inPaid(el, "[data-paid-payments]")).toBeNull();
+      expect(text(inPaid(el, "[data-paid-summary]"))).toBe(
+        t("paid.summary_one").replace("{amount}", money("120.00")),
+      );
+      expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(1);
+    });
+
+    it("a full invoice still shows the ticket view", async () => {
+      const { el } = await payPresented(full());
+
+      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      expect(paidView(el)).toBeNull();
+    });
+  });
+
+  /** A presented bill paid on the phone's reader, answered with `invoice`. */
+  async function payPresented(invoice: TillSaleResult, theme?: "light" | "dark") {
+    const stubs = onPhone({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
+      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoice }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
+      getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+    });
+    api = stubApi(stubs);
+    const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    const sheet = el.shadowRoot!.querySelector<TillPresentedPayDialog>(
+      "till-presented-pay-dialog",
+    )!;
+    await sheet.updateComplete;
+    sheet.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+    await flush(el);
+    return { el };
+  }
+
+  const paidBackgrounds = new Map<string, string>();
+  it.each([
+    ["bill", "light", 390],
+    ["bill", "light", 1280],
+    ["bill", "dark", 390],
+    ["bill", "dark", 1280],
+    ["presented", "light", 390],
+    ["presented", "light", 1280],
+    ["presented", "dark", 390],
+    ["presented", "dark", 1280],
+  ] as const)(
+    "the paid screen looks right on the %s path, %s at %i px",
+    async (path, theme, width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      try {
+        expect(window.innerWidth).toBe(width);
+        const { el } =
+          path === "bill"
+            ? await threeShares(simplified(), {}, {}, theme)
+            : await payPresented(simplified(), theme);
+        await vi.waitFor(() => expect(paidView(el)?.receipt).not.toBeNull());
+        const view = paidView(el)!;
+        await view.updateComplete;
+        const article = view.shadowRoot!.querySelector("article")!;
+        expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
+        const banner = getComputedStyle(view.shadowRoot!.querySelector(".banner")!).backgroundColor;
+        paidBackgrounds.set(`${path}-${theme}-${width}`, banner);
+        if (theme === "dark")
+          expect(banner).not.toBe(paidBackgrounds.get(`${path}-light-${width}`));
+        const shot = `__screenshots__/look/a796-paid-${path}-${theme}-${width}`;
+        await page.screenshot({ element: view, path: `${shot}.png` });
+        const box = view.getBoundingClientRect();
+        const inside = [...view.shadowRoot!.querySelectorAll("wt-button")].every((button) => {
+          const rect = button.getBoundingClientRect();
+          return rect.left >= box.left && rect.right <= box.right;
+        });
+        expect(inside).toBe(true);
+        await commands.writeFile(
+          `src/${shot}.json`,
+          JSON.stringify({
+            innerWidth: window.innerWidth,
+            viewWidth: box.width,
+            articleWidth: article.getBoundingClientRect().width,
+            buttonsInside: inside,
+            banner,
+          }),
+        );
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
 });
