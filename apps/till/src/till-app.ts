@@ -14533,6 +14533,7 @@ export class TillApp extends LitElement {
       }
       if (isPaymentsReceived(error)) {
         this.errorKey = "table.finish_bill_holds_money";
+        this.#leavePaidScreen();
         await this.#loadPartyBills();
         return;
       }
@@ -14782,10 +14783,9 @@ export class TillApp extends LitElement {
         if (this.#finishCurrent(asked)) await this.#refreshBillDraft();
       } else if (code === "party.bill_outstanding" || isPaymentsReceived(error)) {
         this.#closeFinishTable();
-        if (code === "party.bill_outstanding") {
-          this.finishRefused = true;
-          this.#leavePaidScreen();
-        } else this.errorKey = "table.finish_bill_holds_money";
+        if (code === "party.bill_outstanding") this.finishRefused = true;
+        else this.errorKey = "table.finish_bill_holds_money";
+        this.#leavePaidScreen();
         await this.#loadPartyBills();
       } else if (code === "party.unserved_dishes") {
         const opening = { composition: asked, controller: new AbortController() };
@@ -16912,7 +16912,7 @@ export class TillApp extends LitElement {
     void this.#loadPartyBills();
   }
 
-  /** The order screen beneath draws a refused Cerrar mesa's `finishRefused`. */
+  /** A refused Cerrar mesa is acted on from the order screen beneath. */
   #leavePaidScreen(): void {
     if (this.drill?.kind === "paid") this.#popDrill();
   }

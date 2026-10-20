@@ -2959,35 +2959,38 @@ describe("the paid screen on a handheld", () => {
     },
   );
 
-  it("Cerrar mesa with paid dishes not yet served opens the confirmation over the paid screen; refused there because a bill owes, it leaves for the table's refusal", async () => {
-    const unserved = {
-      billId: "wo-4",
-      billRevision: 0,
-      lineId: "line-1",
-      name: "Flan",
-      quantity: "1.000",
-      context: {
-        billStatus: "settled",
-        stage: "not_started",
-        components: [
-          {
-            id: "ticket-line-1",
-            lineId: "line-1",
-            state: "queued",
-            firedAt: null,
-            quantity: "1.000",
-            kitchenQuantity: "1.000",
-            servedQuantity: "0.000",
-            cancelledQuantity: "0.000",
-          },
-        ],
-      },
-    };
+  const unserved = {
+    billId: "wo-4",
+    billRevision: 0,
+    lineId: "line-1",
+    name: "Flan",
+    quantity: "1.000",
+    context: {
+      billStatus: "settled",
+      stage: "not_started",
+      components: [
+        {
+          id: "ticket-line-1",
+          lineId: "line-1",
+          state: "queued",
+          firedAt: null,
+          quantity: "1.000",
+          kitchenQuantity: "1.000",
+          servedQuantity: "0.000",
+          cancelledQuantity: "0.000",
+        },
+      ],
+    },
+  };
+
+  /** The paid screen's Cerrar mesa answered that a paid dish is not served yet, then the
+   * confirmation's send answered `refusal`. */
+  async function refusedAfterUnserved(refusal: { code: string }) {
     const { el } = await threeShares(simplified(), {
       finishTable: vi
         .fn()
         .mockRejectedValueOnce({ code: "party.unserved_dishes", partyId: "v1", dishes: [unserved] })
-        .mockRejectedValue({ code: "party.bill_outstanding" }),
+        .mockRejectedValue(refusal),
       getCancellation: vi.fn().mockResolvedValue({
         billId: "wo-4",
         billRevision: 0,
@@ -3017,10 +3020,45 @@ describe("the paid screen on a handheld", () => {
 
     expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("till-finish-table-dialog")).toBeNull();
+    return el;
+  }
+
+  /** The paid screen is gone and the order screen shows the instruction to give the money back. */
+  function holdsMoneyOnOrder(el: TillApp): void {
+    expect(paidView(el)).toBeNull();
+    expect(tableOrder(el).checkVisibility()).toBe(true);
+    const alert = el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.checkVisibility()).toBe(true);
+    expect(text(alert)).toBe(t("table.finish_bill_holds_money"));
+  }
+
+  it("Cerrar mesa with paid dishes not yet served opens the confirmation over the paid screen; refused there because a bill owes, it leaves for the table's refusal", async () => {
+    const el = await refusedAfterUnserved({ code: "party.bill_outstanding" });
+
     expect(paidView(el)).toBeNull();
     const refusal = inOrder(tableOrder(el), "[data-finish-refusal]");
     expect(refusal).not.toBeNull();
     expect(refusal!.checkVisibility()).toBe(true);
+  });
+
+  it("Cerrar mesa refused because a bill holds money leaves the paid screen, and the order screen keeps the instruction", async () => {
+    const { el } = await threeShares(simplified(), {
+      finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
+    });
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+
+    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await flush(el);
+
+    expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
+    holdsMoneyOnOrder(el);
+  });
+
+  it("the confirmation for paid dishes not yet served, refused because a bill holds money, leaves the paid screen with the instruction", async () => {
+    const el = await refusedAfterUnserved({ code: "bill.payments_received" });
+
+    holdsMoneyOnOrder(el);
   });
 
   it("a ticket read that never answers leaves Cerrar mesa and Volver a la mesa pressable; Cerrar mesa sends once", async () => {
