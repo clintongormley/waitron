@@ -492,7 +492,8 @@ describe("till-floor-screen: the calm card", () => {
     const { el, host } = await mountFloor([table()]);
     host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
-    host.style.setProperty("--wt-color-primary-disabled", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-table-calm-edge", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-primary-disabled", "rgb(13, 14, 15)");
     host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
     const line = nothingNeeded(el)!;
     expect(line.textContent!.trim()).toBe("Nothing needed");
@@ -526,7 +527,8 @@ describe("till-floor-screen: the calm card", () => {
       ],
       { reducedMotion: false },
     );
-    host.style.setProperty("--wt-color-primary-disabled", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-table-calm-edge", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-primary-disabled", "rgb(13, 14, 15)");
     host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
     for (const id of ids) {
       expect(nothingNeeded(el, id), id).toBeNull();
@@ -547,12 +549,13 @@ describe("till-floor-screen: the calm card", () => {
     expect(card(el).querySelector('[data-chip="held"]')).not.toBeNull();
   });
 
-  it("a paid party needing nothing shows Paid, with no check", async () => {
+  it("a paid party needing nothing shows Paid and Nothing needed", async () => {
     const { el } = await mountFloor([
       table({ hasOpenTab: false, party: party({ outstanding: "0.00" }) }),
     ]);
     expect(card(el).querySelector("[data-paid]")).not.toBeNull();
-    expect(nothingNeeded(el)).toBeNull();
+    expect(nothingNeeded(el)).not.toBeNull();
+    expect(card(el).querySelector(".badges")!.firstElementChild).toBe(nothingNeeded(el));
     expect(calm(el)).toBe(true);
   });
 

@@ -461,6 +461,19 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with a paid table that needs nothing, on the list", async () => {
+    const [, paid] = partyTables as [TableState, TableState];
+    const quiet: TableState = { ...paid, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: [quiet] },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelector("[data-paid]")).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector("[data-nothing-needed]")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations with signals side by side and the stations' summary, on the list", async () => {
     const signalled = partyTables.map((table): TableState =>
       table.party === null

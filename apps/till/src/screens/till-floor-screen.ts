@@ -413,7 +413,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       .card.calm {
-        border-left-color: var(--wt-color-primary-disabled);
+        border-left-color: var(--wt-color-table-calm-edge);
       }
 
       .card.state-delivery-pending {
@@ -2394,7 +2394,7 @@ export class TillFloorScreen extends LitElement {
 
   #marks(table: TableState, top: TableStateKind | undefined): CardMark[] {
     const marks: CardMark[] = [];
-    if (top === "nothing-needed" && !partyPaid(table)) {
+    if (top === "nothing-needed") {
       marks.push({
         kind: "nothing-needed",
         mark: html`<span class="calm-line" data-nothing-needed
