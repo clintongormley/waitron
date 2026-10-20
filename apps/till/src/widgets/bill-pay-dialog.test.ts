@@ -2688,17 +2688,73 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     expect(text(next(el))).toBe(nextShare(2, 3));
   });
 
-  it("a card still in progress offers no next guest and keeps today's form", async () => {
+  it("a card still in progress warns not to take that guest's money another way, and offers the next guest with no count", async () => {
     const el = await handheld();
     await share(el, "3");
     await pay(el, "41.60", { change: null, pending: "20.80" });
 
-    expect(next(el)).toBeNull();
-    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
-      t("bill_pay.card_pending").replace("{amount}", money("20.80")),
+    const warning = root(el).querySelector("[data-pay-uncertain]");
+    expect(text(warning!.querySelector("[data-pay-uncertain-title]"))).toBe(
+      t("bill_pay.uncertain_title"),
     );
-    expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
-    expect(field(el, "people")!.value).toBe("");
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.uncertain").replace("{amount}", money("20.80")),
+    );
+    expect(text(root(el).querySelector("[data-pay-pending-manager]"))).toBe(
+      t("bill_pay.card_pending_manager"),
+    );
+    expect(text(next(el))).toBe(t("bill_pay.next"));
+    expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
+
+    await click(el, "[data-pay-next]");
+    expect(root(el).querySelector<HTMLInputElement>('input[name="way"]:checked')!.value).toBe(
+      "share",
+    );
+    expect(field(el, "people")!.value).toBe("2");
+  });
+
+  it("a card in progress that is then received shows it taken, and the count of the next share again", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    await pay(el, "41.60", { change: null, pending: "20.80" });
+
+    el.taken = { change: null, settled: true };
+    await el.updateComplete;
+
+    expect(root(el).querySelector("[data-pay-uncertain]")).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(text(next(el))).toBe(nextShare(2, 3));
+  });
+
+  it.each(["declined", "payment_failed"] as const)(
+    "a card in progress that is then %s says so on the form and ends the run of shares",
+    async (code) => {
+      const el = await handheld();
+      await share(el, "3");
+      await pay(el, "41.60", { change: null, pending: "20.80" });
+
+      el.taken = null;
+      el.balance = balanceOf({ total: "62.40", outstanding: "62.40" });
+      el.refusal = { code };
+      await el.updateComplete;
+
+      expect(next(el)).toBeNull();
+      expect(root(el).querySelector("[data-pay-uncertain]")).toBeNull();
+      expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
+      expect(actions(el).error).toBe(
+        t(code === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
+      );
+      expect(field(el, "people")!.value).toBe("");
+    },
+  );
+
+  it("a counter till keeps today's sentence for a card still in progress, with no warning", async () => {
+    const el = await mount({ taken: { change: null, pending: "40.00" } });
+    expect(root(el).querySelector("[data-pay-uncertain]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-pending-manager]")).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+    );
   });
 
   it("a payment that leaves nothing owing offers no next guest", async () => {

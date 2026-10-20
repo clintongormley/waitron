@@ -66,6 +66,7 @@ const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
 const handheldBackgrounds = new Map<string, string>();
 const nextBackgrounds = new Map<string, string>();
+const uncertainBackgrounds = new Map<string, string>();
 const rowBackgrounds = new Map<string, string>();
 const noticeBackgrounds = new Map<string, string>();
 const tableBackgrounds = new Map<string, string>();
@@ -617,6 +618,72 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
             panelWidth: box.width,
             nextLeft: shown.left - box.left,
             nextRight: box.right - shown.right,
+            background,
+          }),
+        );
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
+
+  /** The first of three shares sent to Lector 2 and still at the reader, as picture 7 left
+   * draws it. */
+  async function uncertainCard() {
+    const mounted = await nextGuest();
+    const { el } = mounted;
+    el.balance = {
+      ...balance,
+      total: "62.40",
+      received: "0.00",
+      reserved: "20.80",
+      outstanding: "41.60",
+      payments: [{ ...pendingCard, kind: "share", shareOf: 3, applied: "20.80" }],
+    };
+    el.taken = { change: null, pending: "20.80" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-pay-uncertain]")).not.toBeNull();
+    return mounted;
+  }
+
+  it("has no violations on a handheld whose card is still at the reader", async () => {
+    const { host } = await uncertainCard();
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])(
+    "looks right on a handheld whose card is still at the reader at %i px",
+    async (width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      try {
+        expect(window.innerWidth).toBe(width);
+        const { el } = await uncertainCard();
+        const panel = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+        const background = getComputedStyle(panel).backgroundColor;
+        uncertainBackgrounds.set(`${theme}-${width}`, background);
+        if (theme === "dark") {
+          const light = uncertainBackgrounds.get(`light-${width}`);
+          expect(light, "run the light case first").toBeDefined();
+          expect(background).not.toBe(light);
+        }
+        const shot = `__screenshots__/look/a796-uncertain-card-${theme}-${width}`;
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a796-uncertain-card-${theme}-${width}.png`,
+        });
+        const box = panel.getBoundingClientRect();
+        const warning = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-uncertain]")!;
+        const shown = warning.getBoundingClientRect();
+        await commands.writeFile(
+          `src/widgets/${shot}.json`,
+          JSON.stringify({
+            innerWidth: window.innerWidth,
+            panelWidth: box.width,
+            warningLeft: shown.left - box.left,
+            warningRight: box.right - shown.right,
             background,
           }),
         );

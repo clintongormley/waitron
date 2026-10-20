@@ -417,6 +417,8 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 const FLOOR_POLL_LIMIT_MS = 25_000;
 /** How often an open sale view re-reads a full invoice's delivery while an attempt waits or sends. */
 const DELIVERY_REREAD_MS = 5_000;
+/** How often a handheld's sheet re-reads the bill while its own card payment is still pending. */
+const PENDING_REREAD_MS = 5_000;
 /** How long the full-invoice dialog waits for the delivery options before opening without them. */
 const INVOICE_OPTIONS_LIMIT_MS = 5_000;
 
@@ -1056,6 +1058,15 @@ interface PendingBillPayment extends Submission {
     preview: AllocationPreview;
     expectedEdit: BillEditExpected | null;
   };
+}
+
+/** The timed re-read of the card payment `paymentId` that dialog `dialogId` shows pending, and
+ * whether a read is out. */
+interface PendingReread {
+  dialogId: number;
+  paymentId: string;
+  timer: ReturnType<typeof setInterval>;
+  out: boolean;
 }
 
 /** The bill payment dialog: the order it pays, and what the server last answered it. */
@@ -2064,6 +2075,7 @@ export class TillApp extends LitElement {
     this.#pendingNfc = undefined;
     this.#reloadAsked = false;
     this.#stopDeliveryReread();
+    this.#stopPendingReread();
     this.#stopDepartmentTransfers();
     this.#partylessScope?.dispose();
     this.#partylessScope = undefined;
@@ -3032,6 +3044,9 @@ export class TillApp extends LitElement {
    * was sent after the bill's last send ended. */
   #payTicks = 0;
   #sendEndedAt = new Map<string, number>();
+  /** The tick of the newest balance read shown in the payment dialog. */
+  #shownBalanceAt = 0;
+  #pendingReread: PendingReread | null = null;
 
   /** No payment may start on a bill while one is out on it, or one A773-1 holds has no answer. */
   #billPaymentHeld(billId: string): boolean {
@@ -16163,13 +16178,98 @@ export class TillApp extends LitElement {
         this.billPaying = { ...now, refusal: { code: "unread" } };
       return undefined;
     }
+    await this.#showBillPayingBalance(id, billId, balance, sentAt, order);
+    return balance;
+  }
+
+  async #showBillPayingBalance(
+    id: number,
+    billId: string,
+    balance: BillBalance,
+    sentAt: number,
+    order?: PayingOrder,
+  ): Promise<void> {
     if (this.activeTabId === billId) this.billBalance = balance;
     const now = this.#billPayingNow(id);
-    if (now !== null) this.billPaying = { ...now, balance };
+    if (now !== null) {
+      this.billPaying = { ...now, balance };
+      this.#shownBalanceAt = Math.max(this.#shownBalanceAt, sentAt);
+    }
     const freed =
       sentAt > (this.#sendEndedAt.get(billId) ?? 0) && this.#freeShownPayment(billId, balance);
     if (freed && order !== undefined) await this.#rereadPayingOrder(order, balance);
-    return balance;
+  }
+
+  /** On a handheld, the bill is read again every few seconds while dialog `dialogId` shows its own
+   * card payment `paymentId` as pending. */
+  #startPendingReread(dialogId: number, paymentId: string): void {
+    if (!this.handheldMode) return;
+    const running = this.#pendingReread;
+    if (running?.dialogId === dialogId && running.paymentId === paymentId) return;
+    this.#stopPendingReread();
+    const reread = {
+      dialogId,
+      paymentId,
+      out: false,
+      timer: setInterval(() => void this.#pendingTick(reread), PENDING_REREAD_MS),
+    };
+    this.#pendingReread = reread;
+  }
+
+  #stopPendingReread(): void {
+    if (this.#pendingReread !== null) clearInterval(this.#pendingReread.timer);
+    this.#pendingReread = null;
+  }
+
+  /**
+   * One timed read. Passive: it never counts as activity. A failed read changes nothing and the
+   * next tick tries again; an answer older than the balance the dialog shows is dropped. Once the
+   * payment is no longer pending the dialog shows it received, or refused, and the reads stop;
+   * while a send is out, or one ended after this read was sent, the next tick decides.
+   */
+  async #pendingTick(reread: PendingReread): Promise<void> {
+    if (this.#pendingReread !== reread || reread.out) return;
+    const open = this.#billPayingNow(reread.dialogId);
+    if (open === null) {
+      this.#stopPendingReread();
+      return;
+    }
+    const { billId } = open;
+    const sentAt = ++this.#payTicks;
+    reread.out = true;
+    let balance: BillBalance;
+    try {
+      balance = await this.api.getBillBalance(billId);
+    } catch {
+      return;
+    } finally {
+      reread.out = false;
+    }
+    if (this.#pendingReread !== reread || sentAt < this.#shownBalanceAt) return;
+    await this.#showBillPayingBalance(reread.dialogId, billId, balance, sentAt);
+    const payment = balance.payments.find((shown) => shown.id === reread.paymentId);
+    if (payment?.state === "pending") return;
+    const now = this.#billPayingNow(reread.dialogId);
+    if (
+      now === null ||
+      now.busy ||
+      this.#pendingReread !== reread ||
+      sentAt <= (this.#sendEndedAt.get(billId) ?? 0)
+    )
+      return;
+    this.#stopPendingReread();
+    if (payment === undefined) return;
+    this.billPaying = {
+      ...now,
+      asked: null,
+      preview: null,
+      ...(payment.state === "received"
+        ? { taken: { change: payment.change, settled: true }, refusal: null }
+        : {
+            taken: null,
+            refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
+          }),
+    };
   }
 
   /**
@@ -16190,6 +16290,7 @@ export class TillApp extends LitElement {
     this.#unansweredPayments.delete(billId);
     const open = this.billPaying;
     if (open === null || open.billId !== billId) return true;
+    if (payment.state === "pending") this.#startPendingReread(open.id, payment.id);
     const outcome: Pick<BillPaying, "taken" | "refusal"> =
       payment.state === "received"
         ? { taken: { change: payment.change }, refusal: null }
@@ -16404,6 +16505,7 @@ export class TillApp extends LitElement {
             },
       busy: false,
     };
+    if (result.payment.state === "pending") this.#startPendingReread(open.id, result.payment.id);
     await this.#rereadPayingOrder(open, result.balance);
   }
 
@@ -16460,6 +16562,7 @@ export class TillApp extends LitElement {
   }
 
   #closeBillPaying(): void {
+    this.#stopPendingReread();
     this.billPaying = null;
     this.payEquipmentErrors = {};
     this.#closeBillRefunding();

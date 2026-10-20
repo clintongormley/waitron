@@ -10,6 +10,7 @@ import { codeMessage } from "./i18n/codes.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
   AllocationPreview,
+  BillBalance,
   BillPaymentRequest,
   DeviceEquipment,
   EquipmentChange,
@@ -36,6 +37,7 @@ import {
   LECTOR_2,
   lock,
   money,
+  paymentOf,
   roleOf,
   shell,
   tableOrder,
@@ -1990,7 +1992,7 @@ describe("till-app: the next guest on a handheld", () => {
     });
   });
 
-  it("a card still at the reader offers no next guest", async () => {
+  it("a card still at the reader warns, and offers the next guest with no count", async () => {
     const { el } = await mountApp(
       onPhone({
         previewBillPayment: vi.fn().mockResolvedValue(share),
@@ -2013,11 +2015,347 @@ describe("till-app: the next guest on a handheld", () => {
 
     await vi.waitFor(() =>
       expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
-        t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+        t("bill_pay.uncertain").replace("{amount}", money("40.00")),
       ),
     );
-    expect(inDialog(el, "[data-pay-next]")).toBeNull();
+    expect(text(inDialog(el, "[data-pay-next]"))).toBe(t("bill_pay.next"));
     expect(inDialog(el, "[data-pay-taken-reader]")).toBeNull();
-    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(inDialog(el, "[data-pay-continue]")).toBeNull();
+  });
+
+  it("three equal shares paid in turn offer the second, then the third, of three", async () => {
+    const shareOf = (applied: string, outstanding: string) =>
+      takenOf(
+        { method: "card", entry: "reader", applied, tip: "0.00", change: null },
+        { total: "120.00", received: (120 - Number(outstanding)).toFixed(2), outstanding },
+      );
+    const { el } = await mountApp(
+      onPhone({
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi
+          .fn()
+          .mockResolvedValueOnce(shareOf("40.00", "80.00"))
+          .mockResolvedValueOnce(shareOf("40.00", "40.00"))
+          .mockResolvedValueOnce(shareOf("40.00", "0.00")),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-next]"))).toBe(
+        t("bill_pay.next_share").replace("{n}", "2").replace("{m}", "3"),
+      ),
+    );
+
+    await press(el, "[data-pay-next]");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-next]"))).toBe(
+        t("bill_pay.next_share").replace("{n}", "3").replace("{m}", "3"),
+      ),
+    );
+
+    await press(el, "[data-pay-next]");
+    await press(el, "[data-pay-continue]");
+    expect(vi.mocked(api.previewBillPayment).mock.calls.at(-1)![1]).toMatchObject({
+      kind: "share",
+      shareOf: 1,
+    });
+  });
+});
+
+describe("till-app: a card the reader has not answered, on a handheld", () => {
+  const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
+  const own = {
+    id: "pay-own",
+    submissionId: "sub-own",
+    method: "card" as const,
+    entry: "reader" as const,
+    applied: "40.00",
+    change: null,
+    tendered: null,
+  };
+  const ownIs = (state: "pending" | "received" | "declined" | "failed") =>
+    balanceOf({
+      ...(state === "pending"
+        ? { reserved: "40.00", outstanding: "80.00" }
+        : state === "received"
+          ? { received: "40.00", outstanding: "80.00" }
+          : {}),
+      payments: [paymentOf({ ...own, state })],
+    });
+  const PENDING_REREAD_MS = 5_000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A share of three sent from the phone and answered that the card is still at the reader, with
+   * the interval clock faked from just before the send. */
+  async function pendingShare(getBillBalance = vi.fn(async () => ownIs("pending"))) {
+    getBillBalance.mockImplementation(async () => balanceOf());
+    const { el } = await mountApp(
+      onPhone({
+        getBillBalance,
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue({
+          ...takenOf({ ...own, state: "pending" }, { reserved: "40.00", outstanding: "80.00" }),
+          outcome: "timeout",
+        }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+    await flush(el);
+    getBillBalance.mockImplementation(async () => ownIs("pending"));
+    const before = getBillBalance.mock.calls.length;
+    return { el, order, reads: () => getBillBalance.mock.calls.length - before };
+  }
+
+  async function tick(el: TillApp, times = 1): Promise<void> {
+    for (let i = 0; i < times; i++) {
+      await vi.advanceTimersByTimeAsync(PENDING_REREAD_MS);
+      await flush(el);
+    }
+  }
+
+  it("warns, names the manager, and reads the bill again every 5 seconds", async () => {
+    const { el, reads } = await pendingShare();
+
+    expect(text(inDialog(el, "[data-pay-uncertain-title]"))).toBe(t("bill_pay.uncertain_title"));
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+      t("bill_pay.uncertain").replace("{amount}", money("40.00")),
+    );
+    expect(text(inDialog(el, "[data-pay-pending-manager]"))).toBe(
+      t("bill_pay.card_pending_manager"),
+    );
+    expect(reads()).toBe(0);
+    await tick(el);
+    expect(reads()).toBe(1);
+    await tick(el);
+    expect(reads()).toBe(2);
+    expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
+  });
+
+  it("sends no second read while the one before is still out", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el, reads } = await pendingShare(getBillBalance);
+    getBillBalance.mockImplementation(() => new Promise<BillBalance>(() => {}));
+
+    await tick(el, 3);
+
+    expect(reads()).toBe(1);
+  });
+
+  it("a failed read changes nothing shown, and the next tick reads again", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el, reads } = await pendingShare(getBillBalance);
+    getBillBalance.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await tick(el);
+
+    expect(reads()).toBe(1);
+    expect(dialog(el)!.refusal).toBeNull();
+    expect(el.shadowRoot!.textContent + dialog(el)!.shadowRoot!.textContent).not.toContain(
+      t("bill_pay.read_failed"),
+    );
+    expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
+    await tick(el);
+    expect(reads()).toBe(2);
+  });
+
+  it("a received card shows as taken, offers the second of three, and stops the reads", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el, reads } = await pendingShare(getBillBalance);
+    getBillBalance.mockResolvedValue(ownIs("received"));
+
+    await tick(el);
+
+    expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(text(inDialog(el, "[data-pay-next]"))).toBe(
+      t("bill_pay.next_share").replace("{n}", "2").replace("{m}", "3"),
+    );
+    await tick(el, 3);
+    expect(reads()).toBe(1);
+  });
+
+  it.each(["declined", "failed"] as const)(
+    "a %s card says so on the form, ends the run of shares, and stops the reads",
+    async (state) => {
+      const getBillBalance = vi.fn(async () => ownIs("pending"));
+      const { el, reads } = await pendingShare(getBillBalance);
+      getBillBalance.mockResolvedValue(ownIs(state));
+
+      await tick(el);
+
+      expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
+      expect(inDialog(el, "[data-pay-next]")).toBeNull();
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(
+        t(state === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
+      );
+      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      await tick(el, 3);
+      expect(reads()).toBe(1);
+    },
+  );
+
+  it("a payment the bill no longer lists stops the reads and leaves the sheet as it was", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el, reads } = await pendingShare(getBillBalance);
+    getBillBalance.mockResolvedValue(balanceOf({ outstanding: "120.00" }));
+
+    await tick(el, 4);
+
+    expect(reads()).toBe(1);
+    expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
+    expect(dialog(el)!.refusal).toBeNull();
+  });
+
+  it("a received card read while the next guest's payment is out waits for a later tick", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el, reads } = await pendingShare(getBillBalance);
+    vi.mocked(api.takeBillPayment).mockImplementation(() => new Promise(() => {}));
+    await press(el, "[data-pay-next]");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(dialog(el)!.busy).toBe(true);
+    getBillBalance.mockResolvedValue(ownIs("received"));
+
+    await tick(el);
+
+    expect(dialog(el)!.busy).toBe(true);
+    expect(dialog(el)!.taken).toBeNull();
+    await tick(el);
+    expect(reads()).toBe(2);
+  });
+
+  it("an older read answering after a newer one changes nothing", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el } = await pendingShare(getBillBalance);
+    let answerOlder: () => void = () => {};
+    getBillBalance.mockImplementationOnce(
+      () => new Promise<BillBalance>((resolve) => (answerOlder = () => resolve(ownIs("pending")))),
+    );
+    await tick(el);
+    getBillBalance.mockResolvedValue(ownIs("received"));
+    vi.mocked(api.previewBillPayment).mockRejectedValueOnce({ code: "bill.not_open" });
+    await press(el, "[data-pay-next]");
+    await press(el, "[data-pay-continue]");
+    await vi.waitFor(() => expect(dialog(el)!.balance!.payments[0]!.state).toBe("received"));
+
+    answerOlder();
+    await flush(el);
+
+    expect(dialog(el)!.balance!.payments[0]!.state).toBe("received");
+  });
+
+  it("closing the sheet stops the reads", async () => {
+    const { el, reads } = await pendingShare();
+    const closed = new Promise((resolve) =>
+      inDialog(el, "wt-dialog")!.addEventListener("wt-close", resolve, { once: true }),
+    );
+
+    await press(el, "[data-pay-close]");
+    await closed;
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+
+    await tick(el, 3);
+    expect(reads()).toBe(0);
+  });
+
+  it("logging out stops the reads", async () => {
+    const { el, reads } = await pendingShare();
+
+    emit(shell(el), "logout");
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
+    if (question?.open) await discardUnsavedLeave(el);
+    expect(dialog(el)).toBeNull();
+
+    await tick(el, 3);
+    expect(reads()).toBe(0);
+  });
+
+  it("taking the till off the page stops the reads", async () => {
+    const { el, reads } = await pendingShare();
+
+    el.remove();
+    await tick(el, 3);
+
+    expect(reads()).toBe(0);
+  });
+
+  it("another phone's card in progress on the bill shows no warning and starts no reads", async () => {
+    const getBillBalance = vi.fn(async () =>
+      balanceOf({
+        reserved: "40.00",
+        outstanding: "80.00",
+        payments: [paymentOf({ ...own, submissionId: "sub-other", state: "pending" })],
+      }),
+    );
+    const { el } = await mountApp(onPhone({ getBillBalance }));
+    const order = await openPhoneTable(el);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(dialog(el)!.balance).not.toBeNull());
+    const before = getBillBalance.mock.calls.length;
+
+    await tick(el, 3);
+
+    expect(getBillBalance.mock.calls.length).toBe(before);
+    expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
+    expect(inDialog(el, "[data-pay-reserved]")).not.toBeNull();
+  });
+
+  it("a card the opening read finds still in progress for this phone's unanswered send warns and reads again", async () => {
+    const getBillBalance = vi.fn(async () => balanceOf());
+    const { el } = await mountApp(
+      onPhone({
+        getBillBalance,
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const submissionId = sent()[0]!.submissionId;
+    getBillBalance.mockResolvedValue(
+      balanceOf({
+        reserved: "40.00",
+        outstanding: "80.00",
+        payments: [paymentOf({ ...own, submissionId, state: "pending" })],
+      }),
+    );
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+    const before = getBillBalance.mock.calls.length;
+
+    await tick(el);
+
+    expect(getBillBalance.mock.calls.length).toBe(before + 1);
   });
 });

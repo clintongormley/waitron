@@ -92,10 +92,12 @@ export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
  * reader, the amount it holds on the bill; on a handheld, for a card charged on a reader, the
- * reader it was sent to and what it charged. */
+ * reader it was sent to and what it charged. `settled` marks a card shown in progress that has
+ * since been received, which the run of shares has already counted. */
 export interface PayTaken {
   change: string | null;
   pending?: string;
+  settled?: true;
   reader?: string;
   charged?: string;
 }
@@ -526,6 +528,8 @@ export class TillBillPayDialog extends LitElement {
   #shareRun: { of: number; paid: number } | null = null;
   /** The count of the equal share last sent to be taken, until its answer. */
   #sharePaying: number | null = null;
+  /** The run counts a card still in progress, which may yet be declined. */
+  #runHoldsPending = false;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -704,7 +708,14 @@ export class TillBillPayDialog extends LitElement {
         this.method = offered[0] ?? "card";
     } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
-    if (changed.has("refusal")) this.shownRefusal = this.refusal;
+    if (changed.has("refusal")) {
+      this.shownRefusal = this.refusal;
+      if (
+        this.#runHoldsPending &&
+        (this.refusal?.code === "declined" || this.refusal?.code === "payment_failed")
+      )
+        this.#endRun();
+    }
     if (changed.has("taken") && this.taken !== null) this.#accept(this.taken);
     if (changed.has("refunded") && this.refunded !== null) this.#endRun();
     if (changed.has("balance") && !this.#owing()) this.nextOffered = false;
@@ -735,17 +746,14 @@ export class TillBillPayDialog extends LitElement {
     this.#tipBaseline = undefined;
   }
 
-  /** A card still in progress keeps today's form. Otherwise the run of shares counts the one just
-   * paid, the form holds one fewer, and the next guest is offered while money is owing. */
+  /** The run of shares counts the one just paid, a card still in progress included, the form
+   * holds one fewer, and the next guest is offered while money is owing. A card in progress that
+   * is then received was counted already. */
   #offerNext(taken: PayTaken): void {
     const paying = this.#sharePaying;
     this.#sharePaying = null;
-    if (taken.pending !== undefined) {
-      this.#shareRun = null;
-      this.nextOffered = false;
-      return;
-    }
-    if (paying === null) this.#shareRun = null;
+    if (taken.settled === true) this.#runHoldsPending = false;
+    else if (paying === null) this.#shareRun = null;
     else {
       const run = this.#shareRun;
       this.#shareRun =
@@ -753,6 +761,7 @@ export class TillBillPayDialog extends LitElement {
           ? { of: run.of, paid: run.paid + 1 }
           : { of: paying, paid: 1 };
     }
+    if (taken.pending !== undefined) this.#runHoldsPending = true;
     const left = this.#sharesLeft();
     if (left > 0) this.people = String(left);
     this.nextOffered = this.#owing();
@@ -768,6 +777,7 @@ export class TillBillPayDialog extends LitElement {
   #endRun(): void {
     if (this.#sharesLeft() > 0 && this.people === String(this.#sharesLeft())) this.people = "";
     this.#shareRun = null;
+    this.#runHoldsPending = false;
     this.nextOffered = false;
   }
 
@@ -1091,8 +1101,9 @@ export class TillBillPayDialog extends LitElement {
   #taken(): TemplateResult | typeof nothing {
     const taken = this.taken;
     if (taken === null) return nothing;
+    if (this.handheld && taken.pending !== undefined) return this.#uncertain(taken.pending);
     const line = html`<p class="taken" role="status" data-pay-taken>${this.#takenText(taken)}</p>`;
-    if (!this.handheld || taken.pending !== undefined) return line;
+    if (!this.handheld) return line;
     return html`<div class="taken-block">
       ${line}
       ${
@@ -1105,6 +1116,16 @@ export class TillBillPayDialog extends LitElement {
             </p>`
       }
     </div>`;
+  }
+
+  #uncertain(pending: string): TemplateResult {
+    return html`<div class="tone" role="status" data-pay-uncertain>
+        <p class="tone-title" data-pay-uncertain-title>${t("bill_pay.uncertain_title")}</p>
+        <p class="tone-body" data-pay-taken>
+          ${t("bill_pay.uncertain").replace("{amount}", () => this.#money(pending))}
+        </p>
+      </div>
+      <p class="muted" data-pay-pending-manager>${t("bill_pay.card_pending_manager")}</p>`;
   }
 
   /** The count stays on one line: "(2 de" over "3)" reads as nonsense on a phone. */
@@ -1125,7 +1146,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #nextActions(): TemplateResult {
-    const left = this.#sharesLeft();
+    const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
     return html`<wt-form-actions>
       <wt-button

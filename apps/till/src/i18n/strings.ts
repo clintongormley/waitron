@@ -1523,6 +1523,11 @@ export const en = {
     "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
   "bill_pay.card_pending":
     "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
+  "bill_pay.uncertain_title": "We don't know yet whether it was charged",
+  "bill_pay.uncertain":
+    "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
+  "bill_pay.card_pending_manager":
+    "If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
   "bill_pay.read_failed": "The bill's payments could not be read again. Close and reopen this.",
   "bill_pay.paid": "Paid",
   "bill_pay.paid_part": "{paid} of {quantity} paid",
@@ -3187,6 +3192,11 @@ export const es: Record<StringKey, string> = {
     "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
   "bill_pay.card_pending":
     "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
+  "bill_pay.uncertain_title": "Aún no sabemos si se ha cobrado",
+  "bill_pay.uncertain":
+    "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",
+  "bill_pay.card_pending_manager":
+    "Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
   "bill_pay.read_failed":
     "No se han podido volver a leer los pagos de la cuenta. Cierra y vuelve a abrir.",
   "bill_pay.paid": "Pagado",
