@@ -661,9 +661,9 @@ describe("till-floor-screen: the zone strip's edge", () => {
         strip.scrollLeft += way === "in" ? Math.floor(cut()) - 3 : Math.ceil(cut()) + 3;
         await nextFrames();
 
-        // The whole-number clientWidth misplaces the strip's end by `gap`. Pick a screen width,
-        // to the sixteenth of a pixel, where it says "further out" for "out" and "further in" for
-        // "in": the side on which a tab near the end reads wrongly.
+        // The whole-number clientWidth misplaces the strip's end by `gap`. For "out", pick a screen
+        // width, to the sixteenth of a pixel, where it says "further out": the side on which a tab
+        // crossing the strip's end reads wrongly.
         const want = way === "out" ? 0.4 : -0.4;
         const base = Math.floor(host.getBoundingClientRect().width) - 1;
         const gap = () => strip.clientWidth - (paddingBox(strip).right - paddingBox(strip).left);
@@ -934,6 +934,123 @@ describe("till-floor-screen: the zone strip's edge", () => {
       );
     } finally {
       await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+  ])(
+    "shows a tab too wide to clear both edges whenever it is whole in the strip (Bar has a state: %s, nearly the strip's width: %s)",
+    async (barHasState, nearlyStrip) => {
+      const name = "Upstairs private dining room and bar";
+      const wide = [zone("z1", "Inside", 0), zone("z2", "Bar", 1), zone("z3", name, 2)];
+      await onPhone(
+        [
+          seated("t1", "z1"),
+          seated("t2", "z2", barHasState ? { readyToServe: 2 } : {}),
+          seated("t3", "z3", { timingBand: "forgotten" }),
+        ],
+        async (el, host) => {
+          const strip = stripOf(el);
+          const tab = () => tabOf(el, "z3").closest(".zone-tab")!.getBoundingClientRect();
+          const box = () => paddingBox(strip);
+          const named = () =>
+            (["start", "end"] as const).filter(
+              (side) => edgeOf(el, side)?.getAttribute("aria-label") === `Show ${name}`,
+            );
+          await expect.poll(named).toEqual(["end"]);
+          // Narrower than the strip, but wider than the room between the two edges.
+          const clear = tapProbe(host, "calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5)");
+          const span = box().right - box().left;
+          if (nearlyStrip) {
+            const zoneTab = tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!;
+            zoneTab.style.paddingRight = `${span - 4.5 - tab().width}px`;
+            await nextFrames();
+          }
+          expect(tab().width).toBeLessThan(span - 4);
+          expect(tab().width).toBeGreaterThan(span - 2 * clear);
+
+          await userEvent.click(edgeOf(el, "end")!);
+          await expect.poll(named).toEqual([]);
+          expect(tab().left).toBeGreaterThanOrEqual(box().left);
+          expect(tab().right).toBeLessThanOrEqual(box().right);
+
+          // Cut at the start, then whole just inside it, under the start edge's place.
+          strip.scrollLeft = strip.scrollWidth;
+          await expect.poll(named).toEqual(["start"]);
+          strip.scrollLeft -= box().left + 2 - tab().left;
+          await expect.poll(named).toEqual([]);
+          expect(tab().left).toBeGreaterThanOrEqual(box().left);
+
+          // Cut at the end, then whole just inside it, under the end edge's place.
+          strip.scrollLeft = 0;
+          await expect.poll(named).toEqual(["end"]);
+          strip.scrollLeft += tab().right - (box().right - 2);
+          await expect.poll(named).toEqual([]);
+          expect(tab().right).toBeLessThanOrEqual(box().right);
+        },
+        true,
+        wide,
+      );
+    },
+  );
+
+  it("brings a tab wider than the strip clear of the start edge an earlier tab's state draws", async () => {
+    const wide = [
+      zone("z1", "Inside", 0),
+      zone("z2", "Bar", 1),
+      zone("z3", "Upstairs private dining room and terrace", 2),
+    ];
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(320, 844);
+    try {
+      const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+        zones: wide,
+        tables: [
+          seated("t1", "z1"),
+          seated("t2", "z2", { readyToServe: 2 }),
+          seated("t3", "z3", { readyToServe: 2 }),
+        ],
+        now,
+        reducedMotion: true,
+      });
+      const strip = stripOf(el);
+      const tab = () => tabOf(el, "z3").closest(".zone-tab")!.getBoundingClientRect();
+      await expect
+        .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
+        .toBe("Show Upstairs private dining room and terrace");
+      expect(tab().width).toBeGreaterThan(paddingBox(strip).right - paddingBox(strip).left);
+      await userEvent.click(edgeOf(el, "end")!);
+      await expect.poll(() => edgeOf(el, "start")?.getAttribute("aria-label")).toBe("Show Bar");
+      const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+      const start = edgeOf(el, "start")!.getBoundingClientRect();
+      expect(tab().left - reach).toBeGreaterThanOrEqual(start.right - 1);
+      expect(tab().left - reach).toBeLessThanOrEqual(start.right + 1);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  it("stops listening to the strip's scroll and size when the screen leaves the page", async () => {
+    const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+    const disconnect = vi.spyOn(ResizeObserver.prototype, "disconnect");
+    try {
+      await onPhone(urgentRight(), async (el, host) => {
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        const strip = stripOf(el);
+        const watcher = observe.mock.contexts[observe.mock.calls.findIndex(([on]) => on === strip)];
+        expect(watcher).toBeDefined();
+        const unlisten = vi.spyOn(strip, "removeEventListener");
+        disconnect.mockClear();
+        host.removeChild(el);
+        expect(unlisten).toHaveBeenCalledWith("scroll", expect.any(Function));
+        expect(disconnect.mock.contexts).toContain(watcher);
+      });
+    } finally {
+      observe.mockRestore();
+      disconnect.mockRestore();
     }
   });
 

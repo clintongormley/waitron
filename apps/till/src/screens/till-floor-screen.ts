@@ -2426,7 +2426,8 @@ export class TillFloorScreen extends LitElement {
 
   /** "nearest" leaves a tab wider than the room between the edges where it is once it sticks out
    * of both ends, so such a tab is brought to the strip's start instead: clear of the start edge
-   * when an earlier tab with a state will put one there, else as far as the ring's room. */
+   * when an earlier tab with a state will put one there, else as far as the ring's room — but never
+   * so far that the strip cuts a tab it could hold whole. */
   #showTab(key: string): void {
     const strip = this.#tabsStrip!;
     const tabs = [...strip.querySelectorAll<HTMLElement>(".zone-tab")];
@@ -2440,7 +2441,11 @@ export class TillFloorScreen extends LitElement {
       const edgeBefore = tabs
         .slice(0, index)
         .some((zoneTab) => this.#zone.marks.has(tabKey(zoneTab)));
-      const inset = edgeBefore ? clear : parseFloat(style.paddingBlockStart);
+      const ring = parseFloat(style.paddingBlockStart);
+      const aim = edgeBefore ? clear : ring;
+      const spare = right - left - box.width;
+      // Centred when the spare room is under a ring's at each end: the scroll lands on whole pixels.
+      const inset = spare < 0 ? aim : Math.min(aim, Math.max(spare / 2, spare - ring));
       strip.scrollLeft += box.left - (left + inset);
     } else {
       tab.scrollIntoView({ inline: "nearest", block: "nearest" });
@@ -2504,14 +2509,18 @@ export class TillFloorScreen extends LitElement {
       overflows
         ? this.shadowRoot!.querySelector(`[data-tabs-edge="${side}"]`)?.getBoundingClientRect()
         : undefined;
-    const left = Math.max(span.left, edge("start")?.right ?? span.left);
-    const right = Math.min(span.right, edge("end")?.left ?? span.right);
+    const [start, end] = [edge("start"), edge("end")];
+    const left = Math.max(span.left, start?.right ?? span.left);
+    const right = Math.min(span.right, end?.left ?? span.right);
+    // No scroll puts a tab wider than this clear of both edges, so it is shown whenever it is whole.
+    const between = span.right - span.left - 2 * ((start ?? end)?.width ?? 0) - 2 * ring;
     const sides = new Map<string, TabsEdge>();
     // A tab hidden at both ends goes to an end the strip itself cuts it at, if there is one.
     for (const tab of tabs) {
       const box = tab.getBoundingClientRect();
       if (box.left < span.left) sides.set(tabKey(tab), "start");
       else if (box.right > span.right) sides.set(tabKey(tab), "end");
+      else if (box.width > between) continue;
       else if (box.left < left) sides.set(tabKey(tab), "start");
       else if (box.right > right) sides.set(tabKey(tab), "end");
     }
