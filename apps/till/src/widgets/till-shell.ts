@@ -669,12 +669,18 @@ export class TillShell extends LitElement {
         inMore ? help : undefined,
         label,
       );
-    const affordance = (item: ShellAffordance & BarItem, type: string, label: string) =>
-      here(item) && this.affordances.includes(item) ? button(item, type, label) : nothing;
+    const affordance = (
+      item: ShellAffordance & BarItem,
+      type: string,
+      label: string,
+      help?: HelpKey,
+    ) =>
+      here(item) && this.affordances.includes(item) ? button(item, type, label, help) : nothing;
     return html`${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
       "expo",
       "show-expo",
       t("expo.open"),
+      "help.more.pass",
     )}${affordance("station", "show-station", t("station.open"))}${affordance(
       "schedule",
       "show-schedule",

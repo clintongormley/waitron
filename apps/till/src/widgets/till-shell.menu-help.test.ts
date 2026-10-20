@@ -140,8 +140,8 @@ describe("till-shell's menu badges", () => {
   it.each([
     [
       "handheld",
-      ["profile.open", "equipment.open", "department_transfer.short"],
-      ["find_bill.open", "schedule.open", "station.open", "expo.open", "shell.logout"],
+      ["expo.open", "profile.open", "equipment.open", "department_transfer.short"],
+      ["find_bill.open", "schedule.open", "station.open", "shell.logout"],
     ],
     [
       "till",
@@ -272,6 +272,7 @@ describe("till-shell's menu badges", () => {
     await settleBadges(more);
     expect(isOpen(popupOf(more))).toBe(true);
     expect(await badged(more)).toEqual([
+      t("expo.open"),
       t("profile.open"),
       t("equipment.open"),
       t("department_transfer.short"),
