@@ -3,7 +3,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
@@ -42,7 +42,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
-import { createOpenOrder, fireCourse, fireLines } from "./working-order.js";
+import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
 import {
   listStationNotices,
   writeKitchenTicketGrouping,
@@ -529,7 +529,7 @@ function spyOnNoSocketOpened() {
   );
 }
 
-describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse)", () => {
+describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderLines)", () => {
   it("heads no group on the ticket of an order whose lines are in no group", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { pCocina, pGroup, jobs } = await asApp(cfg, async (tx) => {
@@ -591,7 +591,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(jobs.filter((j) => j.printerId === pDead)).toHaveLength(0);
   });
 
-  it("a second fire (fireCourse) prints only round-2 items and never reprints round 1 (R-D)", async () => {
+  it("a later line release prints only round-2 items and never reprints round 1 (R-D)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, afterRound1, afterRound2, afterRefire } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -615,11 +615,24 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       // Round 1: firing auto-fires the earliest course (Entrantes) and HOLDS the later one (steak).
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(steak)]);
       const afterRound1 = await printJobsFor(tx);
-      // Round 2: fireCourse releases the held course.
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      const [held] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            eq(workingOrderLines.productId, steak),
+          ),
+        );
+      const [beforeRelease] = await tx
+        .select({ firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, held!.id));
+      expect(beforeRelease!.firedAt).toBeNull();
+      await fireOrderLines(tx, cfg, orderId, [held!.id]);
       const afterRound2 = await printJobsFor(tx);
-      // Re-firing the already-fired course matches zero rows.
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      // Releasing an already-fired line matches zero rows.
+      await fireOrderLines(tx, cfg, orderId, [held!.id]);
       const afterRefire = await printJobsFor(tx);
       return { printerId, afterRound1, afterRound2, afterRefire };
     });
@@ -1788,8 +1801,22 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       });
 
       // Two rounds: round 1 fires the soup and holds the steak, round 2 releases the steak.
-      const orderId = await fireNewOrder(tx, cfg, [line(soup), line(steak)]);
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(steak)]);
+      const [held] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            eq(workingOrderLines.productId, steak),
+          ),
+        );
+      const [beforeRelease] = await tx
+        .select({ firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, held!.id));
+      expect(beforeRelease!.firedAt).toBeNull();
+      await fireOrderLines(tx, cfg, orderId, [held!.id]);
       const beforeReprint = await printJobsFor(tx);
 
       await reprintOrderTickets(tx, cfg, orderId);
@@ -1847,7 +1874,16 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       await tx.execute(sql`
         update working_order_lines set quantity = 1000 where working_order_id = ${orderId}`);
       const beforeRelease = new Set((await printJobsFor(tx)).map((job) => job.id));
-      await fireCourse(tx, cfg, orderId, pri.id, { personId: OPERATOR });
+      const [held] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            eq(workingOrderLines.productId, steak),
+          ),
+        );
+      await fireOrderLines(tx, cfg, orderId, [held!.id]);
       const released = (await printJobsFor(tx)).filter((job) => !beforeRelease.has(job.id));
       const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);

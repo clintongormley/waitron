@@ -30,7 +30,7 @@ import {
 } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { fireCourse, listExpoQueue, parkOrder } from "./working-order.js";
+import { listExpoQueue, parkOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -360,7 +360,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(await firedTicketsOf(ana.tabId)).toHaveLength(2);
   });
 
-  it("holds a moved bill's waiting dishes course by course, so firing one course sends none of a later one", async () => {
+  it("holds a moved bill's waiting dishes course by course, so firing one held group sends none of a later one", async () => {
     const ana = await seat(v, await v.table("Cursos 1"));
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, ana.tabId, [
@@ -399,7 +399,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
       ]);
     }
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, { personId: OPERATOR }));
+    const fireMains = await command(luis.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPrincipales!.id, fireMains));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, tarta!.id].sort(),
@@ -437,13 +438,15 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [tarta!.id, heldPrincipales!.id],
     ]);
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, { personId: OPERATOR }));
+    const fireDesserts = await command(luis.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPostres!.id, fireDesserts));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id, loose!.id].sort(),
     );
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, { personId: OPERATOR }));
+    const fireMains = await command(luis.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPrincipales!.id, fireMains));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, flan!.id, loose!.id, tarta!.id].sort(),
@@ -512,7 +515,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [loose!.id, fired!.id],
     ]);
 
-    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, { personId: OPERATOR }));
+    const fireDesserts = await command(luis.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPostres!.id, fireDesserts));
 
     expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
       [burger!.id, tarta!.id, flan!.id, loose!.id].sort(),

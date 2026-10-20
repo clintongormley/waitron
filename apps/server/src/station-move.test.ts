@@ -57,13 +57,7 @@ import { readStationQueueMoves } from "./station-queue-moves.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { stillMovable } from "./station-move.js";
 import { withStationDishes } from "./station-closing.js";
-import {
-  carveOffLines,
-  createOpenOrder,
-  listStationQueue,
-  readTabLines,
-  fireCourse,
-} from "./working-order.js";
+import { carveOffLines, createOpenOrder, listStationQueue, readTabLines } from "./working-order.js";
 
 let venue: PartyVenue;
 let bar: string;
@@ -618,12 +612,11 @@ describe("release", () => {
     expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([]);
   });
 
-  it("fires a course at the replacement station without correcting an unprinted HOLD", async () => {
+  it("fires a held course group at the replacement station without correcting an unprinted HOLD", async () => {
     await inTx(venue, (tx) => writePrintHeldWork(tx, false));
-    const courseId = await inTx(venue, async (tx) => {
+    await inTx(venue, async (tx) => {
       const course = await createCourse(tx, venue.cfg, { name: `Course ${randomUUID()}` });
       await setProductCourse(tx, venue.cfg, venue.productId("Burger"), course.id);
-      return course.id;
     });
     const group = await heldBurger();
     const at = new Date("2026-10-02T18:45:00.000Z");
@@ -639,9 +632,7 @@ describe("release", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     try {
-      await inTx(venue, (tx) =>
-        fireCourse(tx, venue.cfg, group.tabId, courseId, { personId: OPERATOR }),
-      );
+      await fireHeldBurger(group);
       const [item] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
       );

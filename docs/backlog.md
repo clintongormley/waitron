@@ -2427,8 +2427,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   kitchen quantities, counting separately routed extras by their remaining parent dishes.
   The group and course Away writers and group dispatch flag are retired; legacy stamps do not
   replace group readiness. Current-order kitchen rows omit Away, and the table dish window keeps
-  ready food Ready with its recorded age in Sent. Old course Fire helpers, Expo dispatch and floor
-  en-route projections and their clients still need retirement.
+  ready food Ready with its recorded age in Sent. Deletion history, station rerouting, moved
+  dishes, made-here and multi-round printing tests use group or line release rather than course
+  Fire. The reprint fixture checks that its later dish is held before release. Old course Fire
+  helpers, Expo dispatch and floor en-route projections and their clients still need retirement.
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain
