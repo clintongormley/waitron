@@ -24,7 +24,9 @@
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/identity": "workspace:*",
+    "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "lit": "^3.2.0"

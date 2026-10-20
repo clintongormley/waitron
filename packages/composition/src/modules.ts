@@ -70,6 +70,7 @@ import {
   describeShifts,
 } from "@waitron/staffing";
 import {
+  WORKFORCE_BACKUP_VERIFICATION,
   WORKFORCE_CLASSIFICATION,
   WORKFORCE_CONFIGURATION_TRANSFER,
   WORKFORCE_CHANGE_SOURCES,
@@ -200,6 +201,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_workforce",
       from: "../workforce/drizzle",
     },
+    backup: { verification: WORKFORCE_BACKUP_VERIFICATION },
     classification: WORKFORCE_CLASSIFICATION,
     changes: WORKFORCE_CHANGE_SOURCES,
     permissions: WORKFORCE_PERMISSIONS,

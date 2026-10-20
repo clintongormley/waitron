@@ -513,10 +513,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/workforce/src/backup-verification.ts`, `packages/workforce/src/backup-verification.test.ts`; modify `packages/workforce/src/index.ts`, `packages/workforce/package.json` (module/store dependencies), `packages/composition/src/modules.ts`.
 **Consumes:** Task 6 comparison; pure workforce `chain-hash.ts` verifyChain and `pay-period-chain.ts` verifyPayPeriodClosures, never inserting head readers. **Produces:** `WORKFORCE_BACKUP_VERIFICATION`.
 
-- [ ] RED `walks every node-location time chain and stored head`, `detects old middle or tail loss`, `preserves corrections automatic entries pay closures and snapshots`, `never creates heads for empty data`. Include every extension/self-approval/response/correction field. Pay closures have no separate head at this pin: compare original full rows/tip across migration; do not invent external completeness evidence.
-- [ ] Run `pnpm --filter @waitron/workforce exec vitest run src/backup-verification.test.ts src/restore-continuation.test.ts src/pay-period-chain.test.ts`; expect new export then truncated-history denial red.
-- [ ] Implement read-only mapping/full walks/head equality and all owned state comparison. No closure/projection/automatic shift writes, mail or cross-node merge. GREEN same command with unedited restore-continuation and honest empty/retired-node controls.
-- [ ] Commit `git commit -s -m "feat(workforce): verify complete captured time history"`.
+- [x] RED `walks every node-location time chain and stored head`, `detects old middle or tail loss`, `preserves corrections automatic entries pay closures and snapshots`, `never creates heads for empty data`. Include every extension/self-approval/response/correction field. Pay closures have no separate head at this pin: compare original full rows/tip across migration; do not invent external completeness evidence.
+- [x] Run `pnpm --filter @waitron/workforce exec vitest run src/backup-verification.test.ts src/restore-continuation.test.ts src/pay-period-chain.test.ts`; expect new export then truncated-history denial red.
+- [x] Implement read-only mapping/full walks/head equality and all owned state comparison. No closure/projection/automatic shift writes, mail or cross-node merge. GREEN same command with unedited restore-continuation and honest empty/retired-node controls.
+- [x] Commit `git commit -s -m "feat(workforce): verify complete captured time history"`.
 
 ### Task 18: Cover workforce-es and staffing configuration
 
@@ -874,3 +874,7 @@ query helper as that callback. The guard and all identity assertions remain unch
 
 The artifact host, remaining owners, placement, recovery v2, whole-branch review and release
 qualification are still open. This checkpoint does not release Cloud integration or snapshots.
+
+### Task 17 implementation checkpoint
+
+The workforce contribution compares every classified table and walks full source and restored time-entry and pay-period-closure chains by node and location. It reads stored time heads directly and checks their sequence, id, hash and recorded time. Every correction and extension field is mapped to the existing pure hash reader; full stored rows and snapshots are preserved. No workforce restore hook or activation effect is added. A captured self-consistent closure prefix is not evidence of external completeness; migration loss is checked against the captured rows. Artifact placement and qualification remain later tasks.
