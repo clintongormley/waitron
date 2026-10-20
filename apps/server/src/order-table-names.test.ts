@@ -31,15 +31,13 @@ describe("A765 table names in order lists", () => {
   it("leaves a table-free counter order's own label separate", async () => {
     const id = randomUUID();
     await withTransaction(venue.db, (tx) =>
-      tx
-        .insert(workingOrders)
-        .values({
-          id,
-          ...dashboardOrderAt(venue.cfg.locationId),
-          nodeId: venue.cfg.nodeId,
-          orderNumber: 204,
-          label: "Alex",
-        }),
+      tx.insert(workingOrders).values({
+        id,
+        ...dashboardOrderAt(venue.cfg.locationId),
+        nodeId: venue.cfg.nodeId,
+        orderNumber: 204,
+        label: "Alex",
+      }),
     );
     const row = (await listHeldOrders({ db: venue.db }, venue.cfg)).find(
       (order) => order.id === id,
