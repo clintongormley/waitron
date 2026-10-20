@@ -43,6 +43,11 @@ con **Mide una cantidad (ml, g…) — sin extras** activado: cuando Waitron pre
 kilogramos y miligramos que trae empiezan con él activado, una unidad que añades empieza con él desactivado,
 y un cambio llega a la caja cuando vuelves a publicar los menús que venden los productos de esa unidad.
 
+Cuando cambias el nombre de una unidad que usa un extra, la vista previa de la carta muestra
+el nombre anterior y el nuevo aunque la abreviatura siga igual. Si la etiqueta de la unidad y
+los decimales que se muestran no cambian, indica que han cambiado los detalles de la unidad.
+Publica la carta para usar los nuevos datos de la unidad en los próximos pedidos.
+
 ## Da a un producto hasta tres nombres {#names}
 
 El nombre que acabas de escribir es el nombre del **personal**. Es texto sin formato, en ningún

@@ -338,6 +338,9 @@ The editor mounts at most 50 rows and the visible language window; Jump to langu
 window without dropping a personal draft. Missing in, Kind and search select rows separately from
 the language window. Next, Previous and Show edited preserve edits outside the current page.
 One batch admits at most 100 changed fields, with a unit name and abbreviation counted separately.
+The Save route bounds each raw non-null value at 4096 UTF-8 bytes before trimming; the editor
+sends trimmed values. The ordinary map validator trims before applying its normalized-value
+bound. A direct API caller must account for surrounding spaces in the raw Save limit.
 An uncertain write retains the exact batch for Retry these changes. Review latest restores the
 submitted fields for explicit per-field decisions before a different request can be prepared.
 

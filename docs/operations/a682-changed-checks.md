@@ -3987,3 +3987,28 @@ supply the new contracts; the earlier sections describe any deliberately changed
 | `packages/venue-service/src/category-dependencies.test.ts`                   | `packages/venue-service/src/category-dependencies.test.ts:133`                  |
 | `packages/venue-service/src/department-transfers.test.ts`                    | `packages/venue-service/src/department-transfers.test.ts:962`                   |
 | `packages/venue-service/src/kitchen-notices.test.ts`                         | `packages/venue-service/src/kitchen-notices.test.ts:413`                        |
+
+## Final Claude review follow-up, 2026-10-20
+
+The review at `f1bf61f` found that a unit-name-only change produced an extras preview entry
+carrying only abbreviation and precision. The name-only catalogue case now adds exact
+before/after name and staff-pair checks while retaining its earlier kind/product check.
+`menu-document.test.ts`, `menu-change-navigation.test.ts`, `menu-preview.test.ts` and
+`menu-preview-tree.test.ts` gain the required name/staff fields in their existing unit-change
+fixtures. All prior values and assertions remain. The new browser suite covers the distinct
+labels, staff fallback and an honest details-changed notice when the displayed labels match,
+in both languages/themes at phone and desktop widths. Authority: Task 12's future full unit
+context and Task 13's preview acceptance, plus review finding 1.
+
+`content-translation-writes.test.ts` adds an independent mismatched-owner case with unchanged
+cell identities and complete before/after aggregates. This qualifies the existing owner-kind
+guard; production validation is unchanged. Removing just that check in the installed candidate
+makes the new test fail, while the restored full suite passes. The previous wrong-product case
+also changed the cell kind and therefore did not isolate this guard.
+
+The raw Save/normalized-map byte-limit difference is retained and documented in
+[products.md](../developers/products.md#the-translation-gap-report). A disposable real-database
+probe uses a valid cell baseline: 4098 raw bytes with surrounding spaces are refused without
+writes; the trimmed 4096-byte value succeeds. Raising only the raw gate makes the refusal
+assertion fail. The ordinary map helper accepts the trimmed value. This records two layer
+boundaries, not a larger editor limit.

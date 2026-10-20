@@ -1110,7 +1110,10 @@ export function diffEntries(
       });
     if (same(was.unit, item.unit)) continue;
     const unitFacts = (unit: FrozenExtraItemFacts["unit"]) => ({
+      name: unit?.name ?? {},
+      staffName: unit?.staffName ?? "Each",
       abbreviation: unit?.abbreviation ?? {},
+      staffAbbreviation: unit?.staffAbbreviation ?? "",
       precision: unit?.precision ?? 0,
     });
     push({

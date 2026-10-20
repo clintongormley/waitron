@@ -268,6 +268,23 @@ describe("shared translation writes", () => {
     ).rejects.toMatchObject({ code: "content.translation_invalid" });
   });
 
+  it("refuses a mismatched owner kind even when every cell still names the correct product", async () => {
+    await seedTenant(suite.db);
+    const ids = await withTransaction(suite.db, fixture);
+    const before = await withTransaction(suite.db, snapshot);
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        const item = await resolveItem(tx, "product", ids.product);
+        await writeTranslationMaps(
+          tx,
+          { ...item, owners: { kind: "unit" } },
+          { name: { en: "Changed" } },
+        );
+      }),
+    ).rejects.toMatchObject({ code: "content.translation_invalid" });
+    expect(await withTransaction(suite.db, snapshot)).toEqual(before);
+  });
+
   it("option_label refuses an inactive owner", async () => {
     await seedTenant(suite.db);
     await expect(

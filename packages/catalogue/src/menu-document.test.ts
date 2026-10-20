@@ -1204,8 +1204,20 @@ describe("diffMenuDocuments", () => {
       name: "Extra lemon",
       listId: f.extrasList,
       listName: "Extras",
-      from: { abbreviation: EACH_UNIT.abbreviation, precision: 0 },
-      to: { abbreviation: { en: "kg" }, precision: 3 },
+      from: {
+        name: EACH_UNIT.name,
+        staffName: EACH_UNIT.staffName,
+        staffAbbreviation: EACH_UNIT.staffAbbreviation,
+        abbreviation: EACH_UNIT.abbreviation,
+        precision: 0,
+      },
+      to: {
+        name: { en: "Kilogram" },
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
       source: "shared_product",
     });
   });
@@ -1410,6 +1422,25 @@ describe("diffMenuDocuments", () => {
 
     expect(diffMenuDocuments(live, await build(f.dinner))).toContainEqual(
       expect.objectContaining({ kind: "extra_unit_changed", productId: f.extraLemon }),
+    );
+    expect(diffMenuDocuments(live, await build(f.dinner))).toContainEqual(
+      expect.objectContaining({
+        kind: "extra_unit_changed",
+        from: {
+          name: { en: "Kilogram" },
+          staffName: "Staff unit",
+          abbreviation: { en: "kg" },
+          staffAbbreviation: "su",
+          precision: 3,
+        },
+        to: {
+          name: { en: "Kilo" },
+          staffName: "Staff unit",
+          abbreviation: { en: "kg" },
+          staffAbbreviation: "su",
+          precision: 3,
+        },
+      }),
     );
   });
 

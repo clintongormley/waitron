@@ -595,8 +595,20 @@ describe("nested change subjects", () => {
         ? {
             ...identity,
             kind,
-            from: { abbreviation: { en: "ea" }, precision: 0 },
-            to: { abbreviation: { en: "kg" }, precision: 3 },
+            from: {
+              name: unit.name,
+              staffName: unit.staffName,
+              staffAbbreviation: unit.staffAbbreviation,
+              abbreviation: { en: "ea" },
+              precision: 0,
+            },
+            to: {
+              name: unit.name,
+              staffName: unit.staffName,
+              staffAbbreviation: unit.staffAbbreviation,
+              abbreviation: { en: "kg" },
+              precision: 3,
+            },
           }
         : kind === "extra_portion_changed"
           ? {

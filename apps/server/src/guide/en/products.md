@@ -42,6 +42,11 @@ the quantity of cannot take extras. Nor can a product in a unit switched to **Me
 milligrams it provides start with it on, a unit you add starts with it off, and a change to it reaches the till when you
 next publish the menus that sell the unit's products.
 
+When you rename a unit used by an extra, the menu preview shows its old and new names even
+when the abbreviation stays the same. If the displayed unit label and decimal places are
+unchanged, the preview reports that the unit details changed. Publish the menu to use the new
+unit facts on future orders.
+
 ## Give a product up to three names {#names}
 
 The name you just typed is the **staff** name. It is plain text, in no particular language, and it

@@ -3,6 +3,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import type { MenuView } from "@waitron/catalogue/src/customer-menu-presentation.js";
 import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
 import { menuTargetKey } from "@waitron/catalogue/src/menu-navigation.js";
@@ -439,15 +440,27 @@ export class MenuPreviewPanel extends LitElement {
           fields: change.fields.map((field) => t(PRODUCT_FIELDS[field])).join(", "),
         });
       case "extra_unit_changed": {
-        const locale = currentLocale().slice(0, 2);
-        const unit = (abbreviations: Record<string, string>) =>
-          abbreviations[locale] ?? abbreviations.en ?? Object.values(abbreviations)[0] ?? "";
+        const describe = (unit: typeof change.from) => {
+          const { name, abbreviation } = unitPresentation(
+            unit,
+            currentLocale(),
+            currentContentLanguages(),
+          );
+          return abbreviation && name !== abbreviation ? `${name} · ${abbreviation}` : name;
+        };
+        const from = describe(change.from),
+          to = describe(change.to);
+        if (from === to && change.from.precision === change.to.precision)
+          return fill("menu_preview.extra_unit_details_changed", {
+            list: change.listName,
+            name: change.name,
+          });
         return fill("menu_preview.extra_unit_changed", {
           list: change.listName,
           name: change.name,
-          from: unit(change.from.abbreviation),
+          from,
           fromPrecision: String(change.from.precision),
-          to: unit(change.to.abbreviation),
+          to,
           toPrecision: String(change.to.precision),
         });
       }
