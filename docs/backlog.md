@@ -5198,6 +5198,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   fiscal-chain, registration/allocation, retained filing-history, authenticated application-vault, offline fiscal-certificate, retained-hour and identity authenticator/TOTP checks, plus catalogue versions/references, database image bytes, digests and edits, and complete workforce time chains, stored heads and pay-period snapshots. Service and adjustment
   owners compare retained configuration, staged/live references, issued headings and historical adjustments.
   Agreement and staffing owners preserve configuration and assignments without recomputing work.
+  Strict compatibility reconciles source module maps, migration hash/timestamp prefixes, ownership,
+  captured module configuration, identity, environment and declared archive entries before migration.
   Signed paper needs release-reviewed public roots; stored Cloud receipt references remain unsupported.
   Embedded build identity, the artifact verifier and remaining module checks, and
   target-bound recovery remain open. Cloud integration
