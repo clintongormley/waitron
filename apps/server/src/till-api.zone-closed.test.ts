@@ -256,6 +256,7 @@ describe("existing service in a closed zone", () => {
     const added = await request(v, "POST", `/api/parties/${seated.partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: seated.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { lines: [line(v), { menuItemId: v.offerFor("Tarta"), quantity: "1" }], release: "fire" },
       ],
@@ -352,6 +353,7 @@ describe("existing service in a closed zone", () => {
               },
               submissionId: randomUUID(),
               expectedPartyRevision: party!.revision,
+              allergy: { party: { answer: "none", guests: [] }, ticks: [] },
               groups: [{ lines: [line(v)], release: "fire" }],
             })
           : await request(v, "POST", `/api/parties/${seated.partyId}/drafts/${draft.id}/submit`, {
@@ -361,6 +363,7 @@ describe("existing service in a closed zone", () => {
               expectedEdit: await withTransaction(suite.db, (tx) =>
                 readBillEditState(tx, seated.tabId),
               ),
+              allergy: { party: { answer: "none", guests: [] }, ticks: [] },
               groups: [{ lineIds: draft.lines.map((l) => l.id), release: "fire" }],
             });
       expect(answer).toEqual(

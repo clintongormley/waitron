@@ -217,6 +217,7 @@ async function setup() {
       submissionId: randomUUID(),
       expectedPartyRevision: seated.revision,
       draftRevision: draft.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [{ lineIds: draft.lines.map((x) => x.id), release }],
     });
   }

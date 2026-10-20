@@ -532,6 +532,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       submissionId: randomUUID(),
       draftRevision: draft.revision,
       expectedPartyRevision: party!.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
     };
     at(mondayAt("14:05"));
@@ -935,6 +936,7 @@ describe("service periods gate only added dishes and added stored quantities", (
             submissionId: randomUUID(),
             draftRevision: draft.revision,
             expectedPartyRevision: revision,
+            allergy: { party: { answer: "none", guests: [] }, ticks: [] },
             groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
           },
         );
@@ -1023,6 +1025,7 @@ describe("service periods gate only added dishes and added stored quantities", (
           submissionId: randomUUID(),
           draftRevision: draft.revision,
           expectedPartyRevision: party!.revision,
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
           groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
         },
       );
@@ -1456,6 +1459,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, c.tabId)),
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(c.partyId),
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
         groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release }],
       });
       expect(answer.status).toBe(200);

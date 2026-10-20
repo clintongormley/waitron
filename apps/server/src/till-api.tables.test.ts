@@ -232,6 +232,7 @@ async function sendRound(partyId: string, lines: unknown[]): Promise<Response> {
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
       groups: [{ lines, release: "fire" }],
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     }),
   });
 }

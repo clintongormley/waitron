@@ -1222,6 +1222,7 @@ describe("an item already paid for (design §8 test 5)", () => {
     const round = await request("POST", `/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
@@ -1281,6 +1282,7 @@ describe("an item already paid for (design §8 test 5)", () => {
     const round = await request("POST", `/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
@@ -1613,6 +1615,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const added = await request("POST", `/api/parties/${party!.party_id}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: await partyRevisionOf(billId),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { lines: [{ menuItemId: destination.beerOfferId, quantity: "1" }], release: "fire" },
       ],

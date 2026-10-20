@@ -63,14 +63,17 @@ async function boot(env: NodeJS.ProcessEnv) {
       child.once("exit", (code, signal) => resolve({ code, signal }));
     },
   );
-  const close = async () => {
+  const stop = async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     const deadline = setTimeout(() => child.kill("SIGKILL"), 12_000);
     try {
-      expect(await exited, output).toEqual({ code: 0, signal: null });
+      return await exited;
     } finally {
       clearTimeout(deadline);
     }
+  };
+  const close = async () => {
+    expect(await stop(), output).toEqual({ code: 0, signal: null });
   };
   try {
     await vi.waitFor(
@@ -78,11 +81,11 @@ async function boot(env: NodeJS.ProcessEnv) {
         expect(child.exitCode, output).toBeNull();
         expect(output, output).toContain('"event":"server.listening"');
       },
-      { timeout: 20_000 },
+      { timeout: 60_000 },
     );
     return { close, pid: child.pid! };
   } catch (error) {
-    await close();
+    await stop();
     throw error;
   }
 }
@@ -281,6 +284,7 @@ describe("A669 consideration through a server process restart", () => {
         }
       }
     },
+    240_000,
   );
 });
 

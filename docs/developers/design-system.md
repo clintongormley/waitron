@@ -2598,9 +2598,10 @@ and the staffing grid's block editor in the A761 entry):
   as it stands or is stale, or for a part-paid order, keeping blue through a payment being sent,
   through an order being placed from the counter tab, and when only an invalid tip disables Card
   (in dark, while switched off in those cases, the dim disabled blue, A535).
-  On the table screen, New order sends directly: Send all waits for at least one sendable dish,
+  On the table screen, Send all waits for at least one sendable dish,
   Fire for a selected sendable dish, and Move to… for a selection. Those actions are quiet while
-  disabled and use their primary colour when available. There is no send-preview confirmation.
+  disabled and use their primary colour when available. The allergy question and dish assignments
+  run before the send when needed.
   A649 brought Add a device's Pair (Enable for a returning device) in the waiting-devices table
   under it (owner, 2026-10-14): it is drawn `secondary` while the screen holds no pairing hold.
   A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
