@@ -7646,7 +7646,7 @@ export class TillApp extends LitElement {
     if (this.#billPaymentHeld(workingOrderId)) {
       this.findBillError = this.#paymentsOut.has(workingOrderId)
         ? "bill_pay.sending"
-        : "bill_pay.unconfirmed";
+        : "bill_pay.unconfirmed_elsewhere";
       return;
     }
     const observation = this.#collectionObservation;
@@ -15830,7 +15830,9 @@ export class TillApp extends LitElement {
     if (this.submitting || this.activeTabId === undefined) return false;
     const id = this.activeTabId;
     if (this.#billPaymentHeld(id)) {
-      this.errorKey = this.#paymentsOut.has(id) ? "bill_pay.sending" : "bill_pay.unconfirmed";
+      this.errorKey = this.#paymentsOut.has(id)
+        ? "bill_pay.sending"
+        : "bill_pay.unconfirmed_elsewhere";
       return false;
     }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);

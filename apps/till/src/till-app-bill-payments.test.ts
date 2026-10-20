@@ -2176,6 +2176,47 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     },
   );
 
+  it.each(["pay-tab", "find-bill-pay"])(
+    "a whole payment through %s, refused for a part payment that got no answer after its dialog closed, says to reopen that payment",
+    async (event) => {
+      const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ takeBillPayment });
+      await openTable(el);
+      await contribute(el);
+      await expect
+        .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+        .toBe(t("bill_pay.unconfirmed"));
+      emit(dialog(el)!, "bill-pay-close");
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+
+      emit(
+        tableOrder(el),
+        event,
+        event === "pay-tab"
+          ? { method: "cash", amount: "120.00", guests: 4 }
+          : {
+              workingOrderId: "wo-4",
+              tender: { method: "cash", amount: "120.00" },
+              invoiced: true,
+            },
+      );
+      await flush(el);
+
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      if (event === "pay-tab")
+        expect(el.shadowRoot!.textContent).toContain(t("bill_pay.unconfirmed_elsewhere"));
+      else
+        expect((el as unknown as { findBillError?: unknown }).findBillError).toBe(
+          "bill_pay.unconfirmed_elsewhere",
+        );
+      await openDialog(el, "items");
+      await expect.poll(() => dialog(el)!.confirmationLocked, { timeout: 10_000 }).toBe(true);
+      expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
+    },
+  );
+
   it("a payment started while the one before it is still reading the bill keeps the bill held", async () => {
     const takeBillPayment = vi
       .fn()
