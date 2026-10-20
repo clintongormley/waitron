@@ -1000,6 +1000,8 @@ const party = {
   outstanding: "3.00",
   billCount: 1,
   tableIds: ["t2"],
+  unsentDrafts: [],
+  reminder: null,
 };
 
 const table = {
