@@ -172,6 +172,16 @@ export class TillPayEquipment extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .reason p {
+        margin: 0;
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .reason .hint {
+        margin-top: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-normal);
+      }
+
       .question {
         display: flex;
         flex-direction: column;
@@ -206,6 +216,8 @@ export class TillPayEquipment extends LitElement {
   @property({ attribute: false }) fieldErrors: Partial<Record<PayEquipmentRole, string>> = {};
   /** Why the phone no longer has the reader it had, shown above the row. */
   @property({ attribute: false }) readerReason: string | null = null;
+  /** What to do about it, under the reason, inside its box. */
+  @property({ attribute: false }) readerHint: string | null = null;
   @property({ type: Boolean }) canScan = false;
   @property({ type: Boolean }) askNfc = false;
   @property({ type: Boolean }) disabled = false;
@@ -410,7 +422,14 @@ export class TillPayEquipment extends LitElement {
     return html`${
       this.readerReason === null
         ? nothing
-        : html`<p class="reason" role="status" data-pay-reader-reason>${this.readerReason}</p>`
+        : html`<div class="reason" role="status" data-pay-reader-reason>
+            <p data-pay-reader-line>${this.readerReason}</p>
+            ${
+              this.readerHint === null
+                ? nothing
+                : html`<p class="hint" data-pay-reader-hint>${this.readerHint}</p>`
+            }
+          </div>`
     }${this.#row()}`;
   }
 

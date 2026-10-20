@@ -158,6 +158,7 @@ export class TillPresentedPayDialog extends LitElement {
     null;
   @property({ attribute: false }) equipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
   @property({ attribute: false }) readerReason: string | null = null;
+  @property({ attribute: false }) readerHint: string | null = null;
   @property({ type: Boolean }) canScan = false;
   /** What a sticker's tap or scan did while the sheet is open. */
   @property({ attribute: false }) notice: PayNotice | null = null;
@@ -600,6 +601,7 @@ export class TillPresentedPayDialog extends LitElement {
         .saving=${this.equipmentSaving}
         .fieldErrors=${this.equipmentErrors}
         .readerReason=${this.readerReason}
+        .readerHint=${this.readerHint}
         .canScan=${this.canScan}
         .askNfc=${this.askNfc}
         .disabled=${this.busy}

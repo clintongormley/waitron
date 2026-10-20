@@ -17,6 +17,7 @@ import type {
   DeviceEquipment,
   EquipmentChange,
   EquipmentItem,
+  RoleEquipment,
   TillApi,
   TillSaleResult,
 } from "./api/client.js";
@@ -3800,6 +3801,250 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
           innerWidth: window.innerWidth,
           panelWidth: box.width,
           rowInside: rowBox.left >= box.left && rowBox.right <= box.right,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+});
+
+describe("till-app: why the sheet's reader has gone (default 19)", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const MARC = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
+
+  const withReader = (reader: RoleEquipment): DeviceEquipment => ({
+    roles: [roleOf("receipt", BARRA, [BARRA]), reader],
+  });
+  const holding = (reader: EquipmentItem) =>
+    withReader(roleOf("card_terminal", reader, [reader, LECTOR_3]));
+  const takenByMarc = withReader(
+    roleOf("card_terminal", null, [{ ...LECTOR_2, heldBy: MARC }, LECTOR_3]),
+  );
+  const OFF = { ...LECTOR_2, available: false };
+  const switchedOff = withReader(roleOf("card_terminal", OFF, [OFF, LECTOR_3]));
+  const unpaired = withReader({
+    ...roleOf("card_terminal", OFF, [OFF, LECTOR_3]),
+    resolved: null,
+  });
+  const dropped = withReader(roleOf("card_terminal", null, [LECTOR_3]));
+
+  const presented = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+  const sheet = (el: TillApp) => dialog(el) ?? presented(el);
+  const row = (el: TillApp) =>
+    sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+  async function reason(el: TillApp): Promise<{ line: string; hint: string | null } | null> {
+    await sheet(el)!.updateComplete;
+    await row(el).updateComplete;
+    const box = row(el).shadowRoot!.querySelector("[data-pay-reader-reason]");
+    if (box === null) return null;
+    const hint = box.querySelector("[data-pay-reader-hint]");
+    return {
+      line: text(box.querySelector("[data-pay-reader-line]")),
+      hint: hint === null ? null : text(hint),
+    };
+  }
+  async function closeSheet(el: TillApp): Promise<void> {
+    if (dialog(el) !== null) emit(dialog(el)!, "bill-pay-close");
+    else emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+  }
+  const placed = { getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]) };
+
+  /** A phone that held Lector 2 when the table opened; the sheet's opening read answers `then`. */
+  async function lostPhone(
+    then: DeviceEquipment,
+    overrides: Record<string, unknown> = {},
+    theme?: "light" | "dark",
+    tillOver: Record<string, unknown> = {},
+  ) {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    api = stubApi(onPhone({ getDeviceEquipment, ...overrides }, tillOver));
+    const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+    const order = await openPhoneTable(el);
+    getDeviceEquipment.mockResolvedValue(then);
+    await pressPaySheet(el, order);
+    await flush(el);
+    return { el, order, getDeviceEquipment };
+  }
+
+  const takenLine = () =>
+    t("equipment.taken_person")
+      .replace("{item}", "Lector 2")
+      .replace("{device}", "Móvil 2")
+      .replace("{person}", "Marc");
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["bill", {}],
+    ["presented", placed],
+  ] as const)(
+    "on the %s path, a reader another phone took opens the row saying who took it, and to choose the one in hand",
+    async (_path, over) => {
+      const { el } = await lostPhone(takenByMarc, over);
+
+      expect(row(el).open).toBe(true);
+      expect(await reason(el)).toEqual({
+        line: takenLine(),
+        hint: t("pay_equipment.choose_in_hand"),
+      });
+    },
+  );
+
+  it.each([
+    ["switched off", switchedOff],
+    ["unpaired", unpaired],
+  ] as const)("a %s reader says it is switched off", async (_how, then) => {
+    const { el } = await lostPhone(then);
+
+    expect(row(el).open).toBe(true);
+    expect(await reason(el)).toEqual({
+      line: t("equipment.switched_off").replace("{item}", "Lector 2"),
+      hint: null,
+    });
+  });
+
+  it("a switched-off reader says so on a freshly mounted page too", async () => {
+    const { el } = await lostPhone(switchedOff, {
+      getDeviceEquipment: vi.fn().mockResolvedValue(switchedOff),
+    });
+
+    expect(await reason(el)).toEqual({
+      line: t("equipment.switched_off").replace("{item}", "Lector 2"),
+      hint: null,
+    });
+  });
+
+  it.each([
+    ["bill", {}],
+    ["presented", placed],
+  ] as const)(
+    "on the %s path, a reader taken off the list says it is no longer available",
+    async (_path, over) => {
+      const { el } = await lostPhone(dropped, over);
+
+      expect(row(el).open).toBe(true);
+      expect(await reason(el)).toEqual({
+        line: t("pay_equipment.reader_gone").replace("{item}", "Lector 2"),
+        hint: null,
+      });
+    },
+  );
+
+  it("a reader the server has forgotten, on a freshly mounted page, gets no line", async () => {
+    const { el } = await lostPhone(takenByMarc, {
+      getDeviceEquipment: vi.fn().mockResolvedValue(takenByMarc),
+    });
+
+    expect(row(el).open).toBe(true);
+    expect(await reason(el)).toBeNull();
+  });
+
+  it("a practice venue's phone, which charges its demo reader, gets no line", async () => {
+    const { el } = await lostPhone(takenByMarc, {}, undefined, {
+      cardProvider: "simulator",
+      activeReaders: [{ id: "demo-1", name: "Demo card reader", provider: "simulator" }],
+      defaultReaderId: "demo-1",
+    });
+
+    expect(await reason(el)).toBeNull();
+  });
+
+  it("the line goes once the phone has a ready reader again, and stays gone when it loses that one without being told why", async () => {
+    const { el, order, getDeviceEquipment } = await lostPhone(takenByMarc);
+    expect(await reason(el)).not.toBeNull();
+
+    await closeSheet(el);
+    getDeviceEquipment.mockResolvedValue(holding(LECTOR_3));
+    await pressPaySheet(el, order);
+    await flush(el);
+    expect(await reason(el)).toBeNull();
+
+    await closeSheet(el);
+    getDeviceEquipment.mockResolvedValue(withReader(roleOf("card_terminal", null, [LECTOR_3])));
+    await pressPaySheet(el, order);
+    await flush(el);
+    expect(row(el).open).toBe(true);
+    expect(await reason(el)).toBeNull();
+  });
+
+  it("the line stays when the sheet opens again on a read that says the same", async () => {
+    const { el, order } = await lostPhone(takenByMarc);
+    await closeSheet(el);
+    await pressPaySheet(el, order);
+    await flush(el);
+
+    expect(await reason(el)).toEqual({
+      line: takenLine(),
+      hint: t("pay_equipment.choose_in_hand"),
+    });
+  });
+
+  it("picking Lector 2 again from the list after the takeover asks today's question", async () => {
+    const { el } = await lostPhone(takenByMarc);
+    const combobox = row(el).shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await combobox.updateComplete;
+    const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+      (each) => each.textContent!.trim().startsWith("Lector 2"),
+    )!;
+    await userEvent.click(option);
+    await flush(el);
+    await row(el).updateComplete;
+
+    expect(text(row(el).shadowRoot!.querySelector("[data-pay-take-question]"))).toBe(
+      t("equipment.take_question_person")
+        .replace("{item}", "Lector 2")
+        .replace("{device}", "Móvil 2")
+        .replace("{person}", "Marc"),
+    );
+  });
+
+  const lookBackgrounds = new Map<string, string>();
+  it.each([
+    ["light", 390],
+    ["dark", 390],
+    ["light", 1280],
+    ["dark", 1280],
+  ] as const)("looks right taken, %s at %i px", async (theme, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      // A person with no language of their own signs in to the venue's (`resolveActiveLocale`).
+      const { el } = await lostPhone(takenByMarc, {}, theme, { locale: "es-ES" });
+      await row(el).updateComplete;
+      expect(currentLocale()).toBe("es-ES");
+      expect(row(el).open).toBe(true);
+      expect(await reason(el)).toEqual({
+        line: takenLine(),
+        hint: t("pay_equipment.choose_in_hand"),
+      });
+      const panel = dialog(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      lookBackgrounds.set(`${theme}-${width}`, background);
+      if (theme === "dark") expect(background).not.toBe(lookBackgrounds.get(`light-${width}`));
+      const shot = `__screenshots__/look/a796-reader-taken-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const reasonBox = row(el)
+        .shadowRoot!.querySelector("[data-pay-reader-reason]")!
+        .getBoundingClientRect();
+      await commands.writeFile(
+        `src/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          reasonInside: reasonBox.left >= box.left && reasonBox.right <= box.right,
           background,
         }),
       );

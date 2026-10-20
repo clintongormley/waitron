@@ -408,6 +408,20 @@ describe("till-pay-equipment", () => {
     );
   });
 
+  it("draws a hint under the reason, inside its box, only when given one", async () => {
+    const el = await mount({ readerReason: "Móvil 2 (Marc) se ha llevado Lector 2" });
+    expect(q(el, "[data-pay-reader-hint]")).toBeNull();
+    el.readerHint = "Elige el lector que tienes en la mano.";
+    await el.updateComplete;
+    const reason = q(el, "[data-pay-reader-reason]")!;
+    expect(reason.querySelector("[data-pay-reader-line]")!.textContent!.trim()).toBe(
+      "Móvil 2 (Marc) se ha llevado Lector 2",
+    );
+    expect(reason.querySelector("[data-pay-reader-hint]")!.textContent!.trim()).toBe(
+      "Elige el lector que tienes en la mano.",
+    );
+  });
+
   it("disabled disables Cambiar, QR, NFC and both drop-downs", async () => {
     const el = await mount({ canScan: true, askNfc: true, disabled: true });
     expect(disabledOf(q(el, "[data-pay-equipment-change]"))).toBe(true);

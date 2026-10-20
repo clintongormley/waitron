@@ -1,6 +1,8 @@
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
+import { carriedText, t } from "../i18n/t.js";
 import type {
   DeviceEquipment,
+  EquipmentHolder,
   EquipmentItem,
   EquipmentRole,
   RoleEquipment,
@@ -144,4 +146,55 @@ export function autoPickReader(
   const [only, ...more] = role.choices;
   if (only === undefined || more.length > 0) return null;
   return only.available && !only.busy && only.heldBy === null ? only.id : null;
+}
+
+/** What another device took between two reads: an item a role resolved to before, which it no
+ * longer does, and which the newer read says another device carries. */
+export function takenFrom(before: DeviceEquipment | null, after: DeviceEquipment): string | null {
+  for (const role of after.roles) {
+    const was = before?.roles.find((each) => each.role === role.role)?.resolved;
+    if (was == null || role.resolved?.id === was.id) continue;
+    const holder: EquipmentHolder | null | undefined = [
+      role.chosen,
+      role.default,
+      ...role.choices,
+    ].find((item) => item?.id === was.id)?.heldBy;
+    if (holder == null) continue;
+    return carriedText(was.name, holder, "equipment.taken", "equipment.taken_person");
+  }
+  return null;
+}
+
+/** Why the phone no longer has the reader its previous read resolved to: another device carries
+ * it, or it is offered no longer at all. */
+export type ReaderLoss = { kind: "taken"; text: string } | { kind: "gone"; name: string };
+
+export function readerLoss(
+  before: DeviceEquipment | null,
+  after: DeviceEquipment,
+): ReaderLoss | null {
+  const readerOnly = (equipment: DeviceEquipment): DeviceEquipment => ({
+    roles: equipment.roles.filter((each) => each.role === "card_terminal"),
+  });
+  const was = roleOf(before, "card_terminal")?.resolved;
+  if (before === null || was == null) return null;
+  const text = takenFrom(readerOnly(before), readerOnly(after));
+  if (text !== null) return { kind: "taken", text };
+  const role = roleOf(after, "card_terminal");
+  const offered = [role?.resolved, role?.chosen, role?.default, ...(role?.choices ?? [])];
+  return offered.some((each) => each?.id === was.id) ? null : { kind: "gone", name: was.name };
+}
+
+/** The line above the open row saying why it has no reader: a switched-off reader from the read
+ * itself, else what this page saw happen to the reader. */
+export function readerReasonOf(
+  reader: PayReader,
+  loss: ReaderLoss | null,
+): { line: string; hint: string | null } | null {
+  if (reader.kind === "switched_off")
+    return { line: t("equipment.switched_off").replace("{item}", () => reader.name), hint: null };
+  if (reader.kind === "ready" || loss === null) return null;
+  return loss.kind === "taken"
+    ? { line: loss.text, hint: t("pay_equipment.choose_in_hand") }
+    : { line: t("pay_equipment.reader_gone").replace("{item}", () => loss.name), hint: null };
 }

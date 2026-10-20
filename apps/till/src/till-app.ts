@@ -22,8 +22,12 @@ import { heldViews, placeFor } from "./state/draft-place.js";
 import {
   autoPickReader,
   payReaderOf,
+  readerLoss,
+  readerReasonOf,
   readyPayReader,
+  takenFrom,
   type FixedReader,
+  type ReaderLoss,
 } from "./state/pay-equipment.js";
 import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
@@ -58,7 +62,6 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
-  carriedText,
   countText,
   currentLocale,
   differentPeopleText,
@@ -373,7 +376,6 @@ import type {
   DeviceEquipment,
   DeviceIdentity,
   EquipmentChange,
-  EquipmentHolder,
   ProfileChoice,
   ReadOptions,
   KitchenScreenKind,
@@ -448,23 +450,6 @@ function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
   return reader.kind === "ready"
     ? { id: reader.id, name: reader.name, provider: reader.provider }
     : null;
-}
-
-/** What another device took between two reads: an item a role resolved to before, which it no
- * longer does, and which the newer read says another device carries. */
-function takenFrom(before: DeviceEquipment | null, after: DeviceEquipment): string | null {
-  for (const role of after.roles) {
-    const was = before?.roles.find((each) => each.role === role.role)?.resolved;
-    if (was == null || role.resolved?.id === was.id) continue;
-    const holder: EquipmentHolder | null | undefined = [
-      role.chosen,
-      role.default,
-      ...role.choices,
-    ].find((item) => item?.id === was.id)?.heldBy;
-    if (holder == null) continue;
-    return carriedText(was.name, holder, "equipment.taken", "equipment.taken_person");
-  }
-  return null;
 }
 
 interface TableAllergyRead {
@@ -3001,6 +2986,8 @@ export class TillApp extends LitElement {
   /** Whether the phone has had a reader in this page. Not stored and not reset by logout: it
    * describes the page, not the person (design default 18). */
   #hadReader = false;
+  /** What this page saw happen to the reader it last had; kept until it has a ready one again. */
+  #readerLoss: ReaderLoss | null = null;
   #paySheetOpenings = 0;
   /** The open sheet may pick up a reader by itself; its row stays closed until that is settled. */
   @state() private payAutoPicking = false;
@@ -9080,6 +9067,7 @@ export class TillApp extends LitElement {
 
   #holdEquipment(equipment: DeviceEquipment): void {
     this.#equipmentReads++;
+    this.#readerLoss = readerLoss(this.deviceEquipment, equipment) ?? this.#readerLoss;
     this.#noteReader(equipment);
     if (this.operatorName !== "")
       this.equipmentTaken = takenFrom(this.deviceEquipment, equipment) ?? this.equipmentTaken;
@@ -9089,6 +9077,13 @@ export class TillApp extends LitElement {
   #noteReader(equipment: DeviceEquipment): void {
     if (equipment.roles.some((role) => role.role === "card_terminal" && role.resolved !== null))
       this.#hadReader = true;
+    if (payReaderOf(equipment).kind === "ready") this.#readerLoss = null;
+  }
+
+  /** The line above the sheet's row saying why it has no reader (design default 19). */
+  #payReaderReason(): { line: string; hint: string | null } | null {
+    if (this.#fixedPayReader() !== null) return null;
+    return readerReasonOf(payReaderOf(this.deviceEquipment), this.#readerLoss);
   }
 
   /** The sheet's opening read; once it answers, a phone that has had no reader picks up the one
@@ -9568,6 +9563,7 @@ export class TillApp extends LitElement {
     const open = this.billPaying;
     if (open === null) return nothing;
     const pending = this.#unansweredPayments.get(open.billId);
+    const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
         .balance=${open.balance}
         .lines=${open.lines}
@@ -9597,6 +9593,8 @@ export class TillApp extends LitElement {
         .canScan=${canScan()}
         .fixedReader=${this.#fixedPayReader()}
         .autoPicking=${this.payAutoPicking}
+        .readerReason=${reason?.line ?? null}
+        .readerHint=${reason?.hint ?? null}
         .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
         .equipmentSaving=${this.payEquipmentSaving}
         .equipmentErrors=${this.payEquipmentErrors}
@@ -9619,6 +9617,7 @@ export class TillApp extends LitElement {
     const bill =
       open === null ? undefined : this.partyBills.find((row) => row.workingOrderId === open.billId);
     if (open === null || bill === undefined) return nothing;
+    const reason = this.#payReaderReason();
     return html`<till-presented-pay-dialog
       .open=${true}
       .amount=${bill.outstanding}
@@ -9634,6 +9633,8 @@ export class TillApp extends LitElement {
       .askNfc=${this.nfcPermission === "prompt"}
       .fixedReader=${this.#fixedPayReader()}
       .autoPicking=${this.payAutoPicking}
+      .readerReason=${reason?.line ?? null}
+      .readerHint=${reason?.hint ?? null}
       .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
       .equipmentSaving=${this.payEquipmentSaving}
       .equipmentErrors=${this.payEquipmentErrors}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
+import { t } from "../i18n/t.js";
 import {
   autoPickReader,
   heldForEquipment,
@@ -9,10 +10,13 @@ import {
   printerChoices,
   printerWantsRowOpen,
   readerChoices,
+  readerLoss,
+  readerReasonOf,
   readyPayReader,
   rowStartsOpen,
   type PayPrinter,
   type PayReader,
+  type ReaderLoss,
 } from "./pay-equipment.js";
 
 function item(id: string, overrides: Partial<EquipmentItem> = {}): EquipmentItem {
@@ -447,5 +451,127 @@ describe("autoPickReader: a phone's first payment takes the one free reader", ()
 
   it("an unread equipment picks nothing", () => {
     expect(autoPickReader(null, false)).toBeNull();
+  });
+});
+
+describe("readerLoss: why a phone no longer has the reader it had (default 19)", () => {
+  const lector2 = item("r2", { name: "Lector 2", portable: true, provider: "sumup" });
+  const marc = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
+  const resolved = { id: "r2", name: "Lector 2", available: true, provider: "sumup" };
+  const holding = equipment(
+    {},
+    { selection: "item", chosenId: "r2", resolved, chosen: lector2, choices: [lector2] },
+  );
+
+  it("a reader another device now carries was taken, named with its device and person", () => {
+    const after = equipment({}, { choices: [{ ...lector2, heldBy: marc }] });
+
+    expect(readerLoss(holding, after)).toEqual({
+      kind: "taken",
+      text: t("equipment.taken_person")
+        .replace("{item}", "Lector 2")
+        .replace("{device}", "Móvil 2")
+        .replace("{person}", "Marc"),
+    });
+  });
+
+  it("a reader no longer offered at all has gone", () => {
+    expect(readerLoss(holding, equipment({}, { choices: [item("r3")] }))).toEqual({
+      kind: "gone",
+      name: "Lector 2",
+    });
+  });
+
+  it("a reader still offered as the default or the choice has not gone", () => {
+    expect(readerLoss(holding, equipment({}, { default: lector2 }))).toBeNull();
+    expect(readerLoss(holding, equipment({}, { chosenId: "r2", chosen: lector2 }))).toBeNull();
+  });
+
+  it("a switched-off reader the server keeps as the choice is neither taken nor gone", () => {
+    const off = { ...lector2, available: false };
+    const after = equipment(
+      {},
+      {
+        selection: "item",
+        chosenId: "r2",
+        resolved: { ...resolved, available: false },
+        chosen: off,
+        choices: [off],
+      },
+    );
+    expect(readerLoss(holding, after)).toBeNull();
+  });
+
+  it("an unpaired reader whose choice the server keeps is neither taken nor gone", () => {
+    const after = equipment(
+      {},
+      { selection: "item", chosenId: "r2", chosen: { ...lector2, available: false } },
+    );
+    expect(readerLoss(holding, after)).toBeNull();
+  });
+
+  it("after a fresh mount, or with no reader before, nothing was lost", () => {
+    expect(readerLoss(null, equipment())).toBeNull();
+    expect(readerLoss(equipment({}, { choices: [lector2] }), equipment())).toBeNull();
+  });
+
+  it("the same reader still resolved was not lost", () => {
+    expect(readerLoss(holding, holding)).toBeNull();
+  });
+
+  it("a receipt printer another device took is not the reader's loss", () => {
+    const barra = item("p1", { name: "Barra", portable: true });
+    const printerResolved = { id: "p1", name: "Barra", available: true };
+    const before = equipment(
+      {
+        selection: "item",
+        chosenId: "p1",
+        resolved: printerResolved,
+        chosen: barra,
+        choices: [barra],
+      },
+      holding.roles[4],
+    );
+    const after = equipment({ choices: [{ ...barra, heldBy: marc }] }, holding.roles[4]);
+    expect(readerLoss(before, after)).toBeNull();
+  });
+});
+
+describe("readerReasonOf: the line above the open row", () => {
+  const taken: ReaderLoss = { kind: "taken", text: "Móvil 2 (Marc) took Lector 2" };
+  const gone: ReaderLoss = { kind: "gone", name: "Lector 2" };
+  const none: PayReader = { kind: "none" };
+
+  it("a reader taken says who took it, and to choose the reader in hand", () => {
+    expect(readerReasonOf(none, taken)).toEqual({
+      line: "Móvil 2 (Marc) took Lector 2",
+      hint: t("pay_equipment.choose_in_hand"),
+    });
+  });
+
+  it("a reader gone says it is no longer available", () => {
+    expect(readerReasonOf(none, gone)).toEqual({
+      line: t("pay_equipment.reader_gone").replace("{item}", "Lector 2"),
+      hint: null,
+    });
+  });
+
+  it("a switched-off reader says so from the current read, whatever was remembered", () => {
+    const off: PayReader = { kind: "switched_off", id: "r2", name: "Lector 2" };
+    const line = { line: t("equipment.switched_off").replace("{item}", "Lector 2"), hint: null };
+    expect(readerReasonOf(off, null)).toEqual(line);
+    expect(readerReasonOf(off, taken)).toEqual(line);
+  });
+
+  it("a ready reader, or no reader and nothing remembered, says nothing", () => {
+    const ready: PayReader = {
+      kind: "ready",
+      id: "r2",
+      name: "Lector 2",
+      provider: "sumup_cloud",
+      fromDefault: false,
+    };
+    expect(readerReasonOf(ready, taken)).toBeNull();
+    expect(readerReasonOf(none, null)).toBeNull();
   });
 });

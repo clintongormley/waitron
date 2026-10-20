@@ -109,6 +109,15 @@ describe.each(["light", "dark"] as const)("till-pay-equipment a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("a reason with its hint has no violations", async () => {
+    const { host } = await mount(theme, {
+      open: true,
+      readerReason: "Móvil 2 (Marc) se ha llevado Lector 2",
+      readerHint: "Elige el lector que tienes en la mano.",
+    });
+    await expectNoA11yViolations(host);
+  });
+
   it.each([
     [false, 390],
     [false, 1280],

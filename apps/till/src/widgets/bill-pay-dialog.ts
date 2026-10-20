@@ -488,6 +488,7 @@ export class TillBillPayDialog extends LitElement {
     null;
   @property({ attribute: false }) equipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
   @property({ attribute: false }) readerReason: string | null = null;
+  @property({ attribute: false }) readerHint: string | null = null;
   @property({ type: Boolean }) canScan = false;
   @property({ type: Boolean }) askNfc = false;
   /** An equipment change is out: nothing is taken until it is answered. */
@@ -1716,6 +1717,7 @@ export class TillBillPayDialog extends LitElement {
         .saving=${this.equipmentSaving}
         .fieldErrors=${this.equipmentErrors}
         .readerReason=${this.readerReason}
+        .readerHint=${this.readerHint}
         .canScan=${this.canScan}
         .askNfc=${this.askNfc}
         .disabled=${this.busy || this.confirmationLocked}
