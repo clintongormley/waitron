@@ -222,3 +222,18 @@ describe("file archive", () => {
     ).rejects.toEqual(invalid("unexpected_file_entry"));
   });
 });
+
+it("requires exact framing only when requested and cleans a refused extraction", async () => {
+  const dir = await scratch();
+  const path = join(dir, "archive");
+  const framed = packArchive([{ name: "db.dump", bytes: Buffer.from("database") }]);
+  await writeFile(path, Buffer.concat([framed, Buffer.from("tail")]));
+  await expect(unpackArchiveFile(path, dir, { requireExactEnd: true })).rejects.toEqual(
+    invalid("trailing_data"),
+  );
+  expect(await readdir(dir)).toEqual(["archive"]);
+  await writeFile(path, framed);
+  const entries = await unpackArchiveFile(path, dir, { requireExactEnd: true });
+  expect(entries).toEqual([{ kind: "file", name: "db.dump", path: join(dir, "venue.db") }]);
+  expect((await readFile(join(dir, "venue.db"))).toString()).toBe("database");
+});
