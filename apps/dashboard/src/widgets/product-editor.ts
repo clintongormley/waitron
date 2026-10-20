@@ -157,17 +157,6 @@ export function productEditorField(field: string, defaultLanguage: string): stri
   return mapped.endsWith("-") ? `${mapped}${defaultLanguage}` : mapped;
 }
 
-/**
- * The editor field a refused TRANSLATION belongs to. `content.translation_required` names the
- * language whose text is missing and never the value that lacks it
- * (`packages/catalogue/src/content-languages.ts`), and one save carries several translated values:
- * the product's customer name and one per variant. This points at the first, and the next save
- * reports whatever is still missing.
- *
- * A variant's names are edited in its own window, so a variant's problem belongs to its ROW. The
- * server checks only the variants saved Active (`writeProductVariants`,
- * packages/catalogue/src/variants.ts), so an Inactive one is never blamed.
- */
 export function productEditorTranslationField(
   value: {
     customerName: LocalizedText | null;

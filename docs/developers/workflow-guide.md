@@ -466,3 +466,10 @@ experiments had finished, but `until grep ... <(tail -1 ...)` accepted only an e
 status while the task output ended `[exited with code 0]`. `ps -p 54448 -o pid,ppid,etime,command`
 showed that wait still running at 8:58. The driver retained the output and stopped that recorded
 wait process and its recorded sleep child; the same review then published its completed findings.
+
+Keep a probe's input bounded too. In A682's 2026-10-20 review, the command placed `cat >
+/dev/null` before the Bash script containing its per-test timeouts. After 5:29, `ps -p
+47263,47264 -o pid,ppid,etime,stat,wchan,command` showed only that shell and its `cat` child; no
+test had started. The driver retained the process snapshot and sent SIGTERM to the recorded
+`cat` pid 47264. The following snapshot showed Bash running the probe. A test timeout does not
+cover a command waiting before the test is launched.
