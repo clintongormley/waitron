@@ -10,6 +10,7 @@ import type {
   ExtraList,
   CategorySummary,
   CatalogueSelection,
+  Course,
   FolderContents,
   FolderSummary,
   DashboardApi,
@@ -102,6 +103,7 @@ export class CatalogueBrowser extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
+  @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) routing: RoutingModel | null = null;
   /** Whether the routing read failed, as against not having answered yet. */
   @property({ type: Boolean }) routingFailed = false;
@@ -923,6 +925,7 @@ export class CatalogueBrowser extends LitElement {
         .products=${this.products}
         .search=${this.search}
         .madeAt=${this.madeAt}
+        .courses=${this.courses}
         .unroutedFolderIds=${this.#unroutedFolderIds()}
         .folderMadeAt=${this.#folderMadeAt}
         .routingFailed=${this.routingFailed}

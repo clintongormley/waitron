@@ -703,6 +703,7 @@ export class CatalogueScreen extends LitElement {
               }}
               .products=${this.products}
               .madeAt=${this.madeAt}
+              .courses=${this.courses}
               .routing=${this.routing}
               .routingFailed=${this.routingFailed}
               .categories=${this.categories}

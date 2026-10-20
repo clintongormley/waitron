@@ -221,6 +221,14 @@ it("does not mark a folder covered by its own Every zone cell", async () => {
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
   expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
 });
+it("hands the courses to the products list", async () => {
+  const courses = [
+    { id: "k1", name: "Starters", displayOrder: 0, active: true, heldUntilFired: false },
+  ];
+  const el = await mountBrowser({ courses });
+  await tableOf(el);
+  expect(el.shadowRoot!.querySelector("dashboard-product-list")!.courses).toEqual(courses);
+});
 /** The Made at cell of a row, found by its column heading. */
 async function madeAtText(el: CatalogueBrowser, key: string) {
   const root = (await tableOf(el)).shadowRoot!;

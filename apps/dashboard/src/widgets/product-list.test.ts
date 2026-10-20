@@ -11,7 +11,7 @@ import {
   expectRowMenusOnScreen,
 } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
-import type { Product, Unit } from "../api/client.js";
+import type { Course, Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
@@ -152,6 +152,21 @@ const bunVariant = {
   available: true,
   active: true,
   courseId: null,
+};
+
+const starters: Course = {
+  id: "starters",
+  name: "Starters",
+  displayOrder: 1,
+  active: true,
+  heldUntilFired: false,
+};
+const mains: Course = {
+  id: "mains",
+  name: "Mains",
+  displayOrder: 2,
+  active: true,
+  heldUntilFired: false,
 };
 
 /** The staff name and the customer-facing name deliberately DIFFER, so a test cannot pass by reading
@@ -683,6 +698,7 @@ describe("product-list", () => {
         box.checked,
       ]),
     ).toEqual([
+      ["course", true],
       ["made-at", true],
       ["price", true],
       ["modifiers", true],
@@ -4397,7 +4413,8 @@ describe("the Products tree's Name column", () => {
     const headings = [...root.querySelectorAll("thead th:not(.select)")].map((th) =>
       th.textContent!.replace(/[▲▼]/g, "").trim(),
     );
-    expect(headings[1]).toBe(t("product.price"));
+    expect(headings[1]).toBe("Course");
+    expect(headings[2]).toBe(t("product.price"));
     expect(headings.indexOf(t("product.price"))).toBeLessThan(
       headings.indexOf(t("product.made_at")),
     );
@@ -6046,14 +6063,164 @@ describe("product-list filters (A463)", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "a" })],
       madeAt: { a: station("bar", "Bar") },
+      courses: [starters, mains],
     });
     expect(await filterKeys(el)).toEqual([
+      "course",
       "made-at",
       "modifiers",
       "ordering",
       "allergens",
       "dietary",
     ]);
+  });
+
+  describe("the Course column", () => {
+    beforeEach(() => setLocale("en"));
+
+    // Names sort in the ids' order, and the course order differs from both.
+    const courseProducts = () => [
+      product({
+        id: "a-soup",
+        name: "A soup",
+        courseId: "mains",
+        variants: [
+          { ...bunVariant, id: "cup", name: "Cup", courseId: "starters" },
+          { ...bunVariant, id: "bowl", name: "Bowl", courseId: null },
+        ],
+      }),
+      product({ id: "b-salad", name: "B salad", courseId: "starters" }),
+      product({ id: "c-bread", name: "C bread", courseId: null }),
+      product({ id: "d-cake", name: "D cake", courseId: "gone" }),
+    ];
+
+    async function mountCourses(props: Partial<ProductList> = {}) {
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: courseProducts(),
+        courses: [starters, mains],
+        ...props,
+      });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      return { el, table, root: await tableRoot(el) };
+    }
+
+    async function expand(table: HTMLElementTagNameMap["wt-data-table"], key: string) {
+      table
+        .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-toggle`)!
+        .click();
+      await table.updateComplete;
+    }
+
+    /** Opens the Filters panel and the Course dropdown, then clicks the row named `label`. */
+    async function clickCourse(el: ProductList, label: string): Promise<void> {
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      const root = table.shadowRoot!;
+      const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+      if (getComputedStyle(panel).display === "none") {
+        await userEvent.click(root.querySelector<HTMLElement>(".filters-trigger")!);
+        await table.updateComplete;
+      }
+      const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="course"]')!;
+      if (!filter.shadowRoot!.querySelector(".trigger")!.matches('[aria-expanded="true"]')) {
+        await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+        await filter.updateComplete;
+      }
+      const option = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (row) => row.textContent!.trim() === label,
+      )!;
+      await userEvent.click(option);
+      await el.updateComplete;
+      await table.updateComplete;
+    }
+
+    it("sits after Name, headed Course, and is offered shown in the chooser", async () => {
+      const { root } = await mountCourses();
+      const headings = [...root.querySelectorAll("thead th:not(.select)")].map((th) =>
+        th.textContent!.replace(/[▲▼]/g, "").trim(),
+      );
+      expect(headings[1]).toBe("Course");
+      expect(root.querySelector<HTMLInputElement>('input[data-column="course"]')?.checked).toBe(
+        true,
+      );
+    });
+
+    it("names each product's course, a dash for none and an unavailable one for a course it does not know", async () => {
+      const { table, root } = await mountCourses({
+        categories: [food],
+        products: [
+          ...courseProducts(),
+          product({ id: "e-pie", name: "E pie", primaryCategoryId: "f", courseId: "mains" }),
+        ],
+      });
+      const cell = (key: string) => cellUnder(root, key, "Course").textContent!.trim();
+      expect(cell("a-soup")).toBe("Mains");
+      expect(cell("b-salad")).toBe("Starters");
+      expect(cell("c-bread")).toBe("—");
+      expect(cell("d-cake")).toBe(t("editor.missing_choice"));
+      expect(cell("folder:f")).toBe("");
+      await expand(table, "a-soup");
+      expect(cell("a-soup:cup")).toBe("Starters");
+      expect(cell("a-soup:bowl")).toBe("");
+    });
+
+    it("sorts in firing order, an unknown course after every known one and no course last", async () => {
+      const { table, root } = await mountCourses();
+      root.querySelector<HTMLElement>('button[data-sort="course"]')!.click();
+      await table.updateComplete;
+      expect(table.sortDirection).toBe("ascending");
+      expect(rowKeys(root)).toEqual(["b-salad", "a-soup", "d-cake", "c-bread"]);
+    });
+
+    it("offers the courses in firing order, then No course, and counts two choices", async () => {
+      const { el, root } = await mountCourses();
+      expect(filterOptions(root, "course")).toEqual([
+        ["", "Any course"],
+        ["starters", "Starters"],
+        ["mains", "Mains"],
+        ["no-course", "No course"],
+      ]);
+      await clickCourse(el, "Starters");
+      await clickCourse(el, "Mains");
+      const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="course"]')!;
+      expect(filter.values).toEqual(["starters", "mains"]);
+      expect(filter.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim()).toBe(
+        "2 courses",
+      );
+    });
+
+    it("keeps the products with no course when No course is clicked, and those fired as Starters when Starters is", async () => {
+      const { el, table, root } = await mountCourses();
+      await expand(table, "a-soup");
+      await clickCourse(el, "No course");
+      expect(rowKeys(root)).toEqual(["c-bread"]);
+      await clickCourse(el, "No course");
+      await clickCourse(el, "Starters");
+      expect(rowKeys(root)).toEqual(["a-soup", "a-soup:cup", "b-salad"]);
+    });
+
+    it("has no Course filter while there are no courses, and applies a remembered choice once they arrive", async () => {
+      sessionStorage.setItem(
+        "waitron.products.table",
+        JSON.stringify({ filters: { course: ["mains"] } }),
+      );
+      const { el, table, root } = await mountCourses({ courses: [] });
+      expect(await filterKeys(el)).not.toContain("course");
+      expect(rowKeys(root)).toEqual(["a-soup", "b-salad", "c-bread", "d-cake"]);
+      el.courses = [starters, mains];
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(await filterKeys(el)).toContain("course");
+      expect(rowKeys(root)).toEqual(["a-soup"]);
+    });
+
+    it("draws a renamed course in the cell and the filter without a remount", async () => {
+      const { el, table, root } = await mountCourses();
+      el.courses = [starters, { ...mains, name: "Main courses" }];
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(cellUnder(root, "a-soup", "Course").textContent!.trim()).toBe("Main courses");
+      expect(filterOptions(root, "course")).toContainEqual(["mains", "Main courses"]);
+    });
   });
 
   it("offers one Made at choice per station and keeps the products the column shows there", async () => {

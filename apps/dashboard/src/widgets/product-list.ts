@@ -56,6 +56,7 @@ import {
 import {
   DIETARY_ORIGINS,
   type CategorySummary,
+  type Course,
   type DietaryOrigin,
   type MadeAt,
   type Product,
@@ -72,6 +73,9 @@ export const ROOT_KEY = "root";
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
+/** The Course filter's value for a row with no course. Never `""`: a multiple choice's `""` row is
+ * its "any" row, and choosing it clears the choice. Course ids are UUIDs, so this is never one. */
+const NO_COURSE = "no-course";
 
 export type CategoryNameDraft =
   { kind: "create"; parentId: string | null } | { kind: "rename"; categoryId: string };
@@ -398,6 +402,7 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) selected: string[] = [];
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
+  @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) unroutedFolderIds: string[] = [];
@@ -728,6 +733,11 @@ export class ProductList extends LitElement {
     }
     // The Made at filter offers the stations the read names.
     if (changed.has("madeAt")) this.#columnLocale = "";
+    // The Course filter offers the courses, and has none while there are none.
+    if (changed.has("courses")) {
+      this.#columnLocale = "";
+      this.#courseOrder = new Map(this.courses.map((course, index) => [course.id, index]));
+    }
     if (changed.has("categories")) {
       this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
     }
@@ -1132,6 +1142,37 @@ export class ProductList extends LitElement {
         },
       },
       {
+        key: "course",
+        choosable: "shown",
+        label: t("product.course"),
+        // A variant row names only a course of its own; one that follows its product's is blank.
+        cell: ({ product, variant }) => {
+          const courseId = variant ? variant.courseId : product.courseId;
+          if (courseId === null) return variant ? nothing : "—";
+          return this.#courseName(courseId);
+        },
+        sortValue: ({ product, variant }) =>
+          this.#courseRank(variant ? variant.effective.courseId : product.courseId),
+        ...(this.courses.length
+          ? {
+              filter: {
+                label: t("product.course"),
+                allLabel: t("product.filter_course_all"),
+                multiple: {
+                  countLabel: (count: number) =>
+                    t("product.filter_course_count").replace("{count}", String(count)),
+                },
+                value: ({ product, variant }: ProductRow) =>
+                  (variant ? variant.effective.courseId : product.courseId) ?? NO_COURSE,
+                options: [
+                  ...this.courses.map((course) => ({ value: course.id, label: course.name })),
+                  { value: NO_COURSE, label: t("product.filter_no_course") },
+                ],
+              },
+            }
+          : {}),
+      },
+      {
         key: "made-at",
         choosable: "shown",
         label: t("product.made_at"),
@@ -1378,6 +1419,17 @@ export class ProductList extends LitElement {
   }
 
   #columnLocale = "";
+  #courseOrder = new Map<string, number>();
+
+  #courseName(courseId: string): string {
+    const index = this.#courseOrder.get(courseId);
+    return index === undefined ? t("editor.missing_choice") : this.courses[index]!.name;
+  }
+
+  #courseRank(courseId: string | null): number {
+    if (courseId === null) return this.courses.length + 1;
+    return this.#courseOrder.get(courseId) ?? this.courses.length;
+  }
 
   #stationOptions(): { value: string; label: string }[] {
     const names = new Map<string, string>();

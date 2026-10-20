@@ -356,6 +356,39 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with the Course column filled and its filter open in the panel", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products: [
+          { ...products[0]!, courseId: "mains" },
+          { ...products[2]!, courseId: "gone" },
+          { ...products[3]!, courseId: null },
+        ],
+        courses: [
+          { id: "mains", name: "Mains", displayOrder: 1, active: true, heldUntilFired: false },
+        ],
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await table.updateComplete;
+    const headings = [...table.shadowRoot!.querySelectorAll("thead th")].map((th) =>
+      th.textContent!.trim(),
+    );
+    const column = headings.findIndex((text) => text.startsWith(t("product.course")));
+    expect(column).toBeGreaterThan(0);
+    expect(
+      [...table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map(
+        (row) => row.querySelectorAll("td")[column]?.textContent!.trim() ?? "",
+      ),
+    ).toEqual(expect.arrayContaining(["Mains", t("editor.missing_choice"), "—"]));
+    expect(table.shadowRoot!.querySelector('wt-combobox[data-filter="course"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with the Filters panel open and Show archived on", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
