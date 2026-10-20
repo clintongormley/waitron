@@ -120,8 +120,7 @@ function copyDraft(value: Draft): Draft {
 
 type FieldErrors = Partial<Record<Field, string>>;
 
-type Editor =
-  { kind: "reason"; reason?: AdjustmentReason } | { kind: "deactivate"; reason: AdjustmentReason };
+type Editor = { kind: "reason"; reason?: AdjustmentReason };
 
 /** Basis points from a typed percentage; `null` for no limit, `undefined` when it cannot be one. */
 function percentBp(text: string): number | null | undefined {
@@ -724,10 +723,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       const message = t(
         withNote ? "adjustments.error.void_required_note" : "adjustments.error.void_required",
       );
-      if (this.editor?.kind === "deactivate") {
-        this.editorError = message;
-        return;
-      }
       this.refusedFields = { [withNote ? "noteRequired" : "kind"]: message };
     } else if (
       (code === "management.request_invalid" || code === "adjustment_reason.invalid") &&
@@ -777,28 +772,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (this.#opener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')?.focus();
     await after?.();
-  }
-
-  /** The write can drop the row, so focus goes to the row now in its place, or to Add reason.
-   * Read before the write, while the row is still shown. */
-  #refocusFrom(reason: AdjustmentReason): () => Promise<void> {
-    const rows = () => [...this.renderRoot.querySelectorAll<HTMLElement>("tbody tr[data-reason]")];
-    const index = rows().findIndex((row) => row.dataset.reason === reason.id);
-    return async () => {
-      await this.updateComplete;
-      const remaining = rows();
-      const row = remaining[Math.min(index, remaining.length - 1)];
-      (
-        row?.querySelector<HTMLElement>("wt-row-actions") ??
-        this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
-      )?.focus();
-    };
-  }
-
-  #deactivate(editor: Editor): void {
-    if (this.editor !== editor || editor.kind !== "deactivate" || !this.isConnected) return;
-    const reason = editor.reason;
-    void this.#write(() => this.api.deactivateReason(reason.id), this.#refocusFrom(reason));
   }
 
   #save(editor: Editor): void {
@@ -1017,9 +990,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     >
       ${item(`edit-${reason.id}`, t("adjustments.edit"), (opener) =>
         this.#open({ kind: "reason", reason }, opener),
-      )}
-      ${item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
-        this.#open({ kind: "deactivate", reason }, opener),
       )}
     </wt-row-actions>`;
   }
@@ -1307,11 +1277,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #modal() {
     const editor = this.editor;
     if (editor === undefined) return nothing;
-    const reason = editor.kind === "reason" ? editor.reason : undefined;
-    const deactivating = editor.kind === "deactivate";
-    const heading = deactivating
-      ? t("adjustments.disable_heading")
-      : t(reason ? "adjustments.edit_heading" : "adjustments.new");
+    const heading = t(editor.reason ? "adjustments.edit_heading" : "adjustments.new");
     const checked = this.attempted ? this.#check() : {};
     const errors = { ...this.refusedFields, ...checked };
     const invalid = Object.keys(checked).length > 0;
@@ -1322,7 +1288,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     return keyed(
       editor,
       html`<wt-modal
-        size=${deactivating ? "compact" : "standard"}
+        size="standard"
         open
         heading=${heading}
         .beforeClose=${this.#leave ? this.#closeGuard : undefined}
@@ -1336,13 +1302,7 @@ export class AdjustmentReasonsScreen extends LitElement {
             submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        <div class="form">
-          ${
-            deactivating
-              ? html`<p>${tf("adjustments.disable_explained", { name: editor.reason.name })}</p>`
-              : this.#reasonForm(errors)
-          }
-        </div>
+        <div class="form">${this.#reasonForm(errors)}</div>
         <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button
             slot="cancel"
@@ -1351,23 +1311,13 @@ export class AdjustmentReasonsScreen extends LitElement {
             ?disabled=${this.busy}
             @click=${() => this.#cancel(editor)}
             >${t("adjustments.cancel")}</wt-button
-          >${
-            deactivating
-              ? html`<wt-button
-                  variant="danger"
-                  data-test="confirm-deactivate"
-                  ?disabled=${this.busy}
-                  @click=${() => this.#deactivate(editor)}
-                  >${t("adjustments.disable")}</wt-button
-                >`
-              : html`<wt-button
-                  variant=${saveActionState(this.#reasonScope).variant}
-                  data-test="save-editor"
-                  ?disabled=${saveActionState(this.#reasonScope).unchanged || this.busy || invalid}
-                  @click=${() => this.#save(editor)}
-                  >${t("adjustments.save")}</wt-button
-                >`
-          }</wt-form-actions
+          ><wt-button
+            variant=${saveActionState(this.#reasonScope).variant}
+            data-test="save-editor"
+            ?disabled=${saveActionState(this.#reasonScope).unchanged || this.busy || invalid}
+            @click=${() => this.#save(editor)}
+            >${t("adjustments.save")}</wt-button
+          ></wt-form-actions
         >
       </wt-modal>`,
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRequest } from "@waitron/dashboard-kit";
+import { createRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
 import {
   AdjustmentsApi,
   type AdjustmentEntry,
@@ -81,13 +81,49 @@ describe("AdjustmentsApi", () => {
     });
   });
 
-  it("deactivates a reason with a DELETE", async () => {
+  it("deletes a reason with a DELETE", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    await api(fetchImpl).deactivateReason("r1");
+    await api(fetchImpl).deleteReason("r1");
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/reasons/r1", {
       method: "DELETE",
       credentials: "include",
     });
+  });
+
+  it("watches what deleting a reason would do with a passive read, depending on the reasons' table", async () => {
+    const impact = {
+      target: { id: "r1", name: "Complaint" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
+    const liveData = new LiveData();
+    const queries = new QueryController(
+      { addController: vi.fn() } as unknown as ConstructorParameters<typeof QueryController>[0],
+      () => liveData,
+      vi.fn(),
+    );
+    const apply = vi.fn();
+    const client = new AdjustmentsApi(
+      createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData,
+    );
+    await client.watchReasonDeleteImpact(queries, "r1", apply);
+    expect(apply).toHaveBeenCalledWith(impact);
+    const [path, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
+    expect(path).toBe("/management-api/adjustments/reasons/r1/delete-impact");
+    expect(init.method).toBe("GET");
+    expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+    expect(liveData.interests).toEqual([{ type: "adjustment_reasons" }]);
+    const refused = {
+      ...impact,
+      refusals: [{ code: "adjustment_reason.void_required", params: { withNote: 0 } }],
+    };
+    fetchImpl.mockResolvedValue(jsonResponse(refused));
+    liveData.invalidate([{ type: "adjustment_reasons" }]);
+    await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(refused));
+    queries.hostDisconnected();
   });
 
   it("has no way to switch a reason back on", () => {

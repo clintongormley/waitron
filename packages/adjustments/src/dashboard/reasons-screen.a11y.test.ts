@@ -325,10 +325,4 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
-
-  test("the deactivation confirmation", async () => {
-    const el = await screen(theme);
-    await press(el, "deactivate-c");
-    await expectNoA11yViolations(host);
-  });
 });

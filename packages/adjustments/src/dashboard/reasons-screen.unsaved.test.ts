@@ -68,7 +68,7 @@ function fakeApi() {
     saveSettings: vi.fn(async (value: unknown) => value),
     createReason: vi.fn(async () => reason),
     updateReason: vi.fn(async () => reason),
-    deactivateReason: vi.fn(async () => {}),
+    deleteReason: vi.fn(async () => {}),
     reorderReasons: vi.fn(async () => {}),
   };
   return Object.assign(api, { background: api });
@@ -335,15 +335,6 @@ it("a refused write retains the edited draft and Escape asks", async () => {
   expect((await question()).open).toBe(true);
   expect(native(modal).open).toBe(true);
 });
-it("a readonly deactivation confirmation closes without another question", async () => {
-  const { screen, api } = await mount();
-  await press(screen, "deactivate-reason-one");
-  expect(unload()).toBe(false);
-  await press(screen, "cancel-editor");
-  expect((await question()).open).toBe(false);
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  expect(api.deactivateReason).not.toHaveBeenCalled();
-});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -475,17 +466,6 @@ it("a departed editor Enter cannot submit the current reason", async () => {
   await settle(screen);
   expect(api.updateReason).not.toHaveBeenCalled();
   expect(value(screen, "name")).toBe("Current edit");
-});
-it("a departed deactivation control cannot deactivate the current reason", async () => {
-  const { screen, api } = await mount();
-  await press(screen, "deactivate-reason-one");
-  const old = screen.shadowRoot!.querySelector("wt-modal")!;
-  await press(screen, "cancel-editor");
-  await open(screen);
-  old.querySelector<HTMLElement>('[data-test="confirm-deactivate"]')!.click();
-  await settle(screen);
-  expect(api.deactivateReason).not.toHaveBeenCalled();
-  expect(value(screen, "name")).toBe("Complaint");
 });
 it("Keep returns focus to the edited reason control", async () => {
   const { screen } = await mount();
@@ -792,25 +772,3 @@ it("reconnect waits for fresh settings before exposing a limit draft", async () 
   await field(screen, "maxBillComp", "30");
   expect(unload()).toBe(true);
 });
-
-it.each([false, true])(
-  "closing Deactivate does not route through a retired reason draft (replaced=%s)",
-  async (replaced) => {
-    const { screen } = await mount();
-    await open(screen);
-    if (!replaced) await press(screen, "cancel-editor");
-    await press(screen, "deactivate-reason-one");
-    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
-    await modal.updateComplete;
-    const request = vi.spyOn(app.leave.coordinator, "request");
-    try {
-      const closed = editorClosed(screen);
-      await modal.requestClose("cancel");
-      await closed;
-      await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
-      expect(request).not.toHaveBeenCalled();
-    } finally {
-      request.mockRestore();
-    }
-  },
-);

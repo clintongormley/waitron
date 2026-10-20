@@ -91,7 +91,7 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
     listReasons: vi.fn().mockResolvedValue(reasons),
     createReason: vi.fn().mockResolvedValue({ ...complaint, id: "n" }),
     updateReason: vi.fn().mockResolvedValue(complaint),
-    deactivateReason: vi.fn().mockResolvedValue(undefined),
+    deleteReason: vi.fn().mockResolvedValue(undefined),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
     getSettings: vi
       .fn()
@@ -1807,120 +1807,6 @@ describe("the editor's messages", () => {
     await press(el, "save-editor");
     expect(await bottom(el)).toBe(ES["adjustments.fix_fields"]);
   });
-});
-
-describe("disabling", () => {
-  const menuFocused = (el: AdjustmentReasonsScreen) =>
-    el.shadowRoot!.activeElement?.getAttribute("label");
-
-  it.each([
-    {
-      locale: "en",
-      action: "Disable",
-      heading: "Disable reason",
-      body: "Staff will no longer be offered Complaint. It stays in the list as disabled.",
-    },
-    {
-      locale: "es",
-      action: ES["adjustments.disable"],
-      heading: ES["adjustments.disable_heading"],
-      body: tf("adjustments.disable_explained", { name: "Complaint" }, "es"),
-    },
-  ])("in $locale, offers Disable and confirms it", async ({ locale, action, heading, body }) => {
-    setLocale(locale);
-    const el = await mount(fakeApi());
-    expect(find(el, '[data-test="deactivate-c"]')!.textContent!.trim()).toBe(action);
-    await press(el, "deactivate-c");
-    const modal = find(el, "wt-modal")!;
-    expect(modal.getAttribute("heading")).toBe(heading);
-    expect(modal.textContent).toContain(body);
-    expect(find(el, '[data-test="confirm-deactivate"]')!.textContent!.trim()).toBe(action);
-  });
-
-  it("moves focus to the menu of the row that takes the deactivated one's place", async () => {
-    const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValue([entryError, employee, retired]),
-    });
-    const el = await mount(api);
-    await press(el, "deactivate-c");
-    await press(el, "confirm-deactivate");
-    expect(rowKeys(el)).toEqual(["e", "d", "o"]);
-    expect(menuFocused(el)).toBe("Actions: Employee discount");
-  });
-
-  it("moves focus to the new last row when the last row is deactivated", async () => {
-    const api = fakeApi({
-      listReasons: vi
-        .fn()
-        .mockResolvedValueOnce(reasons)
-        .mockResolvedValue([entryError, complaint, employee]),
-    });
-    const el = await mount(api);
-    await press(el, "deactivate-o");
-    await press(el, "confirm-deactivate");
-    expect(rowKeys(el)).toEqual(["e", "c", "d"]);
-    expect(menuFocused(el)).toBe("Actions: Employee discount");
-  });
-
-  it("moves focus to Add reason when no reason remains", async () => {
-    const api = fakeApi({
-      listReasons: vi.fn().mockResolvedValueOnce([complaint]).mockResolvedValue([]),
-    });
-    const el = await mount(api);
-    await press(el, "deactivate-c");
-    await press(el, "confirm-deactivate");
-    expect(rowKeys(el)).toEqual([]);
-    const add = el.shadowRoot!.querySelector('[data-test="add-reason"]');
-    expect(el.shadowRoot!.activeElement).toBe(add);
-  });
-
-  it("says what disabling does before it acts, then disables and reloads", async () => {
-    const api = fakeApi();
-    const el = await mount(api);
-    await press(el, "deactivate-c");
-    expect(api.deactivateReason).not.toHaveBeenCalled();
-    expect(modal(el)!.textContent).toContain(
-      "Staff will no longer be offered Complaint. It stays in the list as disabled.",
-    );
-    await press(el, "confirm-deactivate");
-    expect(api.deactivateReason).toHaveBeenCalledWith("c");
-    expect(modal(el)).toBeNull();
-    expect(api.listReasons).toHaveBeenCalledTimes(2);
-  });
-
-  it("keeps the confirmation open and explains a refusal", async () => {
-    const el = await mount(
-      fakeApi({ deactivateReason: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
-    );
-    await press(el, "deactivate-c");
-    await press(el, "confirm-deactivate");
-    expect(modal(el)).not.toBeNull();
-    expect(await bottom(el)).toBe("Something went wrong, try again");
-    expect(button(el, "confirm-deactivate").disabled).toBe(false);
-  });
-
-  it.each([
-    [false, "A venue keeps at least one Void reason."],
-    [true, "A venue keeps at least one Void reason that asks for a note."],
-  ] as const)(
-    "keeps the confirmation open and says void_required (withNote=%s)",
-    async (withNote, message) => {
-      const api = fakeApi({
-        deactivateReason: vi
-          .fn()
-          .mockRejectedValue({ code: "adjustment_reason.void_required", params: { withNote } }),
-      });
-      const el = await mount(api);
-      await press(el, "deactivate-e");
-      await press(el, "confirm-deactivate");
-      expect(api.deactivateReason).toHaveBeenCalledWith("e");
-      expect(modal(el)).not.toBeNull();
-      expect(await bottom(el)).toBe(message);
-    },
-  );
 });
 
 describe("the bill comp limit", () => {
