@@ -1,3 +1,4 @@
+import { hexToRgb } from "./colour.js";
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type ModeResult, handTokens, settleMode } from "./derive.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
@@ -43,10 +44,8 @@ export interface DerivedTheme {
   readonly tintStrength: Readonly<Record<Mode, number>> | null;
 }
 
-const HEX = /^#[0-9a-f]{6}$/i;
-
 function lowerHex(value: string): string {
-  if (!HEX.test(value)) throw new RangeError(`not a #rrggbb colour: ${value}`);
+  hexToRgb(value);
   return value.toLowerCase();
 }
 
@@ -115,7 +114,7 @@ export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeC
       const next = nextFix(defaults, current, mode, settled);
       if (next === null) break;
       current = normaliseChoices(
-        next.kind === "brand"
+        next.colour === null
           ? { ...current, brandFix: { ...current.brandFix, [mode]: true } }
           : {
               ...current,

@@ -41,6 +41,16 @@ function deepFreeze<T>(value: T): T {
 }
 
 describe("Waitron's look", () => {
+  test("Waitron's choices are its own brand colour, Neutral, standard corners and nothing by hand", () => {
+    expect(WAITRON_CHOICES).toEqual({
+      brandColor: null,
+      brandFix: {},
+      background: "neutral",
+      corners: "standard",
+      handSet: { light: {}, dark: {} },
+    });
+  });
+
   test("every token is Waitron's own value, with no tint", () => {
     const theme = deriveTheme(WAITRON_CHOICES);
     for (const mode of MODES) {
@@ -231,6 +241,21 @@ describe("the tint gives way", () => {
     expect(theme.light[P("track")]).toBe("#cacfcb");
     expect(theme.light[P("bg")]).toBe("#f3f8f5");
     expectFullList(theme);
+  });
+
+  // From the reference: ~/waitron-campaign/a841-plan1-probes/t9/tint0-ref.mjs, output-tint0.txt.
+  test("to nothing when no strength clears the rule, keeping Waitron's own hues", () => {
+    const textOnPage = {
+      ...WAITRON_DEFAULTS,
+      light: { ...WAITRON_DEFAULTS.light, [P("text")]: WAITRON_DEFAULTS.light[P("bg")]! },
+    };
+    const theme = deriveThemeFrom(textOnPage, DARK_GREEN);
+    expect(theme.tintStrength?.light).toBe(0);
+    expect(
+      ["bg", "surface-sunken", "border", "track", "field-fill", "field-fill-disabled"].map(
+        (colour) => theme.light[P(colour)],
+      ),
+    ).toEqual(["#f7f7f8", "#6f7178", "#d6d9e0", "#6e7178", "#f0f1f4", "#f7f7f8"]);
   });
 
   test("not at all on Waitron's real palette", () => {

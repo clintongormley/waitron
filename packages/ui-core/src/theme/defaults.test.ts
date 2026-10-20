@@ -85,3 +85,34 @@ describe("parseBlock and readDefaults refuse what they cannot read", () => {
     );
   });
 });
+
+describe("parseBlock reads only the selector's own block", () => {
+  test("a selector the text does not hold, with another block later in the text", () => {
+    expect(() => parseBlock(".a-long-selector { --wt-a: 1; }", ":where(x)")).toThrow(
+      "token CSS has no block for :where(x)",
+    );
+  });
+
+  test("a selector with no block after it", () => {
+    expect(() => parseBlock("a {} :where(x)", ":where(x)")).toThrow(
+      "token CSS has no block for :where(x)",
+    );
+  });
+
+  test("a block opening just before the selector", () => {
+    expect(parseBlock("b{}:where(y){--wt-a:1}", ":where(y)")).toEqual({ "--wt-a": "1" });
+  });
+
+  test("declarations with and without spaces, and ones that are not a token", () => {
+    expect(parseBlock(`${ROOT} {--wt-a:1; --wt-b : 2 ; x--wt-c: 3; color: red}`, ROOT)).toEqual({
+      "--wt-a": "1",
+      "--wt-b": "2",
+    });
+  });
+
+  test("the structure comes from the theme root's block, not the first block", () => {
+    const colours = `${FORCED_LIGHT} { --wt-color-primary: #1f6feb; } ${FORCED_DARK} { --wt-color-primary: #000000; }`;
+    const structure = `.other { --wt-radius-md: 1px; } ${ROOT} { --wt-radius-md: 8px; }`;
+    expect(readDefaults(colours, structure).structure).toEqual({ "--wt-radius-md": "8px" });
+  });
+});

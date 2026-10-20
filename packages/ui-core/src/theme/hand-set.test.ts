@@ -128,6 +128,24 @@ describe("colours set by hand", () => {
     expect(() => deriveTheme(withHand(DARK_GREEN, "light", { bg: value }))).toThrow(RangeError);
   });
 
+  test.each(["X#F8F1E1", "#F8F1E1X"])(
+    "a hand-set value %s is refused before it is lower-cased, naming it as given",
+    (value) => {
+      expect(() => deriveTheme(withHand(DARK_GREEN, "dark", { bg: value }))).toThrow(
+        new RangeError(`not a #rrggbb colour: ${value}`),
+      );
+    },
+  );
+
+  test.each(["X#1E5B3A", "#1E5B3AX"])(
+    "a brand colour %s is refused before it is lower-cased, naming it as given",
+    (brandColor) => {
+      expect(() => deriveTheme({ ...DARK_GREEN, brandColor })).toThrow(
+        new RangeError(`not a #rrggbb colour: ${brandColor}`),
+      );
+    },
+  );
+
   test.each(["scrim", "danger"])("a hand-set %s is refused, naming the key", (key) => {
     const choices = withHand(DARK_GREEN, "dark", { [key]: "#000000" } as Partial<
       Record<ThemeColour, string>

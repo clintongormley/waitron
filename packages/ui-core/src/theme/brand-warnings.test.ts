@@ -77,6 +77,20 @@ describe("the brand colour's readability warning", () => {
     expect(deriveTheme(WAITRON_CHOICES).warnings).toEqual([]);
   });
 
+  // From the reference: ~/waitron-campaign/a841-plan1-probes/t9/waitron-primary-ref.mjs.
+  test("Waitron's own brand colour never warns, even on a palette where it fails", () => {
+    const pageColouredButtons = {
+      ...WAITRON_DEFAULTS,
+      light: {
+        ...WAITRON_DEFAULTS.light,
+        [colourToken("primary")]: WAITRON_DEFAULTS.light[colourToken("bg")]!,
+      },
+    };
+    const theme = deriveThemeFrom(pageColouredButtons, WAITRON_CHOICES);
+    expect(theme.light[colourToken("primary")]).toBe("#f7f7f8");
+    expect(theme.warnings).toEqual([]);
+  });
+
   test("a fix flag where the brand colour already reads paints it unchanged", () => {
     const theme = deriveTheme({ ...DARK_GREEN, brandFix: { light: true } });
     expect(theme.light[P("primary")]).toBe("#1e5b3a");

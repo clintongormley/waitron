@@ -17,9 +17,9 @@ export function parseBlock(css: unknown, selector: string, from = 0): Record<str
   // Blanked to the same length, so a caller's `from` offset still points where it did.
   const text = css.replace(/\/\*[\s\S]*?\*\//g, (comment) => " ".repeat(comment.length));
   const at = text.indexOf(selector, from);
-  const open = at < 0 ? -1 : text.indexOf("{", at + selector.length);
-  const close = open < 0 ? -1 : text.indexOf("}", open);
-  if (close < 0) throw new Error(`token CSS has no block for ${selector}`);
+  const open = at === -1 ? -1 : text.indexOf("{", at + selector.length);
+  const close = open === -1 ? -1 : text.indexOf("}", open);
+  if (close === -1) throw new Error(`token CSS has no block for ${selector}`);
   const values: Record<string, string> = {};
   for (const declaration of text.slice(open + 1, close).split(";")) {
     const match = /^\s*(--wt-[a-z0-9-]+)\s*:\s*([\s\S]*?)\s*$/.exec(declaration);

@@ -10,6 +10,7 @@ import {
 import {
   type ContrastRule,
   type RuleResult,
+  STATIONS,
   THEME_RULES,
   checkRules,
   passes,
@@ -20,23 +21,7 @@ import { type ThemeColour, THEME_COLOURS, colourToken, cornerRadii } from "./tok
 
 const PRIMARY = colourToken("primary");
 
-const STATION_FILLS = [
-  "red",
-  "orange",
-  "amber",
-  "yellow",
-  "lime",
-  "green",
-  "teal",
-  "cyan",
-  "sky",
-  "blue",
-  "indigo",
-  "purple",
-  "magenta",
-  "pink",
-  "brown",
-].map((station) => colourToken(`station-${station}`));
+const STATION_FILLS = STATIONS.map(colourToken);
 
 /** The tinted colours of each mode and the OKLCH lightness and chroma each is tinted toward. */
 const TINT_TARGETS: Readonly<
@@ -65,24 +50,33 @@ const TINT_TARGETS: Readonly<
 /** The grounds the button colour sits on; its fix shade is worked out against them. */
 const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
 
-/** One step of a lightness walk; `null` once the lightness is pinned at 0 or 1 and repeats. */
-function stepped(L: number, delta: number, first: boolean): number | null {
-  const next = Math.min(1, Math.max(0, L + delta));
-  // Every later step would repeat this colour and its ratios, so the walk's answer is already known.
-  return !first && next === L ? null : next;
+/**
+ * One step of a lightness walk; `null` once the lightness is pinned at 0 or 1, since every later
+ * step would repeat this colour. The reference also takes a first step that repeats; only #000000
+ * starts pinned, and it maps to itself (`t9/walk-cap.mjs` in the reference's folder).
+ */
+function stepped(L: number, dir: number, size: number): number | null {
+  if (dir === 1 ? !(L < 1) : !(L > 0)) return null;
+  return Math.min(1, Math.max(0, L + dir * size));
 }
 
+/**
+ * Walks `hex`'s lightness in 0.005 steps until it has `need` against every colour in `list`. The
+ * reference stops after 200 steps; no #rrggbb walk takes more before its lightness is pinned
+ * (`t9/walk-cap.mjs`), so this one needs no count.
+ */
 function until(hex: string, dir: number, list: readonly string[], need: number): string {
   const grounds = list.map(relativeLuminance);
   const minRatio = (colour: string) => {
     const own = relativeLuminance(colour);
     return Math.min(...grounds.map((ground) => luminanceRatio(own, ground)));
   };
-  let L: number | null = toOklch(hex).L;
+  let L = toOklch(hex).L;
   let out = hex;
-  for (let i = 0; i < 200 && minRatio(out) < need; i++) {
-    L = stepped(L, dir * 0.005, i === 0);
-    if (L === null) break;
+  while (minRatio(out) < need) {
+    const next = stepped(L, dir, 0.005);
+    if (next === null) break;
+    L = next;
     out = withLightness(hex, L);
   }
   return out;
@@ -111,7 +105,7 @@ function deriveAt(
     return fromOklch({
       L: from.L + (L - from.L) * tintStrength,
       C: from.C + (Math.min(C, C0) - from.C) * tintStrength,
-      H: tintStrength > 0 ? H : from.H,
+      H,
     });
   };
   if (choices.background === "tinted" && tintStrength > 0) {
@@ -125,20 +119,17 @@ function deriveAt(
   Object.assign(out, fixed);
   if (chosen === null && !(PRIMARY in fixed)) return out;
 
-  out[colourToken("surface-lifted")] =
-    fixed[colourToken("surface-lifted")] ??
-    fromOklch({
-      L: dark ? 0.34 : 0.935,
-      C: Math.min(C0, dark ? 0.04 : 0.035),
-      H,
-    });
-  out[colourToken("stepper-button")] =
-    fixed[colourToken("stepper-button")] ??
-    fromOklch({
-      L: dark ? 0.27 : 0.955,
-      C: Math.min(C0, 0.035),
-      H,
-    });
+  out[colourToken("surface-lifted")] = fromOklch({
+    L: dark ? 0.34 : 0.935,
+    C: Math.min(C0, dark ? 0.04 : 0.035),
+    H,
+  });
+  out[colourToken("stepper-button")] = fromOklch({
+    L: dark ? 0.27 : 0.955,
+    C: Math.min(C0, 0.035),
+    H,
+  });
+  Object.assign(out, fixed);
   const grounds = BRAND_GROUNDS.map(get);
   const primary =
     fixed[PRIMARY] ??
@@ -209,6 +200,12 @@ export const handTokens = (
 
 const THEMED = new Set(THEME_COLOURS.map(colourToken));
 
+/** The tint strengths tried, by repeated subtraction as the reference steps them: the last is 1.4e-16. */
+const TINT_STRENGTHS = Array.from({ length: 10 }).reduce<number[]>(
+  (list) => [...list, list[list.length - 1]! - 0.1],
+  [1],
+);
+
 /** Moves `from` in lightness, away from `against` or toward it for an at-most rule, until the rule passes or 200 steps run out. */
 function push(rule: ContrastRule, from: string, against: string): string {
   const within = rule.kind === "at-most";
@@ -216,11 +213,12 @@ function push(rule: ContrastRule, from: string, against: string): string {
   const darker = ground > relativeLuminance(from);
   const dir = within === darker ? +1 : -1;
   const step = within ? 0.002 : 0.005;
-  let L: number | null = toOklch(from).L;
+  let L = toOklch(from).L;
   let out = from;
   for (let i = 0; i < 200 && !passes(rule, luminanceRatio(relativeLuminance(out), ground)); i++) {
-    L = stepped(L, dir * step, i === 0);
-    if (L === null) break;
+    const next = stepped(L, dir, step);
+    if (next === null) break;
+    L = next;
     out = withLightness(from, L);
   }
   return out;
@@ -233,9 +231,7 @@ export function settleMode(
   hand: Readonly<Record<string, string>>,
 ): ModeResult {
   const isHand = (token: string) => token in hand;
-  const tinted = Object.keys(TINT_TARGETS[mode])
-    .map(colourToken)
-    .filter((token) => !isHand(token));
+  const tinted = Object.keys(TINT_TARGETS[mode]).map(colourToken);
   const brandOwned = choices.brandColor !== null && !isHand(PRIMARY);
   const ownRule = ({ rule }: RuleResult) =>
     brandOwned && (rule.a === PRIMARY || rule.b === PRIMARY);
@@ -249,11 +245,11 @@ export function settleMode(
   };
   let strength = 1;
   if (choices.background === "tinted") {
-    for (; strength >= -1e-9; strength -= 0.1) {
-      const tokens = deriveAt(defaults, choices, mode, Math.max(0, strength), hand);
-      if (!failing(defaults, mode, tokens).some(tintIn)) break;
-    }
-    strength = Math.max(0, Math.round(strength * 10) / 10);
+    const found = TINT_STRENGTHS.find(
+      (trial) =>
+        !failing(defaults, mode, deriveAt(defaults, choices, mode, trial, hand)).some(tintIn),
+    );
+    strength = Math.round((found ?? 0) * 10) / 10;
   }
   const colourIn = (tokens: Record<string, string>, token: string) =>
     (tokens[token] ?? defaults[mode][token])!;
@@ -266,8 +262,7 @@ export function settleMode(
   for (let round = 0; ; round++) {
     const { written, fails } = current;
     const failingNow = new Set(fails.map(({ rule }) => rule));
-    // Departs from the reference: a move never newly fails a rule naming no colour the owner picked,
-    // so every rule left failing names the brand colour or a hand-set value.
+    // Departs from the reference: a move never newly fails a rule naming no colour the owner picked.
     const tried = (token: string, value: string) => {
       const next = settled({ ...work, [token]: value, ...hand });
       return next.fails.length < fails.length &&

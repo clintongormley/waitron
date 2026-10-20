@@ -341,4 +341,21 @@ describe("groupAgainst", () => {
     ]);
     expect(groupAgainst([])).toEqual([]);
   });
+
+  test("gives a colour only its key, a group only its count, and counts no other station-like key", () => {
+    expect(
+      groupAgainst([
+        "station-teal",
+        "page-station-red",
+        "station-teal-dot",
+        "station-red-dots",
+        "station-cyan",
+      ]),
+    ).toStrictEqual([
+      { kind: "station-fills", count: 2 },
+      { kind: "colour", key: "page-station-red" },
+      { kind: "station-dots", count: 1 },
+      { kind: "colour", key: "station-red-dots" },
+    ]);
+  });
 });

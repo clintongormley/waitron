@@ -42,7 +42,7 @@ export interface ContrastGroup {
   readonly rules: readonly ContrastRule[];
 }
 
-const STATIONS = [
+export const STATIONS: readonly string[] = [
   "red",
   "orange",
   "amber",

@@ -777,7 +777,8 @@ it and a colour that cannot move (a meaning colour or another hand-set value) fa
 first at which, after settling, no rule names it, no rule between worked-out colours fails, and no
 other hand-set colour is named that was not named before. None accepted → `fix: null`.
 (Fix round 1, ruling I1: a rule naming the brand colour as picked — no fix flag in that mode — is not
-"between worked-out colours", so a brand warning never takes a hand-set colour's fix away.) So a fix
+"between worked-out colours", so the warning on a brand colour with no fix flag never takes a
+hand-set colour's fix away; with the flag on, a rule naming the fixed brand colour still counts.) So a fix
 taken alone always clears its own warning, and `null` means no shade of that colour works while the
 others stay as typed — which another hand-set colour can cause.
 
