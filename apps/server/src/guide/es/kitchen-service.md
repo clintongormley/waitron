@@ -13,7 +13,7 @@ ticket o la tarjeta de la pantalla lleva una marca de alergia. Un extra enviado 
 lleva las mismas instrucciones de la persona a su propia estación.
 
 Si el plato o un extra activo declara un alérgeno que la persona evita, el bloque también indica
-ese conflicto y que se ha enviado de todos modos. La falta de información nutricional no establece
+ese conflicto y que se ha enviado igualmente. La falta de información nutricional no establece
 que un plato sea apto. Consúltalo con quien atiende la mesa antes de prepararlo.
 
 Cocina conserva las instrucciones que recibió primero. Los cambios posteriores de la persona o

@@ -13,7 +13,7 @@ export const KITCHEN_ALLERGY_WORDS = {
     guideTitle: "Servicio de cocina",
     ticketHeading: "!!! ALERGIA EN ESTE TICKET !!!",
     guestHeading: "*** ALERGIA: {who} ***",
-    clash: "!! CONTIENE {allergens} — ENVIADO DE TODOS MODOS",
+    clash: "!! CONTIENE {allergens} — ENVIADO IGUALMENTE",
     changed: "ALERGIA CAMBIADA",
     removed: "ALERGIA ELIMINADA",
   },

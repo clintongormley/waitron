@@ -2309,7 +2309,7 @@ export const es: Record<StringKey, string> = {
   "station.notice.allergy_removed": "Alergia eliminada",
   "kitchen_allergy.line": "ALERGIA · {who}: {allergens}",
   "kitchen_allergy.marker": "Alergia en este ticket",
-  "kitchen_allergy.clash": "Contiene {allergens} — enviado de todos modos",
+  "kitchen_allergy.clash": "Contiene {allergens} — enviado igualmente",
   "station.notice.started": "Empezado",
   "station.notice.moved_to": "Movido a {table}",
   "station.notice.moved_to_counter": "Pasado al mostrador",

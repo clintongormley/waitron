@@ -1778,6 +1778,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         items: [
           {
             id: expect.any(String),
+            allergy: null,
             workingOrderLineId: expect.any(String),
             state: "queued",
             // The kitchen name, falling back to the staff name because this product carries none.
