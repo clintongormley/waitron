@@ -153,11 +153,11 @@ item 4 (564-566). Pictures `docs/backlog/mockups/a757-table-states/04-pulse-spee
    `packages/shared/src/timing.ts`). The card's outline and Forgotten badge read `timingBand` today;
    its chips read the `long_wait` signal. By reading, both count the same lines — unserved, fired,
    not made at the till (`apps/server/src/working-order.ts:8234,8242` against
-   `apps/server/src/table-signals.ts:74-76`) — and differ in one thing: `timingBand` floors each
-   age to whole minutes (`minutesSince`, `working-order.ts:7108-7110`, used at `:8280`) while the
-   signal uses the exact age (`table-signals.ts:123`), so `timingBand` can lag by under a minute.
-   Not measured. Reading the worse keeps a "Waiting" chip from sitting beside "✓ Nothing needed"
-   or under no outline. The Forgotten badge, the forgotten chip's suppression (`tableChips`,
+   `apps/server/src/table-signals.ts:74-76`). `timingBand` floors each age to whole minutes
+   (`minutesSince`, `working-order.ts:7108-7110`, used at `:8280`) while the signal uses the exact
+   age (`table-signals.ts:123`); a model of the two code paths with whole-minute thresholds found
+   no age where their bands disagree. The card takes the worse of the two as a safeguard, so a
+   "Waiting" chip cannot sit beside "✓ Nothing needed" or under no outline. The Forgotten badge, the forgotten chip's suppression (`tableChips`,
    `till-floor-screen.ts:139-144`) and the `timingBand` handed to the unplaced token
    (`#toFloorTable`, `:1987-2015`) read `lateBand` too. **Out:** the map's dot and the order
    screen's pin keep reading `timingBand` (slice 5, Decision 5).

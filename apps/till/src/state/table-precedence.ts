@@ -25,8 +25,7 @@ export const PRECEDENCE = [
 
 export type TableStateKind = (typeof PRECEDENCE)[number];
 
-/** The worse of the table's own band and its `long_wait` signal's, which can disagree by under a
- * minute. */
+/** The worse of the table's own band and its `long_wait` signal's. */
 export function lateBand(table: TableState): TimingBand {
   const longWait = table.signals.find((signal) => signal.kind === "long_wait");
   return worstBand([table.timingBand, longWait?.band ?? "fresh"]);
