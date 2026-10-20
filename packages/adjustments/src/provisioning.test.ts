@@ -5,11 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
-import {
-  createAdjustmentReason,
-  deactivateAdjustmentReason,
-  listAdjustmentReasons,
-} from "./operations.js";
+import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
 import { adjustmentSettings } from "./schema/settings.js";
 
@@ -30,7 +26,7 @@ async function provisionedNode(invoiceLocales: string[]) {
 }
 
 function reasons() {
-  return withTransaction(db, (tx) => listAdjustmentReasons(tx, { includeInactive: true }));
+  return withTransaction(db, (tx) => listAdjustmentReasons(tx));
 }
 
 describe("ADJUSTMENTS_PROVISIONING", () => {
@@ -90,7 +86,7 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       ["discount_percent", "discount_amount"],
       all,
     ]);
-    expect(seeded.every((reason) => reason.maxAmount === null && reason.active)).toBe(true);
+    expect(seeded.every((reason) => reason.maxAmount === null)).toBe(true);
     expect(await db.select().from(adjustmentSettings)).toEqual([]);
   });
 
@@ -127,10 +123,10 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
     expect(await reasons()).toHaveLength(9);
   });
 
-  it("adds nothing to a venue that already has a reason, even one switched off", async () => {
+  it("adds nothing to a venue that already has a reason", async () => {
     const node = await provisionedNode(["es-ES"]);
     await withTransaction(db, async (tx) => {
-      const reason = await createAdjustmentReason(tx, {
+      await createAdjustmentReason(tx, {
         name: "Complaint",
         names: {},
         kind: "comp",
@@ -141,7 +137,6 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
         approverRoles: ["manager", "admin"],
         noteRequired: true,
       });
-      await deactivateAdjustmentReason(tx, reason.id);
     });
 
     await db.transaction((tx) => ADJUSTMENTS_PROVISIONING.seed!.run(tx, node));

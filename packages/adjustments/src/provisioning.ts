@@ -66,7 +66,7 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the starter void and comp reasons",
     async run(tx) {
-      if ((await listAdjustmentReasons(tx, { includeInactive: true })).length > 0) {
+      if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
       for (const starter of STARTERS) {
