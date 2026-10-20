@@ -1,8 +1,11 @@
 import type { FloorMapDot, FloorMapFill, FloorMapTable } from "@waitron/ui";
 import type { TableState } from "../api/client.js";
-import { countText, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
+import { readyText } from "./floor-look.js";
 import { needsMovingToday, onTodaysPlan } from "./floor-today.js";
 import { signalOf } from "./table-signals.js";
+
+export { readyText } from "./floor-look.js";
 
 /** The fills the till draws today; `fillWords` names each. */
 type StandInFill = Extract<FloorMapFill, "free" | "reserved" | "seated" | "bill" | "clearing">;
@@ -90,11 +93,6 @@ function fillWords(table: TableState, fill: StandInFill): string {
     case "free":
       return t("floor.free");
   }
-}
-
-/** "2 ready", or "1 ready" for one. */
-export function readyText(n: number): string {
-  return countText(n, "table.flash_ready", "table.flash_ready_one");
 }
 
 function dotWords(table: TableState, dot: FloorMapDot): string {
