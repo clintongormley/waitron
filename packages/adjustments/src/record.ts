@@ -99,8 +99,8 @@ export async function readReasonTotals(
 /** {@link readReasonItemShares}'s answer: each line's own share, and the whole bill's apart. */
 export interface ReasonItemShares {
   lines: Map<string, number>;
-  /** What this reason's rows on the whole bill took, which counts once on every item. */
-  bill: number;
+  /** What this reason's rows on the whole bill took off the bill in all, in cents. */
+  billReduction: number;
 }
 
 /**
@@ -109,9 +109,9 @@ export interface ReasonItemShares {
  * counts on its own line and on every row split off that line by an adjustment on this bill, a bill
  * discount included, at any remove — including rows taken after the split, which err toward asking.
  * A row that covered part of its line counts only on the rows it carved off and theirs, not on the
- * rest of the line. The reason's rows on the whole bill are answered apart, as `bill`. A split
- * made by anything other than an adjustment is not recorded here, so a row split that way starts
- * with none. The reason's cancels count nowhere, as in {@link readReasonTotals}.
+ * rest of the line. The reason's rows on the whole bill are answered apart, as `billReduction`. A
+ * split made by anything other than an adjustment is not recorded here, so a row split that way
+ * starts with none. The reason's cancels count nowhere, as in {@link readReasonTotals}.
  */
 export async function readReasonItemShares(
   tx: Transaction,
@@ -143,12 +143,12 @@ export async function readReasonItemShares(
     where row.line_id is null
       and row.working_order_id = ${workingOrderId} and row.reason_id = ${reasonId}`);
   const lines = new Map(lineIds.map((lineId) => [lineId, 0]));
-  let bill = 0;
+  let billReduction = 0;
   for (const { seed, reduction, nominal } of taken.rows) {
-    if (seed === null) bill += shareBp(reduction, nominal);
+    if (seed === null) billReduction += reduction;
     else lines.set(seed, lines.get(seed)! + shareBp(reduction, nominal));
   }
-  return { lines, bill };
+  return { lines, billReduction };
 }
 
 /** `ceil(reduction × 10000 ÷ nominal)` in exact integers; 0 where `nominal` is 0. */

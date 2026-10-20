@@ -2202,9 +2202,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   than design D12. Decide whether Discard should ask the question too.
 
 - **A910. A reason's item limit errs toward asking (left open by A758-1).** Each comp row's share of
-  an item is rounded up to a whole basis point (`packages/adjustments/src/record.ts`), and a comp on
-  the whole bill counts against items added to the bill after it. It never lets through what should
-  ask. Revisit if a venue meets an approval it did not expect.
+  an item is rounded up to a whole basis point (`packages/adjustments/src/record.ts`). What the
+  reason's discounts on the whole bill took off each item is not recorded, so `judgeComp`
+  (`apps/server/src/adjustments-apply.ts`) counts their whole reduction on an item, capped at what
+  the item is now below its list price. On an item that other comps, or this reason's own item
+  discounts, also reduced, that counts more than the bill discounts took. The cap assumes an item's
+  price never rises after a bill discount took from it; that was not tested. Recording each item's
+  part of a bill discount would make the count exact. Revisit if a venue meets an approval it did
+  not expect.
 
 - **A911. When an amount comp prints "Descuento 100%" (left open by A758-1, for A758-4).** "Full"
   means the comp took the item's whole list price. An amount comp that takes what another comp left

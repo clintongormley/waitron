@@ -1612,6 +1612,43 @@ describe("cumulative limits (plan D6)", () => {
     expect(await twice(2000)).toMatchObject({ needsApproval: null });
   });
 
+  it("counts the cent a whole-bill discount took off one of two Burgers on that Burger, not half a cent on each", async () => {
+    const reasonId = await inTx(venue, async (tx) => {
+      return (
+        await createAdjustmentReason(tx, {
+          ...REASONS.staffMeal,
+          name: "Just over half",
+          names: {},
+          maxPercentBp: 5005,
+        })
+      ).id;
+    });
+    const { billId } = await bill([{ name: "Burger" }, { name: "Burger" }]);
+    await adjust(billId, {
+      action: "discount_amount",
+      amount: "0.01",
+      reasonId,
+      operatorId: venue.staffId,
+    });
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "11.99", "12.00", "11.99"],
+      ["Burger", "1.000", "12.00", null, "12.00"],
+    ]);
+    const sixOff = async (lineNo: number): Promise<Ask> => ({
+      lineId: await lineIdOf(venue, billId, lineNo),
+      action: "discount_amount",
+      amount: "6.00",
+      reasonId,
+      operatorId: venue.staffId,
+    });
+    expect(await preview(billId, await sixOff(2))).toMatchObject({ needsApproval: null });
+
+    // €6.01 off the €12.00 Burger is 50.09%, past 50.05%.
+    await refusedWith(billId, await sixOff(1), "adjustment.approval_required", {
+      approval: "reason",
+    });
+  });
+
   it("counts a line's share on the row a bill discount split off it", async () => {
     const { billId } = await bill([{ name: "Bottle", quantity: "3" }]);
     const bottles = await lineIdOf(venue, billId, 1);

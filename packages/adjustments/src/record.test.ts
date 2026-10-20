@@ -88,12 +88,15 @@ async function totals(workingOrderId: string, reasonId: string) {
   return withTransaction(db, (tx) => readReasonTotals(tx, { workingOrderId, reasonId }));
 }
 
-/** Each of `lineIds`' share with the whole bill's added, as the item limit counts it. */
-async function shares(workingOrderId: string, reasonId: string, lineIds: string[]) {
-  const { lines, bill } = await withTransaction(db, (tx) =>
+function readShares(workingOrderId: string, reasonId: string, lineIds: string[]) {
+  return withTransaction(db, (tx) =>
     readReasonItemShares(tx, { workingOrderId, reasonId, lineIds }),
   );
-  return new Map([...lines].map(([lineId, share]) => [lineId, share + bill]));
+}
+
+/** Each of `lineIds`' own share, the reason's rows on the whole bill left out. */
+async function shares(workingOrderId: string, reasonId: string, lineIds: string[]) {
+  return (await readShares(workingOrderId, reasonId, lineIds)).lines;
 }
 
 async function shareOf(workingOrderId: string, reasonId: string, lineId: string) {
@@ -359,7 +362,7 @@ describe("readReasonItemShares", () => {
         [carved, 1500],
         [untouched, 0],
       ]),
-      bill: 0,
+      billReduction: 0,
     });
   });
 
@@ -446,7 +449,7 @@ describe("readReasonItemShares", () => {
     );
   });
 
-  it("answers the reason's comp on the whole bill apart from each item's own", async () => {
+  it("answers the reason's comps on the whole bill apart from each item's own, in cents", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
     const [line, neighbour] = [randomUUID(), randomUUID()];
@@ -475,11 +478,11 @@ describe("readReasonItemShares", () => {
         [line, 2500],
         [neighbour, 0],
       ]),
-      bill: 1000,
+      billReduction: 200,
     });
   });
 
-  it("counts a line named twice once, its bill-wide rows included", async () => {
+  it("counts a line named twice once, and the reason's rows on the whole bill once", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
     const line = randomUUID();
@@ -495,7 +498,10 @@ describe("readReasonItemShares", () => {
         nominalValue: decimal("20.00"),
       }),
     );
-    expect(await shares(order, reason.id, [line, line])).toEqual(new Map([[line, 3500]]));
+    expect(await readShares(order, reason.id, [line, line])).toEqual({
+      lines: new Map([[line, 2500]]),
+      billReduction: 200,
+    });
   });
 
   it("leaves out another reason's rows and another bill's", async () => {
@@ -518,7 +524,10 @@ describe("readReasonItemShares", () => {
     await record(comp(order, another, billWide));
     await record(amountOff(other, reason, line, "6.00", "12.00"));
     await record(comp(other, reason, billWide));
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 1000]]));
+    expect(await readShares(order, reason.id, [line])).toEqual({
+      lines: new Map([[line, 1000]]),
+      billReduction: 0,
+    });
   });
 
   it("adds nothing for a cancel", async () => {

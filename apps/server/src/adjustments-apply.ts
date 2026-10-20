@@ -626,11 +626,14 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
 
 /**
  * A comp action's verdict (design §3.2). The reason's share of an item is what it took before
- * ({@link readReasonItemShares}: the item's own, and once what it took off the whole bill) plus
- * what this request takes, each at `ceil(reduction × 10000 ÷ list value)`: on a line, the request's
- * reduction over its list value; on the whole bill, each changed row's over that row's. A
- * percentage taken off a dish was spread over its extras too, so an extra also counts its dish's
- * share, and a dish the largest any of its extras took on its own.
+ * ({@link readReasonItemShares}) plus what this request takes, each at
+ * `ceil(reduction × 10000 ÷ list value)`: on a line, the request's reduction over its list value; on
+ * the whole bill, each changed row's over that row's. A percentage taken off a dish was spread over
+ * its extras too, so an extra also counts its dish's share, and a dish the largest any of its extras
+ * took on its own. What the reason's discounts on the whole bill took off each row is not recorded,
+ * and the whole-cent spread can give one row more than its average, so each of the item's rows
+ * counts their whole reduction, capped at what that row is now below its list value, and the item
+ * the largest of those.
  */
 async function judgeComp(
   tx: Transaction,
@@ -662,20 +665,27 @@ async function judgeComp(
       : [{ row: line, reduction: ask.reduction, nominal: ask.nominal }];
   const relatedOf = (row: Row) =>
     row.parentLineId === null
-      ? rows.filter((other) => other.parentLineId === row.id).map((other) => other.id)
-      : [row.parentLineId];
-  const { lines: shares, bill: billShare } = await readReasonItemShares(tx, {
+      ? rows.filter((other) => other.parentLineId === row.id)
+      : [dishOf(row, rows)];
+  const { lines: shares, billReduction } = await readReasonItemShares(tx, {
     workingOrderId: orderId,
     reasonId: reason.id,
-    lineIds: [...new Set(subjects.flatMap(({ row }) => [row.id, ...relatedOf(row)]))],
+    lineIds: [
+      ...new Set(subjects.flatMap(({ row }) => [row, ...relatedOf(row)].map(({ id }) => id))),
+    ],
   });
+  const billShareOf = (row: Row) => {
+    const list = decimalToCents(listValue(row, row.quantity));
+    const off = list - decimalToCents(gross(row, row.quantity));
+    return shareBp(Math.min(billReduction, Math.max(0, off)), list);
+  };
   const itemShareBp = Math.max(
     0,
     ...subjects.map(
       ({ row, reduction, nominal }) =>
         shares.get(row.id)! +
-        Math.max(0, ...relatedOf(row).map((id) => shares.get(id)!)) +
-        billShare +
+        Math.max(0, ...relatedOf(row).map(({ id }) => shares.get(id)!)) +
+        Math.max(...[row, ...relatedOf(row)].map(billShareOf)) +
         shareBp(decimalToCents(reduction), decimalToCents(nominal)),
     ),
   );
