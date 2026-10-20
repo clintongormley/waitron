@@ -2477,8 +2477,7 @@ export class TillTableOrderScreen extends LitElement {
   #sentFallbackLine(line: TabLine): TemplateResult {
     return html`<div class="sent-fallback-row">
       <span class="sent-fallback-name"
-        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}
-        ×${this.#displayQty(line.quantity)}
+        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${this.#displayQty(line.quantity)}`}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
         ${this.#paidMark(line.lineNo, line.quantity)}

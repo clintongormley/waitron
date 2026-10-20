@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { Hono } from "hono";
@@ -975,6 +976,9 @@ async function partyAloneAt(tableId: string): Promise<string> {
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify(
           await observedMoveBillBody(v.db, `/api/bills/${billId}/move`, {
+            partyId: null,
+            submissionId: randomUUID(),
+            allergy: { party: { answer: "none", guests: [] }, ticks: [] },
             to: { tableId },
             otherPartyId: null,
           }),

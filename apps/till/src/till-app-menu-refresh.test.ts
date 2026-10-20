@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
@@ -276,7 +277,12 @@ function fakeSessionActivity() {
 
 async function mountApp(overrides: Record<string, unknown> = {}, props: Partial<TillApp> = {}) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api: api as unknown as TillApi, ...props });
+  const mounted = await mountWidget<TillApp>("till-app", {
+    api: api as unknown as TillApi,
+    ...props,
+  });
+  Object.assign(api, answeredPartyAllergy(mounted.el));
+  return mounted;
 }
 
 /** Settles awaited API promises (the real `setTimeout` is not faked) and Lit's render. */

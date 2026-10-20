@@ -35,6 +35,7 @@ import {
   departmentTransferRequests,
   departments,
   workingLineContexts,
+  writePartyAllergy,
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order.js";
@@ -1477,6 +1478,7 @@ describe("department transfer tab lifecycle", () => {
           guestCount: null,
           operatorId: personId,
         });
+        await writePartyAllergy(tx, party.partyId, { answer: "none", guests: [] }, personId);
         await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
         const priced = await priceForIssuance(tx, v.clock, v.cfg, f.tab);
         await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);

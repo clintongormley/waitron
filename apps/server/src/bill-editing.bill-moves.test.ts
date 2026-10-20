@@ -515,6 +515,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
     await inTx(venue, async (tx) => {
       await writeEditSentLines(tx, true);
       await submitGroups(tx, venue.cfg, p.partyId, {
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
         expectedPartyRevision: p.revision,
         operatorId: venue.operatorId,
         submissionId: randomUUID(),

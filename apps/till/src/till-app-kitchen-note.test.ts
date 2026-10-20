@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -235,6 +236,7 @@ const heading = (el: TillApp) =>
 async function mounted(overrides: Record<string, unknown> = {}, retrieve = true) {
   api = stubApi(overrides);
   const { el } = await mountWidget<TillApp>("till-app", { api });
+  Object.assign(api, answeredPartyAllergy(el));
   await flush(el);
   emit(el.shadowRoot!.querySelector("till-lock-screen")!, "logged-in", {
     personId: "p1",
@@ -1012,10 +1014,15 @@ describe("party kitchen note integration", () => {
     expect(api.fireGroup).not.toHaveBeenCalled();
     pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
     await flush(el);
-    expect(api.fireGroup).toHaveBeenCalledWith("party-table", "group-held", {
-      submissionId: expect.any(String),
-      expectedPartyRevision: 4,
-    });
+    expect(api.fireGroup).toHaveBeenCalledWith(
+      "party-table",
+      "group-held",
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 4,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
   it("keeps a refused note editable and does not fire food", async () => {
     const pending = deferred<typeof partyNote>();
@@ -1088,12 +1095,18 @@ it.each(["send-lines", "pay-tab", "bill-pay"])(
     pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
     await flush(el);
     if (action === "send-lines")
-      expect(api.sendLines).toHaveBeenCalledWith("bill-table", [1], {
-        billId: "bill-table",
-        editorVersion: 0,
-        draftId: null,
-        draftRevision: null,
-      });
+      expect(api.sendLines).toHaveBeenCalledWith(
+        "bill-table",
+        [1],
+        {
+          billId: "bill-table",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        },
+        { submissionId: expect.any(String), expectedPartyRevision: 4 },
+        { signal: expect.any(AbortSignal) },
+      );
     if (action === "pay-tab")
       expect(api.recordSale).toHaveBeenCalledWith(
         [],

@@ -176,6 +176,7 @@ describe("natural draft-event attendance snapshots", () => {
     const before = await state();
     vi.setSystemTime(new Date("2026-01-05T14:00:00.987Z"));
     const input = {
+      allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
       submissionId: newId(),
       expectedPartyRevision: 0,
       operatorId: OPERATOR,

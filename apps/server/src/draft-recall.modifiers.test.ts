@@ -169,6 +169,7 @@ async function setup(withVariant = false) {
     { listId: seeded.extras.id, picks: [{ productId: seeded.cheese.id, quantity: 1 }] },
   ];
   const sent = await call("POST", `/api/parties/${partyId}/groups`, {
+    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     ...(await command(partyId)),
     groups: [
       {

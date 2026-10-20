@@ -208,7 +208,13 @@ async function submit(
   groups: { lines: GroupLine[]; release: GroupRelease }[],
 ) {
   const args = await command(partyId);
-  return inTx((tx) => submitGroups(tx, v.cfg, partyId, { ...args, groups }));
+  return inTx((tx) =>
+    submitGroups(tx, v.cfg, partyId, {
+      ...args,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups,
+    }),
+  );
 }
 
 /** Seats `label` and fires one group of `dishes`, answering the party, its tab and the group. */

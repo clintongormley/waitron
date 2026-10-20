@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -294,7 +295,7 @@ async function mountApp(
   theme?: "light" | "dark",
 ) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>(
+  const mounted = await mountWidget<TillApp>(
     "till-app",
     {
       api: api as unknown as TillApi,
@@ -302,6 +303,8 @@ async function mountApp(
     },
     theme,
   );
+  Object.assign(api, answeredPartyAllergy(mounted.el));
+  return mounted;
 }
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {

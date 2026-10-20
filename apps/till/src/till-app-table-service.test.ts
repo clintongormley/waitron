@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
@@ -331,7 +332,9 @@ async function ringCafe(el: TillApp, screen: TillTableOrderScreen) {
 
 async function mountApp(overrides: Record<string, unknown> = {}) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api });
+  const mounted = await mountWidget<TillApp>("till-app", { api });
+  Object.assign(api, answeredPartyAllergy(mounted.el));
+  return mounted;
 }
 
 async function flush(el: TillApp): Promise<void> {

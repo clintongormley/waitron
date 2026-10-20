@@ -133,6 +133,7 @@ async function tableWithWaitingTicket() {
     tx.select({ revision: parties.revision }).from(parties).where(eq(parties.id, partyId)),
   );
   const submitted = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
     groups: [{ lines: [{ menuItemId: venue.offerFor("Pulpo"), quantity: "1" }], release: "fire" }],
