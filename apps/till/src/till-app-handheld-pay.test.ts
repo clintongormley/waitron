@@ -48,7 +48,7 @@ import {
   tableOrder,
   flush,
   inDialog,
-  invoiceOf,
+  invoiceOf as saleOf,
   openDialog,
   openTable,
   press,
@@ -70,6 +70,12 @@ async function mountApp(overrides: Record<string, unknown> = {}) {
 
 const sent = (): BillPaymentRequest[] =>
   vi.mocked(api.takeBillPayment).mock.calls.map(([, request]) => request);
+
+/** The server always names an invoice's type (`readReceiptIssuer`). */
+const invoiceOf = (total: string, invoiceType: "F1" | "F2"): TillSaleResult => ({
+  ...saleOf(total),
+  invoiceType,
+});
 
 const wholeCard: AllocationPreview = {
   kind: "allocated",
@@ -256,7 +262,7 @@ describe("a presented bill on a handheld", () => {
   const inPresented = (el: TillApp, selector: string) =>
     presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
   const placedBill = billOf({ status: "placed", receiptAvailable: true });
-  const ticket = () => invoiceOf("120.00");
+  const ticket = () => invoiceOf("120.00", "F2");
   const editOfBill = expect.objectContaining({ billId: "wo-4" });
 
   async function openPresented(overrides: Record<string, unknown> = {}) {
@@ -330,7 +336,7 @@ describe("a presented bill on a handheld", () => {
     ]);
   });
 
-  it("a card is charged on the row's reader through the integrated payment, then the ticket shows", async () => {
+  it("a card is charged on the row's reader through the integrated payment, then the paid screen shows", async () => {
     const { el } = await openPresented();
     await takeOnReader(el);
 
@@ -345,10 +351,10 @@ describe("a presented bill on a handheld", () => {
     expect(vi.mocked(api.takeBillPayment)).not.toHaveBeenCalled();
     expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
     expect(presented(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
   });
 
-  it("cash is collected with what was handed over and the guests, then the ticket shows", async () => {
+  it("cash is collected with what was handed over and the guests, then the paid screen shows", async () => {
     const { el } = await openPresented();
     await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 3 });
 
@@ -362,7 +368,7 @@ describe("a presented bill on a handheld", () => {
     ]);
     expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
     expect(presented(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
   });
 
   it("another card machine is collected as a card of the whole amount with its operation number", async () => {
@@ -662,12 +668,12 @@ describe("an unanswered presented payment on a handheld", () => {
   }
 
   it.each(["cash", "manual"] as const)(
-    "a %s payment with no answer reopens the sheet locked on it, and its action sends it again; answered, the ticket shows",
+    "a %s payment with no answer reopens the sheet locked on it, and its action sends it again; answered, the paid screen shows",
     async (method) => {
       const send = vi
         .fn()
         .mockRejectedValueOnce(noAnswer())
-        .mockResolvedValueOnce(invoiceOf("120.00"));
+        .mockResolvedValueOnce(invoiceOf("120.00", "F2"));
       const { el, order } = await sentWithNoAnswer(method, send);
 
       expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
@@ -685,7 +691,7 @@ describe("an unanswered presented payment on a handheld", () => {
       expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
       expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
       expect(presented(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
     },
   );
 
@@ -739,7 +745,7 @@ describe("an unanswered presented payment on a handheld", () => {
       const send = vi
         .fn()
         .mockRejectedValueOnce(noAnswer())
-        .mockResolvedValueOnce(invoiceOf("120.00"));
+        .mockResolvedValueOnce(invoiceOf("120.00", "F2"));
       const { el } = await sentWithNoAnswer(method, send);
       emit(presented(el)!, "presented-pay-close");
       await flush(el);
@@ -750,14 +756,14 @@ describe("an unanswered presented payment on a handheld", () => {
       await resend(el);
       expect(send).toHaveBeenCalledTimes(2);
       expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
     },
   );
   it("a resend carries the original request after another person's draft has changed the bill", async () => {
     const send = vi
       .fn()
       .mockRejectedValueOnce(noAnswer())
-      .mockResolvedValueOnce(invoiceOf("120.00"));
+      .mockResolvedValueOnce(invoiceOf("120.00", "F2"));
     const { el } = await sentWithNoAnswer("cash", send);
     const original = structuredClone(send.mock.calls[0]);
     expect(original[4]).toEqual({
@@ -805,7 +811,7 @@ describe("an unanswered presented payment on a handheld", () => {
 
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1]).toEqual(original);
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
   });
 });
 
@@ -2442,11 +2448,15 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
   /** A whole-bill card sent from the phone and answered that it is still at the reader, then a
    * read that finds it received and the bill settled. */
-  async function settlingCard(getFiledTicket: ReturnType<typeof vi.fn>) {
+  async function settlingCard(
+    getFiledTicket: ReturnType<typeof vi.fn>,
+    overrides: Record<string, unknown> = {},
+  ) {
     const getBillBalance = vi.fn(async () => balanceOf());
     const whole = { ...own, applied: "120.00" };
     const { el } = await mountApp(
       onPhone({
+        ...overrides,
         getBillBalance,
         getFiledTicket,
         takeBillPayment: vi.fn().mockResolvedValue({
@@ -2473,10 +2483,13 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     return el;
   }
   const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
+  const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
 
-  it("a received card that settles the bill shows the ticket, as a card answered at once does", async () => {
-    const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00"));
-    const el = await settlingCard(getFiledTicket);
+  it("a received card that settles a full invoice's bill shows the ticket, as a card answered at once does", async () => {
+    const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00", "F1"));
+    const el = await settlingCard(getFiledTicket, {
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ invoiceType: "F1" })]),
+    });
 
     await tick(el);
 
@@ -2486,17 +2499,15 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
   });
 
   it("a received card that settles a simplified invoice's bill shows the paid screen, with the read's payments", async () => {
-    const getFiledTicket = vi
-      .fn()
-      .mockResolvedValue({ ...invoiceOf("120.00"), invoiceType: "F2" as const });
+    const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00", "F2"));
     const el = await settlingCard(getFiledTicket);
 
     await tick(el);
 
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull());
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
     expect(ticketView(el)).toBeNull();
     expect(dialog(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-paid-view")!.payments).toEqual([
+    expect(paidView(el)!.payments).toEqual([
       paymentOf({ ...own, applied: "120.00", state: "received" }),
     ]);
   });
@@ -2505,27 +2516,27 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     const getFiledTicket = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValue(invoiceOf("120.00"));
+      .mockResolvedValue(invoiceOf("120.00", "F2"));
     const el = await settlingCard(getFiledTicket);
 
     await tick(el);
     expect(getFiledTicket).toHaveBeenCalledTimes(1);
-    expect(ticketView(el)).toBeNull();
+    expect(paidView(el)).toBeNull();
     expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
 
     await tick(el);
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
     expect(getFiledTicket).toHaveBeenCalledTimes(2);
   });
 
-  it("a ticket read that fails after another tick has come is tried again, and the ticket then shows", async () => {
+  it("a ticket read that fails after another tick has come is tried again, and the paid screen then shows", async () => {
     let fail: () => void = () => {};
     const getFiledTicket = vi
       .fn()
       .mockImplementationOnce(
         () => new Promise((_, reject) => (fail = () => reject(new TypeError("Failed to fetch")))),
       )
-      .mockResolvedValue(invoiceOf("120.00"));
+      .mockResolvedValue(invoiceOf("120.00", "F2"));
     const el = await settlingCard(getFiledTicket);
     await tick(el);
     expect(getFiledTicket).toHaveBeenCalledTimes(1);
@@ -2534,18 +2545,18 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     fail();
     await flush(el);
-    expect(ticketView(el)).toBeNull();
+    expect(paidView(el)).toBeNull();
     await tick(el);
 
     expect(getFiledTicket).toHaveBeenCalledTimes(2);
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
     expect(dialog(el)).toBeNull();
   });
 
   it("a ticket read answered after the sheet closed shows nothing", async () => {
     let answer: () => void = () => {};
     const getFiledTicket = vi.fn(
-      () => new Promise((resolve) => (answer = () => resolve(invoiceOf("120.00")))),
+      () => new Promise((resolve) => (answer = () => resolve(invoiceOf("120.00", "F2")))),
     );
     const el = await settlingCard(getFiledTicket);
     await tick(el);
@@ -2558,6 +2569,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     expect(dialog(el)).toBeNull();
     expect(ticketView(el)).toBeNull();
+    expect(paidView(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
   });
 
@@ -2680,8 +2692,8 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
 describe("the paid screen on a handheld", () => {
   const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
-  const simplified = () => ({ ...invoiceOf("120.00"), invoiceType: "F2" as const });
-  const full = () => ({ ...invoiceOf("120.00"), invoiceType: "F1" as const });
+  const simplified = () => invoiceOf("120.00", "F2");
+  const full = () => invoiceOf("120.00", "F1");
   const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
   const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
   const inPaid = (el: TillApp, selector: string) =>
@@ -2903,6 +2915,153 @@ describe("the paid screen on a handheld", () => {
     }
   });
 
+  it("Cerrar mesa refused because another bill still owes leaves the paid screen for the table's refusal", async () => {
+    const { el } = await threeShares(simplified(), {
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+    });
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await flush(el);
+
+    expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
+    expect(paidView(el)).toBeNull();
+    expect(tableOrder(el).checkVisibility()).toBe(true);
+    const refusal = inOrder(tableOrder(el), "[data-finish-refusal]");
+    expect(refusal).not.toBeNull();
+    expect(refusal!.checkVisibility()).toBe(true);
+    expect(text(refusal!.querySelector("span"))).toBe(codeMessage("party.bill_outstanding"));
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it.each([
+    ["holds money", { code: "bill.payments_received" }],
+    ["changed elsewhere", { code: "draft.out_of_date" }],
+    ["taken over", { code: "draft.taken_over" }],
+    ["not permitted", { code: "authorization.not_permitted" }],
+    ["unanswered", new TypeError("Failed to fetch")],
+  ] as const)(
+    "Cerrar mesa refused (%s) on the paid screen says so where it can be seen",
+    async (_, refusal) => {
+      const { el } = await threeShares(simplified(), {
+        finishTable: vi.fn().mockRejectedValue(refusal),
+      });
+      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+
+      await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+      await flush(el);
+
+      const alert = el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
+      expect(alert).not.toBeNull();
+      expect(alert!.checkVisibility()).toBe(true);
+      expect(text(alert)).not.toBe("");
+    },
+  );
+
+  it("Cerrar mesa with paid dishes not yet served opens the confirmation over the paid screen; refused there because a bill owes, it leaves for the table's refusal", async () => {
+    const unserved = {
+      billId: "wo-4",
+      billRevision: 0,
+      lineId: "line-1",
+      name: "Flan",
+      quantity: "1.000",
+      context: {
+        billStatus: "settled",
+        stage: "not_started",
+        components: [
+          {
+            id: "ticket-line-1",
+            lineId: "line-1",
+            state: "queued",
+            firedAt: null,
+            quantity: "1.000",
+            kitchenQuantity: "1.000",
+            servedQuantity: "0.000",
+            cancelledQuantity: "0.000",
+          },
+        ],
+      },
+    };
+    const { el } = await threeShares(simplified(), {
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "party.unserved_dishes", partyId: "v1", dishes: [unserved] })
+        .mockRejectedValue({ code: "party.bill_outstanding" }),
+      getCancellation: vi.fn().mockResolvedValue({
+        billId: "wo-4",
+        billRevision: 0,
+        revision: 3,
+        context: structuredClone(unserved.context),
+      }),
+    });
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+
+    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await flush(el, 8);
+
+    const confirm = el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("till-finish-table-dialog");
+    expect(confirm).not.toBeNull();
+    await confirm!.updateComplete;
+    expect(
+      confirm!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.checkVisibility(),
+    ).toBe(true);
+    const reason = confirm!.shadowRoot!.querySelector('wt-combobox[name="reason"]')!;
+    const choices = (reason as unknown as { options: { value: string }[] }).options;
+    emit(reason, "wt-change", { value: choices[0]!.value });
+    await confirm!.updateComplete;
+    await userEvent.click(confirm!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+
+    expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("till-finish-table-dialog")).toBeNull();
+    expect(paidView(el)).toBeNull();
+    const refusal = inOrder(tableOrder(el), "[data-finish-refusal]");
+    expect(refusal).not.toBeNull();
+    expect(refusal!.checkVisibility()).toBe(true);
+  });
+
+  it("a ticket read that never answers leaves Cerrar mesa and Volver a la mesa pressable; Cerrar mesa sends once", async () => {
+    const { el } = await threeShares(simplified(), {
+      getReceiptPrintStatus: vi.fn(() => new Promise(() => {})),
+      finishTable: vi.fn(() => new Promise(() => {})),
+    });
+    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await paidView(el)!.updateComplete;
+    expect(paidView(el)!.busy).toBe(true);
+    const enabled = (test: string) =>
+      inPaid(el, `[data-test="${test}"]`)!.shadowRoot!.querySelector("button")!.disabled === false;
+    expect(enabled("finish-table")).toBe(true);
+    expect(enabled("back-to-table")).toBe(true);
+
+    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await flush(el);
+    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await flush(el);
+
+    expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
+  });
+
+  it("collecting a bill through Find a bill on a handheld shows the ticket view, never the paid screen", async () => {
+    const { el } = await mountApp(
+      onPhone({ collectOrder: vi.fn().mockResolvedValue(simplified()) }),
+    );
+    await openPhoneTable(el);
+
+    emit(shell(el), "find-bill-pay", {
+      workingOrderId: "wo-4",
+      tender: { method: "cash", amount: "120.00" },
+      invoiced: false,
+    });
+    await flush(el);
+
+    expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    expect(paidView(el)).toBeNull();
+  });
+
   it("a full invoice still shows the ticket view", async () => {
     const { el } = await threeShares(full());
 
@@ -2993,6 +3152,22 @@ describe("the paid screen on a handheld", () => {
       expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      ["cash", { method: "cash", tendered: "150.00", guests: 4 }],
+      ["another card machine", { method: "manual", externalRef: "OP-7", guests: 4 }],
+    ] as const)(
+      "%s with a simplified invoice shows the paid screen, with no list of payments",
+      async (_, detail) => {
+        const { el } = await payPresented(simplified(), undefined, detail);
+
+        expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+        expect(ticketView(el)).toBeNull();
+        expect(paidView(el)!.payments).toEqual([]);
+        expect(inPaid(el, "[data-paid-payments]")).toBeNull();
+      },
+    );
+
     it("a full invoice still shows the ticket view", async () => {
       const { el } = await payPresented(full());
 
@@ -3001,13 +3176,19 @@ describe("the paid screen on a handheld", () => {
     });
   });
 
-  /** A presented bill paid on the phone's reader, answered with `invoice`. */
-  async function payPresented(invoice: TillSaleResult, theme?: "light" | "dark") {
+  /** A presented bill paid on the phone's reader, or from the sheet with `detail`, answered with
+   * `invoice`. */
+  async function payPresented(
+    invoice: TillSaleResult,
+    theme?: "light" | "dark",
+    detail?: PresentedPayDetail,
+  ) {
     const stubs = onPhone({
       getPartyBills: vi
         .fn()
         .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
       pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoice }),
+      collectOrder: vi.fn().mockResolvedValue(invoice),
       getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
       getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
     });
@@ -3019,7 +3200,9 @@ describe("the paid screen on a handheld", () => {
       "till-presented-pay-dialog",
     )!;
     await sheet.updateComplete;
-    sheet.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+    if (detail === undefined)
+      sheet.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+    else emit(sheet, "presented-pay", detail);
     await flush(el);
     return { el };
   }

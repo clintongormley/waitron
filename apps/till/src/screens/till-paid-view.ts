@@ -131,6 +131,7 @@ export class TillPaidView extends LitElement {
   @property({ type: Boolean }) originalAvailable = false;
   /** Whether this device may request receipt print jobs (the profile's `print-receipt`). */
   @property({ type: Boolean }) canPrint = false;
+  /** A ticket request is out: it holds the ticket's actions, never Cerrar mesa or Volver. */
   @property({ type: Boolean }) busy = false;
 
   #emit(name: string): void {
@@ -250,7 +251,6 @@ export class TillPaidView extends LitElement {
           variant="primary"
           size="lg"
           data-test="finish-table"
-          ?disabled=${this.busy}
           @click=${() => this.#emit("finish-table")}
           >${t("table.finish")}</wt-button
         >
@@ -258,7 +258,6 @@ export class TillPaidView extends LitElement {
           variant="secondary"
           size="lg"
           data-test="back-to-table"
-          ?disabled=${this.busy}
           @click=${() => this.#emit("back-to-table")}
           >${t("paid.back")}</wt-button
         >

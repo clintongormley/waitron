@@ -207,15 +207,31 @@ describe("till-paid-view", () => {
     expect(back.variant).toBe("secondary");
   });
 
-  it("busy disables every action", async () => {
-    const el = await mount({ busy: true, receipt: sent("failed", true) });
-    for (const test of ["finish-table", "back-to-table", "retry-receipt"])
-      expect((button(el, test) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
-    el.busy = false;
-    await el.updateComplete;
-    expect((button(el, "finish-table") as HTMLElement & { disabled: boolean }).disabled).toBe(
-      false,
-    );
+  it("busy disables the ticket's actions, never Cerrar mesa or Volver a la mesa", async () => {
+    const disabled = async (el: TillPaidView, test: string) => {
+      const host = button(el, test) as HTMLElement & { updateComplete: Promise<unknown> };
+      await host.updateComplete;
+      return host.shadowRoot!.querySelector("button")!.disabled;
+    };
+    for (const props of [
+      { receipt: sent("failed", true) },
+      { originalAvailable: true },
+      { receipt: sent("done") },
+      { receipt: null, receiptReadFailed: true },
+    ]) {
+      const el = await mount({ ...props, busy: true });
+      const ticket = ["retry-receipt", "print-receipt", "reprint", "refresh-receipt"].filter(
+        (test) => button(el, test) !== null,
+      );
+      expect(ticket.length).toBeGreaterThan(0);
+      for (const test of ticket) expect(await disabled(el, test)).toBe(true);
+      expect(await disabled(el, "finish-table")).toBe(false);
+      expect(await disabled(el, "back-to-table")).toBe(false);
+      el.busy = false;
+      await el.updateComplete;
+      for (const test of ticket) expect(await disabled(el, test)).toBe(false);
+      cleanupWidgets();
+    }
   });
 
   it("a failed read offers Check again, whatever the device may print, which sends refresh-receipt", async () => {
