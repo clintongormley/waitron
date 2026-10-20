@@ -652,7 +652,7 @@ browser test** — most of these rules exist because a test passed while proving
   Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
 - **The stream loop test and the stream pause test need two pinned binaries: without them they are
   SKIPPED locally and FAIL in CI.** Install both with
-  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. The S3 rehearsal scenarios, send gate and
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them. The S3 rehearsal scenarios, send gate and
   interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
@@ -851,7 +851,7 @@ browser test** — most of these rules exist because a test passed while proving
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
   lock**. A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
-  (`apps/server/src/alert-sources.ts`). Guards, narrower than the rule:
+  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`) and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`) bounds it. Guards, narrower than the rule:
   `apps/server/src/stream-pause.e2e.test.ts`, `apps/server/src/stream-loop.e2e.test.ts` (both
   skipped locally without their binaries) and the bucket-copy cases in
   `apps/server/src/health.test.ts`. Receipt:
