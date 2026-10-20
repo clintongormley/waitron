@@ -2425,6 +2425,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and drops its unused Away field. Group readiness counts only remaining kitchen work, excluding
   fully served/cancelled and made-here components. Floor and counter attention signals use remaining
   kitchen quantities, counting separately routed extras by their remaining parent dishes.
+  The group Away writer and group dispatch flag are retired; legacy stamps do not replace group
+  readiness. Course Away and the remaining wire projections still need retirement.
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain

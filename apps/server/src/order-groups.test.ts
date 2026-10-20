@@ -83,7 +83,6 @@ import {
   fireHeldLine,
   listOrderGroups,
   readCurrentOrders,
-  markGroupAway,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
   reorderHeldGroups,
@@ -3499,11 +3498,6 @@ async function ready(v: Venue, partyId: string, groupId: string, opts: CommandOp
   return inTx((tx) => bumpGroupReady(tx, v.cfg, partyId, groupId, command));
 }
 
-async function away(v: Venue, partyId: string, groupId: string, opts: CommandOptions = {}) {
-  const command = await args(partyId, opts);
-  return inTx((tx) => markGroupAway(tx, v.cfg, partyId, groupId, command));
-}
-
 /** The kitchen's items for a group's dishes, whichever bill they sit on. */
 async function groupTickets(groupId: string) {
   return db
@@ -3551,6 +3545,34 @@ async function specExampleOnTwoBills(v: Venue) {
 }
 
 describe("A773 no dispatch state — group readiness", () => {
+  it.each([false, true])(
+    "keeps readiness independent of legacy Away stamps (ready=%s)",
+    async (isReady) => {
+      const v = await setupVenue();
+      const s = await specExampleOnTwoBills(v);
+      const items = await groupTickets(s.cold);
+      expect(new Set(items.map((item) => item.workingOrderId)).size).toBe(2);
+      if (isReady) await ready(v, s.partyId, s.cold);
+      await db
+        .update(ticketItems)
+        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
+        .where(
+          inArray(
+            ticketItems.id,
+            items.map((item) => item.id),
+          ),
+        );
+      const before = await snapshot(v, s.partyId);
+
+      const group = (await groupsOf(s.partyId)).groups.find((row) => row.id === s.cold)!;
+
+      expect(group.ready === true).toBe(isReady);
+      expect(group).not.toHaveProperty("away");
+      expect(group.lineIds).toHaveLength(2);
+      expect(await snapshot(v, s.partyId)).toEqual(before);
+    },
+  );
+
   it.each([
     { name: "live queued food", kitchenQuantity: 2000, served: 0, madeHere: false, ready: false },
     {
@@ -3682,7 +3704,7 @@ describe("A773 no dispatch state — group readiness", () => {
 });
 
 describe("the pass by group (D1)", () => {
-  it("bumps the fired cold starters ready on both bills, then sends them away, leaving every other group as it was", async () => {
+  it("bumps the fired cold starters ready on both bills, leaving every other group as it was", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     const cold = await groupTickets(s.cold);
@@ -3701,22 +3723,6 @@ describe("the pass by group (D1)", () => {
     expect(coldReady.every((item) => item.readyAt !== null)).toBe(true);
     expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
     expect(await groupTickets(s.warm)).toEqual(warmBefore);
-
-    const sent = await away(v, s.partyId, s.cold);
-
-    expect(sent).toEqual({ revision: await revisionOf(s.partyId) });
-    expect((await groupTickets(s.cold)).every((item) => item.awayAt !== null)).toBe(true);
-    expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
-  });
-
-  it("sends away only what is ready: a group still cooking gets no away stamp", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const before = await groupTickets(s.drinks);
-
-    await away(v, s.partyId, s.drinks);
-
-    expect(await groupTickets(s.drinks)).toEqual(before);
   });
 
   it("changes no kitchen item for a held group, yet records the command and moves the party on", async () => {
@@ -3726,16 +3732,13 @@ describe("the pass by group (D1)", () => {
     expect(before.every((item) => item.firedAt === null)).toBe(true);
     const revision = await revisionOf(s.partyId);
     const readyId = randomUUID();
-    const awayId = randomUUID();
 
     await ready(v, s.partyId, s.warm, { submissionId: readyId });
-    await away(v, s.partyId, s.warm, { submissionId: awayId });
 
     expect(await groupTickets(s.warm)).toEqual(before);
-    expect(await revisionOf(s.partyId)).toBe(revision + 2);
-    expect((await commandsOf(s.partyId)).slice(-2)).toEqual([
+    expect(await revisionOf(s.partyId)).toBe(revision + 1);
+    expect((await commandsOf(s.partyId)).slice(-1)).toEqual([
       { kind: "group.ready", submissionId: readyId },
-      { kind: "group.away", submissionId: awayId },
     ]);
   });
 
@@ -3757,28 +3760,25 @@ describe("the pass by group (D1)", () => {
     expect(await readyOf(s.warm)).toBe(false);
   });
 
-  // Fails if a group sent away still reads only "ready", or reads away before every bill's items left.
-  it("reads a group away only once every fired kitchen item of it has left the pass", async () => {
+  it("keeps a partially stamped group ready across both bills without a dispatch state", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
-    const groupOf = async (groupId: string) =>
-      (await groupsOf(s.partyId)).groups.find((group) => group.id === groupId)!;
     await ready(v, s.partyId, s.cold);
-    expect((await groupOf(s.cold)).away).toBeUndefined();
-
-    // One of the two bills' items gone is not the whole group.
     const [first, ...rest] = await groupTickets(s.cold);
     expect(rest.some((item) => item.workingOrderId !== first!.workingOrderId)).toBe(true);
     await db
       .update(ticketItems)
-      .set({ awayAt: new Date().toISOString() })
+      .set({ awayAt: "2026-10-20T12:01:00.000Z" })
       .where(eq(ticketItems.id, first!.id));
-    expect((await groupOf(s.cold)).away).toBeUndefined();
+    const before = await snapshot(v, s.partyId);
 
-    await away(v, s.partyId, s.cold);
-    expect(await groupOf(s.cold)).toMatchObject({ ready: true, away: true });
-    expect((await groupOf(s.drinks)).away).toBeUndefined();
-    expect((await groupOf(s.warm)).away).toBeUndefined();
+    const groups = (await groupsOf(s.partyId)).groups;
+
+    expect(groups.find((group) => group.id === s.cold)).toMatchObject({ ready: true });
+    expect(groups.every((group) => !("away" in group))).toBe(true);
+    expect(groups.find((group) => group.id === s.drinks)!.ready).toBeUndefined();
+    expect(groups.find((group) => group.id === s.warm)!.ready).toBeUndefined();
+    expect(await snapshot(v, s.partyId)).toEqual(before);
   });
 
   it("never reads ready a fired group with nothing for the kitchen, since nobody recorded it", async () => {
@@ -3794,20 +3794,6 @@ describe("the pass by group (D1)", () => {
 });
 
 describe("pass retries (D8, D19)", () => {
-  it("records an away resent with its submission id once, answering the first answer", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    await ready(v, s.partyId, s.cold);
-    const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
-
-    const first = await away(v, s.partyId, s.cold, opts);
-    const before = await snapshot(v, s.partyId);
-    const second = await away(v, s.partyId, s.cold, opts);
-
-    expect(second).toEqual(first);
-    expect(await snapshot(v, s.partyId)).toEqual(before);
-  });
-
   it("records a ready resent with its submission id once", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
@@ -3826,7 +3812,6 @@ describe("pass retries (D8, D19)", () => {
     const s = await specExample(v);
     const submissionId = randomUUID();
     await ready(v, s.partyId, s.cold, { submissionId });
-    await away(v, s.partyId, s.drinks, { submissionId: randomUUID() });
 
     await expectRefusedWithNothingWritten(
       v,
@@ -3834,41 +3819,31 @@ describe("pass retries (D8, D19)", () => {
       () => ready(v, s.partyId, s.drinks, { submissionId }),
       { code: "submission.id_reused", params: { submissionId } },
     );
-    await expectRefusedWithNothingWritten(
-      v,
-      s.partyId,
-      () => away(v, s.partyId, s.cold, { submissionId }),
-      { code: "submission.id_reused", params: { submissionId } },
-    );
   });
 
-  it("refuses a ready or an away sent with a stale party revision (party.out_of_date), writing nothing", async () => {
+  it("refuses a ready sent with a stale party revision (party.out_of_date), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const stale = await revisionOf(s.partyId);
     await fire(v, s.partyId, s.warm);
 
-    for (const step of [ready, away]) {
-      await expectRefusedWithNothingWritten(
-        v,
-        s.partyId,
-        () => step(v, s.partyId, s.cold, { revision: stale }),
-        { code: "party.out_of_date", params: { partyId: s.partyId, revision: stale + 1 } },
-      );
-    }
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => ready(v, s.partyId, s.cold, { revision: stale }),
+      { code: "party.out_of_date", params: { partyId: s.partyId, revision: stale + 1 } },
+    );
   });
 
-  it("refuses a ready or an away on a closed party (party.not_open), writing nothing", async () => {
+  it("refuses a ready on a closed party (party.not_open), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     await closeParty(s.partyId);
 
-    for (const step of [ready, away]) {
-      await expectRefusedWithNothingWritten(v, s.partyId, () => step(v, s.partyId, s.cold), {
-        code: "party.not_open",
-        params: { partyId: s.partyId },
-      });
-    }
+    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, s.cold), {
+      code: "party.not_open",
+      params: { partyId: s.partyId },
+    });
   });
 
   it("refuses a group the party does not have, or another party's (group.not_found), writing nothing", async () => {
@@ -3879,17 +3854,15 @@ describe("pass retries (D8, D19)", () => {
       await submit(v, other.partyId, [{ release: "fire", lines: [line(v, "steak")] }])
     ).groups[0]!.id;
 
-    for (const step of [ready, away]) {
-      for (const groupId of [randomUUID(), theirs]) {
-        await expectRefusedWithNothingWritten(v, s.partyId, () => step(v, s.partyId, groupId), {
-          code: "group.not_found",
-          params: { groupId },
-        });
-      }
+    for (const groupId of [randomUUID(), theirs]) {
+      await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, groupId), {
+        code: "group.not_found",
+        params: { groupId },
+      });
     }
   });
 
-  it("refuses a ready or an away on a removed group (group.not_found), writing nothing", async () => {
+  it("refuses a ready on a removed group (group.not_found), writing nothing", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const fishOnly = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]))
@@ -3897,12 +3870,10 @@ describe("pass retries (D8, D19)", () => {
     const [fish] = await linesIn(s.partyId, fishOnly);
     await move(v, s.partyId, [{ lineId: fish!.id, quantity: "1" }], { groupId: s.mains });
 
-    for (const step of [ready, away]) {
-      await expectRefusedWithNothingWritten(v, s.partyId, () => step(v, s.partyId, fishOnly), {
-        code: "group.not_found",
-        params: { groupId: fishOnly },
-      });
-    }
+    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, fishOnly), {
+      code: "group.not_found",
+      params: { groupId: fishOnly },
+    });
   });
 });
 
@@ -4046,7 +4017,15 @@ describe("the kitchen and the pass read a party's groups", () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     await ready(v, s.partyId, s.cold);
-    await away(v, s.partyId, s.cold);
+    await db
+      .update(ticketItems)
+      .set({ awayAt: "2026-10-20T12:01:00.000Z" })
+      .where(
+        inArray(
+          ticketItems.id,
+          (await groupTickets(s.cold)).map((item) => item.id),
+        ),
+      );
 
     const board = await inTx((tx) => listExpoQueue(tx, v.cfg));
     const tab = board.find((row) => row.orderId === s.tabId)!;

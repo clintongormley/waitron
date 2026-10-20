@@ -147,8 +147,6 @@ export interface OrderGroup {
    * Present only while kitchen work remains and every remaining fired component is ready.
    */
   ready?: true;
-  /** Present only when every fired kitchen item of the group has been sent away from the pass. */
-  away?: true;
   /** Dishes with active service, excluding recalled sources. */
   lineIds: string[];
   courseIds: string[];
@@ -626,47 +624,12 @@ export async function bumpGroupReady(
   );
 }
 
-/** The pass's Away for a group: stamps `away_at` on its ready items not yet away, on every bill. */
-export async function markGroupAway(
-  tx: Transaction,
-  cfg: TillConfig,
-  partyId: string,
-  groupId: string,
-  args: PartyCommandArgs,
-  firer: Firer = { personId: args.operatorId },
-  attendance?: OrderAttendance,
-): Promise<{ revision: number }> {
-  void cfg;
-  return passStep(
-    tx,
-    partyId,
-    groupId,
-    args,
-    "group.away",
-    async () => {
-      return tx
-        .update(ticketItems)
-        .set({ awayAt: nowIso() })
-        .where(
-          and(
-            inArray(ticketItems.workingOrderLineId, groupLinesOf(tx, groupId)),
-            eq(ticketItems.state, "ready"),
-            isNull(ticketItems.awayAt),
-          ),
-        )
-        .returning({ orderId: ticketItems.workingOrderId });
-    },
-    attendance,
-    "personId" in firer ? firer.personId : undefined,
-  );
-}
-
 async function passStep(
   tx: Transaction,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
-  kind: "group.ready" | "group.away",
+  kind: "group.ready",
   apply: () => Promise<{ orderId: string }[]>,
   attendance: OrderAttendance | undefined,
   personId: string | undefined,
@@ -1469,10 +1432,8 @@ async function readGroups(
   const kitchen = await tx
     .select({
       groupId: workingOrderLines.groupId,
-      fired: sql<number>`count(*)`,
       remaining: sql<number>`count(*) filter (where ${remaining})`,
       ready: sql<number>`count(*) filter (where ${remaining} and ${ticketItems.state} = 'ready')`,
-      away: sql<number>`sum(${ticketItems.awayAt} is not null)`,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1483,9 +1444,6 @@ async function readGroups(
     kitchen
       .filter((row) => row.remaining > 0 && row.ready === row.remaining)
       .map((row) => row.groupId!),
-  );
-  const awayGroups = new Set(
-    kitchen.filter((row) => row.away === row.fired).map((row) => row.groupId!),
   );
   const linesByGroup = new Map<string, typeof lines>();
   const cancellations = await readLineCancellations(
@@ -1517,7 +1475,6 @@ async function readGroups(
       ...(numberLabels.has(group.id) ? { numberPartyLabel: numberLabels.get(group.id)! } : {}),
       state: group.state as "held" | "fired",
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
-      ...(awayGroups.has(group.id) ? { away: true as const } : {}),
       lineIds: active.map((line) => line.id),
       courseIds: [
         ...new Set(own.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),

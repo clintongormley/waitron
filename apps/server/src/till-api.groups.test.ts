@@ -1595,6 +1595,63 @@ describe.each(["ready"] as const)("POST /api/parties/:id/groups/:gid/%s", (step)
 });
 
 describe("the pass routes, one after the other", () => {
+  it.each(["queued", "ready", "held", "stale", "reused", "unknown"] as const)(
+    "retired group Away cannot write or replay for %s work",
+    async (state) => {
+      const party = await withGroups();
+      const submissionId = randomUUID();
+      if (state === "ready" || state === "reused") {
+        const readied = await call(
+          "POST",
+          `/api/parties/${party.partyId}/groups/${party.fired.id}/ready`,
+          { submissionId, expectedPartyRevision: await revisionOf(party.partyId) },
+        );
+        expect(readied.status).toBe(200);
+      }
+      const groupId =
+        state === "held" ? party.tarta.id : state === "unknown" ? randomUUID() : party.fired.id;
+      const body = {
+        submissionId,
+        expectedPartyRevision: state === "stale" ? 0 : await revisionOf(party.partyId),
+      };
+      const stored = () =>
+        inTx(venue, async (tx) => ({
+          party: await tx.select().from(parties).where(eq(parties.id, party.partyId)),
+          groups: await tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
+          items: await tx
+            .select()
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderId, party.tabId)),
+          events: await tx
+            .select()
+            .from(orderGroupEvents)
+            .where(eq(orderGroupEvents.partyId, party.partyId)),
+          commands: await tx
+            .select()
+            .from(serviceCommands)
+            .where(eq(serviceCommands.scopeId, party.partyId)),
+        }));
+      const before = await stored();
+
+      for (const cookie of [venue.cookie, ""]) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await venue.app.request(
+            `/api/parties/${party.partyId}/groups/${groupId}/away`,
+            {
+              method: "POST",
+              headers: { cookie, "content-type": "application/json" },
+              body: JSON.stringify(body),
+            },
+          );
+
+          expect(response.status).toBe(404);
+          expect(await response.text()).toBe("404 Not Found");
+          expect(await stored()).toEqual(before);
+        }
+      }
+    },
+  );
+
   it("bumps fired food ready, then refuses retired Away without changing the party", async () => {
     const party = await withGroups();
     const before = await groupTickets(party.fired.id);

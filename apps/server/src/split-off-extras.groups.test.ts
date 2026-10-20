@@ -12,7 +12,6 @@ import { OPERATOR } from "./testing/party-venue.js";
 import {
   bumpGroupReady,
   listOrderGroups,
-  markGroupAway,
   moveLinesToGroup,
   placeGroups,
 } from "./testing/group-composition-fixture.js";
@@ -68,7 +67,7 @@ async function slips(tx: Transaction, printerId: string) {
 }
 
 describe("groups with split-off extras", () => {
-  it("reads ready only after both stations finish and the pass readies and sends both records away", async () => {
+  it("reads ready only after both stations finish and keeps both components ready with legacy stamps", async () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const first = await placeGroups(tx, v.cfg, v.party.partyId, {
@@ -103,11 +102,19 @@ describe("groups with split-off extras", () => {
           .filter((item) => item.lineId !== grill.lineId && item.lineId !== fryer.lineId)
           .map((item) => item.state),
       ).toEqual(["ready", "ready"]);
-      await markGroupAway(tx, v.cfg, v.party.partyId, second.groups[0]!.id, await command(tx, v));
+      await tx
+        .update(ticketItems)
+        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
+        .where(eq(ticketItems.workingOrderId, second.tabId));
       expect(
         (await listOrderGroups(tx, v.party.partyId)).groups.find(
           (group) => group.id === second.groups[0]!.id,
-        )?.away,
+        ),
+      ).not.toHaveProperty("away");
+      expect(
+        (await listOrderGroups(tx, v.party.partyId)).groups.find(
+          (group) => group.id === second.groups[0]!.id,
+        )?.ready,
       ).toBe(true);
       expect(
         (await records(tx, second.tabId))
