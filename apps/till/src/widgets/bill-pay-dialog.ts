@@ -91,10 +91,13 @@ export interface PayRequest {
 export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
- * reader, the amount it holds on the bill. */
+ * reader, the amount it holds on the bill; on a handheld, for a card charged on a reader, the
+ * reader it was sent to and what it charged. */
 export interface PayTaken {
   change: string | null;
   pending?: string;
+  reader?: string;
+  charged?: string;
 }
 
 /** What a refund just did: the amount given back, how, and whether it was keyed on a separate card
@@ -380,6 +383,24 @@ export class TillBillPayDialog extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      .taken-block {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-success);
+        border-radius: var(--wt-radius-md);
+      }
+
+      .taken-block .taken {
+        color: var(--wt-color-success);
+      }
+
+      .taken-block p {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
       .tone {
         display: flex;
         flex-direction: column;
@@ -492,7 +513,15 @@ export class TillBillPayDialog extends LitElement {
   @state() private rowOpen = false;
   /** The row's QR has put the camera in place of the body. */
   @state() private scanning = false;
+  /** On a handheld, after a payment that leaves money owing: the sheet offers the next guest in
+   * place of the form. */
+  @state() private nextOffered = false;
   #rowWanted = false;
+  /** The equal shares paid in a row in this opening: `of` the count the first was split among.
+   * A change of way or a count typed by hand ends it. */
+  #shareRun: { of: number; paid: number } | null = null;
+  /** The count of the equal share last sent to be taken, until its answer. */
+  #sharePaying: number | null = null;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -686,11 +715,43 @@ export class TillBillPayDialog extends LitElement {
 
   paymentAccepted(): void {
     this.#startAgain();
+    if (this.handheld && this.taken !== null) this.#offerNext(this.taken);
     this.#entryBaseline = this.#draft();
     this.#entry?.commit(this.#entryBaseline);
     this.#tip?.dispose();
     this.#tip = undefined;
     this.#tipBaseline = undefined;
+  }
+
+  /** A card still in progress keeps today's form. Otherwise the run of shares counts the one just
+   * paid, the form holds one fewer, and the next guest is offered while money is owing. The app
+   * also calls {@link paymentAccepted} before it sets `taken`, so only a set `taken` counts, once. */
+  #offerNext(taken: PayTaken): void {
+    const paying = this.#sharePaying;
+    this.#sharePaying = null;
+    if (taken.pending !== undefined) {
+      this.#shareRun = null;
+      this.nextOffered = false;
+      return;
+    }
+    if (paying === null) this.#shareRun = null;
+    else {
+      const run = this.#shareRun;
+      this.#shareRun =
+        run !== null && run.of - run.paid === paying
+          ? { of: run.of, paid: run.paid + 1 }
+          : { of: paying, paid: 1 };
+    }
+    const left = this.#sharesLeft();
+    if (left > 0) this.people = String(left);
+    this.nextOffered =
+      this.balance !== null && compareDecimal(decimal(this.balance.outstanding), decimal("0")) > 0;
+  }
+
+  /** The people still to pay in the run of shares, 0 outside one. */
+  #sharesLeft(): number {
+    const run = this.#shareRun;
+    return run === null || this.chosenWay !== "share" ? 0 : run.of - run.paid;
   }
 
   #startAgain(): void {
@@ -992,12 +1053,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #body(): TemplateResult {
-    return html`${this.#balance()}
-    ${
-      this.taken === null
-        ? nothing
-        : html`<p class="taken" role="status" data-pay-taken>${this.#takenText(this.taken)}</p>`
-    }
+    return html`${this.#balance()} ${this.#taken()}
     ${
       this.refunded === null
         ? nothing
@@ -1005,7 +1061,58 @@ export class TillBillPayDialog extends LitElement {
             ${this.#refundedText(this.refunded)}
           </p>`
     }
-    ${this.#payments()} ${this.#step()}`;
+    ${this.#payments()} ${this.nextOffered ? this.#nextActions() : this.#step()}`;
+  }
+
+  /** On a handheld, a payment taken shows as a block, naming the reader a card was charged on. */
+  #taken(): TemplateResult | typeof nothing {
+    const taken = this.taken;
+    if (taken === null) return nothing;
+    const line = html`<p class="taken" role="status" data-pay-taken>${this.#takenText(taken)}</p>`;
+    if (!this.handheld || taken.pending !== undefined) return line;
+    return html`<div class="taken-block">
+      ${line}
+      ${
+        taken.reader === undefined || taken.charged === undefined
+          ? nothing
+          : html`<p data-pay-taken-reader>
+              ${t("bill_pay.taken_on_reader")
+                .replace("{amount}", () => this.#money(taken.charged!))
+                .replace("{reader}", () => taken.reader!)}
+            </p>`
+      }
+    </div>`;
+  }
+
+  #nextActions(): TemplateResult {
+    const left = this.#sharesLeft();
+    const label =
+      left > 0
+        ? t("bill_pay.next_share")
+            .replace("{n}", String(this.#shareRun!.paid + 1))
+            .replace("{m}", String(this.#shareRun!.of))
+        : t("bill_pay.next");
+    return html`<wt-form-actions>
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-pay-close
+        .disabled=${this.busy}
+        @click=${() => this.#requestClose()}
+      >
+        ${t("bill_pay.close")}
+      </wt-button>
+      <wt-button
+        variant="primary"
+        data-pay-next
+        .disabled=${this.busy}
+        @click=${() => {
+          if (this.isConnected && this.#active && !this.busy) this.nextOffered = false;
+        }}
+      >
+        ${label}
+      </wt-button>
+    </wt-form-actions>`;
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1288,6 +1395,7 @@ export class TillBillPayDialog extends LitElement {
               this.chosenWay === way,
               () => {
                 this.chosenWay = way;
+                this.#shareRun = null;
               },
               way === "whole" && this.balance === null,
             ),
@@ -1345,7 +1453,10 @@ export class TillBillPayDialog extends LitElement {
           "people",
           t("bill_pay.people"),
           this.people,
-          (value) => (this.people = value),
+          (value) => {
+            this.people = value;
+            this.#shareRun = null;
+          },
           { required: true, error: errors.get("people"), submit: "[data-pay-continue]" },
         );
     }
@@ -1681,6 +1792,7 @@ export class TillBillPayDialog extends LitElement {
     const reader =
       this.handheld && onReader && !this.confirmationLocked ? this.#readyReader() : null;
     this.#sent = reader === null ? null : sentCard(reader, preview.charged!);
+    this.#sharePaying = asked.choice.kind === "share" ? asked.choice.shareOf : null;
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
       ...(reader === null ? {} : { readerId: reader.id }),

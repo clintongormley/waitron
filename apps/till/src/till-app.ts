@@ -19,7 +19,7 @@ import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
-import { payReaderOf, type FixedReader } from "./state/pay-equipment.js";
+import { payReaderOf, readyPayReader, type FixedReader } from "./state/pay-equipment.js";
 import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
@@ -16261,6 +16261,12 @@ export class TillApp extends LitElement {
         ? { ...asked.card, readerId }
         : asked.card,
     );
+    // Named now: a tap while the card is out may change the phone's reader before the answer.
+    const ready =
+      this.handheldMode && readerId !== undefined
+        ? readyPayReader(this.deviceEquipment, this.#fixedPayReader())
+        : null;
+    const readerName = ready?.id === readerId ? ready?.name : undefined;
     const key = open.billId;
     const previous = this.#unansweredPayments.get(key);
     const keyed = submissionFor(open.billId, { ...confirmation, ...detail }, previous ?? null);
@@ -16311,7 +16317,7 @@ export class TillApp extends LitElement {
           ),
         );
         settle();
-        await this.#onBillPaid(open, result);
+        await this.#onBillPaid(open, result, readerName);
       } catch (error) {
         settle(error);
         const notChecked =
@@ -16351,7 +16357,11 @@ export class TillApp extends LitElement {
    * a card still at the reader that it is in progress, with the bill's new balance, and the bill is
    * read again. An answer after a logout has closed the dialog changes nothing.
    */
-  async #onBillPaid(open: BillPaying, result: BillPaymentResult): Promise<void> {
+  async #onBillPaid(
+    open: BillPaying,
+    result: BillPaymentResult,
+    readerName?: string,
+  ): Promise<void> {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
@@ -16383,7 +16393,15 @@ export class TillApp extends LitElement {
       taken:
         result.payment.state === "pending"
           ? { change: null, pending: result.payment.applied }
-          : { change: result.payment.change },
+          : {
+              change: result.payment.change,
+              ...(readerName === undefined || result.payment.entry !== "reader"
+                ? {}
+                : {
+                    reader: readerName,
+                    charged: moneyPlus(result.payment.applied, result.payment.tip),
+                  }),
+            },
       busy: false,
     };
     await this.#rereadPayingOrder(open, result.balance);

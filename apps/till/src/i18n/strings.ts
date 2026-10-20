@@ -1496,6 +1496,9 @@ export const en = {
     "This bill has already been presented: it is paid whole, in one payment.",
   "bill_pay.taken": "Payment taken.",
   "bill_pay.taken_change": "Payment taken. Give {amount} in change.",
+  "bill_pay.taken_on_reader": "{amount} by card on {reader}",
+  "bill_pay.next": "Take the next",
+  "bill_pay.next_share": "Take the next ({n} of {m})",
   "bill_pay.unconfirmed":
     "The server did not answer, so this payment may or may not have been taken. Press Check again: it asks about this same payment, and it will not be recorded twice.",
   "bill_pay.unanswered_title": "No connection to the server",
@@ -3156,6 +3159,9 @@ export const es: Record<StringKey, string> = {
   "presented_pay.whole_only": "Esta cuenta ya está presentada: se cobra entera, en un solo pago.",
   "bill_pay.taken": "Pago cobrado.",
   "bill_pay.taken_change": "Pago cobrado. Devuelve {amount} de cambio.",
+  "bill_pay.taken_on_reader": "{amount} con tarjeta en {reader}",
+  "bill_pay.next": "Cobrar al siguiente",
+  "bill_pay.next_share": "Cobrar al siguiente ({n} de {m})",
   "bill_pay.unconfirmed":
     "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Pulsa Comprobar de nuevo: se pregunta por este mismo pago y no se registrará dos veces.",
   "bill_pay.unanswered_title": "Sin conexión con el servidor",

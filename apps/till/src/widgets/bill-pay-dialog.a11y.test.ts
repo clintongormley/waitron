@@ -65,6 +65,7 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
 const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
 const handheldBackgrounds = new Map<string, string>();
+const nextBackgrounds = new Map<string, string>();
 const rowBackgrounds = new Map<string, string>();
 const noticeBackgrounds = new Map<string, string>();
 const tableBackgrounds = new Map<string, string>();
@@ -532,6 +533,98 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       await page.viewport(viewport.width, viewport.height);
     }
   });
+
+  /** The first of three shares taken by card on Lector 2, as picture 8 left draws it. */
+  async function nextGuest() {
+    const mounted = await mount({
+      handheld: true,
+      way: "share",
+      tableName: "Mesa 4",
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      equipment,
+      balance: {
+        ...balance,
+        total: "62.40",
+        received: "0.00",
+        reserved: "0.00",
+        outstanding: "62.40",
+      },
+    });
+    const { el } = mounted;
+    await typed(el, "people", "3");
+    await pressed(el, 'input[name="method"][value="card"]');
+    await previewed(el, shareOf3);
+    await pressed(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+    el.busy = false;
+    el.asked = null;
+    el.preview = null;
+    el.balance = {
+      ...balance,
+      total: "62.40",
+      received: "20.80",
+      reserved: "0.00",
+      outstanding: "41.60",
+      payments: [
+        { ...pendingCard, kind: "share", shareOf: 3, applied: "20.80", state: "received" },
+      ],
+    };
+    el.taken = { change: null, reader: "Lector 2", charged: "20.80" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-pay-next]")).not.toBeNull();
+    return mounted;
+  }
+
+  it("has no violations on a handheld offering the next guest", async () => {
+    const { host } = await nextGuest();
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])(
+    "looks right on a handheld offering the next guest at %i px",
+    async (width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      try {
+        expect(window.innerWidth).toBe(width);
+        const { el } = await nextGuest();
+        const panel = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+        const background = getComputedStyle(panel).backgroundColor;
+        nextBackgrounds.set(`${theme}-${width}`, background);
+        if (theme === "dark") {
+          const light = nextBackgrounds.get(`light-${width}`);
+          expect(light, "run the light case first").toBeDefined();
+          expect(background).not.toBe(light);
+        }
+        const shot = `__screenshots__/look/a796-next-guest-${theme}-${width}`;
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a796-next-guest-${theme}-${width}.png`,
+        });
+        const box = panel.getBoundingClientRect();
+        const next = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-next]")!;
+        const shown = next.getBoundingClientRect();
+        await commands.writeFile(
+          `src/widgets/${shot}.json`,
+          JSON.stringify({
+            innerWidth: window.innerWidth,
+            panelWidth: box.width,
+            nextLeft: shown.left - box.left,
+            nextRight: box.right - shown.right,
+            background,
+          }),
+        );
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
 
   const withRow = () =>
     mount({

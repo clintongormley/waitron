@@ -1813,6 +1813,37 @@ describe("till-app: a sticker's notice inside the sheet", () => {
     expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: READER_ID });
   });
 
+  it("the payment taken names the reader it was sent to, not one tapped while it was out", async () => {
+    let answer!: (value: unknown) => void;
+    const held = new Promise((resolve) => (answer = resolve));
+    const { el } = await phoneSheet({ takeBillPayment: vi.fn(() => held) });
+    await press(el, 'input[name="way"][value="contribution"]');
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[0]).toMatchObject({ readerId: "r2" });
+
+    await tap(el);
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(pickedUp("Lector 3")),
+    );
+    answer(
+      takenOf(
+        { method: "card", entry: "reader", applied: "40.00", tip: "0.00", change: null },
+        { received: "40.00", outstanding: "80.00" },
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-taken-reader]"))).toBe(
+        t("bill_pay.taken_on_reader")
+          .replace("{amount}", money("40.00"))
+          .replace("{reader}", "Lector 2"),
+      ),
+    );
+  });
+
   it("a refused tap says why in the sheet, as an alert", async () => {
     const { el } = await phoneSheet({
       setDeviceEquipment: vi.fn().mockRejectedValue({ code: "device.equipment_held", status: 409 }),
@@ -1908,5 +1939,85 @@ describe("till-app: a sticker's notice inside the sheet", () => {
       line()!.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(toast(el).open).toBe(false);
+  });
+});
+
+describe("till-app: the next guest on a handheld", () => {
+  const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
+
+  it("after the first of three shares, the sheet offers the second, which previews a share among two", async () => {
+    const { el } = await mountApp(
+      onPhone({
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi
+          .fn()
+          .mockResolvedValue(
+            takenOf(
+              { method: "card", entry: "reader", applied: "40.00", tip: "0.00", change: null },
+              { received: "40.00", outstanding: "80.00" },
+            ),
+          ),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-next]"))).toBe(
+        t("bill_pay.next_share").replace("{n}", "2").replace("{m}", "3"),
+      ),
+    );
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(text(inDialog(el, "[data-pay-taken-reader]"))).toBe(
+      t("bill_pay.taken_on_reader")
+        .replace("{amount}", money("40.00"))
+        .replace("{reader}", "Lector 2"),
+    );
+    expect(inDialog(el, "till-pay-equipment")).toBeNull();
+
+    await press(el, "[data-pay-next]");
+    expect(inDialog(el, 'input[name="way"]:checked')).toHaveProperty("value", "share");
+    expect(await rowSummary(el)).toContain("Lector 2");
+    await press(el, "[data-pay-continue]");
+    expect(vi.mocked(api.previewBillPayment).mock.calls.at(-1)![1]).toMatchObject({
+      kind: "share",
+      shareOf: 2,
+    });
+  });
+
+  it("a card still at the reader offers no next guest", async () => {
+    const { el } = await mountApp(
+      onPhone({
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue({
+          ...takenOf(
+            { method: "card", entry: "reader", applied: "40.00", state: "pending", change: null },
+            { reserved: "40.00", outstanding: "80.00" },
+          ),
+          outcome: "timeout",
+        }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+        t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+      ),
+    );
+    expect(inDialog(el, "[data-pay-next]")).toBeNull();
+    expect(inDialog(el, "[data-pay-taken-reader]")).toBeNull();
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
   });
 });
