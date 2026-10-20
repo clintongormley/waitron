@@ -327,6 +327,7 @@ export class TillPayEquipment extends LitElement {
   }
 
   #onPick(role: PayEquipmentRole, shown: string, choices: EquipmentItem[], value: string): void {
+    if (this.asking?.role === role) this.asking = null;
     if (value === "" || value === shown) return;
     const picked = choices.find((choice) => choice.id === value);
     if (picked?.heldBy && !picked.busy) {

@@ -327,6 +327,25 @@ describe("till-pay-equipment", () => {
       expect(q(el, "[data-pay-take-title]")).toBeNull();
     });
 
+    it("choosing a free reader after the question sends that reader and drops the question", async () => {
+      const el = await mount({ open: true });
+      const picks = events(el, "pay-equipment-pick");
+      await pick(box(el, "cardReaderId")!, "Lector 4");
+      expect(q(el, "[data-pay-take-question]")).not.toBeNull();
+      await pick(box(el, "cardReaderId")!, "Lector 1");
+      expect(picks).toEqual([{ role: "card_terminal", id: "r1", takeOver: false }]);
+      expect(q(el, "[data-pay-take-question]")).toBeNull();
+    });
+
+    it("choosing the reader in use again after the question drops the question", async () => {
+      const el = await mount({ open: true });
+      const picks = events(el, "pay-equipment-pick");
+      await pick(box(el, "cardReaderId")!, "Lector 4");
+      await pick(box(el, "cardReaderId")!, "Lector 2");
+      expect(picks).toEqual([]);
+      expect(q(el, "[data-pay-take-question]")).toBeNull();
+    });
+
     it("forgets an open question when the row closes", async () => {
       const el = await mount({ open: true });
       await pick(box(el, "cardReaderId")!, "Lector 4");
