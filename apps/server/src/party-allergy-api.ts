@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { diningTables, partyTables, withTransaction } from "@waitron/db";
 import { canUseDeviceProfile } from "@waitron/identity";
-import type { AllergyCommand, AllergySendTarget } from "@waitron/module";
+import type { AllergyCommand, AllergyPatch, AllergySendTarget } from "@waitron/module";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
@@ -12,6 +12,7 @@ import { checkAndBumpParty, runServiceCommand } from "./parties.js";
 import {
   allergyTargets,
   applyPartyAllergyPatch,
+  normaliseAllergyPatch,
   readAllergySendView,
   readPartyAllergyView,
   survivingParty,
@@ -80,7 +81,9 @@ function command(input: unknown): AllergyCommand {
   return {
     submissionId,
     expectedPartyRevision: body.expectedPartyRevision,
-    ...(body.allergy === undefined ? {} : { allergy: body.allergy as AllergyCommand["allergy"] }),
+    ...(body.allergy === undefined
+      ? {}
+      : { allergy: normaliseAllergyPatch(body.allergy as AllergyPatch) }),
   };
 }
 

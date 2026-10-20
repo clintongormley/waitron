@@ -530,10 +530,10 @@ export async function prepareAllergyRelease(
   personId: string | null,
 ): Promise<void> {
   const view = await readAllergySendView(tx, cfg, partyId, target);
-  if (view.dishes.length === 0) return;
   if (allergy !== undefined) {
     if (personId === null) invalid("allergy");
     await applyPartyAllergyPatch(tx, view.partyId, allergy, personId, allergyTargets(view));
   }
+  if (view.dishes.length === 0) return;
   await assertPartyAllergyAnswered(tx, view.partyId);
 }

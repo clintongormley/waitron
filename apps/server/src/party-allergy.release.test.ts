@@ -119,6 +119,50 @@ async function run(p: Fixture, path: string, ask?: AllergyCommand) {
 }
 
 describe("A669 release matrix", () => {
+  it("saves an explicit answer when a course has no remaining work and replays it once", async () => {
+    const p = await seat(v, await v.table(`Empty course ${randomUUID().slice(0, 8)}`));
+    const ask: AllergyCommand = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(v, p.partyId),
+      allergy: {
+        party: {
+          answer: "allergies",
+          guests: [{ who: "Window seat", allergens: { milk: {} }, note: "Keep separate" }],
+        },
+        ticks: [],
+      },
+    };
+    const before = frozen();
+    const fire = (input: AllergyCommand) =>
+      inTx(v, (tx) =>
+        fireCourse(tx, v.cfg, p.tabId, mains, { personId: OPERATOR }, undefined, input),
+      );
+    await fire(ask);
+    const saved = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
+    expect(saved).toMatchObject({
+      answer: "allergies",
+      revision: ask.expectedPartyRevision + 1,
+      guests: [{ who: "Window seat", allergens: { milk: {} }, note: "Keep separate" }],
+      ticks: [],
+    });
+    const after = frozen();
+    const written = new Set([
+      "parties",
+      "party_allergy",
+      "party_allergy_guests",
+      "service_commands",
+    ]);
+    const otherRows = (rows: ReturnType<typeof frozen>) =>
+      Object.fromEntries(Object.entries(rows).filter(([table]) => !written.has(table)));
+    expect(otherRows(after)).toEqual(otherRows(before));
+    await fire(ask);
+    expect(frozen()).toEqual(after);
+    await expect(fire({ ...ask, allergy: none })).rejects.toMatchObject({
+      code: "submission.id_reused",
+    });
+    expect(frozen()).toEqual(after);
+  });
+
   it("a missing named line is a no-op without an answer, while a mixed selection still checks real work", async () => {
     const p = await fixture(true);
     const before = frozen();

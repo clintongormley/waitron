@@ -174,6 +174,20 @@ async function label(deviceId: string) {
 }
 
 describe("a kitchen display's pass fires as the device", () => {
+  it("a device course refuses person-owned allergy input even when the order has no party", async () => {
+    const f = await fixture();
+    const orderId = await counterOrder(f.v, "Burger");
+    const before = await itemsOf(orderId);
+    const result = await send(f.app, f.pass.cookie, coursePath(orderId, f.mains, "fire"), {
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+    });
+    expect(result.status).toBe(400);
+    expect(result.body.error?.code).toBe("allergy.invalid");
+    expect(await itemsOf(orderId)).toEqual(before);
+    const allowed = await send(f.app, f.pass.cookie, coursePath(orderId, f.mains, "fire"));
+    expect(allowed.status).toBe(200);
+  });
+
   it("device group preflight and release roll back every bill when the later dish is unavailable", async () => {
     const f = await fixture();
     const held = await f.heldBurger();

@@ -221,6 +221,49 @@ describe("A669 allergy routes", () => {
     expect(await snapshot()).toEqual(before);
     expect(await suite.db.select().from(serviceCommands)).toHaveLength(0);
   });
+  it("normalises saved guest and dish ids before writing and fingerprinting a retry", async () => {
+    const first = await ticked();
+    const guestId = first.snapshot.guests[0]!.id;
+    const body = command({
+      expectedPartyRevision: 1,
+      allergy: {
+        party: {
+          answer: "allergies",
+          guests: [{ ...guest, id: guestId.toUpperCase(), who: "Window seat updated" }],
+        },
+        ticks: [{ line: { kind: "working", id: lineId.toUpperCase() }, guestIndex: 0 }],
+      },
+    });
+    const response = await request("PUT", path(), body);
+    expect(response.status).toBe(200);
+    const saved = (await response.json()) as PartyAllergyRead;
+    expect(saved.snapshot).toMatchObject({
+      revision: 2,
+      guests: [{ id: guestId, who: "Window seat updated", allergens: { milk: {} } }],
+      ticks: [{ workingLineId: lineId, guestId }],
+    });
+    const canonical = {
+      ...body,
+      allergy: {
+        party: {
+          answer: "allergies",
+          guests: [{ ...guest, id: guestId, who: "Window seat updated" }],
+        },
+        ticks: [{ line: { kind: "working", id: lineId }, guestIndex: 0 }],
+      },
+    };
+    const replay = await request("PUT", path(), canonical);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(saved);
+    expect(await snapshot()).toEqual(saved.snapshot);
+    expect(await suite.db.select().from(serviceCommands)).toHaveLength(2);
+    await expectError(
+      await request("PUT", path(), { ...canonical, allergy: { ticks: [] } }),
+      409,
+      "submission.id_reused",
+    );
+    expect(await snapshot()).toEqual(saved.snapshot);
+  });
   it("resolves new and reordered stable guest indexes and bumps tick-only edits exactly once", async () => {
     const first = await ticked();
     const [a, b] = first.snapshot.guests;

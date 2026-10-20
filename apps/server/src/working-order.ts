@@ -2286,7 +2286,6 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
 /**
  * Release held items of a course by stamping fired_at. Require the course to exist
  * in this venue, including a deleted course whose food still needs release.
- * Already-fired items retain their timestamps; an empty held set is a no-op.
  *
  * On a party's order, the held groups holding the course's dishes fire whole first
  * ({@link fireHeldGroupsOfCourse}); `firer` is who fired them. The course's lines still held
