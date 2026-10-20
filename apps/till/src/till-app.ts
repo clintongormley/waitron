@@ -2961,9 +2961,7 @@ export class TillApp extends LitElement {
     // The sticker is now the sheet field's latest pick, so no earlier pick's refusal shows under it.
     const role: PayEquipmentRole = code.kind === "reader" ? "card_terminal" : "receipt";
     this.#payEquipmentPicks[role]++;
-    const errors = { ...this.payEquipmentErrors };
-    delete errors[role];
-    this.payEquipmentErrors = errors;
+    this.#setPayEquipmentError(role, null);
     const context = {
       session: this.#operatorSession,
       name: permitted.choices.find((item) => item.id === code.id)!.name,
@@ -9441,13 +9439,12 @@ export class TillApp extends LitElement {
         sheet.sheet === this.#paySheetKey() &&
         sheet.pick === this.#payEquipmentPicks[sheet.role]
       )
-        this.payEquipmentErrors = {
-          ...this.payEquipmentErrors,
-          [sheet.role]:
-            typeof status !== "number"
-              ? t("pay_equipment.not_saved")
-              : codeMessage(typeof code === "string" ? code : "server.internal"),
-        };
+        this.#setPayEquipmentError(
+          sheet.role,
+          typeof status !== "number"
+            ? t("pay_equipment.not_saved")
+            : codeMessage(typeof code === "string" ? code : "server.internal"),
+        );
     } finally {
       limit.done();
       this.equipmentWaiting--;
@@ -9669,13 +9666,19 @@ export class TillApp extends LitElement {
     return presented === null ? undefined : `presented:${presented.id}`;
   }
 
+  /** Puts `message` under the role's field in the pay sheet, or clears it when null. */
+  #setPayEquipmentError(role: PayEquipmentRole, message: string | null): void {
+    const errors = { ...this.payEquipmentErrors };
+    if (message === null) delete errors[role];
+    else errors[role] = message;
+    this.payEquipmentErrors = errors;
+  }
+
   #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): Promise<void> {
     const sheet = this.#paySheetKey();
     if (sheet === undefined) return Promise.resolve();
     this.payEquipmentSaving = { role, id };
-    const errors = { ...this.payEquipmentErrors };
-    delete errors[role];
-    this.payEquipmentErrors = errors;
+    this.#setPayEquipmentError(role, null);
     return this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {
         detail: { role, selection: { id }, via: "list", takeOver },
@@ -16740,14 +16743,14 @@ export class TillApp extends LitElement {
     sheet: "till-bill-pay-dialog" | "till-presented-pay-dialog",
     billId: string,
   ): Promise<void> {
-    this.payEquipmentErrors = {
-      ...this.payEquipmentErrors,
-      card_terminal: t(
+    this.#setPayEquipmentError(
+      "card_terminal",
+      t(
         this.#unknownCardOutcome.has(billId)
           ? "bill_pay.reader_not_held_unknown"
           : "bill_pay.reader_not_held",
       ),
-    };
+    );
     // Opened now, not on the re-read's answer, which may never come.
     this.shadowRoot!.querySelector<TillBillPayDialog | TillPresentedPayDialog>(
       sheet,
