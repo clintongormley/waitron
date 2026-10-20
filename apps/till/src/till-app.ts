@@ -2914,6 +2914,9 @@ export class TillApp extends LitElement {
   /** Equipment changes sent or queued and not yet ended; while any is out a handheld takes no
    * payment. */
   @state() private equipmentWaiting = 0;
+  /** Reads of the equipment sent because a change's answer was set aside or may be out of date;
+   * until one ends, what the device shows may not be what the server holds. */
+  @state() private equipmentRereads = 0;
   /** The pay sheet's own latest pick, which its field shows as saving. */
   @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
   /** A refusal is shown only in the dialog opening it was picked in. */
@@ -8959,7 +8962,12 @@ export class TillApp extends LitElement {
   async #rereadIfStale(): Promise<void> {
     if (this.equipmentWaiting > 0 || !this.#equipmentStale) return;
     this.#equipmentStale = false;
-    if (!(await this.#readEquipment())) this.#equipmentStale = true;
+    this.equipmentRereads++;
+    try {
+      if (!(await this.#readEquipment())) this.#equipmentStale = true;
+    } finally {
+      this.equipmentRereads--;
+    }
   }
 
   #holdEquipment(equipment: DeviceEquipment): void {
@@ -9414,7 +9422,7 @@ export class TillApp extends LitElement {
         .equipment=${this.deviceEquipment}
         .canScan=${canScan()}
         .fixedReader=${this.#fixedPayReader()}
-        .equipmentBusy=${this.equipmentWaiting > 0}
+        .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
         .equipmentSaving=${this.payEquipmentSaving}
         @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
           void this.#onPayEquipmentPick(event.detail)}

@@ -206,8 +206,8 @@ export class TillPayEquipment extends LitElement {
     </div>`;
   }
 
-  #onPick(role: PayEquipmentRole, current: string, choices: EquipmentItem[], value: string): void {
-    if (value === "" || value === current) return;
+  #onPick(role: PayEquipmentRole, shown: string, choices: EquipmentItem[], value: string): void {
+    if (value === "" || value === shown) return;
     const picked = choices.find((choice) => choice.id === value);
     if (picked?.heldBy && !picked.busy) {
       this.asking = { role, item: picked };
@@ -255,7 +255,7 @@ export class TillPayEquipment extends LitElement {
         .invalid=${error !== ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          this.#onPick(role, current, choices, event.detail.value);
+          this.#onPick(role, value, choices, event.detail.value);
           this.requestUpdate();
         }}
       ></wt-combobox
