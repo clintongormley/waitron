@@ -151,6 +151,20 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
+  test("the list with its grips", async () => {
+    const el = await screen(theme);
+    expect(el.shadowRoot!.querySelectorAll('tbody [data-test^="drag-"]')).toHaveLength(3);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a grip focused", async () => {
+    const el = await screen(theme);
+    const grip = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-e"]')!;
+    grip.focus();
+    expect(el.shadowRoot!.activeElement).toBe(grip);
+    await expectNoA11yViolations(host);
+  });
+
   test("a search matching nothing", async () => {
     const el = await screen(theme);
     const search = el.shadowRoot!.querySelector("[name=search]")!;

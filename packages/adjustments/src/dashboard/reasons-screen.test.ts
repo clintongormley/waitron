@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
@@ -546,6 +546,208 @@ describe("the reasons list", () => {
     expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
       "alert",
     );
+  });
+});
+
+describe("setting the order", () => {
+  const grip = (el: AdjustmentReasonsScreen, id: string) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test="drag-${id}"]`)!;
+  const grips = (el: AdjustmentReasonsScreen) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-test^="drag-"]'),
+  ];
+  const announced = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector(".reorder-status")!.textContent;
+  const hint = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector("p.hint")!.textContent!.trim();
+
+  async function arrowDown(el: AdjustmentReasonsScreen, id: string): Promise<void> {
+    const button = grip(el, id);
+    button.focus();
+    button.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  }
+
+  /** A save that answers only when the test says so. */
+  function heldSave(): { save: ReturnType<typeof vi.fn>; answer: () => void } {
+    let answer!: () => void;
+    const save = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)))
+      .mockResolvedValue(undefined);
+    return { save, answer: () => answer() };
+  }
+
+  it("moves a reason with the keyboard and saves the whole order at once", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+    expect(api.reorderReasons.mock.calls).toEqual([[["c", "e", "d", "o"]]]);
+    expect(el.shadowRoot!.activeElement).toBe(grip(el, "e"));
+    expect(announced(el)).toBe("Moved.");
+    expect(grip(el, "e").getAttribute("aria-label")).toBe("Move reason: Entry error");
+  });
+
+  it("names the grip and says the move in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(grip(el, "e").getAttribute("aria-label")).toBe(
+      `${ES["adjustments.reorder"]}: Entry error`,
+    );
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(announced(el)).toBe(ES["adjustments.reordered"]);
+  });
+
+  it("saves a pointer drag once, on drop", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    grip(el, "e").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }));
+    for (const target of ["c", "d"]) {
+      const box = table(el).querySelector(`tr[data-reason="${target}"]`)!.getBoundingClientRect();
+      document.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 9,
+          clientY: box.top + box.height / 2,
+        }),
+      );
+      await el.updateComplete;
+    }
+    expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
+    expect(api.reorderReasons).not.toHaveBeenCalled();
+    document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+    await settle(el);
+    expect(api.reorderReasons.mock.calls).toEqual([[["c", "d", "e", "o"]]]);
+    expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
+  });
+
+  it("saves one move at a time", async () => {
+    const { save, answer } = heldSave();
+    const api = fakeApi({ reorderReasons: save });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(rowKeys(el)).toEqual(["c", "d", "e", "o"]);
+    expect(save.mock.calls).toEqual([[["c", "e", "d", "o"]]]);
+    answer();
+    await settle(el);
+    expect(save.mock.calls).toEqual([[["c", "e", "d", "o"]], [["c", "d", "e", "o"]]]);
+  });
+
+  it("reads the list again after a refused move and says so", async () => {
+    const api = fakeApi({ reorderReasons: vi.fn().mockRejectedValue({ code: "x" }) });
+    const el = await mount(api);
+    expect(api.listReasons).toHaveBeenCalledTimes(1);
+    await arrowDown(el, "e");
+    await settle(el);
+    expect(alert(el)).toBe("The new order could not be saved.");
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+    expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+  });
+
+  it("holds a live list while a move is unanswered, then reads again", async () => {
+    const liveData = new LiveData();
+    const { save, answer } = heldSave();
+    const api = fakeApi({ liveData, reorderReasons: save });
+    const el = await mount(api);
+    try {
+      await arrowDown(el, "e");
+      const reads = api.listReasons.mock.calls.length;
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      const held = api.listReasons.mock.calls.length;
+      api.listReasons.mockResolvedValue([complaint, entryError, employee, retired]);
+      answer();
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(held));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("reads again after a drag put back where it started, if a list arrived while it was held", async () => {
+    const liveData = new LiveData();
+    const api = fakeApi({ liveData });
+    const el = await mount(api);
+    /** Each place's middle, measured before anything moves: a row sliding into place is drawn
+     * away from where it rests. */
+    const places = ["e", "c"].map((id) => {
+      const box = table(el).querySelector(`tr[data-reason="${id}"]`)!.getBoundingClientRect();
+      return box.top + box.height / 2;
+    });
+    const to = async (place: number) => {
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true, pointerId: 9, clientY: places[place] }),
+      );
+      await el.updateComplete;
+    };
+    try {
+      grip(el, "e").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }));
+      await to(1);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      const reads = api.listReasons.mock.calls.length;
+      api.listReasons.mockResolvedValue([employee, entryError, complaint, retired]);
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
+      await to(0);
+      expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+      await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "e", "c", "o"]));
+      expect(api.reorderReasons).not.toHaveBeenCalled();
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("forgets a move answered after the screen has gone", async () => {
+    let refuse!: (error: unknown) => void;
+    const save = vi.fn(() => new Promise<void>((_, reject) => (refuse = reject)));
+    const api = fakeApi({ reorderReasons: save });
+    const el = await mount(api);
+    await arrowDown(el, "e");
+    const host = el.parentElement!;
+    el.remove();
+    refuse({ code: "x" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    host.append(el);
+    await settle(el);
+    expect(alert(el)).toBe("");
+  });
+
+  it("disables the grips while searching, and says how to reorder", async () => {
+    const el = await mount(fakeApi());
+    expect(grips(el).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(hint(el)).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+
+    await type(el, "search", "o");
+    expect(grips(el).length).toBeGreaterThan(0);
+    expect(grips(el).every((button) => button.disabled)).toBe(true);
+    expect(hint(el)).toBe("Clear the search to change the order.");
+
+    await type(el, "search", "   ");
+    expect(grips(el).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(hint(el)).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+
+    await type(el, "search", "");
+    expect(grips(el).map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(hint(el)).toBe("Drag ⋮⋮ to set the order the till lists them in.");
+  });
+
+  it("labels the grip column", async () => {
+    const el = await mount(fakeApi());
+    const first = table(el).querySelector("thead tr")!.firstElementChild!;
+    expect(first.tagName).toBe("TH");
+    expect(first.textContent!.trim()).toBe("Move reason");
   });
 });
 

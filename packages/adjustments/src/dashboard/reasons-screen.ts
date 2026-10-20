@@ -14,6 +14,8 @@ import { formatMoney, searchBy } from "@waitron/shared";
 import {
   baseStyles,
   ReorderController,
+  reorder,
+  type ReorderModel,
   parseDecimalInput,
   formatDecimalInput,
   ContentLanguageController,
@@ -218,7 +220,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      td.handle-cell,
+      .handle-cell,
       td.actions-cell {
         width: 1%;
         padding-inline: 0;
@@ -315,7 +317,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private reasons?: AdjustmentReason[];
   @state() private search = "";
   @state() private loadError?: string;
-  /** A refusal of a row action that saved at once. */
+  /** A refused save of a new order, until the next move or the editor opens. */
   @state() private actionError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
@@ -347,6 +349,37 @@ export class AdjustmentReasonsScreen extends LitElement {
   #leave?: LeaveCoordinator;
   /** Restoring a draft rerenders; the pending close still needs this editor's same guard. */
   #closeGuard?: (reason: LeaveReason) => Promise<boolean>;
+  /** Order saves not yet answered, the one in flight included. */
+  #movesOut = 0;
+  /** Where a pointer drag picked its row up, once it has moved it; null otherwise. */
+  #dragFrom: number | null = null;
+  /** A list read arrived while a move was unsaved, so it was not shown. */
+  #readDropped = false;
+  /** Order saves run one after another along this chain. */
+  #saving: Promise<void> = Promise.resolve();
+  /** Moved on by a refusal or a disconnect, so the saves still waiting are dropped unsent. */
+  #moveGeneration = 0;
+
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => (this.reasons ? this.#shown().map((reason) => reason.id) : []),
+      move: (id, to, via) => this.#move(id, to, via),
+      drop: (id) => this.#drop(id),
+      label: (id) => this.reasons!.find((reason) => reason.id === id)!.name,
+      // Never true for a save: that would disable the grip a keyboard user is on and drop their focus.
+      busy: () => this.#searching,
+      get reorderLabel(): string {
+        return t("adjustments.reorder");
+      },
+    } satisfies ReorderModel,
+    { announce: () => t("adjustments.reordered") },
+  );
+
+  /** While false the rows drawn are every reason, which is what lets a move send the whole order. */
+  get #searching(): boolean {
+    return this.search.trim() !== "";
+  }
 
   #comparison(draft: Draft): string {
     const money = amount(draft.maxAmount);
@@ -433,6 +466,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.draft = undefined;
     this.busy = false;
     this.#restart();
+    this.#moveGeneration++;
+    this.#movesOut = 0;
+    this.#dragFrom = null;
+    this.#readDropped = false;
     super.disconnectedCallback();
   }
 
@@ -499,6 +536,11 @@ export class AdjustmentReasonsScreen extends LitElement {
           ),
         },
         (reasons) => {
+          // An older order would pull rows back under a drag or a keyboard that has moved on.
+          if (this.#movesOut > 0 || this.#dragFrom !== null) {
+            this.#readDropped = true;
+            return;
+          }
           this.reasons = reasons;
           this.loadError = undefined;
         },
@@ -506,6 +548,51 @@ export class AdjustmentReasonsScreen extends LitElement {
     } catch {
       this.loadError = t("adjustments.load_error");
     }
+  }
+
+  /** `to` indexes the rows drawn, which are every reason while a move is allowed. */
+  #move(id: string, to: number, via: "key" | "pointer"): void {
+    const from = this.reasons!.findIndex((reason) => reason.id === id);
+    this.reasons = reorder(this.reasons!, from, to);
+    if (via === "key") this.#saveOrder();
+    else this.#dragFrom ??= from;
+  }
+
+  #drop(id: string): void {
+    const from = this.#dragFrom;
+    this.#dragFrom = null;
+    const to = this.reasons!.findIndex((reason) => reason.id === id);
+    if (from !== null && to !== from) this.#saveOrder();
+    else if (this.#movesOut === 0 && this.#readDropped) this.#readAgain();
+  }
+
+  #saveOrder(): void {
+    const ids = this.reasons!.map((reason) => reason.id);
+    const generation = this.#moveGeneration;
+    this.actionError = undefined;
+    this.#movesOut += 1;
+    this.#saving = this.#saving.then(async () => {
+      if (generation !== this.#moveGeneration) return;
+      try {
+        await this.api.reorderReasons(ids);
+      } catch {
+        if (generation !== this.#moveGeneration) return;
+        // Every save waiting behind a refused one names an order built on it.
+        this.#moveGeneration++;
+        this.#movesOut = 0;
+        this.actionError = t("adjustments.reorder_error");
+        this.#readAgain();
+        return;
+      }
+      if (generation !== this.#moveGeneration) return;
+      this.#movesOut -= 1;
+      if (this.#movesOut === 0 && this.#readDropped) this.#readAgain();
+    });
+  }
+
+  #readAgain(): void {
+    this.#readDropped = false;
+    void this.#load();
   }
 
   #open(editor: Editor, opener: HTMLElement): void {
@@ -951,7 +1038,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #row(reason: AdjustmentReason) {
     const isVoid = reason.kind === "void";
     return html`<tr data-reason=${reason.id}>
-      <td class="handle-cell"></td>
+      <td class="handle-cell">${this.#reorder.handle(reason.id)}</td>
       <td>
         <span class="reason-name">${reason.name}</span>
         ${
@@ -969,9 +1056,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #table(rows: readonly AdjustmentReason[]) {
-    const note = t(
-      this.search.trim() === "" ? "adjustments.order_note" : "adjustments.order_note_searching",
-    );
+    const note = t(this.#searching ? "adjustments.order_note_searching" : "adjustments.order_note");
     if (rows.length === 0)
       return html`<p role="status" data-test="no-matches">${tableNoMatches()}</p>
         <p class="hint">${note}</p>`;
@@ -985,7 +1070,9 @@ export class AdjustmentReasonsScreen extends LitElement {
         <table>
           <thead>
             <tr>
-              <td class="handle-cell"></td>
+              <th scope="col" class="handle-cell">
+                <span class="visually-hidden">${t("adjustments.reorder")}</span>
+              </th>
               <th scope="col">${t("adjustments.column.name")}</th>
               <th scope="col">${t("adjustments.column.kind")}</th>
               <th scope="col">${t("adjustments.column.apply_roles")}</th>
@@ -1322,7 +1409,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           : html`<div class="toolbar">${this.#renderSearch()} ${this.#renderAdd()}</div>
               ${this.reasons ? this.#table(this.#shown()) : nothing}`
       }
-      ${this.#limitSection()} ${this.#modal()}`;
+      ${this.#reorder.liveRegion()} ${this.#limitSection()} ${this.#modal()}`;
   }
 }
 
