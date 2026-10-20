@@ -2979,7 +2979,7 @@ export class TillApp extends LitElement {
   /** Reads of the equipment sent because a change's answer was set aside or may be out of date;
    * until one ends, what the device shows may not be what the server holds. */
   #equipmentRereads = 0;
-  /** Either count above is not zero; the pay sheets hold charging and say saving on it. */
+  /** Either count above is not zero; the pay sheets hold charging on it. */
   @state() private equipmentBusy = false;
   /** The pay sheet's own latest pick, which its field shows as saving. */
   @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
