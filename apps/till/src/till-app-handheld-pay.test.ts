@@ -679,7 +679,6 @@ describe("an unanswered presented payment on a handheld", () => {
     }
   }
 
-  /** Signs out, signs in as Luis, opens the table again and presses the bill's Pay. */
   /** A share taken from the open bill's sheet gets no answer — or, with `out`, is still waiting for
    * one — the sheet is closed, and the bill is then presented: the table is opened again on it. */
   async function partUnconfirmedThenPresented(
@@ -870,6 +869,7 @@ describe("an unanswered presented payment on a handheld", () => {
     expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
   });
 
+  /** Signs out, signs in as Luis, opens the table again and presses the bill's Pay. */
   async function signInAgainAndReopen(el: TillApp): Promise<void> {
     emit(shell(el), "logout");
     await flush(el);
@@ -4963,30 +4963,25 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     expect(pay).not.toHaveBeenCalled();
   });
 
-  it.each([["after its Check again was refused reader.not_held", true]] as const)(
-    "on the presented path, a press refused reader.not_held after a bill payment on that bill got no answer, %s, never says nothing was charged",
-    async (_name, checkAgain) => {
-      const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
-      const pay = vi.fn().mockRejectedValue(notHeld());
-      const { el, order, getDeviceEquipment } = await billUnanswered({ getPartyBills, pay });
-      if (checkAgain) await checkAgainRefused(el);
-      getPartyBills.mockResolvedValue([billOf({ status: "placed" })]);
-      dialog(el)!.dispatchEvent(
-        new CustomEvent("bill-pay-close", { bubbles: true, composed: true }),
-      );
-      order.dispatchEvent(
-        new CustomEvent("pay-presented", {
-          detail: { workingOrderId: billOf().workingOrderId },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await settled(el);
+  it("on the presented path, a press refused reader.not_held after a bill payment on that bill got no answer, after its Check again was refused reader.not_held, never says nothing was charged", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const pay = vi.fn().mockRejectedValue(notHeld());
+    const { el, order, getDeviceEquipment } = await billUnanswered({ getPartyBills, pay });
+    await checkAgainRefused(el);
+    getPartyBills.mockResolvedValue([billOf({ status: "placed" })]);
+    dialog(el)!.dispatchEvent(new CustomEvent("bill-pay-close", { bubbles: true, composed: true }));
+    order.dispatchEvent(
+      new CustomEvent("pay-presented", {
+        detail: { workingOrderId: billOf().workingOrderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settled(el);
 
-      await expectUnknownRefusal(el, getDeviceEquipment, () => pressTake(el));
-      expect(pay).toHaveBeenCalledOnce();
-    },
-  );
+    await expectUnknownRefusal(el, getDeviceEquipment, () => pressTake(el));
+    expect(pay).toHaveBeenCalledOnce();
+  });
 
   it("on the bill path, a fresh Take payment refused reader.not_held after an unanswered card on the bill never says nothing was charged", async () => {
     const { el, getDeviceEquipment } = await billUnanswered();

@@ -15963,8 +15963,8 @@ export class TillApp extends LitElement {
       : null;
   }
 
-  /** The order screen's Pay (`action.pay`) on a presented bill: its sheet opens, and the phone's
-   * equipment is read again. */
+  /** The order screen's Pay (`action.pay`) on a presented bill: its sheet opens and the phone's
+   * equipment is read again, unless a bill payment holds the bill. */
   #onPayPresented(event: Event): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     if (workingOrderId !== this.activeTabId) return;
