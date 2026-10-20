@@ -308,8 +308,10 @@ export class TillFloorScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      /* As wide as its words and button, so its help badge hangs on Update layout's corner. */
       .layout-due {
         display: flex;
+        width: fit-content;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);

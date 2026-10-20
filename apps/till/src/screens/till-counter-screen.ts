@@ -132,6 +132,8 @@ export class TillCounterScreen extends LitElement {
         grid-column: 1;
         grid-row: 1 / span 3;
         overflow: auto;
+        /* Room inside the scrolling box for a help badge hung over its first part's top corner. */
+        padding-block-start: calc(var(--wt-help-badge-target) / 2);
       }
       .menu-column {
         grid-column: 1;
@@ -191,6 +193,9 @@ export class TillCounterScreen extends LitElement {
         .menu-cell,
         .basket-cell {
           overflow: visible;
+        }
+        .menu-cell {
+          padding-block-start: 0;
         }
         .basket-cell {
           border-inline-start: 0;

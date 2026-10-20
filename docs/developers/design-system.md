@@ -2185,7 +2185,11 @@ may be changed), the layout banner, and the Needs moving window when it offers L
 Order: the Fire / Send all group, drawn only as wide as its buttons so the badge sits on Send all's
 corner. Counter's payment buttons carry none yet. At phone width the Floor's toolbar and banner keep
 room on their trailing side for half the badge, whether help is on or off, so a badge stays inside
-the window and turning help on moves nothing. Tests: the `*.help.test.ts` file beside each of
+the window and turning help on moves nothing; the layout banner is only as wide as its words and
+Update layout, so while they fit on one line its badge hangs on that button's corner. On a till wider than a phone, Counter's
+dishes and order lists scroll in a box that keeps half the badge's target clear at its top, so the
+search field's and the list headings' badges are whole
+(`till-counter-screen.help-clip.test.ts`, `till-floor-screen.help-place.test.ts`). Tests: the `*.help.test.ts` file beside each of
 `till-counter-screen.ts`, `till-floor-screen.ts` and `till-table-order-screen.ts` (Counter and Floor
 keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.help.test.ts`.
 
