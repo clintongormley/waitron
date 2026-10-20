@@ -168,6 +168,27 @@ describe("seedAdjustmentReasons", () => {
     expect(reasons.map((reason) => reason.name)).toEqual(ENGLISH);
   });
 
+  it("adds and changes nothing on a second run of a Spanish-only seed over the starter reasons", async () => {
+    await seedTenant(suite.db);
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Venue", invoiceLocales: ["es-ES"], operationDescription: "Demo" })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
+    const [once, twice] = await withTransaction(suite.db, async (tx) => {
+      await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
+      const seed = () =>
+        seedAdjustmentReasons(tx, { locale: "es", dataSet: CASA_DELGADO_ES, languages: ["es"] });
+      await seed();
+      const first = await listAdjustmentReasons(tx, { includeInactive: true });
+      await seed();
+      return [first, await listAdjustmentReasons(tx, { includeInactive: true })];
+    });
+    expect(once).toHaveLength(PROVISIONED.length);
+    expect(twice).toEqual(once);
+  });
+
   it("keeps every Void reason free of role lists and every Comp reason under a limit", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
       await seedAdjustmentReasons(tx, {

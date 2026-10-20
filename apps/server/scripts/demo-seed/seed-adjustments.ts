@@ -176,18 +176,20 @@ export interface SeedAdjustmentReasonsInput {
 }
 
 /** Creates each example reason not already present. One that matches a reason already present by
- * English name renames that reason into the seed's languages and keeps its rules, because a starter
- * reason's rules win over the demo's. */
+ * English name, or by the name it would be stored under, renames that reason into the seed's
+ * languages and keeps its rules, because a starter reason's rules win over the demo's. A seed whose
+ * languages leave out English stores no English name, so a repeat run finds its own rows by name. */
 export async function seedAdjustmentReasons(
   tx: Transaction,
   { locale, dataSet, languages }: SeedAdjustmentReasonsInput,
 ): Promise<void> {
   const existing = await listAdjustmentReasons(tx, { includeInactive: true });
   const byEnglish = new Map(existing.map((reason) => [reason.names.en ?? reason.name, reason]));
+  const byName = new Map(existing.map((reason) => [reason.name, reason]));
   for (const reason of dataSet.adjustmentReasons) {
     const names = inLanguages(reason.names, languages);
     const name = reason.names[locale];
-    const present = byEnglish.get(reason.names.en);
+    const present = byEnglish.get(reason.names.en) ?? byName.get(name);
     if (present === undefined) {
       await createAdjustmentReason(tx, { ...reason, names, name });
       continue;
