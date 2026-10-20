@@ -1294,7 +1294,7 @@ export class ProductList extends LitElement {
       },
       {
         key: "allergens",
-        choosable: "shown",
+        choosable: "hidden",
         label: t("product.allergens"),
         cell: ({ product, variant }) => {
           const state = allergenState(variant ? variant.effective.allergens : product.allergens);
@@ -1322,7 +1322,7 @@ export class ProductList extends LitElement {
       },
       {
         key: "dietary",
-        choosable: "shown",
+        choosable: "hidden",
         label: t("product.dietary_info"),
         cell: ({ product, variant }) => (variant ? nothing : dietaryInfoText(product)),
         filter: {

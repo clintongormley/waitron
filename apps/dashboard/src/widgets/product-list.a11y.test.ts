@@ -213,8 +213,16 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+function showColumns(...keys: string[]): void {
+  localStorage.setItem(
+    "waitron.products.table:columns",
+    JSON.stringify(Object.fromEntries(keys.map((key) => [key, true]))),
+  );
+}
+
 describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme) => {
   it("shows inherited and own allergen badges accessibly", async () => {
+    showColumns("allergens");
     const parent = products[3]!;
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",

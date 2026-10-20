@@ -37,6 +37,13 @@ beforeEach(async () => {
   localStorage.removeItem("waitron.products.table:column-order");
 });
 
+function showColumns(...keys: string[]): void {
+  localStorage.setItem(
+    "waitron.products.table:columns",
+    JSON.stringify(Object.fromEntries(keys.map((key) => [key, true]))),
+  );
+}
+
 async function tableRoot(el: ProductList): Promise<ShadowRoot> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
@@ -705,8 +712,8 @@ describe("product-list", () => {
       ["modifiers", true],
       ["ordering", true],
       ["availability", true],
-      ["allergens", true],
-      ["dietary", true],
+      ["allergens", false],
+      ["dietary", false],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>
@@ -722,6 +729,47 @@ describe("product-list", () => {
     expect(JSON.parse(localStorage.getItem("waitron.products.table:columns")!)).toEqual({
       modifiers: false,
     });
+  });
+
+  it("starts with Allergens and Dietary info hidden, offers them in Customise, and still filters by them", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-pending", name: "A", allergens: null }),
+        product({ id: "b-vegan", name: "B", allergens: {}, dietaryDeclarations: ["vegan"] }),
+        product({
+          id: "c-pending-vegan",
+          name: "C",
+          allergens: null,
+          dietaryDeclarations: ["vegan"],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    const headerLabels = () =>
+      [...root.querySelectorAll("thead th")].map((th) =>
+        th.textContent!.replace(/[▲▼]/g, "").trim(),
+      );
+    expect(headerLabels()).not.toContain(t("product.allergens"));
+    expect(headerLabels()).not.toContain(t("product.dietary_info"));
+    const boxes = () =>
+      [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].filter((box) =>
+        ["allergens", "dietary"].includes(box.dataset.column!),
+      );
+    expect(boxes().map((box) => [box.dataset.column, box.checked])).toEqual([
+      ["allergens", false],
+      ["dietary", false],
+    ]);
+    await choose(el, "allergens", "pending");
+    expect(rowKeys(root)).toEqual(["a-pending", "c-pending-vegan"]);
+    await choose(el, "dietary", "has");
+    expect(rowKeys(root)).toEqual(["c-pending-vegan"]);
+    const box = root.querySelector<HTMLInputElement>('input[data-column="allergens"]')!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await table.updateComplete;
+    expect(headerLabels()).toContain(t("product.allergens"));
+    expect(headerLabels()).not.toContain(t("product.dietary_info"));
   });
 
   it("uses a named kebab menu containing Edit and Archive", async () => {
@@ -1593,6 +1641,7 @@ describe("product-list", () => {
   // The three-state allergen invariant: null=PENDING, {}=none, {…}=declared. PENDING and none MUST
   // be distinguishable — fourteen blank cells must never silently claim "allergen-free".
   it("renders a PENDING allergen pill when allergens is null", async () => {
+    showColumns("allergens");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: null })],
     });
@@ -1602,6 +1651,7 @@ describe("product-list", () => {
   });
 
   it("renders a 'none' allergen pill when allergens is an empty map", async () => {
+    showColumns("allergens");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: {} })],
     });
@@ -1610,6 +1660,7 @@ describe("product-list", () => {
   });
 
   it("renders a 'declared' allergen pill when allergens has entries", async () => {
+    showColumns("allergens");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: { gluten: { kinds: ["wheat" as const] } } })],
     });
@@ -1618,6 +1669,7 @@ describe("product-list", () => {
   });
 
   it("renders each allergen-state pill with its localised name", async () => {
+    showColumns("allergens");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "p", allergens: null }),
@@ -1632,6 +1684,7 @@ describe("product-list", () => {
   });
 
   it("distinguishes all three allergen states from one another", async () => {
+    showColumns("allergens");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "p", allergens: null }),
@@ -1668,6 +1721,7 @@ describe("product-list", () => {
   // stylesheet reaches none of it: the thumbnail frame and the badges would render as bare inline
   // spans while every attribute assertion above still passed.
   it("paints the thumbnail frame and the badges through ::part, not a class", async () => {
+    showColumns("allergens");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ image: null, available: false }),
@@ -3853,6 +3907,7 @@ describe("a product's variants in the list", () => {
   );
 
   it("shows a variant's price, availability, menu and effective allergens, leaving its other cells empty", async () => {
+    showColumns("allergens", "dietary");
     setLocale("en");
     const route = {
       stationId: "deli",
@@ -6388,6 +6443,7 @@ describe("product-list filters (A463)", () => {
   });
 
   it("keeps products with dietary info, from their declarations or a diet override, or with none", async () => {
+    showColumns("dietary");
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -6414,6 +6470,7 @@ describe("product-list filters (A463)", () => {
   });
 
   it("counts a recipe's categorised ingredient origins as dietary info, and an uncategorised one as none", async () => {
+    showColumns("dietary");
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -6900,6 +6957,7 @@ describe("A668 effective allergen cells", () => {
   it.each([null, {}, { milk: {} }] as Product["allergens"][])(
     "shows inherited allergen badges in italic for %j",
     async (allergens) => {
+      showColumns("allergens");
       setLocale("en");
       const { table, root } = await mountTree({
         categories: [],
