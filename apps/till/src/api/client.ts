@@ -3855,8 +3855,11 @@ export class TillApi {
   }
 
   /** A party's order groups in sequence, with its revision → `GET /api/parties/:partyId/groups`. */
-  listGroups(partyId: string): Promise<{ revision: number; groups: OrderGroup[] }> {
-    return this.#request(`/api/parties/${partyId}/groups`, "GET");
+  listGroups(
+    partyId: string,
+    options: ReadOptions = {},
+  ): Promise<{ revision: number; groups: OrderGroup[] }> {
+    return this.#request(`/api/parties/${partyId}/groups`, "GET", undefined, options.signal);
   }
 
   submitGroups(
@@ -4125,8 +4128,13 @@ export class TillApi {
   }
 
   /** A party's Current orders → `GET /api/parties/:partyId/current-orders`. */
-  readCurrentOrders(partyId: string): Promise<CurrentOrders> {
-    return this.#request(`/api/parties/${partyId}/current-orders`, "GET");
+  readCurrentOrders(partyId: string, options: ReadOptions = {}): Promise<CurrentOrders> {
+    return this.#request(
+      `/api/parties/${partyId}/current-orders`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** A party's kitchen tickets that have not printed → `GET /api/parties/:partyId/print-problems`. */

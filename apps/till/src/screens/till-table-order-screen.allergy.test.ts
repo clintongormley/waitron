@@ -151,7 +151,6 @@ for (const width of [390, 1280])
             products: [],
             menus: [],
             lines: [],
-            statuses: [],
             orderId: "wo-4",
             party,
             allergyView: allergy(),

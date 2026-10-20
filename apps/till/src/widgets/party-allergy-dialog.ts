@@ -51,19 +51,22 @@ const lineKey = (line: AllergyLineRef): string =>
 const printable = (value: string): string =>
   // eslint-disable-next-line no-control-regex -- kitchen fields use the seat's printable spelling
   value.replace(/[\x00-\x1f\x7f-\x9f]+/g, " ").trim();
+function normalizedGuest(g: AllergyGuestInput): AllergyGuestInput {
+  return {
+    ...(g.id === undefined ? {} : { id: g.id }),
+    who: printable(g.who),
+    allergens: Object.fromEntries(
+      Object.entries(g.allergens)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([code, v]) => [code, v.kinds ? { kinds: [...v.kinds].sort() } : {}]),
+    ),
+    note: printable(g.note ?? "") || null,
+  };
+}
 function normalized(draft: Draft): Draft {
   return {
     answer: draft.answer,
-    guests: draft.guests.map((g) => ({
-      ...(g.id === undefined ? {} : { id: g.id }),
-      who: printable(g.who),
-      allergens: Object.fromEntries(
-        Object.entries(g.allergens)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([code, v]) => [code, v.kinds ? { kinds: [...v.kinds].sort() } : {}]),
-      ),
-      note: printable(g.note ?? "") || null,
-    })),
+    guests: draft.guests.map(normalizedGuest),
     ticks: Object.fromEntries(Object.entries(draft.ticks).sort(([a], [b]) => a.localeCompare(b))),
   };
 }
@@ -297,6 +300,77 @@ export class TillPartyAllergyDialog extends LitElement {
     this.#baseline = clone(this.#submitted);
     this.#scope?.commit(this.#submitted);
     this.#submitted = undefined;
+  }
+  reviewLatest(scopeKey: string, view: PartyAllergyRead): void {
+    if (!this.active || scopeKey !== this.#opening?.key || view.partyId !== this.view.partyId)
+      return;
+    const local = clone(this.draft);
+    const baseline = clone(this.#baseline);
+    const previousPage = this.page;
+    this.view = view;
+    this.#submitted = undefined;
+    this.#load();
+    const remote = clone(this.draft);
+    const guestKey = (guest: AllergyGuestInput, index: number) => guest.id ?? `new:${index}`;
+    const editingKey =
+      this.editingGuest === null || local.guests[this.editingGuest] === undefined
+        ? null
+        : guestKey(local.guests[this.editingGuest]!, this.editingGuest);
+    const guests: AllergyGuestInput[] = [];
+    const keys: string[] = [];
+    for (const guest of remote.guests) {
+      const old = baseline.guests.find((g) => g.id === guest.id);
+      const changed = local.guests.find((g) => g.id === guest.id);
+      if (old && !changed) continue;
+      const merged = { ...guest };
+      if (old && changed) {
+        const localValue = normalizedGuest(changed);
+        const oldValue = normalizedGuest(old);
+        if (localValue.who !== oldValue.who) merged.who = changed.who;
+        if (localValue.note !== oldValue.note) merged.note = changed.note;
+        if (JSON.stringify(localValue.allergens) !== JSON.stringify(oldValue.allergens))
+          merged.allergens = changed.allergens;
+      }
+      guests.push(merged);
+      keys.push(guest.id!);
+    }
+    local.guests.forEach((guest, index) => {
+      if (guest.id && remote.guests.some((g) => g.id === guest.id)) return;
+      const old = baseline.guests.find((g) => g.id !== undefined && g.id === guest.id);
+      if (old && JSON.stringify(normalizedGuest(guest)) === JSON.stringify(normalizedGuest(old)))
+        return;
+      guests.push({ who: guest.who, allergens: guest.allergens, note: guest.note });
+      keys.push(guestKey(guest, index));
+    });
+    const assignment = (draft: Draft, key: string): string | null => {
+      const index = draft.ticks[key];
+      const guest = index === null || index === undefined ? undefined : draft.guests[index];
+      return guest === undefined ? null : guestKey(guest, index!);
+    };
+    const ticks: Draft["ticks"] = {};
+    for (const dish of view.dishes) {
+      const key = lineKey(dish.line);
+      const before = assignment(baseline, key);
+      const edited = assignment(local, key);
+      const chosen = before === edited ? assignment(remote, key) : edited;
+      const index = chosen === null ? -1 : keys.indexOf(chosen);
+      ticks[key] = index < 0 ? null : index;
+    }
+    const answer = local.answer === baseline.answer ? remote.answer : local.answer;
+    this.draft = {
+      answer,
+      guests: answer === "none" ? [] : guests,
+      ticks:
+        answer === "none"
+          ? Object.fromEntries(Object.keys(ticks).map((key) => [key, null]))
+          : ticks,
+    };
+    this.page = previousPage;
+    const editingIndex = editingKey === null ? -1 : keys.indexOf(editingKey);
+    this.editingGuest = editingIndex < 0 ? null : editingIndex;
+    this.busy = false;
+    this.refusal = t("allergy.stale");
+    this.#scope?.changed();
   }
   #change(change: (draft: Draft) => void): void {
     if (!this.isConnected || !this.active || this.busy || this.confirmation) return;

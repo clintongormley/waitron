@@ -2,405 +2,512 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
-import { deviceZonesFixture } from "../test/device-zones.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
-import {
-  cleanupWidgets,
-  draftServer,
-  mountWidget,
-  type DraftServer,
-} from "./widgets/test-helpers.js";
-import { TillApp } from "./till-app.js";
+import type { TillApi } from "./api/client.js";
+import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
-import type { TillLockScreen } from "./screens/till-lock-screen.js";
-import type { TillFloorScreen } from "./screens/till-floor-screen.js";
-import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import type { TillMenuBrowser } from "./widgets/menu-browser.js";
-import type { TillPartyAllergyDialog } from "./widgets/party-allergy-dialog.js";
-import type { FormFactor, CapabilityFlag } from "./layout.js";
-import type {
-  TableParty,
-  TableState,
-  TillApi,
-  TillMenuOffer,
-  ZoneOfferCatalogue,
-} from "./api/client.js";
-const unit = {
-  id: "unit-each",
-  name: { es: "unit", en: "unit" },
-  abbreviation: { es: "ea", en: "ea" },
-  precision: 0,
-  hardwareUnit: null,
-};
+import {
+  server,
+  api,
+  mountApp,
+  flush,
+  emit,
+  shell,
+  floor,
+  tableOrder,
+  table4,
+  draft,
+  openTable,
+  addDish,
+  dialog,
+  allergyView,
+  party,
+  table,
+  till,
+  resetAllergyFixture,
+} from "../test/allergy-app-fixture.js";
+const originalLocale = currentLocale();
+beforeEach(() => {
+  setLocale("en");
+  resetAllergyFixture();
+});
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(originalLocale);
+});
 
-function offer(id: string, name: string, courseId: string | null = null): TillMenuOffer {
-  return {
-    id,
-    menuId: "lunch",
-    productId: `product-${id}`,
-    grossPrice: null,
-    unitPrice: "5.00",
-    available: true,
-    image: null,
-    description: null,
-    menuName: "Lunch",
-    placements: [[]],
-    name,
-    customerName: null,
-    kitchenName: null,
-    unit,
-    vatClass: "general",
-    category: null,
-    allergens: null,
-    diet: null,
-    dietDerivation: null,
-    dietOverride: null,
-    dietaryDeclarations: [],
-    courseId,
-    offeredModifiers: [],
-    variants: [],
-  } satisfies TillMenuOffer;
-}
+describe("A669 live table editor", () => {
+  it("retains a send answer after exhausted network retries and resends its immutable command", async () => {
+    const submit = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ submitDraft: submit });
+    await openTable(el);
+    await addDish(el);
+    await userEvent.click(
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(form.refusal).not.toBe(""), { timeout: 5000 });
+    expect(dialog(el)).toBe(form);
+    expect(draft(el).sending).toBe(true);
+    expect(submit).toHaveBeenCalledTimes(3);
+    expect(submit.mock.calls[2]![2]).toEqual(submit.mock.calls[0]![2]);
+    submit.mockImplementation(server.submitDraft);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(submit).toHaveBeenCalledTimes(4));
+    expect(submit.mock.calls[3]![2]).toEqual(submit.mock.calls[0]![2]);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  });
 
-function catalogue(version: string, prices: Record<string, string> = {}): ZoneOfferCatalogue {
-  const offers = [
-    offer("offer-beer", "Beer", "drinks"),
-    offer("offer-steak", "Steak", "mains"),
-    offer("offer-flan", "Flan", "desserts"),
-  ].map((each) => ({ ...each, unitPrice: prices[each.name] ?? each.unitPrice }));
-  return {
-    service: {
-      open: true,
-      zoneOpen: true,
-      periodName: null,
-      periodOccurrenceKey: null,
-      keepOpen: null,
-      zoneKeepOpen: null,
-    },
-    context: {
-      departmentName: "Restaurant",
-      zoneId: "z1",
-      departmentId: "department-bar",
-      serviceMode: "table_tab",
-    },
-    defaultMenuId: "lunch",
-    menus: [
-      {
-        id: "lunch",
-        name: "Lunch",
-        isDefault: true,
-        orderable: true,
-        sendable: true,
-        audience: "customer",
-        versionId: version,
-        structure: {
-          members: offers.map((each) => ({
-            kind: "product" as const,
-            menuItemId: each.id,
-            productId: each.productId,
-          })),
-        },
-        home: {
-          shortcuts: [],
-          handheld: HOME_DISPLAY_DEFAULTS.handheld,
-          till: HOME_DISPLAY_DEFAULTS.till,
-        },
-      },
-    ],
-    offers,
-  };
-}
-
-const courses = [
-  { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
-  { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-  { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
-];
-
-function party(over: Partial<TableParty> = {}): TableParty {
-  return {
-    kitchenNote: {
-      scope: { partyId: over.id ?? "v1" },
-      note: null,
-      revision: 0,
-      ownerRevision: over.revision ?? 3,
-    },
-    id: "v1",
-    revision: 3,
-    guestCount: 2,
-    state: "open",
-    name: null,
-    displayName: "4",
-    mainBillId: "wo-4",
-    outstanding: "0.00",
-    billCount: 1,
-    tableIds: ["t4"],
-    unsentDrafts: [],
-    reminder: null,
-    ...over,
-  };
-}
-
-function table(id: string, label: string, tableParty: TableParty | null): TableState {
-  return {
-    id,
-    label,
-    zoneId: "z1",
-    state: tableParty === null ? "free" : "open-tab",
-    condition: tableParty === null ? "free" : "held",
-    hasOpenTab: tableParty !== null,
-    pendingDeliveries: 0,
-    pendingToServe: 0,
-    readyToServe: 0,
-    enRoute: 0,
-    timingBand: "fresh",
-    status: null,
-    nextReservation: null,
-    today: null,
-    signals: [],
-    party: tableParty,
-  };
-}
-
-const table4 = table("t4", "4", party());
-const table7 = table(
-  "t7",
-  "7",
-  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
-);
-
-const drillFormFactor: FormFactor = "till";
-
-function till(formFactor: FormFactor) {
-  return {
-    locale: "en",
-    invoiceLocale: "es-ES",
-    venueName: "Bar Pepe",
-    nif: "B12345678",
-    orderFlow: "prepay" as const,
-    receiptPrintMode: "auto" as const,
-    bumpMode: "line" as const,
-    fireControl: "waiter" as const,
-    courses,
-    cardProvider: "none" as const,
-    tipsEnabled: false,
-    formFactor: formFactor,
-    capabilities: ["print-receipt"] as CapabilityFlag[],
-    inactivityTimeoutSeconds: null,
-    nodeId: "n1",
-    servers: [],
-  };
-}
-
-let server: DraftServer;
-let api: Record<string, ReturnType<typeof vi.fn>>;
-
-function stubApi(overrides: Record<string, unknown> = {}) {
-  server.bills.add("wo-7");
-  server.bills.add("wo-new");
-  return {
-    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
-    getContentLanguages: vi
+  it("a send refused for a stale party refreshes and reconfirms before using the new revision", async () => {
+    let revision = 3;
+    const preview = vi.fn().mockImplementation(async (_id: string, target: AllergySendTarget) => {
+      const view = allergyView(null, target);
+      return { ...view, snapshot: { ...view.snapshot, revision } };
+    });
+    const submit = vi
       .fn()
-      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-    getLocales: vi.fn().mockResolvedValue({
-      locales: [
-        { code: "es-ES", label: "Spanish" },
-        { code: "en-GB", label: "English" },
-      ],
-      venueDefault: "en",
-      loginDefault: "en",
-    }),
-    getTill: vi.fn().mockResolvedValue(till(drillFormFactor)),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
-    getDeviceIdentity: vi.fn().mockResolvedValue({
-      deviceId: "till-dev",
-      name: "Till 1",
-      formFactor: "till",
-    }),
-    getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-    listStaff: vi.fn().mockResolvedValue([]),
-    getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId: "zc" },
-    }),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
-    menuState: vi.fn(() => new Promise(() => {})),
-    setServiceZone: vi.fn(),
-    listWorkingOrders: vi.fn().mockResolvedValue([]),
-    listCounterWaiting: vi.fn().mockResolvedValue([]),
-    getTablesState: vi.fn().mockResolvedValue([table4, table7]),
-    listZones: vi
-      .fn()
-      .mockResolvedValue([
-        { id: "z1", name: "Dining room", displayOrder: 0, active: true, serviceMode: "table_tab" },
-      ]),
-    listStatuses: vi.fn().mockResolvedValue([]),
-    getBillBalance: vi.fn(async (workingOrderId: string) => ({
-      workingOrderId,
-      status: "open",
-      total: "3.00",
-      received: "0.00",
-      reserved: "0.00",
-      outstanding: "3.00",
-      tips: "0.00",
-      payments: [],
-      paidLines: [],
-    })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
-    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
-    readCurrentOrders: vi.fn().mockResolvedValue({
-      revision: 3,
+      .mockImplementationOnce(async () => {
+        revision = 4;
+        throw { code: "party.out_of_date" };
+      })
+      .mockImplementation(server.submitDraft);
+    const { el } = await mountApp({ submitDraft: submit, previewPartyAllergy: preview });
+    await openTable(el);
+    await addDish(el);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
       hasGroups: false,
       nextDisplayNumber: 1,
       retainedCourses: [],
       groups: [],
       ungrouped: [],
       reminder: null,
-    }),
-    listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
-    submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),
-    listDrafts: server.listDrafts,
-    saveDraft: server.saveDraft,
-    submitDraft: server.submitDraft,
-    readPartyAllergy: vi.fn().mockImplementation(async () => allergyView("none")),
-    previewPartyAllergy: vi
+    });
+    await userEvent.click(
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+    expect(submit).toHaveBeenCalledOnce();
+    expect(dialog(el)).toBe(form);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
+    expect(submit.mock.calls[1]![2]).toMatchObject({
+      expectedPartyRevision: 4,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+    });
+    expect(submit.mock.calls[1]![2].submissionId).not.toBe(submit.mock.calls[0]![2].submissionId);
+  });
+
+  it("refreshes the full heading after an answer is saved together with a send", async () => {
+    const submit = vi.fn(async (...args: Parameters<typeof server.submitDraft>) => {
+      const result = await server.submitDraft(...args);
+      api.readPartyAllergy!.mockResolvedValue({
+        ...allergyView("none"),
+        snapshot: { ...allergyView("none").snapshot, revision: 4 },
+      });
+      return result;
+    });
+    const { el } = await mountApp({
+      submitDraft: submit,
+      readPartyAllergy: vi.fn().mockResolvedValue(allergyView(null)),
+    });
+    const screen = await openTable(el);
+    await addDish(el);
+    await userEvent.click(
+      screen.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(screen.allergyView?.snapshot.answer).toBe("none"));
+  });
+
+  it("refreshes a server-stale editor refusal before allowing a separate confirmation", async () => {
+    const read = vi.fn().mockResolvedValue(allergyView("none"));
+    const save = vi
       .fn()
-      .mockImplementation(async (_partyId: string, target: AllergySendTarget) =>
-        allergyView(null, target),
-      ),
-    takeOverDraft: server.takeOverDraft,
-    logout: vi.fn().mockResolvedValue(undefined),
-    sendLines: vi.fn().mockResolvedValue(undefined),
-    fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
-    fireHeldLine: vi.fn().mockResolvedValue({ revision: 4 }),
-    ...overrides,
-  } as Record<string, ReturnType<typeof vi.fn>>;
-}
+      .mockImplementationOnce(async () => {
+        read.mockResolvedValue({
+          ...allergyView("none"),
+          snapshot: { ...allergyView("none").snapshot, revision: 4 },
+        });
+        throw { code: "party.out_of_date" };
+      })
+      .mockResolvedValue({
+        ...allergyView("allergies"),
+        snapshot: { ...allergyView("allergies").snapshot, revision: 5 },
+      });
+    const { el } = await mountApp({ readPartyAllergy: read, savePartyAllergy: save });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.busy).toBe(false));
+    await vi.waitFor(() => expect(form.view.snapshot?.revision).toBe(4));
+    expect(save).toHaveBeenCalledOnce();
+    expect(who.shadowRoot!.querySelector("input")!.value).toBe("Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]![1].expectedPartyRevision).toBe(4);
+    expect(save.mock.calls[1]![1].submissionId).not.toBe(save.mock.calls[0]![1].submissionId);
+  });
 
-async function mountApp(
-  overrides: Record<string, unknown> = {},
-  sessionActivity?: TillApp["sessionActivity"],
-  theme?: "light" | "dark",
-) {
-  api = stubApi(overrides);
-  return mountWidget<TillApp>(
-    "till-app",
-    {
-      api: api as unknown as TillApi,
-      ...(sessionActivity ? { sessionActivity } : {}),
+  it("cancels an editor opening read when navigation leaves its party", async () => {
+    const read = vi.fn().mockResolvedValue(allergyView("none"));
+    const { el } = await mountApp({ readPartyAllergy: read });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    let finish!: (view: PartyAllergyRead) => void;
+    read.mockImplementationOnce(
+      () =>
+        new Promise<PartyAllergyRead>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    const signal = read.mock.calls[1]![1]?.signal as AbortSignal | undefined;
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(signal?.aborted).toBe(true);
+    finish(allergyView("allergies"));
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("a hanging preview reaches its deadline and releases the frozen draft", async () => {
+    const { el } = await mountApp({ previewPartyAllergy: vi.fn(() => new Promise(() => {})) });
+    await openTable(el);
+    await addDish(el);
+    const nativeTimeout = window.setTimeout.bind(window);
+    const { TABLE_REQUEST_LIMIT_MS } = await import("./state/draft-sync.js");
+    const deadlines: (() => void)[] = [];
+    const timeout = vi.spyOn(window, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === TABLE_REQUEST_LIMIT_MS && typeof handler === "function")
+        deadlines.push(handler as () => void);
+      return nativeTimeout(handler, delay, ...args);
+    }) as typeof window.setTimeout);
+    try {
+      await userEvent.click(
+        tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+      );
+      await vi.waitFor(() => expect(api.previewPartyAllergy).toHaveBeenCalledOnce());
+      deadlines.at(-1)!();
+      await vi.waitFor(() => expect(draft(el).sending).toBe(false));
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(draft(el).lines).toHaveLength(1);
+      expect(dialog(el)).toBeNull();
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it.each(["till", "tablet-landscape"] as const)(
+    "binds the authoritative heading in the %s layout",
+    async (formFactor) => {
+      const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(formFactor)) });
+      const screen = await openTable(el);
+      await vi.waitFor(() =>
+        expect(screen.shadowRoot!.querySelector("[data-allergy-heading]")?.textContent).toContain(
+          "No allergies",
+        ),
+      );
+      expect(screen.hasAttribute("embedded")).toBe(formFactor === "tablet-landscape");
     },
-    theme,
   );
-}
 
-async function flush(el: TillApp, rounds = 3): Promise<void> {
-  for (let i = 0; i < rounds; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-  }
-}
+  it("aborts an old party read and lets the next party read finish first", async () => {
+    let resolveOld!: (view: PartyAllergyRead) => void;
+    const read = vi.fn().mockImplementation((id: string) =>
+      id === "v1"
+        ? new Promise<PartyAllergyRead>((resolve) => {
+            resolveOld = resolve;
+          })
+        : Promise.resolve({
+            ...allergyView("none"),
+            partyId: "v7",
+            snapshot: { ...allergyView("none").snapshot, revision: 9 },
+          }),
+    );
+    const { el } = await mountApp({ readPartyAllergy: read });
+    await openTable(el);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+    const oldSignal = read.mock.calls[0]![1].signal as AbortSignal;
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(oldSignal.aborted).toBe(true);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await vi.waitFor(() => expect(tableOrder(el)?.allergyView?.partyId).toBe("v7"));
+    resolveOld(allergyView("allergies"));
+    await flush(el);
+    expect(tableOrder(el)?.allergyView?.partyId).toBe("v7");
+    expect(tableOrder(el)?.allergyView?.snapshot.answer).toBe("none");
+  });
 
-function emit(source: Element, type: string, detail?: unknown): void {
-  if (
-    type === "change-line" &&
-    typeof detail === "object" &&
-    detail !== null &&
-    !Object.hasOwn(detail, "expectedEdit")
-  ) {
-    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
-  }
-  source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-}
+  it("polls after fifteen seconds without overlapping a pending read and ignores an older reply after Save", async () => {
+    const nativeTimeout = window.setTimeout.bind(window);
+    let poll!: () => void;
+    const timeout = vi.spyOn(window, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === 15_000 && typeof handler === "function") poll = handler as () => void;
+      return nativeTimeout(handler, delay, ...args);
+    }) as typeof window.setTimeout);
+    try {
+      const read = vi.fn().mockResolvedValue(allergyView("none"));
+      const { el } = await mountApp({ readPartyAllergy: read });
+      const screen = await openTable(el);
+      await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+      await vi.waitFor(() => expect(poll).toBeTypeOf("function"));
+      let resolveRead!: (view: PartyAllergyRead) => void;
+      read.mockImplementationOnce(
+        () =>
+          new Promise<PartyAllergyRead>((resolve) => {
+            resolveRead = resolve;
+          }),
+      );
+      const before = read.mock.calls.length;
+      poll();
+      window.dispatchEvent(new Event("focus"));
+      expect(read).toHaveBeenCalledTimes(before + 1);
+      emit(screen, "edit-party-allergy");
+      await vi.waitFor(() => expect(dialog(el)?.mode).toBe("edit"));
+      const form = dialog(el)!;
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+      const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+      await who.updateComplete;
+      await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+      await userEvent.click(
+        form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!,
+      );
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+      await vi.waitFor(() => expect(dialog(el)).toBeNull());
+      resolveRead(allergyView("none"));
+      await flush(el);
+      expect(screen.allergyView?.snapshot.revision).toBe(4);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
 
-const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
-const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
-const cardGrid = (el: TillApp) => el;
-const floor = (el: TillApp) =>
-  cardGrid(el)?.shadowRoot?.querySelector<TillFloorScreen>("till-floor-screen") ?? null;
-const tableOrder = (el: TillApp) =>
-  el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
-  cardGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
-  null;
-const browser = (el: TillApp) =>
-  tableOrder(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser");
-const draft = (el: TillApp) => tableOrder(el)!.draftStore!;
+  it("places an editor refusal beside the named guest field", async () => {
+    const { el } = await mountApp({
+      savePartyAllergy: vi
+        .fn()
+        .mockRejectedValue({ code: "allergy.invalid", field: "guests.0.who" }),
+    });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.busy).toBe(false));
+    expect(who.error).not.toBe("");
+    expect(form.refusal).not.toBe("");
+    expect(who.shadowRoot!.querySelector("input")!.value).toBe("Guest two");
+  });
 
-async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promise<void> {
-  server.personId = personId;
-  server.personName = displayName;
-  emit(lock(el), "logged-in", { personId, displayName, permissions: [] });
-  await flush(el);
-}
+  it("keeps dirty input when a poll advances and requires a refreshed review before saving", async () => {
+    const view = allergyView("allergies");
+    view.snapshot.guests = [
+      { id: "guest-1", position: 0, who: "Guest one", allergens: { milk: {} }, note: null },
+    ];
+    const read = vi.fn().mockResolvedValue(view);
+    const { el } = await mountApp({ readPartyAllergy: read });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).toEqual(view));
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)?.mode).toBe("edit"));
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>('[data-edit="0"]')!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "My correction");
+    const latest: PartyAllergyRead = {
+      ...view,
+      snapshot: {
+        ...view.snapshot,
+        revision: 4,
+        guests: [
+          ...view.snapshot.guests,
+          {
+            id: "guest-2",
+            position: 1,
+            who: "New guest elsewhere",
+            allergens: { eggs: {} },
+            note: null,
+          },
+        ],
+      },
+    };
+    read.mockResolvedValue(latest);
+    api.getTablesState!.mockResolvedValue([table("t4", "4", party({ revision: 4 }))]);
+    api.listGroups!.mockResolvedValue({ revision: 4, groups: [] });
+    api.readCurrentOrders!.mockResolvedValue({
+      revision: 4,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    });
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(screen.allergyView?.snapshot.revision).toBe(4));
+    expect(who.shadowRoot!.querySelector("input")!.value).toBe("My correction");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await flush(el);
+    expect(api.savePartyAllergy).not.toHaveBeenCalled();
+    expect(dialog(el)).toBe(form);
+    expect(form.refusal).not.toBe("");
+    expect(form.shadowRoot!.textContent).toContain("New guest elsewhere");
+    expect(who.shadowRoot!.querySelector("input")!.value).toBe("My correction");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(api.savePartyAllergy).toHaveBeenCalledOnce());
+    expect(api.savePartyAllergy!.mock.calls[0]![1]).toMatchObject({
+      expectedPartyRevision: 4,
+      allergy: {
+        party: {
+          guests: [
+            { id: "guest-1", who: "My correction", allergens: { milk: {} } },
+            { id: "guest-2", who: "New guest elsewhere", allergens: { eggs: {} } },
+          ],
+        },
+      },
+    });
+  });
 
-async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
-  await flush(el);
-  await signIn(el);
-  emit(shell(el), "screen-select", { screen: "floor" });
-  await flush(el);
-  emit(floor(el)!, "open-table", { tableId, seated: true });
-  await flush(el);
-  return tableOrder(el)!;
-}
+  it("reuses an uncertain editor command on retry and closes before a failed refresh", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.unreachable" })
+      .mockResolvedValue({
+        ...allergyView("allergies"),
+        snapshot: { ...allergyView("allergies").snapshot, revision: 4 },
+      });
+    const { el } = await mountApp({ savePartyAllergy: save });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).not.toBeNull());
+    emit(screen, "edit-party-allergy");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(form.busy).toBe(false));
+    expect(form.refusal).not.toBe("");
+    api.readPartyAllergy!.mockRejectedValue({ code: "server.unreachable" });
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]![1]).toEqual(save.mock.calls[0]![1]);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    expect(screen.allergyView?.snapshot.revision).toBe(4);
+  });
 
-/** Taps a dish's tile, without waiting. */
-async function addDish(el: TillApp): Promise<void> {
-  const tile = [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
-    (button) => button.querySelector(".name")?.textContent === "Steak",
-  )!;
-  await userEvent.click(tile);
-  await flush(el);
-  const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-  if (review && review.getBoundingClientRect().width > 0) await userEvent.click(review);
-  await flush(el);
-}
-const dialog = (el: TillApp) =>
-  el.shadowRoot!.querySelector<TillPartyAllergyDialog>("till-party-allergy-dialog");
-function allergyView(
-  answer: null | "none" | "allergies",
-  target?: AllergySendTarget,
-): PartyAllergyRead {
-  return {
-    partyId: "v1",
-    snapshot: { answer, guests: [], ticks: [], changedAt: null, changedBy: null, revision: 3 },
-    dishes:
-      target?.kind === "draft"
-        ? target.lineIds.map((id) => ({
-            line: { kind: "draft", id },
-            billId: "wo-4",
-            name: "Steak",
-            quantity: "1.000",
-            allergens: null,
-            extras: [],
-            sentAt: null,
-            offeredBefore: false,
-          }))
-        : target === undefined
-          ? []
-          : [
-              {
-                line: { kind: "working", id: "held-line" },
-                billId: "wo-4",
-                name: "Steak",
-                quantity: "1.000",
-                allergens: null,
-                extras: [],
-                sentAt: null,
-                offeredBefore: true,
-              },
-            ],
-  };
-}
-const originalLocale = currentLocale();
-beforeEach(() => {
-  setLocale("en");
-  server = draftServer();
-});
-afterEach(() => {
-  cleanupWidgets();
-  setLocale(originalLocale);
+  it("reads the full party view on opening and binds it independently of the order draft", async () => {
+    const view = allergyView("allergies");
+    view.snapshot.guests = [
+      { id: "guest-1", position: 0, who: "Guest one", allergens: { milk: {} }, note: null },
+    ];
+    const { el } = await mountApp({ readPartyAllergy: vi.fn().mockResolvedValue(view) });
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView).toEqual(view));
+    expect(screen.shadowRoot!.querySelector("[data-allergy-heading]")?.textContent).toContain(
+      "Guest one",
+    );
+    await addDish(el);
+    const store = draft(el);
+    const lines = [...store.lines];
+    const next = {
+      ...view,
+      snapshot: { ...view.snapshot, answer: "none" as const, guests: [], revision: 4 },
+    };
+    api.readPartyAllergy!.mockResolvedValue(next);
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(screen.allergyView?.snapshot.revision).toBe(4));
+    expect(screen.party?.revision).toBe(3);
+    expect(draft(el)).toBe(store);
+    expect(store.lines).toEqual(lines);
+    expect(
+      api.readPartyAllergy!.mock.calls.every(
+        ([id, options]) => id === "v1" && options.signal instanceof AbortSignal,
+      ),
+    ).toBe(true);
+  });
+
+  it("opens Change as an editor and saves an explicit answer with the reviewed revision", async () => {
+    const { el } = await mountApp();
+    const screen = await openTable(el);
+    await vi.waitFor(() => expect(screen.allergyView?.snapshot.answer).toBe("none"));
+    await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-allergy-change]")!);
+    await vi.waitFor(() => expect(dialog(el)?.mode).toBe("edit"));
+    const form = dialog(el)!;
+    expect(
+      form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")?.hasAttribute("disabled"),
+    ).toBe(true);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    const who = form.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    await who.updateComplete;
+    await userEvent.fill(who.shadowRoot!.querySelector("input")!, "Guest two");
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(api.savePartyAllergy).toHaveBeenCalledOnce());
+    expect(api.savePartyAllergy!.mock.calls[0]!.slice(0, 2)).toEqual([
+      "v1",
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        allergy: {
+          party: {
+            answer: "allergies",
+            guests: [{ who: "Guest two", allergens: { milk: {} }, note: null }],
+          },
+          ticks: [],
+        },
+      },
+    ]);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    expect(screen.party?.revision).toBe(4);
+  });
 });
 
 describe("A669 table orchestration", () => {

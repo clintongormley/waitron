@@ -391,4 +391,123 @@ describe("A669 allergy dialog", () => {
     expect(field!.error).toBe("Check this guest");
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
   });
+  it("keeps the edited guest's control and assignments when a refreshed review reorders guests", async () => {
+    const el = await mount("allergies", "edit");
+    const result = confirmations(el);
+    await click(el, '[data-edit="0"]');
+    await fill(el, "guest-0-who", "Corrected guest");
+    const latest = view("allergies");
+    latest.snapshot.revision = 8;
+    latest.snapshot.guests.reverse();
+    latest.snapshot.guests[0]!.position = 0;
+    latest.snapshot.guests[1]!.position = 1;
+    latest.snapshot.guests[1]!.note = "New kitchen note";
+    el.reviewLatest("opening-a", latest);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-1-who"]')?.value).toBe(
+      "Corrected guest",
+    );
+    expect(
+      el.shadowRoot!.querySelector<WtTextarea>('wt-textarea[name="guest-1-note"]')?.value,
+    ).toBe("New kitchen note");
+    await click(el, "[data-primary]");
+    expect(result).toEqual([
+      {
+        scopeKey: "opening-a",
+        expectedPartyRevision: 8,
+        patch: {
+          party: {
+            answer: "allergies",
+            guests: [
+              { id: "guest-b", who: "Blue shirt", allergens: { eggs: {} }, note: null },
+              {
+                id: "guest-a",
+                who: "Corrected guest",
+                allergens: { gluten: { kinds: ["wheat"] }, milk: {} },
+                note: "New kitchen note",
+              },
+            ],
+          },
+          ticks: [],
+        },
+      },
+    ]);
+  });
+  it("reconciles ticks by guest identity and recreates an edited guest removed elsewhere", async () => {
+    const el = await mount("allergies", "edit");
+    const result = confirmations(el);
+    await click(el, '[data-edit="0"]');
+    await fill(el, "guest-0-who", "Corrected removed guest");
+    await click(el, '[data-tick="1:2"]');
+    const latest = view("allergies");
+    latest.snapshot.revision = 8;
+    latest.snapshot.guests = [
+      { ...latest.snapshot.guests[1]!, position: 0 },
+      { id: "guest-c", position: 1, who: "New guest", allergens: { peanuts: {} }, note: null },
+    ];
+    latest.snapshot.ticks = [
+      { guestId: "guest-b", draftLineId: "new", workingLineId: null },
+      { guestId: "guest-c", draftLineId: null, workingLineId: "old" },
+    ];
+    el.reviewLatest("opening-a", latest);
+    await el.updateComplete;
+    for (const tick of ["0:0", "1:1", "0:2"])
+      expect(el.shadowRoot!.querySelector<HTMLInputElement>(`[data-tick="${tick}"]`)?.checked).toBe(
+        true,
+      );
+    expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-2-who"]')?.value).toBe(
+      "Corrected removed guest",
+    );
+    await click(el, "[data-primary]");
+    expect(result).toEqual([
+      {
+        scopeKey: "opening-a",
+        expectedPartyRevision: 8,
+        patch: {
+          party: {
+            answer: "allergies",
+            guests: [
+              { id: "guest-b", who: "Blue shirt", allergens: { eggs: {} }, note: null },
+              { id: "guest-c", who: "New guest", allergens: { peanuts: {} }, note: null },
+              {
+                who: "Corrected removed guest",
+                allergens: { gluten: { kinds: ["wheat"] }, milk: {} },
+                note: "Severe",
+              },
+            ],
+          },
+          ticks: [{ line: { kind: "draft", id: "unknown" }, guestIndex: 0 }],
+        },
+      },
+    ]);
+  });
+  it("keeps a concurrent allergen edit when the local allergen choices only changed key order", async () => {
+    const el = await mount("allergies", "edit");
+    const result = confirmations(el);
+    await click(el, '[data-edit="0"]');
+    await fill(el, "guest-0-who", "Corrected guest");
+    await click(el, '[data-guest="0"] [data-code="gluten"]');
+    await click(el, '[data-guest="0"] [data-code="gluten"]');
+    await click(el, 'input[name="guest-0-gluten-wheat"]');
+    const latest = view("allergies");
+    latest.snapshot.revision = 8;
+    latest.snapshot.guests[0]!.allergens = { peanuts: {} };
+    el.reviewLatest("opening-a", latest);
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector<HTMLInputElement>('[data-guest="0"] [data-code="peanuts"]')!
+        .checked,
+    ).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector<HTMLInputElement>('[data-guest="0"] [data-code="gluten"]')!
+        .checked,
+    ).toBe(false);
+    await click(el, "[data-primary]");
+    expect(result[0]!.patch.party?.guests[0]).toEqual({
+      id: "guest-a",
+      who: "Corrected guest",
+      allergens: { peanuts: {} },
+      note: "Severe",
+    });
+  });
 });

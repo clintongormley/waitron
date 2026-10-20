@@ -17,6 +17,19 @@ const reply = () =>
   new Response(JSON.stringify(view), { headers: { "content-type": "application/json" } });
 
 describe("A669 allergy client", () => {
+  it.each(["listGroups", "readCurrentOrders"] as const)(
+    "cancels the %s metadata read used before allergy reconfirmation",
+    async (method) => {
+      const fetcher = vi.fn().mockImplementation(reply);
+      const abort = new AbortController();
+      const api = new TillApi("", fetcher);
+      await (api[method] as (id: string, options: { signal: AbortSignal }) => Promise<unknown>)(
+        "party-1",
+        { signal: abort.signal },
+      );
+      expect(fetcher.mock.calls[0]![1].signal).toBe(abort.signal);
+    },
+  );
   it("keeps the bill edit observation and allergy command together on per-line Send", async () => {
     const fetcher = vi.fn().mockImplementation(reply);
     await new TillApi("", fetcher).sendLines("bill-1", [2, 4], expectedEdit, command);
