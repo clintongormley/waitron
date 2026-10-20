@@ -241,32 +241,17 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## Finish first Live setup integration
 
-PR #1752 remains a draft at published `747c9069091214f7e6371920f476c9d3df17202a`.
-CI run 39344124324 passes 52 jobs, but two server shards and the aggregate check fail;
-server coverage merge and publishing are skipped. The baseline selection reproduced 37 failures
-and 29 unhandled rejections before the command-parser correction below.
+The owner approved the exact parser replacement on 20 October at approximately 06:18 and
+the exact live-hour retirement bundle at approximately 07:45. Both are applied. The focused
+pair passes all 48 cases. Historical-contribution selection was rejected and remains unapplied.
+The before/after behavior and exact permission hashes are in
+[the changed-check inventory](../operations/a679-changed-checks.md#live-retirement-approval-applied-2026-10-20).
 
-The owner approved the exact register-till parser replacement on 20 October at approximately
-06:18. Signed commit `175ad50ea7deb13870e2302b034ba952473aff1f` applies those bytes; all 12 cases pass.
-The two other commands retain their source checks. Register-till now checks three accepted and
-seven refused parser shapes instead of header/usage/destructure textual agreement.
-
-The owner rejected selecting historical contributions for the 36 retirement cases and requested
-one live-hour replacement bundle. That one-file proposal remains outside the feature checkout,
-awaiting exact approval in Lane E's questions, 20 October 07:07. It checks spent hours,
-independent taxpayer/environment scopes, archived public floors, damaged key-only recovery
-manifests, earlier abandoned events and exact preparation replay after restart. Its 36 cases,
-the approved parser and the unchanged retired-entry HTTP pair pass 50 cases together in an
-independently installed checkout. Three omitted checks allow forbidden calls and fail their
-assertions; their restored selections pass. Types, scoped lint and formatting pass.
-
-Keep both completed installed Claude reviews and the earlier acceptance receipts. Provisioning's
-six current CI shards and merge pass 1,471 cases and their coverage bars. The local recovery-host
-split passes all 129 cases, with the longest local file at about 119 seconds; its Linux CI timing
-still needs qualification. After exact approval and integration, run the normal hook and literal
-final-head CI, including server coverage merge and the split timings, before landing. Preserve
-the independent fiscal follow-ups below.
-
+PR #1752's earlier published head failed two server shards; no unchanged rerun is a repair.
+Keep both completed installed Claude reviews and the earlier acceptance receipts. The branch
+rebased onto main's `8cf43cfba` to retain its table-label contract. Finish the normal push hook
+and literal final-head CI, including server coverage merge and Linux timings for the 129-case
+recovery-host split, before landing. Preserve the independent fiscal follow-ups below.
 
 ## Pin the clock's future-finished sample refusal
 

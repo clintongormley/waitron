@@ -3801,3 +3801,41 @@ iterations, omitted/restored controls and final logs are retained under Lane E's
 `receipts/a679-live-retirement-20261020-065547/`. No partial push or unchanged CI rerun occurred.
 The published failed head and unqualified next Linux split timings still require final-head CI
 once the owner approves the live replacement. Both completed whole-branch reviews are retained.
+
+
+## Live retirement approval applied, 2026-10-20
+
+The owner approved the exact live-hour replacement at approximately 07:45, including the
+change from S/P independence to a spent taxpayer/environment hour across software IDs.
+Patch SHA-256 `e1cb3edc926d413273d211c91ab027327c75ab08758897de8caee8ec5cc260d5`
+was applied verbatim. The rejected historical-contribution patch remains unapplied.
+Both the parser and retirement decisions are closed; the earlier proposal sections above
+record their dated checkpoints.
+
+Changed test checks: `apps/server/src/first-setup-retired-assignments.test.ts:1` replaces all
+36 signed-register cases with the approved live-hour bundle. Its 16 families retain spent-hour
+refusal and later-hour controls, independent taxpayer/environment scopes, activation bypass,
+archived public floors, damaged recovery documents, abandoned events and exact preparation
+replay after restart. Software IDs share the taxpayer/environment hour. The key-only manifest
+replaces register chunks; saved hour/state supplies its floor. Register audit answers are null.
+An older event's material refuses while the current event and its original issue time remain
+usable without changing setup state or journal bytes. The per-family before/after map and
+syntax inventory remain in Lane E's `a679-live-retirement-20261020-065547` receipts.
+
+The exact applied file has SHA-256
+`4802312a84826333bcbf015261aa1093c2cd7743031789933ee24bc7a4d0aeb5`.
+The approved retirement and earlier parser files pass all 48 cases in the feature checkout.
+The earlier installed proposal's three omitted/restored controls remain separate evidence;
+no production control or test threshold changed in applying the patch.
+
+The branch rebased onto `8cf43cfbabf52aa970afc23a4fe276a1a451e4a4` to retain main's added
+`DepartmentTransfer.summary.tableLabel` field. All 159 range-diff commit entries match; the
+approved file retains the exact hash above. This source comparison does not establish CI
+success. The two completed installed reviews remain retained. Normal hook, final-head CI
+coverage merges and Linux recovery-host split timings still gate landing.
+
+Post-rebase focused qualification: all 50 cases pass across retirement, parser and retired-entry
+HTTP files; the module's initial-setup suite passes six cases; the protected golden/immutability
+pair passes all 20 cases and remains byte-identical to current main. Frozen install passes.
+Receipts are in Lane E's `resume-approved-20261020-081253` directory. These focused results
+do not substitute for final-head package coverage or Linux split timings.
