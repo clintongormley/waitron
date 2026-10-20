@@ -2678,9 +2678,10 @@ export class TillApp extends LitElement {
     expectedEdit: BillEditExpected | null | undefined;
   };
   readonly #unansweredWholePayments = new Map<string, WholePayment>();
-  /** Bills where a card on the presented sheet's reader got no answer, or its reader did not
-   * answer: this page never learns whether that card was charged. */
-  readonly #presentedUnknown = new Set<string>();
+  /** Bills where a card send ended with its outcome unknown: on the presented sheet, no answer or
+   * a reader that did not answer; on the bill path, a send left unanswered or answered `not_checked`.
+   * Neither path learns that card's fate later, so a bill stays marked for the page. */
+  readonly #unknownCardOutcome = new Set<string>();
   @state() private presentedPaying: PresentedPaying | null = null;
   #presentedPays = 0;
   @state() private findBillBusy = false;
@@ -16052,17 +16053,27 @@ export class TillApp extends LitElement {
       const out = await this.#withReaderPayment(
         true,
         () =>
-          api.pay({
-            expectedEdit,
-            id: billId,
-            lines: [],
-            readerId,
-            ...(guests === undefined ? {} : { guests }),
-          }),
+          api
+            .pay({
+              expectedEdit,
+              id: billId,
+              lines: [],
+              readerId,
+              ...(guests === undefined ? {} : { guests }),
+            })
+            .then(
+              (answer) => {
+                if (answer.outcome === "timeout") this.#unknownCardOutcome.add(billId);
+                return answer;
+              },
+              (error: unknown) => {
+                if (isNetworkFailure(error)) this.#unknownCardOutcome.add(billId);
+                throw error;
+              },
+            ),
         billId,
       );
       if (left()) return;
-      if (out.outcome === "timeout") this.#presentedUnknown.add(billId);
       if (out.outcome === "captured") {
         this.#closePresented(id);
         this.result = out.ticket;
@@ -16073,17 +16084,11 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (left()) return;
       paidMeanwhile = isPaymentsReceived(error);
-      if (isNetworkFailure(error)) this.#presentedUnknown.add(billId);
-      const notHeld =
+      readerLost =
         this.handheldMode &&
         this.#presentedNow(id) !== null &&
         (error as { code?: unknown } | null)?.code === "reader.not_held";
-      // The refusal says nothing of an earlier card on the bill whose fate the phone never learned.
-      const unknownEarlier =
-        this.#presentedUnknown.has(billId) || this.#unansweredPayments.has(billId);
-      readerLost = notHeld && !unknownEarlier;
-      if (notHeld && unknownEarlier) this.#showPresentedRefusal(id, { code: "not_checked" });
-      else if (!readerLost)
+      if (!readerLost)
         this.#showPresentedRefusal(
           id,
           this.#counterRefusal(
@@ -16093,7 +16098,7 @@ export class TillApp extends LitElement {
     } finally {
       this.submitting = false;
     }
-    if (readerLost) await this.#onReaderNotHeld("till-presented-pay-dialog");
+    if (readerLost) await this.#onReaderNotHeld("till-presented-pay-dialog", billId);
     if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
   }
 
@@ -16566,10 +16571,15 @@ export class TillApp extends LitElement {
         settle();
         await this.#onBillPaid(open, result, readerName);
       } catch (error) {
-        settle(error);
         const notChecked =
           mayBeRecorded &&
           READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
+        if (
+          asked.pay.method === "card" &&
+          (notChecked || unansweredAfter(submission, error)?.unconfirmed === true)
+        )
+          this.#unknownCardOutcome.add(key);
+        settle(error);
         await this.#onBillPayRefused(
           open.id,
           notChecked ? { code: "not_checked" } : error,
@@ -16706,7 +16716,9 @@ export class TillApp extends LitElement {
         busy: false,
       };
     }
-    const equipmentRead = readerLost ? this.#onReaderNotHeld("till-bill-pay-dialog") : undefined;
+    const equipmentRead = readerLost
+      ? this.#onReaderNotHeld("till-bill-pay-dialog", now.billId)
+      : undefined;
     if (
       stage === "preview" &&
       refusal.code === "management.request_invalid" &&
@@ -16719,15 +16731,20 @@ export class TillApp extends LitElement {
   }
 
   /** A handheld's first send of a card refused `reader.not_held`: the server refuses that before it
-   * records anything, so the reader field can say no card was charged. The row opens at once, and
-   * the equipment is read again, bounded and passively, for the reader the phone now has (design
-   * default 19). */
+   * records anything, so the reader field can say no card was charged, unless an earlier card on
+   * the bill has an unknown outcome. The row opens at once, and the equipment is read again, bounded
+   * and passively, for the reader the phone now has (design default 19). */
   async #onReaderNotHeld(
     sheet: "till-bill-pay-dialog" | "till-presented-pay-dialog",
+    billId: string,
   ): Promise<void> {
     this.payEquipmentErrors = {
       ...this.payEquipmentErrors,
-      card_terminal: t("bill_pay.reader_not_held"),
+      card_terminal: t(
+        this.#unknownCardOutcome.has(billId)
+          ? "bill_pay.reader_not_held_unknown"
+          : "bill_pay.reader_not_held",
+      ),
     };
     // Opened now, not on the re-read's answer, which may never come.
     this.shadowRoot!.querySelector<TillBillPayDialog | TillPresentedPayDialog>(

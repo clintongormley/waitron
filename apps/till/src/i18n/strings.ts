@@ -1513,6 +1513,8 @@ export const en = {
     "A payment on this bill is still waiting for the server. Wait for its answer before taking anything else on this bill.",
   "bill_pay.reader_not_held":
     "This phone no longer has that card reader. Choose the reader in your hand. No card was charged.",
+  "bill_pay.reader_not_held_unknown":
+    "This phone no longer has that card reader. Choose the reader in your hand. An earlier card on this bill got no answer: before charging again, ask a manager to check Card payments.",
   "bill_pay.not_checked":
     "The server could not check this payment. Look at the bill's payments before taking it again.",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
@@ -3191,6 +3193,8 @@ export const es: Record<StringKey, string> = {
     "Un cobro de esta cuenta sigue esperando al servidor. Espera su respuesta antes de cobrar nada más en esta cuenta.",
   "bill_pay.reader_not_held":
     "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. No se ha cobrado ninguna tarjeta.",
+  "bill_pay.reader_not_held_unknown":
+    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. Una tarjeta anterior de esta cuenta no tuvo respuesta: antes de cobrar otra vez, pide a un encargado que lo consulte en Pagos con tarjeta.",
   "bill_pay.not_checked":
     "El servidor no ha podido comprobar este cobro. Mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
