@@ -1,5 +1,12 @@
 # A696: guided repair of an unusable saved time zone
 
+> **Historical proposal, superseded 2026-10-20:** the owner's 2026-10-15 ~22:25 direction did
+> not approve this mid-payment repair design. The [startup redesign](2026-10-20-a696-startup-zone-validation-design.md)
+> replaces its post-capture state, resume action and reporting consequence with startup validation,
+> checks at every zone writer and authenticated confirmation before trading. The body below is
+> preserved as history, including its former status and proposals. Full design, plan and build
+> approval remain outstanding; no repair is built here.
+
 **Status: proposed exact design, awaiting owner approval.** The owner approved restricted guided repair as a scope direction at **2026-10-15 ~17:20**, recorded in `~/waitron-campaign-e/questions.md:4384`. That answer does not approve this design, an implementation plan or a build.
 
 This supplements [the invoice time-zone design](2026-10-15-a696-invoice-time-zone-design.md). Guided repair and strict issuance-zone validation are both **unbuilt**. All current-source observations below are **UNVERIFIED at runtime**: this author read files but ran no product, tests or probes. The parent spec’s historical audit receipts retain their original scope; they do not qualify this repair.

@@ -40,14 +40,16 @@ Old records stay unchanged. See the [recorded decision](#decisions-and-deliberat
 the [spec's dated answer](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
 This does not approve the full design, implementation plan or build.
 
-**Direction update, owner 17:20:** include restricted guided repair for a genuinely invalid or
-missing saved zone, with a manager confirming the correct named zone. Recovery retains the
-capture and uses the later issuance instant; settled replay keeps its saved facts. Valid-to-valid
-zone changes keep their normal settings locks. The
-[exact permission, workflow and validation proposal](../superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md)
-is ready for owner review. Full design, implementation plan and separate FULL fiscal build still
-need approval. No repair tool or strict issuance-zone validation is built; the audit does not
-reproduce that proposed fault.
+**Current direction, updated 2026-10-20:** the owner's 2026-10-15 ~22:25 answer supersedes the
+17:20 mid-payment repair proposal. Check the saved zone at startup and every application writer;
+admit no sale, payment or invoice while it is bad. Keep manager login and zone confirmation
+reachable with `venue.configure`, only for a missing/invalid zone. Valid-to-valid settings locks
+remain. The [startup redesign](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+proposes repair-only authenticated serving followed by restart, and identifies A166's country-pack
+dependency. Fresh-context requirements review found nothing important left. Full-design approval,
+the implementation plan and separate FULL fiscal build are next. No build is approved or implemented.
+The dropped post-capture state, resume action
+and reporting consequence remain only in the historical guided proposal and decision below.
 A444's operation/service-date decision stays separate. The audit also found a
 source-only F2 presentation gap: `readReceiptIssuer` supplies the stored offset only for a named
 recipient, leaving ordinary receipt views to their runtime zone. The approved behavior includes
@@ -879,6 +881,16 @@ or conversion of old fiscal records is part of this change.
   A696 question 2. The [exact design](../superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md)
   awaits owner approval before planning or building; the scope answer does not approve its
   proposed permission or repair mechanism.
+- **A696, owner supersession 2026-10-15 ~22:25, recorded here 2026-10-20:** validate the saved
+  zone at startup and every writer; stop trading before any sale, payment or invoice under a bad
+  zone. A manager/admin confirms only a missing/invalid zone using existing `venue.configure`,
+  one handled incident and no new table. Valid-zone changes keep all settings locks. This replaces
+  the 17:20 post-capture repair direction above: drop its captured-payment failure state, resume
+  action and historical-reporting consequence. Keep mid-payment recovery only if a supported live
+  invalidation path is evidenced. Receipt:
+  `~/waitron-campaign-e/questions.md`, **OWNER 2026-10-15 ~22:25**.
+  The [startup redesign](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+  passed requirements review; full-design approval, the plan and FULL fiscal build remain ahead.
 - **Records that need a person's decision (owner, 2026-10-12, PR #1596).** A 3000 conflict is
   refused and holds nothing; a cancellation of a refused original is set aside (`retenido`) with a
   filing case of its own and holds nothing; a record accepted with errors opens a filing case

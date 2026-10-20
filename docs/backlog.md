@@ -149,13 +149,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   by its claim check). [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**
-  [Owner decision, 2026-10-15](superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone):
-  every new invoice date and record offset, ordinary receipt and till use the saved venue zone,
-  DST included, independently of the process zone; old records stay unchanged. The owner also
-  chose restricted guided repair for an invalid or missing zone (17:20). The
-  [exact repair design](superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md) awaits approval.
-  Next: owner review, then the implementation plan and separate FULL fiscal build. No build
-  approval yet; keep A444 separate.
+  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
+  DST included; old records stay unchanged. The owner's 2026-10-15 ~22:25 direction replaces
+  mid-payment repair with startup validation, checks at every saved-zone writer and manager
+  confirmation only for a missing/invalid zone. The
+  [2026-10-20 startup redesign](superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+  passed its fresh-context requirements review and awaits full-design approval, including its
+  minimal A166 prerequisite, then the plan and separate FULL fiscal build. A696 stays open;
+  no build approval. Keep A444 separate.
   [Detail](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
 
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day

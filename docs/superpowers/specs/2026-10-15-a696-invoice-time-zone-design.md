@@ -1,5 +1,12 @@
 # A696: invoice dates and record offsets in the location's time zone
 
+> **Supersession, 2026-10-20:** the owner's 2026-10-15 ~22:25 direction replaces mid-payment
+> zone repair with startup validation and checks at every saved-zone writer. Follow the
+> [startup redesign](2026-10-20-a696-startup-zone-validation-design.md) for the current proposal.
+> The audit, sourced evidence, measurements and earlier status statements below remain historical.
+> The saved-zone/DST and ordinary receipt/till scope stays; full design, plan and build approval
+> remain outstanding. This documentation change implements nothing.
+
 **Current status, 2026-10-15:** the saved venue zone and inclusion of restricted guided repair
 are approved directions. The [guided repair proposal](2026-10-15-a696-guided-zone-repair-design.md)
 now supplies the exact permission, workflow and validation for owner review. Full design,
