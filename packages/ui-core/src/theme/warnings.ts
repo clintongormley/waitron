@@ -1,19 +1,9 @@
 import { fromOklch, toOklch } from "./colour.js";
-import {
-  type ContrastRule,
-  type RuleResult,
-  STATIONS,
-  THEME_RULES,
-  checkRules,
-} from "./contrast-rules.js";
+import { type ContrastRule, type RuleResult, STATIONS, THEME_RULES } from "./contrast-rules.js";
 import type { Mode, WaitronDefaults } from "./defaults.js";
-import { type ModeResult, handTokens, settleMode } from "./derive.js";
+import { type Memo, type ModeResult, PRIMARY, failingIn, remember, settleMode } from "./derive.js";
 import type { ThemeChoices, ThemeWarning } from "./theme.js";
-import { THEME_COLOURS, type ThemeColour, colourToken } from "./tokens.js";
-
-const PRIMARY = colourToken("primary");
-const PREFIX = colourToken("");
-const THEMED = new Set(THEME_COLOURS.map(colourToken));
+import { THEME_COLOUR_TOKENS, type ThemeColour, colourKey, handTokens } from "./tokens.js";
 
 const names = (failures: readonly RuleResult[], token: string) =>
   failures.filter(({ rule }) => rule.a === token || rule.b === token);
@@ -22,15 +12,24 @@ const names = (failures: readonly RuleResult[], token: string) =>
 const otherOf = (rule: ContrastRule, token: string) => (rule.a === token ? rule.b : rule.a);
 
 const otherSide = (results: readonly RuleResult[], token: string) =>
-  [...new Set(results.map(({ rule }) => otherOf(rule, token)))].map((other) =>
-    other.slice(PREFIX.length),
-  );
+  [...new Set(results.map(({ rule }) => otherOf(rule, token)))].map(colourKey);
 
 /** Hand-set tokens in `THEME_COLOURS` order. */
 const handOrder = (hand: Readonly<Record<string, string>>) =>
-  THEME_COLOURS.map(colourToken).filter((token) => token in hand);
+  [...THEME_COLOUR_TOKENS].filter((token) => token in hand);
 
 const LIGHTNESSES = Array.from({ length: 101 }, (_, i) => i / 100);
+
+/**
+ * `hex`'s hue at each hundredth of lightness, nearest first; lightnesses that round to one colour
+ * give it once, so each colour is tried once.
+ */
+const shadesOf = (memo: Memo, hex: string): readonly string[] =>
+  remember(memo.shades, hex, () => {
+    const base = toOklch(hex);
+    const order = [...LIGHTNESSES].sort((x, y) => Math.abs(x - base.L) - Math.abs(y - base.L));
+    return [...new Set(order.map((L) => fromOklch({ ...base, L })))];
+  });
 
 /**
  * The nearest lightness of `token`'s hue at which, after settling with every other hand-set value
@@ -38,6 +37,7 @@ const LIGHTNESSES = Array.from({ length: 101 }, (_, i) => i / 100);
  * not one) fails, and no other hand-set value is newly named; `null` when none does.
  */
 function fixFor(
+  memo: Memo,
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
@@ -46,9 +46,7 @@ function fixFor(
   picked: ModeResult,
 ): string | null {
   const namedBefore = Object.keys(hand).filter((other) => names(picked.failures, other).length);
-  const base = toOklch(hand[token]!);
-  const order = [...LIGHTNESSES].sort((x, y) => Math.abs(x - base.L) - Math.abs(y - base.L));
-  const cannotMove = (other: string) => !THEMED.has(other) || other in hand;
+  const cannotMove = (other: string) => !THEME_COLOUR_TOKENS.has(other) || other in hand;
   const brandAsPicked = choices.brandColor !== null && choices.brandFix[mode] !== true;
   // Departs from the reference: a rule failing on the brand colour as picked is the brand's warning,
   // so it must not take away a hand-set colour's fix.
@@ -59,15 +57,13 @@ function fixFor(
   const quickRules = THEME_RULES[mode].filter(
     (rule) => [rule.a, rule.b].includes(token) && cannotMove(otherOf(rule, token)),
   );
-  // Lightnesses that round to one colour get one answer, so each colour is tried once.
-  const candidates = [...new Set(order.map((L) => fromOklch({ ...base, L })))];
-  for (const candidate of candidates) {
-    const quick = checkRules(quickRules, (other) =>
+  for (const candidate of shadesOf(memo, hand[token]!)) {
+    const quick = failingIn(memo, quickRules, (other) =>
       other === token ? candidate : (picked.tokens[other] ?? defaults[mode][other])!,
     );
-    if (quick.some((result) => !result.pass)) continue;
+    if (quick.length > 0) continue;
     const trial = { ...hand, [token]: candidate };
-    const { failures } = settleMode(defaults, choices, mode, trial);
+    const { failures } = settleMode(memo, defaults, choices, mode, trial);
     const accepted =
       names(failures, token).length === 0 &&
       !failures.some((result) => workedOut(result, trial)) &&
@@ -84,6 +80,7 @@ function fixFor(
  * that, when working them all out would, every other hand-set colour sharing a rule with it.
  */
 function blockersOf(
+  memo: Memo,
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
@@ -93,14 +90,14 @@ function blockersOf(
   const others = handOrder(hand).filter((other) => other !== token);
   const freedWithout = (drop: readonly string[]) => {
     const kept = Object.fromEntries(Object.entries(hand).filter(([key]) => !drop.includes(key)));
-    const picked = settleMode(defaults, choices, mode, kept);
+    const picked = settleMode(memo, defaults, choices, mode, kept);
     return (
       names(picked.failures, token).length === 0 ||
-      fixFor(defaults, choices, mode, kept, token, picked) !== null
+      fixFor(memo, defaults, choices, mode, kept, token, picked) !== null
     );
   };
   const single = others.filter((other) => freedWithout([other]));
-  if (single.length > 0) return single.map((other) => other.slice(PREFIX.length));
+  if (single.length > 0) return single.map(colourKey);
   // With one other, working out all the others is the single case already tried.
   if (others.length < 2 || !freedWithout(others)) return [];
   return others
@@ -109,7 +106,7 @@ function blockersOf(
         (rule) => [rule.a, rule.b].includes(token) && otherOf(rule, token) === other,
       ),
     )
-    .map((other) => other.slice(PREFIX.length));
+    .map(colourKey);
 }
 
 /** The rules failing on the brand colour as the owner picked or fixed it, against colours not set by hand. */
@@ -123,12 +120,14 @@ function brandFailures(
 }
 
 function brandFixOffer(
+  memo: Memo,
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
   hand: Readonly<Record<string, string>>,
 ): string | null {
   const after = settleMode(
+    memo,
     defaults,
     { ...choices, brandFix: { ...choices.brandFix, [mode]: true } },
     mode,
@@ -140,6 +139,7 @@ function brandFixOffer(
 
 /** `choices` must be normalised. */
 export function warningsFor(
+  memo: Memo,
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
@@ -153,20 +153,20 @@ export function warningsFor(
       field: "brandColor",
       mode,
       against: otherSide(brandFails, PRIMARY),
-      fix: brandFixOffer(defaults, choices, mode, hand),
+      fix: brandFixOffer(memo, defaults, choices, mode, hand),
       blockedBy: [],
     });
   }
   for (const token of handOrder(hand)) {
     const failing = names(settled.failures, token);
     if (failing.length === 0) continue;
-    const fix = fixFor(defaults, choices, mode, hand, token, settled);
+    const fix = fixFor(memo, defaults, choices, mode, hand, token, settled);
     warnings.push({
-      field: `handSet.${mode}.${token.slice(PREFIX.length) as ThemeColour}`,
+      field: `handSet.${mode}.${colourKey(token) as ThemeColour}`,
       mode,
       against: otherSide(failing, token),
       fix,
-      blockedBy: fix === null ? blockersOf(defaults, choices, mode, hand, token) : [],
+      blockedBy: fix === null ? blockersOf(memo, defaults, choices, mode, hand, token) : [],
     });
   }
   return warnings;
@@ -191,6 +191,7 @@ export type NextFix =
  * a fix. Searches only as far as that rule. `choices` must be normalised.
  */
 export function nextFix(
+  memo: Memo,
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
@@ -204,9 +205,9 @@ export function nextFix(
       fixes.set(
         token,
         token === PRIMARY && brandWarns
-          ? brandFixOffer(defaults, choices, mode, hand)
+          ? brandFixOffer(memo, defaults, choices, mode, hand)
           : token in hand
-            ? fixFor(defaults, choices, mode, hand, token, settled)
+            ? fixFor(memo, defaults, choices, mode, hand, token, settled)
             : null,
       );
     }
@@ -218,7 +219,7 @@ export function nextFix(
       if (fix === null) continue;
       return token === PRIMARY && brandWarns
         ? { colour: null }
-        : { colour: token.slice(PREFIX.length) as ThemeColour, fix };
+        : { colour: colourKey(token) as ThemeColour, fix };
     }
   }
   return null;

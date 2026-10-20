@@ -1,6 +1,6 @@
 import { contrastRatio } from "./colour.js";
 import { MODES, type Mode } from "./defaults.js";
-import { THEME_COLOURS, colourToken } from "./tokens.js";
+import { THEME_COLOUR_TOKENS, colourToken } from "./tokens.js";
 
 export type RuleKind = "at-least" | "above" | "at-most";
 
@@ -229,15 +229,14 @@ export function allRules(mode: Mode): readonly ContrastRule[] {
   return CONTRAST_GROUPS.flatMap((candidate) => rulesIn(candidate.id, mode));
 }
 
-const THEME_TOKEN_SET = new Set(THEME_COLOURS.map(colourToken));
+const themeRules = (mode: Mode) =>
+  allRules(mode).filter(
+    (rule) => THEME_COLOUR_TOKENS.has(rule.a) || THEME_COLOUR_TOKENS.has(rule.b),
+  );
 
 export const THEME_RULES: Readonly<Record<Mode, readonly ContrastRule[]>> = {
-  light: allRules("light").filter(
-    (rule) => THEME_TOKEN_SET.has(rule.a) || THEME_TOKEN_SET.has(rule.b),
-  ),
-  dark: allRules("dark").filter(
-    (rule) => THEME_TOKEN_SET.has(rule.a) || THEME_TOKEN_SET.has(rule.b),
-  ),
+  light: themeRules("light"),
+  dark: themeRules("dark"),
 };
 
 export function passes(rule: ContrastRule, ratio: number): boolean {

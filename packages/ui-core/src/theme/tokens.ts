@@ -29,9 +29,21 @@ export type ThemeColour = (typeof THEME_COLOURS)[number];
 
 export const colourToken = (key: string): string => `--wt-color-${key}`;
 
+/** A colour token's key: its name without the `--wt-color-` prefix. */
+export const colourKey = (token: string): string => token.slice(colourToken("").length);
+
+/** The theme's colour tokens, full names, in `THEME_COLOURS` order. */
+export const THEME_COLOUR_TOKENS: ReadonlySet<string> = new Set(THEME_COLOURS.map(colourToken));
+
+/** One mode's hand-set values, keyed by full token name. */
+export const handTokens = (
+  values: Readonly<Partial<Record<ThemeColour, string>>>,
+): Record<string, string> =>
+  Object.fromEntries(Object.entries(values).map(([key, value]) => [colourToken(key), value]));
+
 export const THEME_RADII = ["--wt-radius-sm", "--wt-radius-md", "--wt-radius-lg"] as const;
 
-export const THEME_TOKENS: readonly string[] = [...THEME_COLOURS.map(colourToken), ...THEME_RADII];
+export const THEME_TOKENS: readonly string[] = [...THEME_COLOUR_TOKENS, ...THEME_RADII];
 
 export const BRAND_FAMILY: readonly ThemeColour[] = [
   "primary",
