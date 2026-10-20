@@ -5,7 +5,8 @@
 // would gate each shard's slice.
 //
 // Weaker than its name in one way worth stating: it reads the workflow as TEXT for the sharded
-// packages' bars, so a step that reached the same command through a variable would be invisible to it.
+// packages' bars and their shards' upload paths, so a step that reached the same command or path
+// through a variable would be invisible to it. It never runs Stryker to see a report written.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,6 +95,37 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     expect(runLines()).toContain(
       `run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 30 --break ${BAR}`,
     );
+  });
+
+  /** The `path:` under the upload step that names `mutation-report-<name>-shard-…`, or undefined. */
+  function uploadedPath(name) {
+    const lines = readFileSync(join(root, ".github", "workflows", "mutation.yml"), "utf8")
+      .split("\n")
+      .map((line) => line.trim());
+    const at = lines.findIndex((line) => line.startsWith(`name: mutation-report-${name}-shard-`));
+    if (at === -1) return undefined;
+    const path = lines.slice(at + 1, at + 4).find((line) => line.startsWith("path: "));
+    return path?.slice("path: ".length).replace(/\/$/, "");
+  }
+
+  // The aggregate job reads only the json reports in the shards' uploads; a shard that writes html
+  // alone leaves it nothing to score, and it fails every night.
+  it("every sharded package writes a json report inside the directory its shards upload", () => {
+    const problems = [...SHARDED].sort().flatMap((dir) => {
+      const config = JSON.parse(readFileSync(join(root, dir, "stryker.config.json"), "utf8"));
+      const uploaded = uploadedPath(dir.split("/").pop());
+      const written = config.jsonReporter?.fileName
+        ? join(dir, config.jsonReporter.fileName)
+        : undefined;
+      const found = [];
+      if (!config.reporters?.includes("json")) found.push(`${dir}: no "json" reporter`);
+      if (uploaded === undefined) found.push(`${dir}: no shard upload step in mutation.yml`);
+      else if (!written?.startsWith(`${uploaded}/`)) {
+        found.push(`${dir}: jsonReporter.fileName ${written} is not under ${uploaded}/`);
+      }
+      return found;
+    });
+    expect(problems).toEqual([]);
   });
 
   it("packages/ui-core breaks at 90 on the merged score of its shards", () => {

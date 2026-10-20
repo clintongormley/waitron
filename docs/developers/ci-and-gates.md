@@ -1116,7 +1116,7 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
 | licence.yml        | dco                               | 0.3                            | 5     |
-| mutation.yml       | mutation-ui-core (matrix shards)  | not yet measured in CI; 10.7 locally (slowest of 4) | 25    |
+| mutation.yml       | mutation-ui-core (matrix shards)  | not yet measured in CI; 10.7 locally (shard 1; shards 2 and 3 not timed) | 25    |
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
@@ -1135,16 +1135,17 @@ window. The observed API status lag and chosen margins are recorded under "How t
 reads the API" above; the table's 0.7-minute measurement predates this change.
 
 Until A841 slice 1, ui-core ran as one job, the `mutation` matrix, at a 15-minute limit: its longest
-measured run was `37267389722` (5m18s; its other two scheduled runs, `36380351019` and
-`38206876422`, took 2m06s and 4m56s), and run `39373226000` (2026-10-20) took 6m44s for 612
-mutants at 4 test runners. The theme derivation added about 1,180 mutants, so the job became four
+measured run was `39373226000` (2026-10-20), 6m44s for 612 mutants at 4 test runners; the
+scheduled runs `37267389722`, `36380351019` and `38206876422` took 5m18s, 2m06s and 4m56s. The theme derivation added about 1,180 mutants, so the job became four
 `mutation-ui-core` shards with no file cut into ranges. Their 25-minute limit is the doubling rule
 applied to a LOCAL measurement, because no CI run of them existed yet: on 2026-10-20 on the owner's
 Mac, `pnpm exec stryker run --mutate "$(node ../../scripts/mutation-shard.mjs ui-core <n> 4)"
 --concurrency 2 --force` in `packages/ui-core` took 643 s for shard 1 (544 mutants, `derive.ts` and
 `colour.ts` among them) and 468 s for shard 4 (448 mutants, `contrast-rules.ts` among them); shards
 2 and 3 were not timed and hold about 800 mutants between them (run `39373226000`'s 612 plus the
-theme's 1,180, less the two timed shards). 10.7 minutes doubled is 21.4, rounded up to 25. A CI runner gives Stryker 4
+theme's 1,180, less the two timed shards). Those times are the Stryker command's own wall time,
+and leave out a CI job's setup steps, which took about 38 s on run `39373226000` (job start to the
+mutation step). 10.7 minutes doubled is 21.4, rounded up to 25. A CI runner gives Stryker 4
 test runners (`Creating 4 test runner process(es)` in run `39373226000`'s log) on slower cores, so
 replace this with the first CI run's slowest shard.
 `mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38256003987`, with 30 ui

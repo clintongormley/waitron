@@ -2455,8 +2455,8 @@ jobs:
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
   # async. That makes it the cheapest mutation target in the repo, so its break: 90 is checked on a
   # pull request whose resolved scope contains it (the paragraph below), rather than only in
-  # mutation.yml's nightly run, which checks ui-core's bar and, on each package's merged shard
-  # score, ui's and db's (mutation-ui-aggregate, mutation-db-aggregate).
+  # mutation.yml's nightly run, which checks ui-core's, ui's and db's bars on each package's merged
+  # shard score (mutation-ui-core-aggregate, mutation-ui-aggregate, mutation-db-aggregate).
   #
   # It gated every pull request until this gate was added; it now gates the ones whose resolved
   # scope contains packages/shared, by the same scope-membership mechanism as the scoped test shards
