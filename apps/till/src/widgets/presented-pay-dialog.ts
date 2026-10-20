@@ -165,6 +165,9 @@ export class TillPresentedPayDialog extends LitElement {
   /** An equipment change is out: nothing is taken until it is answered. */
   @property({ type: Boolean }) equipmentBusy = false;
   @property({ attribute: false }) fixedReader: FixedReader | null = null;
+  /** The phone is picking up a reader by itself; the row does not open for the missing reader
+   * until that pick has answered. */
+  @property({ type: Boolean }) autoPicking = false;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) refusal: PayRefusal | null = null;
   /** A whole payment sent with no answer: the sheet shows it, fixed, and only sends it again. */
@@ -245,7 +248,8 @@ export class TillPresentedPayDialog extends LitElement {
     const offered = this.#methods();
     if (offered.length > 0 && !offered.includes(this.method)) this.method = offered[0]!;
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
-    const wanted = this.open && payRowWantsOpen(this.equipment, this.fixedReader);
+    const wanted =
+      this.open && !this.autoPicking && payRowWantsOpen(this.equipment, this.fixedReader);
     if (wanted && !this.#rowWanted) this.rowOpen = true;
     this.#rowWanted = wanted;
     // A send under way drops any question already asked about leaving.

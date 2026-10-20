@@ -494,6 +494,9 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) equipmentBusy = false;
   /** A practice venue's demo reader, charged whatever the equipment says. */
   @property({ attribute: false }) fixedReader: FixedReader | null = null;
+  /** The phone is picking up a reader by itself; the row does not open for the missing reader
+   * until that pick has answered. */
+  @property({ type: Boolean }) autoPicking = false;
 
   @state() private chosenWay: PayWay = "items";
   @state() private picks = new Map<number, number>();
@@ -950,7 +953,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #rowWantsOpen(): boolean {
-    return this.handheld && payRowWantsOpen(this.equipment, this.fixedReader);
+    return this.handheld && !this.autoPicking && payRowWantsOpen(this.equipment, this.fixedReader);
   }
 
   #readerEntry(): CardEntry {

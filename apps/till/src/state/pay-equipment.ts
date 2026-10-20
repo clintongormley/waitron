@@ -130,3 +130,18 @@ export function payRowWantsOpen(
   if (fixedReader !== null) return printerWantsRowOpen(printer);
   return rowStartsOpen(payReaderOf(equipment), printer);
 }
+
+/** The reader a phone's first payment picks up by itself (design default 18): the one reader its
+ * equipment offers, free, to a phone that has had no reader in this page and has none now; else
+ * null. */
+export function autoPickReader(
+  equipment: DeviceEquipment | null,
+  hadReader: boolean,
+): string | null {
+  const role = roleOf(equipment, "card_terminal");
+  if (hadReader || role === undefined || role.resolved !== null || role.chosenId !== null)
+    return null;
+  const [only, ...more] = role.choices;
+  if (only === undefined || more.length > 0) return null;
+  return only.available && !only.busy && only.heldBy === null ? only.id : null;
+}

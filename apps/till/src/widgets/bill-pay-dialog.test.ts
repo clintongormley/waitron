@@ -1991,6 +1991,22 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(row(el)!.open).toBe(true);
   });
 
+  it("keeps the row closed while the reader is being picked up by itself, then opens it only if none came", async () => {
+    const picked = await handheld({ equipment: equipmentWith(null), autoPicking: true });
+    expect(row(picked)!.open).toBe(false);
+    picked.equipment = equipmentWith(LECTOR_2);
+    picked.autoPicking = false;
+    await picked.updateComplete;
+    expect(row(picked)!.open).toBe(false);
+    picked.remove();
+
+    const refused = await handheld({ equipment: equipmentWith(null), autoPicking: true });
+    expect(row(refused)!.open).toBe(false);
+    refused.autoPicking = false;
+    await refused.updateComplete;
+    expect(row(refused)!.open).toBe(true);
+  });
+
   it("opens the row on Cambiar", async () => {
     const el = await handheld();
     await row(el)!.updateComplete;

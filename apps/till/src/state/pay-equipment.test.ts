@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
 import {
+  autoPickReader,
   heldForEquipment,
   payPrinterOf,
   payRowWantsOpen,
@@ -401,5 +402,50 @@ describe("the payment's hold for its equipment", () => {
     expect(payRowWantsOpen(noReader, null)).toBe(true);
     expect(payRowWantsOpen(noReader, demo)).toBe(false);
     expect(payRowWantsOpen(equipment({ choices: [barra] }), demo)).toBe(true);
+  });
+});
+
+describe("autoPickReader: a phone's first payment takes the one free reader", () => {
+  const offered = (...choices: EquipmentItem[]) => equipment({}, { choices });
+
+  it("one free reader offered to a phone that has had none is picked", () => {
+    expect(autoPickReader(offered(lector), false)).toBe("r1");
+  });
+
+  it("a phone that had a reader earlier in the page picks nothing", () => {
+    expect(autoPickReader(offered(lector), true)).toBeNull();
+  });
+
+  it("two readers offered pick nothing, and nor does none", () => {
+    expect(autoPickReader(offered(lector, item("r2")), false)).toBeNull();
+    expect(autoPickReader(offered(), false)).toBeNull();
+  });
+
+  it("a reader another device holds, or is paying on, or that is switched off is never taken", () => {
+    const holder = { deviceId: "d2", deviceName: "Phone 2", personName: null };
+    expect(autoPickReader(offered({ ...lector, heldBy: holder }), false)).toBeNull();
+    expect(autoPickReader(offered({ ...lector, busy: true }), false)).toBeNull();
+    expect(autoPickReader(offered({ ...lector, available: false }), false)).toBeNull();
+  });
+
+  it("a phone that already has a reader, ready or switched off, or chose one, picks nothing", () => {
+    const resolved = { id: "r1", name: "Lector barra", available: true, provider: "sumup" };
+    expect(
+      autoPickReader(
+        equipment({}, { choices: [lector], resolved, chosen: lector, chosenId: "r1" }),
+        false,
+      ),
+    ).toBeNull();
+    expect(
+      autoPickReader(
+        equipment({}, { choices: [lector], resolved: { ...resolved, available: false } }),
+        false,
+      ),
+    ).toBeNull();
+    expect(autoPickReader(equipment({}, { choices: [lector], chosenId: "r9" }), false)).toBeNull();
+  });
+
+  it("an unread equipment picks nothing", () => {
+    expect(autoPickReader(null, false)).toBeNull();
   });
 });

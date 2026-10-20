@@ -248,6 +248,22 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(row(el)!.open).toBe(false);
   });
 
+  it("keeps the row closed while the reader is being picked up by itself, then opens it only if none came", async () => {
+    const picked = await mount({ equipment: equipmentWith(null), autoPicking: true });
+    expect(row(picked)!.open).toBe(false);
+    picked.equipment = equipmentWith(LECTOR_2);
+    picked.autoPicking = false;
+    await picked.updateComplete;
+    expect(row(picked)!.open).toBe(false);
+    picked.remove();
+
+    const refused = await mount({ equipment: equipmentWith(null), autoPicking: true });
+    expect(row(refused)!.open).toBe(false);
+    refused.autoPicking = false;
+    await refused.updateComplete;
+    expect(row(refused)!.open).toBe(true);
+  });
+
   it("starts the row closed again on each opening", async () => {
     const el = await mount({ equipment: equipmentWith(null) });
     expect(row(el)!.open).toBe(true);

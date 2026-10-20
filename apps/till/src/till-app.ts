@@ -19,7 +19,12 @@ import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
-import { payReaderOf, readyPayReader, type FixedReader } from "./state/pay-equipment.js";
+import {
+  autoPickReader,
+  payReaderOf,
+  readyPayReader,
+  type FixedReader,
+} from "./state/pay-equipment.js";
 import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
@@ -2993,6 +2998,14 @@ export class TillApp extends LitElement {
   @state() private payEquipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
   /** Each field's latest sheet pick; only that pick's failure is shown under the field. */
   #payEquipmentPicks: Record<PayEquipmentRole, number> = { card_terminal: 0, receipt: 0 };
+  /** Whether the phone has had a reader in this page. Not stored and not reset by logout: it
+   * describes the page, not the person (design default 18). */
+  #hadReader = false;
+  #paySheetOpenings = 0;
+  /** The sheet opening the automatic reader pick was sent for. */
+  #autoPickedFor: number | null = null;
+  /** The open sheet may pick up a reader by itself; its row stays closed until that is settled. */
+  @state() private payAutoPicking = false;
   /** A refusal is shown only in the dialog opening it was picked in. */
   #equipmentOpenings = 0;
   /** When a read of the equipment and a choice were out at once, either answer may be the older, so
@@ -9069,9 +9082,45 @@ export class TillApp extends LitElement {
 
   #holdEquipment(equipment: DeviceEquipment): void {
     this.#equipmentReads++;
+    this.#noteReader(equipment);
     if (this.operatorName !== "")
       this.equipmentTaken = takenFrom(this.deviceEquipment, equipment) ?? this.equipmentTaken;
     this.deviceEquipment = equipment;
+  }
+
+  #noteReader(equipment: DeviceEquipment): void {
+    if (equipment.roles.some((role) => role.role === "card_terminal" && role.resolved !== null))
+      this.#hadReader = true;
+  }
+
+  /** The sheet's opening read; once it answers, a phone that has had no reader picks up the one
+   * free reader it is offered, through the same request as a list pick (design default 18). */
+  async #readForSheet(): Promise<void> {
+    const opening = ++this.#paySheetOpenings;
+    const picks = this.#payEquipmentPicks.card_terminal;
+    this.payAutoPicking = this.#autoPickCandidate() !== null;
+    const answered = await this.#readEquipment();
+    if (opening !== this.#paySheetOpenings) return;
+    // A change out or a pick of the reader made since the opening has the waiter's say instead.
+    const id =
+      answered && this.equipmentWaiting === 0 && picks === this.#payEquipmentPicks.card_terminal
+        ? this.#autoPickCandidate()
+        : null;
+    if (id === null) {
+      this.payAutoPicking = false;
+      return;
+    }
+    this.#autoPickedFor = opening;
+    this.payAutoPicking = true;
+    await this.#onPayEquipmentPick({ role: "card_terminal", id, takeOver: false });
+    if (this.#autoPickedFor === this.#paySheetOpenings) this.payAutoPicking = false;
+  }
+
+  /** A practice venue charges its demo reader, so it never picks one up. */
+  #autoPickCandidate(): string | null {
+    return this.#fixedPayReader() === null
+      ? autoPickReader(this.deviceEquipment, this.#hadReader)
+      : null;
   }
 
   /** The pay screens follow the boot read before the equipment is read, and on a practice venue,
@@ -9317,6 +9366,7 @@ export class TillApp extends LitElement {
     try {
       const stored = await this.api.setDeviceEquipment(change, { signal: limit.signal });
       this.#equipmentChanged++;
+      this.#noteReader(stored);
       if (!current()) {
         this.#equipmentStale = true;
         return;
@@ -9542,11 +9592,12 @@ export class TillApp extends LitElement {
         .equipment=${this.deviceEquipment}
         .canScan=${canScan()}
         .fixedReader=${this.#fixedPayReader()}
+        .autoPicking=${this.payAutoPicking}
         .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
         .equipmentSaving=${this.payEquipmentSaving}
         .equipmentErrors=${this.payEquipmentErrors}
         @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
-          this.#onPayEquipmentPick(event.detail)}
+          void this.#onPayEquipmentPick(event.detail)}
         @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
           void this.#pickUpSticker(event.detail)}
         @pay-equipment-nfc=${() => this.#askNfc()}
@@ -9578,6 +9629,7 @@ export class TillApp extends LitElement {
       .notice=${this.nfcNotice}
       .askNfc=${this.nfcPermission === "prompt"}
       .fixedReader=${this.#fixedPayReader()}
+      .autoPicking=${this.payAutoPicking}
       .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
       .equipmentSaving=${this.payEquipmentSaving}
       .equipmentErrors=${this.payEquipmentErrors}
@@ -9585,7 +9637,7 @@ export class TillApp extends LitElement {
       .refusal=${open.refusal}
       .confirmation=${this.#unansweredWholePayments.get(open.billId)}
       @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
-        this.#onPayEquipmentPick(event.detail)}
+        void this.#onPayEquipmentPick(event.detail)}
       @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
         void this.#pickUpSticker(event.detail)}
       @pay-equipment-nfc=${() => this.#askNfc()}
@@ -9609,14 +9661,14 @@ export class TillApp extends LitElement {
     return presented === null ? undefined : `presented:${presented.id}`;
   }
 
-  #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): void {
+  #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): Promise<void> {
     const sheet = this.#paySheetKey();
-    if (sheet === undefined) return;
+    if (sheet === undefined) return Promise.resolve();
     this.payEquipmentSaving = { role, id };
     const errors = { ...this.payEquipmentErrors };
     delete errors[role];
     this.payEquipmentErrors = errors;
-    void this.#onEquipmentChange(
+    return this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {
         detail: { role, selection: { id }, via: "list", takeOver },
       }),
@@ -15878,7 +15930,7 @@ export class TillApp extends LitElement {
       session: this.#operatorSession,
       refusal: null,
     };
-    if (this.handheldMode) void this.#readEquipment();
+    if (this.handheldMode) void this.#readForSheet();
   }
 
   #closePresented(id?: number): void {
@@ -16160,7 +16212,7 @@ export class TillApp extends LitElement {
       ...(out === undefined ? {} : { ...out.shown, busy: true, refusal: { code: "sending" } }),
     };
     this.billPaying = open;
-    if (this.handheldMode) void this.#readEquipment();
+    if (this.handheldMode) void this.#readForSheet();
     await this.#rereadBillPaying(open.id, billId, order);
     return open;
   }

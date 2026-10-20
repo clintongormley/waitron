@@ -3342,3 +3342,349 @@ describe("the paid screen on a handheld", () => {
     },
   );
 });
+
+describe("till-app: a phone's first payment picks up the one free reader (default 18)", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+
+  /** No reader chosen, and `offered` the profile's only reader. */
+  const firstUse = (offered: EquipmentItem = LECTOR_2): DeviceEquipment => ({
+    roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", null, [offered])],
+  });
+  const holding = (reader: EquipmentItem): DeviceEquipment => ({
+    roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", reader, [reader])],
+  });
+  const pickOf = (id: string): EquipmentChange => ({
+    role: "card_terminal",
+    selection: { id },
+    via: "list",
+    takeOver: false,
+  });
+
+  /** Each pick waits until its own `answer` (or `refuse`) is called. */
+  function heldPicks() {
+    const answers: Array<{ ok: () => void; fail: (error: unknown) => void }> = [];
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
+        new Promise<DeviceEquipment>((resolve, reject) => {
+          const id = typeof change.selection === "object" ? change.selection.id : "";
+          const reader = [LECTOR_2, LECTOR_3].find((each) => each.id === id)!;
+          answers.push({ ok: () => resolve(holding(reader)), fail: reject });
+        }),
+    );
+    return { setDeviceEquipment, answers };
+  }
+
+  const presented = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+  /** The open sheet: the bill's dialog, else the presented bill's. */
+  const sheet = (el: TillApp) => dialog(el) ?? presented(el);
+  const row = (el: TillApp) =>
+    sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+  async function readerField(el: TillApp): Promise<WtCombobox> {
+    await sheet(el)!.updateComplete;
+    await row(el).updateComplete;
+    return row(el).shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="cardReaderId"]')!;
+  }
+  async function summary(el: TillApp): Promise<string> {
+    await sheet(el)!.updateComplete;
+    await row(el).updateComplete;
+    return text(row(el).shadowRoot!.querySelector("[data-pay-equipment-summary]"));
+  }
+  async function closeSheet(el: TillApp): Promise<void> {
+    if (dialog(el) !== null) emit(dialog(el)!, "bill-pay-close");
+    else emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+  }
+
+  async function firstUsePhone(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+    api = stubApi(
+      onPhone({ getDeviceEquipment: vi.fn().mockResolvedValue(firstUse()), ...overrides }),
+    );
+    const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+    const order = await openPhoneTable(el);
+    return { el, order };
+  }
+
+  const placed = { getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]) };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["bill", {}],
+    ["presented", placed],
+  ] as const)(
+    "on the %s path, picks up the one free reader as the sheet opens and keeps the row closed naming it",
+    async (_path, over) => {
+      const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+      const { el, order } = await firstUsePhone({ ...over, setDeviceEquipment });
+      expect(setDeviceEquipment).not.toHaveBeenCalled();
+
+      await pressPaySheet(el, order);
+      await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+      await flush(el);
+
+      expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(LECTOR_2.id));
+      expect(row(el).open).toBe(false);
+      expect(await summary(el)).toContain("Lector 2");
+    },
+  );
+
+  it.each([
+    ["bill", {}],
+    ["presented", placed],
+  ] as const)(
+    "on the %s path, a refused automatic pick opens the row with the reader empty and the refusal under it",
+    async (_path, over) => {
+      const { setDeviceEquipment, answers } = heldPicks();
+      const { el, order } = await firstUsePhone({ ...over, setDeviceEquipment });
+      await pressPaySheet(el, order);
+      await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+      await flush(el);
+      expect(row(el).open).toBe(false);
+
+      answers[0]!.fail({ code: "device.equipment_held", status: 409 });
+      await flush(el);
+
+      expect(row(el).open).toBe(true);
+      const reader = await readerField(el);
+      expect(reader.value).toBe("");
+      expect(reader.error).toBe(codeMessage("device.equipment_held"));
+      expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("an automatic pick with no answer opens the row and says it was not saved", async () => {
+    const { setDeviceEquipment, answers } = heldPicks();
+    const { el, order } = await firstUsePhone({ setDeviceEquipment });
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+
+    answers[0]!.fail(new TypeError("Failed to fetch"));
+    await flush(el);
+
+    expect(row(el).open).toBe(true);
+    const reader = await readerField(el);
+    expect(reader.value).toBe("");
+    expect(reader.error).toBe(t("pay_equipment.not_saved"));
+  });
+
+  it("closing and reopening the sheet while the pick is out sends no second pick", async () => {
+    const { setDeviceEquipment, answers } = heldPicks();
+    const { el, order } = await firstUsePhone({ setDeviceEquipment });
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+
+    await closeSheet(el);
+    await pressPaySheet(el, tableOrder(el));
+    await flush(el);
+    vi.mocked(api.getDeviceEquipment).mockResolvedValue(holding(LECTOR_2));
+    answers[0]!.ok();
+    await flush(el);
+    await closeSheet(el);
+    await pressPaySheet(el, tableOrder(el));
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(await summary(el)).toContain("Lector 2");
+  });
+
+  it("the 15-second equipment poll answering meanwhile sends no second pick", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { setDeviceEquipment, answers } = heldPicks();
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    const reads = getDeviceEquipment.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flush(el);
+    expect(getDeviceEquipment.mock.calls.length).toBeGreaterThan(reads);
+    answers[0]!.fail({ code: "reader.payment_in_progress", status: 409 });
+    await flush(el);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(row(el).open).toBe(true);
+  });
+
+  it("a tap arriving before the opening read answers takes the reader, and nothing is picked by itself", async () => {
+    installNfc();
+    const { setDeviceEquipment, answers } = heldPicks();
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse(LECTOR_3));
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    const opening: Array<(equipment: DeviceEquipment) => void> = [];
+    getDeviceEquipment.mockImplementation(
+      () => new Promise<DeviceEquipment>((resolve) => opening.push(resolve)),
+    );
+    await pressPaySheet(el, order);
+    expect(opening).toHaveLength(1);
+
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    opening[0]!(firstUse(LECTOR_3));
+    await flush(el);
+    answers[0]!.ok();
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(setDeviceEquipment.mock.calls[0]![0]).toMatchObject({ via: "scan" });
+  });
+
+  it("a tap refused before the opening read answers leaves the reader to the waiter", async () => {
+    installNfc();
+    const { setDeviceEquipment, answers } = heldPicks();
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse(LECTOR_3));
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    const opening: Array<(equipment: DeviceEquipment) => void> = [];
+    getDeviceEquipment.mockImplementation(
+      () => new Promise<DeviceEquipment>((resolve) => opening.push(resolve)),
+    );
+    await pressPaySheet(el, order);
+
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    answers[0]!.fail({ code: "device.equipment_held", status: 409 });
+    await flush(el);
+    for (const answer of opening) answer(firstUse(LECTOR_3));
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(row(el).open).toBe(true);
+  });
+
+  it("a phone that held Lector 2 earlier in the page and lost it picks nothing by itself", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_3));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    getDeviceEquipment.mockResolvedValue(firstUse(LECTOR_3));
+
+    await pressPaySheet(el, order);
+    await flush(el);
+
+    expect(setDeviceEquipment).not.toHaveBeenCalled();
+    expect(row(el).open).toBe(true);
+    expect((await readerField(el)).value).toBe("");
+  });
+
+  it("a reader the waiter picked earlier in the page counts as having had one", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_3));
+    const getDeviceEquipment = vi.fn().mockResolvedValue({
+      roles: [
+        roleOf("receipt", BARRA, [BARRA]),
+        roleOf("card_terminal", null, [LECTOR_2, LECTOR_3]),
+      ],
+    });
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    await pressPaySheet(el, order);
+    expect(row(el).open).toBe(true);
+    const combobox = await readerField(el);
+    await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await combobox.updateComplete;
+    const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+      (each) => each.textContent!.trim().startsWith("Lector 3"),
+    )!;
+    await userEvent.click(option);
+    await flush(el);
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+
+    getDeviceEquipment.mockResolvedValue(firstUse(LECTOR_2));
+    await closeSheet(el);
+    await pressPaySheet(el, tableOrder(el));
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+  });
+
+  it("a practice venue's phone, which charges its demo reader, picks up nothing", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    api = stubApi(
+      onPhone(
+        { getDeviceEquipment: vi.fn().mockResolvedValue(firstUse()), setDeviceEquipment },
+        {
+          cardProvider: "simulator",
+          activeReaders: [{ id: "demo-1", name: "Demo card reader", provider: "simulator" }],
+          defaultReaderId: "demo-1",
+        },
+      ),
+    );
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await pressPaySheet(el, await openPhoneTable(el));
+    await flush(el);
+
+    expect(dialog(el)!.fixedReader).not.toBeNull();
+    expect(setDeviceEquipment).not.toHaveBeenCalled();
+  });
+
+  it("a reader another phone holds is never picked up by itself", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const held = {
+      ...LECTOR_2,
+      heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: null },
+    };
+    const { el, order } = await firstUsePhone({
+      setDeviceEquipment,
+      getDeviceEquipment: vi.fn().mockResolvedValue(firstUse(held)),
+    });
+
+    await pressPaySheet(el, order);
+    await flush(el);
+
+    expect(setDeviceEquipment).not.toHaveBeenCalled();
+    expect(row(el).open).toBe(true);
+  });
+
+  const lookBackgrounds = new Map<string, string>();
+  it.each([
+    ["picked", "light", 390],
+    ["picked", "dark", 390],
+    ["refused", "light", 390],
+    ["refused", "dark", 390],
+    ["picked", "light", 1280],
+    ["picked", "dark", 1280],
+  ] as const)("looks right %s, %s at %i px", async (state, theme, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      setLocale("es-ES");
+      const setDeviceEquipment =
+        state === "picked"
+          ? vi.fn().mockResolvedValue(holding(LECTOR_2))
+          : vi.fn().mockRejectedValue({ code: "device.equipment_held", status: 409 });
+      const { el, order } = await firstUsePhone({ setDeviceEquipment }, theme);
+      await pressPaySheet(el, order);
+      await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+      await flush(el);
+      await row(el).updateComplete;
+      expect(row(el).open).toBe(state === "refused");
+      const panel = dialog(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      lookBackgrounds.set(`${state}-${theme}-${width}`, background);
+      if (theme === "dark")
+        expect(background).not.toBe(lookBackgrounds.get(`${state}-light-${width}`));
+      const shot = `__screenshots__/look/a796-first-use-${state}-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const rowBox = row(el).getBoundingClientRect();
+      await commands.writeFile(
+        `src/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          rowInside: rowBox.left >= box.left && rowBox.right <= box.right,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+});
