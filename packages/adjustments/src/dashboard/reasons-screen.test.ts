@@ -569,6 +569,14 @@ describe("the reasons list", () => {
     expect(menus).toHaveLength(4);
     for (const menu of menus)
       expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(wrapRight + 0.5);
+    el.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+    const pinned = [...wrap.querySelectorAll(".actions-cell")];
+    expect(pinned).toHaveLength(5);
+    for (const cell of pinned) {
+      const line = getComputedStyle(cell, "::before");
+      expect(line.borderInlineStartStyle).toBe("solid");
+      expect(line.borderInlineStartColor).toBe("rgb(1, 2, 3)");
+    }
   });
 
   it("says the list could not be loaded", async () => {

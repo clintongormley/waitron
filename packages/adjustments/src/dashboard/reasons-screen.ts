@@ -251,6 +251,16 @@ export class AdjustmentReasonsScreen extends LitElement {
         inset-inline-end: 0;
         background: var(--wt-color-surface);
       }
+      /* As wt-data-table's pinned column: a border on the cell would stay where the collapsed
+         table draws it, not travel with the held cell. */
+      td.actions-cell::before,
+      th.actions-cell::before {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        border-inline-start: 1px solid var(--wt-color-border);
+      }
       tr[data-dragging] td.actions-cell {
         background: var(--wt-color-surface-lifted);
       }
