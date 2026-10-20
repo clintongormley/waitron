@@ -644,18 +644,22 @@ describe("till-floor-screen: the zone strip's edge", () => {
         });
         const strip = stripOf(el);
         const patio = tabOf(el, "z8").closest<HTMLElement>(".zone-tab")!;
-        const cut = () => patio.getBoundingClientRect().right - paddingBox(strip).right;
+        // Going out, Patio is hidden once the strip cuts it; coming in, once it is clear of the
+        // shown end edge's inner side, `inset` in from the strip's end.
+        let inset = 0;
+        const cut = () => patio.getBoundingClientRect().right - (paddingBox(strip).right - inset);
         const label = () => edgeOf(el, "end")?.getAttribute("aria-label");
         await expect.poll(label).toBe("Show Patio");
         strip.scrollLeft = strip.scrollWidth;
         await expect.poll(() => edgeOf(el, "end")).toBeNull();
         if (way === "in") {
-          strip.scrollLeft -= 30;
+          strip.scrollLeft -= Math.ceil(-cut()) + 30;
           await expect.poll(label).toBe("Show Patio");
-          // The edge narrows the strip; jump to a few pixels short of shown before the slow steps.
-          strip.scrollLeft += Math.floor(cut()) - 3;
-          await nextFrames();
+          inset = paddingBox(strip).right - edgeOf(el, "end")!.getBoundingClientRect().left;
         }
+        // Jump to a few pixels short of the crossing before the slow steps.
+        strip.scrollLeft += way === "in" ? Math.floor(cut()) - 3 : Math.ceil(cut()) + 3;
+        await nextFrames();
 
         // The whole-number clientWidth misplaces the strip's end by `gap`. Pick a screen width,
         // to the sixteenth of a pixel, where it says "further out" for "out" and "further in" for
@@ -693,6 +697,9 @@ describe("till-floor-screen: the zone strip's edge", () => {
           expect(crossing).toBeLessThanOrEqual(0);
           expect(crossing).toBeGreaterThan(miss);
         }
+        // Read at the crossing itself: every later step re-reads the strip on its scroll.
+        if (way === "out") await expect.poll(label).toBe("Show Patio");
+        else await expect.poll(() => edgeOf(el, "end")).toBeNull();
         for (let i = 0; i < 10; i++) {
           strip.scrollLeft += step;
           await nextFrames();
@@ -894,7 +901,10 @@ describe("till-floor-screen: the zone strip's edge", () => {
   });
 
   it("brings a tab wider than the strip, cut at both ends, to its start", async () => {
-    const wide = [zone("z1", "Inside", 0), zone("z2", "Upstairs private dining room", 1)];
+    const wide = [
+      zone("z1", "Inside", 0),
+      zone("z2", "Upstairs private dining room and terrace", 1),
+    ];
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(320, 844);
     try {
@@ -920,7 +930,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
       // Its start is in view now and only its end is cut, so the mark moves to the end edge.
       await expect.poll(() => edgeOf(el, "start")).toBeNull();
       expect(edgeOf(el, "end")?.getAttribute("aria-label")).toBe(
-        "Show Upstairs private dining room",
+        "Show Upstairs private dining room and terrace",
       );
     } finally {
       await page.viewport(viewport.width, viewport.height);

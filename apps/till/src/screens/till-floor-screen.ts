@@ -2507,9 +2507,12 @@ export class TillFloorScreen extends LitElement {
     const left = Math.max(span.left, edge("start")?.right ?? span.left);
     const right = Math.min(span.right, edge("end")?.left ?? span.right);
     const sides = new Map<string, TabsEdge>();
+    // A tab hidden at both ends goes to an end the strip itself cuts it at, if there is one.
     for (const tab of tabs) {
       const box = tab.getBoundingClientRect();
-      if (box.left < left) sides.set(tabKey(tab), "start");
+      if (box.left < span.left) sides.set(tabKey(tab), "start");
+      else if (box.right > span.right) sides.set(tabKey(tab), "end");
+      else if (box.left < left) sides.set(tabKey(tab), "start");
       else if (box.right > right) sides.set(tabKey(tab), "end");
     }
     const same =
