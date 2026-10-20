@@ -79,3 +79,25 @@ describe.each(["light", "dark"] as const)("till-shell's Help switch a11y (%s the
     }
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "till-shell's language choices in More a11y (%s theme)",
+  (theme) => {
+    it("a handheld at 320px with the chooser in More and More open", async () => {
+      await page.viewport(320, 844);
+      const { el, host } = await mountWidget<TillShell>("till-shell", shells.handheld, theme);
+      const more = () =>
+        el.shadowRoot!.querySelector<HTMLElement & LitElement>('header [data-test="more-menu"]')!;
+      await vi.waitFor(() =>
+        expect(more().querySelector(':scope > wt-language-chooser[layout="group"]')).not.toBeNull(),
+      );
+      expect(el.shadowRoot!.querySelectorAll("wt-language-chooser")).toHaveLength(1);
+      await more().updateComplete;
+      await userEvent.click(more().shadowRoot!.querySelector("button")!);
+      const popup = more().shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+      await expectNoA11yViolations(host);
+      await userEvent.keyboard("{Escape}");
+    });
+  },
+);

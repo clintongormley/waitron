@@ -415,6 +415,9 @@ export class TillShell extends LitElement {
   /** With More closed and above phone width: 0, everything on the bar; 1, the name hidden; n, the
    * name hidden and the first n − 1 present items of `LEAVE_ORDER` in More. */
   @state() private steps = 0;
+  /** A handheld at phone width whose bar does not fit with the language chooser: it moves to the
+   * end of More. */
+  @state() private chooserInMore = false;
   #run = 0;
   #stepBackOwed = false;
   #fittedWidth = 0;
@@ -426,7 +429,7 @@ export class TillShell extends LitElement {
   #held?: ReadonlySet<BarItem>;
   readonly #onPopupToggle = () => {
     this.#release();
-    if (this.#stepBackOwed && !this.#menuOpen()) void this.#fit();
+    if ((this.#stepBackOwed || this.phone) && !this.#menuOpen()) void this.#fit();
   };
 
   /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
@@ -476,6 +479,7 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
+    if (!this.phone) this.chooserInMore = false;
     if (this.formFactor !== "till") this.#release();
   }
 
@@ -510,7 +514,7 @@ export class TillShell extends LitElement {
       });
       this.#observer.observe(this);
     }
-    const chooser = this.renderRoot.querySelector(".head wt-language-chooser") ?? undefined;
+    const chooser = this.renderRoot.querySelector(".session > wt-language-chooser") ?? undefined;
     if (chooser !== this.#observedChooser) {
       if (this.#observedChooser) this.#observer.unobserve(this.#observedChooser);
       if (chooser) this.#observer.observe(chooser);
@@ -557,19 +561,24 @@ export class TillShell extends LitElement {
   async #fit(): Promise<void> {
     const run = ++this.#run;
     await this.#settled();
-    if (
-      run !== this.#run ||
-      this.formFactor === "till" ||
-      this.kiosk ||
-      this.phone ||
-      !this.isConnected
-    )
-      return;
+    if (run !== this.#run || this.formFactor === "till" || this.kiosk || !this.isConnected) return;
     this.#fittedLocale = currentLocale();
     const stale = async (): Promise<boolean> => {
       await this.#settled();
       return run !== this.#run;
     };
+    if (this.phone) {
+      // More draws its popup after the shell has rendered, so its toggle listener is attached here.
+      this.#observe();
+      if (this.#menuOpen()) return;
+      if (this.#stepBackOwed && this.chooserInMore) {
+        this.chooserInMore = false;
+        if (await stale()) return;
+      }
+      this.#stepBackOwed = false;
+      if (this.#wraps()) this.chooserInMore = true;
+      return;
+    }
     if (this.#stepBackOwed && !this.#menuOpen()) {
       // Still owed until it finishes: a newer fit, which may owe none of its own (after a
       // `transferCount` change), finishes it instead.
@@ -803,6 +812,7 @@ export class TillShell extends LitElement {
       ${this.#items(moved, true)}
       ${this.formFactor === "till" ? html`<wt-button class="settings" variant="ghost" align="start" @click=${() => this.#emit("open-settings")}>${t("device_zones.settings")}</wt-button>` : nothing}
       ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
+      ${this.chooserInMore ? this.#chooser("group") : nothing}
     </wt-row-actions>`;
   }
 
@@ -936,7 +946,7 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.#chooser()}${this.#helpSwitch()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.chooserInMore ? nothing : this.#chooser()}${this.#helpSwitch()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
                   </div>
                   ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>
