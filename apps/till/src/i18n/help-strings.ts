@@ -28,6 +28,8 @@ export const helpEn = {
     "Nobody can be seated at this table until this is settled. Leave it here keeps the table where it stands until the floor is next laid out, so it can be used straight away.",
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
+  "help.order.send":
+    "Fire sends the lines you ticked to the kitchen to be made now, as one group. Send all sends every line: those under Fire now are made at once, and each Group reaches the kitchen held until it is fired. A line that is blocked, no longer offered or still needs a station is not sent.",
   "help.more.profile":
     "Switches this device to another profile it is approved for. Park or clear the order in progress first.",
   "help.more.settings":
@@ -70,6 +72,8 @@ export const helpEs: Record<HelpKey, string> = {
     "No se puede sentar a nadie en esta mesa hasta resolverlo. Dejar aquí mantiene la mesa donde está hasta la próxima vez que se prepare la sala, y así se puede usar ya.",
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
+  "help.order.send":
+    "Marchar envía a cocina las líneas marcadas para hacerlas ya, como un grupo. Enviar todo envía todas las líneas: las de Marchar ya se hacen enseguida, y cada Grupo llega a cocina retenido hasta que se marcha. Una línea bloqueada, que ya no se ofrece o que aún necesita estación no se envía.",
   "help.more.profile":
     "Cambia este dispositivo a otro perfil para el que está aprobado. Antes, aparca o vacía el pedido en curso.",
   "help.more.settings":

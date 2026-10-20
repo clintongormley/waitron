@@ -87,6 +87,7 @@ import {
 } from "../widgets/table-targets.js";
 import { billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
 import { receiptLanguageLabel, shownReceiptLanguage } from "../widgets/receipt-language.js";
+import { helpBadge } from "../widgets/help-badge.js";
 import {
   billGross,
   isStarted,
@@ -808,6 +809,11 @@ export class TillTableOrderScreen extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+
+      .draft-actions.help-anchor {
+        position: relative;
+        width: fit-content;
       }
 
       .group-sent {
@@ -3565,9 +3571,10 @@ export class TillTableOrderScreen extends LitElement {
     };
     return html`<div class="draft-bar">
       ${this.#draftMoveButton(store)}
-      <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
+      <div class="draft-actions help-anchor" role="group" aria-label=${t("table.draft_actions")}>
         ${button(true, "table.group_fire", "fire-selected")}
         ${button(false, "table.draft_send_all", "send-all")}
+        ${helpBadge("help.order.send", t("table.draft_actions"))}
       </div>
     </div>`;
   }
