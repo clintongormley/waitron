@@ -34,7 +34,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      # Each checkout is three steps: docs/developers/ci-and-gates.md, "Every checkout is bounded".
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -97,7 +115,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v7
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -153,7 +188,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
 
       # No pnpm here, as on `mutation-db-aggregate`.
       - uses: actions/setup-node@v7
@@ -217,7 +269,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
 
       - name: Set up pnpm
         timeout-minutes: 5
@@ -266,7 +335,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
 
       # No pnpm on this runner and none needed: the scorer is one plain `node` script over the
       # downloaded reports, and it installs nothing. `package-manager-cache: false` is set as
