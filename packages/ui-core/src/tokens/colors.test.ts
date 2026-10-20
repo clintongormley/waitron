@@ -510,6 +510,68 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
   });
 });
 
+const PULSE_DIMS = [
+  ["--wt-color-danger-pulse-dim", "--wt-color-danger"],
+  ["--wt-color-warning-pulse-dim", "--wt-color-warning"],
+] as const;
+
+describe.each(["light", "dark"] as const)("floor ring and calm edge colours (%s)", (theme) => {
+  const edge = "--wt-color-table-calm-edge";
+
+  test("the calm edge stands 2:1 or more from the surface and its border", () => {
+    const el = mount(theme);
+    expect(ratio(token(el, edge), token(el, "--wt-color-surface"))).toBeGreaterThanOrEqual(2);
+    expect(ratio(token(el, edge), token(el, "--wt-color-border"))).toBeGreaterThanOrEqual(1.4);
+  });
+
+  test("the calm edge reads as a different blue from the seated edge", () => {
+    const el = mount(theme);
+    expect(deltaE2000(token(el, edge), token(el, "--wt-color-primary"))).toBeGreaterThanOrEqual(15);
+  });
+
+  test("a pulsing ring's dimmest colour is never much darker than its full colour", () => {
+    const el = mount(theme);
+    for (const [dim, full] of PULSE_DIMS)
+      expect(lab(token(el, dim))[0], dim).toBeGreaterThanOrEqual(lab(token(el, full))[0] - 10);
+  });
+
+  test("a pulsing ring's dimmest colour is visibly different from its full colour", () => {
+    const el = mount(theme);
+    for (const [dim, full] of PULSE_DIMS)
+      expect(deltaE2000(token(el, dim), token(el, full)), dim).toBeGreaterThanOrEqual(15);
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = [edge, ...PULSE_DIMS.map(([dim]) => dim)];
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
+
+test("in light, each dim colour is its full colour at 30% over the surface", () => {
+  const el = mount("light");
+  const channels = (hex: string) => {
+    expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+    return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  };
+  const surface = channels(token(el, "--wt-color-surface"));
+  for (const [dim, full] of PULSE_DIMS) {
+    const fullChannels = channels(token(el, full));
+    channels(token(el, dim)).forEach((channel, i) =>
+      expect(
+        Math.abs(channel - Math.round(0.3 * fullChannels[i]! + 0.7 * surface[i]!)),
+        `${dim} channel ${i}`,
+      ).toBeLessThanOrEqual(1),
+    );
+  }
+});
+
 const STATION_FILLS = [
   "red",
   "orange",

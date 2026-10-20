@@ -118,6 +118,10 @@
   --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
+  /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
+  --wt-color-table-calm-edge: #8fb7f5;
+  --wt-color-danger-pulse-dim: #e8bebc;
+  --wt-color-warning-pulse-dim: #dccbb3;
   --wt-color-highlight: #fff3b0;
   --wt-color-on-highlight: #241500;
 }
@@ -235,6 +239,10 @@
     --wt-color-on-table-clearing: #241500;
     --wt-color-table-reserved: #4a3a1c;
     --wt-color-on-table-reserved: #eceef2;
+    /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
+    --wt-color-table-calm-edge: #4d6aa6;
+    --wt-color-danger-pulse-dim: #bd9ba0;
+    --wt-color-warning-pulse-dim: #b9aa94;
     --wt-color-highlight: #614a0f;
     --wt-color-on-highlight: #fff3b0;
   }
@@ -352,6 +360,10 @@
   --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
+  /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
+  --wt-color-table-calm-edge: #8fb7f5;
+  --wt-color-danger-pulse-dim: #e8bebc;
+  --wt-color-warning-pulse-dim: #dccbb3;
   --wt-color-highlight: #fff3b0;
   --wt-color-on-highlight: #241500;
 }
@@ -468,6 +480,10 @@
   --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #4a3a1c;
   --wt-color-on-table-reserved: #eceef2;
+  /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
+  --wt-color-table-calm-edge: #4d6aa6;
+  --wt-color-danger-pulse-dim: #bd9ba0;
+  --wt-color-warning-pulse-dim: #b9aa94;
   --wt-color-highlight: #614a0f;
   --wt-color-on-highlight: #fff3b0;
 }
