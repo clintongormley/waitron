@@ -131,6 +131,8 @@ export class TillPaidView extends LitElement {
   @property({ type: Boolean }) originalAvailable = false;
   /** Whether this device may request receipt print jobs (the profile's `print-receipt`). */
   @property({ type: Boolean }) canPrint = false;
+  /** Whether this device may open the cash drawer by hand (the profile's `open-cash-drawer`). */
+  @property({ type: Boolean }) canOpenDrawer = false;
   /** A ticket request is out: it holds the ticket's actions, never Cerrar mesa or Volver. */
   @property({ type: Boolean }) busy = false;
 
@@ -261,6 +263,17 @@ export class TillPaidView extends LitElement {
           @click=${() => this.#emit("back-to-table")}
           >${t("paid.back")}</wt-button
         >
+        ${
+          this.canOpenDrawer
+            ? html`<wt-button
+                variant="secondary"
+                size="lg"
+                data-test="open-drawer"
+                @click=${() => this.#emit("open-drawer")}
+                >${t("action.open_drawer")}</wt-button
+              >`
+            : nothing
+        }
       </div>
     </article>`;
   }

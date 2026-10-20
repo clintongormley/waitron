@@ -262,6 +262,29 @@ describe("till-paid-view", () => {
     expect(button(reading, "refresh-receipt")).toBeNull();
   });
 
+  it("offers Open drawer only where the device may open it, and sends open-drawer", async () => {
+    const hidden = await mount({});
+    expect(button(hidden, "open-drawer")).toBeNull();
+    cleanupWidgets();
+
+    const el = await mount({ canOpenDrawer: true, busy: true });
+    const open = button(el, "open-drawer") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    expect(open).not.toBeNull();
+    expect(open.textContent!.trim()).toBe(t("action.open_drawer"));
+    await open.updateComplete;
+    expect(open.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    const seen: CustomEvent[] = [];
+    document.addEventListener("open-drawer", (event) => seen.push(event as CustomEvent), {
+      once: true,
+    });
+    open.click();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.bubbles).toBe(true);
+    expect(seen[0]!.composed).toBe(true);
+  });
+
   it("speaks English", async () => {
     setLocale("en-GB");
     const el = await mount({ payments: [payment({})] });

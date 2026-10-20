@@ -17421,6 +17421,7 @@ export class TillApp extends LitElement {
           .receiptReadFailed=${this.originalReceiptReadFailed}
           .originalAvailable=${this.originalReceiptAvailable}
           .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .busy=${this.originalReceiptBusy}
           @back-to-table=${() => this.#onBackToTable()}
         ></till-paid-view>`;

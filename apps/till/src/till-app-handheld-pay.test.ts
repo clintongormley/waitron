@@ -3168,6 +3168,34 @@ describe("the paid screen on a handheld", () => {
       },
     );
 
+    it("a device whose profile allows the drawer is offered Open drawer, which opens it once", async () => {
+      const { el } = await payPresented(
+        simplified(),
+        undefined,
+        { method: "cash", tendered: "150.00", guests: 4 },
+        { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
+      );
+      await vi.waitFor(() => expect(inPaid(el, '[data-test="open-drawer"]')).not.toBeNull());
+
+      await userEvent.click(inPaid(el, '[data-test="open-drawer"]')!);
+      await flush(el);
+
+      expect(vi.mocked(api.openDrawer)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(api.openDrawer)).toHaveBeenCalledWith();
+    });
+
+    it("a device whose profile does not allow the drawer is offered no Open drawer", async () => {
+      const { el } = await payPresented(simplified(), undefined, {
+        method: "cash",
+        tendered: "150.00",
+        guests: 4,
+      });
+      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+      await paidView(el)!.updateComplete;
+
+      expect(inPaid(el, '[data-test="open-drawer"]')).toBeNull();
+    });
+
     it("a full invoice still shows the ticket view", async () => {
       const { el } = await payPresented(full());
 
@@ -3182,16 +3210,21 @@ describe("the paid screen on a handheld", () => {
     invoice: TillSaleResult,
     theme?: "light" | "dark",
     detail?: PresentedPayDetail,
+    tillOver: Record<string, unknown> = {},
   ) {
-    const stubs = onPhone({
-      getPartyBills: vi
-        .fn()
-        .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
-      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoice }),
-      collectOrder: vi.fn().mockResolvedValue(invoice),
-      getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
-      getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
-    });
+    const stubs = onPhone(
+      {
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
+        pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoice }),
+        collectOrder: vi.fn().mockResolvedValue(invoice),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+        openDrawer: vi.fn().mockResolvedValue(undefined),
+      },
+      tillOver,
+    );
     api = stubApi(stubs);
     const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
     const order = await openPhoneTable(el);
@@ -3217,6 +3250,8 @@ describe("the paid screen on a handheld", () => {
     ["presented", "light", 1280],
     ["presented", "dark", 390],
     ["presented", "dark", 1280],
+    ["drawer", "light", 390],
+    ["drawer", "dark", 390],
   ] as const)(
     "the paid screen looks right on the %s path, %s at %i px",
     async (path, theme, width) => {
@@ -3227,10 +3262,18 @@ describe("the paid screen on a handheld", () => {
         const { el } =
           path === "bill"
             ? await threeShares(simplified(), {}, {}, theme)
-            : await payPresented(simplified(), theme);
+            : path === "drawer"
+              ? await payPresented(
+                  simplified(),
+                  theme,
+                  { method: "cash", tendered: "150.00", guests: 4 },
+                  { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
+                )
+              : await payPresented(simplified(), theme);
         await vi.waitFor(() => expect(paidView(el)?.receipt).not.toBeNull());
         const view = paidView(el)!;
         await view.updateComplete;
+        if (path === "drawer") expect(inPaid(el, '[data-test="open-drawer"]')).not.toBeNull();
         const article = view.shadowRoot!.querySelector("article")!;
         expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
         const banner = getComputedStyle(view.shadowRoot!.querySelector(".banner")!).backgroundColor;
