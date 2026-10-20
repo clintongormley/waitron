@@ -136,11 +136,13 @@ item 4 (564-566). Pictures `docs/backlog/mockups/a757-table-states/04-pulse-spee
    They slot in by inserting a name into the ordered list: Waiter called between `fire` and `bill`;
    slice 8's step signal maps to `step`. A table §4 does not cover — a counter delivery waiting at a
    table no party holds (`state: "delivery-pending"`) — has no kind but `reserved` when booked; its
-   card keeps its red left edge (`till-floor-screen.ts:392-394`). A seated table that needs moving
-   today (`needsMovingToday`) draws its own waiting card before `#card` ranks anything
-   (`till-floor-screen.ts:2386-2387`), so it gets no ring and no calm look; `tableStates` itself
-   reads it as whatever its party's facts say (often `nothing-needed`), while today's map fills it
-   as clearing (`apps/till/src/state/floor-map.ts:19`). Open point 9.
+   card keeps its red left edge (`till-floor-screen.ts:392-394`). A table that needs moving today
+   (`needsMovingToday`) draws its own waiting card before `#card` ranks anything
+   (`till-floor-screen.ts:2386-2387`), so it gets no ring and no calm look. Nobody is meant to be
+   seated there until it is marked moved (`apps/till/src/state/floor-today.ts:286-287`; `openTab`
+   refuses it, `apps/server/src/working-order.ts:1632-1634`), so `tableStates` reads only its other
+   facts, such as a booking, while today's map fills it as clearing
+   (`apps/till/src/state/floor-map.ts:19`). Open point 9.
 3. **"Nothing needed", precisely:** a table with a party (`party !== null`) that is in none of rows
    1–12 — no late or waiting dish by either reckoning (Decision 4), no unavailable held dish, no
    reminder due, no bill request, nothing ready or en route, no Take order, no unsent draft, and
@@ -193,8 +195,10 @@ item 4 (564-566). Pictures `docs/backlog/mockups/a757-table-states/04-pulse-spee
    `tableChips` sorts the chips the same way, so the unplaced token's chips follow it too. The
    other callers of `signalChips` — the table details sheet (`table-details-sheet.ts:211`), held
    orders (`held-orders.ts:243`) and the order screen (`till-table-order-screen.ts:4039`) — are not
-   the card and keep the server's order; the details sheet is the map's, so slice 5 decides it
-   (Task 10 puts it on slice 5's list).
+   the card and keep the server's order. The details sheet opens from the map
+   (`wt-table-details`, `till-floor-screen.ts:2179`) and from the order screen's status pin
+   (`table-status.ts:157`), both slice 5's, so slice 5 decides it (Task 10 puts it on slice 5's
+   list).
 8. **The calm look:** when the top is `held` or `nothing-needed`, the card's left edge is
    `--wt-color-primary-disabled` (`#8fb7f5` light, `#28344a` dark, `packages/ui-core/src/tokens/colors.css:21,143`)
    instead of `--wt-color-primary`. Picture 11 draws a pale blue edge (light) and a dark navy one
@@ -349,8 +353,8 @@ lines 354-355). Every name already there stays.
 - [ ] **Step 4: Run** the same command, plus `pnpm exec vitest run scripts/style-token-names.test.ts`
   — PASS. (`src/no-hardcoded-chrome.test.ts` reads only the styles of the constructors exported
   from `./components/*.ts`, `no-hardcoded-chrome.test.ts:6-25`, so it first sees
-  `floorRingStyles` in Task 3, once `wt-table-token` includes them; write no literal colour or
-  length over 1px in `floor-ring.ts`.)
+  `floorRingStyles` in Task 3, once `wt-table-token` includes them; write no literal colour, no
+  `px` over 1 and no `rem` or `em` in `floor-ring.ts`.)
 - [ ] **Step 5:** typecheck `@waitron/ui`; prettier; commit —
   `"One pulse and one ring for the floor, at two speeds (A757 slice 4)"`.
 
@@ -623,7 +627,8 @@ and picture 07, "its card's outline and first chip"):
   the two stations' ready chips, Take order. The edited lines may not carry Spanish (CLAUDE.md §3,
   English only; the guard skips `apps/*`, so review greps the diff), so the fixture's names become
   English (`"Bar"`, `"Kitchen"`, `"Steak"`) and the expected list is read from `es`
-  (`import { es } from "../i18n/strings.js"`, as `till-floor-screen.held.test.ts:4` does):
+  (`import { en, es } from "../i18n/strings.js"`; `till-floor-screen.held.test.ts:4` imports
+  `es` from the same path):
   `[es["signal.wait_overdue"], es["signal.unavailable"].replace("{items}", "Steak"),
   es["signal.bill_requested"], es["signal.ready_at"].replace("{station}", "Bar").replace("{n}",
   "3"), es["signal.ready_at_one"].replace("{station}", "Kitchen"), es["signal.take_order"]]`, with
@@ -752,7 +757,8 @@ Read `docs/backlog.md` → "How to keep this file honest" (`:6945` on) first.
   plan's path; "slices 4–6 and 8 are left" → "slices 5, 6 and 8 are left". A893 (`:2195-2198`):
   "(slices 4–6 and 8 are left)" → "(slices 5, 6 and 8 are left)". Each open point below that the
   owner should see at A893 goes into A893's detail, not a new entry, unless it is work: Open points
-  1, 6, 7 and 9 are slice 5's and go into the A757 detail's list of what slice 5 must do, with
+  1, 6, 7 and 9 are slice 5's and go into a new list, in A757's detail in `docs/backlog/till.md`,
+  of what slice 5 must do (the detail has no such list yet), with
   Decision 4's out-of-scope readers (the map's dot and the order screen's pin keep `timingBand`),
   Decision 5 (the status pin) and Decision 7's note that the table details sheet keeps the server's
   chip order.
@@ -822,9 +828,9 @@ Read `docs/backlog.md` → "How to keep this file honest" (`:6945` on) first.
    first when present.
 9. **A table with a counter delivery waiting and no party** has no state in §4 (Decision 2): the
    rank gives it none, and slice 5 decides how the map draws it (today's map draws it seated,
-   `apps/till/src/state/floor-map.ts:21`). Nor has **a seated table that needs moving today**: its
-   card is unchanged, but the rank reads it from its party's facts, while today's map fills it as
-   clearing (`floor-map.ts:19`); slice 5 decides.
+   `apps/till/src/state/floor-map.ts:21`). Nor has **a table that needs moving today**: its card
+   is unchanged, but the rank reads only its other facts, while today's map fills it as clearing
+   (`floor-map.ts:19`); slice 5 decides.
 10. **Review weight: FULL**, by the driver's ruling (header), because `apps/till` now reads a new
     `@waitron/ui` export; the design said LIGHT. Settled — listed so the owner sees the change.
 11. **Take order** keeps its blue-bordered chip until slice 8 gives steps their look; it ranks as a
