@@ -446,7 +446,7 @@ export class TillStationQueue extends LitElement {
          the same preference (belt-and-suspenders, house a11y rule). */
       .ticket.age-forgotten.flash,
       .cell.age-forgotten.flash {
-        animation: age-forgotten-flash 1s ease-in-out infinite;
+        animation: age-forgotten-flash var(--wt-duration-pulse-fast) ease-in-out infinite;
       }
 
       @keyframes age-forgotten-flash {

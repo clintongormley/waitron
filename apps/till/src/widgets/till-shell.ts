@@ -208,7 +208,7 @@ export class TillShell extends LitElement {
       }
       .bar-action[data-attention] {
         border-color: var(--wt-color-warning);
-        animation: waiting-attention 2s ease-in-out infinite;
+        animation: waiting-attention var(--wt-duration-pulse-slow) ease-in-out infinite;
       }
       @keyframes waiting-attention {
         50% {

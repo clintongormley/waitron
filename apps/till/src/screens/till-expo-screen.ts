@@ -207,7 +207,7 @@ export class TillExpoScreen extends LitElement {
          defence for the same preference (belt-and-suspenders, house a11y rule) — mirrors
          till-station-queue's identical treatment of its .ticket/.cell. */
       .order.age-forgotten.flash {
-        animation: age-forgotten-flash 1s ease-in-out infinite;
+        animation: age-forgotten-flash var(--wt-duration-pulse-fast) ease-in-out infinite;
       }
 
       @keyframes age-forgotten-flash {

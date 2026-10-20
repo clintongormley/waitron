@@ -2066,6 +2066,21 @@ describe("till-expo-screen", () => {
     expect(card.classList).toContain("flash");
   });
 
+  it("flashes a forgotten order card at the fast pulse token, 1 s by default", async () => {
+    const now = Date.parse("2026-08-17T10:16:00.000Z");
+    const el = await mount({
+      api: stubApi([bandOrder("wo-p", 29, "ti-p", "2026-08-17T10:00:00.000Z")]),
+      now,
+      reducedMotion: false,
+    });
+    const card = orderCard(el, 29)!;
+    expect(card.classList).toContain("age-forgotten");
+    expect(getComputedStyle(card).animationName).toBe("age-forgotten-flash");
+    expect(getComputedStyle(card).animationDuration).toBe("1s");
+    el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
+    expect(getComputedStyle(card).animationDuration).toBe("3s");
+  });
+
   it("reduced motion: a forgotten card renders the steady accent with NO flash class", async () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z");
     const el = await mount({

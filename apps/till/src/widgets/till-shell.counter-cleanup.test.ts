@@ -156,6 +156,22 @@ it("A738 Waiting attention stops when empty and respects reduced motion", async 
   }
 });
 
+it("A738 Waiting pulses at the slow pulse token, 2 s by default", async () => {
+  await commands.emulateReducedMotion(false);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", { waitingCount: 2 });
+    const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      '[data-counter-orders="waiting"]',
+    )!;
+    expect(getComputedStyle(button).animationName).toBe("waiting-attention");
+    expect(getComputedStyle(button).animationDuration).toBe("2s");
+    el.style.setProperty("--wt-duration-pulse-slow", "5000ms");
+    expect(getComputedStyle(button).animationDuration).toBe("5s");
+  } finally {
+    await commands.emulateReducedMotion(false);
+  }
+});
+
 it("A738 Language choices remain reachable inside More and emit one selection", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
     loadLocales: async () => [
