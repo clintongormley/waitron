@@ -12,6 +12,7 @@ import {
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
 import {
   CATALOGUE_CLASSIFICATION,
+  CATALOGUE_BACKUP_VERIFICATION,
   CATALOGUE_CHANGE_SOURCES,
   CATALOGUE_CONFIGURATION_TRANSFER,
   CATALOGUE_PROVISIONING,
@@ -149,6 +150,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../catalogue/drizzle",
     },
     classification: CATALOGUE_CLASSIFICATION,
+    backup: { verification: CATALOGUE_BACKUP_VERIFICATION },
     changes: CATALOGUE_CHANGE_SOURCES,
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
     provisioning: CATALOGUE_PROVISIONING,

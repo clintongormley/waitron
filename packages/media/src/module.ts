@@ -3,18 +3,10 @@ import { MEDIA_ROUTES } from "./routes.js";
 import { listImageTranslationGaps } from "./images.js";
 import type { ModulePermission, WaitronModule } from "@waitron/module";
 import type { ChangeSource } from "@waitron/shared";
-import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import { MEDIA_CLASSIFICATION } from "./classification.js";
+import { MEDIA_BACKUP_VERIFICATION } from "./backup-verification.js";
+export { MEDIA_CLASSIFICATION } from "./classification.js";
 
-export const MEDIA_CLASSIFICATION: readonly ClassifiedTable[] = [
-  classify("media_images", "state", "shared image metadata; copied to standbys"),
-  classify("media_image_data", "state", "shared image bytes; copied to standbys"),
-  classify(
-    "media_image_blobs",
-    "state",
-    "immutable replacement sources shared by photo identities",
-  ),
-  classify("media_image_edits", "state", "current picture, framing and revision for each photo"),
-];
 export const MEDIA_CHANGE_SOURCES: readonly ChangeSource[] = [
   { table: "media_images", type: "media_images" },
 ];
@@ -41,6 +33,7 @@ export const MEDIA_MODULE: WaitronModule = {
   requires: { core: "*", modules: { catalogue: "*", "venue-service": "*" } },
   migrations: { name: "media", table: "__drizzle_migrations_media", from: "../media/drizzle" },
   classification: MEDIA_CLASSIFICATION,
+  backup: { verification: MEDIA_BACKUP_VERIFICATION },
   changes: MEDIA_CHANGE_SOURCES,
   configurationTransfer: MEDIA_CONFIGURATION_TRANSFER,
   permissions: MEDIA_PERMISSIONS,

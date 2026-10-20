@@ -21,6 +21,7 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.4"
   },

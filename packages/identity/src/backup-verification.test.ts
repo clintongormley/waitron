@@ -148,7 +148,9 @@ beforeEach(async () => {
       .values({ deviceProfileId: profile, role: "manager" });
   }
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function run(files: Record<string, string> = entries(), missingBefore = false) {
   const path = (suite: typeof original) =>

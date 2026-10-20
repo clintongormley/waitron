@@ -851,3 +851,26 @@ account-key helpers and enrolment writer, outside the later artifact/placement h
 That genuine archive integration remains in Tasks20–24. The existing composition pin for an
 absent identity backup contribution is replaced by its explicit owner; a separate case keeps
 migration composition working with an omitted backup contribution.
+
+### Task 15 implementation checkpoint
+
+Catalogue and media now register explicit custom verification contributions. They compare every
+classified table before and after migration, including immutable menu versions and image bytes.
+Catalogue checks declared foreign keys, document hashes and the document's complete image-reference
+set. Only the shipped suggestion-job additions `collect_cursor: null` and `collected_refs: '[]'`
+are permitted as new columns. Unknown menu document formats stay unsupported, including when a
+separate reference is broken.
+
+Media reads its database tables, without a file directory or image worker. It checks stored picture
+signatures and SHA-256 filenames, replacement blobs, edit bounds and references. Current references
+need a photo identity; historical version references can resolve retained WebP bytes from the blob
+table. Neither enabled-module filtering nor a schema-zero parameter skips these checks. Host
+schema-zero admission and genuine encrypted-archive qualification remain later plan work.
+
+The classification literal moved unchanged to `packages/media/src/classification.ts`; its original
+`module.ts` export remains. No existing assertion changed. The earlier identity test's cleanup
+callback now has an explicit block: the root teardown text scanner had interpreted the following
+query helper as that callback. The guard and all identity assertions remain unchanged.
+
+The artifact host, remaining owners, placement, recovery v2, whole-branch review and release
+qualification are still open. This checkpoint does not release Cloud integration or snapshots.
