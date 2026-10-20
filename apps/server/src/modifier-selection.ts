@@ -91,6 +91,25 @@ function answerFreezers(
   });
 }
 
+function extraUnitSnapshot(
+  unit: ResolvedExtraList["items"][number]["unit"],
+  defaultLanguage: string,
+) {
+  const config = { defaultLanguage, languages: [defaultLanguage] };
+  return {
+    unitName: prepareUnitSnapshot(unit, config).abbreviation,
+    unitPrecision: unit.precision,
+    unitContext: {
+      id: unit.id,
+      name: {
+        [defaultLanguage]: newCustomerText(unit.name, unit.staffName, defaultLanguage, config),
+      },
+      precision: unit.precision,
+      hardwareUnit: unit.hardwareUnit,
+    },
+  };
+}
+
 /**
  * Validate one line's answers to the extras and options lists its dish offers, and freeze them:
  * options into `OptionSnapshot`s for the dish line's own column, extras into child lines.
@@ -135,27 +154,7 @@ export function buildLineExtras(
           quantity: pick.quantity,
           physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
           priceQuantity: item.portion,
-          unitName: prepareUnitSnapshot(item.unit, {
-            defaultLanguage,
-            languages: [defaultLanguage],
-          }).abbreviation,
-          unitPrecision: item.unit.precision,
-          unitContext: {
-            id: item.unit.id,
-            name: {
-              [defaultLanguage]: newCustomerText(
-                item.unit.name,
-                item.unit.staffName,
-                defaultLanguage,
-                {
-                  defaultLanguage,
-                  languages: [defaultLanguage],
-                },
-              ),
-            },
-            precision: item.unit.precision,
-            hardwareUnit: item.unit.hardwareUnit,
-          },
+          ...extraUnitSnapshot(item.unit, defaultLanguage),
         };
       });
     },
@@ -261,6 +260,7 @@ export function editLineExtras<
   products: ReadonlyMap<string, ExtraProductFacts>,
   requested: unknown,
   stored: { children: readonly Child[]; dishQuantity: string },
+  defaultLanguage: string,
 ): { kept: { child: Child; perDish: number }[]; added: ExtraChild[]; removed: Child[] } {
   const dish = decimal(stored.dishQuantity);
   const remaining = [...stored.children];
@@ -350,14 +350,7 @@ export function editLineExtras<
         quantity: pick.quantity,
         physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
         priceQuantity: item.portion,
-        unitName: item.unit.abbreviation,
-        unitPrecision: item.unit.precision,
-        unitContext: {
-          id: item.unit.id,
-          name: item.unit.name,
-          precision: item.unit.precision,
-          hardwareUnit: item.unit.hardwareUnit,
-        },
+        ...extraUnitSnapshot(item.unit, defaultLanguage),
       });
     }
   }

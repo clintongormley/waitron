@@ -109,7 +109,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   renamed or deleted; on a variant line they join it with `variant_name`.
 - `descriptions` — the customer-facing text, resolved through `customerPresentationText`, then
   stored under exactly the location's saved receipt languages (`locations.invoice_locales`), every
-  key holding the venue's default content language's text, or another stored language's where the
+  key holding the venue's default content language's text, or that half's staff name where the
   default has none (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`,
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
   the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else the line's
@@ -127,9 +127,11 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   `packages/catalogue/src/product-presentation.ts`). A staff name containing only spaces resolves
   to empty customer entries; the receipt still takes its separately frozen `variant_name`.
   Keeping both sets is what lets a report group variant lines under their parent.
-  An extras item naming a variant freezes a composed pair from the published offer instead
-  (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`); its child line carries
-  that pair in its name fields, with no separate variant fields.
+  An extras item naming a variant resolves the published parent and variant independently in
+  the current default language, then composes them (`offerModifiers`,
+  `apps/server/src/working-order.ts`). Its child line carries that pair in its name fields,
+  with no separate variant fields. The publication retains both original source maps, so a
+  default-language change does not reuse wording composed under the previous default.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
   as the list's three names and the chosen label's three names, and no ids at all
   (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries

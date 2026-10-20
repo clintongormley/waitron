@@ -1208,9 +1208,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `0035_unit_staff_identity`. New offers and
   publications now retain the raw parent and relative-variant names separately, and publication
   review includes source changes even when their composed display text is unchanged. The stored
-  publication remains unchanged until explicit publish. Consumer integration, parent/newly-added-extra
-  preparation and retained/recalled handling remain to be integrated with the landed A773-1
-  functions; current same-hunk reservations must still be checked. The operator
+  publication remains unchanged until explicit publish. The server and till now prepare new parent
+  snapshots with the full enabled-language projection and the published unit's default or staff
+  abbreviation. Full unit context names are prepared separately. Added extras resolve the published
+  parent and variant independently under the current default; retained picks and recalled-dish
+  carriers keep their recorded maps. A real-sale check compares complete order, sale, fiscal,
+  numbering and publication rows across translation Save, a default change and reprint, then checks
+  that new wording reaches new lines only after publication. The operator
   guide and current editor/option-answer explanations now describe optional fields, deliberate
   batches and waiting fixes. Whole-feature validation and the final snapshot/prose audit after
   those handoffs remain open.

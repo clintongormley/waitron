@@ -5,30 +5,42 @@ import { defaultLanguageDescriptions, defaultLanguageText } from "./default-lang
 describe("defaultLanguageDescriptions", () => {
   it("gives every receipt key the default content language's text", () => {
     expect(
-      defaultLanguageDescriptions({ es: "Café", ca: "Cafè" }, ["ca-ES", "es-ES"], "es"),
-    ).toEqual({ "ca-ES": "Café", "es-ES": "Café" });
+      defaultLanguageDescriptions(
+        { es: "Customer coffee", ca: "Other coffee" },
+        ["ca-ES", "es-ES"],
+        "es",
+        "Staff dish",
+      ),
+    ).toEqual({ "ca-ES": "Customer coffee", "es-ES": "Customer coffee" });
   });
 
-  it("takes the alphabetically first other language's text when the default has none", () => {
+  it("uses the staff name when the default has none", () => {
     expect(
-      defaultLanguageDescriptions({ fr: "Croissant", ca: "Croissant CA" }, ["es-ES"], "es"),
-    ).toEqual({ "es-ES": "Croissant CA" });
+      defaultLanguageDescriptions(
+        { fr: "Croissant", ca: "Croissant CA" },
+        ["es-ES"],
+        "es",
+        "Staff pastry",
+      ),
+    ).toEqual({ "es-ES": "Staff pastry" });
   });
 
-  it("answers an empty string for every key when no language has text", () => {
-    expect(defaultLanguageDescriptions({}, ["ca-ES", "es-ES"], "es")).toEqual({
-      "ca-ES": "",
-      "es-ES": "",
+  it("uses the staff name for every key when no language has text", () => {
+    expect(defaultLanguageDescriptions({}, ["ca-ES", "es-ES"], "es", "Staff dish")).toEqual({
+      "ca-ES": "Staff dish",
+      "es-ES": "Staff dish",
     });
   });
 });
 
 describe("defaultLanguageText", () => {
   it("keeps one entry, under the default content language", () => {
-    expect(defaultLanguageText({ ca: "u.", es: "ud", en: "ea" }, "es")).toEqual({ es: "ud" });
+    expect(defaultLanguageText({ ca: "u.", es: "ud", en: "ea" }, "es", "staff-unit")).toEqual({
+      es: "ud",
+    });
   });
 
-  it("keeps a missing map missing", () => {
-    expect(defaultLanguageText(null, "es")).toBeNull();
+  it("fills a missing map from the staff value", () => {
+    expect(defaultLanguageText(null, "es", "staff-unit")).toEqual({ es: "staff-unit" });
   });
 });

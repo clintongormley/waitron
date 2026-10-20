@@ -1,3 +1,8 @@
+import {
+  newCustomerPresentation,
+  newCustomerText,
+} from "@waitron/catalogue/src/new-customer-text.js";
+import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import type { AllergyCommand } from "@waitron/module";
@@ -89,6 +94,7 @@ import {
   centsToDecimal,
   classifyBand,
   compareDecimal,
+  type ContentLanguages,
   type Decimal,
   decimal,
   decimalToCents,
@@ -162,7 +168,6 @@ import {
   readOptionListsByIds,
   readProductModifiers,
   defaultLanguageDescriptions,
-  defaultLanguageText,
   readContentLanguages,
   readSavedContentLanguages,
   readInvoiceLocales,
@@ -378,7 +383,7 @@ function copyNames(names: Readonly<Record<string, string>> | null): Record<strin
   return names === null ? null : { ...names };
 }
 
-function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferModifiers {
+function offerModifiers(offer: ZoneMenuOffer, config: ContentLanguages): OfferModifiers {
   const extras: ResolvedExtraList[] = [];
   const options: OptionList[] = [];
   const extraProducts = new Map<string, ExtraProductFacts>();
@@ -406,17 +411,12 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
       extraProducts.set(item.productId, {
         id: item.productId,
         name: item.name,
-        descriptions: customerPresentationText(
-          {
-            name: item.name,
-            customerName: item.customerName,
-            kitchenName: item.kitchenName,
-            variantName: null,
-            variantCustomerName: null,
-            variantKitchenName: null,
-          },
-          defaultLanguage,
-        ).product,
+        descriptions: Object.fromEntries(
+          config.languages.map((language) => [
+            language,
+            newCustomerPresentation(item.presentation, language, config),
+          ]),
+        ),
         kitchenName: item.kitchenName,
         vatClass: item.vatClass as VatClass,
       });
@@ -577,7 +577,7 @@ export async function priceOrderLines(
     [REQUIRES_PERIOD_SELECTION]?: true;
     [RECALLED_EXTRAS_SOURCE]?: {
       line: typeof workingOrderLines.$inferSelect;
-      unit: { precision: number; hardwareUnit: "kg" | "g" | "mg" | null };
+      unit: NonNullable<ExtraChild["unitContext"]>;
     };
   } & LineExtras &
     RetainedCourseLine)[],
@@ -693,7 +693,7 @@ export async function priceOrderLines(
   const modifiersByOffer = new Map<string, OfferModifiers>();
   for (const { offer } of lines) {
     if (!modifiersByOffer.has(offer.id)) {
-      modifiersByOffer.set(offer.id, offerModifiers(offer, contentConfig.defaultLanguage));
+      modifiersByOffer.set(offer.id, offerModifiers(offer, contentConfig));
     }
   }
   // A product with an Active variant is never sold as itself, and an extras pick cannot name a
@@ -738,6 +738,8 @@ export async function priceOrderLines(
         courseId: string | null;
         note: string | null;
         makeAt: string | null;
+        unit: ExtraChild["unitContext"];
+        recorded: boolean;
       }
     | {
         kind: "child";
@@ -763,16 +765,24 @@ export async function priceOrderLines(
             variantCustomerName: source.line.variantDescriptions,
             variantKitchenName: source.line.variantKitchenName,
             unitPrice: centsToDecimal(source.line.unitPriceGross),
-            unit: { ...offer.unit, ...source.unit },
+            unit: { ...offer.unit, ...source.unit, abbreviation: source.line.unitName ?? {} },
             vatClass: source.line.vatClass,
             category: source.line.category,
             courseId: source.line.courseId,
           };
-    const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
+    const customerText =
+      source === undefined
+        ? customerPresentationText(
+            selection,
+            contentConfig.defaultLanguage,
+            contentConfig.languages,
+          )
+        : { product: source.line.descriptions, variant: source.line.variantDescriptions };
     const product = {
       name: selection.name,
       unitPrice: selection.unitPrice,
-      unit: selection.unit,
+      unit:
+        source === undefined ? prepareUnitSnapshot(selection.unit, contentConfig) : selection.unit,
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: selection.vatClass as VatClass,
       category: selection.category,
@@ -852,6 +862,20 @@ export async function priceOrderLines(
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
+      recorded: source !== undefined,
+      unit: source?.unit ?? {
+        id: selection.unit.id,
+        name: {
+          [contentConfig.defaultLanguage]: newCustomerText(
+            selection.unit.name,
+            selection.unit.staffName,
+            contentConfig.defaultLanguage,
+            contentConfig,
+          ),
+        },
+        precision: selection.unit.precision,
+        hardwareUnit: selection.unit.hardwareUnit,
+      },
     });
     for (const child of extraChildren) {
       lineMeta.push({
@@ -880,21 +904,22 @@ export async function priceOrderLines(
   ]);
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
-  for (const line of gross.lines) {
+  for (const [index, line] of gross.lines.entries()) {
+    const meta = lineMeta[index]!;
+    if (meta.kind === "parent" && meta.recorded) continue;
     line.descriptions = defaultLanguageDescriptions(
       line.descriptions,
       invoiceLocales,
       contentConfig.defaultLanguage,
+      line.name,
     );
     if (line.variantDescriptions != null) {
       line.variantDescriptions = defaultLanguageDescriptions(
         line.variantDescriptions,
         invoiceLocales,
         contentConfig.defaultLanguage,
+        line.variantName ?? "",
       );
-    }
-    if (line.unitName != null) {
-      line.unitName = defaultLanguageText(line.unitName, contentConfig.defaultLanguage);
     }
   }
 
@@ -950,7 +975,7 @@ export async function priceOrderLines(
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
-    ...(meta.kind === "child" && meta.unit !== undefined ? { unit: meta.unit } : {}),
+    ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
   }));
   return { lineRows, gross, identities, lineContexts, offers };
 }
@@ -1020,7 +1045,8 @@ export async function prepareRecalledModifiers(
       [],
       choices.map(({ parent }) => retained.get(parent.id)!.menuItemId),
     ));
-  const language = (await readContentLanguages(tx, cfg.locale)).defaultLanguage;
+  const contentConfig = await readContentLanguages(tx, cfg.locale);
+  const language = contentConfig.defaultLanguage;
   const offers = new Map(snapshot.offers.map((offer) => [offer.id, offer]));
   const withdrawn = choices.filter(
     ({ parent, input }) =>
@@ -1047,7 +1073,7 @@ export async function prepareRecalledModifiers(
     const plan = plans.get(parent.id)!;
     const held = retained.get(parent.id)!;
     const offer = offers.get(held.menuItemId);
-    const modifiers = offer === undefined ? NO_MODIFIERS : offerModifiers(offer, language);
+    const modifiers = offer === undefined ? NO_MODIFIERS : offerModifiers(offer, contentConfig);
     if (input.options !== undefined) {
       const offeredOptions =
         offer === undefined
@@ -1070,6 +1096,7 @@ export async function prepareRecalledModifiers(
         children: plan.kept.map(({ child }) => child),
         dishQuantity: thousandthsToDecimal(parent.quantity),
       },
+      language,
     );
     plan.kept = extras.kept;
     plan.removed = extras.removed.map((child) => byId.get(child.id)!);
@@ -1083,7 +1110,12 @@ export async function prepareRecalledModifiers(
       [ADDED_EXTRAS_ONLY]: true,
       [RECALLED_EXTRAS_SOURCE]: {
         line: parent,
-        unit: { precision: held.unitPrecision, hardwareUnit: held.hardwareUnit },
+        unit: {
+          id: held.unitId,
+          name: held.unitName,
+          precision: held.unitPrecision,
+          hardwareUnit: held.hardwareUnit,
+        },
       },
     });
   }
@@ -5525,9 +5557,8 @@ async function applyLineEdits(
   const needsModifiers = plan.edits.some(
     ({ intent }) => intent.options !== null || intent.extras !== null,
   );
-  const defaultLanguage = needsModifiers
-    ? (await readContentLanguages(tx, cfg.locale)).defaultLanguage
-    : "";
+  const contentConfig = needsModifiers ? await readContentLanguages(tx, cfg.locale) : undefined;
+  const defaultLanguage = contentConfig?.defaultLanguage ?? "";
   // Read once for the answers the edits are checked against and for the lines priced below.
   const snapshot = needsModifiers
     ? await readBasketOffers(tx, cfg, orderId, context?.zoneId, plan.fresh, [
@@ -5553,7 +5584,7 @@ async function applyLineEdits(
     }
     let modifiers = modifiersByOffer.get(offer.id);
     if (modifiers === undefined) {
-      modifiers = offerModifiers(offer, defaultLanguage);
+      modifiers = offerModifiers(offer, contentConfig!);
       modifiersByOffer.set(offer.id, modifiers);
     }
     return modifiers;
@@ -5646,6 +5677,7 @@ async function applyLineEdits(
               children: parent.children,
               dishQuantity: parent.quantity,
             },
+            defaultLanguage,
           );
     const changed =
       intent.note !== parent.note ||

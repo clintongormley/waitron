@@ -1639,7 +1639,12 @@ describe("getHeldOrder", () => {
         productId,
         quantity: "0.375",
         product: expect.objectContaining({
-          unit: { id: unitId, name: { [LOCALE]: "kg" }, precision: 3, hardwareUnit: "kg" },
+          unit: {
+            id: unitId,
+            name: { [CONTENT_LANGUAGE]: "kg" },
+            precision: 3,
+            hardwareUnit: "kg",
+          },
           unitPrice: "12.00",
         }),
       }),
@@ -1748,7 +1753,7 @@ describe("getHeldOrder", () => {
           // Each unit — frozen at park time, unaffected by the live product's switch to weight above.
           unit: {
             id: EACH_UNIT.id,
-            name: EACH_UNIT.name,
+            name: { [CONTENT_LANGUAGE]: EACH_UNIT.name[CONTENT_LANGUAGE]! },
             precision: EACH_UNIT.precision,
             hardwareUnit: EACH_UNIT.hardwareUnit,
           },

@@ -760,7 +760,7 @@ describe("editLineExtras", () => {
     children: Child[],
     dishQuantity = "1",
   ) => {
-    const result = editLineExtras(offered, products, extras, { children, dishQuantity });
+    const result = editLineExtras(offered, products, extras, { children, dishQuantity }, "en");
     return {
       kept: result.kept.map(({ child, perDish }) => [
         child.productId,
@@ -864,6 +864,7 @@ describe("editLineExtras", () => {
       products,
       [{ listId: weighted.id, picks: [{ productId: "product-wine", quantity: 3 }] }],
       { children: [], dishQuantity: "2" },
+      "en",
     );
 
     expect(result.added).toMatchObject([
@@ -872,7 +873,7 @@ describe("editLineExtras", () => {
         quantity: 3,
         physicalQuantity: "0.150",
         priceQuantity: "0.050",
-        unitName: { en: "kg", es: "kg" },
+        unitName: { en: "kg" },
         unitPrecision: 3,
         unitContext: {
           id: "unit-kg",
