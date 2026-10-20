@@ -56,7 +56,7 @@ const TINT_TARGETS: Readonly<
 };
 
 /** The grounds the button colour sits on; its fix shade is worked out against them. */
-export const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
+const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
 
 const minRatio = (colour: string, list: readonly string[]) =>
   Math.min(...list.map((other) => contrastRatio(colour, other)));
@@ -71,7 +71,7 @@ function until(hex: string, dir: number, list: readonly string[], need: number):
   return out;
 }
 
-export function brandFixShade(brand: string, mode: Mode, grounds: readonly string[]): string {
+function brandFixShade(brand: string, mode: Mode, grounds: readonly string[]): string {
   return until(brand, mode === "dark" ? +1 : -1, grounds, 3);
 }
 

@@ -1,7 +1,9 @@
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type ModeResult, handTokens, settleMode } from "./derive.js";
 import { warningsFor } from "./warnings.js";
-import { type Corners, type ThemeColour, THEME_COLOURS } from "./tokens.js";
+import { type Corners, type ThemeColour, THEME_COLOURS, colourToken } from "./tokens.js";
+
+const PRIMARY = colourToken("primary");
 
 export type Background = "neutral" | "tinted";
 
@@ -101,4 +103,49 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
         ? { light: light.tintStrength, dark: dark.tintStrength }
         : null,
   };
+}
+
+/**
+ * Takes fixes one at a time, per mode: of the first failing rule naming a warned colour with a fix,
+ * the fix of the colour drawn on top if it has one, else of the other; then settles again.
+ */
+export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeChoices {
+  let current = normaliseChoices(choices);
+  for (const mode of MODES) {
+    for (let round = 0; round < 50; round++) {
+      const settled = settleMode(defaults, current, mode, handTokens(current.handSet[mode]));
+      const withFix = new Map(
+        warningsFor(defaults, current, mode, settled, false)
+          .filter((warning) => warning.fix !== null)
+          .map((warning) => [
+            warning.field === "brandColor" ? PRIMARY : colourToken(warning.field.split(".")[2]!),
+            warning,
+          ]),
+      );
+      if (withFix.size === 0) break;
+      let pick: ThemeWarning | undefined;
+      for (const { rule } of settled.failures) {
+        pick = withFix.get(rule.a) ?? withFix.get(rule.b);
+        if (pick) break;
+      }
+      pick ??= [...withFix.values()][0]!;
+      current = normaliseChoices(
+        pick.field === "brandColor"
+          ? { ...current, brandFix: { ...current.brandFix, [mode]: true } }
+          : {
+              ...current,
+              handSet: {
+                ...current.handSet,
+                [mode]: { ...current.handSet[mode], [pick.field.split(".")[2]!]: pick.fix },
+              },
+            },
+      );
+    }
+  }
+  return current;
+}
+
+/** Whether Fix and save is offered: Fix all leaves no warning. */
+export function canFixAll(defaults: WaitronDefaults, choices: ThemeChoices): boolean {
+  return deriveThemeFrom(defaults, fixAll(defaults, choices)).warnings.length === 0;
 }

@@ -3,3 +3,4 @@ export * from "./defaults.js";
 export * from "./contrast-rules.js";
 export * from "./tokens.js";
 export * from "./theme.js";
+export { type AgainstItem, groupAgainst } from "./warnings.js";

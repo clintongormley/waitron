@@ -129,9 +129,10 @@ purpose:
 - The reference's `adjust` / "Q2 A" path (`derive`, `adjust = true`) is not ported: colours are
   always as picked, and a fix is a flag (`brandFix`).
 - Waitron's values come in as a `defaults` argument, never a module-level mutable object.
-- The brand fix's shade comes from **one function**, `brandFixShade`, used both to paint
-  `brandFix` and to offer the fix (plan review M3); the reference computes it in two places and
-  checks they agree with a `throw`, which the port does not need.
+- The brand fix's shade comes from **one function**, `brandFixShade`, which paints `brandFix`
+  (plan review M3), and the offered fix is the primary that flag paints, because hand-set colours
+  can move the grounds between the two runs (Task 7 review ruling, 2026-10-20; the reference's
+  `throw` at `derive-h2.mjs:350` fires on such a case, `output-ruling-brand-fix.txt`).
 - Warnings carry keys without the `--wt-color-` prefix, ordered light then dark, and within a mode
   the brand colour first, then hand-set colours in `THEME_COLOURS` order.
 - Hex input is lower-cased on entry (Review Focus 1).
