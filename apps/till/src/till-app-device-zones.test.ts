@@ -581,6 +581,8 @@ describe("live device zones", () => {
         outstanding: "0.00",
         billCount: 1,
         tableIds: ["table"],
+        unsentDrafts: [],
+        reminder: null,
       },
     };
     const { el, api } = await mount(selection(["bar", "room"], "room"), {

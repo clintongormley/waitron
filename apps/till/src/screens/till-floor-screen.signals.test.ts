@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
@@ -130,7 +131,7 @@ describe("till-floor-screen: the signals at a table", () => {
   it("shows ready drinks, time to fire and the bill request side by side on the card", async () => {
     const el = await mountFloor([mesa2]);
     const badges = card(el, "t2").querySelector(".badges")!;
-    expect(chips(badges)).toEqual(["Bar: 3 ready", "Bill requested"]);
+    expect(chips(badges)).toEqual(["Bill requested", "Bar: 3 ready"]);
     expect(badges.querySelector("[data-fire-due]")!.textContent!.trim()).toBe("Time to fire");
   });
 
@@ -141,7 +142,7 @@ describe("till-floor-screen: the signals at a table", () => {
       '[data-tray-table="t2"] wt-table-token',
     )!;
     await token.updateComplete;
-    expect(chips(token.shadowRoot!)).toEqual(["Bar: 3 ready", "Bill requested"]);
+    expect(chips(token.shadowRoot!)).toEqual(["Bill requested", "Bar: 3 ready"]);
   });
 
   it("names every station with dishes ready, each with its own count", async () => {
@@ -207,20 +208,29 @@ describe("till-floor-screen: the signals at a table", () => {
       table({
         signals: [
           { kind: "take_order" },
-          ready(["bar", "Barra", 3], ["kitchen", "Cocina", 1]),
+          ready(["bar", "Bar", 3], ["kitchen", "Kitchen", 1]),
           { kind: "long_wait", band: "overdue" },
-          { kind: "held_unavailable", groupId: "g2", lineNames: ["Chuletón"] },
+          { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
           { kind: "bill_requested", requestedAt: past },
         ],
       }),
     ]);
+    const keys = [
+      "signal.wait_overdue",
+      "signal.unavailable",
+      "signal.bill_requested",
+      "signal.ready_at",
+      "signal.ready_at_one",
+      "signal.take_order",
+    ] as const;
+    for (const key of keys) expect(es[key]).not.toBe(en[key]);
     expect(chips(card(el, "t2"))).toEqual([
-      "Tomar nota",
-      "Barra: 3 listos",
-      "Cocina: 1 listo",
-      "Con retraso",
-      "No disponible: Chuletón",
-      "Cuenta pedida",
+      es["signal.wait_overdue"],
+      es["signal.unavailable"].replace("{items}", "Steak"),
+      es["signal.bill_requested"],
+      es["signal.ready_at"].replace("{station}", "Bar").replace("{n}", "3"),
+      es["signal.ready_at_one"].replace("{station}", "Kitchen"),
+      es["signal.take_order"],
     ]);
   });
 });

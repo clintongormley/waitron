@@ -13,20 +13,21 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
-import type { TimingBand } from "@waitron/shared";
 import {
   baseStyles,
   UrlStateController,
   buildZoneTabs,
+  floorRingStyles,
   floorTrayStyles,
   inNumberOrder,
   MAP_SEPARATOR,
   mergeLabel,
   renderFloorChips,
+  renderFloorRing,
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
-import type { FloorMapDrop, FloorMapTable, FloorTable, ZoneTab } from "@waitron/ui";
+import type { FloorMapDrop, FloorMapTable, FloorRing, FloorTable, ZoneTab } from "@waitron/ui";
 import {
   conjunctionList,
   decimal,
@@ -101,7 +102,13 @@ import type {
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
-import { heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import {
+  byPrecedence,
+  lateBand,
+  topState,
+  type TableStateKind,
+} from "../state/table-precedence.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
 
 /** The words of a table that needs clearing or moving. */
@@ -136,11 +143,25 @@ function shownPartyName(table: TableState): string | undefined {
   return name === undefined || name === shownUnder(table) ? undefined : name;
 }
 
+const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
+  forgotten: "forgotten",
+  overdue: "overdue",
+  fire: "fire",
+  waiting: "waiting",
+};
+
 /** The table's own Forgotten badge already says a forgotten wait. */
 function tableChips(table: TableState, now: number) {
-  const chips = signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
+  const chips = signalChips(table.signals, { forgottenShown: lateBand(table) === "forgotten" });
   const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
-  return held === null ? chips : [...chips, held];
+  return byPrecedence(held === null ? chips : [...chips, held], (chip) =>
+    chipState(chip, table.signals),
+  );
+}
+
+interface CardMark {
+  kind: TableStateKind | undefined;
+  mark: TemplateResult;
 }
 
 /** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. */
@@ -251,6 +272,7 @@ export class TillFloorScreen extends LitElement {
     baseStyles,
     servicePeriodStyles,
     floorTrayStyles,
+    floorRingStyles,
     signalChipStyles,
     helpAnchorStyles,
     css`
@@ -364,6 +386,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       .card {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -389,6 +412,10 @@ export class TillFloorScreen extends LitElement {
         border-left-color: var(--wt-color-primary);
       }
 
+      .card.calm {
+        border-left-color: var(--wt-color-primary-disabled);
+      }
+
       .card.state-delivery-pending {
         border-left-color: var(--wt-color-danger);
       }
@@ -398,52 +425,11 @@ export class TillFloorScreen extends LitElement {
         cursor: default;
       }
 
-      /* Order-timing accent (KDS order-timing alerts, design §7.3): a table whose worst unserved line
-         has escalated gets a subtler steady amber (warm) through steady red (overdue) up to a
-         FLASHING red (forgotten) — the SAME age- and flash class scheme till-station-queue's rail
-         card and till-expo-screen's order card use, so the escalation reads as one visual language
-         across every KDS surface. Laid down as an INSET BOX-SHADOW rather than another border/border-left
-         colour, deliberately: .card's left edge already carries the OCCUPANCY accent (.state-* above),
-         and a box-shadow is a wholly separate CSS property, so the two accents can never fight over
-         ownership of the same edge — both render, always, side by side (a11y: two independent
-         signals, never one clobbering the other). 'fresh' gets no override. */
-      .card.age-warm {
-        box-shadow: inset 0 0 0 2px var(--wt-color-primary);
+      .card.edge-forgotten {
+        border-left-color: var(--wt-color-danger);
+        border-left-width: var(--wt-space-3);
       }
 
-      .card.age-overdue,
-      .card.age-forgotten {
-        box-shadow: inset 0 0 0 2px var(--wt-color-danger);
-      }
-
-      /* The FORGOTTEN flash: a repeating fade of the inset accent, never a colour/motion change behind
-         text — .flash is applied only when the OS/browser has NOT asked for reduced motion
-         (#prefersReducedMotion), so an assistive-motion setting renders the steady red box-shadow
-         above with no @keyframes at all. The @media guard is a second, CSS-only line of defence for
-         the same preference (belt-and-suspenders, house a11y rule) — mirrors till-station-queue's/
-         till-expo-screen's identical treatment. */
-      .card.age-forgotten.flash {
-        animation: age-forgotten-flash 1s ease-in-out infinite;
-      }
-
-      @keyframes age-forgotten-flash {
-        50% {
-          box-shadow: inset 0 0 0 2px transparent;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .card.age-forgotten.flash {
-          animation: none;
-        }
-      }
-
-      /* The forgotten badge (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
-         table (not just under reduced motion), so a colour-blind operator or a reduced-motion setting
-         still sees the escalation without relying on the flashing-red accent alone. A FILLED danger
-         chip (like .badge.en-route's filled-primary treatment above) rather than plain text, since
-         this card already has a rich badge system — the same a11y-correct danger/on-danger token pair
-         every other filled chrome in this app uses. */
       .badge.forgotten {
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);
@@ -518,13 +504,25 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* "Reserved HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
-         chip (theme text on a neutral fill, so contrast stays token-fixed). Mirrors @waitron/ui's
-         wt-table-token .badge.reserved so the list card and the map token match. */
+      /* Mirrors @waitron/ui's wt-table-token .badge.reserved. */
       .badge.reserved {
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-        border: 1px solid var(--wt-color-primary);
+        background: var(--wt-color-table-reserved);
+        color: var(--wt-color-on-table-reserved);
+        border: 1px solid var(--wt-color-table-reserved);
+      }
+
+      .calm-line {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .calm-line wt-icon {
+        flex: none;
+        color: inherit;
       }
 
       /* "N en camino" -- dispatched by the pass, awaiting the waiter (KDS-3 §3c). The TOP-precedence hint,
@@ -555,14 +553,6 @@ export class TillFloorScreen extends LitElement {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
         border: 1px solid var(--wt-color-warning);
-      }
-
-      .unsent {
-        max-width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--wt-space-1);
       }
 
       .badge.unsent {
@@ -2002,6 +1992,7 @@ export class TillFloorScreen extends LitElement {
       { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {
         ...table,
+        timingBand: lateBand(table),
         // The server reads a table no party holds as free; one needing clearing must not look ready to seat.
         state: needsClearing(table) ? "open-tab" : table.state,
         tabTotal,
@@ -2201,6 +2192,7 @@ export class TillFloorScreen extends LitElement {
     >
       <wt-table-token
         .table=${this.#toFloorTable(table)}
+        .reducedMotion=${this.reducedMotion}
         .locale=${currentLocale()}
         .labels=${{
           covers: t("floor.capacity"),
@@ -2228,13 +2220,6 @@ export class TillFloorScreen extends LitElement {
 
   #prefersReducedMotion(): boolean {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
-
-  /** Space-prefixed (or empty) so it can be interpolated directly after `.card` in the template. */
-  #timingAccentClass(band: TimingBand): string {
-    if (band === "fresh") return "";
-    const flash = band === "forgotten" && !this.#prefersReducedMotion();
-    return ` age-${band}${flash ? " flash" : ""}`;
   }
 
   #seatDialog(): TemplateResult | typeof nothing {
@@ -2385,37 +2370,70 @@ export class TillFloorScreen extends LitElement {
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#waitingCard(table, "clear");
     if (needsMovingToday(table)) return this.#waitingCard(table, "move");
+    const top = topState(table, this.#drawnAt);
+    const ring = top === undefined ? null : (RING_OF[top] ?? null);
+    const moving = !this.#prefersReducedMotion();
+    const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
+    const calm = top === "held" || top === "nothing-needed" ? " calm" : "";
     return html`<button
-      class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
+      class="card state-${table.state}${edge}${calm}"
       data-table=${table.id}
+      data-top=${top ?? nothing}
       @click=${() => this.#openTable(table)}
     >
+      ${renderFloorRing(ring, moving)}
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
-      ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
-      <span class="badges">
-        ${this.#hint(table)}
-        ${
-          table.nextReservation !== null
-            ? html`<span class="badge reserved" data-reserved
-                >${t("floor.reserved")} ${table.nextReservation.time}</span
-              >`
-            : nothing
-        }
-        ${
-          table.timingBand === "forgotten"
-            ? html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`
-            : nothing
-        }
-        ${
-          this.#fireDue(table)
-            ? html`<span class="badge fire-due" data-fire-due
-                ><wt-icon name="floor-fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
-              >`
-            : nothing
-        }
-        ${renderFloorChips(tableChips(table, this.#drawnAt))}
-      </span>
+      ${this.#partyName(table)} ${this.#occupancy(table)}
+      <span class="badges"
+        >${byPrecedence(this.#marks(table, top), (mark) => mark.kind).map(({ mark }) => mark)}</span
+      >
     </button>`;
+  }
+
+  #marks(table: TableState, top: TableStateKind | undefined): CardMark[] {
+    const marks: CardMark[] = [];
+    if (top === "nothing-needed" && !partyPaid(table)) {
+      marks.push({
+        kind: "nothing-needed",
+        mark: html`<span class="calm-line" data-nothing-needed
+          ><wt-icon name="floor-check" size="sm"></wt-icon>${t("floor.nothing_needed")}</span
+        >`,
+      });
+    }
+    if (lateBand(table) === "forgotten") {
+      marks.push({
+        kind: "forgotten",
+        mark: html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`,
+      });
+    }
+    if (this.#fireDue(table)) {
+      marks.push({
+        kind: "fire",
+        mark: html`<span class="badge fire-due" data-fire-due
+          ><wt-icon name="floor-fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
+        >`,
+      });
+    }
+    const hint = this.#hint(table);
+    if (hint !== null) marks.push(hint);
+    for (const draft of table.party?.unsentDrafts ?? []) {
+      marks.push({
+        kind: "not-sent",
+        mark: html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`,
+      });
+    }
+    if (table.nextReservation !== null) {
+      marks.push({
+        kind: "reserved",
+        mark: html`<span class="badge reserved" data-reserved
+          >${t("floor.reserved")} ${table.nextReservation.time}</span
+        >`,
+      });
+    }
+    for (const chip of tableChips(table, this.#drawnAt)) {
+      marks.push({ kind: chipState(chip, table.signals), mark: renderFloorChips([chip])[0]! });
+    }
+    return marks;
   }
 
   /** Every zone's tables, not only the zone on screen: a station serves the whole floor. */
@@ -2466,14 +2484,6 @@ export class TillFloorScreen extends LitElement {
       : html`<span class="party-name" data-party-name>${name}</span>`;
   }
 
-  #unsent(party: TableParty | null): TemplateResult | typeof nothing {
-    const drafts = party?.unsentDrafts ?? [];
-    if (drafts.length === 0) return nothing;
-    return html`<span class="unsent">
-      ${drafts.map((draft) => html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`)}
-    </span>`;
-  }
-
   #party(party: TableParty | null): TemplateResult | typeof nothing {
     if (party === null) return nothing;
     const parts = [
@@ -2486,24 +2496,33 @@ export class TillFloorScreen extends LitElement {
   /** Only the MOST ADVANCED of the three service signals renders: a dispatched line is still `ready`
    * and unserved, so all three counts can be positive at once. The stations' ready chips stand in
    * for the ready count when the table carries them. */
-  #hint(table: TableState): TemplateResult | typeof nothing {
+  #hint(table: TableState): CardMark | null {
     if (table.enRoute > 0) {
-      return html`<span class="badge en-route" data-en-route
-        >${table.enRoute} ${t("floor.en_route")}</span
-      >`;
+      return {
+        kind: "ready",
+        mark: html`<span class="badge en-route" data-en-route
+          >${table.enRoute} ${t("floor.en_route")}</span
+        >`,
+      };
     }
     if (table.readyToServe > 0) {
-      if (signalOf(table.signals, "ready") !== undefined) return nothing;
-      return html`<span class="badge ready" data-ready
-        >${table.readyToServe} ${t("floor.ready")}</span
-      >`;
+      if (signalOf(table.signals, "ready") !== undefined) return null;
+      return {
+        kind: "ready",
+        mark: html`<span class="badge ready" data-ready
+          >${table.readyToServe} ${t("floor.ready")}</span
+        >`,
+      };
     }
     if (table.pendingToServe > 0) {
-      return html`<span class="badge to-serve" data-to-serve
-        >${table.pendingToServe} ${t("floor.to_serve")}</span
-      >`;
+      return {
+        kind: undefined,
+        mark: html`<span class="badge to-serve" data-to-serve
+          >${table.pendingToServe} ${t("floor.to_serve")}</span
+        >`,
+      };
     }
-    return nothing;
+    return null;
   }
 
   /** The switch is exhaustive over {@link TableState.state}, so a new occupancy state is a compile error

@@ -39,12 +39,16 @@
 
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
+  --wt-opacity-pulse-dim: 0.3;
 
   /* How long a notice that goes by itself takes to fade out (wt-notice). */
   --wt-duration-fade: 400ms;
   /* How long a row takes to slide into its new place while a list is reordered by dragging (ReorderController). */
   --wt-duration-move: 150ms;
   --wt-duration-disclosure: 900ms;
+  /* One cycle of a pulse: slow for Overdue, Time to fire and the till bar's Waiting tab; fast for Forgotten. */
+  --wt-duration-pulse-slow: 2000ms;
+  --wt-duration-pulse-fast: 1000ms;
 
   /* wt-modal's sizes: compact for a confirmation or one or two short fields, standard for an
      ordinary editor, and --wt-modal-max-width for wide content (and an unsized modal). */

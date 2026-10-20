@@ -1202,6 +1202,8 @@ describe("an open table's order", () => {
       outstanding: "0.00",
       billCount: 1,
       tableIds: ["t2"],
+      unsentDrafts: [],
+      reminder: null,
     },
   };
   const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");

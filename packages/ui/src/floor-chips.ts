@@ -5,6 +5,7 @@ import { registerIcons } from "./components/wt-icon.js";
 registerIcons({
   "floor-held": "M4 3h3v10H4zM9 3h3v10H9z",
   "floor-fire": "M5 3v10l8-5z",
+  "floor-check": "M2 8.6l1.4-1.4 3 3L12.6 4 14 5.4l-7.6 7.6z",
 });
 
 /** Theme text on a neutral chip with its tone as the border, except `primary-filled`, which is the

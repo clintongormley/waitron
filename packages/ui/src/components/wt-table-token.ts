@@ -3,7 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import type { FloorTable } from "../floor.js";
 import { floorChipStyles, renderFloorChips } from "../floor-chips.js";
-import { formatMoney, type TimingBand } from "@waitron/shared";
+import { type FloorRing, floorRingStyles, renderFloorRing } from "../floor-ring.js";
+import { formatMoney } from "@waitron/shared";
 
 /** Localised words the token puts beside its data; this package carries no copy of its own. */
 export interface TableTokenLabels {
@@ -29,13 +30,13 @@ export class WtTableToken extends LitElement {
   static override styles = [
     baseStyles,
     floorChipStyles,
+    floorRingStyles,
     css`
       :host {
         display: block;
       }
 
-      /* Mirrors till-floor-screen's .card body: the occupancy accent is the left edge, coloured by
-         state via the tokens below — identical to FP-1 so the map token and the list card match. */
+      /* The occupancy accent is the left edge, coloured by state via the tokens below. */
       .card {
         position: relative;
         display: flex;
@@ -63,50 +64,16 @@ export class WtTableToken extends LitElement {
         border-left-color: var(--wt-color-danger);
       }
 
-      /* Order-timing accent (KDS order-timing alerts, design §7.3) — the SAME age- and flash class
-         scheme and reduced-motion gating till-floor-screen's LIST card, till-station-queue's rail
-         card and till-expo-screen's order card all use, so a table reads the same escalation on
-         whichever floor view a manager happens to be looking at. Laid down as an INSET BOX-SHADOW
-         rather than another border colour, deliberately: .card's left edge already carries the
-         OCCUPANCY accent (.state-* above), and a box-shadow is a wholly separate CSS property, so the
-         two accents can never fight over ownership of the same edge — both render, always, side by
-         side. timingBand undefined/'fresh' gets no override. The ring width reuses --wt-space-1 — the
-         SAME token .state-*'s border-left already uses, so the two accents read as one thickness. */
-      .card.age-warm {
-        box-shadow: inset 0 0 0 var(--wt-space-1) var(--wt-color-primary);
-      }
-
-      .card.age-overdue,
-      .card.age-forgotten {
-        box-shadow: inset 0 0 0 var(--wt-space-1) var(--wt-color-danger);
-      }
-
-      /* The FORGOTTEN flash: a repeating fade of the inset accent, never a colour/motion change
-         behind text — .flash is applied only when the OS/browser has NOT asked for reduced motion
-         (#prefersReducedMotion), so an assistive-motion setting renders the steady danger-toned
-         box-shadow above with no @keyframes at all. The @media guard is a second, CSS-only line of
-         defence for the same preference (belt-and-suspenders, house a11y rule) — mirrors
-         till-floor-screen's/till-station-queue's/till-expo-screen's identical treatment. */
-      .card.age-forgotten.flash {
-        animation: age-forgotten-flash 1s ease-in-out infinite;
-      }
-
-      @keyframes age-forgotten-flash {
-        50% {
-          box-shadow: inset 0 0 0 var(--wt-space-1) transparent;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .card.age-forgotten.flash {
-          animation: none;
-        }
+      /* Under reduced motion nothing pulses, so a forgotten table also widens its left edge. */
+      .card.edge-forgotten {
+        border-left-color: var(--wt-color-danger);
+        border-left-width: var(--wt-space-3);
       }
 
       /* The forgotten MARKER (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
          table (not just under reduced motion, exactly like till-floor-screen's .badge.forgotten text
-         chip: it never animates itself, so an operator who cannot distinguish the accent's colour or
-         perceive its flash still sees the escalation). A small CSS-only TRIANGLE — never text, since
+         chip: it never animates itself, so an operator who cannot distinguish the accent's colour still
+         sees the escalation). A small CSS-only TRIANGLE — never text, since
          this package carries no inline copy and a spatial token has no room for a text chip like the
          list card's — and deliberately a DIFFERENT silhouette from the round .dot/.badge.status
          swatch, so it cannot be mistaken for a status marker. Positioned over the card's
@@ -197,13 +164,10 @@ export class WtTableToken extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* "Reserved HH:MM" (Bookings-1 §4) — the table's imminent booking: a PRIMARY border on a neutral
-         chip (theme text on a neutral fill, so the token-fixed contrast holds and no arbitrary colour is
-         involved). */
       .badge.reserved {
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-        border: 1px solid var(--wt-color-primary);
+        background: var(--wt-color-table-reserved);
+        color: var(--wt-color-on-table-reserved);
+        border: 1px solid var(--wt-color-table-reserved);
       }
 
       .badge.fire-due wt-icon {
@@ -219,7 +183,7 @@ export class WtTableToken extends LitElement {
 
       /* The status chip: text in the theme colour on a neutral chip, with the DATA-driven status
          colour as a border + a small swatch — never as a text background, so contrast stays token-fixed
-         and the arbitrary colour cannot fail a11y. Verbatim from FP-1's .badge.status. */
+         and the arbitrary colour cannot fail a11y. */
       .badge.status {
         border: 1px solid var(--wt-color-border);
         background: var(--wt-color-surface);
@@ -249,10 +213,12 @@ export class WtTableToken extends LitElement {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  #timingAccentClass(band: TimingBand | undefined): string {
-    if (band === undefined || band === "fresh") return "";
-    const flash = band === "forgotten" && !this.#prefersReducedMotion();
-    return ` age-${band}${flash ? " flash" : ""}`;
+  #ring(t: FloorTable): FloorRing | null {
+    if (t.timingBand === "forgotten") return "forgotten";
+    if (t.timingBand === "overdue") return "overdue";
+    if (t.fireDue === true) return "fire";
+    if (t.timingBand === "warm") return "waiting";
+    return null;
   }
 
   /** A non-colour tell, shown whatever the motion preference. */
@@ -267,9 +233,12 @@ export class WtTableToken extends LitElement {
   override render(): TemplateResult | typeof nothing {
     const t = this.table;
     if (t == null) return nothing;
+    const ring = this.#ring(t);
+    const moving = !this.#prefersReducedMotion();
+    const edge = ring === "forgotten" && !moving ? " edge-forgotten" : "";
     return html`
-      <div class="card state-${t.state}${this.#timingAccentClass(t.timingBand)}">
-        ${this.#forgottenMarker(t)} ${this.#unsentMark(t)}
+      <div class="card state-${t.state}${edge}">
+        ${renderFloorRing(ring, moving)} ${this.#forgottenMarker(t)} ${this.#unsentMark(t)}
         <span class="card-head">
           <span class="label">${t.label}</span>
           ${

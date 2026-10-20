@@ -259,6 +259,8 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       outstanding: "0.00",
       billCount: 1,
       tableIds: ["t4"],
+      unsentDrafts: [],
+      reminder: null,
     };
     const base = stubApi();
     const api = stubApi({

@@ -343,72 +343,86 @@ describe("till-floor-screen", () => {
   });
 
   describe("order-timing accent (timingBand)", () => {
+    const pulses = (ring: Element) => [...ring.classList].filter((c) => c.startsWith("wt-pulse-"));
+
     it("renders no timing accent for a fresh table (the existing occupancy accent is untouched)", async () => {
       const { el } = await mount({ tables: [table({ id: "t1", timingBand: "fresh" })] });
       const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
       expect(card.classList.contains("state-free")).toBe(true);
-      expect([...card.classList].some((c) => c.startsWith("age-"))).toBe(false);
+      expect(card.querySelector("[data-ring]")).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
     });
 
-    it("renders the subtler steady accent for a warm table, no flash, no badge", async () => {
-      const { el } = await mount({ tables: [table({ id: "t1", timingBand: "warm" })] });
-      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
-      expect(card.classList.contains("age-warm")).toBe(true);
-      expect(card.classList.contains("flash")).toBe(false);
-      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
-    });
-
-    it("renders the steady red accent for an overdue table, no flash, no badge", async () => {
-      const { el } = await mount({ tables: [table({ id: "t1", timingBand: "overdue" })] });
-      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
-      expect(card.classList.contains("age-overdue")).toBe(true);
-      expect(card.classList.contains("flash")).toBe(false);
-      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
-    });
-
-    it("forgotten flashes by default (motion allowed) and shows the non-colour forgotten badge", async () => {
+    it("rings a warm table in steady amber, no pulse, no badge", async () => {
       const { el } = await mount({
-        tables: [table({ id: "t1", timingBand: "forgotten" })],
+        tables: [table({ id: "t1", timingBand: "warm" })],
         reducedMotion: false,
       });
       const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
-      expect(card.classList.contains("age-forgotten")).toBe(true);
-      expect(card.classList.contains("flash")).toBe(true);
-      const badge = el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')!;
-      expect(badge).not.toBeNull();
-      expect(badge.textContent).toContain(t("floor.forgotten"));
+      const ring = card.querySelector('[data-ring="waiting"]')!;
+      expect(ring).not.toBeNull();
+      expect(pulses(ring)).toEqual([]);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
     });
 
-    it("reduced motion: a forgotten table renders steady red with NO flash class, but keeps the badge", async () => {
-      const { el } = await mount({
-        tables: [table({ id: "t1", timingBand: "forgotten" })],
-        reducedMotion: true,
-      });
-      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
-      expect(card.classList.contains("age-forgotten")).toBe(true);
-      expect(card.classList.contains("flash")).toBe(false);
-      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).not.toBeNull();
-    });
-
-    it("reduced motion never applies flash to a merely-overdue (non-forgotten) table either", async () => {
+    it("pulses slowly in red for an overdue table, no badge", async () => {
       const { el } = await mount({
         tables: [table({ id: "t1", timingBand: "overdue" })],
         reducedMotion: false,
       });
       const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
-      expect(card.classList.contains("age-overdue")).toBe(true);
-      expect(card.classList.contains("flash")).toBe(false);
+      const ring = card.querySelector('[data-ring="overdue"]')!;
+      expect(ring).not.toBeNull();
+      expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
     });
 
-    it("coexists with the occupancy accent — a forgotten OPEN-TAB table carries BOTH classes", async () => {
-      // The occupancy state-* accent and the timing age-* accent must never clobber one another.
+    it("forgotten pulses fast when motion is allowed and shows the non-colour forgotten badge", async () => {
+      const { el } = await mount({
+        tables: [table({ id: "t1", timingBand: "forgotten" })],
+        reducedMotion: false,
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      const ring = card.querySelector('[data-ring="forgotten"]')!;
+      expect(ring).not.toBeNull();
+      expect(pulses(ring)).toEqual(["wt-pulse-fast"]);
+      const badge = el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')!;
+      expect(badge).not.toBeNull();
+      expect(badge.textContent).toContain(t("floor.forgotten"));
+    });
+
+    it("reduced motion: a forgotten table's ring stands still, its left edge turns wide, and it keeps the badge", async () => {
+      const { el } = await mount({
+        tables: [table({ id: "t1", timingBand: "forgotten" })],
+        reducedMotion: true,
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      const ring = card.querySelector('[data-ring="forgotten"]')!;
+      expect(ring).not.toBeNull();
+      expect(pulses(ring)).toEqual([]);
+      expect(card.classList.contains("edge-forgotten")).toBe(true);
+      expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).not.toBeNull();
+    });
+
+    it("an overdue table pulses slowly, never fast", async () => {
+      const { el } = await mount({
+        tables: [table({ id: "t1", timingBand: "overdue" })],
+        reducedMotion: false,
+      });
+      const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
+      const ring = card.querySelector('[data-ring="overdue"]')!;
+      expect(ring.classList.contains("wt-pulse-slow")).toBe(true);
+      expect(ring.classList.contains("wt-pulse-fast")).toBe(false);
+      expect(card.classList.contains("edge-forgotten")).toBe(false);
+    });
+
+    it("coexists with the occupancy accent — a forgotten OPEN-TAB table keeps its state class and draws the forgotten ring", async () => {
       const { el } = await mount({
         tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, timingBand: "forgotten" })],
       });
       const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
       expect(card.classList.contains("state-open-tab")).toBe(true);
-      expect(card.classList.contains("age-forgotten")).toBe(true);
+      expect(card.querySelector('[data-ring="forgotten"]')).not.toBeNull();
     });
   });
 

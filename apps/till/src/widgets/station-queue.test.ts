@@ -1107,6 +1107,26 @@ describe("till-station-queue", () => {
     expect(ticket.classList.contains("flash")).toBe(true);
   });
 
+  it.each(["rail", "kanban"] as const)(
+    "flashes a forgotten ticket at the fast pulse token, 1 s by default (%s)",
+    async (view) => {
+      const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [groupA],
+        view,
+        now,
+        reducedMotion: false,
+      });
+      const flashing = el.shadowRoot!.querySelector(
+        view === "rail" ? ".ticket.age-forgotten" : ".cell.age-forgotten",
+      )!;
+      expect(getComputedStyle(flashing).animationName).toBe("age-forgotten-flash");
+      expect(getComputedStyle(flashing).animationDuration).toBe("1s");
+      el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
+      expect(getComputedStyle(flashing).animationDuration).toBe("3s");
+    },
+  );
+
   it("reduced motion: a forgotten ticket renders the steady-red class with NO flash/animation class", async () => {
     const now = Date.parse("2026-08-17T10:16:00.000Z"); // A: 16 min → forgotten
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {

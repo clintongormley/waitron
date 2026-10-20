@@ -358,6 +358,33 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with an overdue, a forgotten and a due card ringed, on the list", async () => {
+    const now = Date.parse("2026-09-29T20:00:00.000Z");
+    const [owing, paid] = partyTables as [TableState, TableState];
+    const ringed: TableState[] = [
+      { ...owing, timingBand: "overdue" },
+      { ...paid, timingBand: "forgotten" },
+      {
+        ...owing,
+        id: "t10",
+        label: "10",
+        party: {
+          ...owing.party!,
+          id: "v10",
+          tableIds: ["t10"],
+          reminder: { groupId: "g10", dueAt: new Date(now).toISOString() },
+        },
+      },
+    ];
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: ringed, now },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelectorAll("[data-ring]")).toHaveLength(3);
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations with held dishes counting down and a reminder due, on the list", async () => {
     const now = Date.parse("2026-09-29T20:00:00.000Z");
     const marked = partyTables.map((table, index): TableState =>
@@ -384,6 +411,32 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     expect(
       list.el.shadowRoot!.querySelector("[data-fire-due] wt-icon[name=floor-fire]"),
     ).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+  });
+
+  it("has no violations with a calm table, a held one and a reserved one, on the list", async () => {
+    const [owing] = partyTables as [TableState];
+    const quiet: TableState = { ...owing, pendingToServe: 0, readyToServe: 0, enRoute: 0 };
+    const tables: TableState[] = [
+      quiet,
+      {
+        ...quiet,
+        id: "t10",
+        label: "10",
+        signals: [{ kind: "held", count: 2 }],
+        party: { ...quiet.party!, id: "v10", tableIds: ["t10"] },
+      },
+      {
+        ...quiet,
+        id: "t11",
+        label: "11",
+        nextReservation: { time: "21:30" },
+        party: { ...quiet.party!, id: "v11", tableIds: ["t11"] },
+      },
+    ];
+    const list = await mountWidget<TillFloorScreen>("till-floor-screen", { zones, tables }, theme);
+    expect(list.el.shadowRoot!.querySelector("[data-nothing-needed]")).not.toBeNull();
+    expect(list.el.shadowRoot!.querySelector("[data-reserved]")).not.toBeNull();
     await expectNoA11yViolations(list.host);
   });
 

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
-import { heldChip, signalChips } from "./signal-chips.js";
+import type { TableSignal } from "@waitron/shared";
+import { chipState, heldChip, signalChips } from "./signal-chips.js";
 
 beforeEach(() => setLocale("en"));
 
@@ -26,6 +27,48 @@ describe("signalChips", () => {
       { key: "long-wait", text: "Forgotten", tone: "danger" },
     ]);
     expect(signalChips(forgotten, { forgottenShown: true })).toEqual([]);
+  });
+});
+
+describe("chipState", () => {
+  it("puts every chip signalChips gives, and the held chip, in its table state", () => {
+    const signals: TableSignal[] = [
+      { kind: "take_order" },
+      {
+        kind: "ready",
+        byStation: [
+          { stationId: "bar", stationName: "Bar", count: 3 },
+          { stationId: "kitchen", stationName: "Kitchen", count: 1 },
+        ],
+      },
+      { kind: "long_wait", band: "overdue" },
+      { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
+      { kind: "bill_requested", requestedAt: "2026-09-30T19:59:00.000Z" },
+    ];
+    expect(signalChips(signals).map((chip) => chipState(chip, signals))).toEqual([
+      "step",
+      "ready",
+      "ready",
+      "overdue",
+      "unavailable",
+      "bill",
+    ]);
+    const held = heldChip([{ kind: "held", count: 2 }], Number.POSITIVE_INFINITY, 0);
+    expect(held && chipState(held, [{ kind: "held", count: 2 }])).toBe("held");
+  });
+
+  it("reads a long wait's band from its signal", () => {
+    const warm: TableSignal[] = [{ kind: "long_wait", band: "warm" }];
+    const forgotten: TableSignal[] = [{ kind: "long_wait", band: "forgotten" }];
+    const [warmChip] = signalChips(warm);
+    const [forgottenChip] = signalChips(forgotten);
+    expect(warmChip && chipState(warmChip, warm)).toBe("waiting");
+    expect(forgottenChip && chipState(forgottenChip, forgotten)).toBe("forgotten");
+  });
+
+  it("gives no state for a chip it does not know", () => {
+    expect(chipState({ key: "something-else", text: "x", tone: "muted" }, [])).toBeUndefined();
+    expect(chipState({ key: "long-wait", text: "x", tone: "warning" }, [])).toBeUndefined();
   });
 });
 
