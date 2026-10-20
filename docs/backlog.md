@@ -3891,8 +3891,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   reader card, a QR scan and an NFC tap from the pay sheet, and the NFC button's permission ask;
   the browser tests use fakes for all four.
 
-- **A user guide for the till's payment sheet** (left open by A796). No till guide exists yet; the
-  guides under `apps/server/src/guide/` cover dashboard screens only.
+- **A user guide for the till's payment sheet** (left open by A796). No guide under
+  `apps/server/src/guide/` covers it.
 
 - **The next identical bill payment can be answered with one that got a server error** (narrowed
   by A796). A payment that got no answer, or is still being sent, now holds the bill on its locked
