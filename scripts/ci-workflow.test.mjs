@@ -2239,7 +2239,9 @@ function unquoted(value) {
 
 /**
  * Each step under a `steps:` key, with its `name:`, its `timeout-minutes:` value as written, and the
- * first line, unquoted, or `|`/`>` block of its `run:`, shell comments cut.
+ * first line, unquoted, or `|`/`>` block of its `run:`, shell comments cut. Also its `id:`, `uses:`,
+ * `if:` and `continue-on-error:` values, unquoted (`undefined` when absent), and its `env:` and
+ * `with:` blocks as objects of the unquoted `key: value` lines one indent deeper (`{}` when absent).
  */
 function workflowSteps(text) {
   const workflowLines = text.split("\n");
@@ -2267,20 +2269,40 @@ function workflowSteps(text) {
       if (indent < dash || (indent === dash && !/^\s*- /.test(current))) break;
       if (indent === dash) {
         const keyIndent = dash + 1 + current.slice(dash + 1).search(/\S/);
-        step = { line: at + 1, name: undefined, run: [], keyIndent };
+        step = { line: at + 1, name: undefined, run: [], keyIndent, env: {}, with: {} };
         steps.push(step);
-      } else if (indent !== step.keyIndent) continue;
+      } else if (indent !== step.keyIndent) {
+        if (step.mapping === undefined) continue;
+        step.mapping.indent ??= indent;
+        if (indent !== step.mapping.indent) continue;
+        const [, mapKey, mapValue] = /^([\w.-]+):\s*(.*)$/.exec(current.trim()) ?? [];
+        if (mapKey !== undefined) step[step.mapping.key][mapKey] = unquoted(mapValue.trim());
+        continue;
+      }
+      step.mapping = undefined;
       const [, key, value] = /^([\w-]+):\s*(.*)$/.exec(current.slice(step.keyIndent)) ?? [];
       if (key === "name") step.name = value.trim();
       if (key === "timeout-minutes") step.timeoutMinutes = value.trim();
+      if (key === "id") step.id = unquoted(value.trim());
+      if (key === "uses") step.uses = unquoted(value.trim());
+      if (key === "if") step.if = unquoted(value.trim());
+      if (key === "continue-on-error") step.continueOnError = unquoted(value.trim());
+      if ((key === "env" || key === "with") && /^(#.*)?$/.test(value.trim()))
+        step.mapping = { key, indent: undefined };
       if (key !== "run") continue;
       if (/^[|>][-+\d]*\s*(#.*)?$/.test(value)) blockIndent = step.keyIndent;
       else step.run.push(unquoted(value));
     }
   });
-  return steps.map(({ line, name, run, timeoutMinutes }) => ({
+  return steps.map(({ line, name, run, timeoutMinutes, ...settings }) => ({
     step: name ?? `the step at line ${line}`,
     timeoutMinutes,
+    id: settings.id,
+    uses: settings.uses,
+    if: settings.if,
+    continueOnError: settings.continueOnError,
+    env: settings.env,
+    with: settings.with,
     command: run
       .filter((runLine) => !/^\s*#/.test(runLine))
       .map((runLine) => runLine.replace(/\s#.*$/, ""))
@@ -2351,6 +2373,52 @@ const workflowsDir = join(repoRoot, ".github", "workflows");
 const workflowFiles = readdirSync(workflowsDir)
   .filter((name) => /\.ya?ml$/.test(name))
   .sort();
+
+describe("the workflow step reader", () => {
+  it("reads a step's id, condition, action, settings, environment and inputs", () => {
+    const text =
+      "on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n" +
+      "      - id: checkout\n" +
+      "        name: Check out\n" +
+      '        uses: "actions/checkout@v7"\n' +
+      "        if: steps.x.outcome == 'failure'\n" +
+      "        timeout-minutes: 2\n" +
+      "        continue-on-error: true\n" +
+      "        env:\n" +
+      "          # a comment\n" +
+      "          GIT_HTTP_LOW_SPEED_LIMIT: 1000\n" +
+      "\n" +
+      "          GIT_HTTP_LOW_SPEED_TIME: '20'\n" +
+      "        with:\n" +
+      "          fetch-depth: 0\n" +
+      "      - name: plain\n" +
+      "        run: echo hi\n";
+    expect(workflowSteps(text)).toEqual([
+      {
+        step: "Check out",
+        timeoutMinutes: "2",
+        command: "",
+        id: "checkout",
+        uses: "actions/checkout@v7",
+        if: "steps.x.outcome == 'failure'",
+        continueOnError: "true",
+        env: { GIT_HTTP_LOW_SPEED_LIMIT: "1000", GIT_HTTP_LOW_SPEED_TIME: "20" },
+        with: { "fetch-depth": "0" },
+      },
+      {
+        step: "plain",
+        timeoutMinutes: undefined,
+        command: "echo hi",
+        id: undefined,
+        uses: undefined,
+        if: undefined,
+        continueOnError: undefined,
+        env: {},
+        with: {},
+      },
+    ]);
+  });
+});
 
 /**
  * Every job runs under a `permissions:` block of its own or its workflow's, never the repository's
@@ -2849,6 +2917,24 @@ describe("CI image provenance", () => {
 });
 
 /**
+ * One workflow's jobs, each a two-space key under the top-level `jobs:` line with the lines from it
+ * to the next job or the next top-level key. Empty when there is no `jobs:` line.
+ */
+function jobBlocks(text) {
+  const workflowLines = text.split("\n");
+  const jobsKey = workflowLines.indexOf("jobs:");
+  const blocks = [];
+  if (jobsKey === -1) return blocks;
+  for (const line of workflowLines.slice(jobsKey + 1)) {
+    if (/^\S/.test(line) && !/^#/.test(line)) break;
+    const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
+    if (id !== undefined) blocks.push({ id, lines: [] });
+    blocks.at(-1)?.lines.push(line);
+  }
+  return blocks;
+}
+
+/**
  * One workflow's pnpm setups: every non-comment `uses: pnpm/action-setup` line, every step whose
  * `run:` command names `scripts/ci-setup-pnpm.sh` and whether it carries a positive
  * `timeout-minutes`, the jobs with a step running `pnpm`, and those of them whose first such step
@@ -2861,20 +2947,10 @@ function pnpmSetups(text) {
     .map((line, index) => ({ line: index + 1, text: line }))
     .filter(({ text: line }) => /^\s*(?:-\s+)?uses:\s*["']?pnpm\/action-setup\b/.test(line))
     .map(({ line }) => line);
-  const jobsKey = workflowLines.indexOf("jobs:");
-  const jobBlocks = [];
-  if (jobsKey !== -1) {
-    for (const line of workflowLines.slice(jobsKey + 1)) {
-      if (/^\S/.test(line) && !/^#/.test(line)) break;
-      const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
-      if (id !== undefined) jobBlocks.push({ id, lines: [] });
-      jobBlocks.at(-1)?.lines.push(line);
-    }
-  }
   const setups = [];
   const pnpmJobs = [];
   const lateJobs = [];
-  for (const { id, lines } of jobBlocks) {
+  for (const { id, lines } of jobBlocks(text)) {
     const steps = workflowSteps(lines.join("\n"));
     for (const { command, timeoutMinutes } of steps) {
       if (!/\bscripts\/ci-setup-pnpm\.sh\b/.test(command)) continue;
