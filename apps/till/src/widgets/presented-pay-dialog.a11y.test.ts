@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./presented-pay-dialog.js";
 import type { TillPresentedPayDialog } from "./presented-pay-dialog.js";
 import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
@@ -71,6 +72,7 @@ async function pressQr(el: HTMLElement & { updateComplete: Promise<unknown> }): 
 }
 
 const scanBackgrounds = new Map<string, string>();
+const noticeBackgrounds = new Map<string, string>();
 
 describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillPresentedPayDialog> = {}) =>
@@ -148,6 +150,75 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
       refusal: { code: "order.payment_in_flight" },
     });
     await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a tap's notice above the row, and a refusal on the locked sheet", async () => {
+    const picked = await mount({
+      notice: { message: t("equipment.picked_up").replace("{item}", "Lector 3"), tone: "info" },
+    });
+    expect(picked.el.shadowRoot!.querySelector("[data-pay-notice]")).not.toBeNull();
+    await expectNoA11yViolations(picked.host);
+    cleanupWidgets();
+    const locked = await mount({
+      notice: { message: codeMessage("device.equipment_held"), tone: "error" },
+      confirmation: { tender: { method: "cash", amount: "70.00" }, outstanding: "62.40" },
+    });
+    expect(locked.el.shadowRoot!.querySelector("[data-pay-notice]")).not.toBeNull();
+    await expectNoA11yViolations(locked.host);
+  });
+
+  it.each([
+    ["form", 390],
+    ["form", 1280],
+    ["locked", 390],
+    ["locked", 1280],
+  ] as const)("looks right with a tap's notice, %s, at %i px", async (view, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await mount(
+        view === "form"
+          ? {
+              notice: {
+                message: t("equipment.picked_up").replace("{item}", "Lector 3"),
+                tone: "info",
+              },
+            }
+          : {
+              notice: { message: codeMessage("device.equipment_held"), tone: "error" },
+              confirmation: { tender: { method: "cash", amount: "70.00" }, outstanding: "62.40" },
+            },
+      );
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      noticeBackgrounds.set(`${view}-${theme}-${width}`, background);
+      if (theme === "dark") {
+        const light = noticeBackgrounds.get(`${view}-light-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-notice-presented-${view}-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const line = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
+      const shown = line.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          noticeWidth: shown.width,
+          noticeRight: box.right - shown.right,
+          noticeColor: getComputedStyle(line).color,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 
   it.each([390, 1280])("looks right locked at %i px", async (width) => {

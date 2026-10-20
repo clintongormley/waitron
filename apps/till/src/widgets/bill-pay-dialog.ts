@@ -24,8 +24,8 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { payScanView } from "./pay-equipment.js";
-import type { PayEquipmentRole } from "./pay-equipment.js";
+import { payNotice, payNoticeStyles, payScanView } from "./pay-equipment.js";
+import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -180,6 +180,7 @@ export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
     guestsStepperStyles,
+    payNoticeStyles,
     css`
       .body {
         display: flex;
@@ -445,6 +446,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) receiptGuests: number | null = null;
   /** A handheld offers Whole bill, and a card on a separate terminal as a method of its own. */
   @property({ type: Boolean }) handheld = false;
+  /** On a handheld, what a sticker's tap or scan did while the sheet is open. */
+  @property({ attribute: false }) notice: PayNotice | null = null;
   /** On a handheld, whether the profile takes a card on a reader, whether or not one is held. */
   @property({ type: Boolean }) takesReaderCard = false;
   /** On a handheld, whether the profile takes a card keyed on a separate terminal. */
@@ -969,7 +972,11 @@ export class TillBillPayDialog extends LitElement {
       @wt-close=${(event: Event) => this.#close(event)}
     >
       <div class="body">
-        ${this.scanning ? payScanView(this, () => (this.scanning = false)) : this.#body()}
+        ${
+          this.scanning
+            ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
+            : this.#body()
+        }
       </div>
     </wt-dialog>`;
   }
@@ -1280,6 +1287,7 @@ export class TillBillPayDialog extends LitElement {
       <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${this.#wayFields(errors)} ${this.#methodFields(errors)}
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
+      ${this.#methods().length === 0 ? this.#notice() : nothing}
       <wt-form-actions .error=${bottom}>
         <wt-button
           slot="cancel"
@@ -1480,21 +1488,25 @@ export class TillBillPayDialog extends LitElement {
   /** A handheld's reader and printer row; its events bubble out to the app unchanged. */
   #equipmentRow(cardRequired: boolean): TemplateResult | typeof nothing {
     if (!this.handheld) return nothing;
-    return html`<till-pay-equipment
-      .equipment=${this.equipment}
-      .cardRequired=${cardRequired}
-      .open=${this.rowOpen}
-      .saving=${this.equipmentSaving}
-      .fieldErrors=${this.equipmentErrors}
-      .readerReason=${this.readerReason}
-      .canScan=${this.canScan}
-      .askNfc=${this.askNfc}
-      .disabled=${this.busy || this.confirmationLocked}
-      .fixedReader=${this.fixedReader}
-      @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
-        (this.rowOpen = event.detail.open)}
-      @pay-equipment-qr=${() => (this.scanning = true)}
-    ></till-pay-equipment>`;
+    return html`${this.#notice()}<till-pay-equipment
+        .equipment=${this.equipment}
+        .cardRequired=${cardRequired}
+        .open=${this.rowOpen}
+        .saving=${this.equipmentSaving}
+        .fieldErrors=${this.equipmentErrors}
+        .readerReason=${this.readerReason}
+        .canScan=${this.canScan}
+        .askNfc=${this.askNfc}
+        .disabled=${this.busy || this.confirmationLocked}
+        .fixedReader=${this.fixedReader}
+        @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
+          (this.rowOpen = event.detail.open)}
+        @pay-equipment-qr=${() => (this.scanning = true)}
+      ></till-pay-equipment>`;
+  }
+
+  #notice(): TemplateResult | typeof nothing {
+    return this.handheld ? payNotice(this.notice) : nothing;
   }
 
   #manualCardFields(): TemplateResult {
@@ -1840,6 +1852,7 @@ export class TillBillPayDialog extends LitElement {
               </div>
               <p class="muted" data-pay-choose-note>${t("bill_pay.choose_later")}</p>`
       }
+      ${this.#notice()}
       <wt-form-actions .error=${bottom}>${this.#backButton()}</wt-form-actions>`;
   }
 

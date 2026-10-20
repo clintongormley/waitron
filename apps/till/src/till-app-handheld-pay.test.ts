@@ -1625,6 +1625,21 @@ describe("till-app: a sticker scanned from the sheet", () => {
     expect(await rowSummary(el)).toContain("Lector 3");
   });
 
+  it("a reader's sticker's notice shows inside the sheet, not in the toast beneath it", async () => {
+    film(formatEquipmentCode("reader", READER_ID));
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_3, BARRA));
+    const { el } = await scanFromSheet(setDeviceEquipment);
+
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    await flush(el);
+    expect(text(inDialog(el, "[data-pay-notice]"))).toBe(
+      t("equipment.picked_up").replace("{item}", "Lector 3"),
+    );
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-nfc-notice]")!.open,
+    ).toBe(false);
+  });
+
   it("a reader's sticker still out holds Continuar", async () => {
     film(formatEquipmentCode("reader", READER_ID));
     let answer!: () => void;
@@ -1703,5 +1718,147 @@ describe("till-app: a sticker scanned from the sheet", () => {
     await flush(el);
     expect(before).toContain("Barra");
     expect(await rowSummary(el)).toBe(before);
+  });
+});
+
+describe("till-app: a sticker's notice inside the sheet", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const pickedUp = (name: string) => t("equipment.picked_up").replace("{item}", name);
+
+  function readers(chosen: EquipmentItem): DeviceEquipment {
+    return {
+      roles: [
+        roleOf("receipt", BARRA, [BARRA]),
+        roleOf("card_terminal", chosen, [LECTOR_2, LECTOR_3]),
+      ],
+    };
+  }
+
+  const toast = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-nfc-notice]")!;
+  const row = (el: TillApp) => inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment;
+
+  beforeEach(() => {
+    installNfc();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  async function phoneSheet(overrides: Record<string, unknown> = {}) {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_3));
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)),
+        setDeviceEquipment,
+        ...overrides,
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    return { el, order, setDeviceEquipment };
+  }
+
+  async function tap(el: TillApp, id = READER_ID): Promise<FakeNdefReader> {
+    const nfc = await nfcReader();
+    nfc.read(`waitron-equipment:reader:${id}`);
+    await flush(el);
+    return nfc;
+  }
+
+  it("a tap with the pay sheet open changes its row, its drop-downs and its charge button, and leaves the listener running", async () => {
+    const { el, setDeviceEquipment } = await phoneSheet();
+    const nfc = await tap(el);
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(pickedUp("Lector 3")),
+    );
+    expect(inDialog(el, "[data-pay-notice]")!.getAttribute("role")).toBe("status");
+    expect(toast(el).open).toBe(false);
+    expect(await rowSummary(el)).toContain("Lector 3");
+    await row(el).updateComplete;
+    const change = row(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
+    if (change !== null) await userEvent.click(change);
+    await flush(el);
+    await row(el).updateComplete;
+    const combobox = row(el).shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    expect(combobox.value).toBe(READER_ID);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toContain("Lector 3");
+
+    expect(nfc.signal!.aborted).toBe(false);
+    nfc.read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+  });
+
+  it("a tap on the confirmation step makes Cobrar send the tapped reader", async () => {
+    const { el } = await phoneSheet();
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toContain("Lector 2");
+
+    await tap(el);
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(pickedUp("Lector 3")),
+    );
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toContain("Lector 3");
+    expect(toast(el).open).toBe(false);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: READER_ID });
+  });
+
+  it("a refused tap says why in the sheet, as an alert", async () => {
+    const { el } = await phoneSheet({
+      setDeviceEquipment: vi.fn().mockRejectedValue({ code: "device.equipment_held", status: 409 }),
+    });
+    await tap(el);
+
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-pay-notice]"))).toBe(codeMessage("device.equipment_held")),
+    );
+    expect(inDialog(el, "[data-pay-notice]")!.getAttribute("role")).toBe("alert");
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("closing the sheet clears its notice, so the toast does not show it afterwards", async () => {
+    const { el } = await phoneSheet();
+    await tap(el);
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-notice]")).not.toBeNull());
+
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("a tap on a presented bill's locked sheet shows above its buttons", async () => {
+    const presented = (el: TillApp) =>
+      el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+    const { el, order } = await phoneSheet({
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+      collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    emit(presented(el)!, "presented-pay", { method: "cash", tendered: "150.00", guests: 4 });
+    await flush(el);
+    await pressPaySheet(el, order);
+    await presented(el)!.updateComplete;
+    expect(presented(el)!.confirmation).toBeDefined();
+
+    await tap(el);
+
+    const line = () => presented(el)!.shadowRoot!.querySelector("[data-pay-notice]");
+    await vi.waitFor(() => expect(text(line())).toBe(pickedUp("Lector 3")));
+    const actions = presented(el)!.shadowRoot!.querySelector("wt-form-actions")!;
+    expect(
+      line()!.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(toast(el).open).toBe(false);
   });
 });

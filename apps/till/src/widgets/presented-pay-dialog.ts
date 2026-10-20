@@ -20,8 +20,8 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { payScanView } from "./pay-equipment.js";
-import type { PayEquipmentRole } from "./pay-equipment.js";
+import { payNotice, payNoticeStyles, payScanView } from "./pay-equipment.js";
+import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import type { RetainedTender } from "./tender-pay.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
@@ -67,6 +67,7 @@ export class TillPresentedPayDialog extends LitElement {
   static override styles = [
     baseStyles,
     guestsStepperStyles,
+    payNoticeStyles,
     css`
       .body {
         display: flex;
@@ -157,6 +158,8 @@ export class TillPresentedPayDialog extends LitElement {
   @property({ attribute: false }) equipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
   @property({ attribute: false }) readerReason: string | null = null;
   @property({ type: Boolean }) canScan = false;
+  /** What a sticker's tap or scan did while the sheet is open. */
+  @property({ attribute: false }) notice: PayNotice | null = null;
   @property({ type: Boolean }) askNfc = false;
   /** An equipment change is out: nothing is taken until it is answered. */
   @property({ type: Boolean }) equipmentBusy = false;
@@ -381,7 +384,7 @@ export class TillPresentedPayDialog extends LitElement {
           this.confirmation !== undefined
             ? this.#locked(this.confirmation)
             : this.scanning
-              ? payScanView(this, () => (this.scanning = false))
+              ? payScanView(this, () => (this.scanning = false), this.notice)
               : this.#form()
         }
       </div>
@@ -399,6 +402,7 @@ export class TillPresentedPayDialog extends LitElement {
       <p class="whole" data-presented-pay-whole>${t("presented_pay.whole_only")}</p>
       ${this.#methodFields(errors)}
       ${this.asksGuests ? this.#guests(errors.get("guests")) : nothing}
+      ${this.#methods().length === 0 ? payNotice(this.notice) : nothing}
       <wt-form-actions .error=${this.#bottomMessage(errors)}>
         <wt-button
           slot="cancel"
@@ -473,6 +477,7 @@ export class TillPresentedPayDialog extends LitElement {
             })
       }
       ${this.busy ? nothing : html`<p role="status">${t("sale.unconfirmed")}</p>`}
+      ${payNotice(this.notice)}
       <wt-form-actions .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal)}>
         <wt-button
           slot="cancel"
@@ -577,21 +582,21 @@ export class TillPresentedPayDialog extends LitElement {
 
   /** The reader and printer row; its events bubble out to the app unchanged. */
   #equipmentRow(): TemplateResult {
-    return html`<till-pay-equipment
-      .equipment=${this.equipment}
-      .cardRequired=${this.method === "card"}
-      .open=${this.rowOpen}
-      .saving=${this.equipmentSaving}
-      .fieldErrors=${this.equipmentErrors}
-      .readerReason=${this.readerReason}
-      .canScan=${this.canScan}
-      .askNfc=${this.askNfc}
-      .disabled=${this.busy}
-      .fixedReader=${this.fixedReader}
-      @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
-        (this.rowOpen = event.detail.open)}
-      @pay-equipment-qr=${() => (this.scanning = true)}
-    ></till-pay-equipment>`;
+    return html`${payNotice(this.notice)}<till-pay-equipment
+        .equipment=${this.equipment}
+        .cardRequired=${this.method === "card"}
+        .open=${this.rowOpen}
+        .saving=${this.equipmentSaving}
+        .fieldErrors=${this.equipmentErrors}
+        .readerReason=${this.readerReason}
+        .canScan=${this.canScan}
+        .askNfc=${this.askNfc}
+        .disabled=${this.busy}
+        .fixedReader=${this.fixedReader}
+        @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
+          (this.rowOpen = event.detail.open)}
+        @pay-equipment-qr=${() => (this.scanning = true)}
+      ></till-pay-equipment>`;
   }
 
   #guests(error: string | undefined): TemplateResult {

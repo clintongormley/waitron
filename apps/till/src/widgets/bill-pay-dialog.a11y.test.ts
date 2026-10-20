@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
@@ -65,6 +66,7 @@ const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
 const handheldBackgrounds = new Map<string, string>();
 const rowBackgrounds = new Map<string, string>();
+const noticeBackgrounds = new Map<string, string>();
 
 const LECTOR_2: EquipmentItem = {
   id: "r2",
@@ -626,6 +628,70 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       await page.viewport(viewport.width, viewport.height);
     }
   });
+
+  it.each([
+    ["info", () => t("equipment.picked_up").replace("{item}", "Lector 3")],
+    ["error", () => codeMessage("device.equipment_held")],
+  ] as const)(
+    "has no violations on a handheld confirmation with a tap's %s notice",
+    async (tone, message) => {
+      const { host, el } = await withRow();
+      await typed(el, "people", "3");
+      await previewed(el, shareOf3);
+      el.notice = { message: message(), tone };
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-pay-notice]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it.each([390, 1280])(
+    "looks right on a handheld confirmation with a tap's notice at %i px",
+    async (width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      try {
+        expect(window.innerWidth).toBe(width);
+        const { el } = await withRow();
+        await typed(el, "people", "3");
+        await previewed(el, shareOf3);
+        el.notice = {
+          message: t("equipment.picked_up").replace("{item}", "Lector 3"),
+          tone: "info",
+        };
+        await el.updateComplete;
+        const panel = el
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+        const background = getComputedStyle(panel).backgroundColor;
+        noticeBackgrounds.set(`${theme}-${width}`, background);
+        if (theme === "dark") {
+          const light = noticeBackgrounds.get(`light-${width}`);
+          expect(light, "run the light case first").toBeDefined();
+          expect(background).not.toBe(light);
+        }
+        const shot = `__screenshots__/look/a796-notice-confirm-${theme}-${width}`;
+        await page.screenshot({ element: panel, path: `${shot}.png` });
+        const box = panel.getBoundingClientRect();
+        const line = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
+        const shown = line.getBoundingClientRect();
+        const row = el.shadowRoot!.querySelector<HTMLElement>("till-pay-equipment")!;
+        await commands.writeFile(
+          `src/widgets/${shot}.json`,
+          JSON.stringify({
+            innerWidth: window.innerWidth,
+            panelWidth: box.width,
+            noticeWidth: shown.width,
+            noticeAboveRow: shown.bottom <= row.getBoundingClientRect().top,
+            noticeColor: getComputedStyle(line).color,
+            background,
+          }),
+        );
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
 
   it("has no violations scanning a sticker in place of the form", async () => {
     const stop = blankCamera();

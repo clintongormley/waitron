@@ -3736,11 +3736,15 @@ export class TillApp extends LitElement {
       if (this.#counterMenuPending) this.#followDefault();
       if (this.#tableMenuPending) this.#followTableMenu();
     }
-    if (changed.has("nfcNotice") && this.nfcNotice !== null)
+    if (changed.has("nfcNotice") && this.nfcNotice !== null && !this.#paySheetOpen())
       this.renderRoot.querySelector<WtToast>("[data-nfc-notice]")!.show();
   }
 
   override willUpdate(changed: PropertyValues): void {
+    // A notice the sheet showed is not repeated in the toast once the sheet closes.
+    const sheetOpen = this.#paySheetOpen();
+    if (this.#paySheetWasOpen && !sheetOpen) this.nfcNotice = null;
+    this.#paySheetWasOpen = sheetOpen;
     if (this.finishRefunds !== null && !this.#finishRefundsCurrent(this.finishRefunds))
       this.finishRefunds = null;
     if (
@@ -9488,6 +9492,7 @@ export class TillApp extends LitElement {
         .asksGuests=${this.#billPayingAsksGuests(open)}
         .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guests ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
         .handheld=${this.handheldMode}
+        .notice=${this.nfcNotice}
         .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
         .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
         .tableName=${this.#payingTableName(open)}
@@ -9526,6 +9531,7 @@ export class TillApp extends LitElement {
       .receiptGuests=${defaultReceiptGuests(this.orderParty)}
       .equipment=${this.deviceEquipment}
       .canScan=${canScan()}
+      .notice=${this.nfcNotice}
       .fixedReader=${this.#fixedPayReader()}
       .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
       .equipmentSaving=${this.payEquipmentSaving}
@@ -9541,6 +9547,13 @@ export class TillApp extends LitElement {
       @presented-pay-resend=${() => void this.#onPresentedResend()}
       @presented-pay-close=${() => this.#closePresented(open.id)}
     ></till-presented-pay-dialog>`;
+  }
+
+  #paySheetWasOpen = false;
+
+  /** A pay sheet that draws a sticker's notice itself, so the toast beneath it stays closed. */
+  #paySheetOpen(): boolean {
+    return this.billPaying !== null ? this.handheldMode : this.#presentedNow() !== null;
   }
 
   /** The pay sheet open now: the bill payment dialog, else the presented bill's sheet. */
@@ -17599,7 +17612,7 @@ export class TillApp extends LitElement {
           class="equipment-toast"
           data-nfc-notice
           .tone=${this.nfcNotice?.tone ?? "info"}
-          .open=${this.nfcNotice !== null}
+          .open=${this.nfcNotice !== null && !this.#paySheetOpen()}
           .message=${this.nfcNotice?.message ?? ""}
           close-label=${t("equipment.close")}
           @wt-close=${() => (this.nfcNotice = null)}

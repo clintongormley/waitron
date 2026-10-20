@@ -6,6 +6,7 @@ import type { ComboboxOption } from "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-notice.js";
 import "./equipment-scanner.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
@@ -26,11 +27,51 @@ export interface PayEquipmentPick {
   takeOver: boolean;
 }
 
+/** What a sticker's tap or scan did, shown inside an open pay sheet. */
+export interface PayNotice {
+  message: string;
+  tone: "info" | "error";
+}
+
+/** The pay sheets' line for a {@link PayNotice}; both sheets add {@link payNoticeStyles}. */
+export function payNotice(notice: PayNotice | null): TemplateResult | typeof nothing {
+  if (notice === null) return nothing;
+  // Two templates, so a change of tone puts in a new live region rather than retyping one.
+  return notice.tone === "error"
+    ? html`<wt-notice class="pay-notice error" role="alert" data-pay-notice .duration=${0}
+        >${notice.message}</wt-notice
+      >`
+    : html`<wt-notice class="pay-notice" role="status" data-pay-notice .duration=${0}
+        >${notice.message}</wt-notice
+      >`;
+}
+
+export const payNoticeStyles = css`
+  .pay-notice {
+    display: block;
+    padding: var(--wt-space-2) var(--wt-space-3);
+    border: 1px solid var(--wt-color-border);
+    border-inline-start: var(--wt-space-1) solid var(--wt-color-success);
+    border-radius: var(--wt-radius-md);
+    background: var(--wt-color-surface-raised);
+    color: var(--wt-color-success);
+    font-weight: var(--wt-font-weight-medium);
+  }
+  .pay-notice.error {
+    border-inline-start-color: var(--wt-color-danger);
+    color: var(--wt-color-danger);
+  }
+`;
+
 /**
  * The camera a pay sheet shows in place of its body after the row's QR: either kind of sticker is
  * read, and `pay-equipment-sticker` carries it to the app, which sends it as an NFC tap.
  */
-export function payScanView(host: HTMLElement, back: () => void): TemplateResult {
+export function payScanView(
+  host: HTMLElement,
+  back: () => void,
+  notice: PayNotice | null,
+): TemplateResult {
   return html`<p data-pay-scan-heading><b>${t("equipment.scan_qr")}</b></p>
     <till-equipment-scanner
       kind="any"
@@ -45,6 +86,7 @@ export function payScanView(host: HTMLElement, back: () => void): TemplateResult
         );
       }}
     ></till-equipment-scanner>
+    ${payNotice(notice)}
     <wt-form-actions>
       <wt-button variant="secondary" data-pay-scan-back @click=${back}>
         ${t("pay_equipment.scan_back")}
