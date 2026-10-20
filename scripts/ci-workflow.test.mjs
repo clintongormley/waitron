@@ -1864,7 +1864,7 @@ describe("the sharded jobs", () => {
       "@waitron/provisioning": 6,
       "@waitron/server": 11,
       "@waitron/venue-service": 4,
-      "@waitron/till": 2,
+      "@waitron/till": 7,
     });
   });
 
