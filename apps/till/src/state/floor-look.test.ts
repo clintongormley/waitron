@@ -538,14 +538,14 @@ describe("mapLook", () => {
   });
 });
 
-describe("the words floor-map.test.ts read through statusWords", () => {
+describe("mapLook's description", () => {
   const startLocale = currentLocale();
   afterEach(() => setLocale(startLocale));
   const words = (members: TableState[]) => mapLook(members, now).description;
   const seated = en["floor.status_seated"];
   const moving = today({ needsMoving: true });
 
-  it("says the status in words (was: says the status in words)", () => {
+  it("says the status in words", () => {
     expect(words([table(free)])).toBe(en["floor.free"]);
     expect(words([table({ ...free, nextReservation: { time: "20:30" } })])).toBe(
       `${en["floor.reserved"]} 20:30`,
@@ -563,7 +563,7 @@ describe("the words floor-map.test.ts read through statusWords", () => {
     );
   });
 
-  it("says one ready dish in the singular (was: …on the pin and in the words)", () => {
+  it("says one ready dish in the singular", () => {
     expect(words([table({ readyToServe: 1 })])).toBe(`${seated}, ${en["table.flash_ready_one"]}`);
     setLocale("es");
     expect(words([table({ readyToServe: 1 })])).toBe(
@@ -571,7 +571,7 @@ describe("the words floor-map.test.ts read through statusWords", () => {
     );
   });
 
-  it("takes a merge's words from the member that has them, its count never summed (was: takes a merge's fill words…)", () => {
+  it("takes a merge's words from the member that has them, its count never summed", () => {
     const booked = table({ id: "a", ...free, nextReservation: { time: "21:00" } });
     const freeTable = table({ id: "b", ...free });
     expect(words([freeTable, booked])).toBe(`${en["floor.reserved"]} 21:00`);
@@ -582,7 +582,7 @@ describe("the words floor-map.test.ts read through statusWords", () => {
     expect(words([freeTable, ...sameParty])).toBe(`${seated}, ${readyText(2)}`);
   });
 
-  it("reads Needs moving, with a booking's words too (was: takes the clearing fill and reads Needs moving…)", () => {
+  it("reads Needs moving, with a booking's words too", () => {
     expect(words([table({ ...free, today: moving })])).toBe(en["floor.needs_moving"]);
     const booked = table({ ...free, today: moving, nextReservation: { time: "20:30" } });
     expect(words([booked])).toBe(`${en["floor.needs_moving"]}, ${en["floor.reserved"]} 20:30`);
@@ -590,7 +590,7 @@ describe("the words floor-map.test.ts read through statusWords", () => {
     expect(words([table({ ...free, today: moving })])).toBe(es["floor.needs_moving"]);
   });
 
-  it("reads Needs clearing while it also needs moving, alone or in a merge (was: reads Needs clearing while it also needs clearing; in a merge ranks with Needs clearing…)", () => {
+  it("reads Needs clearing while it also needs moving, alone or in a merge", () => {
     const both = table({ ...free, condition: "needs_clearing", today: moving });
     expect(words([both])).toBe(en["floor.needs_clearing"]);
     const movingTable = table({ id: "a", ...free, today: moving });

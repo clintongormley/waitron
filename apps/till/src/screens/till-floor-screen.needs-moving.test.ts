@@ -159,6 +159,7 @@ describe("till-floor-screen: a table that needs moving", () => {
 
     const table = drawn(el, "t3");
     expect(table.placement.x).toBe(12);
+    expect(table.fill).toBe("free");
     expect(table.outline).toBe("clearing");
     expect(table.description).toBe("Needs moving");
     expect(drawn(el, "t4").description).toBe(t("floor.free"));
@@ -167,6 +168,7 @@ describe("till-floor-screen: a table that needs moving", () => {
   it("shows Needs clearing while it also needs clearing", async () => {
     const el = await mount([{ ...moving("t3", 12), condition: "needs_clearing" }]);
 
+    expect(drawn(el, "t3").fill).toBe("plain");
     expect(drawn(el, "t3").outline).toBe("clearing");
     expect(drawn(el, "t3").description).toBe(t("floor.needs_clearing"));
     await tap(el, "t3");

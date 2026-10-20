@@ -101,6 +101,7 @@ import type {
 } from "../api/client.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
+import { reminderClock } from "../state/floor-look.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import {
@@ -2015,6 +2016,7 @@ export class TillFloorScreen extends LitElement {
       this.viewOverride,
       this.#pending,
       currentLocale(),
+      reminderClock(this.tables, this.#drawnAt),
     ];
     if (this.#zoneInputs?.every((input, i) => input === inputs[i])) return this.#zone;
     this.#zoneInputs = inputs;

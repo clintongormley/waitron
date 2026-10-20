@@ -72,7 +72,11 @@ function party(id: string): TableParty {
 }
 
 const bill = { kind: "bill_requested" as const, requestedAt: "2026-10-10T20:00:00Z" };
-const seated = { state: "open-tab" as const, condition: "held" as const, party: party("S") };
+const seated = (id: string) => ({
+  state: "open-tab" as const,
+  condition: "held" as const,
+  party: party(`P-${id}`),
+});
 
 const startLocale = currentLocale();
 afterEach(() => setLocale(startLocale));
@@ -95,18 +99,18 @@ describe("standInStatus", () => {
   });
 
   it("a bill requested beats seated, and needs clearing beats both", () => {
-    expect(standInStatus(table({ ...seated, signals: [bill] })).fill).toBe("bill");
+    expect(standInStatus(table({ ...seated("t1"), signals: [bill] })).fill).toBe("bill");
     expect(standInStatus(table({ condition: "needs_clearing", signals: [bill] })).fill).toBe(
       "clearing",
     );
   });
 
   it("a forgotten order's dot beats ready dishes'", () => {
-    expect(standInStatus(table({ ...seated, readyToServe: 2 })).dot).toBe("ready");
-    expect(standInStatus(table({ ...seated, readyToServe: 2, timingBand: "forgotten" })).dot).toBe(
-      "forgotten",
-    );
-    expect(standInStatus(table({ ...seated, timingBand: "overdue" })).dot).toBeNull();
+    expect(standInStatus(table({ ...seated("t1"), readyToServe: 2 })).dot).toBe("ready");
+    expect(
+      standInStatus(table({ ...seated("t1"), readyToServe: 2, timingBand: "forgotten" })).dot,
+    ).toBe("forgotten");
+    expect(standInStatus(table({ ...seated("t1"), timingBand: "overdue" })).dot).toBeNull();
   });
 });
 
@@ -138,35 +142,50 @@ describe("words", () => {
   const pin = (over: Partial<TableState>): string => pinText(table(over));
 
   it("says one ready dish in the singular on the pin", () => {
-    expect(pin({ ...seated, readyToServe: 1 })).toBe("1 ready");
+    expect(pin({ ...seated("t1"), readyToServe: 1 })).toBe("1 ready");
     setLocale("es");
-    expect(pin({ ...seated, readyToServe: 1 })).toBe("1 listo");
-    expect(pin({ ...seated, readyToServe: 2 })).toBe("2 listos");
+    expect(pin({ ...seated("t1"), readyToServe: 1 })).toBe("1 listo");
+    expect(pin({ ...seated("t1"), readyToServe: 2 })).toBe("2 listos");
   });
 
   it("gives the pin its shortest word", () => {
-    expect(pin({ ...seated, readyToServe: 2, timingBand: "forgotten" })).toBe("Forgotten");
-    expect(pin({ ...seated, readyToServe: 2, pendingToServe: 3 })).toBe("2 ready");
-    expect(pin({ ...seated, signals: [bill] })).toBe("Bill requested");
-    expect(pin({ ...seated, pendingToServe: 3 })).toBe("3 to serve");
-    expect(pin({ ...seated })).toBe("Seated");
+    expect(pin({ ...seated("t1"), readyToServe: 2, timingBand: "forgotten" })).toBe("Forgotten");
+    expect(pin({ ...seated("t1"), readyToServe: 2, pendingToServe: 3 })).toBe("2 ready");
+    expect(pin({ ...seated("t1"), signals: [bill] })).toBe("Bill requested");
+    expect(pin({ ...seated("t1"), pendingToServe: 3 })).toBe("3 to serve");
+    expect(pin({ ...seated("t1") })).toBe("Seated");
     expect(pin({ nextReservation: { time: "20:30" } })).toBe("Reserved 20:30");
     expect(pin({ signals: [bill], pendingToServe: 3 })).toBe("Bill requested");
   });
 
   it("takes a merge's pin count from the member that gave the dot, never summed", () => {
     const free = table({ id: "b" });
-    const party = table({ id: "c", ...seated, readyToServe: 2, pendingToServe: 5 });
-    const sameParty = table({ id: "d", ...seated, readyToServe: 2, pendingToServe: 5 });
-    const merged = [free, party, sameParty];
+    const shared = party("S");
+    const seatedParty = table({
+      id: "c",
+      ...seated("c"),
+      party: shared,
+      readyToServe: 2,
+      pendingToServe: 5,
+    });
+    const sameParty = table({
+      id: "d",
+      ...seated("d"),
+      party: shared,
+      readyToServe: 2,
+      pendingToServe: 5,
+    });
+    const merged = [free, seatedParty, sameParty];
     expect(pinText(merged)).toBe("2 ready");
-    expect(pinText([free, table({ id: "e", ...seated, pendingToServe: 5 })])).toBe("5 to serve");
+    expect(pinText([free, table({ id: "e", ...seated("e"), pendingToServe: 5 })])).toBe(
+      "5 to serve",
+    );
   });
 
   it("reads a merge's to-serve count from its seated member with the most, in either order", () => {
     const delivery = table({ id: "a", state: "delivery-pending", pendingToServe: 0 });
-    const party = table({ id: "b", ...seated, pendingToServe: 3 });
-    const other = table({ id: "c", ...seated, pendingToServe: 2 });
+    const party = table({ id: "b", ...seated("b"), pendingToServe: 3 });
+    const other = table({ id: "c", ...seated("c"), pendingToServe: 2 });
     expect(pinText([delivery, party])).toBe("3 to serve");
     expect(pinText([party, delivery])).toBe("3 to serve");
     expect(pinText([other, party, delivery])).toBe("3 to serve");
@@ -192,7 +211,7 @@ describe("a table that needs moving", () => {
 
   it("in a merge ranks with Needs clearing, above a bill, on the pin", () => {
     const moving = table({ id: "a", today: movingToday });
-    const billed = table({ id: "b", ...seated, signals: [bill] });
+    const billed = table({ id: "b", ...seated("b"), signals: [bill] });
     expect(statusPin([billed, moving])).toEqual({
       fill: "clearing",
       dot: null,
@@ -249,12 +268,12 @@ describe("zones and their tables", () => {
     const t4 = table({
       id: "t4",
       label: "4",
-      ...seated,
+      ...seated("t4"),
       readyToServe: 2,
       today: today({ joinId: "j1" }),
     });
     const t5 = table({ id: "t5", label: "5", today: today({ joinId: "j1" }) });
-    const t6 = table({ id: "t6", label: "6", ...seated, party: party("T6"), today: today() });
+    const t6 = table({ id: "t6", label: "6", ...seated("t6"), party: party("T6"), today: today() });
     const shared = {
       fill: "ready",
       outline: null,
@@ -289,18 +308,30 @@ describe("zones and their tables", () => {
     const t1 = table({
       id: "t1",
       label: "1",
-      ...seated,
+      ...seated("t1"),
       party: p,
       readyToServe: 2,
       today: today(),
     });
-    const t2 = table({ id: "t2", label: "2", ...seated, party: p, today: today() });
-    const t3 = table({ id: "t3", label: "3", ...seated, party: p, today: today({ joinId: "j" }) });
-    const t4 = table({ id: "t4", label: "4", ...seated, party: p, today: today({ joinId: "j" }) });
+    const t2 = table({ id: "t2", label: "2", ...seated("t2"), party: p, today: today() });
+    const t3 = table({
+      id: "t3",
+      label: "3",
+      ...seated("t3"),
+      party: p,
+      today: today({ joinId: "j" }),
+    });
+    const t4 = table({
+      id: "t4",
+      label: "4",
+      ...seated("t4"),
+      party: p,
+      today: today({ joinId: "j" }),
+    });
     const off = table({
       id: "t5",
       label: "5",
-      ...seated,
+      ...seated("t5"),
       party: p,
       today: today({ takenOff: true }),
     });
@@ -314,7 +345,7 @@ describe("zones and their tables", () => {
     ]);
 
     const q = party("Q");
-    const alone = table({ id: "t6", label: "6", ...seated, party: q, today: today() });
+    const alone = table({ id: "t6", label: "6", ...seated("t6"), party: q, today: today() });
     const merged = [t3, t4].map((each) => ({ ...each, party: q }));
     expect(mapTables([alone, t2], now).map((row) => row.linkId)).toEqual([null, null]);
     expect(mapTables(merged, now).map((row) => [row.linkId, row.description])).toEqual([
@@ -348,7 +379,7 @@ describe("zones and their tables", () => {
     const t1 = table({ id: "t1", today: today() });
     const t2 = table({ id: "t2", today: today({ placement: null }) });
     const t3 = table({ id: "t3", today: today({ takenOff: true }) });
-    const t4 = table({ id: "t4", ...seated, today: today({ placement: null }) });
+    const t4 = table({ id: "t4", ...seated("t4"), today: today({ placement: null }) });
     const t5 = table({ id: "t5", condition: "needs_clearing", today: today({ placement: null }) });
     const t6 = table({ id: "t6", state: "delivery-pending", today: today({ placement: null }) });
     const t7 = table({ id: "t7" });

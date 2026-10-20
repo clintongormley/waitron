@@ -13,7 +13,7 @@ const inMinutes = (m: number) => new Date(now + m * 60_000).toISOString();
 
 const zone: FloorZone = {
   id: "z1",
-  name: "Comedor",
+  name: "Dining room",
   displayOrder: 0,
   active: true,
   closesAt: null,
@@ -101,8 +101,11 @@ const mount = (tables: TableState[]) =>
     reducedMotion: true,
   }).then(({ el }) => el);
 
+const mapOf = (el: TillFloorScreen): WtFloorMap =>
+  el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!;
+
 const drawn = (el: TillFloorScreen, id: string): FloorMapTable =>
-  el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!.tables.find((each) => each.id === id)!;
+  mapOf(el).tables.find((each) => each.id === id)!;
 
 const lookOf = ({ fill, outline, pulse, cue, description }: FloorMapTable) => ({
   fill,
@@ -144,6 +147,52 @@ describe("till-floor-screen: the map's look", () => {
       description: `${seatedWord}, ${en["floor.nothing_needed"]}`,
     });
     for (const id of ["t1", "t2", "t3"]) expect(drawn(el, id)).not.toHaveProperty("dot");
+  });
+
+  it("redraws the map's look when time passes a reminder, without a new read", async () => {
+    const dueAt = new Date(now + 90_000).toISOString();
+    const tables = [
+      seated("t1", 0, {
+        signals: [{ kind: "held", count: 2 }],
+        party: party("p-t1", { reminder: { groupId: "g1", dueAt } }),
+      }),
+    ];
+    const el = await mount(tables);
+    expect(drawn(el, "t1").cue).toEqual({
+      icon: "floor-held",
+      text: en["floor.cue_minutes"].replace("{m}", "2"),
+    });
+    el.now = now + 61_000;
+    await el.updateComplete;
+    expect(el.tables).toBe(tables);
+    expect(drawn(el, "t1").cue).toEqual({
+      icon: "floor-held",
+      text: en["floor.cue_minutes"].replace("{m}", "1"),
+    });
+    el.now = now + 91_000;
+    await el.updateComplete;
+    expect(el.tables).toBe(tables);
+    expect(drawn(el, "t1").fill).toBe("warning");
+    expect(drawn(el, "t1").cue).toEqual({ icon: "floor-fire", text: en["floor.cue_fire"] });
+  });
+
+  it("hands the map the same array when nothing timed changed", async () => {
+    const el = await mount([
+      seated("t1", 0, {
+        signals: [{ kind: "held", count: 2 }],
+        party: party("p-t1", {
+          reminder: { groupId: "g1", dueAt: new Date(now + 150_000).toISOString() },
+        }),
+      }),
+      seated("t2", 4),
+    ]);
+    const before = mapOf(el).tables;
+    el.canOpenStation = true;
+    await el.updateComplete;
+    expect(mapOf(el).tables).toBe(before);
+    el.now = now + 1_000;
+    await el.updateComplete;
+    expect(mapOf(el).tables).toBe(before);
   });
 
   it("says the cues in Spanish", async () => {
