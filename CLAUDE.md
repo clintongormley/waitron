@@ -462,11 +462,10 @@ called weaker than its name, the topic file lists what it does not see.
   per-line resolver).
 - **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
   the database does not refuse the write.** A write of one of them lives only in the files that
-  JSON names: requests
-  and the paths that write these tables share one venue handle (`ownerDb` is a name, not a separate
-  handle), so that file list is the only separation. Guard: `scripts/write-path-tables.test.ts` is
+  JSON names. Guard: `scripts/write-path-tables.test.ts` is
   the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
-  call chain.
+  call chain. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement).
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.**
   Write-path functions take a `tx: Transaction` and never open their own; a route handler opens
   exactly one `withTransaction` per request. This is a convention, not a compiler guarantee. A
@@ -477,12 +476,11 @@ called weaker than its name, the topic file lists what it does not see.
   under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
   in turn, never `Promise.all`.** No guard enforces it.
-- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** The
-  store routes by ASYNCHRONOUS CONTEXT and per-body identity, so a read
-  written inside the body still sees that body's own rows; three shapes are outside the rule, each
-  stated at its site. Cost: a concurrent read returned rows a rollback then removed. Guard: the
-  routing cases in `packages/store/src/index.test.ts` and `connections.test.ts`, weaker than the set
-  looks.
+- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** Three
+  shapes are outside the rule, each stated at its site. Cost: a concurrent read returned rows a
+  rollback then removed. Guard: the routing cases in `packages/store/src/index.test.ts` and
+  `connections.test.ts`, weaker than the set looks. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-read-taken-while-another-callers-write-transaction-is-open-sees-committed-rows-only).
 - **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
   a refusal and carrying on in the same `tx` is safe. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
@@ -853,10 +851,7 @@ browser test** — most of these rules exist because a test passed while proving
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
   lock**. A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
-  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
-  file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`)
-  and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`)
-  bounds it. Guards, narrower than the rule:
+  (`apps/server/src/alert-sources.ts`). Guards, narrower than the rule:
   `apps/server/src/stream-pause.e2e.test.ts`, `apps/server/src/stream-loop.e2e.test.ts` (both
   skipped locally without their binaries) and the bucket-copy cases in
   `apps/server/src/health.test.ts`. Receipt:
