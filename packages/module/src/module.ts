@@ -1,4 +1,4 @@
-import type { PartyAllergySnapshot } from "./party-allergy.js";
+import type { KitchenAllergyBlock, PartyAllergySnapshot } from "./party-allergy.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
 import semver from "semver";
 import type { Hono } from "hono";
@@ -617,11 +617,13 @@ export interface KitchenNoteChange {
 
 export interface StationNotice {
   orderNoteChange?: KitchenNoteChange;
+  allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;
   workingOrderId: string;
   orderLabel: string;
-  kind: "recalled" | "void" | "changed" | "moved" | "rerouted";
+  kind:
+    "recalled" | "void" | "changed" | "moved" | "rerouted" | "allergy_changed" | "allergy_removed";
   lineName: string;
   unitName: Record<string, string> | null;
   soldInEach: boolean;
@@ -1321,9 +1323,17 @@ export interface VenueServiceContribution {
       quantity: Decimal;
       wasStarted: boolean;
     }[],
-    kind: "recalled" | "void" | "changed" | "moved" | "rerouted",
+    kind:
+      | "recalled"
+      | "void"
+      | "changed"
+      | "moved"
+      | "rerouted"
+      | "allergy_changed"
+      | "allergy_removed",
     options?: {
       orderNoteChange?: KitchenNoteChange;
+      allergyBlock?: KitchenAllergyBlock | null;
       movedTo?: string | null;
       direction?: "added" | "removed" | null;
       cancelledExtra?: string | null;

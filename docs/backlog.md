@@ -2356,7 +2356,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station-specific change/removal notices. The table answer, guest editor, dish assignments and
   send guards are implemented together; they do not yet deliver this kitchen information.
   The [reviewed kitchen plan](superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
-  defines storage, paper, boards and notices. Implementation remains; kitchen Spanish wording
+  defines storage, paper, boards and notices. Storage declarations and a populated-predecessor
+  upgrade check are implemented on the kitchen branch; capture, output and correction wiring
+  remain. Kitchen Spanish wording
   still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

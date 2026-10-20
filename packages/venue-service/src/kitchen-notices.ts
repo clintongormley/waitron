@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { businessDayStart, readLocationClock } from "@waitron/reporting";
 import {
@@ -24,6 +24,7 @@ export type KitchenNoticeDirection = (typeof KITCHEN_NOTICE_DIRECTIONS)[number];
 
 export interface KitchenNotice {
   orderNoteChange?: KitchenNoteChange;
+  allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;
   workingOrderId: string;
@@ -53,6 +54,7 @@ export interface KitchenNoticeItem {
 
 export interface KitchenNoticeOptions {
   orderNoteChange?: KitchenNoteChange;
+  allergyBlock?: KitchenAllergyBlock | null;
   movedTo?: string | null;
   direction?: KitchenNoticeDirection | null;
   cancelledExtra?: string | null;
@@ -65,22 +67,7 @@ const NOTICE_LIMIT = 50;
 /** Notices recorded in one call share a timestamp; the row id keeps them in the order given. */
 const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
 
-/**
- * Records one notice per item, copying the order's label and each line's kitchen name, unit, note
- * and whether it was sold in Each as they stand now, so a void calls it BEFORE deleting the line.
- * The order and every station must be at the caller's location (`working_order.not_found`,
- * `station.not_found`) and every quantity positive (`quantity.invalid`). An item whose line is not
- * on the order is the caller's fault and throws a plain `Error`. Of the named `options`, `movedTo`
- * is for a `moved` notice only; on another kind only the table's check constraint
- * `kitchen_notices_moved_to_ck` refuses it, as the engine's constraint error rather than an
- * `AppError`. `direction` is for a `changed` one only (`kitchen_notice.invalid` otherwise, or for a
- * value outside the two), and so is `cancelledExtra`, the extra taken off the dish
- * (`kitchen_notice.invalid` otherwise).
- * `reroutedTo` names the new station on a `rerouted` notice and is refused on every other kind
- * (`kitchen_notice.invalid`). `fromNumber`, the number of the order the dishes came from, is for a
- * `moved` notice only (`kitchen_notice.invalid` otherwise) and labels the notice `#28 → #27` when
- * it is not the order's own number.
- */
+/** Copy line presentation before deleting a line: notices outlive the work they describe. */
 export async function recordKitchenNotices(
   tx: Transaction,
   cfg: VenueScope,
@@ -96,6 +83,7 @@ export async function recordKitchenNotices(
     reroutedTo = null,
     fromNumber = null,
     orderNoteChange,
+    allergyBlock = null,
   } = options;
   if (
     orderNoteChange !== undefined &&
@@ -121,6 +109,12 @@ export async function recordKitchenNotices(
   }
   if (fromNumber !== null && kind !== "moved") {
     throw new AppError("kitchen_notice.invalid", { field: "fromNumber" });
+  }
+  if (
+    (kind === "allergy_changed") !== (allergyBlock !== null) ||
+    ((kind === "allergy_changed" || kind === "allergy_removed") && movedTo !== null)
+  ) {
+    throw new AppError("kitchen_notice.invalid", { field: "allergyBlock" });
   }
   if (items.length === 0) return;
   const [order] = await tx
@@ -200,6 +194,7 @@ export async function recordKitchenNotices(
         direction,
         cancelledExtra,
         orderNoteChange,
+        allergyBlock,
         reroutedTo,
         createdAt,
       };
@@ -248,6 +243,7 @@ export async function listStationsNotices(
       direction: kitchenNotices.direction,
       cancelledExtra: kitchenNotices.cancelledExtra,
       orderNoteChange: kitchenNotices.orderNoteChange,
+      allergyBlock: kitchenNotices.allergyBlock,
       reroutedTo: kitchenNotices.reroutedTo,
       createdAt: kitchenNotices.createdAt,
       newest:
@@ -272,11 +268,12 @@ export async function listStationsNotices(
     .where(lte(ranked.newest, NOTICE_LIMIT))
     .orderBy(desc(ranked.newest));
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rank is not part of a notice
-  for (const { newest, orderNoteChange, ...row } of rows) {
+  for (const { newest, orderNoteChange, allergyBlock, ...row } of rows) {
     byStation.get(row.stationId)!.push({
       ...row,
       quantity: thousandthsToDecimal(row.quantity),
       ...(orderNoteChange === null ? {} : { orderNoteChange }),
+      ...(row.kind === "allergy_changed" || row.kind === "allergy_removed" ? { allergyBlock } : {}),
     });
   }
   return byStation;

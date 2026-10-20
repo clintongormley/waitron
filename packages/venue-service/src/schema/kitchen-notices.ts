@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import {
   enumCheck,
@@ -16,8 +16,17 @@ import {
   tsString,
   workingOrders,
 } from "@waitron/db";
+import { kitchenAllergyBlockCheck } from "./kitchen-allergy.js";
 
-export const kitchenNoticeKind = enumType(["recalled", "void", "changed", "moved", "rerouted"]);
+export const kitchenNoticeKind = enumType([
+  "recalled",
+  "void",
+  "changed",
+  "moved",
+  "rerouted",
+  "allergy_changed",
+  "allergy_removed",
+]);
 
 export const KITCHEN_NOTICE_DIRECTIONS = ["added", "removed"] as const;
 const kitchenNoticeDirection = enumType(KITCHEN_NOTICE_DIRECTIONS);
@@ -48,6 +57,7 @@ export const kitchenNotices = table(
     /** On a `changed` notice, the extra taken off the dish, as its kitchen paper printed it. */
     cancelledExtra: label("cancelled_extra"),
     orderNoteChange: json<KitchenNoteChange>("order_note_change"),
+    allergyBlock: json<KitchenAllergyBlock>("allergy_block"),
     /** On a `rerouted` notice, the station the work now belongs to, by name as it was then. */
     reroutedTo: label("rerouted_to"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
@@ -68,6 +78,16 @@ export const kitchenNotices = table(
       .on(t.stationId, t.createdAt)
       .where(sql`${t.acknowledgedAt} is null`),
     check("kitchen_notices_kind_ck", enumCheck(t.kind)),
+    check("kitchen_notices_allergy_block_ck", kitchenAllergyBlockCheck(t.allergyBlock)),
+    check(
+      "kitchen_notices_allergy_kind_ck",
+      sql`(${t.kind} = 'allergy_changed' and ${t.allergyBlock} is not null)
+        or (${t.kind} <> 'allergy_changed' and ${t.allergyBlock} is null)`,
+    ),
+    check(
+      "kitchen_notices_allergy_options_ck",
+      sql`${t.kind} not in ('allergy_changed', 'allergy_removed') or ${t.orderNoteChange} is null`,
+    ),
     check("kitchen_notices_quantity_ck", sql`${t.quantity} > 0`),
     check("kitchen_notices_moved_to_ck", sql`${t.kind} = 'moved' or ${t.movedTo} is null`),
     check(

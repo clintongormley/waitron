@@ -62,6 +62,113 @@ const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransac
 const ONE = thousandthsToDecimal(1000);
 const TWO = thousandthsToDecimal(2000);
 
+describe("A669 storage notice payload", () => {
+  const block = {
+    who: "Window guest",
+    allergens: { milk: {} },
+    note: "Separate pan",
+    clashes: { milk: {} },
+    labels: {
+      en: { avoids: ["Milk"], clashes: ["Milk"] },
+      es: { avoids: ["Stored milk label"], clashes: ["Stored milk label"] },
+    },
+  };
+  it("round-trips changed and removed copies through the service read without changing ordinary notices", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const items = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: TWO,
+        wasStarted: true,
+      },
+    ];
+    await expect(
+      inTx((tx) =>
+        recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_changed", {
+          allergyBlock: block,
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await inTx((tx) =>
+      recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_removed", {
+        allergyBlock: null,
+      }),
+    );
+    await inTx((tx) => recordKitchenNotices(tx, v.cfg, order.orderId, items, "void"));
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    expect(notices.map(({ kind, allergyBlock }) => ({ kind, allergyBlock }))).toEqual([
+      { kind: "allergy_changed", allergyBlock: block },
+      { kind: "allergy_removed", allergyBlock: null },
+      { kind: "void", allergyBlock: undefined },
+    ]);
+    expect(notices[0]).toMatchObject({
+      lineName: "BRGR",
+      note: "no onions",
+      quantity: TWO,
+      wasStarted: true,
+    });
+    expect(notices[2]).not.toHaveProperty("allergyBlock");
+  });
+
+  it.each([
+    { kind: "allergy_changed" as const, options: {}, field: "allergyBlock" },
+    { kind: "allergy_changed" as const, options: { allergyBlock: null }, field: "allergyBlock" },
+    { kind: "allergy_removed" as const, options: { allergyBlock: block }, field: "allergyBlock" },
+    { kind: "changed" as const, options: { allergyBlock: block }, field: "allergyBlock" },
+    {
+      kind: "allergy_changed" as const,
+      options: { allergyBlock: block, orderNoteChange: { before: null, after: "Together" } },
+      field: "orderNoteChange",
+    },
+    {
+      kind: "allergy_changed" as const,
+      options: { allergyBlock: block, direction: "added" as const },
+      field: "direction",
+    },
+    {
+      kind: "allergy_changed" as const,
+      options: { allergyBlock: block, cancelledExtra: "Pickles" },
+      field: "cancelledExtra",
+    },
+    {
+      kind: "allergy_changed" as const,
+      options: { allergyBlock: block, reroutedTo: "Cold" },
+      field: "reroutedTo",
+    },
+    {
+      kind: "allergy_changed" as const,
+      options: { allergyBlock: block, fromNumber: 7 },
+      field: "fromNumber",
+    },
+    { kind: "allergy_removed" as const, options: { movedTo: "Table 2" }, field: "allergyBlock" },
+  ])("refuses $kind with mixed/missing $field before writing", async ({ kind, options, field }) => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    await expect(
+      inTx((tx) =>
+        recordKitchenNotices(
+          tx,
+          v.cfg,
+          order.orderId,
+          [
+            {
+              workingOrderLineId: order.burgerLineId,
+              stationId: v.grill,
+              quantity: ONE,
+              wasStarted: false,
+            },
+          ],
+          kind,
+          options,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field } });
+    expect(await suite.db.select().from(kitchenNotices)).toEqual([]);
+  });
+});
+
 describe("whole-order instruction changes", () => {
   it("keeps the frozen before/after instruction separate from the dish's own note", async () => {
     const v = await venue();
