@@ -23,7 +23,6 @@ const COMPLAINT: AdjustmentReason = {
   applyRoles: ["supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: false,
-  active: true,
   position: 0,
 };
 
@@ -38,7 +37,6 @@ const MISTAKE: AdjustmentReason = {
   applyRoles: [],
   approverRoles: [],
   noteRequired: false,
-  active: true,
   position: 1,
 };
 
@@ -210,12 +208,6 @@ describe("evaluateComp", () => {
     expect(evaluateComp(noted, comp({ note: "Cold" }))).toEqual({ kind: "allowed" });
   });
 
-  it("a switched-off reason is refused", () => {
-    expect(
-      evaluateComp({ ...COMPLAINT, active: false }, comp({ action: "discount_amount" })),
-    ).toEqual({ kind: "refused", code: "adjustment.reason_inactive" });
-  });
-
   it.each<[string, Partial<CompRequest>]>([
     ["a negative reduction", { reduction: decimal("-1.00") }],
     ["a negative prior reduction on the bill", { priorReductionOnBill: decimal("-0.01") }],
@@ -224,9 +216,6 @@ describe("evaluateComp", () => {
     ["a fractional item share", { itemShareBp: 12.5 }],
   ])("throws on %s, which is a caller's bug and not a verdict", (_case, overrides) => {
     expect(() => evaluateComp(COMPLAINT, comp(overrides))).toThrow(RangeError);
-    expect(() => evaluateComp({ ...COMPLAINT, active: false }, comp(overrides))).toThrow(
-      RangeError,
-    );
   });
 });
 
@@ -272,13 +261,6 @@ describe("evaluateCancel", () => {
       code: "adjustment.note_required",
     });
     expect(evaluateCancel(noted, cancel({ note: "Wrong table" }))).toEqual({ kind: "allowed" });
-  });
-
-  it("a switched-off Void reason is refused", () => {
-    expect(evaluateCancel({ ...MISTAKE, active: false }, cancel())).toEqual({
-      kind: "refused",
-      code: "adjustment.reason_inactive",
-    });
   });
 });
 

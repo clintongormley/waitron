@@ -14,7 +14,7 @@ import { reasonShapeFault, type AdjustmentAction, type AdjustmentReason } from "
 import { adjustmentReasons, type ReasonKind } from "./schema/reasons.js";
 import "./errors.js";
 
-/** Everything an owner edits on a reason; `active` and `position` have operations of their own. */
+/** Everything an owner edits on a reason; `position` has an operation of its own. */
 export interface AdjustmentReasonInput {
   name: string;
   names: Record<string, string>;
@@ -48,7 +48,6 @@ function toReason(row: ReasonRow): AdjustmentReason {
     applyRoles: row.applyRoles,
     approverRoles: row.approverRoles,
     noteRequired: row.noteRequired,
-    active: row.active,
     position: row.position,
   };
 }
@@ -102,36 +101,37 @@ function reasonValues(input: AdjustmentReasonInput) {
 }
 
 /**
- * Refuses a change to a switched-on Void reason that would leave the venue no switched-on Void
- * reason, or none that asks for a note (A758 D27). `after` is the reason's state once changed;
- * a reason that was not a switched-on Void reason is never refused.
+ * What refuses a change to a Void reason that would leave the venue no Void reason, or none that
+ * asks for a note (A758 D27): `withNote` says which. `after` is the reason's state once changed,
+ * `null` once deleted; a reason that was not a Void reason is never refused.
  */
-async function assertVoidKept(
+export async function voidKeptFault(
   tx: Transaction,
   before: ReasonRow,
-  after: { active: boolean; kind: ReasonKind; noteRequired: boolean },
-): Promise<void> {
-  if (!before.active || before.kind !== "void") return;
+  after: { kind: ReasonKind; noteRequired: boolean } | null,
+): Promise<{ withNote: boolean } | null> {
+  if (before.kind !== "void") return null;
   const others = await tx
     .select({ noteRequired: adjustmentReasons.noteRequired })
     .from(adjustmentReasons)
-    .where(
-      and(
-        eq(adjustmentReasons.active, true),
-        eq(adjustmentReasons.kind, "void"),
-        ne(adjustmentReasons.id, before.id),
-      ),
-    );
-  const remaining = after.active && after.kind === "void" ? [...others, after] : others;
-  if (remaining.length === 0) {
-    throw new AppError("adjustment_reason.void_required", { withNote: false });
-  }
+    .where(and(eq(adjustmentReasons.kind, "void"), ne(adjustmentReasons.id, before.id)));
+  const remaining = after !== null && after.kind === "void" ? [...others, after] : others;
+  if (remaining.length === 0) return { withNote: false };
   if (before.noteRequired && !remaining.some((reason) => reason.noteRequired)) {
-    throw new AppError("adjustment_reason.void_required", { withNote: true });
+    return { withNote: true };
   }
+  return null;
 }
 
-/** Only active names are unique, so an inactive reason's name is never "taken". */
+async function assertVoidKept(
+  tx: Transaction,
+  before: ReasonRow,
+  after: { kind: ReasonKind; noteRequired: boolean } | null,
+): Promise<void> {
+  const fault = await voidKeptFault(tx, before, after);
+  if (fault !== null) throw new AppError("adjustment_reason.void_required", fault);
+}
+
 async function assertNameFree(tx: Transaction, name: string, except: string | null) {
   const [clash] = await tx
     .select({ id: adjustmentReasons.id })
@@ -139,7 +139,6 @@ async function assertNameFree(tx: Transaction, name: string, except: string | nu
     .where(
       and(
         eq(adjustmentReasons.name, name),
-        eq(adjustmentReasons.active, true),
         except === null ? undefined : ne(adjustmentReasons.id, except),
       ),
     );
@@ -152,7 +151,7 @@ async function findReason(tx: Transaction, reasonId: string): Promise<ReasonRow>
   return row;
 }
 
-/** One reason by its id, active or not; `adjustment_reason.not_found` when none has it. */
+/** One reason by its id; `adjustment_reason.not_found` when none has it. */
 export async function findAdjustmentReason(
   tx: Transaction,
   reasonId: string,
@@ -160,20 +159,16 @@ export async function findAdjustmentReason(
   return toReason(await findReason(tx, reasonId));
 }
 
-/** Reasons in the order staff see them. Active ones only unless asked. */
-export async function listAdjustmentReasons(
-  tx: Transaction,
-  opts: { includeInactive?: boolean } = {},
-): Promise<AdjustmentReason[]> {
+/** Every reason, in the order staff see them. */
+export async function listAdjustmentReasons(tx: Transaction): Promise<AdjustmentReason[]> {
   const rows = await tx
     .select()
     .from(adjustmentReasons)
-    .where(opts.includeInactive === true ? undefined : eq(adjustmentReasons.active, true))
     .orderBy(...STAFF_ORDER);
   return rows.map(toReason);
 }
 
-/** Adds an active reason after every existing one. */
+/** Adds a reason after every existing one. */
 export async function createAdjustmentReason(
   tx: Transaction,
   input: AdjustmentReasonInput,
@@ -191,7 +186,7 @@ export async function createAdjustmentReason(
   return toReason(row!);
 }
 
-/** Replaces every field an owner edits; `active` and `position` are left as they are. */
+/** Replaces every field an owner edits; `position` is left as it is. */
 export async function updateAdjustmentReason(
   tx: Transaction,
   reasonId: string,
@@ -199,8 +194,8 @@ export async function updateAdjustmentReason(
 ): Promise<AdjustmentReason> {
   const values = reasonValues(input);
   const existing = await findReason(tx, reasonId);
-  if (existing.active) await assertNameFree(tx, values.name, reasonId);
-  await assertVoidKept(tx, existing, { ...values, active: existing.active });
+  await assertNameFree(tx, values.name, reasonId);
+  await assertVoidKept(tx, existing, values);
   const [row] = await tx
     .update(adjustmentReasons)
     .set(values)
@@ -209,57 +204,30 @@ export async function updateAdjustmentReason(
   return toReason(row!);
 }
 
-/** Kept, never deleted, so anything naming the reason by id can still read it. */
-export async function deactivateAdjustmentReason(tx: Transaction, reasonId: string): Promise<void> {
+/** An adjustment keeps the reason's id and name it was recorded under, so none is touched. */
+export async function deleteAdjustmentReason(tx: Transaction, reasonId: string): Promise<void> {
   const existing = await findReason(tx, reasonId);
-  await assertVoidKept(tx, existing, { ...existing, active: false });
-  await tx
-    .update(adjustmentReasons)
-    .set({ active: false })
-    .where(eq(adjustmentReasons.id, reasonId));
-}
-
-/** Keeps its position, so no two reasons come to share one. Refused while an active reason holds
- * its name, which the partial unique index would otherwise refuse with no domain code. */
-export async function reactivateAdjustmentReason(
-  tx: Transaction,
-  reasonId: string,
-): Promise<AdjustmentReason> {
-  const existing = await findReason(tx, reasonId);
-  await assertNameFree(tx, existing.name, reasonId);
-  const [row] = await tx
-    .update(adjustmentReasons)
-    .set({ active: true })
-    .where(eq(adjustmentReasons.id, reasonId))
-    .returning();
-  return toReason(row!);
+  await assertVoidKept(tx, existing, null);
+  await tx.delete(adjustmentReasons).where(eq(adjustmentReasons.id, reasonId));
 }
 
 /**
- * Puts the active reasons in the order given, then the inactive ones after them in the order they
- * already had, so no two reasons share a position. `ids` must name every active reason exactly
- * once, so a screen working from a stale list is refused rather than half-applied.
+ * Puts the reasons in the order given. `ids` must name every reason exactly once, so a screen
+ * working from a stale list is refused rather than half-applied.
  */
 export async function reorderAdjustmentReasons(
   tx: Transaction,
   ids: readonly string[],
 ): Promise<void> {
   const rows = await tx
-    .select({
-      id: adjustmentReasons.id,
-      active: adjustmentReasons.active,
-      position: adjustmentReasons.position,
-    })
-    .from(adjustmentReasons)
-    .orderBy(...STAFF_ORDER);
+    .select({ id: adjustmentReasons.id, position: adjustmentReasons.position })
+    .from(adjustmentReasons);
   const current = new Map(rows.map((row) => [row.id, row.position]));
-  const active = new Set(rows.filter((row) => row.active).map((row) => row.id));
-  const inactive = rows.filter((row) => !row.active).map((row) => row.id);
-  const unknown = ids.find((reasonId) => !active.has(reasonId));
+  const unknown = ids.find((reasonId) => !current.has(reasonId));
   if (unknown !== undefined)
     throw new AppError("adjustment_reason.not_found", { reasonId: unknown });
-  if (new Set(ids).size !== ids.length || ids.length !== active.size) throw invalid("ids");
-  for (const [position, reasonId] of [...ids, ...inactive].entries()) {
+  if (new Set(ids).size !== ids.length || ids.length !== current.size) throw invalid("ids");
+  for (const [position, reasonId] of ids.entries()) {
     if (current.get(reasonId) === position) continue;
     await tx.update(adjustmentReasons).set({ position }).where(eq(adjustmentReasons.id, reasonId));
   }

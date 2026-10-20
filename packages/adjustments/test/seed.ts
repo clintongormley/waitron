@@ -26,7 +26,7 @@ function seed(db: Database, input: (name: string) => AdjustmentReasonInput) {
   return withTransaction(db, (tx) => createAdjustmentReason(tx, input(`${reasonCount}`)));
 }
 
-/** An active Comp reason offering every comp action, under a name no other reason in the run has. */
+/** A Comp reason offering every comp action, under a name no other reason in the run has. */
 export function seedReason(db: Database): Promise<AdjustmentReason> {
   return seed(db, (n) => ({
     name: `Complaint ${n}`,
@@ -41,7 +41,7 @@ export function seedReason(db: Database): Promise<AdjustmentReason> {
   }));
 }
 
-/** An active Void reason, which only cancels, under a name no other reason in the run has. */
+/** A Void reason, which only cancels, under a name no other reason in the run has. */
 export function seedVoidReason(db: Database): Promise<AdjustmentReason> {
   return seed(db, (n) => ({
     name: `Mistake ${n}`,
