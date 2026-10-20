@@ -20,6 +20,7 @@ import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
 import { payReaderOf, type FixedReader } from "./state/pay-equipment.js";
+import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
@@ -2557,7 +2558,7 @@ export class TillApp extends LitElement {
       equipment: await this.api.getDeviceEquipment({ signal }),
     }),
     onEquipment: ({ changed, equipment }) => {
-      if (changed === this.#equipmentChanged && this.#equipmentWaiting === 0)
+      if (changed === this.#equipmentChanged && this.equipmentWaiting === 0)
         this.#holdEquipment(equipment);
     },
   });
@@ -2910,7 +2911,11 @@ export class TillApp extends LitElement {
       context,
     );
   }
-  #equipmentWaiting = 0;
+  /** Equipment changes sent or queued and not yet ended; while any is out a handheld takes no
+   * payment. */
+  @state() private equipmentWaiting = 0;
+  /** The pay sheet's own latest pick, which its field shows as saving. */
+  @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
   /** A refusal is shown only in the dialog opening it was picked in. */
   #equipmentOpenings = 0;
   /** When a read of the equipment and a choice were out at once, either answer may be the older, so
@@ -8952,7 +8957,7 @@ export class TillApp extends LitElement {
 
   /** Cleared while the read is out, so a second caller does not read too. */
   async #rereadIfStale(): Promise<void> {
-    if (this.#equipmentWaiting > 0 || !this.#equipmentStale) return;
+    if (this.equipmentWaiting > 0 || !this.#equipmentStale) return;
     this.#equipmentStale = false;
     if (!(await this.#readEquipment())) this.#equipmentStale = true;
   }
@@ -9177,7 +9182,7 @@ export class TillApp extends LitElement {
     nfc?: { session: number; name: string },
   ): Promise<void> {
     const opening = this.#equipmentOpenings;
-    this.#equipmentWaiting++;
+    this.equipmentWaiting++;
     const step = () => this.#switchEquipment(event.detail, opening, nfc);
     const run = this.#equipmentQueue.then(step, step);
     this.#equipmentQueue = run;
@@ -9195,7 +9200,7 @@ export class TillApp extends LitElement {
       nfc === undefined ||
       (this.isConnected && nfc.session === this.#operatorSession && this.operatorName !== "");
     if (!current()) {
-      this.#equipmentWaiting--;
+      this.equipmentWaiting--;
       void this.#rereadIfStale();
       return;
     }
@@ -9268,7 +9273,7 @@ export class TillApp extends LitElement {
         };
     } finally {
       limit.done();
-      this.#equipmentWaiting--;
+      this.equipmentWaiting--;
       // The device can keep a choice after its operator leaves; refresh without their notice.
       void this.#rereadIfStale();
     }
@@ -9409,6 +9414,10 @@ export class TillApp extends LitElement {
         .equipment=${this.deviceEquipment}
         .canScan=${canScan()}
         .fixedReader=${this.#fixedPayReader()}
+        .equipmentBusy=${this.equipmentWaiting > 0}
+        .equipmentSaving=${this.payEquipmentSaving}
+        @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
+          void this.#onPayEquipmentPick(event.detail)}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -9416,6 +9425,17 @@ export class TillApp extends LitElement {
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  async #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): Promise<void> {
+    const saving = { role, id };
+    this.payEquipmentSaving = saving;
+    await this.#onEquipmentChange(
+      new CustomEvent<EquipmentChange>("equipment-change", {
+        detail: { role, selection: { id }, via: "list", takeOver },
+      }),
+    );
+    if (this.payEquipmentSaving === saving) this.payEquipmentSaving = null;
   }
 
   #payingTableName(open: BillPaying): string {

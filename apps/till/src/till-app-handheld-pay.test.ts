@@ -1,16 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
 import type { CapabilityFlag } from "./layout.js";
-import type { AllocationPreview, BillPaymentRequest, TillApi } from "./api/client.js";
+import type {
+  AllocationPreview,
+  BillPaymentRequest,
+  DeviceEquipment,
+  EquipmentChange,
+  EquipmentItem,
+  TillApi,
+} from "./api/client.js";
+import type { TillPayEquipment } from "./widgets/pay-equipment.js";
+import { FakeNdefReader, installNfc, READER_ID } from "../test/equipment-nfc.js";
 import {
   balanceOf,
+  BARRA,
   billOf,
   dialog,
+  emit,
+  equipmentItem,
   equipmentWith,
   LECTOR_2,
+  lock,
+  roleOf,
+  shell,
+  tableOrder,
   flush,
   inDialog,
   openDialog,
@@ -240,3 +258,185 @@ describe("till-app: a counter till's simulated card outcome", () => {
     expect(sent()[0]).toMatchObject({ entry: "reader", simulationOutcome: "declined" });
   });
 });
+
+describe("till-app: a pick from the sheet", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
+    portable: true,
+    provider: "sumup",
+  });
+
+  function readers(chosen: EquipmentItem): DeviceEquipment {
+    return {
+      roles: [
+        roleOf("receipt", BARRA, [BARRA]),
+        roleOf("card_terminal", chosen, [LECTOR_2, LECTOR_3, LECTOR_4]),
+      ],
+    };
+  }
+
+  /** Each request waits until its own `answer` is called. */
+  function heldPicks() {
+    const answers: Array<() => void> = [];
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
+        new Promise<DeviceEquipment>((resolve) => {
+          const id = typeof change.selection === "object" ? change.selection.id : "";
+          const chosen = [LECTOR_2, LECTOR_3, LECTOR_4].find((each) => each.id === id)!;
+          answers.push(() => resolve(readers(chosen)));
+        }),
+    );
+    return { setDeviceEquipment, answers };
+  }
+
+  const row = (el: TillApp) =>
+    inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
+  const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
+
+  async function openRow(el: TillApp): Promise<void> {
+    await row(el)!.updateComplete;
+    const change = row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
+    if (change !== null) await userEvent.click(change);
+    await flush(el);
+  }
+
+  async function pickReader(el: TillApp, label: string): Promise<void> {
+    await openRow(el);
+    const combobox = row(el)!.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await combobox.updateComplete;
+    const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+      (each) => each.textContent!.trim().startsWith(label),
+    );
+    if (!option) throw new Error(`no option ${label}`);
+    await userEvent.click(option);
+    await flush(el);
+  }
+
+  async function phoneSheet(overrides: Record<string, unknown>) {
+    const { el } = await mountApp(
+      onPhone({ getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)), ...overrides }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    expect(continueButton(el).disabled).toBe(false);
+    return el;
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("a reader pick saves through Equipment and holds Continuar until it is answered", async () => {
+    const { setDeviceEquipment, answers } = heldPicks();
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    await pickReader(el, "Lector 3");
+
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual({
+      role: "card_terminal",
+      selection: { id: READER_ID },
+      via: "list",
+      takeOver: false,
+    });
+    expect(continueButton(el).disabled).toBe(true);
+    await row(el)!.updateComplete;
+    expect(text(row(el)!.shadowRoot!.querySelector('[data-pay-note="card_terminal"]'))).toBe(
+      t("pay_equipment.saving"),
+    );
+
+    answers[0]!();
+    await flush(el);
+
+    expect(continueButton(el).disabled).toBe(false);
+    await row(el)!.updateComplete;
+    const combobox = row(el)!.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    expect(combobox.value).toBe(READER_ID);
+    expect(row(el)!.shadowRoot!.querySelector('[data-pay-note="card_terminal"]')).toBeNull();
+  });
+
+  it("two picks out at once hold Continuar until the second is answered", async () => {
+    const { setDeviceEquipment, answers } = heldPicks();
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    await pickReader(el, "Lector 3");
+    await pickReader(el, "Lector 4");
+    answers[0]!();
+    await flush(el);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+
+    expect(continueButton(el).disabled).toBe(true);
+    answers[1]!();
+    await flush(el);
+    expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("an NFC tap still out holds Continuar too", async () => {
+    installNfc();
+    const { setDeviceEquipment, answers } = heldPicks();
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(continueButton(el).disabled).toBe(true);
+
+    answers[0]!();
+    await flush(el);
+    expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("a tap queued, then a logout and a sign-in again, leaves Continuar enabled", async () => {
+    installNfc();
+    const { setDeviceEquipment, answers } = heldPicks();
+    const el = await phoneSheet({ setDeviceEquipment });
+    await pickReader(el, "Lector 3");
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await flush(el);
+
+    emit(shell(el), "logout");
+    await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    answers[0]!();
+    await flush(el);
+
+    // The tap's session has ended, so it is dropped unsent and stops counting.
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("a locked confirmation's Comprobar de nuevo is not held while a pick is out", async () => {
+    installNfc();
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { setDeviceEquipment } = heldPicks();
+    const el = await phoneSheet({ setDeviceEquipment, takeBillPayment });
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    await pressPaySheet(el, tableOrder(el));
+    await expect.poll(() => dialog(el)!.busy, { timeout: 10_000 }).toBe(false);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    await flush(el);
+
+    expect(dialog(el)!.equipmentBusy).toBe(true);
+    const confirm = inDialog(el, "[data-pay-confirm]")!;
+    expect(text(confirm)).toBe(t("bill_pay.recheck"));
+    expect(confirm.disabled).toBe(false);
+  });
+});
+
+async function nfcReader(): Promise<FakeNdefReader> {
+  await vi.waitFor(() => expect(FakeNdefReader.instances.at(-1)?.signal).toBeDefined());
+  return FakeNdefReader.instances.at(-1)!;
+}
