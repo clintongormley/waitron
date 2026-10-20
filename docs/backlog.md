@@ -2414,6 +2414,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Scan a QR sticker, or tap NFC), the receipt (print, email or none, language, full invoice),
   then Cash or Card. The simulator asks Declined/Approved at Card; Decline not declining is
   reproduced and fixed; the Demo card reader goes; no receipt screen after paying. It follows the Counter cleanup; the custom-item residual is separate.
+  Once it lands, add help-mode badges to the payment window's buttons (A582 slice 4b left them for it).
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
@@ -4146,8 +4147,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
   in). Slice 3 landed (#1871: the box serves the guides at `/help/<en|es>/<page>`, in English and
   Spanish, and three Products badges link to their sections). Slice 4a landed (#1907: the "?" on
-  the till's bar, help off on lock, badges in the till's More and person menus). Next: slice 4b
-  (badges on Counter, Floor and Order, and the guide sheet), then slice 5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
+  the till's bar, help off on lock, badges in the till's More and person menus). Slice 4b landed
+  (#NNNN: badges on Counter, Floor and Order, and the guide sheet). Next: slice 5, in the design's
+  §8 order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.

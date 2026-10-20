@@ -1114,9 +1114,6 @@ help about anything you want very quickly."
 - **Left open by 3:**
   - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
     guide link.
-  - The till's `/help` proxy and the guide sheet belong to slice 4b. A guide link opens a new tab;
-    a till needs a hook to open its sheet instead, such as a cancelable `wt-*` event on the link's
-    click.
   - Products' VAT and Availability badges have no guide link.
   - `apps/server/src/guide-markdown.ts` takes `escapeHtml` from `recovery-surface.ts`, so the
     renderer loads that module's imports too (Hono, `@waitron/db`, the login locale). Moving
@@ -1137,28 +1134,30 @@ help about anything you want very quickly."
   (PR 4a is Tasks 1–5).
 - **Left open by 4a:** on a till at phone width the "?" leaves the tab strip 8 px wide at 320 px
   with a long name; whether the person's name should give room is the owner's question, A921.
-- **Remaining slices** (design §8): **4b** — badges on Counter, Floor and Order, the guide sheet;
-  **5** kitchen screens and monitors — the corner switch, off after two minutes without a touch.
+- **Slice 4b landed (#NNNN).** With help on, the till's screens carry badges: Counter's Park, Guests
+  field and Parked orders and Waiting orders headings; the dishes' search field on Counter and Order,
+  whose box links to the Products guide's "Read a dish's nutrition at the till"; Floor's tables
+  toolbar, layout banner and Needs moving window; Order's Fire / Send all group. A guide link opens
+  in a full-screen sheet over the till with a Close button: `wt-help-tooltip` sends a cancelable
+  `wt-guide-open`, which `till-shell` cancels, and the till's Vite server sends `/help` to the
+  server. `wt-modal`'s side padding and `wt-disclosure`'s top padding are at least half the badge's
+  square, so the till's 32 px badge fits inside them. Plan:
+  [2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md) (PR 4b is
+  Tasks 6–12). Slice 4 is complete: 4a #1907, 4b #NNNN.
+- **Left open by 4b:** help on Counter's payment buttons waits for A739, which is redesigning the
+  payment window (plan, decision 11); once A739 lands, add it there.
+- **Remaining slice** (design §8): **5** kitchen screens and monitors — the corner switch, off after
+  two minutes without a touch.
 - **Left open by 2b:**
   - Help on a link option in a menu: `wt-menu-row` supports a `wt-button` option only; a link
     inside it would lose the look `wt-row-actions` gives a link (`::slotted(a[href])` styles only a
     direct child). No menu needs it yet.
   - Help on the dashboard's other screens, added as each is next touched; Products is the only
     screen with it.
-- **Slice 4b must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
-  overflows `wt-modal`'s 12 px side padding at phone width (the body scrolls sideways: the 390 px
-  case in `packages/ui/src/components/wt-help-tooltip.slots.test.ts` shows it with the 32 px
-  control) and reaches 4 px above `wt-disclosure`'s 12 px top padding.
-- **Slice 4 also carries the help-mode key of table states** (A893): "It feels like we need a key
-  of the different states when we click the ?" (owner, 2026-10-18, Q42 notes). With help on, the
-  till's floor shows a badge, “What the colours mean”, that opens a key of every A757 table state,
-  following whatever look A893 settles.
 - **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
   hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
   place for the longer explanation. Decided with the design (owner, 2026-10-18; design §7): the
   dashboard's remaining "?" buttons become help-mode badges, and the setup wizard keeps its own.
-- **The till's floor (A504, spec §11).** Help mode should explain the Update layout banner and what
-  "Needs moving", Leave it here and Mark moved mean.
 
 
 ## A653 — every long dashboard table scrolls the same way, with less above it

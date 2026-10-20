@@ -239,20 +239,34 @@ name: its first check renders each linked page in each language and finds the se
 second reads the dashboard's source as text for a quoted `/help/`, so a guide path built from parts
 passes it.
 
-### What slice 4 (the tills) can rely on
+### How the till links a guide, and the sheet it opens in
 
-- `GET /help/<en|es>/<products|modifiers|content-and-images>` answers 200 with one self-contained
-  HTML page, `no-cache` and the policy above, which allows same-origin framing; any other address
-  under `/help` answers the guide's 404 page.
-- Every trading boot and setup mode serve it, before the till's own catch-all, so a till on the
-  box's origin can load a guide in a frame.
-- Section ids are the same in both languages, and `#<id>` opens and highlights that section.
-- Links inside a page go only to other guide pages in the same language, so a frame never leaves
-  `/help/`.
-- The page follows the saved `waitron-theme` choice, which the till writes too.
-- `wt-help-tooltip`'s guide link opens a new tab. A till must open its own sheet instead, and
-  nothing yet lets it: the obvious hook is a cancelable `wt-*` event on the link's click.
-- The till's Vite server does not yet send `/help` to the server.
+A till link to a guide goes through `apps/till/src/help-guide.ts`, which works as the dashboard's
+does: `GUIDE_LINKS` names each section the till links to (today one, the Products page's
+`nutrition-at-the-till`, from the dishes' badge on Counter and Order), and `guideHref(key)` returns
+`/help/<en|es>/<page>#<section>` in the till's current language. A screen builds its badge with
+`helpBadge(key, part, { guide })` (`apps/till/src/widgets/help-badge.ts`), which fills in `guide-href`
+and the "Read more in the guide" words. The same guard, `scripts/guide-links.test.ts`, runs its two
+checks over the till's links and `apps/till/src` too, and is weaker than its name in the same way.
+
+On the dashboard a guide link opens a new tab. A till opens it in a sheet over the till instead,
+because a till runs full screen and has no tab bar to come back by (the design,
+`docs/superpowers/specs/2026-10-18-a582-help-mode-design.md`, §3.2). How:
+
+- `wt-help-tooltip` dispatches `wt-guide-open` (`detail: { href }`, bubbling, composed and
+  cancelable) when its link is clicked, stops the click there, and closes its box. If a listener
+  cancels the event, the link does not open; if nobody does, it opens a new tab as before
+  (`packages/ui/src/components/wt-help-tooltip.ts`, `onGuideClick`).
+- `till-shell` listens for it, cancels it, and sets the sheet's address
+  (`apps/till/src/widgets/till-shell.ts`, `#onGuideOpen`). The sheet, `till-guide-sheet`
+  (`apps/till/src/widgets/guide-sheet.ts`), is a `wt-modal size="full"` holding the page in an
+  `<iframe>`, headed "Guide", with a Close button. Close and Escape both close it, and focus goes
+  back to the badge that opened it. A badge outside `till-shell` reaches no sheet and opens a tab.
+- The page is served by the box on the till's own origin, and its policy allows same-origin framing
+  (`frame-ancestors 'self'`, above). In development the till's Vite server sends `/help` to the
+  server (`apps/till/vite.config.ts`, pinned by `scripts/dev-proxy-config.test.ts`).
+- The page follows the till's theme by itself: both read `waitron-theme` from the same origin's
+  `localStorage` (above).
 
 ## A refusal reaches a field by what the error carries, not by one parameter name
 

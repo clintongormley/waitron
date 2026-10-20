@@ -2176,6 +2176,19 @@ keeps its `--wt-tap-min` square. Tests: `till-shell.help.test.ts` (where the swi
 `till-shell.help-phone.test.ts` (the bar at phone width), `till-app.help-mode.test.ts` (off on lock)
 and `till-shell.menu-help.test.ts` (the menu badges).
 
+The till's screens carry badges too, each built by `helpBadge` (`apps/till/src/widgets/help-badge.ts`)
+with its text from `apps/till/src/i18n/help-strings.ts`. Counter: Park, the Guests field, and the
+Parked orders and Waiting orders headings (the Waiting heading, and so its badge, is not drawn while
+the list is empty). Counter and Order: the dishes' search field, whose box links to the Products
+guide. Floor: the tables toolbar (its text follows the map or list view and whether today's floor
+may be changed), the layout banner, and the Needs moving window when it offers Leave it here.
+Order: the Fire / Send all group, drawn only as wide as its buttons so the badge sits on Send all's
+corner. Counter's payment buttons carry none yet. At phone width the Floor's toolbar and banner keep
+room on their trailing side for half the badge, whether help is on or off, so a badge stays inside
+the window and turning help on moves nothing. Tests: the `*.help.test.ts` file beside each of
+`till-counter-screen.ts`, `till-floor-screen.ts` and `till-table-order-screen.ts` (Counter and Floor
+keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.help.test.ts`.
+
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`
   item) — a screen draws one loose only inside a box it positions itself, as SumUp's affiliate
@@ -2221,7 +2234,8 @@ help text does not join its name.
 
 **Read more in the guide.** A badge whose part the user guide explains further than the badge's own
 text can link to that guide's section: the screen sets `guide-href` to the address
-`guideHref(key)` builds (`apps/dashboard/src/help-guide.ts`) and `guide-label` to its own words for
+`guideHref(key)` builds (`apps/dashboard/src/help-guide.ts`, or the till's
+`apps/till/src/help-guide.ts`) and `guide-label` to its own words for
 the link ("Read more in the guide", "Más información en la guía", `help.guide_link`), because a
 primitive shows no fixed words. The link sits after the text in the open box. Tab goes from the
 badge to the link and the box stays open; Tab past the link closes the box, Escape on it closes the
@@ -2229,6 +2243,8 @@ box and puts focus back on the badge, and a click on it opens the guide in a new
 box (`packages/ui/src/components/wt-help-tooltip.guide.test.ts`). The click first sends
 `wt-guide-open` from the badge; a listener that cancels it keeps the link from opening, so the app
 can show the guide its own way (`packages/ui/src/components/wt-help-tooltip.guide-event.test.ts`).
+The till does: `till-shell` cancels it and shows the page in a full-screen sheet with a Close button,
+because a till has no tab bar to come back by (conventions-ui.md, "How the till links a guide").
 A link is only worth adding where the guide says more than the badge: in Products, the price field,
 the default course and the Variants section link to their sections, and VAT and Availability do not.
 A `wt-data-table` column badge, a `wt-tabs` item and a `wt-menu-row` cannot carry a link yet. Where the guides live and
