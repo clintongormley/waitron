@@ -2935,6 +2935,12 @@ export class TillApp extends LitElement {
       this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
       return;
     }
+    // The sticker is now the sheet field's latest pick, so no earlier pick's refusal shows under it.
+    const role: PayEquipmentRole = code.kind === "reader" ? "card_terminal" : "receipt";
+    this.#payEquipmentPicks[role]++;
+    const errors = { ...this.payEquipmentErrors };
+    delete errors[role];
+    this.payEquipmentErrors = errors;
     const context = {
       session: this.#operatorSession,
       name: permitted.choices.find((item) => item.id === code.id)!.name,

@@ -1256,6 +1256,59 @@ describe("till-app: a pick from the sheet that fails", () => {
     expect(continueButton(el).disabled).toBe(false);
   });
 
+  it("a scanned sticker for the reader replaces an earlier pick's refusal under the field", async () => {
+    const camera = cameraFilming(formatEquipmentCode("reader", READER_ID));
+    try {
+      vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+      const setDeviceEquipment = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "reader.payment_in_progress", status: 409 })
+        .mockResolvedValueOnce(equipmentOf(LECTOR_3));
+      const el = await phoneSheet({ setDeviceEquipment });
+      await pick(el, "cardReaderId", "Lector 4");
+      expect((await field(el, "cardReaderId")).error).toBe(
+        codeMessage("reader.payment_in_progress"),
+      );
+
+      row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+      await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2), {
+        timeout: 10_000,
+      });
+      await flush(el);
+
+      const reader = await field(el, "cardReaderId");
+      expect(reader.value).toBe(READER_ID);
+      expect(reader.error).toBe("");
+    } finally {
+      camera.stop();
+    }
+  });
+
+  it("a pick refused only after an NFC tap for the reader was made shows no refusal", async () => {
+    installNfc();
+    let refuse!: () => void;
+    const setDeviceEquipment = vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise((_, reject) => {
+          refuse = () => reject({ code: "reader.payment_in_progress", status: 409 });
+        }),
+      )
+      .mockResolvedValueOnce(equipmentOf(LECTOR_3));
+    const el = await phoneSheet({ setDeviceEquipment });
+    await pick(el, "cardReaderId", "Lector 4");
+    (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await flush(el);
+
+    refuse();
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+    await flush(el);
+
+    const reader = await field(el, "cardReaderId");
+    expect(reader.value).toBe(READER_ID);
+    expect(reader.error).toBe("");
+  });
+
   it("a pick with no answer reads the equipment again, shows what it says, and says it was not saved", async () => {
     const setDeviceEquipment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_2));
