@@ -98,6 +98,18 @@ const barraQueue: StationQueueGroup[] = [
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    previewPartyAllergy: vi.fn(async (partyId: string) => ({
+      partyId,
+      snapshot: {
+        answer: "none",
+        guests: [],
+        ticks: [],
+        changedAt: null,
+        changedBy: null,
+        revision: 12,
+      },
+      dishes: [],
+    })),
     listStations: vi.fn().mockResolvedValue(stations),
     getFindBill: vi.fn(async (workingOrderId: string) => ({
       workingOrderId,

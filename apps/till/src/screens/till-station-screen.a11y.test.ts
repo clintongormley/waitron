@@ -103,6 +103,23 @@ const groups: StationQueueGroup[] = [
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    getFindBill: vi.fn(async (workingOrderId: string) => ({
+      workingOrderId,
+      partyId: null,
+      edit: null,
+    })),
+    previewPartyAllergy: vi.fn(async (partyId: string) => ({
+      partyId,
+      snapshot: {
+        answer: "none",
+        guests: [],
+        ticks: [],
+        changedAt: null,
+        changedBy: null,
+        revision: 12,
+      },
+      dishes: [],
+    })),
     listStations: vi.fn().mockResolvedValue(stations),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "dev-1",

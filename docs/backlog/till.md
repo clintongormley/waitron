@@ -2278,7 +2278,10 @@ without replacing the dish draft. Release requests have a network deadline separ
 time spent answering; an open allergy form retains its answer for retry. Sold-out, changed-draft
 and station-routing refusals return to their dish recovery handlers. The send's groups and allergy
 ticks use the dish ids returned by its final save. A stale group Fire shows the refreshed dishes and
-requires another confirmation before sending their assignments. Kitchen callers and lifecycle integration remain.
+requires another confirmation before sending their assignments. Signed-in station and pass Fire
+uses the common prompt, including cross-bill assignments. Device Fire uses recorded answers and
+shows an unanswered refusal without offering a guest editor. Lifecycle and counter-to-table move
+integration remain.
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.

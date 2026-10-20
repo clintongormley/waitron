@@ -16309,6 +16309,7 @@ export class TillApp extends LitElement {
       ></till-kitchen-screen-notice>`;
     if (this.initialDevicePassMonitor)
       return html`<till-expo-screen
+        .operatorSession=${this.#operatorSession}
         embedded
         monitor
         .api=${this.api}
@@ -16318,6 +16319,7 @@ export class TillApp extends LitElement {
       ></till-expo-screen>`;
     return this.initialDevicePass
       ? html`<till-expo-screen
+          .operatorSession=${this.#operatorSession}
           embedded
           .api=${this.api}
           .fireControl=${this.fireControl}
@@ -16327,6 +16329,7 @@ export class TillApp extends LitElement {
           .initialDevicePass=${this.initialDevicePass}
         ></till-expo-screen>`
       : html`<till-station-screen
+          .operatorSession=${this.#operatorSession}
           embedded
           .api=${this.api}
           .bumpMode=${this.bumpMode}
@@ -16515,6 +16518,7 @@ export class TillApp extends LitElement {
         ></till-schedule-screen>`;
       case "station":
         return html`<till-station-screen
+          .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
           .canMoveStation=${this.capabilities.includes("take-orders")}
@@ -16527,6 +16531,7 @@ export class TillApp extends LitElement {
         ></till-station-screen>`;
       case "expo":
         return html`<till-expo-screen
+          .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
           .fireControl=${this.fireControl}

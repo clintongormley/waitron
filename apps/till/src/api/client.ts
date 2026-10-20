@@ -3577,8 +3577,18 @@ export class TillApi {
    * course's lines held outside a group are released. NON-FISCAL; idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
    * `course.not_found`; a malformed order id `working_order.not_found`.
    */
-  async fireCourse(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
+  async fireCourse(
+    orderId: string,
+    courseId: string,
+    command?: AllergyCommand,
+    options: ReadOptions = {},
+  ): Promise<void> {
+    await this.#request<void>(
+      `/api/orders/${orderId}/courses/${courseId}/fire`,
+      "POST",
+      command ?? {},
+      options.signal,
+    );
   }
 
   /**

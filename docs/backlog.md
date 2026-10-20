@@ -2377,7 +2377,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   routes and till prompts follow one [combined implementation plan](superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
   and must land together. The unpublished branch includes the server boundary, shared dialog,
   table send adapters, editor and live allergy view, including release deadlines, dish/draft recovery,
-  final-save dish ids and renewed confirmation when a stale Fire finds different dishes. Kitchen screen callers and lifecycle integration remain;
+  final-save dish ids and renewed confirmation when a stale Fire finds different dishes. Signed-in
+  station/pass Fire uses the same prompt; device Fire keeps its existing answer and refusal path.
+  Lifecycle and counter-to-table move integration remain;
   kitchen copies/notices remain a separate slice after them. At the first Send, ask "Any allergies at this table?" on every table send path; the counter has no allergy step.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

@@ -1,3 +1,4 @@
+import { KitchenAllergySend } from "../state/kitchen-allergy-send.js";
 import { groupName } from "../widgets/group-name.js";
 import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
@@ -464,6 +465,16 @@ export class TillExpoScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: TillApi;
+  @property({ attribute: false }) operatorSession = 0;
+  readonly #allergy = new KitchenAllergySend(this, () =>
+    JSON.stringify([
+      this.operatorSession,
+      this.deviceMode,
+      this.monitor,
+      this.#boardId(),
+      this.fireControl,
+    ]),
+  );
   /** Decides who FIRES a held course or group; the ready/away levers are the pass's own regardless. */
   @property() fireControl: FireControlMode = "waiter";
   /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
@@ -745,8 +756,71 @@ export class TillExpoScreen extends LitElement {
     return true;
   }
 
+  async #fireGroup(order: ExpoOrder, party: QueueParty, groupId: string): Promise<void> {
+    if (this.deviceMode) {
+      await this.#groupAct(order, party, (command) =>
+        this.api.fireDeviceGroup(party.id, groupId, command),
+      );
+      return;
+    }
+    const api = this.api;
+    const board = this.#boardId();
+    this.leverError = undefined;
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
+    try {
+      if (
+        !(await this.#allergy.run({ kind: "group", groupId }, party.id, party.revision, (command) =>
+          api.fireGroup(party.id, groupId, command!),
+        ))
+      )
+        return;
+    } catch (error) {
+      if (api !== this.api || board === null || !this.#isCurrent(board)) return;
+      if ((error as { code?: string }).code === "party.out_of_date")
+        this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
+      else
+        this.leverError = {
+          code: (error as { code?: string }).code ?? "table.error",
+          card: order.tableLabel ?? `#${order.orderNumber}`,
+        };
+    }
+    if (api === this.api && board !== null && this.#isCurrent(board)) await this.#reload();
+  }
+
+  async #fireCourse(order: ExpoOrder, courseId: string): Promise<void> {
+    if (this.deviceMode) {
+      await this.#act(order, () => this.api.fireDeviceCourse(order.orderId, courseId));
+      return;
+    }
+    const api = this.api;
+    const board = this.#boardId();
+    this.leverError = undefined;
+    try {
+      if (
+        !(await this.#allergy.run(
+          { kind: "course", orderId: order.orderId, courseId },
+          null,
+          undefined,
+          (command) =>
+            command
+              ? api.fireCourse(order.orderId, courseId, command)
+              : api.fireCourse(order.orderId, courseId),
+        ))
+      )
+        return;
+    } catch (error) {
+      if (api !== this.api || board === null || !this.#isCurrent(board)) return;
+      this.leverError = {
+        code: (error as { code?: string }).code ?? "table.error",
+        card: order.tableLabel ?? `#${order.orderNumber}`,
+      };
+    }
+    if (api === this.api && board !== null && this.#isCurrent(board)) await this.#reload();
+  }
+
   #leverRefused(order: ExpoOrder, error: unknown): void {
-    if (this.deviceMode)
+    if (this.deviceMode || (error as { code?: string } | null)?.code?.startsWith("allergy."))
       this.leverError = {
         code: (error as { code?: string } | null)?.code ?? "server.internal",
         card: order.tableLabel
@@ -819,6 +893,7 @@ export class TillExpoScreen extends LitElement {
         }
         ${!this.#shows() ? nothing : this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
+      ${this.#allergy.render()}
     `;
   }
 
@@ -958,12 +1033,7 @@ export class TillExpoScreen extends LitElement {
         class="lever fire"
         data-group-fire=${groupId}
         aria-label=${`${t("expo.fire")} ${name}`}
-        @click=${() =>
-          void this.#groupAct(order, party, (command) =>
-            this.deviceMode
-              ? this.api.fireDeviceGroup(party.id, groupId, command)
-              : this.api.fireGroup(party.id, groupId, command),
-          )}
+        @click=${() => void this.#fireGroup(order, party, groupId)}
       >
         ${t("expo.fire")}
       </button>`;
@@ -1118,12 +1188,7 @@ export class TillExpoScreen extends LitElement {
         class="lever fire"
         data-fire=${courseId}
         aria-label=${`${t("expo.fire")} ${name}`}
-        @click=${() =>
-          void this.#act(order, () =>
-            this.deviceMode
-              ? this.api.fireDeviceCourse(order.orderId, courseId)
-              : this.api.fireCourse(order.orderId, courseId),
-          )}
+        @click=${() => void this.#fireCourse(order, courseId)}
       >
         ${t("expo.fire")}
       </button>`;

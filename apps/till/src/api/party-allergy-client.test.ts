@@ -17,6 +17,22 @@ const reply = () =>
   new Response(JSON.stringify(view), { headers: { "content-type": "application/json" } });
 
 describe("A669 allergy client", () => {
+  it("sends the allergy command and cancellation signal on a session course Fire", async () => {
+    const fetcher = vi.fn().mockImplementation(reply);
+    const abort = new AbortController();
+    await new TillApi("", fetcher).fireCourse("bill-1", "course-1", command, {
+      signal: abort.signal,
+    });
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual(command);
+    expect(fetcher.mock.calls[0]![1].signal).toBe(abort.signal);
+  });
+  it("keeps a device course Fire free of person-owned allergy edits", async () => {
+    const fetcher = vi.fn().mockImplementation(reply);
+    await new TillApi("", fetcher).fireDeviceCourse("bill-1", "course-1");
+    expect(fetcher.mock.calls[0]![0]).toBe("/api/device/orders/bill-1/courses/course-1/fire");
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual({});
+  });
+
   it.each(["lines", "group", "held-line"] as const)(
     "cancels the %s release request without changing its command",
     async (kind) => {
