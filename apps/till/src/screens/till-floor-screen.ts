@@ -13,20 +13,21 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
-import type { TimingBand } from "@waitron/shared";
 import {
   baseStyles,
   UrlStateController,
   buildZoneTabs,
+  floorRingStyles,
   floorTrayStyles,
   inNumberOrder,
   MAP_SEPARATOR,
   mergeLabel,
   renderFloorChips,
+  renderFloorRing,
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
-import type { FloorMapDrop, FloorMapTable, FloorTable, ZoneTab } from "@waitron/ui";
+import type { FloorMapDrop, FloorMapTable, FloorRing, FloorTable, ZoneTab } from "@waitron/ui";
 import {
   conjunctionList,
   decimal,
@@ -102,6 +103,7 @@ import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { lateBand, topState, type TableStateKind } from "../state/table-precedence.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
 
 /** The words of a table that needs clearing or moving. */
@@ -136,9 +138,16 @@ function shownPartyName(table: TableState): string | undefined {
   return name === undefined || name === shownUnder(table) ? undefined : name;
 }
 
+const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
+  forgotten: "forgotten",
+  overdue: "overdue",
+  fire: "fire",
+  waiting: "waiting",
+};
+
 /** The table's own Forgotten badge already says a forgotten wait. */
 function tableChips(table: TableState, now: number) {
-  const chips = signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
+  const chips = signalChips(table.signals, { forgottenShown: lateBand(table) === "forgotten" });
   const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
   return held === null ? chips : [...chips, held];
 }
@@ -251,6 +260,7 @@ export class TillFloorScreen extends LitElement {
     baseStyles,
     servicePeriodStyles,
     floorTrayStyles,
+    floorRingStyles,
     signalChipStyles,
     helpAnchorStyles,
     css`
@@ -364,6 +374,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       .card {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -398,44 +409,9 @@ export class TillFloorScreen extends LitElement {
         cursor: default;
       }
 
-      /* Order-timing accent (KDS order-timing alerts, design §7.3): a table whose worst unserved line
-         has escalated gets a subtler steady amber (warm) through steady red (overdue) up to a
-         FLASHING red (forgotten) — the SAME age- and flash class scheme till-station-queue's rail
-         card and till-expo-screen's order card use, so the escalation reads as one visual language
-         across every KDS surface. Laid down as an INSET BOX-SHADOW rather than another border/border-left
-         colour, deliberately: .card's left edge already carries the OCCUPANCY accent (.state-* above),
-         and a box-shadow is a wholly separate CSS property, so the two accents can never fight over
-         ownership of the same edge — both render, always, side by side (a11y: two independent
-         signals, never one clobbering the other). 'fresh' gets no override. */
-      .card.age-warm {
-        box-shadow: inset 0 0 0 2px var(--wt-color-primary);
-      }
-
-      .card.age-overdue,
-      .card.age-forgotten {
-        box-shadow: inset 0 0 0 2px var(--wt-color-danger);
-      }
-
-      /* The FORGOTTEN flash: a repeating fade of the inset accent, never a colour/motion change behind
-         text — .flash is applied only when the OS/browser has NOT asked for reduced motion
-         (#prefersReducedMotion), so an assistive-motion setting renders the steady red box-shadow
-         above with no @keyframes at all. The @media guard is a second, CSS-only line of defence for
-         the same preference (belt-and-suspenders, house a11y rule) — mirrors till-station-queue's/
-         till-expo-screen's identical treatment. */
-      .card.age-forgotten.flash {
-        animation: age-forgotten-flash 1s ease-in-out infinite;
-      }
-
-      @keyframes age-forgotten-flash {
-        50% {
-          box-shadow: inset 0 0 0 2px transparent;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .card.age-forgotten.flash {
-          animation: none;
-        }
+      .card.edge-forgotten {
+        border-left-color: var(--wt-color-danger);
+        border-left-width: var(--wt-space-3);
       }
 
       /* The forgotten badge (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
@@ -2002,6 +1978,7 @@ export class TillFloorScreen extends LitElement {
       { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {
         ...table,
+        timingBand: lateBand(table),
         // The server reads a table no party holds as free; one needing clearing must not look ready to seat.
         state: needsClearing(table) ? "open-tab" : table.state,
         tabTotal,
@@ -2201,6 +2178,7 @@ export class TillFloorScreen extends LitElement {
     >
       <wt-table-token
         .table=${this.#toFloorTable(table)}
+        .reducedMotion=${this.reducedMotion}
         .locale=${currentLocale()}
         .labels=${{
           covers: t("floor.capacity"),
@@ -2228,13 +2206,6 @@ export class TillFloorScreen extends LitElement {
 
   #prefersReducedMotion(): boolean {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
-
-  /** Space-prefixed (or empty) so it can be interpolated directly after `.card` in the template. */
-  #timingAccentClass(band: TimingBand): string {
-    if (band === "fresh") return "";
-    const flash = band === "forgotten" && !this.#prefersReducedMotion();
-    return ` age-${band}${flash ? " flash" : ""}`;
   }
 
   #seatDialog(): TemplateResult | typeof nothing {
@@ -2385,11 +2356,17 @@ export class TillFloorScreen extends LitElement {
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#waitingCard(table, "clear");
     if (needsMovingToday(table)) return this.#waitingCard(table, "move");
+    const top = topState(table, this.#drawnAt);
+    const ring = top === undefined ? null : (RING_OF[top] ?? null);
+    const moving = !this.#prefersReducedMotion();
+    const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
     return html`<button
-      class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
+      class="card state-${table.state}${edge}"
       data-table=${table.id}
+      data-top=${top ?? nothing}
       @click=${() => this.#openTable(table)}
     >
+      ${renderFloorRing(ring, moving)}
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
       <span class="badges">
@@ -2402,7 +2379,7 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
         ${
-          table.timingBand === "forgotten"
+          lateBand(table) === "forgotten"
             ? html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`
             : nothing
         }

@@ -1,0 +1,262 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
+import "./till-floor-screen.js";
+import type { TillFloorScreen } from "./till-floor-screen.js";
+import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableSignal } from "@waitron/shared";
+
+const now = Date.parse("2026-09-30T20:00:00.000Z");
+const past = new Date(now - 60_000).toISOString();
+
+function party(over: Partial<TableParty> = {}): TableParty {
+  return {
+    kitchenNote: {
+      scope: { partyId: over.id ?? "v2" },
+      note: null,
+      revision: 0,
+      ownerRevision: over.revision ?? 3,
+    },
+    id: "v2",
+    revision: 3,
+    guestCount: 2,
+    state: "open",
+    name: null,
+    displayName: "Table 2",
+    mainBillId: "wo-2",
+    outstanding: "20.00",
+    billCount: 1,
+    tableIds: ["t2"],
+    unsentDrafts: [],
+    reminder: null,
+    ...over,
+  };
+}
+
+function today(over: Partial<TableToday> = {}): TableToday {
+  return {
+    placement: { x: 2, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+    inJoinedTable: null,
+    joined: null,
+    splitOffFrom: null,
+    zoneRevision: 0,
+    ...over,
+  };
+}
+
+function table(over: Partial<TableState> = {}): TableState {
+  return {
+    id: "t2",
+    label: "Table 2",
+    zoneId: "z1",
+    state: "open-tab",
+    condition: "held",
+    hasOpenTab: true,
+    tabLineCount: 2,
+    tabTotal: "20.00",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    enRoute: 0,
+    timingBand: "fresh",
+    nextReservation: null,
+    today: null,
+    party: party(),
+    signals: [],
+    ...over,
+  };
+}
+
+const longWait = (band: "warm" | "overdue" | "forgotten"): TableSignal => ({
+  kind: "long_wait",
+  band,
+});
+const due = party({ reminder: { groupId: "g2", dueAt: past } });
+
+async function mountFloor(
+  tables: TableState[],
+  over: Partial<TillFloorScreen> = {},
+): Promise<{ el: TillFloorScreen; host: HTMLElement }> {
+  return mountWidget<TillFloorScreen>("till-floor-screen", {
+    zones: [
+      {
+        id: "z1",
+        name: "Dining room",
+        displayOrder: 0,
+        active: true,
+        closesAt: null,
+        closed: false,
+        hasPlan: false,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+      },
+    ],
+    tables,
+    now,
+    ...over,
+  });
+}
+
+const card = (el: TillFloorScreen, id = "t2") =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-table="${id}"]`)!;
+const ringOf = (root: ParentNode) => root.querySelector<HTMLElement>("[data-ring]");
+const pulses = (ring: Element) => [...ring.classList].filter((c) => c.startsWith("wt-pulse-"));
+
+beforeEach(() => setLocale("en"));
+afterEach(cleanupWidgets);
+
+describe("till-floor-screen: the card's ring", () => {
+  it("rings an overdue card in red, pulsing slowly at the slow token", async () => {
+    const { el, host } = await mountFloor([table({ timingBand: "overdue" })], {
+      reducedMotion: false,
+    });
+    host.style.setProperty("--wt-duration-pulse-slow", "5000ms");
+    const ring = card(el).querySelector<HTMLElement>('[data-ring="overdue"]')!;
+    expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
+    expect(getComputedStyle(ring).animationDuration).toBe("5s");
+    expect(card(el).dataset.top).toBe("overdue");
+  });
+
+  it("rings a forgotten card fast, keeps its badge, and dims the ring to the token half-way", async () => {
+    const { el, host } = await mountFloor([table({ timingBand: "forgotten" })], {
+      reducedMotion: false,
+    });
+    host.style.setProperty("--wt-opacity-pulse-dim", "0.4");
+    host.style.setProperty("--wt-duration-pulse-fast", "2000ms");
+    const ring = card(el).querySelector<HTMLElement>('[data-ring="forgotten"]')!;
+    expect(pulses(ring)).toEqual(["wt-pulse-fast"]);
+    expect(card(el).querySelector("[data-forgotten]")).not.toBeNull();
+    const [animation] = ring.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 1000;
+    expect(getComputedStyle(ring).opacity).toBe("0.4");
+  });
+
+  it("rings a card whose reminder is due in amber, pulsing slowly", async () => {
+    const { el, host } = await mountFloor([table({ party: due })], { reducedMotion: false });
+    host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    const ring = card(el).querySelector<HTMLElement>('[data-ring="fire"]')!;
+    expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
+    expect(getComputedStyle(ring).boxShadow).toContain("rgb(4, 5, 6)");
+  });
+
+  it("rings a waiting card in steady amber, not blue", async () => {
+    const { el, host } = await mountFloor([table({ signals: [longWait("warm")] })], {
+      reducedMotion: false,
+    });
+    host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+    const ring = card(el).querySelector<HTMLElement>('[data-ring="waiting"]')!;
+    expect(pulses(ring)).toEqual([]);
+    const shadow = getComputedStyle(ring).boxShadow;
+    expect(shadow).toContain("rgb(4, 5, 6)");
+    expect(shadow).not.toContain("rgb(1, 2, 3)");
+  });
+
+  it("draws only the most urgent state's ring", async () => {
+    const { el } = await mountFloor(
+      [
+        table({ timingBand: "forgotten", party: due }),
+        table({
+          id: "t3",
+          label: "Table 3",
+          party: party({ id: "v3", tableIds: ["t3"] }),
+          signals: [{ kind: "bill_requested", requestedAt: past }, longWait("warm")],
+        }),
+      ],
+      { reducedMotion: false },
+    );
+    const rings = card(el).querySelectorAll<HTMLElement>("[data-ring]");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.dataset.ring).toBe("forgotten");
+    expect(ringOf(card(el, "t3"))).toBeNull();
+    expect(card(el, "t3").dataset.top).toBe("bill");
+  });
+
+  it("outlines a card from its wait chip when the floored band has not caught up", async () => {
+    const { el } = await mountFloor(
+      [
+        table({ timingBand: "fresh", signals: [longWait("overdue")] }),
+        table({
+          id: "t3",
+          label: "Table 3",
+          party: party({ id: "v3", tableIds: ["t3"] }),
+          timingBand: "fresh",
+          signals: [longWait("forgotten")],
+        }),
+      ],
+      { reducedMotion: false },
+    );
+    expect(card(el).querySelector('[data-ring="overdue"]')).not.toBeNull();
+    expect(card(el, "t3").querySelector("[data-forgotten]")).not.toBeNull();
+    expect(card(el, "t3").querySelector('[data-chip="long-wait"]')).toBeNull();
+  });
+
+  it("moves nothing under reduced motion: a forgotten card's left edge turns wide and red", async () => {
+    const { el, host } = await mountFloor(
+      [
+        table({ timingBand: "forgotten" }),
+        table({
+          id: "t3",
+          label: "Table 3",
+          party: party({ id: "v3", tableIds: ["t3"] }),
+          timingBand: "overdue",
+        }),
+        table({
+          id: "t4",
+          label: "Table 4",
+          party: party({ id: "v4", tableIds: ["t4"], reminder: { groupId: "g4", dueAt: past } }),
+        }),
+      ],
+      { reducedMotion: true },
+    );
+    host.style.setProperty("--wt-color-danger", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-space-3", "9px");
+    const forgotten = card(el).querySelector<HTMLElement>('[data-ring="forgotten"]')!;
+    expect(pulses(forgotten)).toEqual([]);
+    expect(card(el).classList.contains("edge-forgotten")).toBe(true);
+    const style = getComputedStyle(card(el));
+    expect(style.borderLeftColor).toBe("rgb(1, 2, 3)");
+    expect(style.borderLeftWidth).toBe("9px");
+    expect(card(el).querySelector("[data-forgotten]")).not.toBeNull();
+    const overdue = card(el, "t3").querySelector<HTMLElement>('[data-ring="overdue"]')!;
+    const fire = card(el, "t4").querySelector<HTMLElement>('[data-ring="fire"]')!;
+    expect(pulses(overdue)).toEqual([]);
+    expect(pulses(fire)).toEqual([]);
+    expect(card(el, "t3").classList.contains("edge-forgotten")).toBe(false);
+  });
+
+  it("hands its reduced motion to the unplaced token", async () => {
+    const tables = [
+      table({ id: "t1", label: "Table 1", party: null, state: "free", today: today() }),
+      table({ timingBand: "forgotten", today: today({ placement: null }) }),
+    ];
+    const tokenRing = (el: TillFloorScreen) => {
+      const token = el.shadowRoot!.querySelector<HTMLElement>(
+        "[data-tray-table=t2] wt-table-token",
+      )!;
+      return token.shadowRoot!.querySelector<HTMLElement>('[data-ring="forgotten"]')!;
+    };
+    const still = await mountFloor(tables, { reducedMotion: true });
+    await (
+      still.el.shadowRoot!.querySelector("wt-table-token") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      }
+    ).updateComplete;
+    expect(pulses(tokenRing(still.el))).toEqual([]);
+    cleanupWidgets();
+    const moving = await mountFloor(tables, { reducedMotion: false });
+    await (
+      moving.el.shadowRoot!.querySelector("wt-table-token") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      }
+    ).updateComplete;
+    expect(pulses(tokenRing(moving.el))).toEqual(["wt-pulse-fast"]);
+  });
+});

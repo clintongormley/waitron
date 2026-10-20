@@ -358,6 +358,33 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(list.host);
   });
 
+  it("has no violations with an overdue, a forgotten and a due card ringed, on the list", async () => {
+    const now = Date.parse("2026-09-29T20:00:00.000Z");
+    const [owing, paid] = partyTables as [TableState, TableState];
+    const ringed: TableState[] = [
+      { ...owing, timingBand: "overdue" },
+      { ...paid, timingBand: "forgotten" },
+      {
+        ...owing,
+        id: "t10",
+        label: "10",
+        party: {
+          ...owing.party!,
+          id: "v10",
+          tableIds: ["t10"],
+          reminder: { groupId: "g10", dueAt: new Date(now).toISOString() },
+        },
+      },
+    ];
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: ringed, now },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelectorAll("[data-ring]")).toHaveLength(3);
+    await expectNoA11yViolations(list.host);
+  });
+
   it("has no violations with held dishes counting down and a reminder due, on the list", async () => {
     const now = Date.parse("2026-09-29T20:00:00.000Z");
     const marked = partyTables.map((table, index): TableState =>
