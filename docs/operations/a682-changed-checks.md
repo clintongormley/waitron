@@ -4048,3 +4048,14 @@ present-map and staff/display expectations remain. Two cases failed before the t
 The existing `till-api.fiscal-sale-paths.test.ts` stays byte-identical to the pushed candidate,
 including its exact original null maps, receipt/replay facts, all totals and fiscal assertions.
 The protected golden/immutability suites also pass unchanged (20 cases).
+
+
+### Allergy integration fixture after rebase
+
+The rebase onto #1910 adds `apps/till/test/allergy-app-fixture.ts`, whose unit fixture predates
+A682's required staff pair. The normal hook and a focused till typecheck both refused its
+`SellableUnit` at line 45 (`TS2739`, missing `staffName` and `staffAbbreviation`). The fixture
+gains only `staffName: "Staff unit"` and `staffAbbreviation: "su"`; its original id, translated
+maps, price/precision/hardware values and all consumer assertions remain unchanged. Authority:
+unit option A / Tasks 2–3. The six consuming allergy suites are run after this addition. No
+production behavior or allergy contract is changed.

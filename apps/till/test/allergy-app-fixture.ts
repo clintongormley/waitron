@@ -21,6 +21,8 @@ import type {
 } from "../src/api/client.js";
 export const unit = {
   id: "unit-each",
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   name: { es: "unit", en: "unit" },
   abbreviation: { es: "ea", en: "ea" },
   precision: 0,
