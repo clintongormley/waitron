@@ -505,60 +505,72 @@ function stubReducedMotion(matches: boolean): () => void {
   };
 }
 
-describe("order-timing accent (timingBand)", () => {
+/** Every `wt-pulse-*` class anywhere in the token's shadow root. */
+function pulseClasses(el: HTMLElement): string[] {
+  return [...el.shadowRoot!.querySelectorAll("*")].flatMap((node) =>
+    [...node.classList].filter((c) => c.startsWith("wt-pulse-")),
+  );
+}
+
+describe("the outline ring", () => {
   test("renders no timing accent when timingBand is undefined (fresh) — occupancy accent untouched", async () => {
     const el = await mountToken(table({ state: "free" }));
     const card = el.shadowRoot!.querySelector(".card")!;
     expect(card.classList.contains("state-free")).toBe(true);
-    expect([...card.classList].some((c) => c.startsWith("age-"))).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-ring]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
   });
 
-  test("renders the subtler steady accent for a warm table, no flash, no marker", async () => {
-    const el = await mountToken(table({ timingBand: "warm" }));
-    const card = el.shadowRoot!.querySelector(".card")!;
-    expect(card.classList.contains("age-warm")).toBe(true);
-    expect(card.classList.contains("flash")).toBe(false);
+  test("renders a steady amber ring for a warm table, no pulse, no marker", async () => {
+    const el = await mountToken(table({ timingBand: "warm" }), undefined, false);
+    expect(el.shadowRoot!.querySelector('[data-ring="waiting"]')).not.toBeNull();
+    expect(pulseClasses(el)).toEqual([]);
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
   });
 
-  test("renders the steady red accent for an overdue table, no flash, no marker", async () => {
-    const el = await mountToken(table({ timingBand: "overdue" }));
-    const card = el.shadowRoot!.querySelector(".card")!;
-    expect(card.classList.contains("age-overdue")).toBe(true);
-    expect(card.classList.contains("flash")).toBe(false);
+  test("pulses slowly in red for an overdue table, no marker", async () => {
+    const el = await mountToken(table({ timingBand: "overdue" }), undefined, false);
+    const ring = el.shadowRoot!.querySelector('[data-ring="overdue"]')!;
+    expect(ring.classList.contains("wt-pulse-slow")).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
   });
 
   test("forgotten flashes by default (motion allowed) and shows the non-colour forgotten marker", async () => {
     const el = await mountToken(table({ timingBand: "forgotten" }), undefined, false);
-    const card = el.shadowRoot!.querySelector(".card")!;
-    expect(card.classList.contains("age-forgotten")).toBe(true);
-    expect(card.classList.contains("flash")).toBe(true);
+    const ring = el.shadowRoot!.querySelector('[data-ring="forgotten"]')!;
+    expect(ring.classList.contains("wt-pulse-fast")).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
   });
 
   test("reduced motion: a forgotten table renders steady red with NO flash class, marker still shown", async () => {
     const el = await mountToken(table({ timingBand: "forgotten" }), undefined, true);
     const card = el.shadowRoot!.querySelector(".card")!;
-    expect(card.classList.contains("age-forgotten")).toBe(true);
-    expect(card.classList.contains("flash")).toBe(false);
+    expect(el.shadowRoot!.querySelector('[data-ring="forgotten"]')).not.toBeNull();
+    expect(pulseClasses(el)).toEqual([]);
+    expect(card.classList.contains("edge-forgotten")).toBe(true);
     // The marker is the non-colour tell, so reduced motion does not remove it.
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
   });
 
-  test("reduced motion never applies flash to a merely-overdue (non-forgotten) table either", async () => {
+  test("an overdue table pulses slowly, never fast", async () => {
     const el = await mountToken(table({ timingBand: "overdue" }), undefined, false);
-    const card = el.shadowRoot!.querySelector(".card")!;
-    expect(card.classList.contains("age-overdue")).toBe(true);
-    expect(card.classList.contains("flash")).toBe(false);
+    const ring = el.shadowRoot!.querySelector('[data-ring="overdue"]')!;
+    expect(ring.classList.contains("wt-pulse-slow")).toBe(true);
+    expect(ring.classList.contains("wt-pulse-fast")).toBe(false);
+
+    const reduced = await mountToken(table({ timingBand: "overdue" }), undefined, true);
+    expect(reduced.shadowRoot!.querySelector('[data-ring="overdue"]')).not.toBeNull();
+    expect(pulseClasses(reduced)).toEqual([]);
+    expect(reduced.shadowRoot!.querySelector(".card")!.classList.contains("edge-forgotten")).toBe(
+      false,
+    );
   });
 
   test("coexists with the occupancy accent — a forgotten OPEN-TAB token carries BOTH classes", async () => {
     const el = await mountToken(table({ state: "open-tab", timingBand: "forgotten" }));
     const card = el.shadowRoot!.querySelector(".card")!;
     expect(card.classList.contains("state-open-tab")).toBe(true);
-    expect(card.classList.contains("age-forgotten")).toBe(true);
+    expect(el.shadowRoot!.querySelector('[data-ring="forgotten"]')).not.toBeNull();
   });
 
   test("the forgotten marker is decorative (aria-hidden) with no consumer-supplied label", async () => {
@@ -579,9 +591,8 @@ describe("order-timing accent (timingBand)", () => {
 
   test("a fresh table carries no timing accent and no marker", async () => {
     const el = await mountToken(table({ timingBand: "fresh" }));
-    const card = el.shadowRoot!.querySelector(".card")!;
-    expect([...card.classList].some((c) => c.startsWith("age-"))).toBe(false);
-    expect(card.classList.contains("flash")).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-ring]")).toBeNull();
+    expect(pulseClasses(el)).toEqual([]);
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
   });
 
@@ -590,13 +601,72 @@ describe("order-timing accent (timingBand)", () => {
       const restore = stubReducedMotion(reduced);
       try {
         const el = await mountToken(table({ timingBand: "forgotten" }));
-        return el.shadowRoot!.querySelector(".card")!.classList.contains("flash");
+        return el
+          .shadowRoot!.querySelector('[data-ring="forgotten"]')!
+          .classList.contains("wt-pulse-fast");
       } finally {
         restore();
       }
     };
     expect(await flashesWhenMotionReduced(true)).toBe(false);
     expect(await flashesWhenMotionReduced(false)).toBe(true);
+  });
+
+  test("rings a table whose reminder is due in amber, slowly", async () => {
+    const el = await mountToken(table({ fireDue: true }), undefined, false);
+    host.style.setProperty("--wt-color-warning", "rgb(19, 20, 21)");
+    const ring = el.shadowRoot!.querySelector('[data-ring="fire"]')!;
+    expect(ring.classList.contains("wt-pulse-slow")).toBe(true);
+    expect(getComputedStyle(ring).color).toBe("rgb(19, 20, 21)");
+
+    const reduced = await mountToken(table({ fireDue: true }), undefined, true);
+    expect(reduced.shadowRoot!.querySelector('[data-ring="fire"]')).not.toBeNull();
+    expect(pulseClasses(reduced)).toEqual([]);
+    expect(reduced.shadowRoot!.querySelector(".card")!.classList.contains("edge-forgotten")).toBe(
+      false,
+    );
+  });
+
+  test("draws one ring, the most urgent", async () => {
+    const ringsOf = async (overrides: Partial<FloorTable>) => {
+      const el = await mountToken(table(overrides), undefined, false);
+      return [...el.shadowRoot!.querySelectorAll("[data-ring]")].map((r) =>
+        r.getAttribute("data-ring"),
+      );
+    };
+    expect(await ringsOf({ timingBand: "forgotten", fireDue: true })).toEqual(["forgotten"]);
+    expect(await ringsOf({ timingBand: "warm", fireDue: true })).toEqual(["fire"]);
+    expect(await ringsOf({ timingBand: "overdue", fireDue: true })).toEqual(["overdue"]);
+  });
+
+  test("under reduced motion a forgotten table's left edge is wide and red", async () => {
+    const leftEdge = async (reducedMotion: boolean) => {
+      const el = await mountToken(
+        table({ state: "open-tab", timingBand: "forgotten" }),
+        undefined,
+        reducedMotion,
+      );
+      host.style.setProperty("--wt-color-danger", "rgb(1, 2, 3)");
+      host.style.setProperty("--wt-space-3", "9px");
+      host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-space-1", "3px");
+      const card = getComputedStyle(el.shadowRoot!.querySelector(".card")!);
+      return [card.borderLeftColor, card.borderLeftWidth];
+    };
+    expect(await leftEdge(true)).toEqual(["rgb(1, 2, 3)", "9px"]);
+    expect(await leftEdge(false)).toEqual(["rgb(4, 5, 6)", "3px"]);
+  });
+
+  test("paints Reserved on the map's reserved tokens", async () => {
+    const el = await mountToken(table({ reservedTime: "20:30" }), { reserved: "Reserved" });
+    host.style.setProperty("--wt-color-table-reserved", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-on-table-reserved", "rgb(10, 11, 12)");
+    host.style.setProperty("--wt-color-surface-raised", "rgb(13, 14, 15)");
+    host.style.setProperty("--wt-color-text", "rgb(16, 17, 18)");
+    const chip = getComputedStyle(el.shadowRoot!.querySelector(".badge.reserved")!);
+    expect(chip.backgroundColor).toBe("rgb(7, 8, 9)");
+    expect(chip.borderTopColor).toBe("rgb(7, 8, 9)");
+    expect(chip.color).toBe("rgb(10, 11, 12)");
   });
 });
 

@@ -16,6 +16,7 @@ interface Token extends HTMLElement {
     unsent?: string;
     fireDue?: string;
   };
+  reducedMotion?: boolean;
   updateComplete: Promise<unknown>;
 }
 
@@ -72,6 +73,22 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
 
   test("a forgotten-band token with a DECORATIVE marker (no consumer label) is accessible", async () => {
     await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("an overdue token, its ring pulsing, is accessible", async () => {
+    const el = await mountToken(tableData({ state: "open-tab", timingBand: "overdue" }), theme);
+    el.reducedMotion = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-ring="overdue"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a forgotten token under reduced motion, its left edge wide and red, is accessible", async () => {
+    const el = await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
+    el.reducedMotion = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-ring="forgotten"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
