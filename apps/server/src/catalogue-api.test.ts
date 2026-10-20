@@ -2833,6 +2833,53 @@ describe("mountCatalogueApi — products", () => {
     ]);
   });
 
+  it("lists a product's course, and each variant's own course beside the course it is fired in", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Course list");
+    const { courseId: parentCourseId } = await seedRouting();
+    const { courseId: variantCourseId } = await seedRouting();
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      {
+        body: await editorBody(app, {
+          name: "Soup",
+          unitPrice: "5.00",
+          courseId: parentCourseId,
+          variants: ["Small soup", "Large soup"].map((name) => ({
+            name,
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            available: true,
+            active: true,
+          })),
+        }),
+      },
+    );
+    expect(created.status).toBe(201);
+    const parent = (await created.json()) as { id: string; variants: { id: string }[] };
+    const [inheritingId, overridingId] = parent.variants.map((variant) => variant.id);
+    expect(
+      (await saveEditorFixture(app, overridingId!, { courseId: variantCourseId })).status,
+    ).toBe(200);
+
+    const listed = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(listed.status).toBe(200);
+    const row = ((await listed.json()) as { id: string; courseId: string | null }[]).find(
+      (product) => product.id === parent.id,
+    )!;
+    expect(row).toMatchObject({
+      courseId: parentCourseId,
+      variants: [
+        { id: inheritingId, courseId: null, effective: { courseId: parentCourseId } },
+        { id: overridingId, courseId: variantCourseId, effective: { courseId: variantCourseId } },
+      ],
+    });
+  });
+
   it("saves the parent's page back unchanged after its variant's price was blanked", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId } = await parentWithVariant(app);
