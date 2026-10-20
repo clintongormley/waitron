@@ -282,3 +282,26 @@ no tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 
 Mayús+F10 o la tecla de menú contextual abre la misma ventana de información para un producto
 enfocado. Intro sigue seleccionando el plato.
+
+## Guarda la respuesta sobre alergias con los platos de la mesa {#table-allergies}
+
+Antes de enviar por primera vez los platos de una mesa, responde **¿Hay alergias en esta mesa?**
+Elige **Sin alergias**, o elige **Alergias** e indica quién necesita atención especial, los alérgenos
+que debe evitar y, si hace falta, una nota para cocina. Puedes añadir varias personas. La respuesta
+pertenece a los comensales de la mesa y se comparte entre sus cuentas.
+
+Marca los platos que comerá cada persona con alergias. La marca abarca toda la línea del pedido:
+una línea con dos raciones se asigna entera, y un plato solo puede corresponder a una persona. Si
+hay un conflicto, verás el alérgeno declarado del plato y podrás elegir **Enviar de todos modos**.
+Comprueba por tu cuenta un plato sin revisar; la falta de información nutricional no establece que
+sea apto. Los extras muestran sus propios alérgenos por separado.
+
+Los siguientes envíos ofrecen los platos nuevos para asignarlos. Un plato que ya has enviado en
+espera no vuelve a ofrecerse solo porque lo envíes a preparar más tarde. **Cambiar** junto a la
+respuesta de la mesa, o **Acciones → Alergias**, abre el editor completo, incluidos los platos ya
+enviados. Ahí puedes editar o eliminar una persona; al eliminar la última, la respuesta sigue
+siendo Alergias hasta que la cambies.
+
+Al pasar una cuenta del mostrador a una mesa, también se comprueba la respuesta de esa mesa y se
+ofrecen los platos que llegan. Cancelar deja la cuenta donde está. Si la mesa cambia mientras
+respondes, revisa la información actualizada y vuelve a confirmar antes de completar el traslado.

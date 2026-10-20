@@ -269,3 +269,25 @@ sheet in the till.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
 still selects the dish.
+
+## Keep a table's allergy answer with its dishes {#table-allergies}
+
+Before you first send a table's dishes, answer **Any allergies at this table?** Choose **No
+allergies**, or choose **Allergies** and enter who needs special care, the allergens they avoid and
+an optional kitchen note. You can add several guests. The answer belongs to the people at the
+table and is shared by their bills.
+
+For an allergic guest, tick the dishes they will eat. A tick covers the whole order line: a line
+with two portions is assigned as one, and a dish can belong to only one guest. A clash shows the
+dish's declared allergen and lets you choose **Send anyway**. Check an unreviewed dish yourself;
+missing nutrition information does not establish that it is suitable. Extras show their own
+allergens separately.
+
+Later sends offer new dishes for ticking. A dish you already submitted on hold is not offered
+again just because you fire it later. **Change** beside the table's answer, or **Actions →
+Allergies**, opens the full editor, including previously sent dishes. You can edit or delete a
+guest there; deleting the last guest leaves the Allergies answer until you change it.
+
+Moving a counter bill to a table also checks that table's answer and offers the arriving dishes.
+Cancel leaves the bill where it is. If the table changes while you answer, review the refreshed
+information and confirm again before the move proceeds.

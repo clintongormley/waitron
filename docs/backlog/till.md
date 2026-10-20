@@ -2289,8 +2289,22 @@ party revisions or attaching the bill. The paired move HTTP/client command carri
 answer, assignments and retry id. The routes check source/destination zones and recheck the current
 session, device action and profile admission after reading the request body. Join-answer combinations,
 copied-guest deletion and assignments through a partial split of recalled dishes have server
-integration checks. The till's move confirmation, restart checks and guides remain; this unpublished
-branch is not a deployable feature yet.
+integration checks. The counter move now opens the shared window before adopting a free table or
+assigning arriving dishes to an existing party. A lost reply keeps the command and observations for
+retry with editing disabled; a stale destination or source is reread and needs a separate
+confirmation. EN/ES product guides describe the table flow. Actual restart acceptance remains;
+this unpublished branch is not a deployable feature yet.
+
+**A669-4 handoff.** `applyPartyAllergyPatch` in `apps/server/src/party-allergy.ts` returns
+`AllergyChangeSet` within its caller's transaction. Its `before` snapshot retains the old guest and
+ticks after guest deletion; `workingLineIds` includes removed as well as changed assignments.
+Production callers currently await and discard that return: the PUT in `party-allergy-api.ts`,
+`submitDraft` in `order-drafts.ts`, `submitGroups` in `order-groups.ts`, `prepareAllergyRelease`
+in `party-allergy.ts`, and `recordAllergy` in `move-bill.ts`. Slice 4 must consume the change set
+there before committing, including deletion of the last guest. `prepareAllergyRelease` serves
+line, group, held-line and course Fire callers; the move hook runs after bill attachment and before
+zone adoption. Frozen ticket copies and acknowledged notices have not been implemented here.
+
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.

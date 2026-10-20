@@ -2386,9 +2386,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station/pass Fire uses the same prompt; device Fire keeps its existing answer and refusal path.
   The lower kitchen writer checks table answers; the counter-to-table write can record an answer
   and assignments before kitchen work. The read-only move preview and paired HTTP/client command
-  are connected, with source/destination zone and current-session checks. The till's move confirmation,
-  restart checks and guides remain;
-  kitchen copies/notices remain a separate slice after them. At the first Send, ask "Any allergies at this table?" on every table send path; the counter has no allergy step.
+  are connected, with source/destination zone and current-session checks. The counter move now
+  uses the shared allergy window, immutable retries and renewed confirmation after a destination or
+  source change; EN/ES guides describe the flow. Actual restart acceptance and the Spanish-copy
+  answer remain before publication. Kitchen copies/notices remain a separate slice. At the first
+  table Send, ask "Any allergies at this table?"; counter sales keep their existing flow.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)

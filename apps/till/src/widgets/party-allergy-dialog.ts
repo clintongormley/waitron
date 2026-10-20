@@ -160,6 +160,7 @@ export class TillPartyAllergyDialog extends LitElement {
   @property() scopeKey = "";
   @property({ attribute: false }) draftParent?: object;
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) retryOnly = false;
   @property() refusal = "";
   @property({ attribute: false }) fieldRefusal: AllergyFieldRefusal | null = null;
   @state() private draft: Draft = { answer: null, guests: [], ticks: {} };
@@ -174,7 +175,7 @@ export class TillPartyAllergyDialog extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
-    if (this.busy || this.confirmation) return false;
+    if (this.busy || this.retryOnly || this.confirmation) return false;
     if (!this.#leave) return true;
     const key = this.#opening?.key;
     return (
@@ -301,7 +302,7 @@ export class TillPartyAllergyDialog extends LitElement {
     this.#scope?.commit(this.#submitted);
     this.#submitted = undefined;
   }
-  reviewLatest(scopeKey: string, view: PartyAllergyRead): void {
+  reviewLatest(scopeKey: string, view: PartyAllergyRead | AllergyMoveRead): void {
     if (!this.active || scopeKey !== this.#opening?.key || view.partyId !== this.view.partyId)
       return;
     const local = clone(this.draft);
@@ -373,7 +374,8 @@ export class TillPartyAllergyDialog extends LitElement {
     this.#scope?.changed();
   }
   #change(change: (draft: Draft) => void): void {
-    if (!this.isConnected || !this.active || this.busy || this.confirmation) return;
+    if (!this.isConnected || !this.active || this.busy || this.retryOnly || this.confirmation)
+      return;
     const next = clone(this.draft);
     change(next);
     this.draft = next;
@@ -439,6 +441,10 @@ export class TillPartyAllergyDialog extends LitElement {
   }
   #none(): void {
     if (this.busy || this.confirmation) return;
+    if (this.retryOnly) {
+      void this.#submit();
+      return;
+    }
     if (Object.values(this.draft.ticks).some((v) => v !== null)) {
       this.confirmation = { kind: "none" };
       return;
@@ -454,7 +460,7 @@ export class TillPartyAllergyDialog extends LitElement {
     if (this.mode === "send") void this.#submit();
   }
   #delete(index: number): void {
-    if (this.busy || this.confirmation) return;
+    if (this.busy || this.retryOnly || this.confirmation) return;
     if (Object.values(this.draft.ticks).includes(index))
       this.confirmation = { kind: "delete", index };
     else this.#remove(index);
@@ -569,7 +575,7 @@ export class TillPartyAllergyDialog extends LitElement {
                 .label=${t("allergy.who")}
                 .value=${live(guest.who)}
                 .error=${errors.who}
-                ?disabled=${this.busy || this.confirmation !== null}
+                ?disabled=${this.busy || this.retryOnly || this.confirmation !== null}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => {
                   e.stopPropagation();
                   this.#field(index, "who", e.detail.value);
@@ -577,7 +583,7 @@ export class TillPartyAllergyDialog extends LitElement {
               ></wt-input>
               <fieldset
                 tabindex="-1"
-                ?disabled=${this.busy || this.confirmation !== null}
+                ?disabled=${this.busy || this.retryOnly || this.confirmation !== null}
                 aria-invalid=${errors.allergens ? "true" : "false"}
                 aria-describedby=${errors.allergens ? `guest-${index}-error` : nothing}
               >
@@ -635,7 +641,7 @@ export class TillPartyAllergyDialog extends LitElement {
                 .label=${t("allergy.note")}
                 .value=${live(guest.note ?? "")}
                 .error=${errors.note}
-                ?disabled=${this.busy || this.confirmation !== null}
+                ?disabled=${this.busy || this.retryOnly || this.confirmation !== null}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => {
                   e.stopPropagation();
                   this.#field(index, "note", e.detail.value);
@@ -655,7 +661,7 @@ export class TillPartyAllergyDialog extends LitElement {
             ? html`<wt-button
                 data-edit=${index}
                 variant="secondary"
-                ?disabled=${this.busy || this.confirmation !== null}
+                ?disabled=${this.busy || this.retryOnly || this.confirmation !== null}
                 @click=${() => {
                   this.editingGuest = index;
                 }}
@@ -665,7 +671,7 @@ export class TillPartyAllergyDialog extends LitElement {
         }<wt-button
           data-delete=${index}
           variant="danger"
-          ?disabled=${this.busy || this.confirmation !== null}
+          ?disabled=${this.busy || this.retryOnly || this.confirmation !== null}
           @click=${() => this.#delete(index)}
           >${t("allergy.delete")}</wt-button
         >
@@ -691,7 +697,7 @@ export class TillPartyAllergyDialog extends LitElement {
               name=${`dish-${index}-guest-${i}`}
               data-tick=${`${i}:${index}`}
               .checked=${live(assigned === i)}
-              ?disabled=${this.busy || this.confirmation !== null}
+              ?disabled=${this.busy || this.retryOnly || this.confirmation !== null}
               @change=${(e: Event) => {
                 e.stopPropagation();
                 const checked = (e.target as HTMLInputElement).checked;
@@ -713,7 +719,7 @@ export class TillPartyAllergyDialog extends LitElement {
       const guest = this.draft.guests[this.draft.ticks[lineKey(d.line)] ?? -1];
       return guest && allergyClashes(d.allergens, guest.allergens).length > 0;
     });
-    const disabled = this.busy || this.confirmation !== null;
+    const disabled = this.busy || this.retryOnly || this.confirmation !== null;
     return html`<wt-dialog
         ${trackDialog()}
         .open=${this.active}
@@ -728,7 +734,10 @@ export class TillPartyAllergyDialog extends LitElement {
           ${
             this.page === "question"
               ? html`<div class="actions">
-                  <wt-button data-none ?disabled=${disabled} @click=${() => this.#none()}
+                  <wt-button
+                    data-none
+                    ?disabled=${this.busy || this.confirmation !== null}
+                    @click=${() => this.#none()}
                     >${t("allergy.none")}</wt-button
                   ><wt-button
                     data-allergies
@@ -789,7 +798,7 @@ export class TillPartyAllergyDialog extends LitElement {
                   >`
                 : nothing
             }
-            ${this.page !== "question" ? html`<wt-button data-primary variant=${this.mode === "edit" ? save.variant : "primary"} ?disabled=${disabled || (this.mode === "edit" && save.unchanged) || (this.attempted && this.#invalid())} @click=${() => void this.#submit()}>${this.mode === "edit" ? t("allergy.save") : this.page === "guests" ? t("allergy.next") : clash ? t("allergy.anyway") : t("allergy.send")}</wt-button>` : nothing}
+            ${this.page !== "question" ? html`<wt-button data-primary variant=${this.mode === "edit" ? save.variant : "primary"} ?disabled=${this.busy || this.confirmation !== null || (this.mode === "edit" && save.unchanged) || (this.attempted && this.#invalid())} @click=${() => void this.#submit()}>${this.mode === "edit" ? t("allergy.save") : this.page === "guests" ? t("allergy.next") : clash ? t("allergy.anyway") : t("allergy.send")}</wt-button>` : nothing}
           </wt-form-actions>
         </div>
       </wt-dialog>
