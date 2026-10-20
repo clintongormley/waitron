@@ -2,20 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Review path: LIGHT** (as design §11 item 4 says; plan ruling, 2026-10-20). The slice changes no
-cross-package contract: no type in `packages/shared` (`TableSignal`,
-`packages/shared/src/table-signals.ts:7-26`, is untouched), and no public property or event of a
-`packages/ui` component — `wt-table-token` keeps `table`, `labels`, `locale` and `reducedMotion`
-(`packages/ui/src/components/wt-table-token.ts:238-246`), and `FloorTable`, `FloorChip` and
-`FloorChipTone` (`packages/ui/src/floor.ts:16-47`) keep their shape. What it adds is additive: three
-tokens in `packages/ui-core`, one new `@waitron/ui` module (`floor-ring.ts`: a keyframe set, its two
-speeds and a ring helper) exported for `apps/till`, and one registered icon. `wt-table-token`'s only
-consumer is `apps/till` (`git grep -n "wt-table-token\|toFloorTable\b\|FloorTable\b" -- apps
+**Review path: FULL** (driver ruling, 2026-10-20, overriding design §11 item 4's LIGHT and this
+plan's first ruling): `apps/till` now consumes a new `@waitron/ui` export (`floor-ring.ts`:
+`floorRingStyles`, `renderFloorRing`, `FloorRing`) and three new `packages/ui-core` tokens, and
+`wt-table-token` changes what it draws — a cross-package contract. So **every task gets its
+per-task review**, and `/finish-branch` runs the full wave, including the Codex run-it seat (two
+angles on a risk-trigger branch). The changes stay additive: no type in `packages/shared`
+(`TableSignal`, `packages/shared/src/table-signals.ts:7-26`, is untouched), and no public property
+or event of a `packages/ui` component — `wt-table-token` keeps `table`, `labels`, `locale` and
+`reducedMotion` (`packages/ui/src/components/wt-table-token.ts:238-246`), and `FloorTable`,
+`FloorChip` and `FloorChipTone` (`packages/ui/src/floor.ts:16-47`) keep their shape.
+`wt-table-token`'s only consumer is `apps/till` (`git grep -n "wt-table-token\|toFloorTable\b\|FloorTable\b" -- apps
 packages ':!*.test.ts'` names only `apps/till/src/screens/till-floor-screen.ts` outside the package).
 **If a task finds it must change `FloorTable`, `FloorChip`, `TableSignal` or a component's
-properties, it stops and reports: the slice then becomes FULL.** The driver may overrule this
-ruling (Open point 10). So no per-task reviewer; `/finish-branch` runs its wave, including the Codex
-run-it seat. **No migration**: no task touches `packages/db`, a schema or a `drizzle` folder (the
+properties, it stops and reports**: that is a contract change this plan does not make (Open point
+6 puts the token's full order in slice 5). **No migration**: no task touches `packages/db`, a schema or a `drizzle` folder (the
 file lists below). **Nothing fiscal.** **One pull request for the whole slice.** Branch
 `feat/a757-4-precedence-pulses`, worktree
 `/Users/clintongormley/workspace/worktrees/waitron-feat-a757-4-precedence-pulses`, from `main` at
@@ -135,7 +136,11 @@ item 4 (564-566). Pictures `docs/backlog/mockups/a757-table-states/04-pulse-spee
    They slot in by inserting a name into the ordered list: Waiter called between `fire` and `bill`;
    slice 8's step signal maps to `step`. A table §4 does not cover — a counter delivery waiting at a
    table no party holds (`state: "delivery-pending"`) — has no kind but `reserved` when booked; its
-   card keeps its red left edge (`till-floor-screen.ts:392-394`). Open point 9.
+   card keeps its red left edge (`till-floor-screen.ts:392-394`). A seated table that needs moving
+   today (`needsMovingToday`) draws its own waiting card before `#card` ranks anything
+   (`till-floor-screen.ts:2386-2387`), so it gets no ring and no calm look; `tableStates` itself
+   reads it as whatever its party's facts say (often `nothing-needed`), while today's map fills it
+   as clearing (`apps/till/src/state/floor-map.ts:19`). Open point 9.
 3. **"Nothing needed", precisely:** a table with a party (`party !== null`) that is in none of rows
    1–12 — no late or waiting dish by either reckoning (Decision 4), no unavailable held dish, no
    reminder due, no bill request, nothing ready or en route, no Take order, no unsent draft, and
@@ -185,7 +190,11 @@ item 4 (564-566). Pictures `docs/backlog/mockups/a757-table-states/04-pulse-spee
    the ready / en route badge, Take order chip, unsent badges (moved into `.badges`), Waiting chip,
    held chip, "✓ Nothing needed", Reserved badge — then the one mark that is not a state, "N to
    serve", last. Marks of one kind keep their order (two stations' ready chips; two unsent drafts).
-   `tableChips` sorts the chips the same way, so the unplaced token's chips follow it too.
+   `tableChips` sorts the chips the same way, so the unplaced token's chips follow it too. The
+   other callers of `signalChips` — the table details sheet (`table-details-sheet.ts:211`), held
+   orders (`held-orders.ts:243`) and the order screen (`till-table-order-screen.ts:4039`) — are not
+   the card and keep the server's order; the details sheet is the map's, so slice 5 decides it
+   (Task 10 puts it on slice 5's list).
 8. **The calm look:** when the top is `held` or `nothing-needed`, the card's left edge is
    `--wt-color-primary-disabled` (`#8fb7f5` light, `#28344a` dark, `packages/ui-core/src/tokens/colors.css:21,143`)
    instead of `--wt-color-primary`. Picture 11 draws a pale blue edge (light) and a dark navy one
@@ -205,7 +214,7 @@ item 4 (564-566). Pictures `docs/backlog/mockups/a757-table-states/04-pulse-spee
 11. **The unplaced token** (`wt-table-token`) draws the same ring, worked out from the two fields it
     already has, in §4's order among them: `timingBand` forgotten, then overdue, then `fireDue`, then
     warm. It does not learn the full order, which would need a new `FloorTable` field — a contract
-    change the LIGHT path excludes (Open point 6). Its reduced-motion Forgotten edge is the card's;
+    change slice 5 makes with the map's one state per table (Open point 6). Its reduced-motion Forgotten edge is the card's;
     its triangle marker stays (`wt-table-token.ts:106-124,259-265`). The floor screen hands the tray
     token its `reducedMotion` (`#trayItem`, `till-floor-screen.ts:2196-2214`, passes none today).
     The token gets no calm look (§9 names the map and the card).
@@ -337,8 +346,11 @@ lines 354-355). Every name already there stays.
 - [ ] **Step 2: Run and watch them fail.** `pnpm --filter @waitron/ui exec vitest run src/floor-ring.test.ts`
 - [ ] **Step 3: Implement**, and export `floorRingStyles`, `renderFloorRing` and `type FloorRing`
   from `packages/ui/src/index.ts`.
-- [ ] **Step 4: Run** the same command, plus `pnpm --filter @waitron/ui exec vitest run src/no-hardcoded-chrome.test.ts`
-  and `pnpm exec vitest run scripts/style-token-names.test.ts` — PASS.
+- [ ] **Step 4: Run** the same command, plus `pnpm exec vitest run scripts/style-token-names.test.ts`
+  — PASS. (`src/no-hardcoded-chrome.test.ts` reads only the styles of the constructors exported
+  from `./components/*.ts`, `no-hardcoded-chrome.test.ts:6-25`, so it first sees
+  `floorRingStyles` in Task 3, once `wt-table-token` includes them; write no literal colour or
+  length over 1px in `floor-ring.ts`.)
 - [ ] **Step 5:** typecheck `@waitron/ui`; prettier; commit —
   `"One pulse and one ring for the floor, at two speeds (A757 slice 4)"`.
 
@@ -364,7 +376,9 @@ lines 354-355). Every name already there stays.
 - [ ] **Step 1: Write the failing tests** (new cases in the describe at `:508`, renamed "the outline
   ring"):
   - `"rings a table whose reminder is due in amber, slowly"` — `fireDue: true`, motion allowed →
-    `[data-ring="fire"]` with `wt-pulse-slow`.
+    `[data-ring="fire"]` with `wt-pulse-slow`; with `reducedMotion: true` the `fire` ring is still
+    drawn, with no `wt-pulse-*` class and no `edge-forgotten` (§5.2 line 350, "Time to fire keeps a
+    thick amber outline").
   - `"draws one ring, the most urgent"` — `timingBand: "forgotten", fireDue: true` → one
     `[data-ring]`, `forgotten`; `timingBand: "warm", fireDue: true` → `fire`; `timingBand:
     "overdue", fireDue: true` → `overdue`.
@@ -395,7 +409,9 @@ ring's pulse class:
 - `:517-523` warm — `[data-ring="waiting"]`, no `wt-pulse-*` class; marker check kept. Renamed
   "renders a steady amber ring for a warm table, no pulse, no marker".
 - `:525-531` overdue — `[data-ring="overdue"]`, and now `wt-pulse-slow` (§5.2 line 340); renamed
-  "pulses slowly in red for an overdue table, no marker".
+  "pulses slowly in red for an overdue table, no marker". It mounts with no `reducedMotion` today;
+  because it now asserts a pulse, its mount passes `false` as `mountToken`'s third argument, as
+  `:533-539` does, so it does not rest on the browser's own setting (see Task 5's note).
 - `:533-539` forgotten, motion — `[data-ring="forgotten"]` with `wt-pulse-fast`; marker kept.
 - `:541-548` forgotten, reduced — `[data-ring="forgotten"]` with no `wt-pulse-*`; the card has
   `edge-forgotten`; marker kept.
@@ -495,7 +511,9 @@ unchanged.
 **Interfaces — consumes:** `topState`, `lateBand` (Task 4); `floorRingStyles`, `renderFloorRing`
 (Task 2).
 
-- [ ] **Step 1: Write the failing tests** in `till-floor-screen.precedence.test.ts`:
+- [ ] **Step 1: Write the failing tests** in `till-floor-screen.precedence.test.ts`. Every case
+  that asserts a `wt-pulse-*` class, or its absence, passes `reducedMotion` explicitly (see the
+  note under "Assertions changed"):
   - `"rings an overdue card in red, pulsing slowly at the slow token"` — `timingBand: "overdue"`,
     `reducedMotion: false`; host `--wt-duration-pulse-slow: 5000ms` → `[data-ring="overdue"]`,
     `wt-pulse-slow`, `animationDuration` `5s`; the card's `data-top` is `overdue`.
@@ -538,9 +556,15 @@ mapping as Task 3's:
   badge check kept.
 - `:354-360` warm — `[data-ring="waiting"]`, no `wt-pulse-*`; renamed "rings a warm table in
   steady amber, no pulse, no badge".
-- `:362-368` overdue — `[data-ring="overdue"]` with `wt-pulse-slow` (the default mount reads the
-  browser's setting, which allows motion in the test browser — the existing forgotten-flash case
-  `:370-381` relies on the same); renamed "pulses slowly in red for an overdue table, no badge".
+- `:362-368` overdue — `[data-ring="overdue"]` with `wt-pulse-slow`; renamed "pulses slowly in red
+  for an overdue table, no badge". Its mount gains `reducedMotion: false`, as `:370-381` and
+  `:394-402` already pass, because the case now asserts a pulse. Measured 2026-10-20 in this
+  worktree: a throwaway `apps/till` test (deleted) printed
+  `window.matchMedia("(prefers-reduced-motion: reduce)").matches` as `false` when run alone — but
+  three till files switch the page to `reduce` with `commands.emulateReducedMotion`
+  (`till-counter-cleanup.layout.test.ts:323`, `till-counter-cleanup.look.test.ts:98`,
+  `till-shell.counter-cleanup.test.ts:143`), and whether that reaches another file in the same run
+  was not measured, so no edited case rests on the default.
 - `:370-381` forgotten, motion — `[data-ring="forgotten"]` with `wt-pulse-fast`; badge checks kept.
 - `:383-392` forgotten, reduced — `[data-ring="forgotten"]`, no `wt-pulse-*`, card
   `edge-forgotten`; badge kept.
@@ -595,8 +619,16 @@ and picture 07, "its card's outline and first chip"):
 - `:133` `["Bar: 3 ready", "Bill requested"]` → `["Bill requested", "Bar: 3 ready"]` (row 6 before
   row 7); `:134` unchanged.
 - `:144` (the tray token) — the same change.
-- `:217-224` (Spanish) → `["Con retraso", "No disponible: Chuletón", "Cuenta pedida", "Barra: 3
-  listos", "Cocina: 1 listo", "Tomar nota"]` (rows 2, 3, 6, 7, 7, 8). Every chip is still there.
+- `:204-225` (Spanish) — the order becomes rows 2, 3, 6, 7, 7, 8: overdue, unavailable, bill,
+  the two stations' ready chips, Take order. The edited lines may not carry Spanish (CLAUDE.md §3,
+  English only; the guard skips `apps/*`, so review greps the diff), so the fixture's names become
+  English (`"Bar"`, `"Kitchen"`, `"Steak"`) and the expected list is read from `es`
+  (`import { es } from "../i18n/strings.js"`, as `till-floor-screen.held.test.ts:4` does):
+  `[es["signal.wait_overdue"], es["signal.unavailable"].replace("{items}", "Steak"),
+  es["signal.bill_requested"], es["signal.ready_at"].replace("{station}", "Bar").replace("{n}",
+  "3"), es["signal.ready_at_one"].replace("{station}", "Kitchen"), es["signal.take_order"]]`, with
+  a check that each `es` value differs from its `en` one so the case still proves Spanish. Every
+  chip is still there.
 
 ### Task 7: the calm look and Reserved's colour on the card
 
@@ -695,7 +727,8 @@ outside the new tests is a stop.
   sentence (`:501`): "`--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one
   cycle of a floor ring's pulse, which dims it to `--wt-opacity-pulse-dim` (0.3) half-way;
   `packages/ui/src/floor-ring.ts` holds the one keyframe set. The kitchen screen's and the pass's
-  forgotten flash read the fast one." In the floor paragraph (`:840-843`), after the held chip's
+  forgotten flash read the fast one." In the floor paragraph (`:840-843`), change "`@waitron/ui`'s `floor-chips.ts` registers both
+  icons" (`:843`) to say it registers the held, fire and check icons (`floor-check` is new), and after the held chip's
   sentence: "A table's states are ranked in A757 §4's order (`tableStates`,
   `apps/till/src/state/table-precedence.ts`). On the list card the most urgent decides the one
   outline — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly; Waiting
@@ -719,7 +752,10 @@ Read `docs/backlog.md` → "How to keep this file honest" (`:6945` on) first.
   plan's path; "slices 4–6 and 8 are left" → "slices 5, 6 and 8 are left". A893 (`:2195-2198`):
   "(slices 4–6 and 8 are left)" → "(slices 5, 6 and 8 are left)". Each open point below that the
   owner should see at A893 goes into A893's detail, not a new entry, unless it is work: Open points
-  1, 6, 7 and 9 are slice 5's and go into the A757 detail's list of what slice 5 must do.
+  1, 6, 7 and 9 are slice 5's and go into the A757 detail's list of what slice 5 must do, with
+  Decision 4's out-of-scope readers (the map's dot and the order screen's pin keep `timingBand`),
+  Decision 5 (the status pin) and Decision 7's note that the table details sheet keeps the server's
+  chip order.
 - [ ] **Step 2: `docs/backlog/till.md`.** A757's landed-slices sentence (`:1272-1281`) gains slice 4
   with this plan and `docs/backlog/mockups/a757-table-states/built-4/`. A893 (`:1330-1360`) gains
   one bullet: "the choices slice 4 made where the pictures are silent (its plan's Open points 1–5,
@@ -779,16 +815,17 @@ Read `docs/backlog.md` → "How to keep this file honest" (`:6945` on) first.
 5. **A third token, `--wt-opacity-pulse-dim`** (Decision 13), rather than the 30% written in.
 6. **The unplaced token rings from its own two fields** (Decision 11), so a tray table with the bill
    requested and a dish waiting is outlined amber while its list card is not. Giving the token the
-   full order needs a new `FloorTable` field — a FULL-review change that fits slice 5.
+   full order needs a new `FloorTable` field, which fits slice 5's change to the map's contract.
 7. **No icons yet on the wait, unavailable, bill, ready and unsent chips** (Decision 15); picture
    07 draws them. Slice 5 registers the map's cue icons, and the chips can take them then.
 8. **"N to serve" now comes last** on the card, after every state (Decision 7); before, it came
    first when present.
 9. **A table with a counter delivery waiting and no party** has no state in §4 (Decision 2): the
    rank gives it none, and slice 5 decides how the map draws it (today's map draws it seated,
-   `apps/till/src/state/floor-map.ts:21`).
-10. **Review weight: LIGHT**, by this plan's ruling (header): only additions in `packages/ui` and
-    `packages/ui-core`. The driver may rule FULL because `apps/till` now reads a new `@waitron/ui`
-    export.
+   `apps/till/src/state/floor-map.ts:21`). Nor has **a seated table that needs moving today**: its
+   card is unchanged, but the rank reads it from its party's facts, while today's map fills it as
+   clearing (`floor-map.ts:19`); slice 5 decides.
+10. **Review weight: FULL**, by the driver's ruling (header), because `apps/till` now reads a new
+    `@waitron/ui` export; the design said LIGHT. Settled — listed so the owner sees the change.
 11. **Take order** keeps its blue-bordered chip until slice 8 gives steps their look; it ranks as a
     step (row 8) now.
