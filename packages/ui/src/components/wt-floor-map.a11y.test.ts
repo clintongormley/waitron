@@ -46,12 +46,16 @@ const centreOf = (element: Element) => {
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 };
 
-async function mountMap(theme: "light" | "dark", tables: FloorMapTable[]): Promise<void> {
+async function mountMap(
+  theme: "light" | "dark",
+  tables: FloorMapTable[],
+  reducedMotion = true,
+): Promise<void> {
   const el = (await mountThemed(
     '<wt-floor-map style="width: 480px; height: 240px"></wt-floor-map>',
     theme,
   )) as WtFloorMap;
-  el.reducedMotion = true;
+  el.reducedMotion = reducedMotion;
   el.tables = tables;
   await new Promise(requestAnimationFrame);
   await new Promise(requestAnimationFrame);
@@ -86,6 +90,54 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
       t("T1", { x: 0 }, { fill: "seated", dot: "ready", description: "Seated, 2 ready" }),
       t("T2", { x: 8 }, { fill: "seated", dot: "forgotten", description: "Seated, forgotten" }),
     ]);
+    await expectNoA11yViolations(host);
+  });
+
+  test("each new fill with its cue", async () => {
+    const fills = ["calm", "ready", "danger", "warning", "plain"] as const;
+    await mountMap(
+      theme,
+      fills.map((fill, i) =>
+        t(
+          `T${i + 1}`,
+          { x: i * 8 },
+          { fill, cue: { icon: "floor-timer", text: "Waiting" }, description: "Waiting" },
+        ),
+      ),
+    );
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    expect(root.querySelectorAll('[part="cue"] wt-icon')).toHaveLength(fills.length);
+    await expectNoA11yViolations(host);
+  });
+
+  test("Overdue, Waiting and Needs clearing outlines over fills", async () => {
+    await mountMap(theme, [
+      t("T1", { x: 0 }, { fill: "calm", outline: "overdue" }),
+      t("T2", { x: 8 }, { fill: "bill", outline: "overdue" }),
+      t("T3", { x: 16 }, { fill: "ready", outline: "waiting" }),
+      t("T4", { x: 24 }, { fill: "plain", outline: "clearing" }),
+      t("T5", { x: 32 }, { fill: "free", outline: "clearing" }),
+    ]);
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    expect(root.querySelectorAll("[data-ring]")).toHaveLength(3);
+    expect(root.querySelectorAll('[data-outline="clearing"]')).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a forgotten, an overdue and a due pulse, moving", async () => {
+    await mountMap(
+      theme,
+      [
+        t("T1", { x: 0 }, { fill: "danger", pulse: "forgotten" }),
+        t("T2", { x: 8 }, { fill: "calm", outline: "overdue", pulse: "overdue" }),
+        t("T3", { x: 16 }, { fill: "warning", pulse: "fire" }),
+      ],
+      false,
+    );
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    const pulses = [...root.querySelectorAll<HTMLElement>("[data-pulse]")];
+    expect(pulses.map((p) => p.dataset["pulse"])).toEqual(["forgotten", "overdue", "fire"]);
+    expect(pulses.every((p) => p.getAnimations().length > 0)).toBe(true);
     await expectNoA11yViolations(host);
   });
 
