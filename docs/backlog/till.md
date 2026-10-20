@@ -2333,7 +2333,8 @@ Production callers currently await and discard that return: the PUT in `party-al
 in `party-allergy.ts`, and `recordAllergy` in `move-bill.ts`. Slice 4 must consume the change set
 there before committing, including deletion of the last guest. `prepareAllergyRelease` serves
 line, group, held-line and course Fire callers; the move hook runs after bill attachment and before
-zone adoption. Frozen ticket copies and acknowledged notices have not been implemented here.
+zone adoption. The kitchen branch captures frozen ticket copies; acknowledged allergy change
+delivery is not yet connected to these callers.
 
 The [reviewed kitchen implementation plan](../superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
 defines nine tasks. It captures localized allergen names with kinds alongside their codes, keeps
@@ -2342,7 +2343,10 @@ choice adds venue-service migrations. The kitchen branch's
 `kitchen-allergy.upgrade.test.ts` applies them through `applyMigrations` to populated predecessor
 work, compares the retained rows and print payloads, reinstalls change feeds and checks foreign
 keys. New ticket copies start empty; the release still requires no outstanding pre-live kitchen
-work rather than inventing historical originals. Capture, paper, boards and change delivery remain.
+work rather than inventing historical originals. First exposure now captures the assigned guest,
+known parent/active-extra clashes and English/Spanish names by value. Fired work freezes without a
+printer; HOLD and added-HOLD corrections freeze only where paper is queued. Paper formatting,
+boards, lifecycle preservation and change delivery remain.
 
 **Remaining: A669-4.** Freeze the guest details beside each ticket item and render the allergy
 heading, block and clash at both paper widths and on station/pass screens. Enqueue acknowledged

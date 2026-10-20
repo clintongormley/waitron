@@ -1,13 +1,3 @@
-// Kitchen print jobs for fired items, and HOLD tickets and HOLD corrections for held work, each
-// enqueued on its caller's transaction so it rolls back with it.
-//
-// A printer never blocks a fire (CLAUDE.md §5): `enqueuePrintJob` is an outbox insert that opens no
-// socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the
-// mapping read the enqueue paths use (`printerMappings` without `switchedOffToo`) keeps active
-// printers only, and no other write transaction can run between that read and the enqueue, because
-// one write transaction runs on the venue file at a time (`withTransaction`,
-// `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in
-// `packages/catalogue/src/extras.ts`.
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -63,14 +53,13 @@ import { readRestOfOrder } from "./rest-of-order.js";
 import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { readGroupNumberLabels } from "./order-groups.js";
+import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 /**
- * An item to print: its line, its station and the quantity to print. A fire captures its items from
- * its own write's `RETURNING`, never by re-querying `ticket_items`, which would re-select earlier
- * rounds' items and reprint them.
+ * A selected line and station: resolving its copy must not sweep earlier rounds into this output.
  */
 export interface FiredItem {
   workingOrderLineId: string;
@@ -537,6 +526,16 @@ async function planKitchenTickets(
       ? await printerMappings(tx, stationIds)
       : known.mappings.filter((mapping) => stationIds.includes(mapping.stationId));
   if (mappingRows.length === 0) return [];
+
+  if (!reprint && mark === "HOLD") {
+    const receiving = new Set(mappingRows.map((mapping) => mapping.stationId));
+    await freezeKitchenAllergyItems(
+      tx,
+      cfg,
+      orderId,
+      firedItems.filter((item) => receiving.has(item.stationId)),
+    );
+  }
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
@@ -1048,6 +1047,16 @@ async function printCorrectionSlips(
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await printerMappings(tx, stationIds);
   if (mappingRows.length === 0) return;
+
+  if (change.kind === "HOLD CHANGED" && change.direction === "added") {
+    const receiving = new Set(mappingRows.map((mapping) => mapping.stationId));
+    await freezeKitchenAllergyItems(
+      tx,
+      cfg,
+      orderId,
+      items.filter((item) => receiving.has(item.stationId)),
+    );
+  }
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);

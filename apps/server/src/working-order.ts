@@ -13,6 +13,7 @@ import {
 } from "./party-allergy.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import { freezeKitchenAllergies, freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -1822,6 +1823,7 @@ export async function insertSplitExtras(
   if (values.length === 0) return [];
   try {
     const inserted = await tx.insert(ticketItems).values(values).returning({
+      id: ticketItems.id,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
@@ -1829,6 +1831,11 @@ export async function insertSplitExtras(
       madeHere: ticketItems.madeHere,
     });
     for (const row of inserted) if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
+    await freezeKitchenAllergies(
+      tx,
+      cfg,
+      inserted.filter((row) => !row.madeHere && row.firedAt !== null).map((row) => row.id),
+    );
     return inserted
       .filter((row) => !row.madeHere)
       .map((row) => ({
@@ -2174,6 +2181,7 @@ export async function fireLines(
         .filter((row) => row.firedAt !== null)
         .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId })),
     );
+  await freezeKitchenAllergyItems(tx, cfg, orderId, firedItems);
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;
 }
@@ -2512,6 +2520,10 @@ async function finishRelease(
   const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
     (item) => !rerouted.has(item.workingOrderLineId),
   );
+  await freezeKitchenAllergyItems(tx, cfg, orderId, [
+    ...fired,
+    ...extras.filter((item) => item.firedAt !== null),
+  ]);
   await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
   const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
   for (const item of fired) {

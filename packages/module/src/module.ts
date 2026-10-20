@@ -1,4 +1,8 @@
-import type { KitchenAllergyBlock, PartyAllergySnapshot } from "./party-allergy.js";
+import type {
+  KitchenAllergyBlock,
+  PartyAllergySnapshot,
+  TicketAllergyCopy,
+} from "./party-allergy.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
 import semver from "semver";
 import type { Hono } from "hono";
@@ -1373,6 +1377,19 @@ export interface VenueServiceContribution {
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;
+  recordTicketAllergies(
+    tx: Transaction,
+    rows: readonly ({ ticketItemId: string } & TicketAllergyCopy)[],
+  ): Promise<void>;
+  readTicketAllergies(
+    tx: Transaction,
+    ticketItemIds: readonly string[],
+  ): Promise<ReadonlyMap<string, TicketAllergyCopy>>;
+  setTicketAllergyCurrent(
+    tx: Transaction,
+    ticketItemId: string,
+    block: KitchenAllergyBlock | null,
+  ): Promise<void>;
   partiesWithAllergicGuests(
     tx: Transaction,
     partyIds: readonly string[],

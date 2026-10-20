@@ -20,6 +20,8 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { VENUE_SERVICE_CLASSIFICATION, VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { readPartyAllergy, savePartyAllergy } from "./party-allergy.js";
+import { VENUE_SERVICE } from "./service.js";
+import type { KitchenAllergyBlock } from "@waitron/module";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -34,7 +36,7 @@ const original = {
     en: { avoids: ["Gluten (wheat)", "Milk"], clashes: ["Milk"] },
     es: { avoids: ["Stored gluten label", "Stored milk label"], clashes: ["Stored milk label"] },
   },
-};
+} satisfies KitchenAllergyBlock;
 let partyId: string;
 let orderId: string;
 let stationId: string;
@@ -294,4 +296,62 @@ describe("A669 storage", () => {
       "ticket_item_allergies",
     );
   });
+});
+
+it("A669 copy operations keep the first original, update only current and read the requested tickets", async () => {
+  expect(VENUE_SERVICE).toHaveProperty("recordTicketAllergies");
+  expect(
+    await withTransaction(suite.db, (tx) => VENUE_SERVICE.readTicketAllergies(tx, [])),
+  ).toEqual(new Map());
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.recordTicketAllergies(tx, [
+      {
+        ticketItemId: ticketId,
+        originalBlock: original,
+        currentBlock: original,
+      },
+    ]),
+  );
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.recordTicketAllergies(tx, [
+      {
+        ticketItemId: ticketId,
+        originalBlock: null,
+        currentBlock: null,
+      },
+    ]),
+  );
+  const corrected = { ...original, who: "Corrected guest" };
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.setTicketAllergyCurrent(tx, ticketId, corrected),
+  );
+  const read = () =>
+    withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readTicketAllergies(tx, [ticketId, randomUUID()]),
+    );
+  expect(await read()).toEqual(
+    new Map([[ticketId, { originalBlock: original, currentBlock: corrected }]]),
+  );
+  expect(
+    await withTransaction(suite.db, (tx) => VENUE_SERVICE.readTicketAllergies(tx, [randomUUID()])),
+  ).toEqual(new Map());
+  await expect(
+    withTransaction(suite.db, async (tx) => {
+      await VENUE_SERVICE.setTicketAllergyCurrent(tx, ticketId, null);
+      throw new Error("Roll back this edit");
+    }),
+  ).rejects.toThrow("Roll back this edit");
+  expect(await read()).toEqual(
+    new Map([[ticketId, { originalBlock: original, currentBlock: corrected }]]),
+  );
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.setTicketAllergyCurrent(tx, ticketId, null),
+  );
+  expect(await read()).toEqual(
+    new Map([[ticketId, { originalBlock: original, currentBlock: null }]]),
+  );
+  await withTransaction(suite.db, (tx) => VENUE_SERVICE.recordTicketAllergies(tx, []));
+  expect(await read()).toEqual(
+    new Map([[ticketId, { originalBlock: original, currentBlock: null }]]),
+  );
 });
