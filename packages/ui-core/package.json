@@ -44,7 +44,9 @@
     "./field-styles": "./src/field-styles.ts",
     "./tokens/colors.css": "./src/tokens/colors.css",
     "./tokens/structure.css": "./src/tokens/structure.css",
-    "./unsaved-changes": "./src/unsaved-changes.ts"
+    "./unsaved-changes": "./src/unsaved-changes.ts",
+    "./theme": "./src/theme/index.ts",
+    "./theme/waitron": "./src/theme/waitron.ts"
   },
   "peerDependencies": {
     "lit": "^3.2.0"
@@ -118,6 +120,14 @@
       "./unsaved-changes": {
         "types": "./dist/types/unsaved-changes.d.ts",
         "import": "./dist/unsaved-changes.js"
+      },
+      "./theme": {
+        "types": "./dist/types/theme/index.d.ts",
+        "import": "./dist/theme/index.js"
+      },
+      "./theme/waitron": {
+        "types": "./dist/types/theme/waitron.d.ts",
+        "import": "./dist/theme/waitron.js"
       }
     }
   }
