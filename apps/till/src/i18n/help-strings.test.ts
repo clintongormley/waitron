@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale } from "./t.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText } from "./help-strings.js";
+import { es } from "./strings.js";
 
 const original = currentLocale();
 afterEach(() => setLocale(original));
@@ -49,5 +50,11 @@ describe("the till's help strings", () => {
       tiqueWord.test(text.replace(/\{[^}]*\}/g, "")),
     );
     expect(saysTique).toEqual([]);
+  });
+});
+
+describe("the order screen's help", () => {
+  it("the order screen's Send help calls a held group by the same word", () => {
+    expect(helpEs["help.order.send"]).toContain(es["table.group_held"].toLowerCase());
   });
 });

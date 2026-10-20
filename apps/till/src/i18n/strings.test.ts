@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogues } from "./strings.js";
+import { catalogues, es } from "./strings.js";
 
 /**
  * The permanent-refusal messages, checked as prose in every language the till ships. `sale.refused`
@@ -108,4 +108,17 @@ it.each([
   ["es-ES", "Buscar"],
 ])("labels the menu search simply in %s", (locale, label) => {
   expect(catalogues[locale]?.["menu.search"]).toBe(label);
+});
+
+describe("the floor's held chip", () => {
+  it("the floor's held chip says held with the order screen's word", () => {
+    const held = es["table.group_held"].toLowerCase();
+    expect(es["floor.held"].replace("{n}", "2")).toBe(`2 ${held}`);
+    expect(es["floor.held_one"]).toBe(`1 ${held}`);
+    expect(es["floor.held_fire_in"].startsWith(`{n} ${held} · `)).toBe(true);
+    expect(es["floor.held_fire_in_one"].startsWith(`1 ${held} · `)).toBe(true);
+    const tail = es["floor.held_fire_in"].split(" · ")[1];
+    expect(tail).toContain("{m}");
+    expect(es["floor.held_fire_in_one"].split(" · ")[1]).toBe(tail);
+  });
 });
