@@ -1,13 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  MONEY_SCALE,
-  compareDecimal,
-  decimal,
-  formatMoney,
-  subtractDecimal,
-  toScale,
-} from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney, subtractDecimal } from "@waitron/shared";
 import {
   baseStyles,
   focusFirstInvalid,
@@ -35,7 +28,7 @@ import { trackDialog } from "./track-dialog.js";
 import { refusalText, type PayRefusal } from "./pay-refusal.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { DeviceEquipment } from "../api/client.js";
-import { typedAmount } from "../state/bill-payment.js";
+import { typedAmount, typedMoney } from "../state/bill-payment.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -60,8 +53,7 @@ interface EntryDraft {
 
 /** Two cash entries that are the same amount however spelled; anything else as typed. */
 function cashKey(value: string): string {
-  const amount = typedAmount(value);
-  return amount === null ? `typed:${value.trim()}` : toScale(decimal(amount), MONEY_SCALE);
+  return typedMoney(value) ?? `typed:${value.trim()}`;
 }
 
 /**

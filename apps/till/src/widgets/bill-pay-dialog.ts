@@ -54,6 +54,7 @@ import {
   refundOffered,
   refundableOf,
   typedAmount,
+  typedMoney,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import {
@@ -145,13 +146,7 @@ interface TipDraft {
   amount: string;
 }
 function amountKey(value: string): string | { invalid: string } {
-  const amount = typedAmount(value);
-  if (amount === null) return { invalid: value };
-  try {
-    return toScale(decimal(amount), MONEY_SCALE);
-  } catch {
-    return { invalid: value };
-  }
+  return typedMoney(value) ?? { invalid: value };
 }
 
 /** The field a refusal is about, or null when it names none the dialog shows. A tip the venue does

@@ -55,6 +55,13 @@ export function typedAmount(value: string): string | null {
   return typed !== null && TYPED_AMOUNT.test(typed) ? typed.replace(/^0+(?=\d)/, "") : null;
 }
 
+/** A typed amount at the money scale, so two spellings of one amount compare equal; null when it
+ * is not an amount. */
+export function typedMoney(value: string): Decimal | null {
+  const amount = typedAmount(value);
+  return amount === null ? null : toScale(decimal(amount), MONEY_SCALE);
+}
+
 /** Two amounts added, at the money scale. */
 export function moneyPlus(a: string, b: string): Decimal {
   return toScale(addDecimal(decimal(a), decimal(b)), MONEY_SCALE);
