@@ -17,7 +17,6 @@ import type {
   OptionList,
   OptionListInput,
   Product,
-  MadeAt,
   ProductEditorInput,
   ProductEditorValue,
   Course,
@@ -98,7 +97,6 @@ export class CatalogueScreen extends LitElement {
   @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
   @state() private productsLoaded = false;
-  @state() private madeAt: Record<string, MadeAt> = {};
   @state() private routing: RoutingModel | null = null;
   @state() private routingFailed = false;
   @state() private courses: Course[] = [];
@@ -276,9 +274,6 @@ export class CatalogueScreen extends LitElement {
   }
 
   async #reloadProducts(): Promise<void> {
-    await this.#queries.watch("listMadeAt", [], (value) => {
-      this.madeAt = value;
-    });
     if (!this.catalogues.length) {
       this.products = [];
       this.#queries.release("listProducts");
@@ -702,7 +697,6 @@ export class CatalogueScreen extends LitElement {
                 this.#url.write({ category: this.categoryId }, true);
               }}
               .products=${this.products}
-              .madeAt=${this.madeAt}
               .courses=${this.courses}
               .routing=${this.routing}
               .routingFailed=${this.routingFailed}

@@ -15,7 +15,6 @@ import type {
   FolderSummary,
   DashboardApi,
   Product,
-  MadeAt,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
 import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
@@ -102,7 +101,6 @@ export class CatalogueBrowser extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) products: Product[] = [];
-  @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) routing: RoutingModel | null = null;
   /** Whether the routing read failed, as against not having answered yet. */
@@ -924,11 +922,8 @@ export class CatalogueBrowser extends LitElement {
         .categories=${this.categories}
         .products=${this.products}
         .search=${this.search}
-        .madeAt=${this.madeAt}
         .courses=${this.courses}
         .unroutedFolderIds=${this.#unroutedFolderIds()}
-        .folderMadeAt=${this.#folderMadeAt}
-        .routingFailed=${this.routingFailed}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {

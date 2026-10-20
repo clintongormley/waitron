@@ -360,10 +360,9 @@ describe("catalogue-screen", () => {
     expect(api.listCategories).toHaveBeenCalledOnce();
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
-    expect(api.listMadeAt).toHaveBeenCalledOnce();
+    expect(api.listMadeAt).not.toHaveBeenCalled();
     expect(api.getFolderRouting).toHaveBeenCalledOnce();
     expect(list(el).routing).toMatchObject({ cells: [], defaultStationId: null });
-    expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(list(el).products).toEqual(products);
     expect(list(el).courses).toEqual([oneCourse]);
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
@@ -524,7 +523,6 @@ describe("catalogue-screen", () => {
     vi.mocked(api.listCatalogues).mockResolvedValue(catalogues);
     api.liveData.refresh();
     await vi.waitFor(() => expect(list(el).products).toEqual(products));
-    expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(alert()).toBeNull();
   });
 

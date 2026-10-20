@@ -254,15 +254,14 @@ for (const succeeds of [true, false]) {
       listOptionLists: async () => [],
       listStations: async () => [],
       listCourses: async () => [],
-      listProducts: async () => [],
-      getFolderRouting: async () => null,
-      listMadeAt: async () => {
+      listProducts: async () => {
         if (written) {
           refreshDirty = app.leave.coordinator.isDirty();
           throw { code: "connection.failed" };
         }
-        return {};
+        return [];
       },
+      getFolderRouting: async () => null,
       createProductEditor: vi.fn(async () => {
         if (!succeeds) throw { code: "product.invalid", params: { field: "name" } };
         written = true;
