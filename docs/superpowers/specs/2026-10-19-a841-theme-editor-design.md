@@ -517,8 +517,8 @@ background and round corners.
    is a draft change like any other: the light preview turns mustard, the warning becomes "Buttons
    on light screens: #9f8b18 · Undo" (`05-fixed-light.png`), and Cancel or Undo puts the lemon back.
    Dark screens keep the lemon, which reads there. For a colour set by hand, the warning and its fix
-   sit under its row ("Light screens: hard to read on Selected item, Field background and
-   Switched-off field background." with **Use #526a5b**); pressing it replaces the hand-set value
+   sit under its row ("Light screens: hard to read on Selected item, Field background,
+   Switched-off field background and the 15 station colours." with **Use #526a5b**); pressing it replaces the hand-set value
    with the fixed shade and shows "Light screens: fixed from #8fa898 · Undo" until the editor
    closes. When two or more warnings with a fix show, a line above the form's buttons says "2
    colours are hard to read." with **Fix all** (`15-hand-set-and-dark-warnings-light.png`). The
@@ -611,6 +611,7 @@ Product text, English (Spanish to be written with the strings):
 | After the fix | Buttons on {light / dark} screens: {colour} · Undo |
 | Hand-set warning, under its row | {Light / Dark} screens: hard to read on {names}. / {Light / Dark} screens: {names} hard to read on it. |
 | Its fix | Use {colour} |
+| {names} in a warning | Each colour by its plain name, except the station colours: the station fills a value fails against are one item, "the 15 station colours" when all fifteen and "{n} station colours" otherwise, and its station dots likewise "the 15 station dots" or "{n} station dots"; the item stands where the first of them would (the fills: the driver's ruling of 2026-10-20 on the slice 1 plan review; the dots by the same rule, my call) |
 | No shade passes, under its row | {Light / Dark} screens: no shade of this colour can be read on {names}. Pick another colour. / {Light / Dark} screens: no shade of this colour lets {names} be read on it. Pick another colour. |
 | Two or more fixes, above the buttons | {n} colours are hard to read. · Fix all |
 | Advanced, closed, with a warning | … · {n} hard to read |
@@ -1044,9 +1045,14 @@ All my call; the plan pins the exact numbers.
   colour.
 - **Worked examples**, from a prototype of this function
   (`/Users/clintongormley/waitron-campaign/a841-mockups-src/derive.mjs`, outside the repository;
-  `node build.mjs` there prints them). The prototype checks 67 rules in light and 72 in dark: every
-  rule of `colors.test.ts` listed in section 3 that reads a token the theme writes, plus Waitron's
-  own button rules of section 9.
+  `node build.mjs` there prints them). The prototype checks 67 rules in light and 72 in dark, which
+  misses 31 that section 3 lists and that read a token the theme writes: text on the search
+  highlight (`colors.test.ts:281`), and text and secondary text on each of the 15 station fills
+  (`colors.test.ts:532-545`). With them — every rule of `colors.test.ts` listed in section 3 that
+  reads a token the theme writes, plus Waitron's own button rules of section 9 — it is 98 in light
+  and 103 in dark (corrected 2026-10-20 by the slice 1 plan,
+  `docs/superpowers/plans/2026-10-20-a841-1-theme-derivation.md`, whose reference in
+  `~/waitron-campaign/a841-plan1-probes/` reproduces every colour this section gives; the corrections below cite it).
   The prototype's `warn` (added for Q2) works out a set as picked and lists the warnings with their
   fixes; `checks.txt` there holds its output for every picture.
   - Bar Lucía, `#1e5b3a`, tinted: light buttons are `#1e5b3a` with white text at 8.04:1, and no
@@ -1106,14 +1112,24 @@ answered A on 2026-10-20; section 19).
      hand-set value named by a rule still failing after steps 1 and 2 shows a warning under its row,
      and no other. A rule between the brand colour and a hand-set colour is the hand-set colour's
      warning, not the brand colour's: the brand colour's own fix only ever looks at colours Waitron
-     works out. The **fix** offered is the value moved, keeping its hue, to the nearest lightness at
-     which no rule names it, the brand colour held as picked. Meaning colours (danger, success,
+     works out. The **fix** offered is that value moved, keeping its hue, to the nearest lightness at
+     which, with the rest worked out again, no rule names it — searched for each warned value on its
+     own, with the brand colour as picked and every other hand-set value as typed, so a fix taken
+     alone always clears its own warning (decided in the slice 1 plan after its review found a value
+     drawn underneath offered no fix although one existed). Meaning colours (danger, success,
      station dots, Google's button line, the search highlight) never move, so a hand-set background
      that fails against one of them is the one with the warning. When both colours in a failing rule
-     are hand-set, both warn; taking the fix of the one drawn on top (text, line or button) first is
-     what Fix all does, and it can clear the other's warning. Where no lightness of its hue, from
-     black to white, passes, the warning says so and offers no fix ("no shade of this colour can be
-     read on …"). Taking a fix replaces the hand-set value in the draft; it is still set by hand,
+     are hand-set, both warn, each offering its own fix. **Fix all** takes the fixes one at a time:
+     in rule order, the first failing rule that names a colour whose warning has a fix; the fix of
+     the colour drawn on top in it (text, line or button) if that one has a fix, else the other's;
+     then everything is worked out again, until no warning has a fix. Taking the top one first can
+     clear the other's warning. Where no lightness of its hue, from black to white, passes, the
+     warning says so and offers no fix ("no shade of this colour can be read on …"). Because the
+     other hand-set values are held as typed, a value can have no fix because of another value set
+     by hand: in the slice 1 plan's two-colour sweep (Bar Lucía, light; eight pairs of colours that
+     share a rule, each set to `#555555` or `#aaaaaa`; 32 cases), 20 of 61 warnings had no fix, and
+     after Fix all 7 cases still held a warning, each with no fix (`two-hand-sweep.mjs`,
+     `output-two-hand-sweep-light-mid.txt` in `~/waitron-campaign/a841-plan1-probes/`). Taking a fix replaces the hand-set value in the draft; it is still set by hand,
      now to the fixed shade, with Undo until the editor closes. Once saved, the typed colour is
      gone, while a brand colour's fix keeps its Undo after saving. That difference is wanted (my
      call): the brand colour is one choice painting both kinds of screen, so it must stay stored as
@@ -1156,17 +1172,21 @@ answered A on 2026-10-20; section 19).
    hand-set page, her light page would have been `#fff3f3`; **Use worked-out colour** on the page row
    gives exactly that. Mock-up `14-q-hand-kept-or-put-back-light.png`, left.
 4. Back on green, with the cream page, she sets Secondary text (light) to a pale sage, `#8fa898`.
-   The rules for secondary text ask 4.5:1 on the selected item, the field background and the
-   switched-off field background; the sage reads 2.04:1, 2.24:1 and 2.38:1. No worked-out colour
+   The rules for secondary text ask 4.5:1 on the selected item, the field background, the
+   switched-off field background and each of the 15 station fills; the sage reads 2.04:1, 2.24:1
+   and 2.38:1, and 1.97:1 to 2.22:1 on the station fills. No worked-out colour
    can move far enough from it (even white reaches only 2.55:1), so the sage is at fault (step 3).
    The warning is on the sage alone — the cream page is named by no failing rule, and the tint stays
-   at full strength (`/tmp/a841q2/check4.mjs`: tint 1, field background `#ebf2ed`, only the three
-   secondary-text rules failing). Its row says "Light screens: hard to read on Selected item, Field
-   background and Switched-off field background." with **Use #526a5b**; that shade reads 4.70:1,
-   5.17:1 and 5.49:1, every rule passing. If she presses it, the stored choice becomes `#526a5b`; if
+   at full strength (tint 1, field background `#ebf2ed`, only the 18 secondary-text rules failing:
+   three in `/tmp/a841q2/check4.mjs`, which lacked the station-fill rules, corrected by the slice 1
+   plan's reference, `output-settle2.txt` and `output-sage-stations.txt` in `~/waitron-campaign/a841-plan1-probes/`). Its
+   row says "Light screens: hard to read on Selected item, Field background, Switched-off field
+   background and the 15 station colours." with **Use #526a5b**; that shade reads 4.70:1, 5.17:1
+   and 5.49:1, and 4.54:1 to 5.11:1 on the station fills, every rule passing. If she presses it, the stored choice becomes `#526a5b`; if
    she saves without it, Save asks once and Save anyway stores `#8fa898` as typed, and the light
    tills show the pale sage. Mock-up `15-hand-set-and-dark-warnings-light.png`, which also shows her
-   green warning for dark screens before she took that fix, and Fix all taking both.
+   green warning for dark screens before she took that fix, and Fix all taking both; its sage row
+   names the first three colours only (section 18).
 
 **Extreme picks** (`node sweep-warn.mjs hand light` and `… hand dark` in the same folder, added for
 Q2: Bar Lucía, Tinted, with her dark fix `#417c59` taken, each of the 22 colours set by hand in turn
@@ -1177,8 +1197,12 @@ with an unexplained failing rule 0, cases still failing after Fix all 0` and, fo
 79, hand-set warnings 97 (with a fix 97, no shade passes 0), brand-colour warnings 0 (no fix 0),
 cases with an unexplained failing rule 0, cases still failing after Fix all 0`. Those are the same
 counts the earlier design's automatic moves gave (87 left as typed and 89 moved in light, 79 and 97
-in dark). No case lacked a fix, so I have no example of a hand-set colour that no lightness of its
-hue can make readable, and give none. A first run of the sweep counted 17 light and 15 dark
+in dark). With the 31 rules the prototype missed (above), the dark counts are 78 with no warning and
+98 with one, every other count unchanged (`sweep-warn-exact.mjs hand dark`, slice 1 plan's
+reference in `~/waitron-campaign/a841-plan1-probes/`). No case lacked a fix. A made-up one exists: light Secondary text
+`#808080` with the switched-off field background set by hand to black — the text would have to
+read on black and on the light surfaces at once — warns with no fix, while the same grey alone is
+offered `#636363` (`ex2.mjs`, `ex3.mjs` there). A first run of the sweep counted 17 light and 15 dark
 brand-colour warnings, all in cases where a hand-set colour made a rule with the green fail; one was
 pure blue cards, where the green's own fix found no shade while the cards' fix cleared everything.
 That is why a rule between the brand colour and a hand-set colour is now the hand-set colour's
@@ -1229,7 +1253,9 @@ the fix. The prototype (`warn` in `a841-mockups-src/derive.mjs`, run by
 `a841q8-design/probes/dark-own.mjs` in the campaign folder, outside the repository) printed for the dark version
 `rules 72 failing 0` (text on the button `#001206` at 6.70:1, the button 6.63:1 on the dark page
 `#0b110d`, pointed-at `#72ba8c`, links `#6ab284`, from `probes/dark-own-shades.mjs`) and for the light version `rules 67 failing 0`
-with its buttons still `#1e5b3a`; the control, the same theme with neither the fix nor an own dark
+with its buttons still `#1e5b3a` (with the 31 rules section 6 says the prototype missed, 103 and 98
+rules, still none failing: "dark own" and "lucia light" in `output-settle2.txt`, slice 1 plan's
+reference); the control, the same theme with neither the fix nor an own dark
 colour, printed `failing 3` (the green on the dark field background, page and cards), so the check
 tells the two apart. Each version is worked out from the shared choices and that version's own
 hand-set values only (the prototype calls `warn(k, mode, handOf(k, mode))`, `a841-mockups-src/build.mjs:63`),
@@ -1843,8 +1869,10 @@ Worked examples:
 **No shade passes.** Where no lightness of a colour's hue passes, the warning says "{Light / Dark}
 screens: no shade of this colour can be read on {names}. Pick another colour." and offers no fix. It
 never disables Save: the dialog lists it and offers only Save anyway and Back (Fix and save needs
-every warning to have a fix), and Save anyway stores it as picked like any other. The sweeps found
-no such case (section 6), so this is a sentence the plan must still test with a made-up case.
+every warning to have a fix), and Save anyway stores it as picked like any other. The one-colour
+sweeps found no such case; with two colours set by hand it is common, because each value's shade
+is searched with the other held as typed (section 6, step 3). The slice 1 plan tests the made-up
+one-colour case of section 6 and the two-colour sweep.
 
 **Every way in is checked for validity; readability is reported, never enforced.** The server
 derives on every save, hand-set values and fixes included, and answers `theme.invalid` only for
@@ -2185,9 +2213,11 @@ and administrators change it.
 - `style-token-names.test.ts`: the theme writes only names already declared in `colors.css` and
   `structure.css`, so no read becomes undeclared. A theme that wrote a name declared nowhere would
   do nothing, and this guard would not see it (its header: it does not see a name written from
-  script or as a quoted key). `theme-registry.test.ts` changes from `THEMEABLE_TOKENS` to the list
-  `deriveTheme` writes: every name declared in the token files, and the list the same for every
-  choice. The 22 hand-settable names are that list's colours, so the same guard covers them; a test
+  script or as a quoted key). The list `deriveTheme` writes is guarded by
+  `packages/ui-core/src/theme/tokens.test.ts` (slice 1), beside the token files it reads, and slice
+  2 deletes `theme-registry.test.ts` with `THEMEABLE_TOKENS` rather than changing it (the layouts
+  package cannot see `ui-core`'s list without a new dependency): every name declared in the token
+  files, and the list the same for every choice. The 22 hand-settable names are that list's colours, so the same guard covers them; a test
   pins that `scrim` and every meaning colour are outside it.
 - `no-hardcoded-chrome.test.ts`: the editor lives in `apps/dashboard`, outside what it scans, and
   its draft colours are built at run time, which it never reads. The preview panels and the swatches
@@ -2206,7 +2236,7 @@ and administrators change it.
 
 - Type (section 5a): the list `deriveTheme` writes gains the four sizes, the three weights and
   `--wt-font-family`, written as Waitron's values where nothing is set, so every theme keeps one
-  shape; `theme-registry.test.ts` checks them declared like the colours, and a case pins that the
+  shape; `tokens.test.ts` checks them declared like the colours, and a case pins that the
   mono typeface and Google's typeface, line height, font size and font weight are outside the list;
   a browser case renders the Google button with a theme at 130% and a hand-set Medium weight of 800
   and asserts 14 px and 500. No guard checks that a
@@ -2249,8 +2279,11 @@ and administrators change it.
   passing; the brand change keeping it and dropping the green's dark fix; Use worked-out colour
   giving `#fff3f3`; the sage warning with the fix `#526a5b`, the cream page not named); a hand-set
   Main buttons colour with "Waitron's" brand colour writing its whole family; a rule between the
-  brand colour and a hand-set colour warning on the hand-set one; a sweep of hand-set values in
-  which every failing rule names an owner-picked colour and Fix all leaves nothing failing; an
+  brand colour and a hand-set colour warning on the hand-set one; two hand-set colours failing one
+  rule, each offered its own fix (text `#6a6a6a` on sunken areas `#bbbbbb`: both fixes, and either
+  taken alone clears its own warning); a sweep of hand-set values in which every failing rule names
+  an owner-picked colour and Fix all leaves nothing failing, and a two-colour sweep in which a fix
+  taken alone always clears its own warning and Fix all leaves no warning that has a fix; an
   extreme hand-set colour (pure blue cards) whose fix keeps its hue and passes every rule; a made-up
   colour with no passing shade warning without a fix (section 9); and Main buttons set by hand for a
   mode dropping that mode's brand fix from the draft, with Use worked-out colour on that row
@@ -2346,7 +2379,7 @@ and administrators change it.
 - The two versions (section 7). Derivation: a value set by hand for the dark version only, Main
   buttons among them, leaves every light token exactly as it was (the control: the same value set
   for the light version moves light tokens); a dark Main buttons set by hand drops the dark fix and
-  its family follows it, with section 7's Bar Lucía case (`#5fa77a`, `rules 72 failing 0`) and its
+  its family follows it, with section 7's Bar Lucía case (`#5fa77a`, no dark rule failing) and its
   control (no fix, no own colour: three rules failing). Browser: under Light, Dark and Follow device
   with the operating system light and dark, a screen paints the version its setting picks (section
   7's probe, now with a theme whose two versions differ); changing the setting or the system mode
@@ -2669,7 +2702,7 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `12-advanced-{light,dark}.png` | Advanced opened, with Page and surfaces opened and the other four sections closed: Bar Lucía's light page set by hand to cream in the draft, marked, beside worked-out colours; her dark page still worked out. The saved look around the card has no cream |
 | `13-advanced-phone-light.png` | The same at 390 px: each row stacks its Light and Dark values |
 | `14-q-hand-kept-or-put-back-light.png` | The extra question: with the cream page saved, the brand changed to burgundy in the draft; the cream page kept (A) or put back (B). On both sides the green's dark fix is dropped with the green, so burgundy warns for dark screens with its fix. Kept unchanged as the record of what the owner saw when they answered A (2026-10-20); its left side is the behaviour now decided |
-| `15-hand-set-and-dark-warnings-light.png` | Left: Bar Lucía with the cream page saved, the sage typed for Secondary text and her green's dark fix not yet taken — two warnings, the sage's under its row with **Use #526a5b**, the green's under Brand colour with **Use #417c59 on dark screens**, and "2 colours are hard to read. · Fix all" above the buttons. Right: the same after Fix all, the sage row showing "Light screens: fixed from #8fa898 · Undo" until the editor closes. The sage's row is in the opened Text colours and links section. Replaces `15-q2-hand-set-adjust-or-refuse-light.png`, which the owner saw beside 09 (in git history at 1f88662fb) |
+| `15-hand-set-and-dark-warnings-light.png` | Left: Bar Lucía with the cream page saved, the sage typed for Secondary text and her green's dark fix not yet taken — two warnings, the sage's under its row with **Use #526a5b**, the green's under Brand colour with **Use #417c59 on dark screens**, and "2 colours are hard to read. · Fix all" above the buttons. Right: the same after Fix all, the sage row showing "Light screens: fixed from #8fa898 · Undo" until the editor closes. The sage's row is in the opened Text colours and links section. Replaces `15-q2-hand-set-adjust-or-refuse-light.png`, which the owner saw beside 09 (in git history at 1f88662fb). Drawn before the station-fill rules were counted (slice 1 plan): its sage row names three colours, where the build's reads "Selected item, Field background, Switched-off field background and the 15 station colours"; not redrawn, and that grouped item is the one difference. |
 | `16-save-hard-to-read-light.png` | Left: Save pressed with the lemon unfixed — the "Hard to read" dialog with Back, Save anyway and Fix and save. Right: after Save anyway — the lemon on the page and on a till's Pay button, and the warning line on the saved card |
 | `17-logo-editor-{light,dark}.png` | The editor just after Lucía, the manager, uploads the bar's logo: the Logo field with Replace and Remove, "+ Add a version for dark screens" with its hint, and the preview's banner strips — the logo on the light panel, on a plate on the dark one. The dashboard around the card still shows Waitron's lockup: the logo is not saved yet |
 | `18-logo-editor-phone-light.png` | The same at 390 px |
