@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
@@ -16,6 +16,8 @@ import type {
   TillApi,
 } from "./api/client.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
+import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
+import type { TillTenderPay } from "./widgets/tender-pay.js";
 import { FakeNdefReader, installNfc, READER_ID } from "../test/equipment-nfc.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
@@ -33,6 +35,7 @@ import {
   tableOrder,
   flush,
   inDialog,
+  invoiceOf,
   openDialog,
   openTable,
   press,
@@ -223,14 +226,308 @@ describe("till-app: paying a table from a handheld", () => {
     expect(inOrder(order, "[data-open-bill-pay]")).toBeNull();
   });
 
-  it("a presented bill keeps today's pay card", async () => {
+  it("a presented bill draws one Cobrar in place of today's pay card", async () => {
     const { el } = await mountApp(
       onPhone({ getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]) }),
     );
     const order = await openPhoneTable(el);
 
-    expect(inOrder(order, "till-tender-pay")).not.toBeNull();
+    expect(inOrder(order, "till-tender-pay")).toBeNull();
+    expect(order.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+  });
+});
+
+describe("a presented bill on a handheld", () => {
+  const presented = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+  const inPresented = (el: TillApp, selector: string) =>
+    presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+  const placedBill = billOf({ status: "placed", receiptAvailable: true });
+  const ticket = () => invoiceOf("120.00");
+  const editOfBill = expect.objectContaining({ billId: "wo-4" });
+
+  async function openPresented(overrides: Record<string, unknown> = {}) {
+    const stubs = onPhone({
+      getPartyBills: vi.fn().mockResolvedValue([placedBill]),
+      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: ticket() }),
+      collectOrder: vi.fn().mockResolvedValue(ticket()),
+      ...overrides,
+    });
+    const { el } = await mountApp(stubs);
+    const order = await openPhoneTable(el);
+    const readsBefore = stubs.getDeviceEquipment.mock.calls.length;
+    await pressPaySheet(el, order);
+    await presented(el)?.updateComplete;
+    return { el, order, stubs, readsBefore };
+  }
+
+  async function takeOnReader(el: TillApp): Promise<void> {
+    inPresented(el, "[data-presented-pay-take]")!.click();
+    await flush(el);
+  }
+
+  async function payFromSheet(el: TillApp, detail: PresentedPayDetail): Promise<void> {
+    emit(presented(el)!, "presented-pay", detail);
+    await flush(el);
+  }
+
+  it("Cobrar opens the presented bill's sheet on its whole amount and reads the equipment again", async () => {
+    const { el, stubs, readsBefore } = await openPresented();
+
+    const sheet = presented(el);
+    expect(sheet).not.toBeNull();
+    expect(sheet!.open).toBe(true);
+    expect(sheet!.amount).toBe("120.00");
+    expect(sheet!.tableName).toBe(t("floor.table_title").replace("{table}", "4"));
+    expect(sheet!.asksGuests).toBe(true);
+    expect(sheet!.receiptGuests).toBe(4);
+    expect(sheet!.takesReaderCard).toBe(true);
+    expect(sheet!.takesCash).toBe(true);
+    expect(sheet!.takesManualCard).toBe(true);
+    expect(dialog(el)).toBeNull();
+    expect(stubs.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
+  });
+
+  it("a full invoice's presented bill asks for no guests", async () => {
+    const { el } = await openPresented({
+      getPartyBills: vi.fn().mockResolvedValue([{ ...placedBill, invoiceType: "F1" }]),
+    });
+    expect(presented(el)!.asksGuests).toBe(false);
+    await takeOnReader(el);
+    expect(vi.mocked(api.pay).mock.calls[0]![0]).not.toHaveProperty("guests");
+  });
+
+  it("another card machine with no operation number sends none", async () => {
+    const { el } = await openPresented();
+    await payFromSheet(el, { method: "manual" });
+
+    expect(vi.mocked(api.collectOrder).mock.calls[0]).toEqual([
+      "wo-4",
+      { method: "card", amount: "120.00" },
+      undefined,
+      undefined,
+      editOfBill,
+    ]);
+  });
+
+  it("a card is charged on the row's reader through the integrated payment, then the ticket shows", async () => {
+    const { el } = await openPresented();
+    await takeOnReader(el);
+
+    expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.pay).mock.calls[0]![0]).toEqual({
+      expectedEdit: editOfBill,
+      id: "wo-4",
+      lines: [],
+      readerId: "r2",
+      guests: 4,
+    });
+    expect(vi.mocked(api.takeBillPayment)).not.toHaveBeenCalled();
+    expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
+    expect(presented(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+  });
+
+  it("cash is collected with what was handed over and the guests, then the ticket shows", async () => {
+    const { el } = await openPresented();
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 3 });
+
+    expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.collectOrder).mock.calls[0]).toEqual([
+      "wo-4",
+      { method: "cash", amount: "150.00" },
+      undefined,
+      3,
+      editOfBill,
+    ]);
+    expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
+    expect(presented(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+  });
+
+  it("another card machine is collected as a card of the whole amount with its operation number", async () => {
+    const { el } = await openPresented();
+    await payFromSheet(el, { method: "manual", externalRef: "OP-7", guests: null });
+
+    expect(vi.mocked(api.collectOrder).mock.calls[0]).toEqual([
+      "wo-4",
+      { method: "card", amount: "120.00", externalRef: "OP-7" },
+      undefined,
+      null,
+      editOfBill,
+    ]);
+    expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
+  });
+
+  it.each(["card", "cash"] as const)(
+    "the party's kitchen note is saved before a %s payment is sent",
+    async (method) => {
+      let saved!: (value: unknown) => void;
+      const { el, order } = await openPresented({
+        setKitchenNote: vi.fn(() => new Promise((resolve) => (saved = resolve))),
+      });
+      emit(presented(el)!, "presented-pay-close");
+      await flush(el);
+      const note = order.shadowRoot!.querySelector<HTMLElement>("till-order-kitchen-note")!;
+      emit(note, "save-kitchen-note", {
+        ...(note as unknown as { opening: object }).opening,
+        scopeKey: (note as unknown as { scopeKey: string }).scopeKey,
+        visit: (note as unknown as { visit: number }).visit,
+        revision: 0,
+        note: "Together",
+      });
+      await flush(el);
+      expect(vi.mocked(api.setKitchenNote)).toHaveBeenCalledOnce();
+      await pressPaySheet(el, order);
+      if (method === "card") await takeOnReader(el);
+      else await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+      expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
+      expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
+
+      saved({
+        scope: { partyId: "v1" },
+        note: "Together",
+        revision: 1,
+        ownerRevision: 4,
+      });
+      await flush(el);
+      expect(
+        method === "card" ? vi.mocked(api.pay) : vi.mocked(api.collectOrder),
+      ).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("a declined card keeps the sheet open, saying so in today's words", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockResolvedValue({ outcome: "declined", failureReason: "generic_decline" }),
+    });
+    await takeOnReader(el);
+
+    expect(presented(el)!.open).toBe(true);
+    expect(presented(el)!.busy).toBe(false);
+    expect(presented(el)!.refusal).toEqual({ code: "declined" });
+    expect(
+      presented(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+        .error,
+    ).toBe(t("bill_pay.card_declined"));
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+  });
+
+  it.each([
+    ["network_unavailable", "card_network"],
+    ["timeout", "card_timeout"],
+  ] as const)("a card the reader answered %s keeps the sheet open as %s", async (outcome, code) => {
+    const { el } = await openPresented({ pay: vi.fn().mockResolvedValue({ outcome }) });
+    await takeOnReader(el);
+
+    expect(presented(el)!.refusal).toEqual({ code });
+  });
+
+  it("a card refused for good says the sale was refused, on the sheet", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
+    });
+    await takeOnReader(el);
+
+    expect(presented(el)!.open).toBe(true);
+    expect(presented(el)!.refusal).toEqual({ code: "sale.refused" });
+    expect(el.shadowRoot!.textContent).not.toContain(t("sale.refused"));
+  });
+
+  it("a card with no answer from the server says to check the sale, on the sheet", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await takeOnReader(el);
+
+    expect(presented(el)!.open).toBe(true);
+    expect(presented(el)!.refusal).toEqual({ code: "sale.unconfirmed" });
+  });
+
+  it("a card the server refuses shows the server's code on the sheet", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
+    });
+    await takeOnReader(el);
+
+    expect(presented(el)!.refusal).toEqual({ code: "order.payment_in_flight" });
+  });
+
+  it("a cash send refused as paid meanwhile says so on the sheet and reads the bills again", async () => {
+    const { el } = await openPresented({
+      collectOrder: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
+    });
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+
+    expect(presented(el)!.open).toBe(true);
+    expect(presented(el)!.refusal).toEqual({ code: "bill.pay_with_bill_payments" });
+    expect(el.shadowRoot!.textContent).not.toContain(t("bill.pay_with_bill_payments"));
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it("a cash send with no answer closes the sheet, so the pay card's recovery shows", async () => {
+    const { el, order } = await openPresented({
+      collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+
+    expect(presented(el)).toBeNull();
+    const tender = order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+    expect(tender).not.toBeNull();
+    expect(tender!.confirmation?.tender).toEqual({ method: "cash", amount: "150.00" });
     expect(inOrder(order, "[data-pay-sheet]")).toBeNull();
+  });
+
+  const lookBackgrounds = new Map<string, string>();
+  it.each([
+    ["light", 390],
+    ["light", 1280],
+    ["dark", 390],
+    ["dark", 1280],
+  ] as const)("looks right opened from the bill, %s at %i px", async (theme, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      setLocale("es-ES");
+      api = stubApi(onPhone({ getPartyBills: vi.fn().mockResolvedValue([placedBill]) }));
+      const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await presented(el)!.updateComplete;
+      const panel = presented(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      lookBackgrounds.set(`${theme}-${width}`, background);
+      if (theme === "dark") expect(background).not.toBe(lookBackgrounds.get(`light-${width}`));
+      const shot = `__screenshots__/look/a796-presented-from-bill-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const take = inPresented(el, "[data-presented-pay-take]")!.getBoundingClientRect();
+      await commands.writeFile(
+        `src/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          takeInside: take.right <= box.right && take.left >= box.left,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  it("Close shuts the sheet without a payment", async () => {
+    const { el } = await openPresented();
+    emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+
+    expect(presented(el)).toBeNull();
+    expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
+    expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
   });
 });
 

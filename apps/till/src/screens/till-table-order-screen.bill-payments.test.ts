@@ -261,10 +261,34 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
   });
 
-  it("keeps the pay card for a presented bill", async () => {
+  it("draws one Pay for a presented bill, which asks for the presented bill's sheet", async () => {
     const el = await mountScreen({ handheld: true, bills: [{ ...untouched, status: "placed" }] });
+    const presented = capture<{ workingOrderId: string }>(el, "pay-presented");
+    const asked = capture<BillPayDetail>(el, "bill-pay");
 
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+    await press(el, "[data-pay-sheet]");
+
+    expect(presented).toEqual([{ workingOrderId: "wo-4" }]);
+    expect(asked).toEqual([]);
+  });
+
+  it("keeps the pay card's recovery for a presented bill's unanswered whole payment", async () => {
+    const confirmation = {
+      tender: { method: "cash" as const, amount: "50.00" },
+      outstanding: "45.00",
+      guests: 3,
+    };
+    const el = await mountScreen({
+      handheld: true,
+      bills: [{ ...untouched, status: "placed" }],
+      paymentConfirmation: confirmation,
+    });
+
+    const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+    expect(tender).not.toBeNull();
+    expect(tender!.confirmation).toBe(confirmation);
     expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
   });
 

@@ -3860,7 +3860,7 @@ export class TillTableOrderScreen extends LitElement {
     if (partlyPaid === undefined)
       return html`<section class="pay">
         <h2>${t("table.pay_title")}</h2>
-        ${this.#paySheetButton()} ${this.#billChoices(shown)}
+        ${this.#paySheetButton(shown)} ${this.#billChoices(shown)}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
@@ -3875,7 +3875,7 @@ export class TillTableOrderScreen extends LitElement {
       }
       ${
         sheet
-          ? html`${this.#paySheetButton()} ${this.#billChoices(shown)}`
+          ? html`${this.#paySheetButton(shown)} ${this.#billChoices(shown)}`
           : html`<wt-button
                 variant="primary"
                 data-pay-rest
@@ -3889,22 +3889,27 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** A handheld pays an open bill through the pay sheet; a presented bill, and a payment A773-1
-   * holds, keep the pay card. */
+  /** A handheld pays an open bill, and a presented bill not yet paid in part, through a pay sheet;
+   * a payment A773-1 holds keeps the pay card. */
   #paysOnSheet(shown: PartyBill | undefined): boolean {
     return (
       this.handheld &&
       this.paymentConfirmation === undefined &&
-      (shown === undefined || shown.status === "open")
+      (shown === undefined ||
+        shown.status === "open" ||
+        (shown.status === "placed" && !paidInPart(shown)))
     );
   }
 
-  #paySheetButton(): TemplateResult {
+  #paySheetButton(shown: PartyBill | undefined): TemplateResult {
     return html`<wt-button
       variant="primary"
       data-pay-sheet
       .disabled=${this.busy}
-      @click=${() => this.#payPart("whole")}
+      @click=${() =>
+        shown?.status === "placed"
+          ? this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId })
+          : this.#payPart("whole")}
       >${t("action.pay")}</wt-button
     >`;
   }

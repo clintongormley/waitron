@@ -10,7 +10,8 @@ import { isTakePaymentRefusal } from "../state/bill-payment.js";
  * names. The app's own codes: `network`, a payment that got no answer; `sending`, a payment on the
  * bill still waiting for the server; `not_checked`, a payment the server could not check;
  * `payment_failed`, a payment recorded as not taken; `unread`, a balance that could not be read
- * again; `declined` and `card_network`, a card the reader did not charge;
+ * again; `declined` and `card_network`, a card the reader did not charge; `card_timeout`, a card
+ * the reader did not answer for;
  * `sale.unconfirmed`, `sale.refused` and `bill.pay_with_bill_payments`, a presented bill's payment
  * in the till's own sentences. */
 export interface PayRefusal {
@@ -49,6 +50,8 @@ export function refusalText(refusal: PayRefusal): string {
       return t("bill_pay.card_declined");
     case "card_network":
       return t("bill_pay.card_unreachable");
+    case "card_timeout":
+      return `${t("card.no_answer")}. ${t("card.pending_check")}`;
     case "sale.unconfirmed":
     case "sale.refused":
     case "bill.pay_with_bill_payments":

@@ -177,6 +177,8 @@ import {
   type AdjustTarget,
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
+import "./widgets/presented-pay-dialog.js";
+import type { PresentedPayDetail } from "./widgets/presented-pay-dialog.js";
 import "./widgets/invoice-recipient-dialog.js";
 import type {
   InvoiceRecipientDetail,
@@ -586,6 +588,21 @@ function billWriteError(error: unknown, lineChange = false): CounterError {
 function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
+
+/** What the presented bill's sheet says of a refused payment. */
+function presentedRefusalOf(error: unknown): PayRefusal {
+  if (isPaymentsReceived(error)) return { code: "bill.pay_with_bill_payments" };
+  if (isPermanentSaleRefusal(error)) return { code: "sale.refused" };
+  if (isNetworkFailure(error)) return { code: "sale.unconfirmed" };
+  return refusalOf(error, false);
+}
+
+/** The sheet's words for a card the reader did not charge. */
+const PRESENTED_CARD_REFUSALS = {
+  declined: "declined",
+  network_unavailable: "card_network",
+  timeout: "card_timeout",
+} as const;
 
 /** The bill a seated party opens on when it has no main bill: its first unpaid, else its latest. */
 function billToOpen(bills: readonly PartyBill[]): string | undefined {
@@ -1005,6 +1022,15 @@ interface PayingOrder {
   surface: "table" | "counter";
   billId: string;
   visit: number;
+}
+
+/** The presented bill's sheet, open on `billId`. */
+interface PresentedPaying {
+  id: number;
+  billId: string;
+  visit: number;
+  session: number;
+  refusal: PayRefusal | null;
 }
 
 interface WholePayment {
@@ -2642,6 +2668,8 @@ export class TillApp extends LitElement {
     expectedEdit: BillEditExpected | null | undefined;
   };
   readonly #unansweredWholePayments = new Map<string, WholePayment>();
+  @state() private presentedPaying: PresentedPaying | null = null;
+  #presentedPays = 0;
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
   #findBillRead?: AbortController;
@@ -9467,6 +9495,35 @@ export class TillApp extends LitElement {
       ${this.#renderBillRefunding()}`;
   }
 
+  #renderPresentedPaying(): TemplateResult | typeof nothing {
+    const open = this.#presentedNow();
+    const bill =
+      open === null ? undefined : this.partyBills.find((row) => row.workingOrderId === open.billId);
+    if (open === null || bill === undefined) return nothing;
+    return html`<till-presented-pay-dialog
+      .open=${true}
+      .amount=${bill.outstanding}
+      .tableName=${this.#activeTableTitle()}
+      .takesCash=${this.#takesCash()}
+      .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
+      .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
+      .asksGuests=${bill.invoiceType !== "F1"}
+      .receiptGuests=${defaultReceiptGuests(this.orderParty)}
+      .equipment=${this.deviceEquipment}
+      .canScan=${canScan()}
+      .fixedReader=${this.#fixedPayReader()}
+      .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
+      .equipmentSaving=${this.payEquipmentSaving}
+      .equipmentErrors=${this.payEquipmentErrors}
+      .busy=${this.submitting}
+      .refusal=${open.refusal}
+      @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
+        this.#onPayEquipmentPick(event.detail)}
+      @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
+      @presented-pay-close=${() => this.#closePresented(open.id)}
+    ></till-presented-pay-dialog>`;
+  }
+
   #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): void {
     this.payEquipmentSaving = { role, id };
     const errors = { ...this.payEquipmentErrors };
@@ -9482,7 +9539,10 @@ export class TillApp extends LitElement {
   }
 
   #payingTableName(open: BillPaying): string {
-    if (open.surface !== "table") return "";
+    return open.surface === "table" ? this.#activeTableTitle() : "";
+  }
+
+  #activeTableTitle(): string {
     const label = this.tables.find((table) => table.id === this.activeTableId)?.label;
     return label === undefined ? "" : t("floor.table_title").replace("{table}", () => label);
   }
@@ -15581,6 +15641,7 @@ export class TillApp extends LitElement {
     this.receiptLanguageAsking = null;
     this.#closeAdjust();
     this.#closeBillPaying();
+    this.#closePresented();
     this.#closeDeparting();
     this.#closeCancelCrediting();
     this.#cancelFindBillRead();
@@ -15606,21 +15667,30 @@ export class TillApp extends LitElement {
    * saves the counter basket, which is not the tab. Shares `submitting` with {@link #onConfirmPayment}.
    */
   async #onPayTab(event: Event): Promise<void> {
-    if (this.submitting || this.activeTabId === undefined) return;
+    await this.#payWholeTab((event as CustomEvent<ConfirmPaymentDetail>).detail);
+  }
+
+  /** {@link #onPayTab}'s send, answering true once the ticket shows. Given `refused`, a refusal is
+   * offered to it first, and goes to the screen only when it answers false. */
+  async #payWholeTab(
+    detail: ConfirmPaymentDetail,
+    refused?: (error: unknown) => boolean,
+  ): Promise<boolean> {
+    if (this.submitting || this.activeTabId === undefined) return false;
     const id = this.activeTabId;
     if (this.#billPaymentHeld(id)) {
       this.errorKey = this.#paymentsOut.has(id) ? "bill_pay.sending" : "bill_pay.unconfirmed";
-      return;
+      return false;
     }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
     const key = id;
     const unanswered = this.#unansweredWholePayments.get(key);
     if (unanswered === undefined && bill !== undefined && paidInPart(bill)) {
       this.#sayBillPayments(bill.outstanding);
-      return;
+      return false;
     }
     this.submitting = true;
-    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
     let paidMeanwhile = false;
@@ -15628,6 +15698,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     let payment = unanswered;
+    let paid = false;
     try {
       if (
         (unanswered === undefined && !(await this.#flushDraft())) ||
@@ -15641,7 +15712,7 @@ export class TillApp extends LitElement {
         api !== this.api ||
         id !== this.activeTabId
       )
-        return;
+        return false;
       if (payment === undefined) {
         const expectedEdit = this.#draftSync?.expectedEditFor(id);
         if (expectedEdit == null) throw { code: "draft.out_of_date" };
@@ -15665,9 +15736,10 @@ export class TillApp extends LitElement {
         api !== this.api ||
         id !== this.activeTabId
       )
-        return;
+        return false;
       this.result = result;
       this.#showTicket(id, !payment.invoiced);
+      paid = true;
     } catch (error) {
       if (
         (unanswered === undefined || paymentNotRecorded(error)) &&
@@ -15681,25 +15753,152 @@ export class TillApp extends LitElement {
         api !== this.api ||
         id !== this.activeTabId
       )
-        return;
+        return false;
       paidMeanwhile = isPaymentsReceived(error);
-      this.errorKey = paidMeanwhile
-        ? "bill.pay_with_bill_payments"
-        : isPermanentSaleRefusal(error)
-          ? "sale.refused"
-          : isNetworkFailure(error)
-            ? "sale.unconfirmed"
-            : isTakePaymentRefusal(error)
-              ? "take_payment.not_permitted"
-              : isPaymentInFlight(error)
-                ? "sale.payment_in_flight"
-                : (settleRefusalOf(error) ?? "sale.error");
+      if (refused?.(error) !== true)
+        this.errorKey = paidMeanwhile
+          ? "bill.pay_with_bill_payments"
+          : isPermanentSaleRefusal(error)
+            ? "sale.refused"
+            : isNetworkFailure(error)
+              ? "sale.unconfirmed"
+              : isTakePaymentRefusal(error)
+                ? "take_payment.not_permitted"
+                : isPaymentInFlight(error)
+                  ? "sale.payment_in_flight"
+                  : (settleRefusalOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }
     // Another device took a payment on the bill first: read again, the bill offers to take the rest
     // as a bill payment.
     if (paidMeanwhile && this.activeTabId === id) await this.#loadPartyBills();
+    return paid;
+  }
+
+  /** The presented bill's sheet, while it is still on the bill, visit and sign-in it opened on. */
+  #presentedNow(id?: number): PresentedPaying | null {
+    const open = this.presentedPaying;
+    return open !== null &&
+      (id === undefined || open.id === id) &&
+      open.billId === this.activeTabId &&
+      open.visit === this.#orderVisit &&
+      open.session === this.#operatorSession
+      ? open
+      : null;
+  }
+
+  /** Cobrar on a presented bill: its sheet opens, and the phone's equipment is read again. */
+  #onPayPresented(event: Event): void {
+    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    if (workingOrderId !== this.activeTabId) return;
+    this.presentedPaying = {
+      id: ++this.#presentedPays,
+      billId: workingOrderId,
+      visit: this.#orderVisit,
+      session: this.#operatorSession,
+      refusal: null,
+    };
+    if (this.handheldMode) void this.#readEquipment();
+  }
+
+  #closePresented(id?: number): void {
+    if (id === undefined || this.presentedPaying?.id === id) this.presentedPaying = null;
+  }
+
+  #showPresentedRefusal(id: number, refusal: PayRefusal): void {
+    const now = this.#presentedNow(id);
+    if (now !== null) this.presentedPaying = { ...now, refusal };
+  }
+
+  /** The presented bill's sheet asks to take its whole amount: a card on the phone's reader through
+   * `POST /api/pay`, cash or another card machine through {@link #payWholeTab}. A send with no answer
+   * closes the sheet, leaving A773-1's recovery on the pay card. */
+  async #onPresentedPay(event: Event): Promise<void> {
+    const open = this.#presentedNow();
+    if (open === null || this.submitting) return;
+    const bill = this.partyBills.find((row) => row.workingOrderId === open.billId);
+    if (bill === undefined) return;
+    const detail = (event as CustomEvent<PresentedPayDetail>).detail;
+    this.presentedPaying = { ...open, refusal: null };
+    if (detail.method === "card") {
+      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guests);
+      return;
+    }
+    const guests = detail.guests === undefined ? {} : { guests: detail.guests };
+    const tender: ConfirmPaymentDetail =
+      detail.method === "cash"
+        ? { method: "cash", amount: detail.tendered, ...guests }
+        : {
+            method: "card",
+            amount: bill.outstanding,
+            ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
+            ...guests,
+          };
+    const paid = await this.#payWholeTab(tender, (error) => {
+      if (this.#presentedNow(open.id) === null) return false;
+      if (isNetworkFailure(error)) {
+        this.#closePresented(open.id);
+        return false;
+      }
+      this.#showPresentedRefusal(open.id, presentedRefusalOf(error));
+      return true;
+    });
+    if (paid) this.#closePresented(open.id);
+  }
+
+  async #payPresentedOnReader(
+    id: number,
+    bill: PartyBill,
+    readerId: string,
+    guests: number | null | undefined,
+  ): Promise<void> {
+    if (this.submitting) return;
+    this.submitting = true;
+    this.errorKey = undefined;
+    const billId = bill.workingOrderId;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const left = () =>
+      visit !== this.#orderVisit ||
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      billId !== this.activeTabId;
+    let paidMeanwhile = false;
+    try {
+      if (!(await this.#flushDraft()) || left() || !(await this.#flushPartyKitchenNote()) || left())
+        return;
+      const expectedEdit = this.#draftSync?.expectedEditFor(billId);
+      if (expectedEdit == null) throw { code: "draft.out_of_date" };
+      const out = await this.#withReaderPayment(
+        true,
+        () =>
+          api.pay({
+            expectedEdit,
+            id: billId,
+            lines: [],
+            readerId,
+            ...(guests === undefined ? {} : { guests }),
+          }),
+        billId,
+      );
+      if (left()) return;
+      if (out.outcome === "captured") {
+        this.#closePresented(id);
+        this.result = out.ticket;
+        this.#showTicket(billId, bill.receiptAvailable !== true);
+        return;
+      }
+      this.#showPresentedRefusal(id, { code: PRESENTED_CARD_REFUSALS[out.outcome] });
+    } catch (error) {
+      if (left()) return;
+      paidMeanwhile = isPaymentsReceived(error);
+      this.#showPresentedRefusal(id, presentedRefusalOf(error));
+    } finally {
+      this.submitting = false;
+    }
+    if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
   }
 
   /** Pay items, Contribute or Split equally pressed on the bill on screen: the dialog opens on the
@@ -17191,6 +17390,7 @@ export class TillApp extends LitElement {
         @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
+        @pay-presented=${(event: Event) => this.#onPayPresented(event)}
         @bill-pay=${(event: Event) => void this.#onBillPay(event)}
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
@@ -17406,8 +17606,8 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
-        ${this.#renderBillPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
-        ${this.#renderCancelCrediting()}
+        ${this.#renderBillPaying()} ${this.#renderPresentedPaying()} ${this.#renderDeparting()}
+        ${this.#renderTenderRefund()} ${this.#renderCancelCrediting()}
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}
