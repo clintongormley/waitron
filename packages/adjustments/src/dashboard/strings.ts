@@ -15,10 +15,10 @@ const en = {
   "adjustments.add": "Add reason",
   "adjustments.empty": "No reasons yet.",
   "adjustments.column.name": "Name",
-  "adjustments.column.allows": "Allows",
+  "adjustments.column.kind": "Kind",
+  "adjustments.column.apply_roles": "Who can apply it",
+  "adjustments.column.approver_roles": "Who can approve it",
   "adjustments.column.limits": "Limits",
-  "adjustments.column.roles": "Who applies it",
-  "adjustments.column.status": "Status",
   "adjustments.column.actions": "Actions",
   "adjustments.customise_columns": "Customise columns",
   "adjustments.customise": "Customise",
@@ -30,23 +30,13 @@ const en = {
   "adjustments.column_always_shown": "Always shown",
   "adjustments.column_last_shown": "Keep at least one shown",
   "adjustments.column_position": "{position} of {total}",
-  "adjustments.filters": "Filters",
-  "adjustments.filtered_column": "Filtered",
-  "adjustments.filters_clear_all": "Clear all",
-  "adjustments.filters_close": "Close filters",
-  "adjustments.active": "Active",
-  "adjustments.disabled": "Disabled",
-  "adjustments.filter_all": "All reasons",
-  "adjustments.combobox_search": "Search",
-  "adjustments.combobox_no_results": "No results",
-  "adjustments.limit_percent": "Up to {percent}% off an item",
-  "adjustments.limit_amount": "Up to {amount} off a bill",
+  "adjustments.limit_percent": "{percent}% an item",
+  "adjustments.limit_amount": "{amount} a bill",
+  "adjustments.none": "—",
   "adjustments.no_limit": "No limit",
-  "adjustments.approves": "Approves: {roles}",
   "adjustments.everyone": "Everyone",
   "adjustments.note_required": "Note required",
-  "adjustments.move_up": "Move up",
-  "adjustments.move_down": "Move down",
+  "adjustments.order_note": "Drag ⋮⋮ to set the order the till lists them in.",
   "adjustments.edit": "Edit",
   "adjustments.disable": "Disable",
   "adjustments.new": "Add reason",
@@ -172,10 +162,10 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.add": "Añadir motivo",
   "adjustments.empty": "Todavía no hay motivos.",
   "adjustments.column.name": "Nombre",
-  "adjustments.column.allows": "Permite",
+  "adjustments.column.kind": "Tipo",
+  "adjustments.column.apply_roles": "Quién puede aplicarlo",
+  "adjustments.column.approver_roles": "Quién puede autorizarlo",
   "adjustments.column.limits": "Límites",
-  "adjustments.column.roles": "Quién lo aplica",
-  "adjustments.column.status": "Estado",
   "adjustments.column.actions": "Acciones",
   "adjustments.customise_columns": "Personalizar columnas",
   "adjustments.customise": "Personalizar",
@@ -187,23 +177,13 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.column_always_shown": "Siempre visible",
   "adjustments.column_last_shown": "Deja al menos una visible",
   "adjustments.column_position": "{position} de {total}",
-  "adjustments.filters": "Filtros",
-  "adjustments.filtered_column": "Filtrada",
-  "adjustments.filters_clear_all": "Borrar todo",
-  "adjustments.filters_close": "Cerrar filtros",
-  "adjustments.active": "Activo",
-  "adjustments.disabled": "Deshabilitado",
-  "adjustments.filter_all": "Todos los motivos",
-  "adjustments.combobox_search": "Buscar",
-  "adjustments.combobox_no_results": "Sin resultados",
-  "adjustments.limit_percent": "Hasta un {percent}% de un artículo",
-  "adjustments.limit_amount": "Hasta {amount} de una cuenta",
+  "adjustments.limit_percent": "{percent}% por artículo",
+  "adjustments.limit_amount": "{amount} por cuenta",
+  "adjustments.none": "—",
   "adjustments.no_limit": "Sin límite",
-  "adjustments.approves": "Aprueba: {roles}",
   "adjustments.everyone": "Todos",
   "adjustments.note_required": "Nota obligatoria",
-  "adjustments.move_up": "Subir",
-  "adjustments.move_down": "Bajar",
+  "adjustments.order_note": "Arrastra ⋮⋮ para fijar el orden en que la caja los muestra.",
   "adjustments.edit": "Editar",
   "adjustments.disable": "Deshabilitar",
   "adjustments.new": "Añadir motivo",
@@ -361,13 +341,6 @@ const ACTION_CHOICES: NameTable = {
   discount_amount: { en: "An amount", es: "Un importe" },
 };
 
-/** How the reasons list names a Comp reason's offers. */
-const OFFER_NAMES: NameTable = {
-  comp: { en: "Free", es: "Gratis" },
-  discount_percent: { en: "Percentage discount", es: "Descuento en porcentaje" },
-  discount_amount: { en: "Amount discount", es: "Descuento en importe" },
-};
-
 const KIND_NAMES: NameTable = {
   void: { en: "Void", es: "Cancelar" },
   comp: { en: "Comp", es: "Descuento" },
@@ -402,10 +375,6 @@ export function actionName(action: string, locale?: string): string {
 
 export function actionChoice(action: string, locale?: string): string {
   return resolveNameTable(ACTION_CHOICES, action, locale);
-}
-
-export function offerName(action: string, locale?: string): string {
-  return resolveNameTable(OFFER_NAMES, action, locale);
 }
 
 export function kindName(kind: string, locale?: string): string {

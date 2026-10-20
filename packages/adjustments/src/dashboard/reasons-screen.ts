@@ -1,18 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
-import {
-  QueryController,
-  codeMessage,
-  codeOf,
-  currentLocale,
-  tableNoMatches,
-} from "@waitron/dashboard-kit";
+import { repeat } from "lit/directives/repeat.js";
+import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import {
   baseStyles,
+  ReorderController,
   parseDecimalInput,
   formatDecimalInput,
   ContentLanguageController,
@@ -24,7 +19,6 @@ import {
   type LeaveCoordinator,
   type LeaveReason,
   submitOnEnter,
-  type DataTableColumn,
 } from "@waitron/ui";
 import type {
   AdjustmentAction,
@@ -38,7 +32,7 @@ import type {
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
-import { actionChoice, kindName, offerName, roleName, t, tf, type StringKey } from "./strings.js";
+import { actionChoice, kindName, roleName, t, tf, type StringKey } from "./strings.js";
 
 /** What a Comp reason may offer, in the order the form and the request list them. */
 const OFFERS: readonly AdjustmentAction[] = ["comp", "discount_percent", "discount_amount"];
@@ -184,6 +178,8 @@ function languageName(code: string): string {
 export class AdjustmentReasonsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    ReorderController.styles,
+    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -200,6 +196,30 @@ export class AdjustmentReasonsScreen extends LitElement {
         display: flex;
         justify-content: flex-end;
         margin-block: var(--wt-space-3);
+      }
+      .empty {
+        display: grid;
+        justify-items: start;
+        gap: var(--wt-space-3);
+      }
+      .empty p {
+        margin: 0;
+      }
+      thead th {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      td.handle-cell,
+      td.actions-cell {
+        width: 1%;
+        padding-inline: 0;
+        white-space: nowrap;
+      }
+      td.actions-cell {
+        text-align: end;
+      }
+      .reason-name {
+        font-weight: var(--wt-font-weight-bold);
       }
       .alert,
       .required,
@@ -270,19 +290,13 @@ export class AdjustmentReasonsScreen extends LitElement {
         gap: var(--wt-space-4);
         align-items: start;
       }
-      /* Cell markup lives in the table's shadow root, so only a part reaches it. */
-      wt-data-table::part(manage) {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
     `,
   ];
 
   @property({ attribute: false }) api!: AdjustmentsApi;
   @state() private reasons?: AdjustmentReason[];
   @state() private loadError?: string;
-  /** A refusal of a row action that saved at once: a move or an Enable. */
+  /** A refusal of a row action that saved at once. */
   @state() private actionError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
@@ -353,9 +367,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (!this.#leave) this.#close();
     else void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel");
   }
-  /** The active reasons' ids in list order, and each one's place in it, kept in step with `reasons`. */
-  #activeIds: readonly string[] = [];
-  #activeIndex = new Map<string, number>();
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -476,42 +487,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     } catch {
       this.loadError = t("adjustments.load_error");
     }
-  }
-
-  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has("reasons")) {
-      this.#activeIds = this.reasons!.filter((reason) => reason.active).map((reason) => reason.id);
-      this.#activeIndex = new Map(this.#activeIds.map((id, index) => [id, index]));
-    }
-  }
-
-  async #move(reason: AdjustmentReason, step: -1 | 1): Promise<void> {
-    if (this.busy) return;
-    const ids = [...this.#activeIds];
-    const from = ids.indexOf(reason.id);
-    [ids[from], ids[from + step]] = [ids[from + step]!, ids[from]!];
-    this.busy = true;
-    this.actionError = undefined;
-    try {
-      await this.api.reorderReasons(ids);
-    } catch {
-      this.actionError = t("adjustments.reorder_error");
-    } finally {
-      this.busy = false;
-    }
-    // Also after a refusal: the route refuses a stale list whole, so a retry needs the current one.
-    await this.#load();
-    if (this.actionError) return;
-    await this.updateComplete;
-    // Rows are drawn by position, so the pressed button now belongs to another reason.
-    const table = this.renderRoot.querySelector("wt-data-table");
-    await table?.updateComplete;
-    const button = (direction: string) =>
-      table?.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>(
-        `[data-test="move-${direction}-${reason.id}"]`,
-      );
-    const same = button(step < 0 ? "up" : "down");
-    (same && !same.disabled ? same : button(step < 0 ? "down" : "up"))?.focus();
   }
 
   #open(editor: Editor, opener: HTMLElement): void {
@@ -694,22 +669,17 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (this.editor !== undefined || !this.isConnected) return;
     await this.updateComplete;
     if (this.#opener?.isConnected === false)
-      this.renderRoot.querySelector<HTMLElement>('.toolbar [data-test="add-reason"]')?.focus();
+      this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')?.focus();
     await after?.();
   }
 
-  /** The status filter can drop the row, so focus goes to the row now in its place, or to Add
-   * reason. Read before the write, while the row is still shown. */
+  /** The write can drop the row, so focus goes to the row now in its place, or to Add reason.
+   * Read before the write, while the row is still shown. */
   #refocusFrom(reason: AdjustmentReason): () => Promise<void> {
-    const rows = () => [
-      ...(this.renderRoot
-        .querySelector("wt-data-table")
-        ?.shadowRoot?.querySelectorAll<HTMLElement>("tbody tr[data-row-key]") ?? []),
-    ];
-    const index = rows().findIndex((row) => row.dataset.rowKey === reason.id);
+    const rows = () => [...this.renderRoot.querySelectorAll<HTMLElement>("tbody tr[data-reason]")];
+    const index = rows().findIndex((row) => row.dataset.reason === reason.id);
     return async () => {
       await this.updateComplete;
-      await this.renderRoot.querySelector("wt-data-table")?.updateComplete;
       const remaining = rows();
       const row = remaining[Math.min(index, remaining.length - 1)];
       (
@@ -911,36 +881,14 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (reason.maxAmount !== null) {
       parts.push(tf("adjustments.limit_amount", { amount: formatMoney(reason.maxAmount, locale) }));
     }
-    if (parts.length === 0) parts.push(t("adjustments.no_limit"));
-    if (reason.noteRequired) parts.push(t("adjustments.note_required"));
     return parts;
   }
 
-  /** One line each: a table cell never wraps on its own, so a long cell would widen the table. */
+  /** One line each, or a dash for none. */
   #lines(lines: readonly string[]) {
-    return lines.map((line) => html`<div>${line}</div>`);
-  }
-
-  #manage(reason: AdjustmentReason) {
-    return html`<div part="manage">${this.#moveButtons(reason)}${this.#rowMenu(reason)}</div>`;
-  }
-
-  #moveButtons(reason: AdjustmentReason) {
-    if (!reason.active) return nothing;
-    const index = this.#activeIndex.get(reason.id)!;
-    const button = (direction: "up" | "down", step: -1 | 1, disabled: boolean) => {
-      const label = t(direction === "up" ? "adjustments.move_up" : "adjustments.move_down");
-      return html`<wt-button
-        size="sm"
-        variant="secondary"
-        data-test=${`move-${direction}-${reason.id}`}
-        aria-label=${`${label}: ${reason.name}`}
-        ?disabled=${this.busy || disabled}
-        @click=${() => void this.#move(reason, step)}
-        >${label}</wt-button
-      >`;
-    };
-    return html`${button("up", -1, index === 0)}${button("down", 1, index === this.#activeIds.length - 1)}`;
+    return lines.length === 0
+      ? t("adjustments.none")
+      : lines.map((line) => html`<div>${line}</div>`);
   }
 
   #rowMenu(reason: AdjustmentReason) {
@@ -957,75 +905,76 @@ export class AdjustmentReasonsScreen extends LitElement {
         }}
         >${label}</wt-button
       >`;
-    return html`<wt-row-actions label=${`${t("adjustments.column.actions")}: ${reason.name}`}>
+    return html`<wt-row-actions
+      align="end"
+      label=${`${t("adjustments.column.actions")}: ${reason.name}`}
+    >
       ${item(`edit-${reason.id}`, t("adjustments.edit"), (opener) =>
         this.#open({ kind: "reason", reason }, opener),
       )}
-      ${
-        reason.active
-          ? item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
-              this.#open({ kind: "deactivate", reason }, opener),
-            )
-          : nothing
-      }
+      ${item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
+        this.#open({ kind: "deactivate", reason }, opener),
+      )}
     </wt-row-actions>`;
   }
 
-  #columns(): DataTableColumn<AdjustmentReason>[] {
-    return [
-      { key: "name", label: t("adjustments.column.name"), cell: (reason) => reason.name },
-      {
-        key: "allows",
-        label: t("adjustments.column.allows"),
-        choosable: "shown",
-        cell: (reason) =>
-          this.#lines(
-            reason.kind === "void"
-              ? [kindName("void")]
-              : reason.actions.map((action) => offerName(action)),
-          ),
-      },
-      {
-        key: "limits",
-        label: t("adjustments.column.limits"),
-        choosable: "shown",
-        cell: (reason) => this.#lines(this.#limits(reason)),
-      },
-      {
-        key: "roles",
-        label: t("adjustments.column.roles"),
-        choosable: "shown",
-        cell: (reason) =>
-          reason.kind === "void"
-            ? nothing
-            : this.#lines([
-                rolesText(reason.applyRoles),
-                tf("adjustments.approves", { roles: rolesText(reason.approverRoles) }),
-              ]),
-      },
-      {
-        key: "status",
-        label: t("adjustments.column.status"),
-        choosable: "shown",
-        cell: (reason) => t(reason.active ? "adjustments.active" : "adjustments.disabled"),
-        filter: {
-          label: t("adjustments.column.status"),
-          allLabel: t("adjustments.filter_all"),
-          value: (reason) => (reason.active ? "active" : "inactive"),
-          options: [
-            { value: "active", label: t("adjustments.active") },
-            { value: "inactive", label: t("adjustments.disabled") },
-          ],
-          initial: "active",
-        },
-      },
-      {
-        key: "actions",
-        label: t("adjustments.column.actions"),
-        pinned: "end",
-        cell: (reason) => this.#manage(reason),
-      },
-    ];
+  /** The rows drawn, in list order. */
+  #shown(): AdjustmentReason[] {
+    return this.reasons ?? [];
+  }
+
+  #row(reason: AdjustmentReason) {
+    const isVoid = reason.kind === "void";
+    return html`<tr data-reason=${reason.id}>
+      <td class="handle-cell"></td>
+      <td>
+        <span class="reason-name">${reason.name}</span>
+        ${
+          reason.noteRequired
+            ? html`<wt-lozenge>${t("adjustments.note_required")}</wt-lozenge>`
+            : nothing
+        }
+      </td>
+      <td><wt-lozenge>${kindName(reason.kind)}</wt-lozenge></td>
+      <td>${isVoid ? t("adjustments.none") : rolesText(reason.applyRoles)}</td>
+      <td>${isVoid ? t("adjustments.none") : rolesText(reason.approverRoles)}</td>
+      <td>${this.#lines(this.#limits(reason))}</td>
+      <td class="actions-cell">${this.#rowMenu(reason)}</td>
+    </tr>`;
+  }
+
+  #table(rows: readonly AdjustmentReason[]) {
+    return html`<div
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        aria-label=${t("adjustments.title")}
+        data-test="reasons"
+      >
+        <table>
+          <thead>
+            <tr>
+              <td class="handle-cell"></td>
+              <th scope="col">${t("adjustments.column.name")}</th>
+              <th scope="col">${t("adjustments.column.kind")}</th>
+              <th scope="col">${t("adjustments.column.apply_roles")}</th>
+              <th scope="col">${t("adjustments.column.approver_roles")}</th>
+              <th scope="col">${t("adjustments.column.limits")}</th>
+              <th scope="col">
+                <span class="visually-hidden">${t("adjustments.column.actions")}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${repeat(
+              rows,
+              (reason) => reason.id,
+              (reason) => this.#row(reason),
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">${t("adjustments.order_note")}</p>`;
   }
 
   #fieldError(errors: FieldErrors, field: Field) {
@@ -1306,11 +1255,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     );
   }
 
-  #renderAdd(slot?: "empty-action") {
+  #renderAdd() {
     return html`<wt-button
       variant="primary"
       data-test="add-reason"
-      slot=${ifDefined(slot)}
       ?disabled=${this.busy}
       @click=${(event: Event) => this.#open({ kind: "reason" }, event.currentTarget as HTMLElement)}
       >${t("adjustments.add")}</wt-button
@@ -1322,37 +1270,14 @@ export class AdjustmentReasonsScreen extends LitElement {
     return html`<h1>${t("adjustments.title")}</h1>
       <p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}
-      <div class="toolbar">${this.#renderAdd()}</div>
       ${
-        this.reasons
-          ? html`<wt-data-table
-              filterSearchPlaceholder=${t("adjustments.combobox_search")}
-              filterNoResultsLabel=${t("adjustments.combobox_no_results")}
-              data-test="reasons"
-              aria-label=${t("adjustments.title")}
-              viewKey="waitron.adjustments.reasons.table"
-              customiseColumnsLabel=${t("adjustments.customise_columns")}
-              customiseLabel=${t("adjustments.customise")}
-              restoreColumnsLabel=${t("adjustments.restore_columns")}
-              doneLabel=${t("adjustments.done")}
-              moveColumnLabel=${t("adjustments.move_column")}
-              showColumnLabel=${t("adjustments.show_column")}
-              hideColumnLabel=${t("adjustments.hide_column")}
-              alwaysShownColumnLabel=${t("adjustments.column_always_shown")}
-              lastShownColumnLabel=${t("adjustments.column_last_shown")}
-              columnPositionLabel=${t("adjustments.column_position")}
-              filtersLabel=${t("adjustments.filters")}
-              filteredColumnLabel=${t("adjustments.filtered_column")}
-              filtersClearAllLabel=${t("adjustments.filters_clear_all")}
-              filtersCloseLabel=${t("adjustments.filters_close")}
-              .rows=${this.reasons}
-              .columns=${this.#columns()}
-              .rowKey=${(reason: AdjustmentReason) => reason.id}
-              .emptyMessage=${t("adjustments.empty")}
-              .noMatchesMessage=${tableNoMatches()}
-              >${this.reasons.length === 0 ? this.#renderAdd("empty-action") : nothing}</wt-data-table
-            >`
-          : nothing
+        this.reasons?.length === 0
+          ? html`<div class="empty">
+              <p data-test="empty">${t("adjustments.empty")}</p>
+              ${this.#renderAdd()}
+            </div>`
+          : html`<div class="toolbar">${this.#renderAdd()}</div>
+              ${this.reasons ? this.#table(this.#shown()) : nothing}`
       }
       ${this.#limitSection()} ${this.#modal()}`;
   }

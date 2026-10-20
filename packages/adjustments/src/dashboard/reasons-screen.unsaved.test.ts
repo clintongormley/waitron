@@ -17,7 +17,6 @@ const reason: AdjustmentReason = {
   applyRoles: ["supervisor", "manager", "admin"],
   approverRoles: ["manager", "admin"],
   noteRequired: true,
-  active: true,
   position: 0,
 };
 const voidReason: AdjustmentReason = {
@@ -31,7 +30,6 @@ const voidReason: AdjustmentReason = {
   applyRoles: [],
   approverRoles: [],
   noteRequired: false,
-  active: true,
   position: 1,
 };
 class ReasonLeaveApp extends LitElement {
@@ -82,7 +80,7 @@ async function mount(api = fakeApi()) {
   document.body.append(app);
   await app.updateComplete;
   const screen = app.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen")!;
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+  await expect.poll(() => screen.shadowRoot!.querySelector('[data-test="reasons"]')).not.toBeNull();
   await settle(screen);
   return { screen, api };
 }

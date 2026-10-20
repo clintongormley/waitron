@@ -1,13 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
-import {
-  chooseOption,
-  chooseOptions,
-  cleanup,
-  formMessageOf,
-  host,
-} from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
@@ -32,7 +26,6 @@ const reasons: AdjustmentReason[] = [
     applyRoles: [],
     approverRoles: [],
     noteRequired: false,
-    active: true,
     position: 0,
   },
   {
@@ -46,7 +39,6 @@ const reasons: AdjustmentReason[] = [
     applyRoles: ["supervisor", "manager", "admin"],
     approverRoles: ["manager", "admin"],
     noteRequired: true,
-    active: true,
     position: 1,
   },
   {
@@ -60,7 +52,6 @@ const reasons: AdjustmentReason[] = [
     applyRoles: ["staff", "supervisor", "manager", "admin"],
     approverRoles: ["manager", "admin"],
     noteRequired: false,
-    active: false,
     position: 2,
   },
 ];
@@ -154,16 +145,24 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     expect(save.variant).toBe("primary");
     await expectNoA11yViolations(host);
   });
-  test("the list of active reasons", async () => {
-    await screen(theme);
+  test("the list", async () => {
+    const el = await screen(theme);
+    expect(el.shadowRoot!.querySelectorAll("tbody tr[data-reason]")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 
-  test("the list showing inactive reasons", async () => {
+  test("the empty list", async () => {
+    const el = await screen(theme, { listReasons: vi.fn().mockResolvedValue([]) });
+    expect(el.shadowRoot!.querySelector('[data-test="empty"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("the open row menu", async () => {
     const el = await screen(theme);
-    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
-    await chooseOption(filter, "");
+    const menu = deep(el, 'tr[data-reason="c"] wt-row-actions');
+    menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
     await settle(el);
+    expect(menu.shadowRoot!.querySelector("button")!.getAttribute("aria-expanded")).toBe("true");
     await expectNoA11yViolations(host);
   });
 

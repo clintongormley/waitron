@@ -79,7 +79,6 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
                       applyRoles: [],
                       approverRoles: [],
                       noteRequired: false,
-                      active: true,
                       position: 0,
                     },
                   ],

@@ -29,7 +29,6 @@ export interface AdjustmentSettings {
 
 export interface AdjustmentReason extends AdjustmentReasonInput {
   id: string;
-  active: boolean;
   position: number;
 }
 
@@ -143,7 +142,7 @@ export class AdjustmentsApi {
     return this.request(`/management-api/adjustments/reasons/${reasonId}`, "DELETE");
   }
 
-  /** `ids` is every active reason, once each, in the new order. */
+  /** `ids` is every reason, once each, in the new order. */
   reorderReasons(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });
   }

@@ -26,7 +26,7 @@ const input: AdjustmentReasonInput = {
   approverRoles: ["manager", "admin"],
   noteRequired: true,
 };
-const reason: AdjustmentReason = { ...input, id: "r1", active: true, position: 0 };
+const reason: AdjustmentReason = { ...input, id: "r1", position: 0 };
 
 function api(fetchImpl: ReturnType<typeof vi.fn>, passive = false) {
   const client = new AdjustmentsApi(
