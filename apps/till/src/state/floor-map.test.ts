@@ -9,7 +9,6 @@ import {
   seatsFor,
   standInStatus,
   statusPin,
-  statusWords,
 } from "./floor-map.js";
 import "@waitron/ui/src/components/wt-floor-map.js";
 
@@ -52,8 +51,28 @@ function today(over: Partial<TableToday> = {}): TableToday {
   };
 }
 
+const now = Date.parse("2026-10-10T20:30:00Z");
+
+function party(id: string): TableParty {
+  return {
+    id,
+    kitchenNote: { scope: { partyId: id }, note: null, revision: 0, ownerRevision: 1 },
+    revision: 1,
+    guestCount: 2,
+    state: "open",
+    name: null,
+    displayName: id,
+    mainBillId: null,
+    outstanding: "0.00",
+    billCount: 1,
+    tableIds: [],
+    unsentDrafts: [],
+    reminder: null,
+  };
+}
+
 const bill = { kind: "bill_requested" as const, requestedAt: "2026-10-10T20:00:00Z" };
-const seated = { state: "open-tab" as const, condition: "held" as const };
+const seated = { state: "open-tab" as const, condition: "held" as const, party: party("S") };
 
 const startLocale = currentLocale();
 afterEach(() => setLocale(startLocale));
@@ -116,26 +135,11 @@ describe("combinedStatus", () => {
 });
 
 describe("words", () => {
-  const words = (over: Partial<TableState>): string => statusWords(table(over));
   const pin = (over: Partial<TableState>): string => pinText(table(over));
 
-  it("says the status in words", () => {
-    expect(words({})).toBe("Free");
-    expect(words({ nextReservation: { time: "20:30" } })).toBe("Reserved 20:30");
-    expect(words({ ...seated, readyToServe: 2 })).toBe("Seated, 2 ready");
-    expect(words({ ...seated, signals: [bill], timingBand: "forgotten" })).toBe(
-      "Bill requested, Forgotten",
-    );
-    expect(words({ condition: "needs_clearing" })).toBe("Needs clearing");
-    setLocale("es");
-    expect(words({ ...seated, readyToServe: 2 })).toBe("Ocupada, 2 listos");
-  });
-
-  it("says one ready dish in the singular, on the pin and in the words", () => {
-    expect(words({ ...seated, readyToServe: 1 })).toBe("Seated, 1 ready");
+  it("says one ready dish in the singular on the pin", () => {
     expect(pin({ ...seated, readyToServe: 1 })).toBe("1 ready");
     setLocale("es");
-    expect(words({ ...seated, readyToServe: 1 })).toBe("Ocupada, 1 listo");
     expect(pin({ ...seated, readyToServe: 1 })).toBe("1 listo");
     expect(pin({ ...seated, readyToServe: 2 })).toBe("2 listos");
   });
@@ -150,15 +154,11 @@ describe("words", () => {
     expect(pin({ signals: [bill], pendingToServe: 3 })).toBe("Bill requested");
   });
 
-  it("takes a merge's fill words from the member that gave the fill and its count from the one that gave the dot, never summed", () => {
-    const booked = table({ id: "a", nextReservation: { time: "21:00" } });
+  it("takes a merge's pin count from the member that gave the dot, never summed", () => {
     const free = table({ id: "b" });
     const party = table({ id: "c", ...seated, readyToServe: 2, pendingToServe: 5 });
     const sameParty = table({ id: "d", ...seated, readyToServe: 2, pendingToServe: 5 });
-    const members = [free, booked];
-    expect(statusWords(members)).toBe("Reserved 21:00");
     const merged = [free, party, sameParty];
-    expect(statusWords(merged)).toBe("Seated, 2 ready");
     expect(pinText(merged)).toBe("2 ready");
     expect(pinText([free, table({ id: "e", ...seated, pendingToServe: 5 })])).toBe("5 to serve");
   });
@@ -176,42 +176,34 @@ describe("words", () => {
 describe("a table that needs moving", () => {
   const movingToday = today({ needsMoving: true });
 
-  it("takes the clearing fill and reads Needs moving, even with a booking to come", () => {
+  it("takes the clearing fill and reads Needs moving on the pin, even with a booking to come", () => {
     const moving = table({ today: movingToday });
     expect(standInStatus(moving)).toEqual({ fill: "clearing", dot: null });
-    expect(statusWords(moving)).toBe("Needs moving");
     expect(pinText(moving)).toBe("Needs moving");
     const booked = table({ today: movingToday, nextReservation: { time: "20:30" } });
     expect(standInStatus(booked).fill).toBe("clearing");
-    expect(statusWords(booked)).toBe("Needs moving");
     expect(pinText(booked)).toBe("Needs moving");
-    setLocale("es");
-    expect(statusWords(moving)).toBe("Por mover");
   });
 
-  it("reads Needs clearing while it also needs clearing", () => {
+  it("takes the clearing fill while it also needs clearing", () => {
     const both = table({ condition: "needs_clearing", today: movingToday });
     expect(standInStatus(both).fill).toBe("clearing");
-    expect(statusWords(both)).toBe("Needs clearing");
   });
 
-  it("in a merge ranks with Needs clearing, above a bill, whose words win when a member needs clearing", () => {
+  it("in a merge ranks with Needs clearing, above a bill, on the pin", () => {
     const moving = table({ id: "a", today: movingToday });
     const billed = table({ id: "b", ...seated, signals: [bill] });
-    const clearing = table({ id: "c", condition: "needs_clearing" });
     expect(statusPin([billed, moving])).toEqual({
       fill: "clearing",
       dot: null,
       text: "Needs moving",
     });
-    expect(statusWords([moving, clearing])).toBe("Needs clearing");
-    expect(statusWords([clearing, moving])).toBe("Needs clearing");
   });
 
-  it("is drawn in its old place with the clearing fill and its words", () => {
-    const drawn = mapTables([table({ today: movingToday })]);
-    expect(drawn.map((row) => [row.placement, row.fill, row.description])).toEqual([
-      [placement, "clearing", "Needs moving"],
+  it("is drawn in its old place with the dashed outline over the next fill, and its words", () => {
+    const drawn = mapTables([table({ today: movingToday })], now);
+    expect(drawn.map((row) => [row.placement, row.fill, row.outline, row.description])).toEqual([
+      [placement, "free", "clearing", "Needs moving"],
     ]);
   });
 });
@@ -221,12 +213,13 @@ describe("zones and their tables", () => {
     const marked = table({ id: "a", today: today({ joinId: "j" }), hasAllergy: true });
     const joined = table({ id: "b", today: today({ joinId: "j" }), readyToServe: 2 });
     const other = table({ id: "c", today: today() });
-    const mapped = mapTables([marked, joined, other]);
-    expect(mapped[0]).toMatchObject({ allergy: true, dot: "ready" });
-    expect(mapped[1]).toMatchObject({ allergy: true, dot: "ready" });
+    const mapped = mapTables([marked, joined, other], now);
+    const ready = { fill: "ready", cue: { icon: "floor-ready", text: "2" } };
+    expect(mapped[0]).toMatchObject({ allergy: true, ...ready });
+    expect(mapped[1]).toMatchObject({ allergy: true, ...ready });
     expect(mapped[2]).not.toHaveProperty("allergy");
-    expect(mapTables([joined, marked]).map((row) => row.allergy)).toEqual([true, true]);
-    expect(mapTables([{ ...marked, hasAllergy: undefined }, joined])[0]).not.toHaveProperty(
+    expect(mapTables([joined, marked], now).map((row) => row.allergy)).toEqual([true, true]);
+    expect(mapTables([{ ...marked, hasAllergy: undefined }, joined], now)[0]).not.toHaveProperty(
       "allergy",
     );
   });
@@ -235,13 +228,15 @@ describe("zones and their tables", () => {
     const t1 = table({ id: "t1", label: "1", today: today() });
     const t2 = table({ id: "t2", label: "2", today: today({ placement: null }) });
     const t3 = table({ id: "t3", label: "3", today: today({ takenOff: true }) });
-    expect(mapTables([t1, t2, t3])).toEqual([
+    expect(mapTables([t1, t2, t3], now)).toEqual([
       {
         id: "t1",
         label: "1",
         placement,
         fill: "free",
-        dot: null,
+        outline: null,
+        pulse: null,
+        cue: null,
         joinId: null,
         fixed: false,
         linkId: null,
@@ -259,34 +254,38 @@ describe("zones and their tables", () => {
       today: today({ joinId: "j1" }),
     });
     const t5 = table({ id: "t5", label: "5", today: today({ joinId: "j1" }) });
-    const t6 = table({ id: "t6", label: "6", ...seated, today: today() });
+    const t6 = table({ id: "t6", label: "6", ...seated, party: party("T6"), today: today() });
     const shared = {
-      fill: "seated",
-      dot: "ready",
+      fill: "ready",
+      outline: null,
+      pulse: null,
+      cue: { icon: "floor-ready", text: "2" },
       joinId: "j1",
       fixed: false,
       linkId: null,
       description: "Seated, 2 ready",
     };
-    expect(mapTables([t5, t4, t6])).toEqual([
+    expect(mapTables([t5, t4, t6], now)).toEqual([
       { id: "t5", label: "5", placement, ...shared },
       { id: "t4", label: "4", placement, ...shared },
       {
         id: "t6",
         label: "6",
         placement,
-        fill: "seated",
-        dot: null,
+        fill: "calm",
+        outline: null,
+        pulse: null,
+        cue: { icon: "floor-check", text: "" },
         joinId: null,
         fixed: false,
         linkId: null,
-        description: "Seated",
+        description: "Seated, Nothing needed",
       },
     ]);
   });
 
   it("links a party's tables on the map and gives them one status", () => {
-    const p = { id: "P" } as TableParty;
+    const p = party("P");
     const t1 = table({
       id: "t1",
       label: "1",
@@ -305,40 +304,44 @@ describe("zones and their tables", () => {
       party: p,
       today: today({ takenOff: true }),
     });
-    const linked = mapTables([t1, t2, t3, t4, off]);
-    expect(linked.map((row) => [row.id, row.linkId, row.fill, row.dot, row.description])).toEqual([
-      ["t1", "P", "seated", "ready", "Seated, 2 ready"],
-      ["t2", "P", "seated", "ready", "Seated, 2 ready"],
-      ["t3", "P", "seated", "ready", "Seated, 2 ready"],
-      ["t4", "P", "seated", "ready", "Seated, 2 ready"],
+    const linked = mapTables([t1, t2, t3, t4, off], now);
+    const readyCue = { icon: "floor-ready", text: "2" };
+    expect(linked.map((row) => [row.id, row.linkId, row.fill, row.cue, row.description])).toEqual([
+      ["t1", "P", "ready", readyCue, "Seated, 2 ready"],
+      ["t2", "P", "ready", readyCue, "Seated, 2 ready"],
+      ["t3", "P", "ready", readyCue, "Seated, 2 ready"],
+      ["t4", "P", "ready", readyCue, "Seated, 2 ready"],
     ]);
 
-    const q = { id: "Q" } as TableParty;
+    const q = party("Q");
     const alone = table({ id: "t6", label: "6", ...seated, party: q, today: today() });
     const merged = [t3, t4].map((each) => ({ ...each, party: q }));
-    expect(mapTables([alone, t2]).map((row) => row.linkId)).toEqual([null, null]);
-    expect(mapTables(merged).map((row) => [row.linkId, row.description])).toEqual([
-      [null, "Seated"],
-      [null, "Seated"],
+    expect(mapTables([alone, t2], now).map((row) => row.linkId)).toEqual([null, null]);
+    expect(mapTables(merged, now).map((row) => [row.linkId, row.description])).toEqual([
+      [null, "Seated, Nothing needed"],
+      [null, "Seated, Nothing needed"],
     ]);
-    expect(mapTables([...merged, alone]).map((row) => row.linkId)).toEqual(["Q", "Q", "Q"]);
+    expect(mapTables([...merged, alone], now).map((row) => row.linkId)).toEqual(["Q", "Q", "Q"]);
   });
 
   it("carries today's names only when a table or its group has one", () => {
     const plain = table({ id: "t1", today: today({ name: null, joinName: null }) });
-    expect(mapTables([plain])[0]).not.toHaveProperty("name");
-    expect(mapTables([plain])[0]).not.toHaveProperty("groupName");
-    expect(mapTables([table({ id: "t1", today: today() })])[0]).not.toHaveProperty("name");
+    expect(mapTables([plain], now)[0]).not.toHaveProperty("name");
+    expect(mapTables([plain], now)[0]).not.toHaveProperty("groupName");
+    expect(mapTables([table({ id: "t1", today: today() })], now)[0]).not.toHaveProperty("name");
     const named = table({
       id: "t1",
       today: today({ joinId: "j", name: "Window", joinName: "García birthday" }),
     });
-    expect(mapTables([named])[0]).toMatchObject({ name: "Window", groupName: "García birthday" });
+    expect(mapTables([named], now)[0]).toMatchObject({
+      name: "Window",
+      groupName: "García birthday",
+    });
   });
 
   it("marks a fixed table fixed", () => {
     const fixed = table({ id: "t1", today: today({ fixed: true }) });
-    expect(mapTables([fixed])[0]!.fixed).toBe(true);
+    expect(mapTables([fixed], now)[0]!.fixed).toBe(true);
   });
 
   it("lists what is on today's plan and what must stay reachable", () => {
@@ -359,11 +362,11 @@ describe("zones and their tables", () => {
       today: today({ placement: null, takenOff: true }),
     });
     expect(listedTables([off])).toEqual([off]);
-    expect(mapTables([off])).toEqual([]);
+    expect(mapTables([off], now)).toEqual([]);
   });
 
   it.each([
-    ["map", mapTables],
+    ["map", (tables: TableState[]) => mapTables(tables, now)],
     ["list", listedTables],
   ] as const)("a still-joined part that kept its place is absent from the %s", (_name, read) => {
     const part = table({
@@ -382,7 +385,7 @@ describe("zones and their tables", () => {
       today: today({ inJoinedTable: "Long table" }),
     });
     expect(listedTables([part])).toEqual([part]);
-    expect(mapTables([part])).toEqual([]);
+    expect(mapTables([part], now)).toEqual([]);
   });
 
   it("reads seats only from today or its merge, with none without a today row", () => {
@@ -406,8 +409,16 @@ describe("a joined table split today", () => {
       today: today({ joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false } }),
     });
     const stool = table({ id: "stool", label: "Stool 2", today: today() });
-    expect(mapTables([c5, long, stool]).map((each) => each.id)).toEqual(["long", "stool", "c5"]);
-    expect(mapTables([long, c5, stool]).map((each) => each.id)).toEqual(["long", "stool", "c5"]);
+    expect(mapTables([c5, long, stool], now).map((each) => each.id)).toEqual([
+      "long",
+      "stool",
+      "c5",
+    ]);
+    expect(mapTables([long, c5, stool], now).map((each) => each.id)).toEqual([
+      "long",
+      "stool",
+      "c5",
+    ]);
   });
 
   it("draws a part split off on top when it is merged with a table listed before its joined table", async () => {
@@ -428,7 +439,7 @@ describe("a joined table split today", () => {
     });
     const map = document.createElement("wt-floor-map");
     map.style.cssText = "display: block; width: 600px; height: 300px";
-    map.tables = mapTables([bar2, long, c5]);
+    map.tables = mapTables([bar2, long, c5], now);
     document.body.append(map);
     try {
       await new Promise(requestAnimationFrame);

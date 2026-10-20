@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
 import type { FloorMapCue, FloorMapFill, FloorMapOutline, FloorMapPulse } from "@waitron/ui";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
-import { en } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { PRECEDENCE } from "./table-precedence.js";
 import {
   MAP_PRECEDENCE,
@@ -534,6 +535,68 @@ describe("mapLook", () => {
       pulse: null,
       cue: null,
     });
+  });
+});
+
+describe("the words floor-map.test.ts read through statusWords", () => {
+  const startLocale = currentLocale();
+  afterEach(() => setLocale(startLocale));
+  const words = (members: TableState[]) => mapLook(members, now).description;
+  const seated = en["floor.status_seated"];
+  const moving = today({ needsMoving: true });
+
+  it("says the status in words (was: says the status in words)", () => {
+    expect(words([table(free)])).toBe(en["floor.free"]);
+    expect(words([table({ ...free, nextReservation: { time: "20:30" } })])).toBe(
+      `${en["floor.reserved"]} 20:30`,
+    );
+    expect(words([table({ readyToServe: 2 })])).toBe(`${seated}, ${readyText(2)}`);
+    expect(words([table({ signals: [bill], timingBand: "forgotten" })])).toBe(
+      `${seated}, ${en["floor.forgotten"]}, ${en["signal.bill_requested"]}`,
+    );
+    expect(words([table({ ...free, condition: "needs_clearing" })])).toBe(
+      en["floor.needs_clearing"],
+    );
+    setLocale("es");
+    expect(words([table({ readyToServe: 2 })])).toBe(
+      `${es["floor.status_seated"]}, ${es["table.flash_ready"].replace("{n}", "2")}`,
+    );
+  });
+
+  it("says one ready dish in the singular (was: …on the pin and in the words)", () => {
+    expect(words([table({ readyToServe: 1 })])).toBe(`${seated}, ${en["table.flash_ready_one"]}`);
+    setLocale("es");
+    expect(words([table({ readyToServe: 1 })])).toBe(
+      `${es["floor.status_seated"]}, ${es["table.flash_ready_one"]}`,
+    );
+  });
+
+  it("takes a merge's words from the member that has them, its count never summed (was: takes a merge's fill words…)", () => {
+    const booked = table({ id: "a", ...free, nextReservation: { time: "21:00" } });
+    const freeTable = table({ id: "b", ...free });
+    expect(words([freeTable, booked])).toBe(`${en["floor.reserved"]} 21:00`);
+    const sameParty = [
+      table({ id: "c", readyToServe: 2, pendingToServe: 5 }),
+      table({ id: "d", readyToServe: 2, pendingToServe: 5 }),
+    ];
+    expect(words([freeTable, ...sameParty])).toBe(`${seated}, ${readyText(2)}`);
+  });
+
+  it("reads Needs moving, with a booking's words too (was: takes the clearing fill and reads Needs moving…)", () => {
+    expect(words([table({ ...free, today: moving })])).toBe(en["floor.needs_moving"]);
+    const booked = table({ ...free, today: moving, nextReservation: { time: "20:30" } });
+    expect(words([booked])).toBe(`${en["floor.needs_moving"]}, ${en["floor.reserved"]} 20:30`);
+    setLocale("es");
+    expect(words([table({ ...free, today: moving })])).toBe(es["floor.needs_moving"]);
+  });
+
+  it("reads Needs clearing while it also needs moving, alone or in a merge (was: reads Needs clearing while it also needs clearing; in a merge ranks with Needs clearing…)", () => {
+    const both = table({ ...free, condition: "needs_clearing", today: moving });
+    expect(words([both])).toBe(en["floor.needs_clearing"]);
+    const movingTable = table({ id: "a", ...free, today: moving });
+    const clearing = table({ id: "c", ...free, condition: "needs_clearing" });
+    expect(words([movingTable, clearing])).toBe(en["floor.needs_clearing"]);
+    expect(words([clearing, movingTable])).toBe(en["floor.needs_clearing"]);
   });
 });
 

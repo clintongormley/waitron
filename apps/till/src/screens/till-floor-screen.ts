@@ -2033,7 +2033,7 @@ export class TillFloorScreen extends LitElement {
     const listed = listedTables(visible);
     const pending = this.#pending;
     const drawn = pending === null ? visible : visible.map((table) => placedAt(table, pending));
-    const onMap = mapTables(drawn);
+    const onMap = mapTables(drawn, this.#drawnAt);
     const mapIds = new Set(onMap.map((table) => table.id));
     const unplaced = listed.filter((table) => !mapIds.has(table.id));
     const view = this.viewOverride ?? (onMap.length > 0 ? "map" : "list");

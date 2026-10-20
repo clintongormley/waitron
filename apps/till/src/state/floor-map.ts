@@ -1,7 +1,7 @@
 import type { FloorMapDot, FloorMapFill, FloorMapTable } from "@waitron/ui";
 import type { TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { readyText } from "./floor-look.js";
+import { mapLook, readyText } from "./floor-look.js";
 import { needsMovingToday, onTodaysPlan } from "./floor-today.js";
 import { signalOf } from "./table-signals.js";
 
@@ -99,16 +99,6 @@ function dotWords(table: TableState, dot: FloorMapDot): string {
   return dot === "forgotten" ? t("floor.forgotten") : readyText(table.readyToServe);
 }
 
-/** The fill's words, then the dot's: "Seated, 2 ready". Pass a merge's members together. */
-export function statusWords(tables: TableState | readonly TableState[]): string {
-  return wordsOf(sources(tables));
-}
-
-function wordsOf({ status, fillFrom, dotFrom }: Sources): string {
-  const fill = fillWords(fillFrom, status.fill);
-  return dotFrom === undefined ? fill : `${fill}, ${dotWords(dotFrom, status.dot!)}`;
-}
-
 /** The status pin's fill and shortest word. Pass a merge's members together. */
 export function statusPin(tables: TableState | readonly TableState[]): {
   fill: FloorMapFill;
@@ -134,14 +124,17 @@ function pinWords({ members, statuses, status, fillFrom, dotFrom }: Sources): st
   return fillWords(fillFrom, status.fill);
 }
 
-type Look = Pick<FloorMapTable, "fill" | "dot" | "description" | "allergy">;
+type Look = Pick<FloorMapTable, "fill" | "outline" | "pulse" | "cue" | "description" | "allergy">;
 
-function lookOf(from: Sources): Look {
+function lookOf(members: readonly TableState[], now: number): Look {
+  const { fill, outline, pulse, cue, description } = mapLook(members, now);
   return {
-    fill: from.status.fill,
-    dot: from.status.dot,
-    description: wordsOf(from),
-    ...(from.members.some((member) => member.hasAllergy) ? { allergy: true } : {}),
+    fill,
+    outline,
+    pulse,
+    cue,
+    description,
+    ...(members.some((member) => member.hasAllergy) ? { allergy: true } : {}),
   };
 }
 
@@ -153,10 +146,9 @@ export function drawnGroupKey(table: TableState, linkId: string | null): string 
 
 /**
  * Every member of a merge, and every table of a party drawn as two or more groups, carries the same
- * fill, dot and description, as `wt-floor-map` requires; the party's tables also carry its id as
- * `linkId`.
+ * look, as `wt-floor-map` requires; the party's tables also carry its id as `linkId`.
  */
-export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
+export function mapTables(zoneTables: readonly TableState[], now: number): FloorMapTable[] {
   // `wt-floor-map` draws each merge where its first member is listed, so a part split off, and any
   // merge holding one, goes last to land on top of its joined table.
   const onPlan = zoneTables.filter(onTodaysPlan);
@@ -186,7 +178,7 @@ export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
     else together.set(lookKey(table), [table]);
   }
   const looks = new Map<string, Look>();
-  for (const [key, members] of together) looks.set(key, lookOf(sources(members)));
+  for (const [key, members] of together) looks.set(key, lookOf(members, now));
   return drawn.map((table) => {
     const today = table.today!;
     return {

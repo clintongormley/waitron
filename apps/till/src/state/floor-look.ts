@@ -148,9 +148,10 @@ function unavailableDishes(members: readonly TableState[]): string {
 }
 
 /**
- * A kind's words, as the card says them; counts read from one member of a merge. `kind` must be one
- * of the members' own kinds (from `mapLook` or `mapKinds`) at the same `now`: Held, Unavailable and
- * Reserved read dishes or a booking that only such a member has, and Held only until it is due.
+ * A kind's words, as the card says them; a merge's ready count reads from one member. `kind` must
+ * be one of the members' own kinds (from `mapLook` or `mapKinds`) at the same `now`: Held,
+ * Unavailable and Reserved read dishes or a booking that only such a member has, and Held only
+ * until it is due.
  */
 export function kindWords(kind: MapKind, members: readonly TableState[], now: number): string {
   const fixed = FIXED_WORDS[kind];

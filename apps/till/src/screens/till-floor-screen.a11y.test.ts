@@ -277,8 +277,16 @@ for (const locale of ["en", "es"]) {
           expect(marker.right).toBeLessThanOrEqual(bounds.right);
           expect(marker.top).toBeGreaterThanOrEqual(bounds.top);
           expect(marker.bottom).toBeLessThanOrEqual(bounds.bottom);
-          const dot = map.shadowRoot!.querySelector('[part="dot"]')!.getBoundingClientRect();
-          expect(marker.right).toBeLessThanOrEqual(dot.left);
+          const caption = mark
+            .closest("button")!
+            .querySelector('[part="caption"], [part="name"]')!
+            .getBoundingClientRect();
+          const covers =
+            marker.left < caption.right &&
+            caption.left < marker.right &&
+            marker.top < caption.bottom &&
+            caption.top < marker.bottom;
+          expect(covers).toBe(false);
           expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
           await expectNoA11yViolations(host);
           await page.screenshot({
