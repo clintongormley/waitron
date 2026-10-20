@@ -47,7 +47,7 @@ import {
   orderForParty,
   pay,
   revisionOf,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   split,
   type PartyVenue,

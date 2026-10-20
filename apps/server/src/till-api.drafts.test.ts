@@ -136,6 +136,7 @@ async function submitBody(partyId: string, draft: DraftAnswer, lineIds = draft.l
     submissionId: randomUUID(),
     draftRevision: draft.revision,
     expectedPartyRevision: await revisionOf(partyId),
+    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     groups: [{ lineIds: lineIds.map((line) => line.id), release: "fire" }],
   };
 }
@@ -1315,6 +1316,7 @@ describe("per-group HTTP destinations draft", () => {
     const initial = await ana("POST", `/api/parties/${party.partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: party.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         { release: "hold", lines: [dish("Tarta")] },
         { release: "hold", lines: [dish("Croquetas")] },

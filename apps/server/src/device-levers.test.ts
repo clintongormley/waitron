@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
@@ -9,6 +9,7 @@ import {
   orderGroups,
   products,
   ticketItems,
+  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -19,6 +20,8 @@ import { LEVER_STATUS, mountDeviceApi } from "./device-api.js";
 import { STATUS as TILL_STATUS, mountTillApi } from "./till-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { readBillEditState } from "./bill-editing.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 
@@ -30,6 +33,7 @@ import {
   revisionOf,
   seat,
   setupPartyVenue,
+  split,
 } from "./testing/party-venue.js";
 
 const suite = useVenueDb({
@@ -92,6 +96,9 @@ async function fixture() {
   /** A seated party with one Burger held in a group of its own. */
   const heldBurger = async () => {
     const seated = await seat(v, await v.table(`T${randomUUID().slice(0, 4)}`));
+    await inTx(v, (tx) =>
+      VENUE_SERVICE.writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, OPERATOR),
+    );
     const placed = await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, seated.partyId, {
         groups: [
@@ -167,6 +174,263 @@ async function label(deviceId: string) {
 }
 
 describe("a kitchen display's pass fires as the device", () => {
+  it("a device course refuses person-owned allergy input even when the order has no party", async () => {
+    const f = await fixture();
+    const orderId = await counterOrder(f.v, "Burger");
+    const before = await itemsOf(orderId);
+    const result = await send(f.app, f.pass.cookie, coursePath(orderId, f.mains, "fire"), {
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+    });
+    expect(result.status).toBe(400);
+    expect(result.body.error?.code).toBe("allergy.invalid");
+    expect(await itemsOf(orderId)).toEqual(before);
+    const allowed = await send(f.app, f.pass.cookie, coursePath(orderId, f.mains, "fire"));
+    expect(allowed.status).toBe(200);
+  });
+
+  it("device group preflight and release roll back every bill when the later dish is unavailable", async () => {
+    const f = await fixture();
+    const held = await f.heldBurger();
+    await inTx(f.v, (tx) =>
+      placeGroups(tx, f.v.cfg, held.partyId, {
+        operatorId: OPERATOR,
+        billId: held.tabId,
+        groups: [
+          {
+            release: "hold",
+            joinGroupId: held.groupId,
+            lines: [{ menuItemId: f.v.item("Flan"), quantity: "1" }],
+          },
+        ],
+      }),
+    );
+    const other = await split(f.v, held.partyId, held.tabId, [2]);
+    await suite.db
+      .update(products)
+      .set({ available: false })
+      .where(eq(products.id, f.v.productId("Flan")));
+    const before = [await itemsOf(held.tabId), await itemsOf(other)];
+    const revision = await revisionOf(f.v, held.partyId);
+    const result = await send(f.app, f.pass.cookie, groupPath(held.partyId, held.groupId, "fire"), {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revision,
+    });
+    expect(result.status).toBe(409);
+    expect(result.body.error?.code).toBe("product.unavailable");
+    expect([await itemsOf(held.tabId), await itemsOf(other)]).toEqual(before);
+    expect((await groupRow(held.groupId)).state).toBe("held");
+    expect(await firedEvent(held.groupId)).toBeUndefined();
+    expect(await revisionOf(f.v, held.partyId)).toBe(revision);
+  });
+  for (const path of [
+    "course",
+    "group",
+    "line",
+    "held-line",
+    "device-course",
+    "device-group",
+  ] as const) {
+    it(`${path} rechecks current profile authority after reading a queued Fire body`, async () => {
+      const f = await fixture();
+      const held = await f.heldBurger();
+      const [line] = await suite.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, held.tabId));
+      if (path === "line")
+        await suite.db
+          .update(workingOrderLines)
+          .set({ groupId: null })
+          .where(eq(workingOrderLines.id, line!.id));
+      const profile = path.startsWith("device")
+        ? f.runner
+        : await f.profile("till", ["take-orders"]);
+      const till = path.startsWith("device")
+        ? f.pass
+        : await f.device("Queued allergy till", profile, {});
+      const cookie = path.startsWith("device") ? till.cookie : await f.signIn(till.cookie);
+      const revision = await revisionOf(f.v, held.partyId);
+      const body = {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        expectedEdit: await inTx(f.v, (tx) => readBillEditState(tx, held.tabId)),
+        lineId: line!.id,
+        lineNos: [line!.lineNo],
+      };
+      const url =
+        path === "device-course"
+          ? coursePath(held.tabId, f.mains, "fire")
+          : path === "device-group"
+            ? groupPath(held.partyId, held.groupId, "fire")
+            : path === "course"
+              ? `/api/orders/${held.tabId}/courses/${f.mains}/fire`
+              : path === "group"
+                ? `/api/parties/${held.partyId}/groups/${held.groupId}/fire`
+                : path === "held-line"
+                  ? `/api/parties/${held.partyId}/groups/fire-line`
+                  : `/api/working-orders/${held.tabId}/lines/send`;
+      let unblock!: () => void;
+      let notifyRead!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+      const reading = new Promise<void>((resolve) => {
+        notifyRead = resolve;
+      });
+      const request = new Request(`http://localhost${url}`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      request.text = async () => {
+        notifyRead();
+        await blocked;
+        return JSON.stringify(body);
+      };
+      const pending = f.app.fetch(request);
+      await reading;
+      await suite.db
+        .update(deviceProfiles)
+        .set({ capabilities: [] })
+        .where(eq(deviceProfiles.id, profile));
+      const before = await itemsOf(held.tabId);
+      unblock();
+      const response = await pending;
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
+      expect(await itemsOf(held.tabId)).toEqual(before);
+      expect(await revisionOf(f.v, held.partyId)).toBe(revision);
+    });
+  }
+  it("device course commands reject stale revisions before any release", async () => {
+    const f = await fixture();
+    const held = await f.heldBurger();
+    const revision = await revisionOf(f.v, held.partyId);
+    const result = await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revision + 1,
+    });
+    expect(result.status).toBe(409);
+    expect(result.body.error?.code).toBe("party.out_of_date");
+    expect((await groupRow(held.groupId)).state).toBe("held");
+    expect(await revisionOf(f.v, held.partyId)).toBe(revision);
+  });
+  it("device course command replay retains its target and advances the party once", async () => {
+    const f = await fixture();
+    const held = await f.heldBurger();
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(f.v, held.partyId),
+    };
+    expect(
+      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), body)).status,
+    ).toBe(200);
+    expect(
+      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "fire"), body)).status,
+    ).toBe(200);
+    expect(await revisionOf(f.v, held.partyId)).toBe(body.expectedPartyRevision + 1);
+    const other = await inTx(f.v, (tx) =>
+      createCourse(tx, f.v.cfg, { name: "Another course", displayOrder: 2 }),
+    );
+    const reused = await send(f.app, f.pass.cookie, coursePath(held.tabId, other.id, "fire"), body);
+    expect(reused.status).toBe(409);
+    expect(reused.body.error?.code).toBe("submission.id_reused");
+  });
+  for (const path of ["course", "group"] as const) {
+    it(`refuses an unanswered device ${path} without firing or recording an actor`, async () => {
+      const f = await fixture();
+      const held = await f.heldBurger();
+      await suite.db.run(sql`delete from party_allergy where party_id = ${held.partyId}`);
+      const before = await itemsOf(held.tabId);
+      const revision = await revisionOf(f.v, held.partyId);
+      const result = await send(
+        f.app,
+        f.pass.cookie,
+        path === "course"
+          ? coursePath(held.tabId, f.mains, "fire")
+          : groupPath(held.partyId, held.groupId, "fire"),
+        { submissionId: randomUUID(), expectedPartyRevision: revision },
+      );
+      expect(result.status).toBe(409);
+      expect(result.body.error?.code).toBe("allergy.unanswered");
+      expect(await itemsOf(held.tabId)).toEqual(before);
+      expect(await revisionOf(f.v, held.partyId)).toBe(revision);
+      expect(await firedEvent(held.groupId)).toBeUndefined();
+    });
+    it(`a device ${path} cannot save a person-owned allergy answer`, async () => {
+      const f = await fixture();
+      const held = await f.heldBurger();
+      const result = await send(
+        f.app,
+        f.pass.cookie,
+        path === "course"
+          ? coursePath(held.tabId, f.mains, "fire")
+          : groupPath(held.partyId, held.groupId, "fire"),
+        {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await revisionOf(f.v, held.partyId),
+          allergy: { party: { answer: "allergies", guests: [] }, ticks: [] },
+        },
+      );
+      expect(result.status).toBe(400);
+      expect(result.body.error?.code).toBe("allergy.invalid");
+      expect(
+        (await inTx(f.v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, held.partyId))).answer,
+      ).toBe("none");
+      expect((await groupRow(held.groupId)).state).toBe("held");
+    });
+  }
+  for (const path of ["course", "group", "line", "held-line"] as const) {
+    it(`signed-in ${path} saves its first allergy answer with Fire and replays exactly`, async () => {
+      const f = await fixture();
+      const held = await f.heldBurger();
+      await suite.db.run(sql`delete from party_allergy where party_id = ${held.partyId}`);
+      const [line] = await suite.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, held.tabId));
+      if (path === "line")
+        await suite.db
+          .update(workingOrderLines)
+          .set({ groupId: null })
+          .where(eq(workingOrderLines.id, line!.id));
+      const profile = await f.profile("till", ["take-orders"]);
+      const till = await f.device("Allergy till", profile, {});
+      const cookie = await f.signIn(till.cookie);
+      const body = {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(f.v, held.partyId),
+        expectedEdit: await inTx(f.v, (tx) => readBillEditState(tx, held.tabId)),
+        lineId: line!.id,
+        lineNos: [line!.lineNo],
+        allergy: {
+          party: {
+            answer: "allergies",
+            guests: [{ who: "Alex", allergens: { milk: {} }, note: null }],
+          },
+          ticks: [{ line: { kind: "working", id: line!.id }, guestIndex: 0 }],
+        },
+      };
+      const url =
+        path === "course"
+          ? `/api/orders/${held.tabId}/courses/${f.mains}/fire`
+          : path === "group"
+            ? `/api/parties/${held.partyId}/groups/${held.groupId}/fire`
+            : path === "held-line"
+              ? `/api/parties/${held.partyId}/groups/fire-line`
+              : `/api/working-orders/${held.tabId}/lines/send`;
+      const fired = await send(f.app, cookie, url, body);
+      expect(fired.status).toBe(200);
+      const snapshot = await inTx(f.v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, held.partyId));
+      expect(snapshot.answer).toBe("allergies");
+      expect(snapshot.ticks.map((tick) => tick.workingLineId)).toEqual([line!.id]);
+      expect(await revisionOf(f.v, held.partyId)).toBe(body.expectedPartyRevision + 1);
+      const after = await itemsOf(held.tabId);
+      expect((await send(f.app, cookie, url, body)).status).toBe(200);
+      expect(await itemsOf(held.tabId)).toEqual(after);
+      expect(await revisionOf(f.v, held.partyId)).toBe(body.expectedPartyRevision + 1);
+    });
+  }
   it("fires a course, recording the device on its group and its event, and shows the device as the sender", async () => {
     const f = await fixture();
     const held = await f.heldBurger();

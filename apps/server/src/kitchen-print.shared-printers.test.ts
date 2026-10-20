@@ -145,6 +145,7 @@ async function seatAndSubmit(
     operatorId: OPERATOR,
   });
   await submitGroups(tx, cfg, partyId, {
+    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     submissionId: randomUUID(),
     expectedPartyRevision: revision,
     operatorId: OPERATOR,

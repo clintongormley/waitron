@@ -254,6 +254,7 @@ async function seated(v: Venue): Promise<Seated> {
       guestCount: 4,
       operatorId: ALEX,
     });
+    await VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ALEX);
     return { partyId, tabId, tableId };
   });
 }
@@ -2174,6 +2175,7 @@ async function billOfNoParty(
       zoneId: v.zoneId,
     });
     const opened = await openPartyTab(tx, v.cfg, { tableId });
+    await VENUE_SERVICE.writePartyAllergy(tx, opened.partyId, { answer: "none", guests: [] }, ALEX);
     await fill(tx, opened.tabId);
     return opened;
   });

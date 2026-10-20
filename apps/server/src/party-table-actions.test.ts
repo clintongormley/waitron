@@ -47,7 +47,7 @@ import {
   paymentsOf,
   placeByHand,
   revisionOf,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   tableRow,
   zoneOf,

@@ -67,6 +67,7 @@ async function setup(recalled: boolean, release: "hold" | "fire" = "hold") {
   expect(
     (
       await call("POST", `/api/parties/${partyId}/groups`, {
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
         ...(await command(partyId)),
         groups: [{ release, lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "2" }] }],
       })

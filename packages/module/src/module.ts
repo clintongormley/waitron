@@ -1362,6 +1362,12 @@ export interface VenueServiceContribution {
     input: unknown,
     operatorId: string,
   ): Promise<PartyAllergySnapshot>;
+  writePartyAllergy(
+    tx: Transaction,
+    partyId: string,
+    input: unknown,
+    operatorId: string,
+  ): Promise<void>;
   setAllergyLineTicks(tx: Transaction, partyId: string, input: unknown): Promise<void>;
   moveAllergyDraftTicks(
     tx: Transaction,

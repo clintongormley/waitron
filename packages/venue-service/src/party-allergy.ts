@@ -96,6 +96,25 @@ export async function savePartyAllergy(
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) invalid("revision");
   if (party.revision !== expectedRevision)
     throw new AppError("allergy.out_of_date", { revision: party.revision });
+  await writePartyAllergy(tx, partyId, input, operatorId);
+  await tx
+    .update(parties)
+    .set({ revision: party.revision + 1 })
+    .where(eq(parties.id, partyId));
+  return readPartyAllergy(tx, partyId);
+}
+
+export async function writePartyAllergy(
+  tx: Transaction,
+  partyId: string,
+  input: unknown,
+  operatorId: string,
+): Promise<void> {
+  const [party] = await tx
+    .select({ state: parties.state })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party === undefined || party.state !== "open") invalid("partyId");
   if (!record(input) || (input.answer !== "none" && input.answer !== "allergies"))
     invalid("answer");
   if (!Array.isArray(input.guests) || (input.answer === "none" && input.guests.length !== 0))
@@ -145,11 +164,6 @@ export async function savePartyAllergy(
       await tx.update(partyAllergyGuests).set(guest).where(eq(partyAllergyGuests.id, guest.id));
     else await tx.insert(partyAllergyGuests).values(guest);
   }
-  await tx
-    .update(parties)
-    .set({ revision: party.revision + 1 })
-    .where(eq(parties.id, partyId));
-  return readPartyAllergy(tx, partyId);
 }
 
 export async function setAllergyLineTicks(

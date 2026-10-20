@@ -37,7 +37,7 @@ import { setStationToday } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { OPERATOR, seat, setupPartyVenue } from "./testing/party-venue.js";
+import { OPERATOR, seatWithNoAllergies as seat, setupPartyVenue } from "./testing/party-venue.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import * as splitVenue from "./testing/split-extras-venue.js";
 import "./errors.js";

@@ -248,6 +248,7 @@ async function seated(v: Venue): Promise<Seated> {
       guestCount: 2,
       operatorId: ALEX,
     });
+    await VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ALEX);
     return { partyId, tabId, tableId };
   });
 }

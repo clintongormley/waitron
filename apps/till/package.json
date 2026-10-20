@@ -20,6 +20,7 @@
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
     "@waitron/diagnostics": "workspace:*",
+    "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
     "@waitron/venue-service": "workspace:*",

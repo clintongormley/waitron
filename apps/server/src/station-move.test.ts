@@ -45,7 +45,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import {
   inTx,
   orderForParty,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
   OPERATOR,

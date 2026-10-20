@@ -104,6 +104,7 @@ async function sendRound(
         submissionId: randomUUID(),
         expectedPartyRevision: revision,
         groups: [{ lines, release: "fire" }],
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       }),
     ),
   });

@@ -1,3 +1,5 @@
+import type { PartyAllergySnapshot } from "@waitron/module";
+import { allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -40,9 +42,12 @@ export interface SentReorderDetail {
 
 @customElement("till-sent-orders")
 export class TillSentOrders extends LitElement {
+  @property({ attribute: false }) allergy: PartyAllergySnapshot | null = null;
+
   static override styles = [
     baseStyles,
     nutritionIconStyles,
+    allergyMarkStyles,
     css`
       :host {
         display: block;
@@ -466,7 +471,7 @@ export class TillSentOrders extends LitElement {
   #what(row: CurrentOrderRow, quantity: string): TemplateResult {
     return html`<span class="what"
       >${row.name}${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}
-      ×${this.#quantity(quantity)}
+      ×${this.#quantity(quantity)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}
       ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${formatDecimalInput(extra.quantity, currentLocale())}</span>`)}
       ${row.note === null ? nothing : html`<span class="note">${t("line.note.label")}: ${row.note}</span>`}
     </span>`;

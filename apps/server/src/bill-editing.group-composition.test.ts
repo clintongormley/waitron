@@ -52,6 +52,7 @@ async function fixture() {
       .returning();
     await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
     await submitGroups(tx, venue.cfg, p.partyId, {
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       expectedPartyRevision: p.revision,
       operatorId: venue.operatorId,
       submissionId: randomUUID(),

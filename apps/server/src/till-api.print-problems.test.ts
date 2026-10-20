@@ -61,6 +61,7 @@ async function tableWithFailedTicket() {
   const submitted = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
+    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     groups: [{ lines: [{ menuItemId: venue.offerFor("Pulpo"), quantity: "1" }], release: "fire" }],
   });
   expect(submitted.status).toBe(200);

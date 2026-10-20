@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -45,7 +46,7 @@ import { send as rawGroupSend } from "./testing/bill-venue.js";
 import {
   inTx,
   orderForParty,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
@@ -645,6 +646,9 @@ describe("the till's station day", () => {
     const table = await v.table("Station routing");
     const seated = await call("POST", `/api/tables/${table}/seat`, {}, staffCookie);
     expect(seated.status).toBe(200);
+    await inTx(v, (tx) =>
+      writePartyAllergy(tx, String(seated.json.partyId), { answer: "none", guests: [] }, staff),
+    );
     const placed = await call(
       "POST",
       `/api/parties/${String(seated.json.partyId)}/groups`,

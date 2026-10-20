@@ -1,5 +1,5 @@
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { setRoutingCell } from "@waitron/venue-service";
+import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, asc, eq } from "drizzle-orm";
@@ -524,6 +524,7 @@ export async function billWith(
       guestCount: null,
       operatorId,
     });
+    await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, operatorId);
     if (lines.length > 0) {
       await placeGroups(tx, venue.cfg, seated.partyId, {
         groups: [

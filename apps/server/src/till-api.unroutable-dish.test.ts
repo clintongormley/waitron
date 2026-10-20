@@ -29,7 +29,13 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
-import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import {
+  OPERATOR,
+  inTx,
+  seatWithNoAllergies as seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   carveOffLines,

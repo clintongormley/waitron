@@ -55,7 +55,7 @@ import {
   OPERATOR,
   inTx,
   partyRow,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
@@ -79,6 +79,10 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | PUT /api/working-orders/:id/kitchen-note | canonical party or counter order | same scope refusal/allowed control |
  * | GET /api/parties/:id/kitchen-note | party | same scope refusal/allowed control |
  * | PUT /api/parties/:id/kitchen-note | party | same scope refusal/allowed control |
+ * | GET /api/parties/:id/allergy | surviving party | till-api.allergy.test.ts: "checks party zones for GET and serves an allowed control" |
+ * | PUT /api/parties/:id/allergy | surviving party | same suite: "checks party zones for PUT and serves an allowed control" |
+ * | POST /api/parties/:id/allergy/send-preview | surviving party | same suite: "checks party zones for POST and serves an allowed control" |
+ * | POST /api/bills/:id/move/allergy-preview | source bill and destination table | till-api.allergy-move.test.ts: "preview checks the source zone and admits an allowed control", "preview checks the destination zone and admits an allowed control" |
  * | GET /api/clock/state | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on state" |
  * | POST /api/clock/in | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on in" |
  * | POST /api/clock/out | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on out" |

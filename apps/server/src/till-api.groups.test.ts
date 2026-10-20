@@ -58,6 +58,14 @@ async function seated(): Promise<Seated> {
   );
   const seat = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   expect(seat.status).toBe(200);
+  await inTx(venue, (tx) =>
+    VENUE_SERVICE.writePartyAllergy(
+      tx,
+      seat.json.partyId as string,
+      { answer: "none", guests: [] },
+      venue.operatorId,
+    ),
+  );
   return seat.json as unknown as Seated;
 }
 

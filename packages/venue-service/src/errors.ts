@@ -15,6 +15,7 @@ declare module "@waitron/shared" {
       field: "profileId" | "snapshot" | "selectedZoneIds" | "startingZoneId";
     };
     "device_zones.changed": Record<string, never>;
+    "allergy.unanswered": { partyId: string };
     "allergy.invalid": { field: string };
     "allergy.out_of_date": { revision: number };
     "kitchen_note.invalid": { field: "note" | "scope" | "revision" };

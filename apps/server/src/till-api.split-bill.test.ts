@@ -1,3 +1,4 @@
+import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -380,6 +381,9 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       partyId: string;
       revision: number;
     };
+    await withTransaction(suite.db, (tx) =>
+      writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ana.id),
+    );
     await kitchenStation(cfg);
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, { zone: "tables" }),

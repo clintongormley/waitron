@@ -2128,6 +2128,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
+  accepted a counter bill from another location into an answered party. The new allergy move
+  command checks the source location; the legacy request still needs its own fix and regression.
+  [Probe and scope](backlog/till.md#legacy-bill-moves-do-not-check-the-source-location).
+
 - **Remove the Filter's unused session-storage write.** Filter selections live in the active
   operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
@@ -2373,11 +2378,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
-- **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** The send
-  routes and till prompts follow one [combined implementation plan](superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
-  and must land together; kitchen copies/notices remain a separate slice after them. At the first
-  Send, ask "Any allergies at this table?" on every table send path; the counter has no allergy step.
-  [Detail](backlog/till.md#a669-an-allergy-at-the-table),
+- **A669-4 — allergy information in the kitchen.** Freeze each assigned guest's allergy details
+  with the ticket item; show them on 58/80 mm kitchen paper and station/pass screens. Changes or
+  deletion affecting unserved dishes already with the kitchen must create acknowledged,
+  station-specific change/removal notices. The table answer, guest editor, dish assignments and
+  send guards are implemented together; they do not yet deliver this kitchen information.
+  Kitchen Spanish wording still needs the owner's answer.
+  [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
@@ -5696,6 +5703,25 @@ the tree. What remains, largest first:
   Find the slow files or setup cost before changing its distribution; keep every check and
   coverage threshold. This exceeds the approximate four-minute target without reproducing
   the former shared light-job timeout.
+
+- **Investigate two full-run till browser failures seen during A669 validation.** On
+  2026-10-20, `pnpm --filter @waitron/till test:coverage` reached a missing `Filters 1`
+  control in `till-find-bill-screen.a11y.test.ts:89`; its failure capture showed three active
+  filters. The unchanged file then passed all four cases alone and in the next full run.
+  After rebasing onto A582 help, the full run passed 12,599 cases but Playwright could not
+  click the split control in `till-app-drafts.test.ts:8160`: the button detached during
+  scrolling. That case passed alone without edits. Retain both captures and reproduce
+  the saved-view and detached-control paths before changing code or tests; neither cause
+  is established, and a passing retry is not a repair. Lane G retains the logs and captures
+  under `resume-a669-land-20261020-090825`.
+
+- **Investigate the release-stamp bundle guard's child timeout.** An A669 normal hook on
+  2026-10-20 passed 7,600 root cases but `generate-hour-release.test.mjs:243` received
+  `status: null` from its 20-second bundle child. The captured output showed seven bundles
+  taking 1.87–3.36 seconds each before the timeout; the test and bundle scripts were unchanged
+  from its main base. Measure the child with bounded test concurrency before changing the
+  guard, retaining every entry and stamp assertion. The cause of those build durations is
+  unverified. Lane G retains `verified-recovery-push.log` in the same receipt directory.
 
 - **Check the older capture suites' viewport cleanup (A669-5 review).**
   `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its

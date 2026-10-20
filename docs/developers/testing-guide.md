@@ -1973,6 +1973,18 @@ During the Categories review on 2026-09-13, deleting the duplicate-membership gu
 `categories.test.ts` green: the later unique-constraint failure also matched `toBeInstanceOf(Error)`.
 Keep rollback assertions, and assert the domain code that the API maps to its client response.
 
+## Allergy submission checks include the HTTP parser and a fresh process
+
+`apps/server/src/party-allergy.restart.test.ts` sends first answers and dish assignments through
+both submit routes. Its restart cases stop the server process, start another against the same
+venue folder, and compare an unticked held dish with a fresh draft. They include no-preparation
+work without a ticket row and held work without a HOLD print stamp. The assignment cases check
+both held and immediately fired work and replay the original request.
+
+Run `pnpm --filter @waitron/server exec vitest run src/party-allergy.restart.test.ts`.
+Writer-only checks do not exercise these routes' request parsing. These cases do not test a
+power failure or a physical printer.
+
 ## A default you did not state is not a value you tested
 
 `@simplewebauthn/server` 14 takes its default signature-algorithm list from what the running Node's

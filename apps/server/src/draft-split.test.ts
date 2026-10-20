@@ -125,6 +125,7 @@ async function withSource(
     "POST",
     groupPath,
     await observedGroupSubmitBody(venue.db, groupPath, {
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       submissionId: randomUUID(),
       expectedPartyRevision: p.body.expectedPartyRevision,
       billId: p.billId,

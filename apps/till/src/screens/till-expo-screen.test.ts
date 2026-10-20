@@ -199,6 +199,23 @@ const withAwayCourse: ExpoOrder = {
 
 function stubApi(queue: ExpoOrder[] = [threeCourseOrder], overrides: Record<string, unknown> = {}) {
   return {
+    getFindBill: vi.fn(async (workingOrderId: string) => ({
+      workingOrderId,
+      partyId: null,
+      edit: null,
+    })),
+    previewPartyAllergy: vi.fn(async (partyId: string) => ({
+      partyId,
+      snapshot: {
+        answer: "none",
+        guests: [],
+        ticks: [],
+        changedAt: null,
+        changedBy: null,
+        revision: 7,
+      },
+      dishes: [],
+    })),
     getExpoQueue: vi.fn().mockResolvedValue(queue),
     getDeviceIdentity: vi.fn().mockResolvedValue(identity([])),
     getDevicePassScreen: vi

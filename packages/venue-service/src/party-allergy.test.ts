@@ -52,6 +52,25 @@ function save(input: unknown, revision = 0, id = partyId) {
   return tx((t) => allergy.savePartyAllergy(t, id, revision, input, actor));
 }
 
+it("writes a validated replacement without advancing the caller-owned party revision", async () => {
+  await tx((t) =>
+    allergy.writePartyAllergy(t, partyId, { answer: "allergies", guests: [guest] }, actor),
+  );
+  const first = await read();
+  expect(first).toMatchObject({ answer: "allergies", revision: 0, changedBy: actor });
+  expect(first.guests).toHaveLength(1);
+  const workingLineId = await workingLine();
+  await tx((t) =>
+    allergy.setAllergyLineTicks(t, partyId, [{ guestId: first.guests[0]!.id, workingLineId }]),
+  );
+  await tx((t) => allergy.writePartyAllergy(t, partyId, { answer: "none", guests: [] }, actor));
+  expect(await read()).toMatchObject({ answer: "none", guests: [], ticks: [], revision: 0 });
+  await expect(tx((t) => allergy.writePartyAllergy(t, partyId, null, actor))).rejects.toMatchObject(
+    { code: "allergy.invalid", params: { field: "answer" } },
+  );
+  expect(await read()).toMatchObject({ answer: "none", guests: [], ticks: [], revision: 0 });
+});
+
 it("A669 reads only the requested parties with guests, including an empty selection", async () => {
   const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
   await save({ answer: "allergies", guests: [guest, { who: "Guest B", allergens: { milk: {} } }] });

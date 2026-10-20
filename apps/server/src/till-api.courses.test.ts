@@ -20,6 +20,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -265,6 +266,9 @@ async function tabWithSopaAndFilete(): Promise<string> {
     partyId: string;
     revision: number;
   };
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ana.id),
+  );
   const round = await app.request(`/api/parties/${partyId}/groups`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },

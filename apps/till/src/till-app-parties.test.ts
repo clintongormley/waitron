@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
@@ -330,7 +331,9 @@ const partyDraft = (order: TillTableOrderScreen) =>
 
 async function mountApp(overrides: Record<string, unknown> = {}, props: Partial<TillApp> = {}) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api, ...props });
+  const mounted = await mountWidget<TillApp>("till-app", { api, ...props });
+  Object.assign(api, answeredPartyAllergy(mounted.el));
+  return mounted;
 }
 
 function idleActivity() {
@@ -5739,7 +5742,9 @@ describe("till-app: the order's groups", () => {
       await press(el, "[data-fire-confirm]");
       await reopenDrawer(el);
 
-      expect(server.fireGroup.mock.calls).toEqual([["v1", "g3", command(3)]]);
+      expect(server.fireGroup.mock.calls).toEqual([
+        ["v1", "g3", command(3), { signal: expect.any(AbortSignal) }],
+      ]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(server.listGroups).toHaveBeenCalledTimes(groupReads + 1);
       expect((await heldGroupsList(el)).map((group) => group.state)).toEqual([
@@ -5943,11 +5948,19 @@ describe("till-app: the order's groups", () => {
 
       emit(order, "fire-group", { groupId: "g3" });
       await flush(el);
-      expect(banner(el)!.textContent).toContain(t("table.error"));
+      await vi.waitFor(() => expect(banner(el)?.textContent).toContain(t("table.error")), {
+        timeout: 5000,
+      });
       emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
       await flush(el);
 
-      expect(api.fireGroup).toHaveBeenCalledOnce();
+      expect(api.fireGroup).toHaveBeenCalledTimes(3);
+      expect(vi.mocked(api.fireGroup).mock.calls[1]).toEqual(
+        vi.mocked(api.fireGroup).mock.calls[0],
+      );
+      expect(vi.mocked(api.fireGroup).mock.calls[2]).toEqual(
+        vi.mocked(api.fireGroup).mock.calls[0],
+      );
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
@@ -6187,7 +6200,7 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(refused).toHaveBeenCalledOnce();
-        expect(refused.mock.calls[0]!.at(-1)).toEqual(
+        expect(refused.mock.calls[0]!.at(type === "fire-group" ? -2 : -1)).toEqual(
           type === "split-group-line"
             ? {
                 ...command(3),
@@ -6266,7 +6279,9 @@ describe("till-app: the order's groups", () => {
       emit(tableOrder(el)!, "fire-group", { groupId: "g3" });
       await flush(el);
 
-      expect(server.fireGroup.mock.calls).toEqual([["v1", "g3", command(3)]]);
+      expect(server.fireGroup.mock.calls).toEqual([
+        ["v1", "g3", command(3), { signal: expect.any(AbortSignal) }],
+      ]);
       expect(banner(el)).toBeNull();
     });
 
@@ -6360,7 +6375,12 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(vi.mocked(api.fireGroup).mock.calls).toEqual([
-          ["v1", "g3", { submissionId: expect.any(String), expectedPartyRevision: 4 }],
+          [
+            "v1",
+            "g3",
+            { submissionId: expect.any(String), expectedPartyRevision: 4 },
+            { signal: expect.any(AbortSignal) },
+          ],
         ]);
         expect(banner(el)).toBeNull();
       });
@@ -7794,6 +7814,7 @@ describe("till-app: Current orders", () => {
                       { lineId: "line-2", quantity: "2" },
                     ],
               { submissionId: expect.any(String), expectedPartyRevision: 3 },
+              ...(action === "fire" ? [{ signal: expect.any(AbortSignal) }] : []),
             );
             expect(order.currentOrders).toEqual(before);
             expect(
@@ -8141,10 +8162,15 @@ describe("till-app: Current orders", () => {
       expect(dialog.textContent).toContain("Vino ×1");
       await userEvent.click(dialog.querySelector<HTMLElement>("[data-fire-confirm]")!);
       await flush(el);
-      expect(api.fireGroup).toHaveBeenCalledExactlyOnceWith("v1", "g2", {
-        submissionId: expect.any(String),
-        expectedPartyRevision: 3,
-      });
+      expect(api.fireGroup).toHaveBeenCalledExactlyOnceWith(
+        "v1",
+        "g2",
+        {
+          submissionId: expect.any(String),
+          expectedPartyRevision: 3,
+        },
+        { signal: expect.any(AbortSignal) },
+      );
     });
     it("reopens ready food on re-entering the same bill after it was manually folded", async () => {
       const ready = {
@@ -9640,10 +9666,15 @@ describe("one held dish Fire now app command", () => {
     const order = await openMesa(el);
     emit(order, "fire-held-line", { lineId: "line-steak" });
     await flush(el);
-    expect(fireHeldLine).toHaveBeenCalledExactlyOnceWith("v1", "line-steak", {
-      submissionId: expect.any(String),
-      expectedPartyRevision: 3,
-    });
+    expect(fireHeldLine).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "line-steak",
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(tableOrder(el)!.party?.revision).toBe(4);
     expect(banner(el)).toBeNull();
   });

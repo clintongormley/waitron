@@ -108,6 +108,7 @@ function take(
 async function sentDish(p: Awaited<ReturnType<typeof fixture>>) {
   await inTx(venue, (tx) =>
     submitGroups(tx, venue.cfg, p.partyId, {
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       operatorId: venue.operatorId,
       submissionId: randomUUID(),
       expectedPartyRevision: p.revision,
@@ -466,6 +467,7 @@ describe("bill editor in real save and takeover commands", () => {
     const saved = await save(p.partyId, blank(p.tabId));
     const sent = await inTx(venue, (tx) =>
       submitDraft(tx, venue.cfg, p.partyId, saved.draft!.id, {
+        allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
         submissionId: randomUUID(),
         operatorId: venue.operatorId,
         expectedPartyRevision: p.revision,
@@ -634,6 +636,7 @@ describe("bill editor in real save and takeover commands", () => {
 async function sendAsk(saved: Awaited<ReturnType<typeof save>>) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, saved.draft!.partyId));
   return {
+    allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
     submissionId: randomUUID(),
     operatorId: venue.operatorId,
     expectedPartyRevision: party!.revision,

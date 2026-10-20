@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { page } from "vitest/browser";
 import { setLocale } from "./i18n/t.js";
@@ -305,6 +306,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       ),
     });
     const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
+    Object.assign(api, answeredPartyAllergy(el));
     await flush(el);
     const emit = (source: Element, type: string, detail: unknown) =>
       source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));

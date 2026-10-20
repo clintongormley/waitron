@@ -1,3 +1,10 @@
+import type {
+  AllergyCommand,
+  AllergyMoveRead,
+  AllergyPatch,
+  AllergySendTarget,
+  PartyAllergyRead,
+} from "@waitron/module";
 import type { FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
@@ -690,6 +697,7 @@ export interface BillRequestCommand extends GroupCommand {
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
  * added to the existing held group `joinGroupId`. */
 export interface GroupSubmission extends GroupCommand {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   groups: {
     lines: GroupLine[];
@@ -870,6 +878,7 @@ export interface DiscardedDraft {
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   draftRevision: number;
   groups: {
@@ -3569,8 +3578,18 @@ export class TillApi {
    * course's lines held outside a group are released. NON-FISCAL; idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
    * `course.not_found`; a malformed order id `working_order.not_found`.
    */
-  async fireCourse(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
+  async fireCourse(
+    orderId: string,
+    courseId: string,
+    command?: AllergyCommand,
+    options: ReadOptions = {},
+  ): Promise<void> {
+    await this.#request<void>(
+      `/api/orders/${orderId}/courses/${courseId}/fire`,
+      "POST",
+      command ?? {},
+      options.signal,
+    );
   }
 
   /**
@@ -3847,8 +3866,11 @@ export class TillApi {
   }
 
   /** A party's order groups in sequence, with its revision → `GET /api/parties/:partyId/groups`. */
-  listGroups(partyId: string): Promise<{ revision: number; groups: OrderGroup[] }> {
-    return this.#request(`/api/parties/${partyId}/groups`, "GET");
+  listGroups(
+    partyId: string,
+    options: ReadOptions = {},
+  ): Promise<{ revision: number; groups: OrderGroup[] }> {
+    return this.#request(`/api/parties/${partyId}/groups`, "GET", undefined, options.signal);
   }
 
   submitGroups(
@@ -3968,6 +3990,31 @@ export class TillApi {
     );
   }
 
+  readPartyAllergy(partyId: string, options: ReadOptions = {}): Promise<PartyAllergyRead> {
+    return this.#request(`/api/parties/${partyId}/allergy`, "GET", undefined, options.signal);
+  }
+
+  previewPartyAllergy(
+    partyId: string,
+    target: AllergySendTarget,
+    options: ReadOptions = {},
+  ): Promise<PartyAllergyRead> {
+    return this.#request(
+      `/api/parties/${partyId}/allergy/send-preview`,
+      "POST",
+      target,
+      options.signal,
+    );
+  }
+
+  savePartyAllergy(
+    partyId: string,
+    command: AllergyCommand,
+    options: ReadOptions = {},
+  ): Promise<PartyAllergyRead> {
+    return this.#request(`/api/parties/${partyId}/allergy`, "PUT", command, options.signal);
+  }
+
   /**
    * Send lines of the signed-in person's draft as groups →
    * `POST /api/parties/:partyId/drafts/:draftId/submit`. A repeat with the same submission id answers
@@ -3993,9 +4040,15 @@ export class TillApi {
   fireGroup(
     partyId: string,
     groupId: string,
-    command: GroupCommand,
+    command: AllergyCommand,
+    options: ReadOptions = {},
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
+    return this.#request(
+      `/api/parties/${partyId}/groups/${groupId}/fire`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   /** The pass marks a fired group's kitchen items ready → `POST /api/parties/:partyId/groups/:groupId/ready`.
@@ -4092,8 +4145,13 @@ export class TillApi {
   }
 
   /** A party's Current orders → `GET /api/parties/:partyId/current-orders`. */
-  readCurrentOrders(partyId: string): Promise<CurrentOrders> {
-    return this.#request(`/api/parties/${partyId}/current-orders`, "GET");
+  readCurrentOrders(partyId: string, options: ReadOptions = {}): Promise<CurrentOrders> {
+    return this.#request(
+      `/api/parties/${partyId}/current-orders`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** A party's kitchen tickets that have not printed → `GET /api/parties/:partyId/print-problems`. */
@@ -4117,12 +4175,15 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: GroupCommand,
+    command: AllergyCommand,
+    options: ReadOptions = {},
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/fire-line`, "POST", {
-      ...command,
-      lineId,
-    });
+    return this.#request(
+      `/api/parties/${partyId}/groups/fire-line`,
+      "POST",
+      { ...command, lineId },
+      options.signal,
+    );
   }
 
   splitHeldLineIntoUnits(
@@ -4194,11 +4255,15 @@ export class TillApi {
     orderId: string,
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
+    command?: AllergyCommand,
+    options: ReadOptions = {},
   ): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", {
-      lineNos,
-      expectedEdit,
-    });
+    await this.#request<void>(
+      `/api/working-orders/${orderId}/lines/send`,
+      "POST",
+      { lineNos, expectedEdit, ...command },
+      options.signal,
+    );
   }
 
   async recallLines(
@@ -4372,8 +4437,30 @@ export class TillApi {
     to: MoveBillTarget,
     bills: "merge" | "separate",
     revisions: MoveBillRevisions,
+    command?: { submissionId: string; allergy: AllergyPatch },
+    options: ReadOptions = {},
   ): Promise<MoveBillResult> {
-    return this.#request(`/api/bills/${billId}/move`, "POST", { to, bills, ...revisions });
+    return this.#request(
+      `/api/bills/${billId}/move`,
+      "POST",
+      { to, bills, ...revisions, ...command },
+      options.signal,
+    );
+  }
+
+  previewBillMoveAllergy(
+    billId: string,
+    to: MoveBillTarget,
+    bills: "merge" | "separate",
+    revisions: MoveBillRevisions,
+    options: ReadOptions = {},
+  ): Promise<AllergyMoveRead> {
+    return this.#request(
+      `/api/bills/${billId}/move/allergy-preview`,
+      "POST",
+      { to, bills, ...revisions },
+      options.signal,
+    );
   }
 
   /**

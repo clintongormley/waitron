@@ -272,7 +272,14 @@ async function guestsAtBarAlone(table: Record<string, string | undefined>): Prom
       v.cfg,
       order,
       { tableId: table.bar! },
-      { bills: "separate", partyId: null, otherPartyId: null, operatorId: OPERATOR },
+      {
+        bills: "separate",
+        partyId: null,
+        otherPartyId: null,
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      },
     ),
   );
   expect(await partyAt(v, table.bar!)).not.toBeNull();

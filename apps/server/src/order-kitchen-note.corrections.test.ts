@@ -46,7 +46,7 @@ import {
   order,
   pay,
   revisionOf,
-  seat,
+  seatWithNoAllergies as seat,
   setupPartyVenue,
   split,
   type PartyVenue,
@@ -361,7 +361,14 @@ describe("effective kitchen headings", () => {
         v.cfg,
         id,
         { tableId },
-        { operatorId: OPERATOR, bills: "separate", partyId: null, otherPartyId: null },
+        {
+          operatorId: OPERATOR,
+          bills: "separate",
+          partyId: null,
+          otherPartyId: null,
+          submissionId: randomUUID(),
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        },
       ),
     );
     const jobs = await v.db.select().from(printJobs);

@@ -1,8 +1,13 @@
+import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "allergy.unanswered": { en: en["allergy.unanswered"], es: es["allergy.unanswered"] },
+  "allergy.out_of_date": { en: en["allergy.stale"], es: es["allergy.stale"] },
+  "allergy.invalid": { en: en["allergy.invalid"], es: es["allergy.invalid"] },
+
   "bill.unsent_dishes": {
     en: "Send or remove the unsent dishes before paying.",
     es: "Envía o quita los platos sin enviar antes de cobrar.",

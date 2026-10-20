@@ -128,6 +128,7 @@ describe("VENUE_SERVICE", () => {
       "withdrawPendingDepartmentTransfers",
       "writeDepartmentReceipt",
       "writeKitchenNote",
+      "writePartyAllergy",
     ]);
   });
 

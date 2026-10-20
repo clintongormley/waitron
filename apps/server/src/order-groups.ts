@@ -89,6 +89,13 @@ import {
   requireBillEditors,
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
+import {
+  applyPartyAllergyPatch,
+  assertPartyAllergyAnswered,
+  prepareAllergyRelease,
+  normaliseAllergyPatch,
+} from "./party-allergy.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -96,6 +103,7 @@ export type GroupRelease = "fire" | "hold";
 export type GroupLine = Omit<TabRoundLine, "hold" | "release">;
 
 export interface SubmitGroupsInput {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   submissionId: string;
   expectedPartyRevision: number;
@@ -116,6 +124,10 @@ export interface PartyCommandArgs {
   submissionId: string;
   expectedPartyRevision: number;
   operatorId: string;
+}
+
+export interface PartyFireArgs extends PartyCommandArgs {
+  allergy?: AllergyPatch;
 }
 
 /** Who fires a group: a person, or a kitchen display nobody is signed in on. */
@@ -173,12 +185,13 @@ export async function submitGroups(
     ...body
   } = input;
   const expectedEdit = parseBillEditExpected(observed);
+  const allergy = input.allergy === undefined ? undefined : normaliseAllergyPatch(input.allergy);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     submissionId,
     "group.submit",
-    { partyId, operatorId, ...body, expectedEdit },
+    { partyId, operatorId, ...body, allergy, expectedEdit },
     async () => {
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
       return placeGroups(
@@ -189,6 +202,19 @@ export async function submitGroups(
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+        async (parentIds) => {
+          let parent = 0;
+          const targets = input.groups.flatMap((group, groupIndex) =>
+            group.lines.map((_, lineIndex) => ({
+              ref: { kind: "submitted", groupIndex, lineIndex } as AllergyLineRef,
+              draftLineId: null,
+              workingLineId: parentIds[parent++]!,
+            })),
+          );
+          if (allergy !== undefined)
+            await applyPartyAllergyPatch(tx, partyId, allergy, operatorId, targets);
+          await assertPartyAllergyAnswered(tx, partyId);
+        },
       );
     },
     cfg.madeHereSink,
@@ -214,6 +240,7 @@ export async function placeGroups(
   partyId: string,
   input: PlaceGroupsInput,
   attendance?: { recorder: AttendanceRecorder; at: string },
+  beforeOutput?: (parentIds: readonly string[]) => Promise<void>,
 ): Promise<SubmittedGroups> {
   const { operatorId } = input;
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
@@ -333,6 +360,7 @@ export async function placeGroups(
         })),
     );
   }
+  await beforeOutput?.(rows.filter((row) => row.parentLineId == null).map((row) => row.id!));
   const routing = routingOnce(tx, cfg, new Date());
   for (const [i, group] of groups.entries()) {
     const groupId = groupIds[i]!;
@@ -390,20 +418,34 @@ export async function fireGroup(
   cfg: OriginConfig,
   partyId: string,
   groupId: string,
-  args: PartyCommandArgs,
+  args: PartyFireArgs,
   firer: Firer = { personId: args.operatorId },
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   const routing = routingOnce(tx, cfg, new Date());
+  if (args.allergy !== undefined) args = { ...args, allergy: normaliseAllergyPatch(args.allergy) };
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     args.submissionId,
     "group.fire",
-    { partyId, groupId, operatorId: args.operatorId },
+    {
+      partyId,
+      groupId,
+      operatorId: args.operatorId,
+      ...(args.allergy === undefined ? {} : { allergy: args.allergy }),
+    },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
+      await prepareAllergyRelease(
+        tx,
+        cfg,
+        partyId,
+        { kind: "group", groupId },
+        args.allergy,
+        "personId" in firer ? firer.personId : null,
+      );
       await releaseGroup(
         tx,
         cfg,
@@ -428,16 +470,22 @@ export async function fireHeldLine(
   cfg: OriginConfig,
   partyId: string,
   lineId: string,
-  args: PartyCommandArgs,
+  args: PartyFireArgs,
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   const routing = routingOnce(tx, cfg, new Date());
+  if (args.allergy !== undefined) args = { ...args, allergy: normaliseAllergyPatch(args.allergy) };
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     args.submissionId,
     "group.fire_line",
-    { partyId, lineId, operatorId: args.operatorId },
+    {
+      partyId,
+      lineId,
+      operatorId: args.operatorId,
+      ...(args.allergy === undefined ? {} : { allergy: args.allergy }),
+    },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       const [line] = await tx
@@ -469,6 +517,14 @@ export async function fireHeldLine(
       if (line.quantity <= cancelled)
         throw new AppError("management.request_invalid", { field: "lineId" });
       await refusePaymentInFlight(tx, [line.workingOrderId]);
+      await prepareAllergyRelease(
+        tx,
+        cfg,
+        partyId,
+        { kind: "held-line", lineId },
+        args.allergy,
+        args.operatorId,
+      );
       const source = line.groupId!;
       const printed = (await printedHeldGroups(tx, [source])).get(source);
       const labels = await readGroupNumberLabels(tx, [partyId]);
@@ -656,6 +712,7 @@ export async function fireHeldGroupsOfCourse(
   firer: Firer,
   routing?: RoutingOnce,
   attendance?: OrderAttendance,
+  options: { partyRevisionOwner?: "caller" } = {},
 ): Promise<void> {
   const party = await partyRevisionOfOrder(tx, orderId);
   if (party === null) return;
@@ -679,7 +736,16 @@ export async function fireHeldGroupsOfCourse(
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   if (groups.length === 0) return;
-  await checkAndBumpParty(tx, partyId, party.revision, "open");
+  if (options.partyRevisionOwner !== "caller")
+    await checkAndBumpParty(tx, partyId, party.revision, "open");
+  await prepareAllergyRelease(
+    tx,
+    cfg,
+    partyId,
+    { kind: "course", orderId, courseId },
+    undefined,
+    null,
+  );
   const snapshot =
     attendance === undefined || "deviceId" in firer
       ? undefined
@@ -761,6 +827,7 @@ async function releaseGroup(
   );
   const active = lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
   if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
+  await assertPartyAllergyAnswered(tx, partyId);
   const byOrder = new Map<string, string[]>();
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);

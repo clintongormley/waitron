@@ -82,6 +82,7 @@ async function setup(release: "hold" | "fire", count = 1) {
   expect(seated.status).toBe(200);
   const { partyId, tabId } = seated.json as unknown as { partyId: string; tabId: string };
   const answer = await call("POST", `/api/parties/${partyId}/groups`, {
+    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     ...(await command(partyId)),
     groups: [
       {

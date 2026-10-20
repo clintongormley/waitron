@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { workingOrderLines, workingOrders } from "@waitron/db";
@@ -63,6 +64,12 @@ async function move(billId: string, to: MoveTarget, bills: "merge" | "separate" 
   const expectedOtherPartyRevision = target === null ? undefined : await revisionOf(v, target);
   return inTx(v, (tx) =>
     moveBill(tx, v.cfg, billId, to, {
+      ...(source === null && "tableId" in to
+        ? {
+            submissionId: randomUUID(),
+            allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
+          }
+        : {}),
       bills,
       operatorId: OPERATOR,
       partyId: source,

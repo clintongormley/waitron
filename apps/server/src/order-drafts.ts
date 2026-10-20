@@ -15,7 +15,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
-import type { ZoneMenuOffer, ZoneOffers } from "@waitron/module";
+import type { AllergyPatch, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
 import {
   AppError,
   centsToDecimal,
@@ -71,6 +71,11 @@ import {
 import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { assertBillInvariant } from "./bill-payments.js";
+import {
+  applyPartyAllergyPatch,
+  assertPartyAllergyAnswered,
+  normaliseAllergyPatch,
+} from "./party-allergy.js";
 
 export interface FreshDraftLine {
   sourceLineId: null;
@@ -1040,6 +1045,7 @@ export async function discardDraft(
 }
 
 export interface SubmitDraftInput extends PartyCommandArgs {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   draftRevision: number;
   /** Lines of the draft's current revision, each named once across the groups. */
@@ -1066,6 +1072,8 @@ export async function submitDraft(
 ): Promise<SubmittedDraft> {
   const at = nowIso();
   const { operatorId } = input;
+  const allergyPatch =
+    input.allergy === undefined ? undefined : normaliseAllergyPatch(input.allergy);
   const id = uuid(draftId, "draftId");
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
   if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
@@ -1082,7 +1090,7 @@ export async function submitDraft(
     { kind: "party", partyId },
     input.submissionId,
     "draft.submit",
-    { partyId, draftId: id, operatorId, groups, joinGroupId, expectedEdit },
+    { partyId, draftId: id, operatorId, groups, joinGroupId, expectedEdit, allergy: allergyPatch },
     async () => {
       const draft = await draftOnParty(tx, id, partyId);
       const billId = uuid(draft.billId, "billId");
@@ -1098,6 +1106,23 @@ export async function submitDraft(
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
+      if (allergyPatch !== undefined)
+        await applyPartyAllergyPatch(
+          tx,
+          partyId,
+          allergyPatch,
+          operatorId,
+          lines
+            .filter((line) => named.has(line.id))
+            .map((line) => ({
+              ref: isFresh(line)
+                ? { kind: "draft" as const, id: line.id }
+                : { kind: "working" as const, id: line.sourceLineId },
+              draftLineId: isFresh(line) ? line.id : null,
+              workingLineId: isFresh(line) ? null : line.sourceLineId,
+            })),
+        );
+      await assertPartyAllergyAnswered(tx, partyId);
       const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
       const assigned = new Set(
         allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),

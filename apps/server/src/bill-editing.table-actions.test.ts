@@ -469,6 +469,12 @@ describe("table composition compares every affected bill before moving anything"
         into = await party();
       await inTx(venue, async (tx) => {
         await writeEditSentLines(tx, true);
+        await VENUE_SERVICE.writePartyAllergy(
+          tx,
+          from.partyId,
+          { answer: "none", guests: [] },
+          venue.operatorId,
+        );
         await submitGroups(tx, venue.cfg, from.partyId, {
           expectedPartyRevision: from.revision,
           operatorId: venue.operatorId,

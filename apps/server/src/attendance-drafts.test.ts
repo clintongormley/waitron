@@ -200,6 +200,7 @@ describe("accepted draft attendance capture", () => {
     const first = await save();
     vi.setSystemTime(new Date("2026-01-05T12:00:00Z"));
     const input = {
+      allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
       submissionId: newId(),
       expectedPartyRevision: 0,
       operatorId: OPERATOR,

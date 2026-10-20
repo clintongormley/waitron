@@ -15,7 +15,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { createCourse, listCourses, requireCourse, updateCourse } from "./kitchen.js";
-import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
+import {
+  inTx,
+  setupPartyVenue,
+  seatWithNoAllergies as seat,
+  OPERATOR,
+} from "./testing/party-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 

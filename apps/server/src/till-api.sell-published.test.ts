@@ -951,6 +951,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     const held = await send(v, "POST", `/api/parties/${party.partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: party.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [
         {
           lines: [{ menuItemId: tables.offerFor(bacon.productId), quantity: "1" }],

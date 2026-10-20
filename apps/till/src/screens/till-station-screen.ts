@@ -1,3 +1,4 @@
+import { KitchenAllergySend } from "../state/kitchen-allergy-send.js";
 import {
   LitElement,
   type PropertyValues,
@@ -210,6 +211,11 @@ export class TillStationScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: TillApi;
+  @property({ attribute: false }) operatorSession = 0;
+  readonly #allergy = new KitchenAllergySend(this, () =>
+    JSON.stringify([this.operatorSession, this.deviceMode, this.activeStationId, this.fireControl]),
+  );
+  @state() private fireErrorCode?: string;
   @property() bumpMode: BumpMode = "line";
   @property() fireControl: FireControlMode = "waiter";
   /**
@@ -681,7 +687,25 @@ export class TillStationScreen extends LitElement {
     if (this.deviceMode) return;
     const { orderId, courseId } = (event as CustomEvent<{ orderId: string; courseId: string }>)
       .detail;
-    await this.#advance(() => this.api.fireCourse(orderId, courseId));
+    this.fireErrorCode = undefined;
+    try {
+      const api = this.api;
+      if (
+        await this.#allergy.run(
+          { kind: "course", orderId, courseId },
+          null,
+          undefined,
+          (command) =>
+            command
+              ? api.fireCourse(orderId, courseId, command)
+              : api.fireCourse(orderId, courseId),
+        )
+      )
+        await this.#reload();
+    } catch (error) {
+      this.fireErrorCode = (error as { code?: string }).code ?? "table.error";
+      await this.#reload();
+    }
   }
 
   /** Refused `party.out_of_date`, the queue is read again and the cook decides; nothing is resent. */
@@ -694,13 +718,19 @@ export class TillStationScreen extends LitElement {
     const card = this.#cardOfGroup(partyId, groupId);
     this.tableChanged = null;
     this.#tableChangedNext = null;
+    this.fireErrorCode = undefined;
     try {
-      await this.api.fireGroup(partyId, groupId, {
-        submissionId: crypto.randomUUID(),
+      const api = this.api;
+      const sent = await this.#allergy.run(
+        { kind: "group", groupId },
+        partyId,
         expectedPartyRevision,
-      });
+        (command) => api.fireGroup(partyId, groupId, command!),
+      );
+      if (!sent) return;
     } catch (error) {
       if ((error as { code?: string }).code === "party.out_of_date") this.#tableChangedNext = card;
+      else this.fireErrorCode = (error as { code?: string }).code ?? "table.error";
     }
     await this.#reload();
   }
@@ -893,7 +923,7 @@ export class TillStationScreen extends LitElement {
   override render() {
     return html`${this.deviceMode ? this.#renderDevice() : this.#renderOperator()}${
       this.moving === null ? nothing : this.#renderMoveDialog(this.moving)
-    }`;
+    }${this.fireErrorCode ? html`<p class="error" role="alert">${codeMessage(this.fireErrorCode)}</p>` : nothing}${this.#allergy.render()}`;
   }
 
   #renderOperator(): TemplateResult {

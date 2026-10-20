@@ -815,6 +815,9 @@ describe("a counter order delivered to a table an action brings into or takes ou
     const { table, zoneId } = await unseatedGroup(cumple);
     const movedBillId = await counterOrder(v, "Burger");
     await post(`/api/bills/${movedBillId}/move`, {
+      partyId: null,
+      submissionId: randomUUID(),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       expectedEdits: await inTx(v, async (tx) => [await readBillEditState(tx, movedBillId)]),
       to: { tableId: table.c6! },
       otherPartyId: null,
