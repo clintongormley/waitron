@@ -237,6 +237,12 @@ export {
 } from "./node-membership.js";
 export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./node-identity.js";
 export {
+  compareBackupTables,
+  verifyCoreBackupData,
+  CORE_BACKUP_TABLE_POLICIES,
+} from "./backup-evidence.js";
+export type { BackupTablePolicy } from "./backup-evidence.js";
+export {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   readLiveSeriesIdTx,

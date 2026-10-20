@@ -1,4 +1,5 @@
 import { MEDIA_MODULE } from "@waitron/media";
+import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
 import {
   ADJUSTMENTS_CHANGE_SOURCES,
   ADJUSTMENTS_CLASSIFICATION,
@@ -132,6 +133,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_TRANSFER,
+    backup: { verification: CORE_BACKUP_VERIFICATION },
   },
   {
     name: "catalogue",

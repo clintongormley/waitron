@@ -391,10 +391,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/db/src/backup-evidence.ts`, `packages/db/src/backup-evidence.test.ts`, `packages/composition/src/core-backup-verification.ts`; modify `packages/db/src/index.ts`, `packages/composition/src/modules.ts`.
 **Consumes:** Task 2 queries, complete core classification and existing pure amendment verifier. **Produces:** table policy/comparison/core functions above; `CORE_BACKUP_VERIFICATION:BackupVerificationContribution` in composition, using a structural db API to avoid cycles.
 
-- [ ] RED `detects same-count immutable replacement and non-hash field changes`, `preserves every historical and live series counter`, `source identity location or environment disagreement refuses`, `walks every order amendment chain`, `never creates a missing head`. Assert every generated core append-only row/field, sales relationships and stored heads are retained, not merely row counts/newest hashes.
-- [ ] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts`; expect missing export then count-only comparison denial red.
-- [ ] Implement complete typed row comparisons, identity/series/reference checks and query-only amendment walks. Preserve membership documents, public-key relationships and removal/clearance evidence without adoption/signing; use existing `verifyMembershipDocument` (`packages/membership/src/verify.ts:100`) with the captured trust set as an internal consistency check, without claiming independent external membership attestation. Compare closes/head now; Task 7 adds semantic walk. Declare host series replacement/first-start as activation-only. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts`.
-- [ ] Commit `git commit -s -m "feat(db): verify preserved core backup evidence"`.
+- [x] RED `detects same-count immutable replacement and non-hash field changes`, `preserves every historical and live series counter`, `source identity location or environment disagreement refuses`, `walks every order amendment chain`, `never creates a missing head`. Assert every generated core append-only row/field, sales relationships and stored heads are retained, not merely row counts/newest hashes.
+- [x] Run `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts`; expect missing export then count-only comparison denial red.
+- [x] Implement complete typed row comparisons, identity/series/reference checks and query-only amendment walks. Preserve membership documents, public-key relationships and removal/clearance evidence without adoption/signing; use existing `verifyMembershipDocument` (`packages/membership/src/verify.ts:100`) with the captured trust set as an internal consistency check, without claiming independent external membership attestation. Compare closes/head now; Task 7 adds semantic walk. Declare host series replacement/first-start as activation-only. GREEN same command plus `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts`.
+- [x] Commit `git commit -s -m "feat(db): verify preserved core backup evidence"`.
 
 ### Task 7: Verify daily-close history through the core contribution
 
@@ -737,3 +737,35 @@ at a time. Each selected denial test failed an assertion beside a passing legiti
 restoring the candidate returned both complete files to passing. The later semver correction
 changes only dependency-range text admission; those six guarded statements retain their tested
 shape. No existing test check or protected fiscal file changed.
+
+### Task 6 execution, 20 October 2026
+
+Core preservation now compares every classified table as a typed row multiset, including original
+columns, duplicate multiplicities, local state, append-only evidence and existing counters. SQL
+sorting uses explicit binary collation and a hexadecimal tie-break for equal INTEGER/REAL values;
+comparison streams rows instead of retaining a whole history in JavaScript. Only declared additive
+defaults and new empty tables are accepted. Source identity/environment, schema-declared foreign
+keys, sale/series counters, captured membership signatures and every amendment chain are checked.
+Membership verification uses the archive's own public keys; it is internal consistency only.
+
+The registered core owner returns one aggregate `data` check, rather than inventing separate
+per-check findings from a boolean result. Series replacement and first start are declared
+activation-only. Daily-close rows and heads are preserved here; their semantic walk remains Task 7.
+The host still needs to enforce scratch/temp-file quotas and qualify actual artifact placement.
+
+Observed commands on this task's tree:
+
+- `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts`: 60 passed after
+  behavioral failures, including cursor cleanup failure and four absent-source-table cases.
+- The same suite with `--coverage --coverage.include=src/backup-evidence.ts`: statements 99.27%,
+  branches 98.18%, functions and lines 100%. This is a focused file report, not package coverage.
+- `pnpm --filter @waitron/composition test:coverage`: 64 passed, all four measures 100%; the
+  JSON summary includes `core-backup-verification.ts`.
+- Both package typechecks and scoped ESLint passed. The root cycle/module-seam suites passed
+  3,357 cases; the unedited fiscal write-path/inmutability pair passed 20.
+- Six independent installed omissions failed the intended assertions beside accepting controls:
+  full-value preservation, complete amendment walk, source binding, foreign references, membership
+  signature and second-cursor release. Restoring the candidate passed all 60 cases.
+
+No original test file changed. The full verifier, remaining owners, qualified recovery, whole-branch
+review, current-head CI and joint release remain open; this task does not qualify a backup.
