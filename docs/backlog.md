@@ -5697,15 +5697,6 @@ the tree. What remains, largest first:
   path before checking the action, and add that path case while retaining the no-build/pull/up
   assertions. The guard and deploy script are unchanged by A738; this remains open.
 
-- **Bring the till CI shards back toward the four-minute target.** In A738 run
-  `39343830012`, the two successful Vitest steps took 304.86 s and 345.63 s; the earlier
-  successful main run `39318408371` took about 295 s and 298 s. Profile the slow files and
-  shard balance before choosing a change; retain all checks and coverage bars. The cause of
-  the excess duration has not been established.
-  A679 run `39380412391` again passes both shards, with Vitest steps at 332 s and 444 s
-  (whole jobs 376 s and 479 s). Completed logs are retained; no stalled browser or resource
-  cause was established.
-
 - **Profile provisioning's busiest shard after the A679 split.** All six shards and merged
   coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
   Find the slow files or setup cost before changing its distribution; keep every check and
