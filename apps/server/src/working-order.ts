@@ -2284,7 +2284,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
 }
 
 /**
- * Release held items of a course by stamping fired_at. Require the course to exist
+ * Release held items of a course by stamping fired_at and queued_at. Require the course to exist
  * in this venue, including a deleted course whose food still needs release.
  *
  * On a party's order, the held groups holding the course's dishes fire whole first
@@ -2414,7 +2414,7 @@ async function releaseHeld(
   const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: firedNow })
+    .set({ firedAt: firedNow, queuedAt: firedNow })
     .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, isNull(ticketItems.firedAt)))
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
@@ -2666,7 +2666,7 @@ async function releasedCourses(
  * Recall selected lines of an open tab only while their items remain queued.
  * Refuse the whole call if a line is missing or any item has started. Previously
  * fired lines record a RECALLED kitchen notice and enqueue correction slips in the same
- * transaction; held lines do neither. Leave queued_at untouched until a later send refreshes it.
+ * transaction; held lines do neither. Leave queued_at untouched until a later send or release refreshes it.
  *
  * With changes to sent items switched off (`readEditSentLines`), a line that was ever sent to a
  * station — stamped sent and holding a ticket item — is refused `ticket.already_fired`: a

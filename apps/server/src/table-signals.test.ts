@@ -451,6 +451,21 @@ describe("the floor's attention signals", () => {
     expect((await floorRow(v, mesa2)).timingBand).toBe("forgotten");
   });
 
+  it("counts a released group's dish as waiting from when it was fired, not from when it was held", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, mesa2);
+    const mains = await holdGroup(v, partyId, "Burger");
+    await queuedAgo(v, tabId, 20);
+    const fire = await command(v, partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, partyId, mains, fire));
+
+    const row = await floorRow(v, mesa2);
+
+    expect(row.signals).toEqual([]);
+    expect(row.timingBand).toBe("fresh");
+  });
+
   it("names the held group and the staff name of a dish that became unavailable in it, cancels nothing, and clears once it is available again", async () => {
     const v = await setupPartyVenue(suite.db);
     const mesa2 = await v.table("Mesa 2");

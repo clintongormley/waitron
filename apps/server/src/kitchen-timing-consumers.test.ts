@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { kitchenStations, kitchenTimingDefaults, ticketItems, workingOrders } from "@waitron/db";
@@ -6,8 +7,18 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { computeOverdueOrders } from "@waitron/reporting";
 import { createStation, updateStation } from "./kitchen.js";
 import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
+import { fireGroup } from "./order-groups.js";
 import { readBillSignals } from "./table-signals.js";
-import { floorRow, inTx, order, seat, setupPartyVenue } from "./testing/party-venue.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import {
+  commandFor,
+  floorRow,
+  inTx,
+  OPERATOR,
+  order,
+  seat,
+  setupPartyVenue,
+} from "./testing/party-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
@@ -226,6 +237,35 @@ describe("effective kitchen timing across consumers", () => {
         (await listExpoQueue(tx, v.cfg)).find((row) => row.orderId === a.tabId)!.worstBand,
       ).toBe("fresh");
       expect((await readBillSignals(tx, [a.tabId], now)).get(a.tabId)).toEqual([]);
+      expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
+    });
+  });
+
+  it("ages a released held group's dish from its release on the kitchen's boards and the overdue report", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { partyId, tabId } = await seat(v, await v.table("Held"));
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [{ menuItemId: v.item("Burger"), quantity: "1" }], release: "hold" }],
+        operatorId: OPERATOR,
+      }),
+    );
+    const heldAt = new Date(Date.now() - 20 * 60_000).toISOString();
+    await inTx(v, (tx) =>
+      tx.update(ticketItems).set({ queuedAt: heldAt }).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    const fire = { submissionId: randomUUID(), ...(await commandFor(v, partyId)) };
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, partyId, placed.groups[0]!.id, fire));
+
+    await inTx(v, async (tx) => {
+      const [kitchen] = await tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.isDefault, true));
+      const [card] = await listStationQueue(tx, kitchen!.id);
+      expect(card!.queuedAt > heldAt).toBe(true);
+      expect(card!.items.map((item) => item.band)).toEqual(["fresh"]);
+      expect((await listExpoQueue(tx, v.cfg)).map((row) => row.worstBand)).toEqual(["fresh"]);
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });
   });
