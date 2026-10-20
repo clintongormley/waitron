@@ -1535,8 +1535,6 @@ export const en = {
   "bill_pay.uncertain_title": "We don't know yet whether it was charged",
   "bill_pay.uncertain":
     "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
-  "bill_pay.card_pending_manager":
-    "If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
   "bill_pay.late_received": "The earlier card of {amount} was charged.",
   "bill_pay.late_not_charged": "The earlier card of {amount} was not charged: it is still owed.",
   "bill_pay.read_failed": "The bill's payments could not be read again. Close and reopen this.",
@@ -3216,8 +3214,6 @@ export const es: Record<StringKey, string> = {
   "bill_pay.uncertain_title": "Aún no sabemos si se ha cobrado",
   "bill_pay.uncertain":
     "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",
-  "bill_pay.card_pending_manager":
-    "Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
   "bill_pay.late_received": "La tarjeta anterior de {amount} se ha cobrado.",
   "bill_pay.late_not_charged": "La tarjeta anterior de {amount} no se ha cobrado: sigue por pagar.",
   "bill_pay.read_failed":

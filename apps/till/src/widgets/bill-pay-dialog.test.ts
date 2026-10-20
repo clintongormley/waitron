@@ -2734,7 +2734,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
       t("bill_pay.uncertain").replace("{amount}", money("20.80")),
     );
     expect(text(root(el).querySelector("[data-pay-pending-manager]"))).toBe(
-      t("bill_pay.card_pending_manager"),
+      t("bill_pay.pending_where"),
     );
     expect(text(next(el))).toBe(t("bill_pay.next"));
     expect(root(el).querySelector("[data-pay-continue]")).toBeNull();

@@ -1179,7 +1179,7 @@ export class TillBillPayDialog extends LitElement {
           ${t("bill_pay.uncertain").replace("{amount}", () => this.#money(pending))}
         </p>
       </div>
-      <p class="muted" data-pay-pending-manager>${t("bill_pay.card_pending_manager")}</p>`;
+      <p class="muted" data-pay-pending-manager>${t("bill_pay.pending_where")}</p>`;
   }
 
   /** The count stays on one line: "(2 de" over "3)" reads as nonsense on a phone. */

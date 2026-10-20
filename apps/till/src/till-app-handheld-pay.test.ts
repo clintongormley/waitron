@@ -2173,7 +2173,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       t("bill_pay.uncertain").replace("{amount}", money("40.00")),
     );
     expect(text(inDialog(el, "[data-pay-pending-manager]"))).toBe(
-      t("bill_pay.card_pending_manager"),
+      t("bill_pay.pending_where"),
     );
     expect(reads()).toBe(0);
     await tick(el);
