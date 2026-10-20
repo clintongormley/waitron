@@ -627,15 +627,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     not run; whether a real draft can reach that state has not been tested.
     [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
-- **A833. Setup, and the demo, start only for a country that has a country pack** (owner decision,
-  2026-10-17). The country choice offers only countries with a pack (Spain today); a country without
-  one is not offered at all. The venue screen offers only `VENUE_SETUP_COUNTRY_PACKS`, marks a
-  country with no pack invalid, and no longer shows "Invoice settings have not loaded yet." for one
-  (`apps/setup/src/screens/venue-screen.ts`); the server refuses one in every mode (`parseVenue`,
-  `apps/server/src/setup-api.ts`). Read, not run. One browser test seeding a draft with a country
-  that has no pack, plus one request test: if both refuse, delete this entry; if either does not,
-  fix it.
-
 - **A834. Point the certificate export help's macOS link at FNMT's English page.** In
   `apps/setup/src/certificate-export-help.ts` the macOS guide's link opens FNMT's Basque `/eu/`
   page, while the Windows and Firefox links open `/en/`. Change it to `/en/`, or to the person's
