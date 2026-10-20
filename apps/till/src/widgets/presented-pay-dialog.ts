@@ -259,6 +259,11 @@ export class TillPresentedPayDialog extends LitElement {
     this.#syncDraft();
   }
 
+  /** The app has put a refusal under one of the row's fields: the row opens so it shows. */
+  openEquipmentRow(): void {
+    this.rowOpen = true;
+  }
+
   #methods(): Method[] {
     return [
       ...(this.takesReaderCard ? (["card"] as const) : []),

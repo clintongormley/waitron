@@ -187,7 +187,7 @@ import {
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
 import "./widgets/presented-pay-dialog.js";
-import type { PresentedPayDetail } from "./widgets/presented-pay-dialog.js";
+import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import "./widgets/invoice-recipient-dialog.js";
 import type {
   InvoiceRecipientDetail,
@@ -2678,6 +2678,9 @@ export class TillApp extends LitElement {
     expectedEdit: BillEditExpected | null | undefined;
   };
   readonly #unansweredWholePayments = new Map<string, WholePayment>();
+  /** Bills where a card on the presented sheet's reader got no answer, or its reader did not
+   * answer: this page never learns whether that card was charged. */
+  readonly #presentedUnknown = new Set<string>();
   @state() private presentedPaying: PresentedPaying | null = null;
   #presentedPays = 0;
   @state() private findBillBusy = false;
@@ -16059,6 +16062,7 @@ export class TillApp extends LitElement {
         billId,
       );
       if (left()) return;
+      if (out.outcome === "timeout") this.#presentedUnknown.add(billId);
       if (out.outcome === "captured") {
         this.#closePresented(id);
         this.result = out.ticket;
@@ -16069,12 +16073,17 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (left()) return;
       paidMeanwhile = isPaymentsReceived(error);
-      // `api.pay` is never resent, so every refusal it answers is a first send's.
-      readerLost =
+      if (isNetworkFailure(error)) this.#presentedUnknown.add(billId);
+      const notHeld =
         this.handheldMode &&
         this.#presentedNow(id) !== null &&
         (error as { code?: unknown } | null)?.code === "reader.not_held";
-      if (!readerLost)
+      // The refusal says nothing of an earlier card on the bill whose fate the phone never learned.
+      const unknownEarlier =
+        this.#presentedUnknown.has(billId) || this.#unansweredPayments.has(billId);
+      readerLost = notHeld && !unknownEarlier;
+      if (notHeld && unknownEarlier) this.#showPresentedRefusal(id, { code: "not_checked" });
+      else if (!readerLost)
         this.#showPresentedRefusal(
           id,
           this.#counterRefusal(
@@ -16084,7 +16093,7 @@ export class TillApp extends LitElement {
     } finally {
       this.submitting = false;
     }
-    if (readerLost) await this.#onReaderNotHeld();
+    if (readerLost) await this.#onReaderNotHeld("till-presented-pay-dialog");
     if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
   }
 
@@ -16697,7 +16706,7 @@ export class TillApp extends LitElement {
         busy: false,
       };
     }
-    const equipmentRead = readerLost ? this.#onReaderNotHeld() : undefined;
+    const equipmentRead = readerLost ? this.#onReaderNotHeld("till-bill-pay-dialog") : undefined;
     if (
       stage === "preview" &&
       refusal.code === "management.request_invalid" &&
@@ -16710,13 +16719,20 @@ export class TillApp extends LitElement {
   }
 
   /** A handheld's first send of a card refused `reader.not_held`: the server refuses that before it
-   * records anything, so the reader field can say no card was charged. The equipment is read again,
-   * bounded and passively, so the row opens on the reader the phone now has (design default 19). */
-  async #onReaderNotHeld(): Promise<void> {
+   * records anything, so the reader field can say no card was charged. The row opens at once, and
+   * the equipment is read again, bounded and passively, for the reader the phone now has (design
+   * default 19). */
+  async #onReaderNotHeld(
+    sheet: "till-bill-pay-dialog" | "till-presented-pay-dialog",
+  ): Promise<void> {
     this.payEquipmentErrors = {
       ...this.payEquipmentErrors,
       card_terminal: t("bill_pay.reader_not_held"),
     };
+    // Opened now, not on the re-read's answer, which may never come.
+    this.shadowRoot!.querySelector<TillBillPayDialog | TillPresentedPayDialog>(
+      sheet,
+    )?.openEquipmentRow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       await this.#readEquipment(limit.signal);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { formatEquipmentCode } from "@waitron/shared";
 import type { WtCombobox } from "@waitron/ui";
@@ -4095,6 +4095,21 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
       .map((node) => (node.shadowRoot === null ? "" : shownText(node.shadowRoot)))
       .join(" ") + ` ${root.textContent ?? ""}`;
 
+  /** How many times each of the stub API's requests has been called. */
+  const apiCalls = (): Record<string, number> =>
+    Object.fromEntries(
+      Object.entries(api).map(([name, request]) => {
+        expect(vi.isMockFunction(request), name).toBe(true);
+        return [name, vi.mocked(request as () => unknown).mock.calls.length];
+      }),
+    );
+  const apiCallsSince = (before: Record<string, number>): Record<string, number> =>
+    Object.fromEntries(
+      Object.entries(apiCalls())
+        .map(([name, count]) => [name, count - (before[name] ?? 0)] as const)
+        .filter(([, count]) => count > 0),
+    );
+
   async function billOnConfirmation(overrides: Record<string, unknown> = {}) {
     const getDeviceEquipment = vi.fn().mockResolvedValue(holding());
     const { el } = await mountApp(onPhone({ getDeviceEquipment, ...overrides }));
@@ -4117,12 +4132,23 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
       });
       getDeviceEquipment.mockResolvedValue(takenByMarc);
       const readsBefore = getDeviceEquipment.mock.calls.length;
+      const before = apiCalls();
 
       await press(el, "[data-pay-confirm]");
       const shown = await settled(el);
 
       expect(sent()).toHaveLength(1);
       expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
+      // The bill's own re-reads after a refusal, the refused send, and the one equipment read.
+      expect(apiCallsSince(before)).toEqual({
+        getTablesState: 1,
+        getPartyBills: 1,
+        getTabLines: 1,
+        listGroups: 1,
+        getBillBalance: 1,
+        takeBillPayment: 1,
+        getDeviceEquipment: 1,
+      });
       expect(getDeviceEquipment.mock.calls.at(-1)).toEqual([{ signal: expect.any(AbortSignal) }]);
       expect(shown.open).toBe(true);
       expect(field(el, "cardReaderId").value).toBe("");
@@ -4159,6 +4185,53 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
       expect(bottom(el)).toBe("");
       expect(shownText(presented(el)!.shadowRoot!)).not.toContain(codeMessage("reader.not_held"));
     });
+
+    const rereads = [
+      ["fails with no answer", () => Promise.reject(new TypeError("Failed to fetch"))],
+      ["still shows the phone holding the reader", () => Promise.resolve(holding())],
+    ] as const;
+
+    it.each(rereads)(
+      "on the bill path, the row opens with the refusal under the reader field when the re-read %s",
+      async (_name, reread) => {
+        const { el, getDeviceEquipment } = await billOnConfirmation({
+          takeBillPayment: vi.fn().mockRejectedValue(notHeld()),
+        });
+        expect(row(el).open).toBe(false);
+        getDeviceEquipment.mockImplementation(reread);
+
+        await press(el, "[data-pay-confirm]");
+        const shown = await settled(el);
+
+        expect(shown.open).toBe(true);
+        expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
+      },
+    );
+
+    it.each(rereads)(
+      "on the presented path, the row opens with the refusal under the reader field when the re-read %s",
+      async (_name, reread) => {
+        const getDeviceEquipment = vi.fn().mockResolvedValue(holding());
+        const { el } = await mountApp(
+          onPhone({
+            getDeviceEquipment,
+            pay: vi.fn().mockRejectedValue(notHeld()),
+            getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+          }),
+        );
+        const order = await openPhoneTable(el);
+        await pressPaySheet(el, order);
+        await settled(el);
+        expect(row(el).open).toBe(false);
+        getDeviceEquipment.mockImplementation(reread);
+
+        presented(el)!.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+        const shown = await settled(el);
+
+        expect(shown.open).toBe(true);
+        expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
+      },
+    );
 
     it("a re-read that never answers is cut off at the request limit", async () => {
       const { el, getDeviceEquipment } = await billOnConfirmation({
@@ -4310,6 +4383,95 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
     expect(shownText(dialog(el)!.shadowRoot!)).not.toContain(t("bill_pay.reader_not_held"));
     expect(field(el, "cardReaderId")?.error ?? "").toBe("");
     expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore);
+  });
+
+  it.each([
+    [
+      "a send with no answer",
+      (pay: Mock) => pay.mockRejectedValueOnce(new TypeError("Failed to fetch")),
+      () => t("sale.unconfirmed"),
+    ],
+    [
+      "a reader that did not answer",
+      (pay: Mock) => pay.mockResolvedValueOnce({ outcome: "timeout" }),
+      () => `${t("card.no_answer")}. ${t("card.pending_check")}`,
+    ],
+  ] as const)(
+    "on the presented path, a press after %s refused reader.not_held says the server could not check it, never that nothing was charged",
+    async (_name, first, shownFirst) => {
+      const getDeviceEquipment = vi.fn().mockResolvedValue(holding());
+      const pay = vi.fn();
+      first(pay);
+      pay.mockRejectedValueOnce(notHeld());
+      const { el } = await mountApp(
+        onPhone({
+          getDeviceEquipment,
+          pay,
+          getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+        }),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await settled(el);
+      const take = () =>
+        presented(el)!.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!;
+      take().click();
+      await settled(el);
+      expect(bottom(el)).toBe(shownFirst());
+      getDeviceEquipment.mockResolvedValue(takenByMarc);
+      const readsBefore = getDeviceEquipment.mock.calls.length;
+
+      take().click();
+      await settled(el);
+
+      expect(pay).toHaveBeenCalledTimes(2);
+      expect(bottom(el)).toBe(t("bill_pay.not_checked"));
+      const text = shownText(presented(el)!.shadowRoot!);
+      const notCharged = t("bill_pay.reader_not_held").split(". ").at(-1)!;
+      expect(codeMessage("reader.not_held")).toContain(notCharged);
+      expect(text).not.toContain(notCharged);
+      expect(field(el, "cardReaderId")?.error ?? "").toBe("");
+      expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore);
+    },
+  );
+
+  it("on the presented path, a press refused reader.not_held after a bill payment on that bill got no answer never says nothing was charged", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+    const pay = vi.fn().mockRejectedValue(notHeld());
+    const { el, order, getDeviceEquipment } = await billOnConfirmation({
+      getPartyBills,
+      pay,
+      takeBillPayment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS * 3);
+    } finally {
+      vi.useRealTimers();
+    }
+    await settled(el);
+    expect(sent()).toHaveLength(3);
+    expect(bottom(el)).toBe(t("bill_pay.unconfirmed"));
+    getPartyBills.mockResolvedValue([billOf({ status: "placed" })]);
+    dialog(el)!.dispatchEvent(new CustomEvent("bill-pay-close", { bubbles: true, composed: true }));
+    order.dispatchEvent(
+      new CustomEvent("pay-presented", {
+        detail: { workingOrderId: billOf().workingOrderId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settled(el);
+    getDeviceEquipment.mockResolvedValue(takenByMarc);
+
+    presented(el)!.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+    await settled(el);
+
+    expect(pay).toHaveBeenCalledOnce();
+    expect(bottom(el)).toBe(t("bill_pay.not_checked"));
+    const notCharged = t("bill_pay.reader_not_held").split(". ").at(-1)!;
+    expect(shownText(presented(el)!.shadowRoot!)).not.toContain(notCharged);
   });
 
   describe("a printer that would print nothing", () => {
