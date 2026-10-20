@@ -589,12 +589,19 @@ function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
 
-/** What the presented bill's sheet says of a refused payment. */
-function presentedRefusalOf(error: unknown): PayRefusal {
-  if (isPaymentsReceived(error)) return { code: "bill.pay_with_bill_payments" };
-  if (isPermanentSaleRefusal(error)) return { code: "sale.refused" };
-  if (isNetworkFailure(error)) return { code: "sale.unconfirmed" };
-  return refusalOf(error, false);
+/** What the pay card, and the presented bill's sheet, say of a refused whole payment. */
+function wholeTabErrorOf(error: unknown): CounterError {
+  return isPaymentsReceived(error)
+    ? "bill.pay_with_bill_payments"
+    : isPermanentSaleRefusal(error)
+      ? "sale.refused"
+      : isNetworkFailure(error)
+        ? "sale.unconfirmed"
+        : isTakePaymentRefusal(error)
+          ? "take_payment.not_permitted"
+          : isPaymentInFlight(error)
+            ? "sale.payment_in_flight"
+            : (settleRefusalOf(error) ?? "sale.error");
 }
 
 /** The sheet's words for a card the reader did not charge. */
@@ -9231,7 +9238,7 @@ export class TillApp extends LitElement {
   #onEquipmentChange(
     event: CustomEvent<EquipmentChange>,
     nfc?: { session: number; name: string },
-    sheet?: { role: PayEquipmentRole; payId: number; pick: number },
+    sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
   ): Promise<void> {
     const opening = this.#equipmentOpenings;
     this.equipmentWaiting++;
@@ -9247,7 +9254,7 @@ export class TillApp extends LitElement {
     change: EquipmentChange,
     opening: number,
     nfc?: { session: number; name: string },
-    sheet?: { role: PayEquipmentRole; payId: number; pick: number },
+    sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
   ): Promise<void> {
     const current = () =>
       nfc === undefined ||
@@ -9327,7 +9334,7 @@ export class TillApp extends LitElement {
         };
       if (
         sheet !== undefined &&
-        sheet.payId === this.billPaying?.id &&
+        sheet.sheet === this.#paySheetKey() &&
         sheet.pick === this.#payEquipmentPicks[sheet.role]
       )
         this.payEquipmentErrors = {
@@ -9524,7 +9531,16 @@ export class TillApp extends LitElement {
     ></till-presented-pay-dialog>`;
   }
 
+  /** The pay sheet open now: the bill payment dialog, else the presented bill's sheet. */
+  #paySheetKey(): string | undefined {
+    if (this.billPaying !== null) return `bill:${this.billPaying.id}`;
+    const presented = this.#presentedNow();
+    return presented === null ? undefined : `presented:${presented.id}`;
+  }
+
   #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): void {
+    const sheet = this.#paySheetKey();
+    if (sheet === undefined) return;
     this.payEquipmentSaving = { role, id };
     const errors = { ...this.payEquipmentErrors };
     delete errors[role];
@@ -9534,7 +9550,7 @@ export class TillApp extends LitElement {
         detail: { role, selection: { id }, via: "list", takeOver },
       }),
       undefined,
-      { role, payId: this.billPaying!.id, pick: ++this.#payEquipmentPicks[role] },
+      { role, sheet, pick: ++this.#payEquipmentPicks[role] },
     );
   }
 
@@ -15755,18 +15771,7 @@ export class TillApp extends LitElement {
       )
         return false;
       paidMeanwhile = isPaymentsReceived(error);
-      if (refused?.(error) !== true)
-        this.errorKey = paidMeanwhile
-          ? "bill.pay_with_bill_payments"
-          : isPermanentSaleRefusal(error)
-            ? "sale.refused"
-            : isNetworkFailure(error)
-              ? "sale.unconfirmed"
-              : isTakePaymentRefusal(error)
-                ? "take_payment.not_permitted"
-                : isPaymentInFlight(error)
-                  ? "sale.payment_in_flight"
-                  : (settleRefusalOf(error) ?? "sale.error");
+      if (refused?.(error) !== true) this.errorKey = wholeTabErrorOf(error);
     } finally {
       this.submitting = false;
     }
@@ -15803,12 +15808,30 @@ export class TillApp extends LitElement {
   }
 
   #closePresented(id?: number): void {
-    if (id === undefined || this.presentedPaying?.id === id) this.presentedPaying = null;
+    if (id !== undefined && this.presentedPaying?.id !== id) return;
+    this.presentedPaying = null;
+    this.payEquipmentErrors = {};
   }
 
   #showPresentedRefusal(id: number, refusal: PayRefusal): void {
     const now = this.#presentedNow(id);
     if (now !== null) this.presentedPaying = { ...now, refusal };
+  }
+
+  /** A refusal on the sheet in the pay card's words. */
+  #counterRefusal(error: CounterError): PayRefusal {
+    const text = errorText(
+      error,
+      this.tableMenus,
+      this.tables,
+      typeof error === "object" && "unsentBill" in error
+        ? this.#paymentBillLabel(error.unsentBill.billId)
+        : undefined,
+    );
+    return {
+      code: typeof error === "string" ? error : "code" in error ? error.code : "sale.error",
+      text: typeof text === "string" ? text : t("sale.error"),
+    };
   }
 
   /** The presented bill's sheet asks to take its whole amount: a card on the phone's reader through
@@ -15841,7 +15864,7 @@ export class TillApp extends LitElement {
         this.#closePresented(open.id);
         return false;
       }
-      this.#showPresentedRefusal(open.id, presentedRefusalOf(error));
+      this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
       return true;
     });
     if (paid) this.#closePresented(open.id);
@@ -15894,7 +15917,12 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (left()) return;
       paidMeanwhile = isPaymentsReceived(error);
-      this.#showPresentedRefusal(id, presentedRefusalOf(error));
+      this.#showPresentedRefusal(
+        id,
+        this.#counterRefusal(
+          isReaderRefusal(error) ? "card_reader.not_set_up" : wholeTabErrorOf(error),
+        ),
+      );
     } finally {
       this.submitting = false;
     }

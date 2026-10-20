@@ -261,6 +261,13 @@ describe("a presented bill on a handheld", () => {
     return { el, order, stubs, readsBefore };
   }
 
+  async function sheetMessage(el: TillApp): Promise<string> {
+    await presented(el)!.updateComplete;
+    return presented(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!.error;
+  }
+
   async function takeOnReader(el: TillApp): Promise<void> {
     inPresented(el, "[data-presented-pay-take]")!.click();
     await flush(el);
@@ -423,6 +430,13 @@ describe("a presented bill on a handheld", () => {
     expect(presented(el)!.refusal).toEqual({ code });
   });
 
+  it("a card the reader did not answer for says so in the pay card's words", async () => {
+    const { el } = await openPresented({ pay: vi.fn().mockResolvedValue({ outcome: "timeout" }) });
+    await takeOnReader(el);
+
+    expect(await sheetMessage(el)).toBe(`${t("card.no_answer")}. ${t("card.pending_check")}`);
+  });
+
   it("a card refused for good says the sale was refused, on the sheet", async () => {
     const { el } = await openPresented({
       pay: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
@@ -430,7 +444,7 @@ describe("a presented bill on a handheld", () => {
     await takeOnReader(el);
 
     expect(presented(el)!.open).toBe(true);
-    expect(presented(el)!.refusal).toEqual({ code: "sale.refused" });
+    expect(await sheetMessage(el)).toBe(t("sale.refused"));
     expect(el.shadowRoot!.textContent).not.toContain(t("sale.refused"));
   });
 
@@ -441,16 +455,42 @@ describe("a presented bill on a handheld", () => {
     await takeOnReader(el);
 
     expect(presented(el)!.open).toBe(true);
-    expect(presented(el)!.refusal).toEqual({ code: "sale.unconfirmed" });
+    expect(await sheetMessage(el)).toBe(t("sale.unconfirmed"));
   });
 
-  it("a card the server refuses shows the server's code on the sheet", async () => {
+  it("a card refused while a payment is in flight says so as the pay card does", async () => {
     const { el } = await openPresented({
       pay: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
     });
     await takeOnReader(el);
 
-    expect(presented(el)!.refusal).toEqual({ code: "order.payment_in_flight" });
+    expect(await sheetMessage(el)).toBe(t("sale.payment_in_flight"));
+  });
+
+  it("a card refused because this device may not take card payments says so", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockRejectedValue({ code: "device.forbidden_action", action: "pay" }),
+    });
+    await takeOnReader(el);
+
+    expect(await sheetMessage(el)).toBe(t("card_reader.not_set_up"));
+  });
+
+  it.each([
+    [{ code: "order.payment_in_flight" }, "sale.payment_in_flight"],
+    [
+      { code: "authorization.not_permitted", permission: "sale.take_payment" },
+      "take_payment.not_permitted",
+    ],
+    [{ code: "fiscal.record_invalid" }, "sale.refused"],
+    [{ code: "something.else" }, "sale.error"],
+  ] as const)("a cash send refused as %o says %s, as the pay card does", async (error, key) => {
+    const { el } = await openPresented({ collectOrder: vi.fn().mockRejectedValue(error) });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
+
+    expect(presented(el)!.open).toBe(true);
+    expect(await sheetMessage(el)).toBe(t(key));
+    expect(el.shadowRoot!.textContent).not.toContain(t(key));
   });
 
   it("a cash send refused as paid meanwhile says so on the sheet and reads the bills again", async () => {
@@ -461,7 +501,7 @@ describe("a presented bill on a handheld", () => {
     await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
 
     expect(presented(el)!.open).toBe(true);
-    expect(presented(el)!.refusal).toEqual({ code: "bill.pay_with_bill_payments" });
+    expect(await sheetMessage(el)).toBe(t("bill.pay_with_bill_payments"));
     expect(el.shadowRoot!.textContent).not.toContain(t("bill.pay_with_bill_payments"));
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
   });
@@ -1104,3 +1144,139 @@ async function nfcReader(): Promise<FakeNdefReader> {
   await vi.waitFor(() => expect(FakeNdefReader.instances.at(-1)?.signal).toBeDefined());
   return FakeNdefReader.instances.at(-1)!;
 }
+
+describe("till-app: a pick from the presented bill's sheet", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+
+  function readers(chosen: EquipmentItem): DeviceEquipment {
+    return {
+      roles: [
+        roleOf("receipt", BARRA, [BARRA]),
+        roleOf("card_terminal", chosen, [LECTOR_2, LECTOR_3]),
+      ],
+    };
+  }
+
+  const presented = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+  const row = (el: TillApp) =>
+    presented(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+  const take = (el: TillApp) =>
+    presented(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-presented-pay-take]",
+    )!;
+
+  async function note(el: TillApp): Promise<Element | null> {
+    await presented(el)!.updateComplete;
+    await row(el).updateComplete;
+    return row(el).shadowRoot!.querySelector('[data-pay-note="card_terminal"]');
+  }
+
+  async function openRow(el: TillApp): Promise<void> {
+    await presented(el)!.updateComplete;
+    await row(el).updateComplete;
+    const change = row(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
+    if (change !== null) await userEvent.click(change);
+    await flush(el);
+  }
+
+  async function pickReader(el: TillApp, label: string): Promise<void> {
+    await openRow(el);
+    const combobox = row(el).shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    await combobox.updateComplete;
+    const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find(
+      (each) => each.textContent!.trim().startsWith(label),
+    );
+    if (!option) throw new Error(`no option ${label}`);
+    await userEvent.click(option);
+    await flush(el);
+  }
+
+  async function presentedSheet(setDeviceEquipment: unknown) {
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(readers(LECTOR_2)),
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+        setDeviceEquipment,
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    return { el, order };
+  }
+
+  async function closeSheet(el: TillApp): Promise<void> {
+    emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+  }
+
+  it("a reader pick is saved once, holds Take until answered, and Take then names it", async () => {
+    let answer!: () => void;
+    const setDeviceEquipment = vi.fn(
+      () => new Promise<DeviceEquipment>((resolve) => (answer = () => resolve(readers(LECTOR_3)))),
+    );
+    const { el, order } = await presentedSheet(setDeviceEquipment);
+
+    await pickReader(el, "Lector 3");
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+    expect(setDeviceEquipment.mock.calls[0]).toEqual([
+      { role: "card_terminal", selection: { id: READER_ID }, via: "list", takeOver: false },
+      expect.anything(),
+    ]);
+    expect(text(await note(el))).toBe(t("pay_equipment.saving"));
+    expect(take(el).disabled).toBe(true);
+
+    vi.mocked(api.getDeviceEquipment).mockResolvedValue(readers(LECTOR_3));
+    answer();
+    await flush(el);
+    expect(await note(el)).toBeNull();
+    expect(take(el).disabled).toBe(false);
+    expect(
+      row(el).shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="cardReaderId"]')!.value,
+    ).toBe(READER_ID);
+    expect(text(take(el))).toContain("Lector 3");
+
+    await closeSheet(el);
+    await pressPaySheet(el, order);
+    expect(await note(el)).toBeNull();
+    expect(text(take(el))).toContain("Lector 3");
+  });
+
+  it("a refused pick says why under its field, and the reopened sheet does not", async () => {
+    const setDeviceEquipment = vi
+      .fn()
+      .mockRejectedValue({ code: "reader.payment_in_progress", status: 409 });
+    const { el, order } = await presentedSheet(setDeviceEquipment);
+
+    await pickReader(el, "Lector 3");
+    await row(el).updateComplete;
+    const field = () =>
+      row(el).shadowRoot!.querySelector<WtCombobox & { error: string }>(
+        'wt-combobox[name="cardReaderId"]',
+      )!;
+    expect(field().error).toBe(codeMessage("reader.payment_in_progress"));
+
+    await closeSheet(el);
+    await pressPaySheet(el, order);
+    await openRow(el);
+    expect(field().error).toBe("");
+  });
+
+  it("an open bill's sheet opened after a pick from the presented sheet is not held", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_3));
+    const { el, order } = await presentedSheet(setDeviceEquipment);
+    await pickReader(el, "Lector 3");
+    await closeSheet(el);
+
+    emit(order, "bill-pay", { way: "whole", lines: [] });
+    await flush(el);
+
+    expect(dialog(el)).not.toBeNull();
+    expect(dialog(el)!.equipmentSaving).toBeNull();
+    expect(dialog(el)!.equipmentBusy).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+  });
+});

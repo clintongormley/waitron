@@ -13,9 +13,10 @@ import { isTakePaymentRefusal } from "../state/bill-payment.js";
  * again; `declined` and `card_network`, a card the reader did not charge; `card_timeout`, a card
  * the reader did not answer for;
  * `sale.unconfirmed`, `sale.refused` and `bill.pay_with_bill_payments`, a presented bill's payment
- * in the till's own sentences. */
+ * in the till's own sentences. `text`, when given, is what to say, worded by the caller. */
 export interface PayRefusal {
   code: string;
+  text?: string;
   unsent?: BillUnsent;
   billLabel?: string;
   field?: string;
@@ -33,6 +34,7 @@ function chargeableText(amount: string): string {
  * the venue takes no tips, the till's own sentence for a device not set up for the card reader or
  * for a person who may not take payments, or the server's code in its own words. */
 export function refusalText(refusal: PayRefusal): string {
+  if (refusal.text !== undefined) return refusal.text;
   if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);
   if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");
   switch (refusal.code) {
