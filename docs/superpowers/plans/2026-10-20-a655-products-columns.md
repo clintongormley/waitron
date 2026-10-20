@@ -108,7 +108,7 @@ Chromium, project `browser`; `packages/catalogue` and `apps/server` in Node).
    ordering by" / «Pedir por separado» (Spanish unchanged). The filter's "all" and count labels
    (`product.filter_ordering_all`, `product.filter_ordering_count`) stay as they are.
    `product.course` becomes "Course" / «Curso» and serves the editor field, the column heading and
-   the Course filter. New keys: `product.filter_course_all` "Any course" / «Cualquier curso»,
+   the Course filter; that rename lands in Task 2, which first shows the word as a heading. New keys: `product.filter_course_all` "Any course" / «Cualquier curso»,
    `product.filter_course_count` "{count} courses" / «{count} cursos», `product.filter_no_course`
    "No course" / «Sin curso». The Spanish of every new key is this plan's wording (an owner point in
    the PR).
@@ -226,13 +226,24 @@ list")
 | --- | --- | --- |
 | `product-list.test.ts` "offers every column but the name and the actions in a translated column chooser, and remembers a hidden one" (`:668`) | the chooser's list starts `["made-at", true]` | `["course", true]` is inserted first (Tasks 4 and 6a change the same list again) |
 | `product-list.test.ts` "draws the filters in the order of the default columns" (`:6036`) | `["made-at","modifiers",…]`, mounted with no courses | mounted with two courses (setup; with none the Course column has no filter, Decision 4), and `"course"` inserted first (Task 6a then drops `made-at`) |
-| `product-list.test.ts` "ignores the old Main category column's key in a saved column choice and order, and applies the rest" (`:4378`) | `headings[1]` is Price | `headings[1]` is "Course" (English literal, failing first) and `headings[2]` is Price — this also pins Decision 1's placement of Course in a saved order. Its remaining `made-at` checks change in Task 6a. |
+| `product-list.test.ts` "ignores the old Main category column's key in a saved column choice and order, and applies the rest" (`:4378`) | `headings[1]` is Price | `headings[1]` is "Course" (English literal, failing first; the test mounts through `mountDeep`, which sets English, `:4044`) and `headings[2]` is Price — this also pins Decision 1's placement of Course in a saved order. Its remaining `made-at` checks change in Task 6a. |
+
+Added checks, with a setup change: `apps/dashboard/src/widgets/product-editor.test.ts` "picks the
+default course from a shared dropdown, with none as a chosen value and a row" (`:5064`) gains
+`expect(course.label).toBe("Course")`. The test sets no language today, and the dashboard's
+default is Spanish (`packages/dashboard-kit/src/i18n.ts:11`, `let locale = "es-ES"`), so it gains
+`setLocale("en-GB")` in a `try` with the previous locale restored in `finally`, as `:248-251` and
+`:3244` do; its other checks read `t(…)` and are unchanged by the language.
+`apps/dashboard/src/screens/catalogue-screen.test.ts` "loads all product editor libraries…"
+(`:346`) gains `expect(list(el).courses).toEqual([oneCourse])`, with that test's stub answering
+`listCourses` with one course (setup): the shared stub answers `[]` (`:259`), which equals the
+browser's default, so a check against it would pass even if the screen never passed courses down.
 
 **Task 3 — labels** (owner 2026-10-16 heading and field; owner answer Q2)
 
 | Test | Old check | New check |
 | --- | --- | --- |
-| `apps/dashboard/src/widgets/product-list.test.ts` "names the three orderings in English and in Spanish" (`:1000-1004`) | a Spanish heading starts with the literal «Pedido por separado» | starts with `es["product.ordering"]` (no Spanish literal in a test). The failing-first checks added in the same test are English: the English heading starts with "Standalone" and the Standalone filter's label is "Standalone ordering by" |
+| `apps/dashboard/src/widgets/product-list.test.ts` "names the three orderings in English and in Spanish" (`:1000-1004`) | a Spanish heading starts with the literal «Pedido por separado» | starts with `es["product.ordering"]` (no Spanish literal in a test). The failing-first checks added in the same test are English: the English heading, with its sort arrow stripped (`textContent.replace(/[▲▼]/g, "").trim()`, as `:691-694` does), **equals** "Standalone" — "starts with" would already pass on "Standalone ordering" — and the Standalone filter's label is "Standalone ordering by" |
 | `apps/dashboard/src/widgets/product-editor.test.ts:261` | `choices!.label` is "Ordered on its own by" | is "Standalone ordering by" (literal) |
 | `product-editor.test.ts:3247` | label "Ordered on its own by" | "Standalone ordering by" (literal) |
 
@@ -297,23 +308,24 @@ Changed:
 | `catalogue-browser.test.ts` "works the route out again when the products or the categories change" (`:284`) | Made at text of `folder:d` and new `folder:w` | renamed "works the asterisk out again when the categories change": a new subcategory under a category whose baseline reaches no station carries the asterisk; the products half goes (its "some items made elsewhere" line is deleted) |
 | `catalogue-browser.test.ts` "decides the asterisk from default recovery for a switched-off station" (`:311`) and "clears the asterisk on a category that falls through…" (`:343`) | Made at text and asterisk | the `madeAtText` lines go; every `unroutedMarker` line stays |
 | `catalogue-browser.test.ts` "leaves categories blank while routing loads, and says so when its read failed" (`:360`) | Made at cells blank, then "Kitchen routing unavailable" in `folder:d`'s cell | renamed "marks no category while routing loads, and says so above the list when its read failed": no line and no asterisk while loading; failed → the line (Task 5) shows, no asterisk |
+| `catalogue-browser.a11y.test.ts` "renders categories' Made at %s accessibly" (`:236`) | after opening Drinks, a `[part~="maker-detail"]` exists (`:290`; drawn only by `product-list.ts:1034,1062`, which this task deletes); axe | renamed "renders the categories' routing marks %s accessibly": the routed case (every category in its fixture reaches a station: Drinks by its own cell, Beer from Drinks, Food by the default) opens Drinks and checks Beer's row is drawn with no `[part~="unrouted-folder"]`; the unreadable case checks `[data-test=routing-unavailable]` is drawn (Task 5); axe in both |
 
-Setup changes, checks unchanged: `product-list.a11y.test.ts` "renders accessibly mid-drag"
-(`:550`) and any other list mount passing `madeAt`, `folderMadeAt` or `routingFailed` drop the prop.
+Setup changes, checks unchanged: any list mount in these files that passes `madeAt`,
+`folderMadeAt` or `routingFailed` to `dashboard-product-list` drops the prop.
 
 **Task 6b — the browser and the screen stop carrying Made at** (owner answer Q1 = A)
 
 | Test | Old check | New check |
 | --- | --- | --- |
-| `catalogue-browser.a11y.test.ts` "renders categories' Made at %s accessibly" (`:236`) | axe over Made at cells, routed and unreadable | renamed "renders the categories' routing marks %s accessibly": the routed case shows an asterisk, the unreadable case the line; axe in both |
 | `apps/dashboard/src/screens/catalogue-screen.test.ts` "loads all product editor libraries…" (`:346`) | `api.listMadeAt` called once; `list(el).madeAt[…]` is "Bar" | `api.listMadeAt` not called; the `madeAt` line goes |
 | `catalogue-screen.test.ts` "loads the products once the server answers again…" (`:503`) | last-but-one line reads `list(el).madeAt` | that line goes |
 
 Setup change, checks unchanged: `apps/dashboard/src/widgets/product-editor.unsaved.test.ts` "real
 Product write success commits before a failed refresh" (`:244`) uses `listMadeAt` as the read that
 fails after the write (`:259-264`); the hook moves to `listProducts`. That `#reloadProducts`
-(`catalogue-screen.ts:278-295`) calls `listProducts` after the write was **read, not run**, so
-Task 6b's step makes the test prove it (see there).
+(`catalogue-screen.ts:278-295`) calls `listProducts` after the write was **read, not run**; the
+moved test proves it, because its success case polls `refreshDirty` to `false`, which stays
+`undefined` — and the poll fails — if the hook never runs.
 
 **Task 7 — `folderMadeAt` trimmed** (follows from Q1 = A and Decision 11: nothing shows `source` or
 `someElsewhere`)
@@ -339,6 +351,11 @@ stays; every `source` and `someElsewhere` assertion goes; the `madeAt(model, pro
   from `:241` to `:548`, and `:601` "does not count a maker that reaches nowhere, whatever the
   source" (`:594` still pins nowhere).
 - `:232` "gives every category an entry, and none to an unknown one" stays unchanged.
+- Callers that still pass products lose that argument: `:214` (its `madeAt(…, [product("loose",
+  null)])`, `:222`), `:609` (`:621`), and `:562`, which calls `folderMadeAt` directly with three
+  arguments (`:564-566`) and keeps its `folder("orphan", …)` categories. The deleted tests take the
+  other callers with them. Then remove what nothing uses: the `FolderMakerSource` import (`:8`), the
+  `product` helper (`:28`) and any type import only it used.
 
 ## Tasks
 
@@ -415,8 +432,10 @@ no course.
 
 - [ ] **Step 1 (failing tests)** in `product-list.test.ts`, new describe "the Course column", with
   courses `[{ id: "starters", name: "Starters", displayOrder: 1, … }, { id: "mains", name: "Mains",
-  displayOrder: 2, … }]` and products with `courseId` "mains", "starters", null and "gone". English
-  literals where the wording is new ("Course", "No course", "Any course"):
+  displayOrder: 2, … }]` and products with `courseId` "mains", "starters", null and "gone". The
+  describe sets English before each mount (`setLocale("en")`, as `mountDeep` does at `:4044`): the
+  file resets to Spanish after every test (`:27`). English literals where the wording is new
+  ("Course", "No course", "Any course"):
   - the heading after Name is "Course", and the chooser offers `course` shown;
   - cells read "Mains", "Starters", "—" and `t("editor.missing_choice")`; a category row's cell is
     empty; a variant row's cell is empty when its `courseId` is null and names its own course
@@ -435,37 +454,39 @@ no course.
     nothing then, and once `courses` arrives it applies (only "mains" listed). The failing case this
     guards: a filter offering only "No course" would drop the stored "mains" before courses load;
   - a rename in `courses` redraws the cell and the filter option without a remount.
-  In `catalogue-screen.test.ts` "loads all product editor libraries…", add
-  `expect(list(el).courses).toEqual(<the stub's courses>)` (an added check). Make the three Task 2
-  changes in Changed test checks. Run
-  `pnpm --filter @waitron/dashboard exec vitest run --project browser src/widgets/product-list.test.ts src/screens/catalogue-screen.test.ts`
-  — expect the new tests and the three changed ones to fail (no Course heading; `courses`
-  undefined on the browser).
+  Make the three Task 2 changes and the two added checks in Changed test checks (the editor's
+  "Course" label under English; the screen passing one stubbed course down). Run
+  `pnpm --filter @waitron/dashboard exec vitest run --project browser src/widgets/product-list.test.ts src/widgets/product-editor.test.ts src/screens/catalogue-screen.test.ts`
+  — expect the new tests and the changed ones to fail (no Course heading; the editor's label reads
+  "Default course"; `courses` undefined on the browser).
 - [ ] **Step 2.** Add the column (Decisions 1, 3, 4, 5) — in Task 2 it sits between Name and Made
-  at — the property chain, and the three strings (Decision 6).
-- [ ] **Step 3.** Re-run the two files plus `src/widgets/catalogue-browser.test.ts` and
-  `src/widgets/product-list.a11y.test.ts`; add an axe case with the Course column filled to
-  `product-list.a11y.test.ts` (light and dark). Typecheck. Commit: "Products lists each dish's
-  course, with a Course filter (A655)".
+  at — the property chain, the three new filter strings, and the `product.course` rename to
+  "Course" / «Curso» (Decision 6).
+- [ ] **Step 3.** Re-run the three files plus `src/widgets/catalogue-browser.test.ts`,
+  `src/widgets/product-editor.a11y.test.ts` and `src/widgets/product-list.a11y.test.ts`; add an axe
+  case with the Course column filled to `product-list.a11y.test.ts` (light and dark). Typecheck.
+  Commit: "Products lists each dish's course, with a Course filter, and Default course is now
+  Course (A655)".
 
-### Task 3: "Standalone", "Standalone ordering by", and "Course" in place of "Default course"
+### Task 3: "Standalone" and "Standalone ordering by"
 
 **Files:** `apps/dashboard/src/i18n/strings.ts`, `product-list.ts` (the Standalone filter's label),
 `product-list.test.ts`, `product-editor.test.ts`.
 
 - [ ] **Step 1 (failing tests).** Make the three checks in Changed test checks (Task 3). Every
-  failing-first check is an English literal — "Standalone" (heading), "Standalone ordering by"
-  (filter label, editor field), "Course" — because tests carry no Spanish words and a check reading
-  `en[…]`/`es[…]` cannot fail before the strings change. In `product-editor.test.ts` "picks the
-  default course from a shared dropdown…" (`:5064`) add `expect(course.label).toBe("Course")` (an
-  added check). Run
+  failing-first check is an English literal compared exactly — "Standalone" (heading),
+  "Standalone ordering by" (filter label, editor field) — because tests carry no Spanish words and a check reading
+  `en[…]`/`es[…]` cannot fail before the strings change. The English halves of both tests already
+  run under `setLocale("en-GB")` (`product-list.test.ts:980`, `product-editor.test.ts:248-251` and
+  `:3244`). Run
   `pnpm --filter @waitron/dashboard exec vitest run --project browser src/widgets/product-list.test.ts src/widgets/product-editor.test.ts`
-  — expect failures showing "Standalone ordering" / "Ordered on its own by" / "Default course".
+  — expect failures showing "Standalone ordering" (the heading) and "Ordered on its own by" (the
+  filter label and the editor field).
 - [ ] **Step 2.** Strings: `product.ordering` "Standalone" / «Por separado»; `editor.ordered_on_own`
-  "Standalone ordering by" (Spanish stays «Pedir por separado»); `product.course` "Course" /
-  «Curso». In `product-list.ts` the ordering filter's `label` becomes `t("editor.ordered_on_own")`.
+  "Standalone ordering by" (Spanish stays «Pedir por separado»). In `product-list.ts` the ordering
+  filter's `label` becomes `t("editor.ordered_on_own")`.
 - [ ] **Step 3.** Re-run; also run `src/widgets/product-editor.a11y.test.ts`. Commit: "Shorter
-  Standalone heading, and Course in place of Default course (A655)".
+  Standalone heading and Standalone ordering by (A655)".
 
 ### Task 4: Allergens and Dietary info start hidden
 
@@ -515,9 +536,10 @@ no course.
   (Task 6a row) and add "ignores a saved Made at column choice, order and filter": store
   `{ "made-at": true }` under `…:columns`, `["made-at","price"]` under `…:column-order`, and
   `{ filters: { "made-at": ["bar"] } }` in `sessionStorage["waitron.products.table"]`; mount two
-  products; no heading reads "Made at" (English literal) and there is no
-  `input[data-column="made-at"]`, Price is the third heading (after Name and Course), and both
-  products are listed. Make the chooser and filter-order checks drop `made-at`. Run the file —
+  products with English set first (`setLocale("en")`; in Spanish the heading is «Se prepara en», so
+  a check for "Made at" would pass before the deletion); no heading reads "Made at" (English
+  literal) and there is no `input[data-column="made-at"]`, Price is the third heading (after Name
+  and Course), and both products are listed. Make the chooser and filter-order checks drop `made-at`. Run the file —
   expect these to fail.
 - [ ] **Step 2.** In `product-list.ts` delete the `made-at` column, `madeAtStation`,
   `#stationOptions`, `#folderMadeAt`, the `made-at` branch in `#buildColumns`, the `madeAt`,
@@ -531,8 +553,9 @@ no course.
   `folders.no_active_station`. `catalogue-browser.ts` still binds `.madeAt`, `.folderMadeAt` and
   `.routingFailed` on the list until 6b; Lit property bindings are not typechecked, so this stays
   green.
-- [ ] **Step 3.** Apply every Task 6a deletion, change and setup change in Changed test checks, and
-  nothing else. Run
+- [ ] **Step 3.** Apply every Task 6a deletion, change and setup change in Changed test checks
+  (the `catalogue-browser.a11y.test.ts` row included, since Step 2 deletes the `maker-detail` part
+  it read), and nothing else. Run
   `pnpm --filter @waitron/dashboard exec vitest run --project browser src/widgets/product-list.test.ts src/widgets/product-list.a11y.test.ts src/widgets/catalogue-browser.test.ts src/widgets/catalogue-browser.a11y.test.ts`
   and typecheck. Commit: "Products drops the Made at column and its filter; Prep stations' Routes
   tab shows where dishes are made (A655)".
@@ -554,12 +577,11 @@ no course.
 - [ ] **Step 3 (the refresh hook).** In `product-editor.unsaved.test.ts` "real Product write…"
   (`:244`), move the `if (written) { refreshDirty = …; throw … }` hook from `listMadeAt` to
   `listProducts`, and remove its `listMadeAt` entry. The move rests on `#reloadProducts` calling
-  `listProducts` after the write, which was read, not run: **prove it** — run the file once with the
-  hook moved (both cases pass, and the success case's `expect.poll(() => refreshDirty).toBe(false)`
-  passes only if the hook ran), then once with the hook's `throw` removed: the failure case must
-  still pass and the success case must still see `refreshDirty` defined. If `refreshDirty` stays
-  `undefined`, `listProducts` is not called after the write — stop and report.
-- [ ] **Step 4.** Rename and change the a11y test (Task 6b row). Run
+  `listProducts` after the write, which was read, not run. Run the file: the success case's
+  `expect.poll(() => refreshDirty).toBe(false)` passes only if the hook ran, because
+  `refreshDirty` stays `undefined` otherwise. If that poll fails, `listProducts` is not called after
+  the write — stop and report.
+- [ ] **Step 4.** Run
   `pnpm --filter @waitron/dashboard exec vitest run --project browser src/widgets/catalogue-browser.test.ts src/widgets/catalogue-browser.a11y.test.ts src/screens/catalogue-screen.test.ts src/screens/catalogue-screen.a11y.test.ts src/widgets/product-editor.unsaved.test.ts src/dashboard-app.test.ts`
   and typecheck. Then check what is left:
   `{ git grep -lwE 'madeAt|MadeAt|listMadeAt' -- apps/dashboard/src; git grep -lE 'made_at|"made-at"' -- apps/dashboard/src; } | sort -u`
@@ -610,9 +632,9 @@ of the published copy) is already pinned in three places; this task runs them an
   `wa-wt demo waitron-feat-a655-products-columns`, which prints the till and dashboard addresses.
   **Signing a till in:** open the till address in its own browser tab; the tab shows the device
   picker and must pick a device — dev mode approves the join at once, but the tab still picks (a
-  device a venue reset deleted sends the tab back to the picker). Then sign in with a PIN of a
-  person the demo seed creates (look it up in the seed before starting; `apps/server/src/demo-seed.ts`
-  names no PIN itself, so follow where it creates people). In the dashboard pick a dish on a
+  device a venue reset deleted sends the tab back to the picker). Then sign in with the demo staff
+  PIN, `DEMO_PIN` (`apps/server/scripts/demo-seed/staff.ts:6`, "5555"; `seed-staff.ts:5,13` hashes
+  it for the seeded staff). In the dashboard pick a dish on a
   published menu that has no course (or one course); note it; change its Course to a course that is
   held until fired (Kitchen settings → Courses shows which) and save. **Do not publish.** On the
   till, open a table, wait at least 15 seconds (the open table's poll,
@@ -647,13 +669,17 @@ of the published copy) is already pinned in three places; this task runs them an
   `pnpm exec vitest run scripts/guide-links.test.ts`.
 - [ ] **Developer docs.**
   - `products.md:736-740`: "Ordered on its own by" → "Standalone ordering by"; the list "shows the
-    same setting as a column headed Standalone, with a filter". `products.md:822` and `:826` call
-    the editor field "Standalone ordering" → "Standalone ordering by".
-  - `product-categories.md:50-53`: "the route the Made at column shows for it reaches no active
-    station, so it reads No replacement or Nowhere" → "its baseline route reaches no active
-    station" (the "reads No replacement or Nowhere" clause described the Made at cell, and goes);
-    "Made at reads only" → "The baseline reads only"; `:80` "and Made at above" → "and the baseline
-    above".
+    same setting as a column headed Standalone, with a filter". `products.md:822` ("Standalone
+    ordering (absent on a variant's page)") and `:825-826` ("no Standalone ordering, Modifiers or
+    Variants section") call the editor field "Standalone ordering" → "Standalone ordering by".
+  - `product-categories.md:50-52`: the opening "A red asterisk beside a category means the route
+    the Made at column shows for it reaches no active station, so it reads No replacement or
+    Nowhere. That route is the category's baseline: Made at reads only the routing grid's Every zone
+    column, …" becomes "A red asterisk beside a category means the category's baseline route reaches
+    no active station. The baseline reads only the routing grid's Every zone column, …" — the "reads
+    No replacement or Nowhere" clause described the Made at cell, and "That route is the category's
+    baseline:" would now repeat the first sentence; the rest of the paragraph is unchanged. `:80`
+    "and Made at above" → "and the baseline above".
   - `design-system.md:2275`: "the default course" → "the course".
 - [ ] **Backlog.** Delete the A655 entry (`docs/backlog.md:765-770`) and the
   `## A655 — fewer and slimmer columns on Products` section (`docs/backlog/catalogue.md:736-761`).
