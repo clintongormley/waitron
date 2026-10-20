@@ -82,6 +82,8 @@ for (const succeeds of [true, false]) {
         written = true;
         return {
           id: "box",
+          staffName: input.staffName,
+          staffAbbreviation: input.staffAbbreviation,
           name: input.name,
           abbreviation: input.abbreviation,
           precision: input.precision,

@@ -72,6 +72,7 @@ it("requires only the staff pair and submits empty customer maps without filling
           name: {},
           abbreviation: {},
           precision: 0,
+          measure: false,
         },
       },
     }),
@@ -113,6 +114,7 @@ it("clears visible customer maps while retaining disabled entries and staff iden
     name: { fr: "Disabled crate" },
     abbreviation: { fr: "disabled-cr" },
     precision: 0,
+    measure: false,
   });
   expect(stored.name).toEqual({ es: "Caja", en: "Crate", fr: "Disabled crate" });
   expect(stored.abbreviation).toEqual({ es: "cj", en: "cr", fr: "disabled-cr" });

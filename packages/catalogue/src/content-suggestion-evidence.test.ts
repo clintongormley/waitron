@@ -13,7 +13,7 @@ import { resolveTranslationCells } from "./content-translation-cells.js";
 import { pruneSuggestions } from "./content-suggestion-collect.js";
 import {
   listContentSuggestions,
-  storeSuggestionResults,
+  storeSuggestionPage,
   suggestionStale,
 } from "./content-suggestion-store.js";
 import type { TranslationCellRef } from "./content-translation-types.js";
@@ -52,11 +52,13 @@ async function corrected(wrong = "CLIENT-CA Pa", field = "ca", label = false) {
   const before = await suite.db.select().from(products).orderBy(products.id);
   const job = await runningJob(suite.db);
   await app((tx) =>
-    storeSuggestionResults(
+    storeSuggestionPage(
       tx,
       job.id,
       {
         state: "done",
+        cursor: 0,
+        nextCursor: null,
         failed: [],
         results: [
           result(
@@ -234,11 +236,13 @@ describe("language correction evidence", () => {
     const before = await suite.db.select().from(units);
     const job = await runningJob(suite.db);
     await app((tx) =>
-      storeSuggestionResults(
+      storeSuggestionPage(
         tx,
         job.id,
         {
           state: "done",
+          cursor: 0,
+          nextCursor: null,
           failed: [],
           results: [
             result(
@@ -278,11 +282,13 @@ describe("language correction evidence", () => {
     });
     const job = await runningJob(suite.db);
     await app((tx) =>
-      storeSuggestionResults(
+      storeSuggestionPage(
         tx,
         job.id,
         {
           state: "done",
+          cursor: 0,
+          nextCursor: null,
           failed: [],
           results: [
             result(

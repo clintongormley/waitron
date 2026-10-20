@@ -38,6 +38,14 @@ const extras: LiveModifier = {
   maxPicks: null,
   items: [
     {
+      presentation: {
+        name: "Cheese",
+        customerName: { en: "Customer cheese" },
+        kitchenName: "Kitchen cheese",
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
       productId: "cheese",
       name: "Cheese",
       customerName: { en: "Customer cheese" },
@@ -49,6 +57,8 @@ const extras: LiveModifier = {
       portion: "1",
       unit: {
         id: "each",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each" },
         abbreviation: { en: "ea" },
         precision: 0,
@@ -79,6 +89,8 @@ function offer(modifiers: LiveModifier[]): TillMenuOffer {
     kitchenName: null,
     unit: {
       id: "each",
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each" },
       abbreviation: { en: "ea" },
       precision: 0,

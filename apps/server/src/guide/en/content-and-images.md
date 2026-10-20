@@ -77,7 +77,7 @@ staging the correction in this editor. An out-of-date fix cannot replace your ow
 correction to a staff name takes you to its existing editor. Use **All names** to find corrections
 on items that have no missing translations. When Translate all stops, even part-way through,
 the alerts bell tells you how many suggestions are waiting for review. The
-[documented Cloud request limit](backlog.md) remains 20 languages; this editor does not split a
+Cloud request limit remains 20 languages; this editor does not split a
 larger language set into smaller requests.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields

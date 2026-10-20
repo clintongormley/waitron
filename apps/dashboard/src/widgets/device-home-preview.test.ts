@@ -23,6 +23,8 @@ import { DeviceHomePreview } from "./device-home-preview.js";
 
 const KILO = {
   id: "unit-kg",
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   name: { en: "kilogram" },
   precision: 3,
   abbreviation: { en: "kg" },

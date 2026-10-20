@@ -670,7 +670,13 @@ describe("a unit's measure switch reaches the till at the next publish", () => {
     const unit = await withTransaction(suite.db, async (tx) => {
       const ml = await createUnit(
         tx,
-        { name: { es: "Mililitro" }, abbreviation: { es: "ml" }, precision: 0 },
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { es: "Mililitro" },
+          abbreviation: { es: "ml" },
+          precision: 0,
+        },
         LOCALE,
       );
       await assignProductUnit(tx, v.lemonade.productId, ml.id);

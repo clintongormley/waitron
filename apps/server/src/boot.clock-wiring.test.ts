@@ -7,6 +7,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult, type FiscalDutyDeps } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
+import type {
+  TranslationCell,
+  TranslationItemPage,
+} from "@waitron/catalogue/src/content-translation-types.js";
 import { AppError } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -203,6 +207,66 @@ describe("boot's authority clock wiring", () => {
         cloudOrigin: "https://cloud.example",
         run: null,
       });
+      const translationUrl = `http://127.0.0.1:${port}/management-api/content-translations`;
+      const readTranslations = async () => {
+        const response = await fetch(
+          `${translationUrl}?language=en&target=product:${venue.cafeId}`,
+          { headers: { cookie: venue.managerCookie } },
+        );
+        expect(response.status).toBe(200);
+        return response.json() as Promise<TranslationItemPage>;
+      };
+      const originalCell = (await readTranslations()).rows[0]!.cells[0]!;
+      const saveTranslation = (origin: string, expected: string, text: string) =>
+        fetch(translationUrl, {
+          method: "PUT",
+          headers: {
+            cookie: venue.managerCookie,
+            origin,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            edits: [
+              { kind: "product", id: venue.cafeId, language: "en", field: "name", expected, text },
+            ],
+          }),
+        });
+      const refused = await saveTranslation(
+        "https://untrusted.example",
+        originalCell.expected,
+        "Wrong origin",
+      );
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: {} },
+      });
+      expect((await readTranslations()).rows[0]!.cells[0]!).toEqual(originalCell);
+      const translated = await saveTranslation(
+        "https://dashboard.example",
+        originalCell.expected,
+        "Customer coffee",
+      );
+      expect(translated.status).toBe(200);
+      const translatedBody = (await translated.json()) as { saved: TranslationCell[] };
+      expect(
+        translatedBody.saved.map(({ kind, id, language, field, text }) => ({
+          kind,
+          id,
+          language,
+          field,
+          text,
+        })),
+      ).toEqual([
+        {
+          kind: "product",
+          id: venue.cafeId,
+          language: "en",
+          field: "name",
+          text: "Customer coffee",
+        },
+      ]);
+      expect((await readTranslations()).rows[0]!.cells[0]!.text).toBe("Customer coffee");
+
       expect(createContentSuggestionRunner).toHaveBeenCalledOnce();
       const runner = vi.mocked(createContentSuggestionRunner).mock.results[0]!.value as ReturnType<
         typeof createContentSuggestionRunner

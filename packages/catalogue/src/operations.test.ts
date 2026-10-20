@@ -906,7 +906,14 @@ describe("catalogue operations", () => {
       const cat = await createCatalogue(tx, { name: "Bar" });
       const ml = await createUnit(
         tx,
-        { name: { en: "ml" }, precision: 0, abbreviation: { en: "ml" }, measure: true },
+        {
+          staffName: "ml",
+          staffAbbreviation: "ml",
+          name: { en: "ml" },
+          precision: 0,
+          abbreviation: { en: "ml" },
+          measure: true,
+        },
         "en",
       );
       for (const [name, unitId] of [

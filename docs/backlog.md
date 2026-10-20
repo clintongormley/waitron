@@ -1200,12 +1200,17 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   prepare the receipt abbreviation separately from the full unit name used by line contexts.
   Recorded option comparisons retain unchanged answers under their original language maps.
   Unit changes also appear in publication review for extras-only products, while previously
-  published rows remain unchanged. No intermediate feature is ready to publish. Boot's
-  configured-origin forwarding and obsolete callback cleanup wait for lane E. New offers and
+  published rows remain unchanged. No intermediate feature is ready to publish. After the
+  A679 handoff, boot now forwards the configured dashboard origin to translation saves and no
+  longer registers the obsolete default-switch gap callback. Real startup accepts that origin
+  and refuses a foreign one without changing the saved name. The branch is rebased over the
+  measure-unit and paged Cloud-result changes; the staff-unit migration is regenerated as
+  `0035_unit_staff_identity`. New offers and
   publications now retain the raw parent and relative-variant names separately, and publication
   review includes source changes even when their composed display text is unchanged. The stored
   publication remains unchanged until explicit publish. Consumer integration, parent/newly-added-extra
-  preparation and retained/recalled handling still reach lane G's reserved functions. The operator
+  preparation and retained/recalled handling remain to be integrated with the landed A773-1
+  functions; current same-hunk reservations must still be checked. The operator
   guide and current editor/option-answer explanations now describe optional fields, deliberate
   batches and waiting fixes. Whole-feature validation and the final snapshot/prose audit after
   those handoffs remain open.

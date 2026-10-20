@@ -1418,7 +1418,14 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Millilitre" }, abbreviation: { en: "ml" }, precision: 0, measure: true },
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+          measure: true,
+        },
         "en",
       );
       await updateProduct(tx, f.lemonade, { unitId: unit.id });
@@ -1434,7 +1441,13 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Portion" }, abbreviation: { en: "pt" }, precision: 0 },
+        {
+          staffName: "Portion",
+          staffAbbreviation: "pt",
+          name: { en: "Portion" },
+          abbreviation: { en: "pt" },
+          precision: 0,
+        },
         "en",
       );
       await updateProduct(tx, f.lemonade, { unitId: unit.id });
@@ -1450,7 +1463,13 @@ describe("diffMenuDocuments", () => {
     const unitId = await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Millilitre" }, abbreviation: { en: "ml" }, precision: 0 },
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+        },
         "en",
       );
       await updateProduct(tx, f.lemonade, { unitId: unit.id });

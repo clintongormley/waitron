@@ -5781,6 +5781,14 @@ describe("till-app: a draft line that cannot be sold now", () => {
                       {
                         portion: "1",
                         unit,
+                        presentation: {
+                          name: "Lemon",
+                          customerName: null,
+                          kitchenName: null,
+                          variantName: null,
+                          variantCustomerName: null,
+                          variantKitchenName: null,
+                        },
                         productId: "p-lemon",
                         name: "Lemon",
                         customerName: null,
@@ -10307,6 +10315,14 @@ describe("native app phone Review with mixed dish families", () => {
               maxPicks: null,
               items: [
                 {
+                  presentation: {
+                    name: "Sauce",
+                    customerName: null,
+                    kitchenName: null,
+                    variantName: null,
+                    variantCustomerName: null,
+                    variantKitchenName: null,
+                  },
                   productId: "sauce",
                   name: "Sauce",
                   image: null,

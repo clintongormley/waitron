@@ -3137,6 +3137,8 @@ describe("till-table-order-screen", () => {
     function liveOffer(product: TillProduct): TillMenuOffer {
       const unit = {
         id: "each",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each" },
         abbreviation: { en: "ea" },
         precision: 0,
@@ -3158,6 +3160,8 @@ describe("till-table-order-screen", () => {
         kitchenName: product.kitchenName ?? null,
         unit: {
           id: "each",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "Each" },
           abbreviation: { en: "ea" },
           precision: 0,

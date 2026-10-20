@@ -1524,11 +1524,16 @@ describe("dashboard-app", () => {
   it("opens a product's editor on the catalogue screen from the units in-use modal", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
-      listUnits: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "u1", name: { es: "kg" }, abbreviation: { es: "kg" }, precision: 0 },
-        ]),
+      listUnits: vi.fn().mockResolvedValue([
+        {
+          id: "u1",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "kg" },
+          abbreviation: { es: "kg" },
+          precision: 0,
+        },
+      ]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -1556,11 +1561,16 @@ describe("dashboard-app", () => {
     history.replaceState(null, "", "/manage/units/view/detail");
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
-      listUnits: vi
-        .fn()
-        .mockResolvedValue([
-          { id: "u1", name: { es: "kg" }, abbreviation: { es: "kg" }, precision: 0 },
-        ]),
+      listUnits: vi.fn().mockResolvedValue([
+        {
+          id: "u1",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "kg" },
+          abbreviation: { es: "kg" },
+          precision: 0,
+        },
+      ]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -7217,7 +7227,14 @@ describe("the Products screen in the shell", () => {
     modifiers: [],
     customerName: null,
     unitId: "u",
-    unit: { id: "u", name: { es: "Unidad" }, abbreviation: { es: "ud" }, precision: 0 },
+    unit: {
+      id: "u",
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      name: { es: "Unidad" },
+      abbreviation: { es: "ud" },
+      precision: 0,
+    },
     description: null,
     kitchenName: null,
     dietaryDeclarations: [],
@@ -7707,16 +7724,24 @@ describe("inline translation application leave paths", () => {
         kind: "product",
         id: "dish",
         name: "STAFF Soup",
-        reason: "partial",
-        selectedText: null,
-        defaultText: "Customer soup",
-        effectiveSelectedText: null,
-        effectiveDefaultText: "Customer soup",
-        defaultRequired: false,
-        eligible: true,
-        unavailableReason: null,
         owners: { kind: "product", parentId: null },
-        expected: "baseline",
+        cells: config.languages.map((language) => ({
+          kind: "product",
+          id: "dish",
+          language,
+          field: "name",
+          text: language === "en" ? "Customer soup" : null,
+          inheritedText: null,
+          effectiveText: language === "en" ? "Customer soup" : null,
+          defaultText: "Customer soup",
+          inheritedDefaultText: null,
+          effectiveDefaultText: "Customer soup",
+          staffText: "STAFF Soup",
+          eligible: true,
+          unavailableReason: null,
+          owners: { kind: "product", parentId: null },
+          expected: `baseline-${language}`,
+        })),
       };
       const api = stubApi({
         getMe: vi
@@ -7729,11 +7754,11 @@ describe("inline translation application leave paths", () => {
         getContentTranslationGaps: vi.fn().mockResolvedValue([
           {
             language: "es",
-            gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+            count: 1,
           },
         ]),
         getContentSuggestions: vi.fn(async () => ({
-          config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+          config,
           required: [],
           configuration: "suggestion-config",
           waitingFixes: 0,
@@ -7744,7 +7769,7 @@ describe("inline translation application leave paths", () => {
           cloudOrigin: null,
         })),
         getContentTranslationTargets: vi.fn().mockResolvedValue({
-          language: "es",
+          configuration: "suggestion-config",
           config,
           required: [],
           rows: [row],
@@ -7766,20 +7791,27 @@ describe("inline translation application leave paths", () => {
       await screen.updateComplete;
       const form = screen.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
       await vi.waitFor(() =>
-        expect(form.shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
+        expect(
+          form.shadowRoot!.querySelector("dashboard-content-translation-window"),
+        ).not.toBeNull(),
       );
-      const inputs = form.shadowRoot!.querySelector("wt-data-table")!;
+      const inputs = form.shadowRoot!.querySelector("dashboard-content-translation-window")!;
       await inputs.updateComplete;
+      await vi.waitFor(() =>
+        expect(
+          inputs.shadowRoot!.querySelector("[name=translation-product-dish-es-name]"),
+        ).not.toBeNull(),
+      );
       const field = inputs.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-        "[name=translation-text-product-dish]",
+        "[name=translation-product-dish-es-name]",
       )!;
       await field.updateComplete;
-      await userEvent.fill(field.shadowRoot!.querySelector("input")!, "Sopa nueva");
+      await userEvent.fill(field.shadowRoot!.querySelector("input")!, "New customer soup");
       await form.updateComplete;
       const act = () => {
         if (route === "navigation") navStaff(el)!.click();
         else if (route === "editor")
-          inputs.shadowRoot!.querySelector<HTMLAnchorElement>("tbody a")!.click();
+          inputs.shadowRoot!.querySelector<HTMLAnchorElement>("section a")!.click();
         else if (route === "locale")
           emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
         else logoutBtn(el)!.click();
@@ -7791,7 +7823,7 @@ describe("inline translation application leave paths", () => {
       warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
       await vi.waitFor(() => expect(warning.open).toBe(false));
       expect(form.open).toBe(true);
-      expect(field.value).toBe("Sopa nueva");
+      expect(field.value).toBe("New customer soup");
       expect(location.pathname).toBe("/manage/content-languages");
       expect(api.logout).not.toHaveBeenCalled();
       expect(api.putLocale).not.toHaveBeenCalled();

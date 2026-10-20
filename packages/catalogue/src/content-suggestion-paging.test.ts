@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { products } from "@waitron/db";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
-import { listContentSuggestions, storeSuggestionResults } from "./content-suggestion-store.js";
+import { listContentSuggestions, storeSuggestionPage } from "./content-suggestion-store.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addPlainProducts,
@@ -275,11 +275,13 @@ it("keeps independently fresh corrections for two entered languages on one item"
   const before = await suite.db.select().from(products).where(eq(products.id, venue.bread));
   const job = await runningJob(suite.db);
   await app((tx) =>
-    storeSuggestionResults(
+    storeSuggestionPage(
       tx,
       job.id,
       {
         state: "done",
+        cursor: 0,
+        nextCursor: null,
         failed: [],
         results: [
           result(

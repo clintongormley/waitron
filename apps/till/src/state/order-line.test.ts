@@ -294,6 +294,8 @@ describe("offeredListsOf", () => {
   };
   const unit = (measure: boolean): NonNullable<TillProduct["unit"]> => ({
     id: "unit-ml",
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     name: { en: "millilitre", es: "mililitro" },
     abbreviation: { en: "ml", es: "ml" },
     precision: 0,

@@ -384,7 +384,17 @@ describe("unit operations", () => {
 
   it("starts a new unit as no measure unless the create asks for one", async () => {
     const plain = await run((tx) =>
-      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "portion",
+          staffAbbreviation: "u",
+          name: { en: "portion" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
     expect(plain).not.toHaveProperty("measure");
     expect(await run((tx) => getUnit(tx, plain.id))).not.toHaveProperty("measure");
@@ -392,7 +402,14 @@ describe("unit operations", () => {
     const measured = await run((tx) =>
       createUnit(
         tx,
-        { name: { en: "Centilitre" }, precision: 0, abbreviation: { en: "cl" }, measure: true },
+        {
+          staffName: "Centilitre",
+          staffAbbreviation: "cl",
+          name: { en: "Centilitre" },
+          precision: 0,
+          abbreviation: { en: "cl" },
+          measure: true,
+        },
         "en",
       ),
     );
@@ -404,7 +421,17 @@ describe("unit operations", () => {
 
   it("turns the measure switch on and off by itself", async () => {
     const unit = await run((tx) =>
-      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "portion",
+          staffAbbreviation: "u",
+          name: { en: "portion" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
 
     const on = await run((tx) => updateUnit(tx, unit.id, { measure: true }, "en"));

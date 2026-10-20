@@ -62,7 +62,15 @@ async function mount(overrides: Partial<ProductEditorValue> = {}) {
     value: { ...value, ...overrides },
     ...{
       categories: [{ id: "drinks", name: "Drinks staff", parentId: null, color: null }],
-      units: [{ id: "cup", name: { en: "Cup", es: "Taza" }, abbreviation: { en: "c" } }],
+      units: [
+        {
+          id: "cup",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Cup", es: "Taza" },
+          abbreviation: { en: "c" },
+        },
+      ],
       extraLists: [{ id: "same", name: "Sauces staff" }],
       optionLists: [{ id: "same", name: "Cooked staff" }],
     },
@@ -140,7 +148,15 @@ describe("archived product details", () => {
   it("shows a unit name holding a placeholder or a replacement pattern as it is", async () => {
     const { el } = await mount();
     Object.assign(el, {
-      units: [{ id: "cup", name: { en: "{from} $& $1", es: "Taza" }, abbreviation: { en: "c" } }],
+      units: [
+        {
+          id: "cup",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "{from} $& $1", es: "Taza" },
+          abbreviation: { en: "c" },
+        },
+      ],
     });
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain("€3.00 / {from} $& $1");

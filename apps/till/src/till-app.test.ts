@@ -6564,6 +6564,8 @@ describe("till-app", () => {
   // offer's unit, so the till offers the lists that unit takes now.
   const mlUnit = {
     id: "unit-ml",
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     name: { en: "millilitre", es: "mililitro" },
     abbreviation: { en: "ml", es: "ml" },
     precision: 0,

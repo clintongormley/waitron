@@ -83,6 +83,8 @@ describe("New order quantities keep display separate from submission", () => {
           ...jamon,
           unit: {
             id: "fractional-unit",
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             name: { en: abbreviation, es: abbreviation },
             abbreviation: { en: abbreviation, es: abbreviation },
             precision: 3,
@@ -97,7 +99,8 @@ describe("New order quantities keep display separate from submission", () => {
         )!;
         await basket.updateComplete;
         expect(basket.shadowRoot!.querySelector(".qty")!.textContent).toBe(
-          (locale === "es" ? "0,350" : "0.350") + (abbreviation === "" ? "" : ` ${abbreviation}`),
+          (locale === "es" ? "0,350" : "0.350") +
+            (abbreviation === "" ? " su" : ` ${abbreviation}`),
         );
         expect(store(el).lines[0]!.quantity).toBe("0.350");
       });

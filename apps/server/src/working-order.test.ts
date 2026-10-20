@@ -7458,6 +7458,8 @@ describe("frozen answers through a fractional quantity edit", () => {
       const ml = await catalogue.createUnit(
         tx,
         {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
           name: { [CONTENT_LANGUAGE]: "Mililitro" },
           abbreviation: { [CONTENT_LANGUAGE]: "ml" },
           precision: 0,

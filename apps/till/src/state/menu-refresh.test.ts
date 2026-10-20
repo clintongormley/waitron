@@ -503,6 +503,8 @@ describe("refreshBasket", () => {
   };
   const portion = {
     id: "unit-portion",
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     name: { es: "ración" },
     abbreviation: { es: "rac" },
     precision: 0,

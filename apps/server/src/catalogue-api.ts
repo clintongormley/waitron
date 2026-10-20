@@ -128,10 +128,6 @@ export interface CatalogueApiDeps {
   managementOrigin?: string;
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
-  contentTranslationGaps?: (
-    tx: Transaction,
-    language: string,
-  ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
   /** Required by the routes that read the venue's location; `requireVenueCfg` throws without it. */
   venueCfg?: TillConfig;

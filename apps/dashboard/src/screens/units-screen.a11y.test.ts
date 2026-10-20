@@ -21,6 +21,8 @@ function api(): DashboardApi {
   const listUnits = vi.fn().mockResolvedValue([
     {
       id: "u1",
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "unidad", en: "each" },
       abbreviation: { es: "ud", en: "ea" },
       precision: 0,

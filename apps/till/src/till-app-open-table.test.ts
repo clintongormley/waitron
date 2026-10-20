@@ -31,6 +31,8 @@ import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 
 const unit = {
   id: "unit-each",
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   name: { es: "unidad", en: "unit" },
   abbreviation: { es: "ud", en: "ea" },
   precision: 0,

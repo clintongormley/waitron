@@ -21,6 +21,8 @@ const offeredBeer = {
   ...beer,
   unit: {
     id: "00000000-0000-0000-0000-000000000001",
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     name: { en: "Each", es: "Unidad" },
     abbreviation: { en: "ea", es: "ud" },
     precision: 0,

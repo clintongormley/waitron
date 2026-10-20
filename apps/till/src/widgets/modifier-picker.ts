@@ -24,7 +24,6 @@ import {
 } from "../state/order-line.js";
 import { optionSnapshotOf } from "../state/held-options.js";
 import { productName, productUnit } from "./product-name.js";
-import { descriptionFor } from "./dish-format.js";
 import { lineNutrition } from "./line-nutrition.js";
 import { optionAnswers } from "./option-snapshot.js";
 import type { LineNutrition } from "../api/client.js";

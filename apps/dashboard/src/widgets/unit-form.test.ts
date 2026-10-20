@@ -345,6 +345,7 @@ describe("unit-form", () => {
             name: { es: "caja", en: "box" },
             abbreviation: { es: "cj" },
             precision: 1,
+            measure: false,
           },
         },
       }),
@@ -387,6 +388,7 @@ describe("unit-form", () => {
             name: { es: "caja" },
             abbreviation: { es: "cj", en: "bx" },
             precision: 1,
+            measure: false,
           },
         },
       }),
@@ -829,6 +831,8 @@ describe("unit-form measure switch", () => {
       locales: ["en"],
       value: {
         id: "ml",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "millilitre" },
         abbreviation: { en: "ml" },
         precision: 0,
@@ -859,7 +863,14 @@ describe("unit-form measure switch", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["en"],
-      value: { id: "u1", name: { en: "millilitre" }, abbreviation: { en: "ml" }, precision: 0 },
+      value: {
+        id: "u1",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+      },
     });
     const toggle = measureSwitch(el)!;
     await toggle.updateComplete;
