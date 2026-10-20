@@ -526,6 +526,28 @@ it("uses the icon reveal control for the certificate passphrase", async () => {
   expect(q(el, "[data-test=toggle-passphrase]")!.querySelector("svg")).not.toBeNull();
 });
 
+it.each(["en-GB", "es-ES"] as const)(
+  "links all certificate export guides to the English FNMT site in %s",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+      const help = q(el, "[data-test=certificate-export-help]")!;
+      const links = [...help.querySelectorAll<HTMLAnchorElement>("a")];
+      expect(links).toHaveLength(3);
+      const articles = links.map((link) => {
+        const url = new URL(link.href);
+        expect(url.origin).toBe("https://www.sede.fnmt.gob.es");
+        expect(url.pathname).toMatch(/^\/en\/preguntas-frecuentes\//);
+        return url.pathname.match(/\/content\/(\d+)-/)?.[1];
+      });
+      expect(articles.sort()).toEqual(["1379", "1399", "1501"]);
+    } finally {
+      setLocale("en-GB");
+    }
+  },
+);
+
 describe("setup-cert-screen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
 

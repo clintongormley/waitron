@@ -598,9 +598,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     certificate through Windows', macOS' or Firefox's own certificate store while reading the new
     guidance, so the instructions are unverified against the thing they describe. The Spanish
     steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
-    Windows", "Acceso a Llaveros", "Sus certificados"…), and the FNMT links open FNMT's English
-    pages but for macOS's (A834); check them on real Spanish systems at the same time (left open by
-    C42, #837).
+    Windows", "Acceso a Llaveros", "Sus certificados"…). The three FNMT links use its English
+    site, whose article text was still Spanish when opened on 2026-10-20; check the instructions
+    on real Spanish systems (left open by C42, #837).
     [Detail](backlog/setup.md#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
   - Switching setup mode does not clean up what the server already holds. If someone fills in
     Demo, Prepare or Live far enough that the server has stored part of that answer and then
@@ -626,12 +626,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   - In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
     not run; whether a real draft can reach that state has not been tested.
     [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
-
-- **A834. Point the certificate export help's macOS link at FNMT's English page.** In
-  `apps/setup/src/certificate-export-help.ts` the macOS guide's link opens FNMT's Basque `/eu/`
-  page, while the Windows and Firefox links open `/en/`. Change it to `/en/`, or to the person's
-  language where FNMT has a page in it. Done when each of the three links has been opened and shows
-  the right language.
 
 - **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
   backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input

@@ -12,7 +12,7 @@ export const EXPORT_GUIDES = [
   {
     id: "mac",
     title: "cert_help.mac.title",
-    href: "https://www.sede.fnmt.gob.es/eu/preguntas-frecuentes/android-mac/-/asset_publisher/1RphW9IeUoAH/content/1379-como-puedo-exportar-mi-certificado-desde-el-llavero-de-mac-",
+    href: "https://www.sede.fnmt.gob.es/en/preguntas-frecuentes/android-mac/-/asset_publisher/1RphW9IeUoAH/content/1379-como-puedo-exportar-mi-certificado-desde-el-llavero-de-mac-",
     steps: ["cert_help.mac.step1", "cert_help.mac.step2", "cert_help.mac.step3"],
   },
   {
