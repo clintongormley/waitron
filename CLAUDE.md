@@ -175,8 +175,8 @@ hook, or how tests are scheduled:
 - **Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes`
   with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a
   second attempt run only when the first failed.** Cost: run 39446310822's `test-dashboard (2)`
-  fetch printed nothing for 353 s. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`, weaker than
-  their name — they read text and never run a workflow. Receipt:
+  fetch printed nothing for 353 s. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`,
+  weaker than their name — they read text and never run a workflow. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-checkout-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
@@ -642,9 +642,9 @@ browser test** — most of these rules exist because a test passed while proving
   shard 1 lost its worker to the watchdog. Guard: two cases in
   `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
   folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
-  `setInterval` captured when `@waitron/store` loads. Guard: the cases under "a holder whose test fakes the
-  clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options
-  only, and only when the store loads before the clock is faked. Receipt:
+  `setInterval` captured when `@waitron/store` loads. Guard: the cases under "a holder whose test
+  fakes the clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default
+  options only, and only when the store loads before the clock is faked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
   **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
@@ -652,7 +652,8 @@ browser test** — most of these rules exist because a test passed while proving
   Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
 - **The stream loop test and the stream pause test need two pinned binaries: without them they are
   SKIPPED locally and FAIL in CI.** Install both with
-  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them. The S3 rehearsal scenarios, send gate and
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints `1 skipped` and nothing else, so a local
+  green run of `apps/server` may not have run them. The S3 rehearsal scenarios, send gate and
   interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
@@ -851,7 +852,10 @@ browser test** — most of these rules exist because a test passed while proving
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
   lock**. A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
-  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`) and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`) bounds it. Guards, narrower than the rule:
+  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
+  file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`)
+  and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`)
+  bounds it. Guards, narrower than the rule:
   `apps/server/src/stream-pause.e2e.test.ts`, `apps/server/src/stream-loop.e2e.test.ts` (both
   skipped locally without their binaries) and the bucket-copy cases in
   `apps/server/src/health.test.ts`. Receipt:
