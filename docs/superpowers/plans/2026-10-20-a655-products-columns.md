@@ -419,8 +419,9 @@ is fired in) — so the comment does not go stale. Add no other comment.
 
 **Files:** `apps/dashboard/src/widgets/product-list.ts`, `catalogue-browser.ts`,
 `apps/dashboard/src/screens/catalogue-screen.ts`, `apps/dashboard/src/i18n/strings.ts` (the three new
-filter keys, EN and ES), `product-list.test.ts`, `product-list.a11y.test.ts`,
-`catalogue-browser.test.ts`, `catalogue-screen.test.ts`.
+filter keys and the `product.course` rename, EN and ES), `product-list.test.ts`,
+`product-list.a11y.test.ts`, `catalogue-browser.test.ts`, `catalogue-screen.test.ts`,
+`product-editor.test.ts`.
 
 Interfaces: `ProductList` and `CatalogueBrowser` gain
 `@property({ attribute: false }) courses: Course[] = []` (`Course` from `../api/client.js`); the
@@ -480,8 +481,9 @@ no course.
   run under `setLocale("en-GB")` (`product-list.test.ts:980`, `product-editor.test.ts:248-251` and
   `:3244`). Run
   `pnpm --filter @waitron/dashboard exec vitest run --project browser src/widgets/product-list.test.ts src/widgets/product-editor.test.ts`
-  — expect failures showing "Standalone ordering" (the heading) and "Ordered on its own by" (the
-  filter label and the editor field).
+  — expect failures showing "Standalone ordering" (the heading and the filter label, which reads
+  `t("product.ordering")` today, `product-list.ts:1218`) and "Ordered on its own by" (the editor
+  field).
 - [ ] **Step 2.** Strings: `product.ordering` "Standalone" / «Por separado»; `editor.ordered_on_own`
   "Standalone ordering by" (Spanish stays «Pedir por separado»). In `product-list.ts` the ordering
   filter's `label` becomes `t("editor.ordered_on_own")`.
@@ -530,7 +532,8 @@ no course.
 ### Task 6a: Made at leaves the list
 
 **Files:** `product-list.ts`, `strings.ts`, `product-list.test.ts`, `product-list.a11y.test.ts`,
-`catalogue-browser.test.ts` (only the tests that read the list's Made at cells).
+`catalogue-browser.test.ts` (only the tests that read the list's Made at cells),
+`catalogue-browser.a11y.test.ts`.
 
 - [ ] **Step 1 (failing test).** In `product-list.test.ts`, make the Main-category test's change
   (Task 6a row) and add "ignores a saved Made at column choice, order and filter": store
@@ -562,8 +565,8 @@ no course.
 
 ### Task 6b: the browser and the screen stop carrying Made at
 
-**Files:** `catalogue-browser.ts`, `catalogue-screen.ts`, `catalogue-browser.a11y.test.ts`,
-`catalogue-screen.test.ts`, `product-editor.unsaved.test.ts`.
+**Files:** `catalogue-browser.ts`, `catalogue-screen.ts`, `catalogue-screen.test.ts`,
+`product-editor.unsaved.test.ts` (`catalogue-browser.a11y.test.ts` is run, not changed).
 
 - [ ] **Step 1 (failing tests).** Make the Task 6b changes in Changed test checks
   (`listMadeAt` not called). Run
