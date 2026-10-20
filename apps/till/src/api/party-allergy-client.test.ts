@@ -17,6 +17,27 @@ const reply = () =>
   new Response(JSON.stringify(view), { headers: { "content-type": "application/json" } });
 
 describe("A669 allergy client", () => {
+  it.each(["lines", "group", "held-line"] as const)(
+    "cancels the %s release request without changing its command",
+    async (kind) => {
+      const fetcher = vi.fn().mockImplementation(reply);
+      const api = new TillApi("", fetcher);
+      const abort = new AbortController();
+      if (kind === "lines")
+        await api.sendLines("bill-1", [2], expectedEdit, command, { signal: abort.signal });
+      else if (kind === "group")
+        await api.fireGroup("party-1", "group-1", command, { signal: abort.signal });
+      else await api.fireHeldLine("party-1", "line-1", command, { signal: abort.signal });
+      expect(fetcher.mock.calls[0]![1].signal).toBe(abort.signal);
+      expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual(
+        kind === "lines"
+          ? { lineNos: [2], expectedEdit, ...command }
+          : kind === "group"
+            ? command
+            : { ...command, lineId: "line-1" },
+      );
+    },
+  );
   it.each(["listGroups", "readCurrentOrders"] as const)(
     "cancels the %s metadata read used before allergy reconfirmation",
     async (method) => {

@@ -588,6 +588,90 @@ it.each([
   { kind: "group", event: "fire-group", method: "fireGroup" },
   { kind: "held-line", event: "fire-held-line", method: "fireHeldLine" },
 ] as const)(
+  "retries an unanswered $kind release under its original command and request signal",
+  async ({ kind, event, method }) => {
+    const release = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({ [method]: release });
+    const screen = await openTable(el);
+    emit(
+      screen,
+      event,
+      kind === "lines"
+        ? { lineNos: [2], expectedEdit: screen.billEdit }
+        : kind === "group"
+          ? { groupId: "held-group" }
+          : { lineId: "held-line" },
+    );
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(2));
+    expect(release.mock.calls[1]).toEqual(release.mock.calls[0]);
+    expect(release.mock.calls[1]!.at(-1).signal).toBe(release.mock.calls[0]!.at(-1).signal);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  },
+);
+
+it.each([
+  { kind: "lines", event: "send-lines", method: "sendLines" },
+  { kind: "group", event: "fire-group", method: "fireGroup" },
+  { kind: "held-line", event: "fire-held-line", method: "fireHeldLine" },
+] as const)(
+  "a hanging $kind release retains its answer and retries the same command after its deadline",
+  async ({ kind, event, method }) => {
+    const release = vi.fn().mockImplementation(() => new Promise(() => {}));
+    const { el } = await mountApp({ [method]: release });
+    const screen = await openTable(el);
+    emit(
+      screen,
+      event,
+      kind === "lines"
+        ? { lineNos: [2], expectedEdit: screen.billEdit }
+        : kind === "group"
+          ? { groupId: "held-group" }
+          : { lineId: "held-line" },
+    );
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const form = dialog(el)!;
+    const { TABLE_REQUEST_LIMIT_MS } = await import("./state/draft-sync.js");
+    const nativeTimeout = window.setTimeout.bind(window);
+    const deadlines: (() => void)[] = [];
+    const timeout = vi.spyOn(window, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === TABLE_REQUEST_LIMIT_MS && typeof handler === "function")
+        deadlines.push(handler as () => void);
+      return nativeTimeout(handler, delay, ...args);
+    }) as typeof window.setTimeout);
+    try {
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+      await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+      const first = release.mock.calls[0]!;
+      for (const deadline of deadlines) deadline();
+      await vi.waitFor(() => expect(form.busy).toBe(false));
+      expect(dialog(el)).toBe(form);
+      expect(form.refusal).not.toBe("");
+      expect(first.at(-1).signal.aborted).toBe(true);
+      release.mockResolvedValue({ revision: 4 });
+      await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+      await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(2));
+      expect(release.mock.calls[1]!.slice(0, -1)).toEqual(first.slice(0, -1));
+      await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    } finally {
+      timeout.mockRestore();
+    }
+  },
+);
+
+it.each([
+  { kind: "lines", event: "send-lines", method: "sendLines" },
+  { kind: "group", event: "fire-group", method: "fireGroup" },
+  { kind: "held-line", event: "fire-held-line", method: "fireHeldLine" },
+] as const)(
   "asks before releasing $kind and attaches the explicit answer",
   async ({ kind, event, method }) => {
     const { el } = await mountApp();

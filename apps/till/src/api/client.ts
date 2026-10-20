@@ -4030,8 +4030,14 @@ export class TillApi {
     partyId: string,
     groupId: string,
     command: AllergyCommand,
+    options: ReadOptions = {},
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
+    return this.#request(
+      `/api/parties/${partyId}/groups/${groupId}/fire`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   /** The pass marks a fired group's kitchen items ready → `POST /api/parties/:partyId/groups/:groupId/ready`.
@@ -4159,11 +4165,14 @@ export class TillApi {
     partyId: string,
     lineId: string,
     command: AllergyCommand,
+    options: ReadOptions = {},
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/fire-line`, "POST", {
-      ...command,
-      lineId,
-    });
+    return this.#request(
+      `/api/parties/${partyId}/groups/fire-line`,
+      "POST",
+      { ...command, lineId },
+      options.signal,
+    );
   }
 
   splitHeldLineIntoUnits(
@@ -4236,12 +4245,14 @@ export class TillApi {
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
     command?: AllergyCommand,
+    options: ReadOptions = {},
   ): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", {
-      lineNos,
-      expectedEdit,
-      ...command,
-    });
+    await this.#request<void>(
+      `/api/working-orders/${orderId}/lines/send`,
+      "POST",
+      { lineNos, expectedEdit, ...command },
+      options.signal,
+    );
   }
 
   async recallLines(

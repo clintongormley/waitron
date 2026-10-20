@@ -9,6 +9,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { current, row } from "./till-table-order-screen.current-orders.test-helpers.js";
+import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 
 const originalLocale = currentLocale();
 beforeEach(() => setLocale("en"));
@@ -52,6 +53,51 @@ const allergy = (answer: null | "none" | "allergies" = "allergies"): PartyAllerg
         : [],
   },
   dishes: [],
+});
+
+it("marks a recalled dish by its source assignment without borrowing its new draft id", async () => {
+  await page.viewport(1280, 900);
+  const draftStore = new DraftStore();
+  draftStore.appendLines([
+    {
+      product: {
+        id: "retired",
+        name: "Recorded dish",
+        unitPrice: "4.00",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+      quantity: "2.000",
+      draftLineId: "same-id",
+      noMerge: true,
+      source: { line: storedDish, extras: [storedExtra], netAmount: "8.00" },
+    },
+  ]);
+  const view = allergy();
+  view.snapshot.guests.push({
+    id: "other-guest",
+    position: 1,
+    who: "Red hat",
+    allergens: { eggs: {} },
+    note: null,
+  });
+  view.snapshot.ticks.push({
+    guestId: "other-guest",
+    draftLineId: null,
+    workingLineId: storedDish.id,
+  });
+  const { el } = await mount({
+    party,
+    draftStore,
+    allergyView: view,
+    billEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft", draftRevision: 1 },
+  });
+  el.style.width = "1280px";
+  await resized(el);
+  expect(
+    el.shadowRoot!.querySelector('[data-draft-select="0"] [data-allergy-tag]')?.textContent,
+  ).toBe("Red hat");
 });
 
 it.each([null, "none", "allergies"] as const)(

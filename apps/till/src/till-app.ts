@@ -3543,7 +3543,7 @@ export class TillApp extends LitElement {
 
   async #writeTableAllergy<T>(
     prepared: PreparedTableAllergy,
-    write: (command: AllergyCommand) => Promise<T>,
+    write: (command: AllergyCommand, signal: AbortSignal) => Promise<T>,
   ): Promise<{ value: T } | null> {
     let command: AllergyCommand = {
       submissionId: crypto.randomUUID(),
@@ -3552,7 +3552,9 @@ export class TillApp extends LitElement {
     };
     while (prepared.current()) {
       try {
-        const value = await write(command);
+        const value = await this.#allergyRequest((signal) =>
+          this.#resend((attempt) => write(command, attempt), signal, prepared.current),
+        );
         if (!prepared.current()) return null;
         this.#closeAllergyDialog(true, prepared.key);
         void this.#refreshTableAllergy();
@@ -3564,7 +3566,15 @@ export class TillApp extends LitElement {
         }
         const open = this.allergyDialog;
         const refusal = asRefusal(error);
-        if (open?.key !== prepared.key || isVersionRefusal(error) || isGroupGone(error)) {
+        if (
+          open?.key !== prepared.key ||
+          isVersionRefusal(error) ||
+          isGroupGone(error) ||
+          (refusal !== undefined &&
+            (DRAFT_REFUSALS.has(refusal.refused) ||
+              UNSELLABLE_LINE_REFUSALS.has(refusal.refused) ||
+              refusal.refused === "station.no_replacement"))
+        ) {
           this.#closeAllergyDialog(false, prepared.key);
           throw error;
         }
@@ -10935,19 +10945,9 @@ export class TillApp extends LitElement {
         ...(billId === undefined ? {} : { billId }),
       };
       const draftId = sync.draftId;
-      const written = await this.#writeTableAllergy(allergy, async (packet) => {
-        const sending = limited(TABLE_REQUEST_LIMIT_MS);
-        try {
-          return await this.#resend(
-            (signal) =>
-              allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
-            sending.signal,
-            allergy.current,
-          );
-        } finally {
-          sending.done();
-        }
-      });
+      const written = await this.#writeTableAllergy(allergy, (packet, signal) =>
+        allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
+      );
       if (written === null) return;
       submitted = written.value;
     } catch (error) {
@@ -10955,7 +10955,6 @@ export class TillApp extends LitElement {
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;
-        // The adopted lines are saved under their new versions, and so under new ids: another request.
         if (outcome === "adopted" && !retried)
           return this.#submitDraft(tabId, party, sync, submission, sent, live, true);
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
@@ -11096,8 +11095,8 @@ export class TillApp extends LitElement {
         () => true,
       );
       if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command) =>
-        allergy.api.fireGroup(party.id, groupId, command),
+      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+        allergy.api.fireGroup(party.id, groupId, command, { signal }),
       );
       if (written === null || !allergy.current()) return;
       this.#notePartyRevision(party.id, written.value.revision);
@@ -11113,8 +11112,8 @@ export class TillApp extends LitElement {
         () => true,
       );
       if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command) =>
-        allergy.api.fireHeldLine(party.id, lineId, command),
+      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+        allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
       );
       if (written === null || !allergy.current()) return;
       this.#notePartyRevision(party.id, written.value.revision);
@@ -11545,8 +11544,8 @@ export class TillApp extends LitElement {
         live,
       );
       if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command) =>
-        composition.api.sendLines(billId, lineNos, expectedEdit, command),
+      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+        composition.api.sendLines(billId, lineNos, expectedEdit, command, { signal }),
       );
       if (written === null) return;
     } catch (error) {

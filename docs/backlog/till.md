@@ -2274,7 +2274,10 @@ The [combined send/till plan](../superpowers/plans/2026-10-19-a669-2-3-table-all
 keeps the server refusal and every till prompt in one working PR. The unpublished branch contains
 the server boundary, shared dialog, table submit/release adapters, editor and live allergy view.
 The table heading and line marks share that view; stale confirmations refresh the party metadata
-without replacing the dish draft. Kitchen callers and lifecycle integration remain.
+without replacing the dish draft. Release requests have a network deadline separate from the
+time spent answering; an open allergy form retains its answer for retry. Sold-out, changed-draft
+and station-routing refusals return to their dish recovery handlers. Kitchen callers and lifecycle
+integration remain.
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.

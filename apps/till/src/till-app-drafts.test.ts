@@ -9728,7 +9728,10 @@ describe("direct course and send editing authority", () => {
         ...args,
         expectedEdit,
         ...(type === "send-lines"
-          ? [{ submissionId: expect.any(String), expectedPartyRevision: 3 }]
+          ? [
+              { submissionId: expect.any(String), expectedPartyRevision: 3 },
+              { signal: expect.any(AbortSignal) },
+            ]
           : []),
       );
       expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
