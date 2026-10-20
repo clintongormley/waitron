@@ -1292,7 +1292,8 @@ speeds and the calm card, landed (plan
 `docs/backlog/mockups/a757-table-states/built-4/`); a follow-up to slice 4, the owner's look
 changes and the Spanish word for held dishes, landed (plan
 `docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`; pictures drawn for it in
-`docs/backlog/mockups/a757-table-states/4b-owner-changes.png` and `4b-owner-changes-dark.png`).
+`docs/backlog/mockups/a757-table-states/4b-owner-changes.png` and `4b-owner-changes-dark.png`;
+pictures as built in `docs/backlog/mockups/a757-table-states/built-4b/`).
 
 What slice 5 (the map and the zone tabs) must also do, left by slice 4 (its plan's Decisions and
 Open points):
