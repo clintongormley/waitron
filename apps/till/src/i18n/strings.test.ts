@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogues, es } from "./strings.js";
+import { catalogues, en, es } from "./strings.js";
 
 /**
  * The permanent-refusal messages, checked as prose in every language the till ships. `sale.refused`
@@ -110,7 +110,7 @@ it.each([
   expect(catalogues[locale]?.["menu.search"]).toBe(label);
 });
 
-describe("the floor's held chip, and no retenido in the catalogue", () => {
+describe("the floor's held chip, the Waiting chip's own word, and no retenido in the catalogue", () => {
   // Owner decision (2026-10-20): held dishes are «en espera» everywhere. Weaker than its name:
   // only the catalogue in strings.ts is read, not codes.ts or the dashboard.
   it("has no Spanish catalogue string that says retenido", () => {
@@ -129,6 +129,12 @@ describe("the floor's held chip, and no retenido in the catalogue", () => {
     const tail = es["floor.held_fire_in"].split(" · ")[1];
     expect(tail).toContain("{m}");
     expect(es["floor.held_fire_in_one"].split(" · ")[1]).toBe(tail);
+  });
+
+  it("the Waiting chip does not use held's word", () => {
+    const waiting = es["signal.wait_warm"].toLowerCase();
+    expect(waiting).not.toContain(es["table.group_held"].toLowerCase());
+    expect(es["signal.wait_warm"]).not.toBe(en["signal.wait_warm"]);
   });
 });
 

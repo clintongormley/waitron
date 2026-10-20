@@ -2711,7 +2711,7 @@ export const es: Record<StringKey, string> = {
   "signal.take_order": "Tomar nota",
   "signal.ready_at": "{station}: {n} listos",
   "signal.ready_at_one": "{station}: 1 listo",
-  "signal.wait_warm": "En espera",
+  "signal.wait_warm": "Esperando",
   "signal.wait_overdue": "Con retraso",
   "signal.wait_forgotten": "Olvidado",
   "signal.unavailable": "No disponible: {items}",
