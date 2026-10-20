@@ -386,5 +386,5 @@ for (const kind of ["counter", "table"] as const)
               await capture(`${list}-empty`);
             }
           }
-        }, 30_000);
+        }, 90_000);
       }

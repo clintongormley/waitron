@@ -2194,6 +2194,9 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
+2026-10-20: the owner’s 2026-10-18 copy amendment replaces Hold with Park, so the target
+bottom row is **Park · Pay**. The earlier board and wording below remain a dated design record.
+
 Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
 
 - **Pay opens one window.** Its top row says how much: An amount | Split equally | Items | Whole

@@ -2291,7 +2291,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
+- **A739 — paying: Park · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
   window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,
   Scan a QR sticker, or tap NFC), the receipt (print, email or none, language, full invoice),
   then Cash or Card. The simulator asks Declined/Approved at Card; Decline not declining is
@@ -5524,6 +5524,12 @@ the tree. What remains, largest first:
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 ### CI, tests and developer tooling
+
+- **Bring the till CI shards back toward the four-minute target.** In A738 run
+  `39343830012`, the two successful Vitest steps took 304.86 s and 345.63 s; the earlier
+  successful main run `39318408371` took about 295 s and 298 s. Profile the slow files and
+  shard balance before choosing a change; retain all checks and coverage bars. The cause of
+  the excess duration has not been established.
 
 - **Check the older capture suites' viewport cleanup (A669-5 review).**
   `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
