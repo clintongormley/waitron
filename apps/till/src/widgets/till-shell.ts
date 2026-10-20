@@ -11,6 +11,7 @@ import {
 } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
+import { helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { FormFactor } from "../layout.js";
 import {
@@ -23,6 +24,7 @@ import type { TillClockAction } from "../state/clocking.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
+import "@waitron/ui/src/components/wt-help-switch.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 
@@ -101,6 +103,8 @@ export class TillShell extends LitElement {
         display: flex;
         flex-direction: column;
         height: 100dvh;
+        --wt-help-badge-target: 32px;
+        --wt-help-badge-size: 24px;
       }
 
       .shell {
@@ -536,7 +540,7 @@ export class TillShell extends LitElement {
   async #settled(): Promise<void> {
     await this.updateComplete;
     const children = this.renderRoot.querySelectorAll(
-      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge",
+      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge, .head wt-help-switch",
     );
     await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
   }
@@ -600,6 +604,13 @@ export class TillShell extends LitElement {
           .loadLocales=${this.loadLocales}
         ></wt-language-chooser>`
       : nothing;
+  }
+
+  #helpSwitch(): TemplateResult {
+    return html`<wt-help-switch
+      data-test="help-switch"
+      label=${helpText("help.label")}
+    ></wt-help-switch>`;
   }
 
   #transferText(): string {
@@ -925,7 +936,7 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.#chooser()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.#chooser()}${this.#helpSwitch()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
                   </div>
                   ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>
