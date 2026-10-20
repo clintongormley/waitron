@@ -14,6 +14,7 @@ import {
 import {
   diningTables,
   kitchenStations,
+  lineServiceCancellations,
   orderGroups,
   parties,
   partyTables,
@@ -32,7 +33,7 @@ import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 
-import { fireGroup, snoozeReminder } from "./order-groups.js";
+import { fireGroup, readHeldCounts, snoozeReminder } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
@@ -275,6 +276,7 @@ describe("the floor's attention signals", () => {
 
     expect((await floorRow(v, mesa2)).signals).toEqual([
       { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 3 }] },
+      { kind: "held", count: 1 },
       { kind: "release_due", groupId: mains, dueAt: await remindAtOf(v, mains) },
       { kind: "bill_requested", requestedAt },
     ]);
@@ -426,7 +428,7 @@ describe("the floor's attention signals", () => {
     await queuedAgo(v, tabId, 20);
     const row = await floorRow(v, mesa2);
 
-    expect(row.signals).toEqual([]);
+    expect(row.signals).toEqual([{ kind: "held", count: 1 }]);
   });
 
   it("does not let an old held dish turn the table's band, while an old fired one does", async () => {
@@ -461,6 +463,7 @@ describe("the floor's attention signals", () => {
     await setAvailable("Agua", false);
 
     expect((await floorRow(v, mesa2)).signals).toEqual([
+      { kind: "held", count: 2 },
       { kind: "held_unavailable", groupId: mains, lineNames: ["Burger"] },
     ]);
     const [group] = await inTx(v, (tx) =>
@@ -478,7 +481,139 @@ describe("the floor's attention signals", () => {
 
     await setAvailable("Burger", true);
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([]);
+    expect((await floorRow(v, mesa2)).signals).toEqual([{ kind: "held", count: 2 }]);
+  });
+
+  it("marks a table holding dishes with how many, with reminders off", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await inTx(v, (tx) => writeReleaseReminderMinutes(tx, null));
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, mesa2);
+    await holdGroup(v, partyId, "Burger", "Burger", "Paella");
+
+    expect((await floorRow(v, mesa2)).signals).toEqual([{ kind: "held", count: 3 }]);
+  });
+
+  it("counts each party's own held dishes, and stops once the group is fired", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa2 = await v.table("Mesa 2");
+    const mesa3 = await v.table("Mesa 3");
+    const two = await seat(v, mesa2);
+    const three = await seat(v, mesa3);
+    const mains = await holdGroup(v, two.partyId, "Burger", "Paella");
+    await holdGroup(v, three.partyId, "Burger");
+
+    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 2 });
+    expect((await floorRow(v, mesa3)).signals).toContainEqual({ kind: "held", count: 1 });
+
+    const fire = await command(v, two.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, two.partyId, mains, fire));
+
+    expect((await floorRow(v, mesa2)).signals).not.toContainEqual(
+      expect.objectContaining({ kind: "held" }),
+    );
+    expect((await floorRow(v, mesa3)).signals).toContainEqual({ kind: "held", count: 1 });
+  });
+
+  it("counts a held dish by what is left after a cancellation, a weighed dish as one, and no extra", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, mesa2);
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [
+          {
+            lines: [
+              { menuItemId: v.item("Burger"), quantity: "2" },
+              { menuItemId: v.item("Paella"), quantity: "2" },
+            ],
+            release: "hold",
+          },
+        ],
+        operatorId: OPERATOR,
+      }),
+    );
+    const groupId = placed.groups[0]!.id;
+    const lines = await inTx(v, (tx) =>
+      tx
+        .select({
+          id: workingOrderLines.id,
+          name: workingOrderLines.name,
+          descriptions: workingOrderLines.descriptions,
+          workingOrderId: workingOrderLines.workingOrderId,
+          lineNo: workingOrderLines.lineNo,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.groupId, groupId)),
+    );
+    const burger = lines.find((line) => line.name === "Burger")!;
+    const paella = lines.find((line) => line.name === "Paella")!;
+    const heldSignal = async () =>
+      (await floorRow(v, mesa2)).signals.filter((signal) => signal.kind === "held");
+    const cancel = (lineId: string, quantity: number) =>
+      inTx(v, (tx) =>
+        tx.insert(lineServiceCancellations).values({
+          lineId,
+          quantity,
+          cancelledAt: new Date().toISOString(),
+          wasStarted: false,
+          actorId: OPERATOR,
+        }),
+      );
+
+    await cancel(burger.id, 1000);
+    expect(await heldSignal()).toEqual([{ kind: "held", count: 3 }]);
+
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ unitPrecision: 3, quantity: 350 })
+        .where(eq(workingOrderLines.id, paella.id)),
+    );
+    expect(await heldSignal()).toEqual([{ kind: "held", count: 2 }]);
+
+    await inTx(v, (tx) =>
+      tx.insert(workingOrderLines).values({
+        id: randomUUID(),
+        workingOrderId: burger.workingOrderId,
+        lineNo: Math.max(...lines.map((line) => line.lineNo)) + 1,
+        name: "Cheese",
+        descriptions: burger.descriptions,
+        quantity: 2000,
+        unitPriceGross: 100,
+        vatClass: "general",
+        lineTotal: 200,
+        parentLineId: burger.id,
+        groupId,
+      }),
+    );
+    expect(await heldSignal()).toEqual([{ kind: "held", count: 2 }]);
+
+    await inTx(v, (tx) =>
+      tx
+        .update(lineServiceCancellations)
+        .set({ quantity: 2000 })
+        .where(eq(lineServiceCancellations.lineId, burger.id)),
+    );
+    expect(await heldSignal()).toEqual([{ kind: "held", count: 1 }]);
+
+    await cancel(paella.id, 350);
+    expect(await heldSignal()).toEqual([]);
+  });
+
+  it("readHeldCounts answers an empty list without reading", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { counts, statements } = await inTx(v, async (tx) => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        return { counts: await readHeldCounts(tx, []), statements: prepare.mock.calls.length };
+      } finally {
+        prepare.mockRestore();
+      }
+    });
+
+    expect(counts).toEqual(new Map());
+    expect(statements).toBe(0);
   });
 
   it("gives joined tables the party's signals, and reads the bills a merged-in party kept", async () => {
@@ -587,6 +722,7 @@ describe("the floor's attention signals", () => {
       expect(row.signals.map((signal) => signal.kind)).toEqual([
         "unsent_draft",
         "ready",
+        "held",
         "bill_requested",
       ]);
     }

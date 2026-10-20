@@ -1635,6 +1635,48 @@ export async function readReleaseReminders(
   return reminders;
 }
 
+/**
+ * How many dishes each of these open parties holds in its own held groups, as the `held` signal
+ * counts them, keyed by party; a party holding none is absent. The lines are filtered as
+ * {@link readReleaseReminders} filters them, so a party with a reminder always has a count.
+ */
+export async function readHeldCounts(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (partyIds.length === 0) return counts;
+  const lines = await tx
+    .select({
+      partyId: orderGroups.partyId,
+      quantity: workingOrderLines.quantity,
+      unitPrecision: workingOrderLines.unitPrecision,
+      cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
+    })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .innerJoin(parties, eq(parties.id, orderGroups.partyId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
+    .where(
+      and(
+        inArray(orderGroups.partyId, [...partyIds]),
+        eq(orderGroups.state, "held"),
+        eq(parties.state, "open"),
+        isNull(workingOrderLines.parentLineId),
+        onShownBill(),
+        not(isRecalledDish(tx)),
+      ),
+    );
+  for (const line of lines) {
+    const { active } = serviceQuantities(line.quantity, 0, line.cancelledQuantity);
+    if (active <= 0) continue;
+    const items = line.unitPrecision ? 1 : active / 1000;
+    counts.set(line.partyId, (counts.get(line.partyId) ?? 0) + items);
+  }
+  return counts;
+}
+
 /** What the kitchen has recorded for a dish row: nothing is inferred, so a station that never
  * records progress leaves `queued` with its fired time. */
 export interface CurrentOrderKitchen {

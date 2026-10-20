@@ -15,6 +15,10 @@ describe("signalChips", () => {
     ).toEqual([]);
   });
 
+  it("gives no chip for held dishes, which the floor draws with their countdown", () => {
+    expect(signalChips([{ kind: "held", count: 2 }])).toEqual([]);
+  });
+
   it("says a forgotten wait unless the caller already shows its own Forgotten badge", () => {
     const forgotten = [{ kind: "long_wait" as const, band: "forgotten" as const }];
     expect(signalChips(forgotten)).toEqual([
