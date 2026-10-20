@@ -819,7 +819,7 @@ describe("approval (plan D6)", () => {
     ...(approver === undefined ? {} : { approver }),
   });
 
-  it("refuses a staff member's comp under Complaint with no approver, naming the reason's list", async () => {
+  it("refuses a staff member's comp under Guest complaint with no approver, naming the reason's list", async () => {
     const { billId } = await bill([{ name: "Burger" }]);
     await refusedWith(billId, await comp(billId), "adjustment.approval_required", {
       approval: "reason",
@@ -1410,7 +1410,7 @@ describe("the reason as it was (plan D20)", () => {
         "en-GB",
       ),
     );
-    expect((await recordedOn(billId))[0]!.reasonName).toBe("Complaint");
+    expect((await recordedOn(billId))[0]!.reasonName).toBe("Guest complaint");
   });
 });
 
@@ -1497,7 +1497,7 @@ describe("cumulative limits (plan D6)", () => {
     await refusedWith(billId, ask, "adjustment.approval_required", { approval: "reason" });
   });
 
-  it("lets staff take Staff meal 50% off one of two Burgers on one line, then 50% off the other, both straight through", async () => {
+  it("lets staff take Crew meal 50% off one of two Burgers on one line, then 50% off the other, both straight through", async () => {
     const { billId } = await bill([{ name: "Burger", quantity: "2" }]);
     const half = async (quantity?: string) => ({
       lineId: await lineIdOf(venue, billId, 1),
@@ -1778,7 +1778,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
   it("past both the reason's limit and the bill's, one PIN from the bill's list is enough", async () => {
     await setLimit("40.00", ["supervisor"]);
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
-    // Complaint allows €30.00 a bill and is approved by managers and admins.
+    // Guest complaint allows €30.00 a bill and is approved by managers and admins.
     const complaint = (extra: Partial<Ask> = {}) =>
       billOff("50.00", { reasonId: venue.reasonId.complaint, ...extra });
 
@@ -2246,7 +2246,7 @@ describe("an extra on its own (B11d)", () => {
     });
   });
 
-  // Staff meal takes at most 50% off one item before it asks.
+  // Crew meal takes at most 50% off one item before it asks.
   const percent = (percentBp: number) => ({
     action: "discount_percent" as const,
     percentBp,

@@ -387,7 +387,7 @@ describe("approval through the route (plan D6)", () => {
     expect(lines.status).toBe(200);
   });
 
-  it("still refuses it with a supervisor's PIN, who may apply Complaint but not approve it", async () => {
+  it("still refuses it with a supervisor's PIN, who may apply Guest complaint but not approve it", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const refused = await post(
       billId,
@@ -402,7 +402,7 @@ describe("approval through the route (plan D6)", () => {
     expect(await recordedOn(billId)).toEqual([]);
   });
 
-  it("applies a supervisor's comp within Complaint's €30 with no PIN", async () => {
+  it("applies a supervisor's comp within Guest complaint's €30 with no PIN", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const applied = await post(billId, await comp(billId), { cookie: venue.cookie.supervisor });
     expect(applied.status).toBe(200);
@@ -1151,7 +1151,7 @@ describe("what the till reads", () => {
         (english.json as unknown as { id: string; name: string }[]).find(
           (reason) => reason.id === venue.reasonId.complaint,
         )!.name,
-      ).toBe("Complaint");
+      ).toBe("Guest complaint");
     } finally {
       await inTx(venue, (tx) =>
         tx.update(persons).set({ locale: null }).where(eq(persons.id, venue.staffId)),
@@ -1180,7 +1180,7 @@ describe("what the till reads", () => {
       (listed.json as unknown as { id: string; name: string }[]).find(
         (reason) => reason.id === venue.reasonId.complaint,
       )!.name,
-    ).toBe("Complaint");
+    ).toBe("Guest complaint");
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
 
     const answer = await send(
@@ -1200,7 +1200,7 @@ describe("what the till reads", () => {
     );
 
     expect(answer.status).toBe(200);
-    expect((await recordedOn(billId))[0]!.reasonName).toBe("Complaint");
+    expect((await recordedOn(billId))[0]!.reasonName).toBe("Guest complaint");
   });
 
   it("gives the price a comped or discounted line had before, and nothing on a line never adjusted", async () => {

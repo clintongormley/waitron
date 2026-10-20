@@ -1770,7 +1770,7 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
   });
   const prepared = await withTransaction(suite.db, async (tx) => {
     const policy = {
-      names: { en: "Complaint", es: "Queja" },
+      names: { en: "Guest complaint", es: "Queja" },
       kind: "comp" as const,
       actions: ["comp", "discount_percent"] as ("comp" | "discount_percent")[],
       maxPercentBp: null,
@@ -1779,7 +1779,7 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
       approverRoles: ["manager" as const, "admin" as const],
       noteRequired: true,
     };
-    await createAdjustmentReason(tx, { ...policy, name: "Complaint" });
+    await createAdjustmentReason(tx, { ...policy, name: "Guest complaint" });
     const retired = await createAdjustmentReason(tx, { ...policy, name: "Retired" });
     await deactivateAdjustmentReason(tx, retired.id);
     return listAdjustmentReasons(tx, { includeInactive: true });

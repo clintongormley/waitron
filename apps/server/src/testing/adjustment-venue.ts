@@ -203,8 +203,8 @@ export const REASONS = {
   /** Free and every discount; €30.00 a bill; supervisors and above apply, managers and admins
    * approve. */
   complaint: {
-    name: "Complaint",
-    names: { en: "Complaint", es: "Queja" },
+    name: "Guest complaint",
+    names: { en: "Guest complaint", es: "Queja" },
     kind: "comp",
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: null,
@@ -215,8 +215,8 @@ export const REASONS = {
   },
   /** A percentage or an amount, 50% an item; anyone applies, managers and admins approve. */
   staffMeal: {
-    name: "Staff meal",
-    names: { en: "Staff meal", es: "Comida de personal" },
+    name: "Crew meal",
+    names: { en: "Crew meal", es: "Comida de personal" },
     kind: "comp",
     actions: ["discount_percent", "discount_amount"],
     maxPercentBp: 5000,
