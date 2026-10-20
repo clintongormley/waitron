@@ -48,6 +48,7 @@ import type {
 } from "../api/client.js";
 import {
   HANDHELD_PAY_WAYS,
+  PAYMENT_STATES,
   PAY_WAYS,
   moneyPlus,
   paidQuantities,
@@ -1269,12 +1270,6 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #paymentRow(payment: BillPaymentView, n: number, status: BillBalance["status"]): TemplateResult {
-    const STATES: Record<BillPaymentView["state"], StringKey> = {
-      received: "bill_pay.state_received",
-      pending: "bill_pay.state_pending",
-      failed: "bill_pay.state_failed",
-      declined: "bill_pay.state_declined",
-    };
     const REFUNDS: Record<BillPaymentView["refunds"][number]["state"], StringKey> = {
       completed: "bill_pay.refunded",
       pending: "bill_pay.refund_waiting",
@@ -1289,7 +1284,7 @@ export class TillBillPayDialog extends LitElement {
           ${t("bill_pay.payment")
             .replace("{n}", String(n))
             .replace("{method}", () => method)}
-          · ${t(STATES[payment.state])}
+          · ${t(PAYMENT_STATES[payment.state])}
         </span>
         <p>
           ${t("bill_pay.applied")} ${this.#money(payment.applied)} · ${t("bill_pay.tip")}

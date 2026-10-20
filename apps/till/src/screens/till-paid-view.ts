@@ -3,17 +3,10 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { BillPaymentView, OriginalReceiptPrint } from "../api/client.js";
-import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { PAYMENT_STATES } from "../state/bill-payment.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "@waitron/ui/src/components/wt-button.js";
-
-const STATES: Record<BillPaymentView["state"], StringKey> = {
-  received: "bill_pay.state_received",
-  pending: "bill_pay.state_pending",
-  failed: "bill_pay.state_failed",
-  declined: "bill_pay.state_declined",
-};
 
 /** The bill paid in full: what was paid, whether a ticket went out, and Cerrar mesa. It only shows
  * and asks; the app owns every request. */
@@ -170,7 +163,7 @@ export class TillPaidView extends LitElement {
         <p class="muted">${facts.join(" · ")}</p>
       </div>
       <span class="state ${payment.state === "received" ? "" : "unsettled"}"
-        >${t(STATES[payment.state])}</span
+        >${t(PAYMENT_STATES[payment.state])}</span
       >
     </li>`;
   }

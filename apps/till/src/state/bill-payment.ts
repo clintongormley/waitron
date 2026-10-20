@@ -48,6 +48,14 @@ export const HANDHELD_PAY_WAYS = [
   ...PAY_WAYS,
 ] as const satisfies readonly { way: PayChoice["kind"] | "whole"; label: StringKey }[];
 
+/** A payment's state, as its row names it. */
+export const PAYMENT_STATES: Record<BillPaymentView["state"], StringKey> = {
+  received: "bill_pay.state_received",
+  pending: "bill_pay.state_pending",
+  failed: "bill_pay.state_failed",
+  declined: "bill_pay.state_declined",
+};
+
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 export function typedAmount(value: string): string | null {
