@@ -102,8 +102,13 @@ import type {
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
-import { heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
-import { lateBand, topState, type TableStateKind } from "../state/table-precedence.js";
+import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import {
+  byPrecedence,
+  lateBand,
+  topState,
+  type TableStateKind,
+} from "../state/table-precedence.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
 
 /** The words of a table that needs clearing or moving. */
@@ -149,7 +154,14 @@ const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
 function tableChips(table: TableState, now: number) {
   const chips = signalChips(table.signals, { forgottenShown: lateBand(table) === "forgotten" });
   const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
-  return held === null ? chips : [...chips, held];
+  return byPrecedence(held === null ? chips : [...chips, held], (chip) =>
+    chipState(chip, table.signals),
+  );
+}
+
+interface CardMark {
+  kind: TableStateKind | undefined;
+  mark: TemplateResult;
 }
 
 /** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. */
@@ -468,6 +480,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       .badges {
+        max-width: 100%;
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
@@ -525,14 +538,6 @@ export class TillFloorScreen extends LitElement {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
         border: 1px solid var(--wt-color-warning);
-      }
-
-      .unsent {
-        max-width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--wt-space-1);
       }
 
       .badge.unsent {
@@ -2362,31 +2367,49 @@ export class TillFloorScreen extends LitElement {
     >
       ${renderFloorRing(ring, moving)}
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
-      ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
-      <span class="badges">
-        ${this.#hint(table)}
-        ${
-          table.nextReservation !== null
-            ? html`<span class="badge reserved" data-reserved
-                >${t("floor.reserved")} ${table.nextReservation.time}</span
-              >`
-            : nothing
-        }
-        ${
-          lateBand(table) === "forgotten"
-            ? html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`
-            : nothing
-        }
-        ${
-          this.#fireDue(table)
-            ? html`<span class="badge fire-due" data-fire-due
-                ><wt-icon name="floor-fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
-              >`
-            : nothing
-        }
-        ${renderFloorChips(tableChips(table, this.#drawnAt))}
-      </span>
+      ${this.#partyName(table)} ${this.#occupancy(table)}
+      <span class="badges"
+        >${byPrecedence(this.#marks(table), (mark) => mark.kind).map(({ mark }) => mark)}</span
+      >
     </button>`;
+  }
+
+  #marks(table: TableState): CardMark[] {
+    const marks: CardMark[] = [];
+    if (lateBand(table) === "forgotten") {
+      marks.push({
+        kind: "forgotten",
+        mark: html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`,
+      });
+    }
+    if (this.#fireDue(table)) {
+      marks.push({
+        kind: "fire",
+        mark: html`<span class="badge fire-due" data-fire-due
+          ><wt-icon name="floor-fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
+        >`,
+      });
+    }
+    const hint = this.#hint(table);
+    if (hint !== null) marks.push(hint);
+    for (const draft of table.party?.unsentDrafts ?? []) {
+      marks.push({
+        kind: "not-sent",
+        mark: html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`,
+      });
+    }
+    if (table.nextReservation !== null) {
+      marks.push({
+        kind: "reserved",
+        mark: html`<span class="badge reserved" data-reserved
+          >${t("floor.reserved")} ${table.nextReservation.time}</span
+        >`,
+      });
+    }
+    for (const chip of tableChips(table, this.#drawnAt)) {
+      marks.push({ kind: chipState(chip, table.signals), mark: html`${renderFloorChips([chip])}` });
+    }
+    return marks;
   }
 
   /** Every zone's tables, not only the zone on screen: a station serves the whole floor. */
@@ -2437,14 +2460,6 @@ export class TillFloorScreen extends LitElement {
       : html`<span class="party-name" data-party-name>${name}</span>`;
   }
 
-  #unsent(party: TableParty | null): TemplateResult | typeof nothing {
-    const drafts = party?.unsentDrafts ?? [];
-    if (drafts.length === 0) return nothing;
-    return html`<span class="unsent">
-      ${drafts.map((draft) => html`<span class="badge unsent" data-unsent>${unsentText(draft)}</span>`)}
-    </span>`;
-  }
-
   #party(party: TableParty | null): TemplateResult | typeof nothing {
     if (party === null) return nothing;
     const parts = [
@@ -2457,24 +2472,33 @@ export class TillFloorScreen extends LitElement {
   /** Only the MOST ADVANCED of the three service signals renders: a dispatched line is still `ready`
    * and unserved, so all three counts can be positive at once. The stations' ready chips stand in
    * for the ready count when the table carries them. */
-  #hint(table: TableState): TemplateResult | typeof nothing {
+  #hint(table: TableState): CardMark | null {
     if (table.enRoute > 0) {
-      return html`<span class="badge en-route" data-en-route
-        >${table.enRoute} ${t("floor.en_route")}</span
-      >`;
+      return {
+        kind: "ready",
+        mark: html`<span class="badge en-route" data-en-route
+          >${table.enRoute} ${t("floor.en_route")}</span
+        >`,
+      };
     }
     if (table.readyToServe > 0) {
-      if (signalOf(table.signals, "ready") !== undefined) return nothing;
-      return html`<span class="badge ready" data-ready
-        >${table.readyToServe} ${t("floor.ready")}</span
-      >`;
+      if (signalOf(table.signals, "ready") !== undefined) return null;
+      return {
+        kind: "ready",
+        mark: html`<span class="badge ready" data-ready
+          >${table.readyToServe} ${t("floor.ready")}</span
+        >`,
+      };
     }
     if (table.pendingToServe > 0) {
-      return html`<span class="badge to-serve" data-to-serve
-        >${table.pendingToServe} ${t("floor.to_serve")}</span
-      >`;
+      return {
+        kind: undefined,
+        mark: html`<span class="badge to-serve" data-to-serve
+          >${table.pendingToServe} ${t("floor.to_serve")}</span
+        >`,
+      };
     }
-    return nothing;
+    return null;
   }
 
   /** The switch is exhaustive over {@link TableState.state}, so a new occupancy state is a compile error

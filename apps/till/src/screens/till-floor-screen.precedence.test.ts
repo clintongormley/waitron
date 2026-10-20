@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-floor-screen.js";
@@ -8,6 +9,7 @@ import type { TableSignal } from "@waitron/shared";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
 const past = new Date(now - 60_000).toISOString();
+const ahead = new Date(now + 10 * 60_000).toISOString();
 
 function party(over: Partial<TableParty> = {}): TableParty {
   return {
@@ -285,5 +287,106 @@ describe("till-floor-screen: the card's ring", () => {
     const ring = token.shadowRoot!.querySelector<HTMLElement>('[data-ring="overdue"]')!;
     expect(ring).not.toBeNull();
     expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
+  });
+});
+
+describe("till-floor-screen: the card's marks in the order of precedence", () => {
+  const marks = (el: TillFloorScreen, id = "t2") =>
+    [...card(el, id).querySelector(".badges")!.children].map((mark) => {
+      const chip = mark.getAttribute("data-chip");
+      if (chip !== null) return `[data-chip="${chip}"]`;
+      return `[${mark.getAttributeNames().find((name) => name.startsWith("data-"))}]`;
+    });
+  const draft = { billId: "bill-1", billNumber: 1, ownerName: "Alex", lineCount: 2 };
+
+  it("lists every mark, most urgent first, and draws nothing after Reserved", async () => {
+    const { el } = await mountFloor([
+      table({
+        timingBand: "forgotten",
+        readyToServe: 2,
+        pendingToServe: 3,
+        nextReservation: { time: "21:30" },
+        party: party({ reminder: { groupId: "g2", dueAt: past }, unsentDrafts: [draft] }),
+        signals: [
+          { kind: "take_order" },
+          { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+          { kind: "bill_requested", requestedAt: past },
+          { kind: "release_due", groupId: "g2", dueAt: past },
+          { kind: "held_unavailable", groupId: "g3", lineNames: ["Steak"] },
+          longWait("forgotten"),
+        ],
+      }),
+    ]);
+    expect(marks(el)).toEqual([
+      "[data-forgotten]",
+      '[data-chip="held-unavailable"]',
+      "[data-fire-due]",
+      '[data-chip="bill-requested"]',
+      '[data-chip="ready"]',
+      '[data-chip="take-order"]',
+      "[data-unsent]",
+      "[data-reserved]",
+    ]);
+  });
+
+  it("puts N to serve after the held chip", async () => {
+    const { el } = await mountFloor([
+      table({
+        pendingToServe: 2,
+        party: party({ reminder: { groupId: "g2", dueAt: ahead } }),
+        signals: [{ kind: "held", count: 2 }],
+      }),
+    ]);
+    expect(marks(el)).toEqual(['[data-chip="held"]', "[data-to-serve]"]);
+  });
+
+  it("puts the overdue chip before the bill and the waiting chip after the unsent order", async () => {
+    const { el } = await mountFloor([
+      table({
+        signals: [{ kind: "bill_requested", requestedAt: past }, longWait("overdue")],
+      }),
+      table({
+        id: "t3",
+        label: "Table 3",
+        party: party({ id: "v3", tableIds: ["t3"], unsentDrafts: [draft] }),
+        signals: [longWait("warm")],
+      }),
+    ]);
+    expect(marks(el)).toEqual(['[data-chip="long-wait"]', '[data-chip="bill-requested"]']);
+    expect(marks(el, "t3")).toEqual(["[data-unsent]", '[data-chip="long-wait"]']);
+  });
+
+  it("keeps two unsent orders in their own order, inside the card at 390 px", async () => {
+    await page.viewport(390, 900);
+    try {
+      const { el } = await mountFloor([
+        table({
+          signals: [{ kind: "bill_requested", requestedAt: past }],
+          party: party({
+            unsentDrafts: [
+              { ...draft, ownerName: "AlexandradelRosariodelasMercedesFernandezFernandez" },
+              { billId: "bill-2", billNumber: 2, ownerName: "Alex", lineCount: 1 },
+            ],
+          }),
+        }),
+      ]);
+      expect(marks(el)).toEqual(['[data-chip="bill-requested"]', "[data-unsent]", "[data-unsent]"]);
+      const unsent = [...card(el).querySelectorAll<HTMLElement>("[data-unsent]")];
+      expect(unsent.map((mark) => mark.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+        "Bill 1 · AlexandradelRosariodelasMercedesFernandezFernandez has an unsent order: 2 items",
+        "Bill 2 · Alex has an unsent order: 1 item",
+      ]);
+      const box = card(el).getBoundingClientRect();
+      for (const mark of unsent) {
+        const range = document.createRange();
+        range.selectNodeContents(mark);
+        const bounds = range.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(box.left);
+        expect(bounds.right).toBeLessThanOrEqual(box.right);
+      }
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    } finally {
+      await page.viewport(1280, 900);
+    }
   });
 });
