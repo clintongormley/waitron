@@ -1276,7 +1276,8 @@ settings in the department dialog's Service tab, landed (plan
 `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slice 2, retiring venue-made
 statuses, landed (plan `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`);
 slice 3, the held mark and its countdown, landed (plan
-`docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`).
+`docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`; pictures as built in
+`docs/backlog/mockups/a757-table-states/built-3/`).
 
 Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
@@ -1486,7 +1487,7 @@ whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
 
-### `timingBand` counts only dishes sent (A757 Q17, owner 2026-10-17; built by A757 slice 3)
+### `timingBand` counts only fired dishes (A757 Q17, owner 2026-10-17; built by A757 slice 3)
 
 A held dish does not turn a card's outline, its Forgotten badge, the map's dot or the order screen's
 pin, however long it is held; sending or releasing it restarts its age.

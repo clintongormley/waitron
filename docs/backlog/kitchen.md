@@ -226,10 +226,11 @@ Open points:
 Left open by A757 slice 3. The manager overview's "orders taking too long" list
 (`computeOverdueOrders`, `packages/reporting/src/overdue-orders.ts`) reads every unserved ticket item
 of its node that is not made here, on an order neither abandoned nor collected; its `where` has no
-`fired_at` test, so a dish waiting in a held group ages from when it was taken. Since A757 slice 3 the floor's late marks
-count only dishes sent (`timingBand` and the `long_wait` signal, A757 Q17).
+`fired_at` test, so a dish waiting in a held group ages from when it was taken. Since A757 slice 3
+`timingBand`, like the `long_wait` signal before it, counts only fired dishes (`ticket_items.fired_at`
+set; A757 Q17).
 
-Probe, 2026-10-20, on `feat/a757-3-held-mark-countdown` at `ce488495c`, in a test file deleted after:
+Probe, 2026-10-20, on `feat/a757-3-held-mark-countdown`, in a test file deleted after:
 hold a group of one Burger with `placeGroups` (`release: "hold"`), set its ticket item's `queued_at`
 20 minutes back, and call `computeOverdueOrders` before releasing it. It returned the order with
 `stationName: "Cocina"`, `ageMinutes: 20`, `band: "forgotten"`.

@@ -1930,7 +1930,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
-  dish held 20 minutes is listed Forgotten while the floor counts only dishes sent (A757 Q17).
+  dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17).
   Decide whether the report leaves held dishes out too. [Detail](backlog/kitchen.md#a930-the-managers-overdue-report-counts-a-held-dish-as-late)
 
 - **A808. A reprinted kitchen ticket shows when it was reprinted (owner, 2026-10-17).** The heading
