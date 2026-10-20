@@ -258,7 +258,7 @@ it("A647 offers three visible ordering choices and only the selected explanation
       );
     expect(choices).not.toBeNull();
     await choices!.updateComplete;
-    expect(choices!.label).toBe("Ordered on its own by");
+    expect(choices!.label).toBe("Standalone ordering by");
     expect(
       [...choices!.shadowRoot!.querySelectorAll('[role="radio"]')].map((button) =>
         button.textContent!.trim(),
@@ -3244,7 +3244,7 @@ it("describes Staff only ordering briefly in English and Spanish", async () => {
   setLocale("en-GB");
   try {
     const { el } = await mount();
-    expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Ordered on its own by");
+    expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Standalone ordering by");
     expect(await orderingTexts(el)).toEqual([
       ["Anyone", "Can be ordered on its own."],
       ["Staff only", ""],

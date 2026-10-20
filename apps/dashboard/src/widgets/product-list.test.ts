@@ -20,6 +20,7 @@ import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 
 useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);
@@ -1007,6 +1008,15 @@ describe("product-list", () => {
       expect(
         [...root.querySelectorAll("[data-test=ordering-badge]")].map((b) => b.textContent!.trim()),
       ).toEqual(["Anyone", "Staff only", "Nobody"]);
+      expect(
+        [...root.querySelectorAll("thead th")].some(
+          (cell) => cell.textContent!.replace(/[▲▼]/g, "").trim() === "Standalone",
+        ),
+      ).toBe(true);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      expect(table.columns.find((column) => column.key === "ordering")!.filter!.label).toBe(
+        "Standalone ordering by",
+      );
       cleanupWidgets();
       setLocale("es-ES");
       const { el: spanish } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -1020,7 +1030,7 @@ describe("product-list", () => {
       ).toEqual(["Cualquiera", "Solo el personal", "Nadie"]);
       expect(
         [...spanishRoot.querySelectorAll("thead th")].some((cell) =>
-          cell.textContent!.trim().startsWith("Pedido por separado"),
+          cell.textContent!.trim().startsWith(es["product.ordering"]),
         ),
       ).toBe(true);
     } finally {

@@ -1257,7 +1257,7 @@ export class ProductList extends LitElement {
         },
         sortValue: ({ product }) => PRODUCT_ORDERINGS.indexOf(product.ordering),
         filter: {
-          label: t("product.ordering"),
+          label: t("editor.ordered_on_own"),
           allLabel: t("product.filter_ordering_all"),
           multiple: {
             countLabel: (count) =>
