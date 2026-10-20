@@ -139,10 +139,10 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,orange,amber,yellow,lime,green,teal,cyan,sky,blue,indigo,purple,magenta,pink,brown,grey}`, `--wt-color-day-standard` and
 `--wt-color-day-closed`, the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
-the list card's calm left edge `--wt-color-table-calm-edge` and the colours a pulsing floor ring
-dims to, `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` (none of the three has a text colour),
 and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
-`--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own
+`--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own, and, with no text
+colour, the list card's calm left edge `--wt-color-table-calm-edge` and the colours a pulsing floor
+ring dims to, `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim`
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -514,7 +514,7 @@ dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 `--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one cycle of a floor
 ring's pulse, which dims it to `--wt-color-danger-pulse-dim` or `--wt-color-warning-pulse-dim`
-half-way, at full opacity — in dark, a fade to grey, not to the card;
+half-way, at full opacity — in dark, toward grey, not to the card;
 `packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. The kitchen screen's and the pass's
 forgotten flash keep their own keyframes and read the fast duration; the till bar's Waiting tab
 keeps its own keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`.

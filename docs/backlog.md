@@ -2109,6 +2109,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
   adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
 
+- **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
+  `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
+  reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
+  (`held.title` «Pedidos aparcados»). Proposed: «Aparca, envía o cancela…». Found in A757 slice 4b's
+  review.
+
 - **A921. On a narrow till, should the person's name give room to the tab strip? (question for the
   owner, left open by A582 slice 4a).** Since 4a the till's bar has the Help switch before the
   person's menu, and nothing else left the bar for it, so at phone width the tab strip, which

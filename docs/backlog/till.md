@@ -1300,7 +1300,8 @@ Open points):
 
 - decide the map's own Nothing needed fill; the card's edge keeps `--wt-color-table-calm-edge`, a
   line colour;
-- on the map, keep the Waiting outline under a state that draws none (owner, 2026-10-20, point 1);
+- on the map, keep the Waiting outline under a state that draws none (the owner's answer to #1918,
+  point 1, 2026-10-20);
 - put the icons picture 07 draws on the wait, unavailable, bill, ready and unsent chips, once the
   map's cue icons are registered (Open point 7);
 - decide how the map draws a table with a counter delivery waiting and no party, and a table that
@@ -1374,7 +1375,9 @@ owner, on the running till:
   scrolled out of sight (A757 §7);
 - Nothing needed's calm look (A757 §9).
 - the choices slice 4 made where the pictures are silent (its plan's Open points 4, 8 and 11,
-  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`), and one point from its look
+  `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`; Open point 4's ring no longer
+  dims "to 30%" — since A757 slice 4b it dims to a colour, `--wt-color-danger-pulse-dim` or
+  `--wt-color-warning-pulse-dim`), and one point from its look
   (2026-10-20, pictures in `docs/backlog/mockups/a757-table-states/built-4/`): at 1280 px every list
   card in a row stretches to its tallest neighbour, so one busy card makes the calm ones beside it
   tall and mostly empty. The grid rule behind it dates from 2026-08-21 (`git blame`) and slice 4 did
