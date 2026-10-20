@@ -46,8 +46,9 @@ you are editing, not what is stored: nothing is sent until you save the list its
 Give the list a staff name in plain text — what you and your staff call it. A **Kitchen name**,
 directly under it, and a **Customer-facing name**, with one field per content language, are both
 optional and fall back to the staff name when you leave them blank. On a receipt, an options
-list's and an option's customer-facing names print in the default language, or another language's
-where the default is blank, and as the staff name only when no language has one; an extras
+list's and an option's new answers keep the default language's text, falling back independently
+to their staff names when it is blank. Text in another language alone does not fill that default.
+Previously recorded answers keep their saved names; an extras
 list's own customer-facing name is not printed anywhere today. While a name is blank, its field
 shows, in place of the blank, the name it falls back to.
 

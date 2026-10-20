@@ -38,7 +38,14 @@ const products: Product[] = [
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
     unitId: "u1",
-    unit: { id: "u1", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u1",
+      name: { es: "Unidad" },
+      precision: 0,
+      abbreviation: { es: "ud" },
+    },
     description: null,
     kitchenName: null,
     dietaryDeclarations: [],
@@ -136,11 +143,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     }),
     listStations: vi.fn().mockResolvedValue(stations),
     listCourses: vi.fn().mockResolvedValue(courses),
-    listUnits: vi
-      .fn()
-      .mockResolvedValue([
-        { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
-      ]),
+    listUnits: vi.fn().mockResolvedValue([
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { es: "unidad" },
+        abbreviation: { es: "u" },
+        precision: 0,
+      },
+    ]),
     listExtraLists: vi.fn().mockResolvedValue([]),
     listOptionLists: vi.fn().mockResolvedValue([]),
     createProductEditor: vi.fn().mockResolvedValue({ id: "new", name: "Croquetas de jamón" }),

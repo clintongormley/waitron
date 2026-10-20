@@ -367,6 +367,12 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0169_floor_tables_keep_no_place": {
     refused: ["NOT NULL constraint failed: __new_floor_plan_tables.zone_id"],
   },
+  "catalogue/0035_unit_staff_identity": {
+    refused: [
+      "ALTER TABLE `units` ADD `staff_name` text NOT NULL",
+      "Cannot add a NOT NULL column with default value NULL",
+    ],
+  },
   "core/0160_retire_canvases": {
     refused: ["DROP TABLE `device_profiles`", "FOREIGN KEY constraint failed"],
   },

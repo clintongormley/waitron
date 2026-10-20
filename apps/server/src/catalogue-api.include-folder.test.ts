@@ -242,16 +242,11 @@ describe("PUT /management-api/sections/:id/members/:memberId/folder", () => {
     expect(await json(product, 400)).toMatchObject({
       error: { code: "menu_section.membership_invalid" },
     });
-    // Blanking the default language leaves the folder only an English name.
     const gap = await send(app, "PUT", folderPath(f), {
       body: { showAsFolder: true, overrides: { names: { es: " " } } },
     });
-    expect(await json(gap, 400)).toEqual({
-      error: {
-        code: "menu_section.translation_required",
-        params: { field: "names", language: "es" },
-      },
-    });
+    expect(await json(gap, 200)).toEqual({ showAsFolder: true, overrides: {} });
+    expect(await folderOf(app, f)).toEqual({ showAsFolder: true, overrides: {} });
     const colour = await send(app, "PUT", folderPath(f), {
       body: { showAsFolder: true, overrides: { color: "#AABBCC" } },
     });

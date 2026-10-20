@@ -305,7 +305,13 @@ it("places every change kind in its named group and keeps the groups in working 
     under: ["Drinks"],
   };
   const extra = { ...product, listId: "extras", listName: "Extras" };
-  const unit = { abbreviation: { en: "g" }, precision: 0 };
+  const unit = {
+    name: { en: "Gram" },
+    staffName: "Gram",
+    staffAbbreviation: "g",
+    abbreviation: { en: "g" },
+    precision: 0,
+  };
   const kinds: Record<MenuChange["kind"], MenuChange> = {
     menu_renamed: { ...shared, id: "rename", kind: "menu_renamed", from: "Old", to: "New" },
     section_added: { ...shared, ...section, id: "section-add", kind: "section_added" },

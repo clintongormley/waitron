@@ -1,3 +1,4 @@
+import type { Unit } from "./product-types.js";
 import type { MenuClash } from "./menu-combine-types.js";
 import type {
   MenuOffer,
@@ -214,8 +215,8 @@ export type MenuChangeBody = {
       name: string;
       listId: string;
       listName: string;
-      from: { abbreviation: Record<string, string>; precision: number };
-      to: { abbreviation: Record<string, string>; precision: number };
+      from: Pick<Unit, "name" | "abbreviation" | "staffName" | "staffAbbreviation" | "precision">;
+      to: Pick<Unit, "name" | "abbreviation" | "staffName" | "staffAbbreviation" | "precision">;
     }
   | {
       kind: "extra_portion_changed";

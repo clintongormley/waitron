@@ -26,8 +26,18 @@ function offeredItem(
   declarations: Partial<Pick<OfferedExtraItem, "addAllergens" | "suitableFor">> = {},
 ): OfferedExtraItem {
   return {
+    presentation: {
+      name: staff,
+      customerName: { es: `${staff} carta` },
+      kitchenName: `${staff} KDS`,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",
@@ -280,6 +290,8 @@ describe("till-basket", () => {
       ...cafe,
       id: "portion",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-portion",
         name: { en: "tray" },
         abbreviation: { en: "tray" },

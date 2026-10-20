@@ -16,6 +16,8 @@ async function visibleHelp(root: ShadowRoot): Promise<number> {
 }
 
 const KILOGRAM = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "u1",
   name: { es: "kilogramo", en: "kilogram" },
   abbreviation: { es: "kg", en: "kg" },

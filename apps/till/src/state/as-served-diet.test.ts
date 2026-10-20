@@ -5,8 +5,18 @@ import type { DietDerivation, DietOverride, OfferedExtraItem, TillProduct } from
 
 function item(productId: string): OfferedExtraItem {
   return {
+    presentation: {
+      name: productId,
+      customerName: { en: `${productId} for the customer` },
+      kitchenName: `${productId} KDS`,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",

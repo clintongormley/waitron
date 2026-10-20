@@ -1,104 +1,105 @@
 # Idiomas y fotografías para tu carta
 
 Puedes añadir texto en francés a una carta en español sin cambiar el idioma del panel de gestión ni
-el de tus tickets. Empieza eligiendo los idiomas que admite tu contenido y después añade las
-traducciones a medida que las necesites. La biblioteca de imágenes usa los mismos idiomas que tus
-productos, tus secciones y tus [modificadores](modifiers.md). Una lista de opciones, cada una de sus
-opciones y una lista de extras entran en la comprobación de traducciones del idioma predeterminado.
-Un elemento de una lista de extras no: no tiene nombre propio y toma el del producto.
+el de tus tickets. Elige primero los idiomas del contenido y añade las traducciones cuando las
+necesites. Los nombres para el cliente son opcionales, también en el idioma predeterminado.
+Tus productos, secciones, [modificadores](modifiers.md) y unidades comparten estos idiomas.
+La biblioteca de imágenes también los usa, pero una fotografía necesita un nombre en el idioma
+predeterminado al subirla o editarla.
 
 ## Elige los idiomas de tu contenido {#languages}
 
-Un local nuevo empieza con sus idiomas de contenido ya elegidos: los idiomas que Waitron mantiene
-activados para su región, más el inglés. En España, Waitron mantiene activado el español en todas
-las regiones donde hoy se puede dar de alta un local, y además el catalán en Cataluña, la Comunidad
-Valenciana y las Islas Baleares, y el gallego en Galicia; allí ese idioma regional es el
-predeterminado. En el resto de España el predeterminado es el español. Un local de otro país empieza
-con el idioma de su país y el inglés. Para añadir otro, abre **Ajustes** y después **Idiomas del
-contenido**, que muestra en una tabla tus idiomas y cuántos nombres faltan en cada uno, con el
-predeterminado primero. Selecciona **Añadir idioma** y elige el idioma para añadirlo. La lista
-muestra primero los idiomas oficiales de tu país, bajo **Idiomas oficiales**, mientras falte por
-añadir alguno de ellos. Los campos de traducción del idioma añadido quedan entonces disponibles en
-todos tus editores de contenido. Para cambiar el predeterminado, abre el menú ⋮ de ese idioma y
-selecciona **Hacer predeterminado**.
+Un local nuevo empieza con los idiomas que Waitron mantiene activados para su región, más el inglés.
+El español se mantiene activado en toda España. La región puede añadir otros idiomas obligatorios y
+establecer uno de ellos como predeterminado. Por ejemplo, un local nuevo en la Comunidad Valenciana
+empieza con el valenciano como predeterminado, además del español y del inglés.
 
-Un idioma que Waitron mantiene activado para tu región aparece marcado como **Obligatorio** y no
-tiene **Eliminar**, y si alguna vez falta, el siguiente guardado en esta página lo vuelve a añadir.
-Donde la región pide también idiomas extranjeros, la página muestra un aviso mientras tengas menos de
-los que pide.
+Abre **Ajustes**, **Idiomas del contenido** para ver tus idiomas y cuántos nombres faltan en cada
+uno. El predeterminado aparece primero. Selecciona **Añadir idioma** y elige uno de la lista.
+Los idiomas oficiales que aún no has añadido aparecen primero, bajo **Idiomas oficiales**.
+Al añadirlo, sus campos de traducción quedan disponibles en los editores del contenido.
+Para cambiar el predeterminado, elige **Hacer predeterminado** en el menú ⋮ de ese idioma.
 
-Por ejemplo, con el español como predeterminado y el inglés al lado, un producto cuyo nombre para el
-cliente es **Pan de verano** en español puede dejar vacío el inglés mientras preparas la traducción.
-Donde se pide contenido en inglés, se muestra **Pan de verano** hasta que escribes **Summer bread**.
-Esta alternativa usa el texto en español sin copiarlo al campo en inglés, así que los cambios
-posteriores en español siguen viéndose donde aún falta la traducción.
+Un idioma que Waitron mantiene activado para tu región aparece como **Obligatorio** y no tiene
+**Eliminar**. Si falta, el siguiente guardado en esta página lo vuelve a añadir. Donde la región
+pide también idiomas extranjeros, aparece un aviso mientras tengas menos de los que pide.
 
-Los campos obligatorios necesitan texto en el idioma predeterminado. Las demás traducciones pueden
-esperar. Para cambiar el predeterminado al inglés, completa primero las traducciones obligatorias al
-inglés y los nombres de las imágenes. Si se rechaza el cambio, selecciona **Editar traducciones** en
-el menú ⋮ del inglés para abrir el informe: los nombres marcados como **Traducido a medias** bajo el
-inglés son los que lo impiden, y cada uno tiene un enlace **Abrir** a la pantalla donde se edita.
-También se comprueban los nombres de las imágenes, pero no aparecen ahí, así que revísalos en la
-**Biblioteca de imágenes**. Algo que has eliminado o desactivado también puede impedir el cambio sin
-aparecer en la lista.
+Por ejemplo, con el español como predeterminado y el inglés al lado, puedes guardar **Pan de verano**
+en español y dejar el inglés vacío. Donde se pide contenido en inglés se muestra **Pan de verano**
+hasta que escribes **Summer bread**. El texto español no se copia al campo inglés, así que sus
+cambios siguen viéndose mientras falte la traducción.
 
-El nombre para el cliente de un producto y de una variante es la excepción, porque es opcional:
-déjalo vacío en todos los idiomas y Waitron recurre al nombre del personal, así que nunca impide el
-cambio. Pero si lo rellenas en español y dejas el inglés en blanco, eso _sí_ es una traducción que
-falta (está claro que querías traducirlo), así que impide el cambio hasta que la completas o la
-borras. Los nombres para el cliente de una sección funcionan igual: no tener ninguno nunca impide el
-cambio, pero una sección con algunos nombres y ninguno en el nuevo idioma predeterminado sí lo
-impide. Los nombres para el cliente de una sección se editan en la pestaña **Estructura** de su
-carta, en **Productos y cartas**, **Cartas**. Los nombres para el cliente de la propia carta se
-editan con **Cambiar nombre** en la fila de la carta en esa lista, no en su pestaña **Estructura**,
-aunque el enlace de **Traducciones que faltan** para el nombre de una carta abre esa pestaña. Una
-carta incluida en otra puede dar a su carpeta nombres para el cliente propios: elige **Editar** en
-el ⋮ de esa inclusión, en la pestaña **Estructura** de la carta que la incluye. Cuando los nombres
-de esa carpeta, los suyos junto con los que toma de la carta incluida, están rellenos en algunos
-idiomas pero no en el nuevo predeterminado, esa carpeta también impide el cambio, y **Traducciones
-que faltan** la muestra como **Carpeta de carta incluida**. Esto vale también mientras la inclusión
-muestra sus secciones directamente; activa **Mostrar como carpeta** para ver los nombres.
+Puedes cambiar el predeterminado aunque falten traducciones o nombres de fotografías.
+**Obligatorio** significa que el idioma sigue activado; no te obliga a rellenar todos los nombres
+para el cliente. Con el nombre del personal **Patatas**, puedes guardar **Potatoes** en inglés y
+dejar vacío el español. La traducción española sigue faltando aunque se muestre un nombre alternativo.
 
-**Editar traducciones** abre una ventana que muestra las traducciones que faltan en tus idiomas de
-contenido. Se abre en el idioma que elegiste; los idiomas marcados como **Obligatorio** van primero
-y llevan una nota que dice cuántos nombres falta traducir a ellos. Tiene los filtros Tipo y Motivo y
-enlaces a cada editor existente. Un nombre relleno en algunos idiomas pero no en este aparece
-marcado como **Traducido a medias**. Algo que no tiene ningún nombre para el cliente aparece en tus
-otros idiomas como **Sin nombre para el cliente**, porque allí se muestra en su lugar el nombre del
-personal; una lista de extras es la excepción, porque su propio nombre nunca llega a un ticket. Los
-productos archivados, las listas deshabilitadas y las cartas desactivadas no aparecen.
+Da a cada unidad un nombre del personal y una abreviatura, como **Kilogramo** y **kg**.
+Sus nombres y abreviaturas traducidos son opcionales e independientes. Una unidad cuenta como
+pendiente en un idioma cuando falta cualquiera de los dos campos, y cuenta una sola vez si faltan ambos.
 
-Si tu local está conectado a Waitron Cloud y allí tiene activado Traducir todo, **Traducir todo**, en
-la parte superior de la ventana, pide a Cloud que sugiera todos los nombres para el cliente que
-faltan, en todos los idiomas. Las sugerencias rellenan los campos vacíos como borradores marcados
-como **Sugerido**, hasta 100 a la vez, y nada llega a tus comensales hasta que las guardas;
-**Descartar sugerencia** quita una que no quieres. Cuando Traducir todo se detiene, aunque sea a
-medias, la campana de avisos te dice cuántas esperan revisión.
+**Editar traducciones** abre el mismo editor desde cualquier fila de idioma. **Falta en** empieza
+con el idioma que elegiste. Selecciona **Todos los nombres** para incluir los que ya tienen texto.
+Usa **Tipo** y la búsqueda para reducir las filas. El informe incluye nombres que faltan en el
+idioma predeterminado y nombres sin ninguna traducción. Los productos archivados y las listas
+desactivadas quedan fuera. El nombre propio de una lista de extras aparece aunque no se imprima en
+un ticket; un elemento de esa lista toma el nombre de su producto.
 
-Seleccionar **Eliminar** en el menú ⋮ de un idioma adicional oculta sus campos de traducción
-habituales, pero conserva el texto guardado. Vuelve a añadir el idioma para seguir usando esas
-traducciones. La fila del idioma predeterminado no tiene **Eliminar**: elige antes otro
-predeterminado. La fila de un idioma obligatorio tampoco lo tiene.
+Edita los idiomas junto a cada elemento. **Ir al idioma** trae un idioma a la vista en una pantalla
+pequeña. Cada campo es independiente: rellenar el español no requiere un nombre inglés que lo
+acompañe, y el nombre alternativo mostrado como pista no se guarda como traducción. Vaciar un campo
+elimina esa traducción. **Siguiente** y **Anterior** cambian de página conservando tus cambios.
+**Ver editados** muestra los elementos editados que ocultan tus filtros.
 
-Los ajustes del idioma de los tickets siguen siendo independientes. Un ticket se imprime en un solo
-idioma. El predeterminado de cada ubicación se elige en la tarjeta **Valores predeterminados** de
-**Ajustes del local**, que en Cataluña lo fija en catalán, y el personal puede elegir otro idioma
-para una venta, o para una copia, en la caja. La caja ofrece el idioma de tickets de la ubicación y,
-en España, los idiomas de tu contenido que sean español, catalán, gallego o euskera, así que añadir
-contenido en inglés no añade un ticket en inglés.
+Las traducciones guardadas actualizan las cartas de trabajo que usan esas definiciones. Revisa la
+vista previa y publica por separado para llevar el texto nuevo a la caja. Guardar traducciones
+conserva la publicación anterior y los nombres registrados con los pedidos.
 
-Los nombres de los productos, las unidades y las respuestas de las opciones se imprimen en tu idioma
-de contenido predeterminado, o en otro de tus idiomas de contenido donde un nombre está en blanco en
-él, sea cual sea el idioma del ticket. Se guardan en ese idioma cuando se añade un plato a un pedido,
-así que cambiar el idioma de contenido predeterminado no reescribe los tickets ya emitidos. Si el
-idioma del ticket no es uno de tus idiomas de contenido, esta página y la tarjeta Valores
-predeterminados de Ajustes del local muestran una nota que lo indica.
+**Guardar cambios** guarda juntos los campos pendientes, incluidos los de otras páginas, hasta 100
+campos por lote. El nombre y la abreviatura de una unidad son campos separados. Si superas el límite,
+usa **Retirar campo del lote** antes de guardar. Cerrar una ventana con cambios propios sin guardar
+te pregunta qué hacer con ellos.
 
-Las pantallas de cocina, los pedidos que recuperas y los informes de ventas conservan los nombres
-registrados, aunque más tarde quites ese idioma de tus ajustes de contenido. El idioma de los
-botones y las pantallas de Waitron sigue siendo una preferencia de interfaz aparte. Estos ajustes de
-contenido también dan las opciones de idioma para el futuro contenido en línea; no crean un sitio de
-pedidos en línea.
+Si un nombre guardado cambia mientras trabajas, compara **Al abrir**, **Actual** y **Tu borrador**.
+Elige **Conservar borrador**, **Usar nombre actual** o **Descartar cambio** para ese campo. Si no se
+confirma un guardado, **Reintentar estos cambios** envía el mismo lote. **Revisar última versión**
+te permite leer los nombres actuales y decidir cada campo enviado antes de preparar otro lote.
+
+Si tu local está conectado a Waitron Cloud y tiene activado Traducir todo allí, **Traducir todo**
+pide sugerencias para los nombres que faltan. Aparecen como borradores **Sugerido**, dentro del
+mismo límite de 100 campos, sin sustituir el texto que escribiste. Para las unidades se sugieren
+nombres; las abreviaturas las introduces tú. Nada se guarda hasta elegir **Guardar cambios**.
+**Descartar sugerencia** elimina una que no quieras. Cerrar la ventana deja las sugerencias sin
+aceptar disponibles para más tarde.
+
+Una corrección ortográfica espera a **Usar corrección**. Al elegirla se comprueba el nombre guardado
+antes de incorporar la corrección al editor. Una corrección desactualizada no puede sustituir un
+cambio tuyo. Una corrección del nombre del personal te lleva a su editor. Usa **Todos los nombres**
+para encontrar correcciones de elementos sin traducciones pendientes. Cuando Traducir todo termina,
+aunque sea a medias, la campana de avisos indica cuántas sugerencias esperan revisión.
+La petición a Cloud sigue limitada a 20 idiomas; el editor no divide un conjunto mayor en varias
+peticiones más pequeñas.
+
+**Eliminar**, en el menú ⋮ de un idioma adicional, oculta sus campos pero conserva su texto.
+Añade el idioma de nuevo para volver a usarlo. El predeterminado no tiene **Eliminar**: elige otro
+primero. Los idiomas obligatorios tampoco se pueden eliminar.
+
+Los idiomas de los tickets son independientes. Cada ticket se imprime en un idioma. El
+predeterminado de la ubicación se elige en **Valores predeterminados**, en **Datos del local**, y se
+fija al catalán en Cataluña. El personal puede elegir otro idioma para una venta o una copia en la
+caja. La caja ofrece el idioma del ticket de la ubicación y, en España, el español, el catalán, el
+gallego y el euskera que estén entre los idiomas del contenido. Añadir inglés al contenido no añade
+un ticket en inglés.
+
+El idioma del ticket elige sus encabezados. Los nombres de los platos, las unidades y las respuestas
+proceden del pedido guardado. Editar traducciones o cambiar el predeterminado no cambia los nombres
+de un ticket ya emitido. Si el idioma del ticket no está entre los idiomas del contenido, esta
+página y la tarjeta de valores predeterminados muestran un aviso.
+
+Las pantallas de cocina, los pedidos recuperados y los informes conservan sus nombres registrados,
+aunque elimines ese idioma del contenido. El idioma de los botones y pantallas sigue siendo una
+preferencia aparte. Estos ajustes también ofrecen los idiomas para futuro contenido en línea;
+no crean un sitio de pedidos en línea.
 
 ## Sube una fotografía una sola vez {#upload}
 

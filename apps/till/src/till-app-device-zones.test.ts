@@ -104,6 +104,8 @@ const catalogue = (id: string): ZoneOfferCatalogue => ({
       customerName: { en: "Customer coffee" },
       kitchenName: "Kitchen coffee",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "each",
         name: { en: "each" },
         abbreviation: { en: "ea" },

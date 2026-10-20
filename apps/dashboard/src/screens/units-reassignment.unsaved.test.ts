@@ -31,8 +31,22 @@ async function fixture(overrides: Partial<DashboardApi> = {}) {
   setLocale("en-GB");
   const api = {
     listUnits: async () => [
-      { id: "u1", name: { en: "Gram" }, abbreviation: { en: "g" }, precision: 3 },
-      { id: "u2", name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      {
+        id: "u1",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "Gram" },
+        abbreviation: { en: "g" },
+        precision: 3,
+      },
+      {
+        id: "u2",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "Kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
     ],
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     listUnitProducts: async () => products,

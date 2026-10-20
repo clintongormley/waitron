@@ -708,11 +708,6 @@ export class CatalogueScreen extends LitElement {
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
-              .unitLanguage=${
-                this.contentLanguages?.languages[0] ??
-                this.contentLanguages?.defaultLanguage ??
-                "en"
-              }
               .canAddProduct=${this.catalogueSettings !== null && locales.length > 0 && this.units.length > 0}
               .loaded=${this.productsLoaded}
               .defaultColor=${this.catalogueSettings?.defaultColor ?? null}

@@ -37,7 +37,13 @@ export async function seedProduct(db: Database): Promise<string> {
     const cat = await createCatalogue(tx, { name: "Deli" });
     const unit = await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      },
       "en",
     );
     const p = await createProduct(tx, {

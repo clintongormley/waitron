@@ -28,6 +28,8 @@ import type { OfferedExtraItem } from "./menu-types.js";
 expectTypeOf<OfferedExtraItem["portion"]>().toEqualTypeOf<string>();
 expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
   id: string;
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
@@ -275,6 +277,14 @@ describe("what a product offers", () => {
         {
           productId: ids.bacon,
           name: "bacon staff",
+          presentation: {
+            name: "bacon staff",
+            customerName: { en: "Smoked streaky bacon" },
+            kitchenName: "BCN",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           customerName: { en: "Smoked streaky bacon" },
           kitchenName: "BCN",
           price: "1.50",
@@ -289,6 +299,14 @@ describe("what a product offers", () => {
         {
           productId: ids.cheese,
           name: "cheese staff",
+          presentation: {
+            name: "cheese staff",
+            customerName: { en: "Aged manchego" },
+            kitchenName: "CHS",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           customerName: { en: "Aged manchego" },
           kitchenName: "CHS",
           price: "2.00",
@@ -305,6 +323,14 @@ describe("what a product offers", () => {
         {
           productId: ids.olives,
           name: "olives staff",
+          presentation: {
+            name: "olives staff",
+            customerName: { en: "Gordal olives" },
+            kitchenName: "OLV",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           customerName: { en: "Gordal olives" },
           kitchenName: "OLV",
           price: "0.75",

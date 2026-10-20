@@ -1,15 +1,16 @@
-import { resolveSnapshotText } from "@waitron/shared";
-
-// Customer text frozen onto an order line in the venue's default content language. Where the
-// default has no text, another stored language's is taken (`resolveSnapshotText`).
+import { newCustomerText } from "./new-customer-text.js";
 
 /** Every receipt key in `keys` holds the default content language's text. */
 export function defaultLanguageDescriptions(
   text: Readonly<Record<string, string>>,
   keys: readonly string[],
   defaultLanguage: string,
+  staffName: string,
 ): Record<string, string> {
-  const frozen = resolveSnapshotText(text, defaultLanguage, defaultLanguage);
+  const frozen = newCustomerText(text, staffName.trim(), defaultLanguage, {
+    defaultLanguage,
+    languages: [defaultLanguage],
+  });
   return Object.fromEntries(keys.map((key) => [key, frozen]));
 }
 
@@ -17,7 +18,12 @@ export function defaultLanguageDescriptions(
 export function defaultLanguageText(
   text: Readonly<Record<string, string>> | null,
   defaultLanguage: string,
-): Record<string, string> | null {
-  if (text === null) return null;
-  return { [defaultLanguage]: resolveSnapshotText(text, defaultLanguage, defaultLanguage) };
+  staffName: string,
+): Record<string, string> {
+  return {
+    [defaultLanguage]: newCustomerText(text, staffName.trim(), defaultLanguage, {
+      defaultLanguage,
+      languages: [defaultLanguage],
+    }),
+  };
 }

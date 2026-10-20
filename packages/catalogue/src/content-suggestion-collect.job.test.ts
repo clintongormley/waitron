@@ -363,9 +363,13 @@ describe("the house style", () => {
       await section(tx, terrace.id, "Postres", { ca: "CLIENT-CA Postres" });
       await deactivateCatalogue(tx, terrace.id);
       await extraList(tx, "Salses", { ca: "CLIENT-CA Salses" });
-      await tx
-        .insert(units)
-        .values({ name: { ca: "CLIENT-CA Ració" }, abbreviation: { ca: "r." }, precision: 0 });
+      await tx.insert(units).values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { ca: "CLIENT-CA CA portion" },
+        abbreviation: { ca: "r." },
+        precision: 0,
+      });
 
       const byName = (a: HouseStyleExample, b: HouseStyleExample) =>
         a.staffName < b.staffName ? -1 : 1;

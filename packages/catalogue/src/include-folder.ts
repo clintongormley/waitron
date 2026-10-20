@@ -1,17 +1,21 @@
 import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError, contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
+import {
+  AppError,
+  contentLanguageCode,
+  FALLBACK_LOCALE,
+  type ContentLanguages,
+} from "@waitron/shared";
 import { isStoredColor } from "./color-inheritance.js";
-import { folderPresentation } from "./include-folder-presentation.js";
+import { readContentLanguages } from "./content-languages.js";
+import {
+  mergeOptionalTranslations,
+  validateOptionalTranslations,
+} from "./optional-translations.js";
 import { sectionMembers } from "./schema/sections.js";
 import { loadSectionGraph } from "./section-graph.js";
 import type { IncludeFolder, IncludeFolderInput, IncludeFolderOverrides } from "./section-types.js";
-import {
-  requireDefaultLanguageName,
-  sectionColorOf,
-  sectionImageOf,
-  writableMember,
-} from "./sections.js";
+import { sectionColorOf, sectionImageOf, writableMember } from "./sections.js";
 import "./errors.js";
 
 type Rows = readonly Record<string, unknown>[];
@@ -45,18 +49,23 @@ function overridesShapeProblem(value: unknown): "overrides" | "names" | null {
   return null;
 }
 
-async function checkedOverrides(tx: Transaction, value: unknown): Promise<IncludeFolderOverrides> {
+async function checkedOverrides(
+  tx: Transaction,
+  value: unknown,
+  stored: IncludeFolderOverrides,
+  config: ContentLanguages,
+): Promise<IncludeFolderOverrides> {
   const problem = overridesShapeProblem(value);
   if (problem !== null) throw new AppError("menu_section.invalid", { field: problem });
   const { names, image, color } = value as IncludeFolderOverrides;
-  const trimmed =
-    names === undefined
-      ? {}
-      : Object.fromEntries(
-          Object.entries(names).map(([language, text]) => [language, text.trim()]),
-        );
+  try {
+    if (names !== undefined) validateOptionalTranslations(names);
+  } catch {
+    throw new AppError("menu_section.invalid", { field: "names" });
+  }
+  const trimmed = mergeOptionalTranslations(stored.names ?? null, names ?? {}, config);
   return {
-    ...(Object.keys(trimmed).length > 0 ? { names: trimmed } : {}),
+    ...(trimmed !== null ? { names: trimmed } : {}),
     ...(image === undefined ? {} : { image: await sectionImageOf(tx, image) }),
     ...(color === undefined ? {} : { color: sectionColorOf(color) }),
   };
@@ -64,8 +73,7 @@ async function checkedOverrides(tx: Transaction, value: unknown): Promise<Includ
 
 /**
  * Sets how one include of `listId` shows the menu it includes. Without `overrides` the stored ones
- * are kept. The names the folder would show are held to the venue's default content language, as a
- * section's own are. Which menus reach the include does not change, so no menu's offers are synced.
+ * are kept. Which menus reach the include does not change, so no menu's offers are synced.
  */
 export async function setIncludeFolder(
   tx: Transaction,
@@ -85,13 +93,12 @@ export async function setIncludeFolder(
     throw new AppError("menu_section.invalid", { field: "showAsFolder" });
   let overrides = graph.folder(memberId).overrides;
   if (input.overrides !== undefined) {
-    overrides = await checkedOverrides(tx, input.overrides);
-    const own = graph.section(ref.sectionId)!;
-    const { names } = folderPresentation(
-      { names: own.names!, image: own.image!, color: own.color! },
-      { showAsFolder: true, overrides },
+    overrides = await checkedOverrides(
+      tx,
+      input.overrides,
+      overrides,
+      await readContentLanguages(tx, fallbackLanguage),
     );
-    await requireDefaultLanguageName(tx, names, fallbackLanguage);
   }
   await tx
     .update(sectionMembers)

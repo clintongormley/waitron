@@ -16,7 +16,13 @@ const each = (
 ): PriceableProduct => ({
   name: "item",
   descriptions: { en: "item" },
-  unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
+  unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    name: { en: "each" },
+    precision: 0,
+    abbreviation: { en: "ea" },
+  },
   unitPrice,
   vatClass,
   category,
@@ -24,7 +30,13 @@ const each = (
 const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
   name: "sliced ham",
   descriptions: { en: "sliced ham" },
-  unit: { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+  unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    name: { en: "kg" },
+    precision: 3,
+    abbreviation: { en: "kg" },
+  },
   unitPrice,
   vatClass,
   category: "Food",
@@ -110,7 +122,13 @@ describe("priceBasket — difference method", () => {
           product: {
             name: "tea service",
             descriptions: { en: "tea service" },
-            unit: { name: { en: "tray" }, precision: 2, abbreviation: { en: "tr" } },
+            unit: {
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
+              name: { en: "tray" },
+              precision: 2,
+              abbreviation: { en: "tr" },
+            },
             unitPrice: "8.00",
             vatClass: "general",
             category: null,
@@ -135,7 +153,13 @@ describe("priceBasket — difference method", () => {
           product: {
             name: "Olives",
             descriptions: { en: "Olives" },
-            unit: { name: { en: "Kilogram" }, precision: 3, abbreviation: { en: "kg" } },
+            unit: {
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
+              name: { en: "Kilogram" },
+              precision: 3,
+              abbreviation: { en: "kg" },
+            },
             unitPrice: "10.00",
             vatClass: "general",
             category: null,
@@ -399,7 +423,13 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
           product: {
             name: "Café",
             descriptions: { es: "Café" },
-            unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
+            unit: {
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
+              name: { en: "each" },
+              precision: 0,
+              abbreviation: { en: "ea" },
+            },
             unitPrice: "2.50",
             vatClass: "reduced",
             category: "Drinks",

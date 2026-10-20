@@ -2,7 +2,11 @@ import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type { ContentLanguages, Decimal } from "@waitron/shared";
-import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
+import { readContentLanguages } from "./content-languages.js";
+import {
+  mergeOptionalTranslations,
+  validateOptionalTranslations,
+} from "./optional-translations.js";
 import { reachableMenuItem } from "./menu-structure.js";
 import { batches } from "./batches.js";
 import { dropMenuPrices } from "./menu-removal.js";
@@ -25,6 +29,9 @@ export type { ProductVariant, ProductVariantInput } from "./product-types.js";
  * the editor body always carries, with `active` optional for a caller in code — absent creates a new
  * variant Active and leaves one sent by `id` Active or Inactive as it already is. */
 export type VariantWrite = Omit<ProductVariantInput, "active"> & { active?: boolean };
+type EditorVariantWrite = Omit<VariantWrite, "customerName"> & {
+  customerName?: Record<string, string> | null;
+};
 
 const variantColumns = {
   id: products.id,
@@ -171,7 +178,7 @@ export async function setProductVariants(
 export async function writeProductVariantsSkippingNameCheck(
   tx: Transaction,
   productId: string,
-  inputs: readonly VariantWrite[],
+  inputs: readonly EditorVariantWrite[],
   config: ContentLanguages,
 ): Promise<ProductVariant[]> {
   return writeProductVariants(tx, productId, inputs, config, false);
@@ -180,12 +187,12 @@ export async function writeProductVariantsSkippingNameCheck(
 async function writeProductVariants(
   tx: Transaction,
   productId: string,
-  inputs: readonly VariantWrite[],
+  inputs: readonly EditorVariantWrite[],
   config: ContentLanguages,
   checkNames: boolean,
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
-  const checked: (VariantWrite & { cents: number | null })[] = [];
+  const checked: (EditorVariantWrite & { cents: number | null })[] = [];
   for (const input of inputs) {
     if (input.id !== undefined) {
       if (seen.has(input.id)) throw new AppError("product.variant_invalid", { field: "id" });
@@ -199,15 +206,22 @@ async function writeProductVariants(
   const parent = await assertProductForWrite(tx, productId);
   if (!parent.active) throw new AppError("product.archived", { productId });
   const current = await listProductVariants(tx, productId);
+  const currentById = new Map(current.map((variant) => [variant.id, variant]));
   const currentActive = new Map(current.map((variant) => [variant.id, variant.active]));
   const normalized: (VariantWrite & { active: boolean; cents: number | null })[] = [];
   for (const input of checked) {
     const active =
       input.active ?? (input.id === undefined ? true : (currentActive.get(input.id) ?? true));
-    // Archived variants may retain customer names missing the venue's current default language.
-    if (active && input.customerName != null)
-      assertContentTranslations([input.customerName], config);
-    normalized.push({ ...input, active });
+    const previous = input.id === undefined ? undefined : currentById.get(input.id);
+    const customerName =
+      previous === undefined
+        ? input.customerName == null
+          ? null
+          : validateOptionalTranslations(input.customerName)
+        : input.customerName === undefined || !previous.active
+          ? previous.customerName
+          : mergeOptionalTranslations(previous.customerName, input.customerName, config);
+    normalized.push({ ...input, customerName, active });
   }
   const currentIds = new Set(currentActive.keys());
   for (const id of seen) {
@@ -243,7 +257,10 @@ async function writeProductVariants(
     if (input.id !== undefined && currentActive.get(input.id) === false) continue;
     const values = {
       ...nameColumns(input.name),
-      customerName: input.customerName,
+      customerName:
+        input.customerName && Object.keys(input.customerName).length > 0
+          ? input.customerName
+          : null,
       kitchenName: input.kitchenName,
       image: input.image,
       unitPrice: input.cents,

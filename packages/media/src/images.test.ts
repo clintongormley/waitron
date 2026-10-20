@@ -7,9 +7,30 @@ import {
   catalogues,
   products,
   tenantReceipts,
+  locations,
+  workingOrders,
+  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  writeContentLanguages,
+  readContentLanguages,
+  createCatalogue,
+  createProduct,
+  createUnit,
+  setProductVariants,
+  addMember,
+  setIncludeFolder,
+  menuDetails,
+  sections,
+  optionLists,
+  optionLabels,
+  extraLists,
+  listContentTranslationGaps,
+  previewMenu,
+  publishMenu,
+} from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -1182,5 +1203,174 @@ describe("relevance scores and tie-breaks", () => {
         english.image.id,
       ]);
     });
+  });
+});
+
+describe("free default choice with incomplete catalogue and image text", () => {
+  it("switches with all nine catalogue kinds and a real image gap without rewriting their rows", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+      const menu = await createCatalogue(tx, {
+        name: "Staff menu",
+        names: { en: "Customer menu" },
+      });
+      const included = await createCatalogue(tx, {
+        name: "Staff included menu",
+        names: { en: "Customer included" },
+      });
+      const root = async (id: string) =>
+        (await tx.select().from(menuDetails).where(eq(menuDetails.menuId, id)))[0]!.rootSectionId;
+      const menuRoot = await root(menu.id);
+      const member = await addMember(tx, menuRoot, {
+        kind: "section",
+        sectionId: await root(included.id),
+      });
+      await setIncludeFolder(tx, menuRoot, member.id, {
+        showAsFolder: true,
+        overrides: { names: { en: "Folder" } },
+      });
+      await tx.insert(sections).values({
+        ownerMenuId: menu.id,
+        internalName: "Staff section",
+        names: { en: "Customer section" },
+      });
+      const unit = await createUnit(
+        tx,
+        {
+          staffName: "Staff kilogram",
+          staffAbbreviation: "skg",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
+        "en",
+      );
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
+        customerName: { en: "Potatoes" },
+        unitId: unit.id,
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await setProductVariants(
+        tx,
+        product.id,
+        [
+          {
+            name: "Staff variant",
+            kitchenName: "KITCHEN VARIANT",
+            customerName: { en: "Customer variant" },
+            image: null,
+            unitPrice: "3.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      const [list] = await tx
+        .insert(optionLists)
+        .values({ name: "Staff list", customerName: { en: "Customer list" } })
+        .returning();
+      await tx
+        .insert(optionLabels)
+        .values({ listId: list!.id, name: "Staff label", customerName: { en: "Customer label" } });
+      await tx
+        .insert(extraLists)
+        .values({ name: "Staff extras", customerName: { en: "Customer extras" } });
+      const uploaded = await uploadImage(
+        tx,
+        { image: photo, names: { en: "Image" } },
+        { fallbackLanguage: "en" },
+      );
+      expect(await listImageTranslationGaps(tx, "es")).toEqual([
+        { kind: "image", id: uploaded.image.id },
+      ]);
+      const snapshot = async () => {
+        const tables = (
+          await tx.execute<{ name: string }>(
+            sql`select name from sqlite_master where type = 'table' and name <> 'content_languages' order by name`,
+          )
+        ).rows;
+        const rows: Record<string, unknown> = {};
+        for (const { name } of tables)
+          rows[name] = (await tx.execute(sql`select * from ${sql.identifier(name)}`)).rows;
+        return rows;
+      };
+      expect((await listContentTranslationGaps(tx, "es")).map(({ kind }) => kind).sort()).toEqual([
+        "extra_list",
+        "menu_include",
+        "menu_section",
+        "menu_section",
+        "menu_section",
+        "option_label",
+        "option_list",
+        "product",
+        "unit",
+        "variant",
+      ]);
+      const { hash } = await previewMenu(tx, menu.id);
+      await publishMenu(tx, menu.id, hash, "person-default-switch");
+      const [location] = await tx
+        .insert(locations)
+        .values({
+          name: "Saved-order venue",
+          invoiceLocales: ["en"],
+          operationDescription: "Restaurant",
+        })
+        .returning();
+      const [order] = await tx
+        .insert(workingOrders)
+        .values({ source: "dashboard", locationId: location!.id, orderNumber: 17 })
+        .returning();
+      await tx.insert(workingOrderLines).values({
+        workingOrderId: order!.id,
+        lineNo: 1,
+        name: "Recorded staff potatoes",
+        descriptions: { en: "Recorded potatoes" },
+        unitName: { en: "recorded-kg" },
+        quantity: 1000,
+        unitPriceGross: 200,
+        lineTotal: 200,
+        vatClass: "general",
+      });
+      const before = await snapshot();
+      expect(before["menu_versions"]).toHaveLength(1);
+      expect(before["menu_publications"]).toHaveLength(1);
+      expect(before["working_order_lines"]).toHaveLength(1);
+      await expect(
+        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["en", "es"] }),
+      ).resolves.toBeUndefined();
+      expect(await readContentLanguages(tx, "en")).toEqual({
+        defaultLanguage: "es",
+        languages: ["es", "en"],
+      });
+      expect(await snapshot()).toEqual(before);
+      expect(await listImageTranslationGaps(tx, "es")).toEqual([
+        { kind: "image", id: uploaded.image.id },
+      ]);
+    });
+  });
+
+  it("still refuses an image metadata write missing the newly selected default", async () => {
+    const id = await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+      const result = await uploadImage(
+        tx,
+        { image: await prepare(81), names: { en: "Original" } },
+        { fallbackLanguage: "en" },
+      );
+      await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["en", "es"] });
+      return result.image.id;
+    });
+    await expect(
+      withTransaction(suite.db, (tx) => updateImage(tx, id, { names: { en: "Changed" } }, "en")),
+    ).rejects.toMatchObject({ code: "image.translation_required", params: { language: "es" } });
+    await withTransaction(suite.db, async (tx) =>
+      expect((await readImage(tx, id)).names).toEqual({ en: "Original" }),
+    );
   });
 });

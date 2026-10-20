@@ -201,6 +201,8 @@ const PRODUCT_COLUMNS = {
   ...PRODUCT_BASE_COLUMNS,
   unitId: units.id,
   unitName: units.name,
+  unitStaffName: units.staffName,
+  unitStaffAbbreviation: units.staffAbbreviation,
   unitAbbreviation: units.abbreviation,
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
@@ -217,6 +219,8 @@ interface RawProduct {
   ordering: ProductOrdering;
   unitId: string | null;
   unitName: Record<string, string> | null;
+  unitStaffName: string | null;
+  unitStaffAbbreviation: string | null;
   unitAbbreviation: Record<string, string> | null;
   unitPrecision: number | null;
   hardwareUnit: string | null;
@@ -249,13 +253,24 @@ interface RawProduct {
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
 // what makes the casts below safe.
 function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
-  const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, unitMeasure, ...product } = row;
+  const {
+    unitName,
+    unitAbbreviation,
+    unitPrecision,
+    hardwareUnit,
+    unitMeasure,
+    unitStaffName,
+    unitStaffAbbreviation,
+    ...product
+  } = row;
   const unit = sellableUnit(
     row.unitId,
     unitName,
     unitPrecision,
     hardwareUnit,
     unitAbbreviation,
+    unitStaffName,
+    unitStaffAbbreviation,
     unitMeasure,
   );
   return {
@@ -280,11 +295,15 @@ function sellableUnit(
   precision: number | null,
   hardwareUnit: string | null | undefined,
   abbreviation: Record<string, string> | null,
+  staffName: string | null,
+  staffAbbreviation: string | null,
   measure: boolean | null,
 ): SellableUnit {
   if (id !== null && name !== null && precision !== null) {
     return {
       id,
+      staffName: staffName!,
+      staffAbbreviation: staffAbbreviation!,
       name,
       precision,
       abbreviation: abbreviation ?? {},
@@ -405,6 +424,8 @@ async function writeMenuItemSettings(
 const offerLineColumns = {
   unitId: units.id,
   unitName: units.name,
+  unitStaffName: units.staffName,
+  unitStaffAbbreviation: units.staffAbbreviation,
   unitAbbreviation: units.abbreviation,
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
@@ -427,6 +448,8 @@ type UnitRow = typeof units.$inferSelect;
 interface OfferLineRow {
   unitId: UnitRow["id"] | null;
   unitName: UnitRow["name"] | null;
+  unitStaffName: UnitRow["staffName"] | null;
+  unitStaffAbbreviation: UnitRow["staffAbbreviation"] | null;
   unitAbbreviation: UnitRow["abbreviation"] | null;
   unitPrecision: UnitRow["precision"] | null;
   hardwareUnit: UnitRow["hardwareUnit"] | null;
@@ -450,6 +473,8 @@ function offerLineValues(row: OfferLineRow) {
       row.unitPrecision,
       row.hardwareUnit,
       row.unitAbbreviation,
+      row.unitStaffName,
+      row.unitStaffAbbreviation,
       row.unitMeasure,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
@@ -818,12 +843,24 @@ export async function updateMenuDetails(
   },
 ): Promise<void> {
   const rootSectionId = await requireMenuRoot(tx, catalogueId);
-  const presentation = await sectionPatchValues(tx, {
-    internalName: patch.name,
-    names: patch.names,
-    image: patch.image,
-    color: patch.color,
-  });
+  const [stored] =
+    patch.names === undefined
+      ? []
+      : await tx
+          .select({ names: sections.names })
+          .from(sections)
+          .where(eq(sections.id, rootSectionId));
+  const presentation = await sectionPatchValues(
+    tx,
+    {
+      internalName: patch.name,
+      names: patch.names,
+      image: patch.image,
+      color: patch.color,
+    },
+    undefined,
+    stored?.names,
+  );
   if (presentation.internalName !== undefined)
     await tx
       .update(catalogues)
@@ -1442,6 +1479,8 @@ export async function listAvailableProducts(
       customerName: products.customerName,
       unitId: units.id,
       unitName: units.name,
+      unitStaffName: units.staffName,
+      unitStaffAbbreviation: units.staffAbbreviation,
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
@@ -1495,6 +1534,8 @@ export async function listAvailableProducts(
       row.unitPrecision,
       row.hardwareUnit,
       row.unitAbbreviation,
+      row.unitStaffName,
+      row.unitStaffAbbreviation,
       row.unitMeasure,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,

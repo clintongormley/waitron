@@ -4211,6 +4211,8 @@ describe("department transfers across operator lifetimes", () => {
                       {
                         ...cafe,
                         unit: {
+                          staffName: "Staff unit",
+                          staffAbbreviation: "su",
                           id: "00000000-0000-0000-0000-000000000001",
                           name: { en: "each", es: "unidad" },
                           abbreviation: { en: "ea", es: "ud" },

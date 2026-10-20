@@ -10,11 +10,6 @@ import {
 } from "./content-languages.js";
 import { racePair } from "../test/fixtures.js";
 
-/**
- * An authoring transaction and a change of the venue's DEFAULT LANGUAGE do not interleave, and
- * whichever runs second validates against the other's committed state. `racePair`
- * (`test/fixtures.ts`) carries the mechanism, the measurement and its control.
- */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 async function configuredTenant() {
@@ -29,7 +24,7 @@ async function configuredTenant() {
   return { menuId: menu!.id };
 }
 
-it("a default switch waits for an authoring transaction and rejects its newly committed missing translation", async () => {
+it("a default switch waits for an authoring transaction and keeps its incomplete customer map", async () => {
   const { menuId } = await configuredTenant();
 
   const [write, change] = await racePair(
@@ -49,15 +44,11 @@ it("a default switch waits for an authoring transaction and rejects its newly co
   );
 
   expect(write.status).toBe("fulfilled");
-  expect(change.status).toBe("rejected");
-  if (change.status === "rejected")
-    expect(change.reason).toMatchObject({
-      code: "content.default_missing",
-      params: { language: "fr", count: 1 },
-    });
+  expect(change.status).toBe("fulfilled");
+  expect((await suite.db.select().from(products))[0]!.customerName).toEqual({ en: "Bread" });
   expect(
     (await withTransaction(suite.db, (tx) => readContentLanguages(tx, "es"))).defaultLanguage,
-  ).toBe("en");
+  ).toBe("fr");
 });
 
 it("an authoring transaction waits for the default switch and validates against the committed new language", async () => {

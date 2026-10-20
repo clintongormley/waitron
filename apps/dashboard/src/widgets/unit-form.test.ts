@@ -66,7 +66,14 @@ describe("unit-form", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["en"],
-      value: { id: "u1", name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { en: "kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
       api: { getUnitExtraUsage },
     });
 
@@ -88,7 +95,14 @@ describe("unit-form", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["en"],
-      value: { id: "u1", name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { en: "kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
     });
     const box = precisionBox(el);
     expect(box).not.toBeNull();
@@ -160,6 +174,8 @@ describe("unit-form", () => {
       open: true,
       locales: ["en"],
       value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "u1",
         name: { en: "kilogram" },
         abbreviation: { en: "kg" },
@@ -173,6 +189,8 @@ describe("unit-form", () => {
 
   it("returns a canonical input without mutating the supplied unit", async () => {
     const value = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "u1",
       name: { es: "caja", en: "box", fr: "boîte" },
       abbreviation: { es: "cj", en: "bx", fr: "bt" },
@@ -195,6 +213,8 @@ describe("unit-form", () => {
 
     expect(event.detail).toEqual({
       value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { es: "caja nueva", en: "box", fr: "boîte" },
         abbreviation: { es: "cj", en: "bx", fr: "bt" },
         precision: 2,
@@ -204,6 +224,8 @@ describe("unit-form", () => {
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
     expect(value).toEqual({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "u1",
       name: { es: "caja", en: "box", fr: "boîte" },
       abbreviation: { es: "cj", en: "bx", fr: "bt" },
@@ -211,7 +233,7 @@ describe("unit-form", () => {
     });
   });
 
-  it("marks the default name, abbreviation and precision as required and explains every error", async () => {
+  it("marks the staff pair and precision as required and explains every error", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es", "en"],
@@ -221,8 +243,8 @@ describe("unit-form", () => {
     await el.updateComplete;
 
     for (const [testId, message] of [
-      ["name-es", t("units.name_required")],
-      ["abbreviation-es", t("units.abbreviation_required")],
+      ["staffName", t("units.staff_name_required")],
+      ["staffAbbreviation", t("units.staff_abbreviation_required")],
     ])
       expect(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error")).toBe(
         message,
@@ -230,17 +252,23 @@ describe("unit-form", () => {
     expect(precisionBox(el).error).toBe(t("units.precision_invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=name-es]")!.hasAttribute("required")).toBe(
+    expect(el.shadowRoot!.querySelector("[data-test=staffName]")!.hasAttribute("required")).toBe(
       true,
     );
     expect(el.shadowRoot!.querySelector("[data-test=name-en]")!.hasAttribute("required")).toBe(
       false,
     );
     expect(
-      el.shadowRoot!.querySelector("[data-test=abbreviation-es]")!.hasAttribute("required"),
+      el.shadowRoot!.querySelector("[data-test=staffAbbreviation]")!.hasAttribute("required"),
     ).toBe(true);
     expect(
       el.shadowRoot!.querySelector("[data-test=abbreviation-en]")!.hasAttribute("required"),
+    ).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=name-es]")!.hasAttribute("required")).toBe(
+      false,
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=abbreviation-es]")!.hasAttribute("required"),
     ).toBe(false);
   });
 
@@ -249,6 +277,8 @@ describe("unit-form", () => {
       open: true,
       locales: ["en"],
     });
+    change(el, "staffName", "Staff box");
+    change(el, "staffAbbreviation", "staff-bx");
     change(el, "name-en", "box");
     change(el, "abbreviation-en", " bx ");
     change(el, "precision", "0");
@@ -263,12 +293,13 @@ describe("unit-form", () => {
     expect(event.detail.value.abbreviation).toEqual({ en: "bx" });
   });
 
-  it("blocks submit with a blank default-language abbreviation", async () => {
+  it("blocks submit with a blank staff abbreviation", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["en"],
     });
     change(el, "name-en", "box");
+    change(el, "staffName", "Staff box");
     change(el, "precision", "0");
 
     let submitted = false;
@@ -278,17 +309,17 @@ describe("unit-form", () => {
 
     expect(submitted).toBe(false);
     expect(
-      el.shadowRoot!.querySelector("[data-test=abbreviation-en]")!.getAttribute("error"),
+      el.shadowRoot!.querySelector("[data-test=staffAbbreviation]")!.getAttribute("error"),
     ).not.toBe("");
   });
 
-  // The draft is rebuilt on a language change only while it holds no names, so a default language
-  // enabled after the form opened has no key in it at all.
-  it("blocks submit when the default language became one the draft holds no abbreviation for", async () => {
+  it("saves when the default language became one the draft holds no abbreviation for", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es"],
       value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "u1",
         name: { es: "caja", en: "box" },
         abbreviation: { es: "cj" },
@@ -305,18 +336,38 @@ describe("unit-form", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await el.updateComplete;
 
-    expect(submit).not.toHaveBeenCalled();
+    expect(submit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        detail: {
+          value: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { es: "caja", en: "box" },
+            abbreviation: { es: "cj" },
+            precision: 1,
+            measure: false,
+          },
+        },
+      }),
+    );
     expect(el.shadowRoot!.querySelector("[data-test=abbreviation-en]")!.getAttribute("error")).toBe(
-      t("units.abbreviation_required"),
+      "",
     );
     expect(el.shadowRoot!.querySelector("[data-test=name-en]")!.getAttribute("error")).toBe("");
   });
 
-  it("blocks submit when the default language became one the draft holds no name for", async () => {
+  it("saves when the default language became one the draft holds no name for", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es"],
-      value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj", en: "bx" }, precision: 0 },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { es: "caja" },
+        abbreviation: { es: "cj", en: "bx" },
+        precision: 0,
+      },
     });
     el.locales = ["en", "es"];
     await el.updateComplete;
@@ -328,10 +379,21 @@ describe("unit-form", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await el.updateComplete;
 
-    expect(submit).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[data-test=name-en]")!.getAttribute("error")).toBe(
-      t("units.name_required"),
+    expect(submit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        detail: {
+          value: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { es: "caja" },
+            abbreviation: { es: "cj", en: "bx" },
+            precision: 1,
+            measure: false,
+          },
+        },
+      }),
     );
+    expect(el.shadowRoot!.querySelector("[data-test=name-en]")!.getAttribute("error")).toBe("");
   });
 
   for (const field of ["name", "abbreviation"])
@@ -340,7 +402,14 @@ describe("unit-form", () => {
       const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
         open: true,
         locales: ["es", "en"],
-        value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+        value: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          id: "u1",
+          name: { es: "caja" },
+          abbreviation: { es: "cj" },
+          precision: 0,
+        },
       });
       await chooseOption(precisionBox(el), "1");
       el.fieldErrors = unitRefusalErrors({
@@ -434,7 +503,14 @@ describe("unit-form", () => {
   });
 
   it("initializes an open edit form when its locales arrive after mounting", async () => {
-    const value = { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 2 };
+    const value = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u1",
+      name: { es: "caja" },
+      abbreviation: { es: "cj" },
+      precision: 2,
+    };
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: [],
@@ -452,6 +528,8 @@ describe("unit-form", () => {
       open: true,
       locales: ["es", "en"],
     });
+    change(el, "staffName", "Staff unit");
+    change(el, "staffAbbreviation", "su");
     change(el, "name-es", "caja");
     change(el, "abbreviation-es", "cj");
     el.locales = ["es", "en", "fr"];
@@ -460,7 +538,14 @@ describe("unit-form", () => {
     el.addEventListener("wt-submit", submit);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     expect(submit.mock.calls[0]![0].detail).toStrictEqual({
-      value: { name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0, measure: false },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { es: "caja" },
+        abbreviation: { es: "cj" },
+        precision: 0,
+        measure: false,
+      },
     });
   });
 
@@ -469,6 +554,8 @@ describe("unit-form", () => {
       open: true,
       locales: ["en"],
     });
+    change(el, "staffName", "Staff unit");
+    change(el, "staffAbbreviation", "su");
     change(el, "name-en", "box");
     change(el, "abbreviation-en", "bx");
     await el.updateComplete;
@@ -482,6 +569,8 @@ describe("unit-form", () => {
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
     expect(submit).toHaveBeenCalledOnce();
     expect(submit.mock.calls[0]![0].detail.value).toEqual({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "box" },
       abbreviation: { en: "bx" },
       precision: 0,
@@ -494,7 +583,14 @@ describe("unit-form", () => {
       open: true,
       busy: true,
       locales: ["en"],
-      value: { id: "u1", name: { en: "box" }, abbreviation: { en: "bx" }, precision: 0 },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { en: "box" },
+        abbreviation: { en: "bx" },
+        precision: 0,
+      },
     });
     const seen = vi.fn();
     el.addEventListener("wt-submit", seen);
@@ -525,13 +621,13 @@ describe("unit-form", () => {
       open: true,
       locales: ["es"],
     });
-    change(el, "name-es", "caja");
+    change(el, "staffName", "Staff box");
     await el.updateComplete;
     saveOf(el).click();
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
 
-    const abbreviation = el.shadowRoot!.querySelector("[data-test=abbreviation-es]")!;
+    const abbreviation = el.shadowRoot!.querySelector("[data-test=staffAbbreviation]")!;
     expect(abbreviation.shadowRoot!.activeElement).toBe(
       abbreviation.shadowRoot!.querySelector("input"),
     );
@@ -548,20 +644,20 @@ describe("unit-form", () => {
     saveOf(el).click();
     await el.updateComplete;
 
-    change(el, "name-es", "caja");
+    change(el, "staffName", "caja");
     await el.updateComplete;
-    expect(errorOf(el, "name-es")).toBe("");
-    expect(errorOf(el, "abbreviation-es")).toBe(t("units.abbreviation_required"));
+    expect(errorOf(el, "staffName")).toBe("");
+    expect(errorOf(el, "staffAbbreviation")).toBe(t("units.staff_abbreviation_required"));
     expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
-    change(el, "name-es", " ");
+    change(el, "staffName", " ");
     await el.updateComplete;
-    expect(errorOf(el, "name-es")).toBe(t("units.name_required"));
+    expect(errorOf(el, "staffName")).toBe(t("units.staff_name_required"));
 
-    change(el, "name-es", "caja");
-    change(el, "abbreviation-es", "cj");
+    change(el, "staffName", "caja");
+    change(el, "staffAbbreviation", "cj");
     await el.updateComplete;
-    expect(errorOf(el, "abbreviation-es")).toBe("");
+    expect(errorOf(el, "staffAbbreviation")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
@@ -571,7 +667,14 @@ describe("unit-form", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es"],
-      value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { es: "caja" },
+        abbreviation: { es: "cj" },
+        precision: 0,
+      },
     });
     change(el, "name-es", "caja mediana");
     el.fieldErrors = unitRefusalErrors({ code: "unit.precision_invalid", params: {} });
@@ -595,7 +698,14 @@ describe("unit-form", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es"],
-      value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+      value: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u1",
+        name: { es: "caja" },
+        abbreviation: { es: "cj" },
+        precision: 0,
+      },
     });
     el.fieldErrors = unitRefusalErrors({ code: "unit.precision_invalid", params: {} });
     await el.updateComplete;
@@ -642,13 +752,13 @@ describe("unit-form", () => {
     await el.updateComplete;
     saveOf(el).click();
     await el.updateComplete;
-    expect(errorOf(el, "name-es")).toBe(t("units.name_required"));
+    expect(errorOf(el, "staffName")).toBe(t("units.staff_name_required"));
     el.open = false;
     await el.updateComplete;
     el.open = true;
     await el.updateComplete;
 
-    expect(errorOf(el, "name-es")).toBe("");
+    expect(errorOf(el, "staffName")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(saveOf(el).hasAttribute("disabled")).toBe(true);
     expect(saveOf(el).variant).toBe("secondary");
@@ -721,6 +831,8 @@ describe("unit-form measure switch", () => {
       locales: ["en"],
       value: {
         id: "ml",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "millilitre" },
         abbreviation: { en: "ml" },
         precision: 0,
@@ -751,7 +863,14 @@ describe("unit-form measure switch", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["en"],
-      value: { id: "u1", name: { en: "millilitre" }, abbreviation: { en: "ml" }, precision: 0 },
+      value: {
+        id: "u1",
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+      },
     });
     const toggle = measureSwitch(el)!;
     await toggle.updateComplete;

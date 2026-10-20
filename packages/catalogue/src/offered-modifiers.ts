@@ -138,6 +138,7 @@ async function readExtraProducts(
         row.id,
         {
           productId: row.id,
+          presentation,
           name: staffPresentationName(presentation),
           customerName:
             row.parentName === null

@@ -105,7 +105,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import { categoryDetails } from "@waitron/catalogue";
+import { categoryDetails, units, unitSeedStates } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
@@ -7208,4 +7208,50 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
   expect(exported.tables).toHaveProperty("device_profile_zones");
   expect(exported.tables).not.toHaveProperty("device_zone_selections");
   expect(exported.tables).not.toHaveProperty("device_zone_selection_zones");
+});
+
+it("round-trips explicit unit staff identity, empty and disabled translations and seed markers", async () => {
+  const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await suite.db
+    .update(units)
+    .set({ staffName: "Masa", staffAbbreviation: "M", name: { de: "Gewicht" }, abbreviation: {} })
+    .where(eq(units.seedKey, "kg"));
+  const original = await suite.db.select().from(units).orderBy(units.seedKey);
+  const marker = await suite.db.select().from(unitSeedStates);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-17T10:00:00Z"),
+    versions,
+  );
+  expect(bundle.tables.units?.find((row) => row.seed_key === "kg")).toMatchObject({
+    staff_name: "Masa",
+    staff_abbreviation: "M",
+    name: '{"de":"Gewicht"}',
+    abbreviation: "{}",
+    precision: 3,
+    hardware_unit: "kg",
+  });
+  expect(() => validateConfigurationBundle(bundle, ALL_MODULES, versions)).not.toThrow();
+  const before = structuredClone(bundle);
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+  });
+  expect(bundle).toEqual(before);
+  const imported = await targetSuite.db.select().from(units).orderBy(units.seedKey);
+  expect(imported.map((row) => ({ ...row, id: null }))).toEqual(
+    original.map((row) => ({ ...row, id: null })),
+  );
+  expect(imported.every((row) => !original.some((sourceRow) => sourceRow.id === row.id))).toBe(
+    true,
+  );
+  expect(await targetSuite.db.select().from(unitSeedStates)).toEqual(marker);
 });

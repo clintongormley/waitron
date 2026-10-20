@@ -568,7 +568,6 @@ export const en = {
     "{language} stays enabled for venues in this region, and 1 name is not translated into it yet.",
   "content_gaps.required_warning":
     "{language} stays enabled for venues in this region, and {count} names are not translated into it yet.",
-  "content_gaps.table": "Missing in {language}",
   "content_gaps.search": "Search names",
   "content_gaps.name": "Name",
   "content_gaps.kind": "Kind",
@@ -601,18 +600,26 @@ export const en = {
   "translations.replace": "Use current name",
   "translations.discard": "Discard edit",
   "translations.help":
-    "Fill the names for this language. Save changes saves every edited row together; menus are published separately.",
-  "translations.reasons":
-    "Partly translated: fill the missing name for this language. No customer-facing name: start one here. Blank rows are not saved.",
-  "translations.default_needed":
-    "Also enter the default name in {language}; it will not be copied from the staff name.",
+    "Edit the languages you need. Save changes saves your staged fields together; menus are published separately.",
+  "translations.missing_in": "Missing in",
+  "translations.any_language": "Any enabled language",
+  "translations.all_names": "All names",
+  "translations.jump": "Jump to language",
+  "translations.more_suggestions": "More suggestions",
+  "translations.retry_batch": "Retry these changes",
+  "translations.review_batch": "Review these changes",
+  "translations.batch_review":
+    "The save could not be confirmed. Review this field before editing again.",
+  "translations.unstage": "Unstage field",
+  "translations.unstage_named": "Unstage field · {name} · {language} · {field}",
+  "translations.uncertain":
+    "The save could not be confirmed. Retry these exact changes, or review every field before editing them again.",
   "translations.scope_shared":
     "Changes the shared customer-facing name wherever this definition is used.",
   "translations.scope_menu": "Changes this menu or section's customer-facing name.",
   "translations.scope_include": "Changes only this included folder's name in this menu.",
   "translations.unavailable":
     "This item is no longer available for translation. Open its editor to review it.",
-  "translations.required": "Enter a name.",
   "translations.name_bytes": "Keep each name within 4 KiB of UTF-8 text.",
   "translations.batch_bytes":
     "These edits exceed 256 KiB. Shorten or undo some names before saving.",
@@ -620,10 +627,19 @@ export const en = {
   "translations.hidden": "{count} hidden edits",
   "translations.show_edited": "Show edited",
   "translations.show_all": "Show all",
-  "translations.capacity": "100 items are edited. Save or undo an edit before starting another.",
+  "translations.batch_full": "This batch has reached its 100-field limit.",
+  "translations.capacity": "Your batch exceeds 100 fields. Unstage a field before saving.",
+  "translations.input_unavailable":
+    "This edit could not be staged. Review your staged edits and try again.",
   "translations.previous": "Previous",
   "translations.next": "Next",
   "translations.page": "Page {page} of {pages}",
+  "suggestions.waiting_fixes": "Review {count} waiting fixes and notes",
+  "suggestions.fixes_filter":
+    "Missing in is now All names, showing items with waiting fixes and notes.",
+  "suggestions.fix_capacity":
+    "Your batch already has 100 fields. Save or unstage a field before using this fix.",
+  "suggestions.use_fix": "Use fix",
   "suggestions.suggested": "Suggested",
   "suggestions.discard": "Discard suggestion",
   "suggestions.discard_named": "Discard suggestion for {name}",
@@ -1158,9 +1174,11 @@ export const en = {
   "units.add": "Add unit",
   "units.edit": "Edit unit",
   "units.name": "Name",
-  "units.name_required": "Enter the unit name in the default language.",
+  "units.staff_name": "Staff name",
+  "units.staff_name_required": "Enter the staff name.",
+  "units.staff_abbreviation": "Staff abbreviation",
+  "units.staff_abbreviation_required": "Enter the staff abbreviation.",
   "units.abbreviation": "Abbreviation",
-  "units.abbreviation_required": "Enter the unit abbreviation in the default language.",
   "units.precision": "Precision",
   "units.precision_help": "Choose 0, 1, 2 or 3 decimal places.",
   "units.precision_help_label": "About decimal places",
@@ -2807,6 +2825,7 @@ export const en = {
   "menu_preview.product_moved": "{name} moved from {from} to {to}",
   "menu_preview.price_changed": "{name} price changed from {from} to {to}",
   "menu_preview.changed_fields": "{name}: {fields}",
+  "menu_preview.extra_unit_details_changed": "{list}: {name} unit details changed",
   "menu_preview.extra_unit_changed":
     "{list}: {name} unit changed from {from} ({fromPrecision} decimal places) to {to} ({toPrecision} decimal places)",
   "menu_preview.extra_portion_changed": "{list}: {name} portion changed from {from} to {to}",
@@ -3598,7 +3617,6 @@ export const es: Record<StringKey, string> = {
     "El {language} se mantiene activado en los locales de esta región y falta 1 nombre por traducir a este idioma.",
   "content_gaps.required_warning":
     "El {language} se mantiene activado en los locales de esta región y faltan {count} nombres por traducir a este idioma.",
-  "content_gaps.table": "Sin traducir al {language}",
   "content_gaps.search": "Buscar nombres",
   "content_gaps.name": "Nombre",
   "content_gaps.kind": "Tipo",
@@ -3631,18 +3649,26 @@ export const es: Record<StringKey, string> = {
   "translations.replace": "Usar nombre actual",
   "translations.discard": "Descartar cambio",
   "translations.help":
-    "Rellena los nombres de este idioma. Guardar cambios guarda todas las filas editadas juntas; las cartas se publican por separado.",
-  "translations.reasons":
-    "Traducido a medias: rellena el nombre que falta en este idioma. Sin nombre para el cliente: empieza aquí. Las filas vacías no se guardan.",
-  "translations.default_needed":
-    "Introduce también el nombre predeterminado en {language}; no se copiará del nombre interno.",
+    "Edita los idiomas que necesites. Guardar cambios guarda juntos los campos pendientes; las cartas se publican por separado.",
+  "translations.missing_in": "Falta en",
+  "translations.any_language": "Cualquier idioma activado",
+  "translations.all_names": "Todos los nombres",
+  "translations.jump": "Ir al idioma",
+  "translations.more_suggestions": "Más sugerencias",
+  "translations.retry_batch": "Reintentar estos cambios",
+  "translations.review_batch": "Revisar estos cambios",
+  "translations.batch_review":
+    "No se ha podido confirmar el guardado. Revisa este campo antes de volver a editarlo.",
+  "translations.unstage": "Retirar campo del lote",
+  "translations.unstage_named": "Retirar campo del lote · {name} · {language} · {field}",
+  "translations.uncertain":
+    "No se ha podido confirmar el guardado. Reintenta estos mismos cambios o revisa cada campo antes de volver a editarlos.",
   "translations.scope_shared":
     "Cambia el nombre para el cliente en todos los lugares que usan esta definición.",
   "translations.scope_menu": "Cambia el nombre para el cliente de esta carta o sección.",
   "translations.scope_include": "Cambia solo el nombre de esta carpeta incluida en esta carta.",
   "translations.unavailable":
     "Este elemento ya no está disponible para traducir. Abre su editor para revisarlo.",
-  "translations.required": "Introduce un nombre.",
   "translations.name_bytes": "Cada nombre debe ocupar como máximo 4 KiB de texto UTF-8.",
   "translations.batch_bytes":
     "Estos cambios superan 256 KiB. Acorta o deshaz algunos nombres antes de guardar.",
@@ -3650,11 +3676,20 @@ export const es: Record<StringKey, string> = {
   "translations.hidden": "{count} cambios ocultos",
   "translations.show_edited": "Ver editados",
   "translations.show_all": "Ver todos",
+  "translations.input_unavailable":
+    "No se ha podido preparar este cambio. Revisa los cambios pendientes e inténtalo de nuevo.",
+  "translations.batch_full": "Este lote ha llegado al límite de 100 campos.",
   "translations.capacity":
-    "Hay 100 elementos editados. Guarda o deshaz un cambio antes de empezar otro.",
+    "El lote supera los 100 campos. Retira un campo del lote antes de guardar.",
   "translations.previous": "Anterior",
   "translations.next": "Siguiente",
   "translations.page": "Página {page} de {pages}",
+  "suggestions.waiting_fixes": "Revisar {count} correcciones y notas pendientes",
+  "suggestions.fixes_filter":
+    "Falta en muestra ahora Todos los nombres, con los artículos que tienen correcciones y notas pendientes.",
+  "suggestions.fix_capacity":
+    "El lote ya tiene 100 campos. Guarda o retira un campo antes de usar esta corrección.",
+  "suggestions.use_fix": "Usar corrección",
   "suggestions.suggested": "Sugerido",
   "suggestions.discard": "Descartar sugerencia",
   "suggestions.discard_named": "Descartar sugerencia de {name}",
@@ -4197,10 +4232,11 @@ export const es: Record<StringKey, string> = {
   "units.add": "Añadir unidad",
   "units.edit": "Editar unidad",
   "units.name": "Nombre",
-  "units.name_required": "Introduce el nombre de la unidad en el idioma predeterminado.",
+  "units.staff_name": "Nombre interno",
+  "units.staff_name_required": "Introduce el nombre interno.",
+  "units.staff_abbreviation": "Abreviatura interna",
+  "units.staff_abbreviation_required": "Introduce la abreviatura interna.",
   "units.abbreviation": "Abreviatura",
-  "units.abbreviation_required":
-    "Introduce la abreviatura de la unidad en el idioma predeterminado.",
   "units.precision": "Precisión",
   "units.precision_help": "Elige 0, 1, 2 o 3 decimales.",
   "units.precision_help_label": "Acerca de los decimales",
@@ -5862,6 +5898,8 @@ export const es: Record<StringKey, string> = {
   "menu_preview.product_moved": "Se ha movido {name}: antes en {from}; ahora en {to}",
   "menu_preview.price_changed": "Ha cambiado el precio de {name} de {from} a {to}",
   "menu_preview.changed_fields": "{name}: {fields}",
+  "menu_preview.extra_unit_details_changed":
+    "{list}: han cambiado los detalles de la unidad de {name}",
   "menu_preview.extra_unit_changed":
     "{list}: la unidad de {name} ha cambiado de {from} ({fromPrecision} decimales) a {to} ({toPrecision} decimales)",
   "menu_preview.extra_portion_changed": "{list}: la porción de {name} ha cambiado de {from} a {to}",

@@ -57,7 +57,13 @@ const writes: [label: string, path: string, method: string, body: unknown][] = [
     "a unit",
     "/management-api/units",
     "POST",
-    { name: { en: "portion" }, precision: 0, abbreviation: { en: "pt" } },
+    {
+      staffName: "Staff portion",
+      staffAbbreviation: "sp",
+      name: { en: "portion" },
+      precision: 0,
+      abbreviation: { en: "pt" },
+    },
   ],
 ];
 

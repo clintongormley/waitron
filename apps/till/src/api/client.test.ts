@@ -4818,8 +4818,18 @@ describe("menuOfferToTillProduct", () => {
       maxPicks: 2,
       items: [
         {
+          presentation: {
+            name: "Bacon",
+            customerName: { es: "Bacon carta" },
+            kitchenName: "Bacon KDS",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           portion: "1",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
             hardwareUnit: null,
             id: "00000000-0000-0000-0000-000000000001",
@@ -4866,6 +4876,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: { es: "Burger carta" },
       kitchenName: "Burger KDS",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -4910,6 +4922,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -4947,6 +4961,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -4998,6 +5014,8 @@ describe("menuOfferToTillProduct", () => {
     // Every value the variant sells under differs from the parent's, so a mapping that read the
     // parent's for any of them fails here.
     const parentUnit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-each",
       name: { es: "unidad" },
       abbreviation: { es: "ud" },
@@ -5005,6 +5023,8 @@ describe("menuOfferToTillProduct", () => {
       hardwareUnit: null,
     };
     const litre = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-litre",
       name: { es: "litro" },
       abbreviation: { es: "l" },
@@ -5104,6 +5124,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5148,6 +5170,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: { es: "Beicon crujiente" },
       kitchenName: "BCN",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5186,6 +5210,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5227,6 +5253,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5250,8 +5278,18 @@ describe("menuOfferToTillProduct", () => {
 
   it("offers the picker only the extras items and option labels that can be sold now", () => {
     const item = (productId: string, available: boolean) => ({
+      presentation: {
+        name: productId,
+        customerName: null,
+        kitchenName: null,
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
       portion: "1",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
         hardwareUnit: null,
         id: "00000000-0000-0000-0000-000000000001",
@@ -5293,6 +5331,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },

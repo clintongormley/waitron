@@ -225,6 +225,8 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
         name: "Staff coffee",
         customerName: { es: "Café cliente", en: "Customer coffee" },
         unit: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "each",
           name: { en: "unit", es: "unidad" },
           abbreviation: { en: "ea", es: "ud" },

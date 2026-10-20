@@ -2,7 +2,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import type { ContentSuggestionView, DashboardApi, TranslationPage } from "../api/client.js";
+import type { ContentSuggestionView, DashboardApi } from "../api/client.js";
+import type {
+  TranslationItemPage,
+  TranslationCellRef,
+  TranslationCell,
+  TranslationQuery,
+} from "@waitron/catalogue/src/content-translation-types.js";
 import { fill, t, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -12,10 +18,28 @@ import {
 } from "./test-helpers.js";
 import "./content-translations-dialog.js";
 
-const result: TranslationPage = {
-  language: "es",
-  config: { defaultLanguage: "en", languages: ["en", "es"] },
+const config = { defaultLanguage: "en", languages: ["en", "es"] };
+const savedCell = (id = "dish", language = "es", text: string | null = null): TranslationCell => ({
+  kind: "product",
+  id,
+  language,
+  field: "name",
+  owners: { kind: "product", parentId: null },
+  text,
+  inheritedText: null,
+  effectiveText: text,
+  defaultText: "Customer soup",
+  inheritedDefaultText: null,
+  effectiveDefaultText: "Customer soup",
+  expected: "baseline",
+  staffText: "STAFF Soup",
+  eligible: true,
+  unavailableReason: null,
+});
+const result: TranslationItemPage = {
+  config,
   required: [],
+  configuration: "suggestion-config",
   next: null,
   total: 1,
   rows: [
@@ -23,24 +47,28 @@ const result: TranslationPage = {
       kind: "product",
       id: "dish",
       name: "STAFF Soup",
-      reason: "partial",
-      selectedText: null,
-      defaultText: "Customer soup",
-      effectiveSelectedText: null,
-      effectiveDefaultText: "Customer soup",
-      defaultRequired: false,
-      eligible: true,
-      unavailableReason: null,
       owners: { kind: "product", parentId: null },
-      expected: "baseline",
+      cells: [savedCell()],
     },
   ],
 };
+const readCells = async (refs: readonly TranslationCellRef[]) => ({
+  config,
+  required: [],
+  configuration: "suggestion-config",
+  cells: refs.map((ref) => savedCell(ref.id, ref.language)),
+});
+const save = async (batch: { edits: { id: string; language: string; text: string | null }[] }) => ({
+  saved: batch.edits.map((edit) => savedCell(edit.id, edit.language, edit.text)),
+});
 class TranslationLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api = {
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config,
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,
@@ -48,13 +76,15 @@ class TranslationLeaveApp extends LitElement {
       cloudOrigin: null,
     })),
     getContentTranslationTargets: vi.fn().mockResolvedValue(result),
-    saveContentTranslations: vi.fn().mockResolvedValue({ saved: result.rows }),
+    getContentTranslationCells: vi.fn(readCells),
+    saveContentTranslations: vi.fn(save),
   } as unknown as DashboardApi;
   open = true;
   closed = 0;
   override render() {
     return html`<dashboard-content-translations-dialog
         .api=${this.api}
+        .config=${config}
         language="es"
         .open=${this.open}
         @translations-closed=${() => {
@@ -74,16 +104,23 @@ afterEach(() => {
 async function mount() {
   const { el: app } = await mountWidget<TranslationLeaveApp>("translation-leave-test-app", {});
   const form = app.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
-  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-test=loading]")).toBeNull());
+  await vi.waitFor(() =>
+    expect(
+      form
+        .shadowRoot!.querySelector("dashboard-content-translation-window")
+        ?.shadowRoot?.querySelector("wt-input"),
+    ).toBeTruthy(),
+  );
   await form.updateComplete;
-  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  await form.shadowRoot!.querySelector("dashboard-content-translation-window")!.updateComplete;
   return { app, form };
 }
 const field = (form: HTMLElement) =>
   form
-    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector("dashboard-content-translation-window")!
     .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      "[name=translation-text-product-dish]",
+      "[name=translation-product-dish-es-name]",
     )!;
 async function edit(
   form: HTMLElementTagNameMap["dashboard-content-translations-dialog"],
@@ -93,7 +130,7 @@ async function edit(
   await input.updateComplete;
   await userEvent.fill(input.shadowRoot!.querySelector("input")!, value);
   await form.updateComplete;
-  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  await form.shadowRoot!.querySelector("dashboard-content-translation-window")!.updateComplete;
 }
 async function question(app: TranslationLeaveApp) {
   const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -183,8 +220,17 @@ it("registers a dirty draft even when disconnected before its edit redraw and re
   await vi.waitFor(() => expect(questionEl.open).toBe(false));
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
   await vi.waitFor(() => expect(form.open).toBe(false));
-  expect(app.api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
-    edits: [{ kind: "product", id: "dish", expected: "baseline", text: "Sopa nueva" }],
+  expect(app.api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+    edits: [
+      {
+        kind: "product",
+        id: "dish",
+        language: "es",
+        field: "name",
+        expected: "baseline",
+        text: "Sopa nueva",
+      },
+    ],
   });
 });
 it.each(["navigation", "locale", "signout"] as const)(
@@ -237,8 +283,9 @@ it("a product editor link asks about the draft before emitting navigation", asyn
   await edit(form, "Sopa nueva");
   const opened = vi.fn();
   form.addEventListener("wt-edit-product", opened);
+  expect(field(form).closest("section")!.querySelector("a")).not.toBeNull();
   field(form)
-    .closest("tr")!
+    .closest("section")!
     .querySelector<HTMLAnchorElement>("a")!
     .dispatchEvent(
       new MouseEvent("click", { button: 0, bubbles: true, composed: true, cancelable: true }),
@@ -249,8 +296,9 @@ it("a product editor link asks about the draft before emitting navigation", asyn
   await vi.waitFor(() => expect(warning.open).toBe(false));
   await closeReportsDelivered();
   expect(opened).not.toHaveBeenCalled();
+  expect(field(form).closest("section")!.querySelector("a")).not.toBeNull();
   field(form)
-    .closest("tr")!
+    .closest("section")!
     .querySelector<HTMLAnchorElement>("a")!
     .dispatchEvent(
       new MouseEvent("click", { button: 0, bubbles: true, composed: true, cancelable: true }),
@@ -264,32 +312,38 @@ const soup = (id: string, itemId: string, text: string): ContentSuggestionView =
   id,
   kind: "product",
   itemId,
+  item: { name: itemId },
   language: "es",
   text,
   placeholder: false,
   fix: null,
   stale: false,
+  cell: { kind: "product", id: itemId, language: "es", field: "name" },
+  expected: "baseline",
 });
-function suggestionApi(page: TranslationPage, suggestions: ContentSuggestionView[]) {
+function suggestionApi(page: TranslationItemPage, suggestions: ContentSuggestionView[]) {
   return {
-    getContentTranslationTargets: vi.fn(async (_language: string, query: { after?: string }) => {
-      const start = query.after === undefined ? 0 : Number(query.after);
-      return {
-        ...page,
-        rows: page.rows.slice(start, start + 50),
-        next: start + 50 < page.rows.length ? String(start + 50) : null,
-        total: page.rows.length,
-      };
-    }),
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
-      run: null,
-      suggestions,
+    getContentTranslationTargets: vi.fn(async (query: TranslationQuery) => ({
+      ...page,
+      rows:
+        "targets" in query
+          ? page.rows.filter((row) => query.targets.some((ref) => ref.id === row.id))
+          : page.rows.slice(0, 50),
       next: null,
+    })),
+    getContentTranslationCells: vi.fn(readCells),
+    getContentSuggestions: vi.fn(async (query: { after?: string } = {}) => ({
+      config,
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
+      run: null,
+      suggestions: suggestions.slice(query.after ? 100 : 0, query.after ? 200 : 100),
+      next: !query.after && suggestions.length > 100 ? "suggestions-100" : null,
       service: "on" as const,
       cloudOrigin: null,
     })),
-    saveContentTranslations: vi.fn().mockResolvedValue({ saved: [] }),
+    saveContentTranslations: vi.fn(save),
     discardContentSuggestion: vi.fn(),
     startContentSuggestions: vi.fn(async () => ({ run: null })),
   } as unknown as DashboardApi;
@@ -297,9 +351,16 @@ function suggestionApi(page: TranslationPage, suggestions: ContentSuggestionView
 async function mountWith(api: DashboardApi) {
   const { el: app } = await mountWidget<TranslationLeaveApp>("translation-leave-test-app", { api });
   const form = app.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
-  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-test=loading]")).toBeNull());
+  await vi.waitFor(() =>
+    expect(
+      form
+        .shadowRoot!.querySelector("dashboard-content-translation-window")
+        ?.shadowRoot?.querySelector("wt-input"),
+    ).toBeTruthy(),
+  );
   await form.updateComplete;
-  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  await form.shadowRoot!.querySelector("dashboard-content-translation-window")!.updateComplete;
   return { app, form };
 }
 async function closeUnasked(
@@ -314,9 +375,9 @@ async function closeUnasked(
 }
 it("closes with only untouched suggestions without asking or warning on unload", async () => {
   const { app, form } = await mountWith(
-    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]),
+    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Soup of the day")]),
   );
-  expect(field(form).value).toBe("CLIENT-es Sopa del día");
+  expect(field(form).value).toBe("CLIENT-es Soup of the day");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
@@ -325,7 +386,7 @@ it("closes with only untouched suggestions without asking or warning on unload",
 });
 it("a person's edit of a suggested name still asks, and discarding the edit brings the suggestion back", async () => {
   const { app, form } = await mountWith(
-    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]),
+    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Soup of the day")]),
   );
   await edit(form, "Sopa de la casa");
   expect(app.leave.coordinator.isDirty()).toBe(true);
@@ -335,19 +396,28 @@ it("a person's edit of a suggested name still asks, and discarding the edit brin
   warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   expect(await discarded).toBe("proceeded");
   await form.updateComplete;
-  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-  expect(field(form).value).toBe("CLIENT-es Sopa del día");
+  await form.shadowRoot!.querySelector("dashboard-content-translation-window")!.updateComplete;
+  expect(field(form).value).toBe("CLIENT-es Soup of the day");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("saving untouched suggestions leaves nothing unsaved when the saved event arrives", async () => {
-  const api = suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]);
+  const api = suggestionApi(result, [soup("s1", "dish", "CLIENT-es Soup of the day")]);
   const { app, form } = await mountWith(api);
   const outcomes: boolean[] = [];
   form.addEventListener("translations-saved", () => outcomes.push(app.leave.coordinator.isDirty()));
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
   await vi.waitFor(() => expect(outcomes).toEqual([false]));
-  expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
-    edits: [{ kind: "product", id: "dish", expected: "baseline", text: "CLIENT-es Sopa del día" }],
+  expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+    edits: [
+      {
+        kind: "product",
+        id: "dish",
+        language: "es",
+        field: "name",
+        expected: "baseline",
+        text: "CLIENT-es Soup of the day",
+      },
+    ],
   });
 });
 
@@ -356,13 +426,17 @@ it("fills at most 100 of 150 suggestions and closes without asking", async () =>
     ...result.rows[0]!,
     id: `dish-${n}`,
     name: `STAFF Soup ${n}`,
-    expected: `baseline-${n}`,
+    cells: [savedCell(`dish-${n}`)],
   }));
   const { app, form } = await mountWith(
     suggestionApi(
       { ...result, rows },
-      rows.map((row, n) => soup(`s${n}`, row.id, `CLIENT-es Sopa ${n}`)),
+      rows.map((row, n) => soup(`s${n}`, row.id, `CLIENT-es Soup ${n}`)),
     ),
+  );
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=next-suggestions]")!.click();
+  await vi.waitFor(() =>
+    expect(form.shadowRoot!.querySelector("[data-test=suggestion-capacity]")).not.toBeNull(),
   );
   expect(
     form.shadowRoot!.querySelector("[data-test=suggestion-capacity]")!.textContent!.trim(),

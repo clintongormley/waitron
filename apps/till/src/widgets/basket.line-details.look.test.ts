@@ -29,6 +29,14 @@ const dish: TillProduct = {
       maxPicks: 3,
       items: [
         {
+          presentation: {
+            name: "Mature farmhouse sheep cheese",
+            customerName: { en: "Customer cheese" },
+            kitchenName: "Kitchen cheese",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           productId: "cheese",
           name: "Mature farmhouse sheep cheese",
           customerName: { en: "Customer cheese" },
@@ -38,6 +46,8 @@ const dish: TillProduct = {
           portion: "1",
           unit: {
             id: "each",
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             name: { en: "Each" },
             abbreviation: { en: "ea" },
             precision: 0,

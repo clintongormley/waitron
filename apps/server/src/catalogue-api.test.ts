@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, categories, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, categories, locations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -680,6 +680,37 @@ describe("content-language configuration", () => {
     );
   });
 
+  it("switches the default over a partial customer name without copying staff or kitchen text", async () => {
+    const app = mountApp("en-GB");
+    const catalogueId = await createCatalogueVia(app, "Default switch menu");
+    const created = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
+        customerName: { en: "Potatoes" },
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const before = (await suite.db.execute(sql`select * from products where id = ${id}`)).rows;
+    const response = await send(app, "PUT", "/management-api/content-languages", {
+      body: { defaultLanguage: "es", languages: ["en", "es"] },
+    });
+    expect(response.status).toBe(204);
+    expect(await (await send(app, "GET", "/management-api/content-languages")).json()).toEqual({
+      defaultLanguage: "es",
+      languages: ["es", "en"],
+    });
+    expect((await suite.db.execute(sql`select * from products where id = ${id}`)).rows).toEqual(
+      before,
+    );
+  });
+
   it("exposes language choices to public content readers without a management session", async () => {
     const app = mountApp("en-GB");
     const response = await send(app, "GET", "/api/content-languages", { cookie: null });
@@ -702,7 +733,7 @@ describe("content-language configuration", () => {
     ).toBe(403);
   });
 
-  it("requires the configured default for a new product's customer-facing name", async () => {
+  it("saves a new product without customer text in the configured default", async () => {
     const app = mountApp("en-GB");
     const catalogueId = await createCatalogueVia(app, "Lunch");
     const product = {
@@ -715,18 +746,84 @@ describe("content-language configuration", () => {
       vatClass: "general",
     };
     const missing = await send(app, "POST", "/management-api/products", { body: product });
-    expect(missing.status).toBe(400);
-    expect(await missing.json()).toEqual({
-      error: { code: "content.translation_required", params: { language: "en" } },
-    });
+    expect(missing.status).toBe(201);
+    const saved = (await missing.json()) as { id: string; customerName: unknown };
+    expect(saved.customerName).toEqual({ fr: "Pain" });
+    const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { customerName: unknown }).customerName).toEqual({ fr: "Pain" });
     expect(
       (
         await send(app, "POST", "/management-api/products", {
-          body: { ...product, customerName: { en: "Bread" } },
+          body: { ...product, name: "Pain with English text", customerName: { en: "Bread" } },
         })
       ).status,
     ).toBe(201);
   });
+
+  it.each([
+    [{ en: " Potatoes ", es: "  " }, { en: "Potatoes" }],
+    [{}, null],
+    [null, null],
+    [{ fr: "FR potatoes" }, { fr: "FR potatoes" }],
+  ])(
+    "creates optional customer maps through the direct product API: %j",
+    async (customerName, expected) => {
+      const app = mountApp("es-ES");
+      const catalogueId = await createCatalogueVia(app, "Lunch");
+      const configured = await send(app, "PUT", "/management-api/content-languages", {
+        body: { defaultLanguage: "es", languages: ["es", "en"] },
+      });
+      expect(configured.status).toBe(204);
+      const response = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "ES potatoes",
+          customerName,
+          pricingUnit: "each",
+          unitPrice: "2.00",
+          vatClass: "general",
+        },
+      });
+      expect(response.status).toBe(201);
+      const created = (await response.json()) as {
+        id: string;
+        name: string;
+        customerName: unknown;
+      };
+      expect(created.name).toBe("ES potatoes");
+      expect(created.customerName).toEqual(expected);
+      const read = await send(app, "GET", `/management-api/products/${created.id}/editor`);
+      expect(read.status).toBe(200);
+      expect(((await read.json()) as { customerName: unknown }).customerName).toEqual(expected);
+    },
+  );
+
+  it.each([{ EN: "Potatoes" }, { en: "é".repeat(2049) }])(
+    "refuses malformed or oversized direct product maps atomically",
+    async (customerName) => {
+      const app = mountApp("en-GB");
+      const catalogueId = await createCatalogueVia(app, "Lunch");
+      const before = (await suite.db.execute(sql`select * from products`)).rows;
+      const response = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "ES potatoes",
+          customerName,
+          pricingUnit: "each",
+          unitPrice: "2.00",
+          vatClass: "general",
+        },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "content.translation_invalid", params: {} },
+      });
+      expect((await suite.db.execute(sql`select * from products`)).rows).toEqual(before);
+    },
+  );
 
   const BARCELONA: ContentLanguageRules = {
     required: ["ca", "es"],
@@ -813,13 +910,19 @@ describe("the missing-translations report", () => {
       (await send(app, "PUT", "/management-api/content-languages", { body: settings })).status,
     ).toBe(204);
     const menu = await createCatalogueVia(app, "Gap report");
+    const beforeCountResponse = await send(app, "GET", PATH);
+    expect(beforeCountResponse.status).toBe(200);
+    const beforeCounts = (await beforeCountResponse.json()) as {
+      language: string;
+      count: number;
+    }[];
     const created = await send(app, "POST", "/management-api/products", {
       body: {
         catalogueId: menu,
         categoryId: null,
-        name: "STAFF Pan gap report",
-        customerName: { es: "CLIENT-ES Pan con tomate" },
-        kitchenName: "KITCHEN Pan",
+        name: "STAFF Bread gap report",
+        customerName: { es: "CLIENT-ES Bread con tomate" },
+        kitchenName: "KITCHEN Bread",
         pricingUnit: "each",
         unitPrice: "3",
         vatClass: "reduced",
@@ -830,17 +933,19 @@ describe("the missing-translations report", () => {
 
     const response = await send(app, "GET", PATH);
     expect(response.status).toBe(200);
-    const report = (await response.json()) as {
-      language: string;
-      gaps: { kind: string; id: string; name: string; reason: string }[];
-    }[];
+    const report = (await response.json()) as { language: string; count: number }[];
     expect(report.map((entry) => entry.language)).toEqual(["es", "ca", "en"]);
-    const gapsIn = (language: string) =>
-      report.find((entry) => entry.language === language)!.gaps.filter((gap) => gap.id === id);
-    expect(gapsIn("ca")).toEqual([
-      { kind: "product", id, name: "STAFF Pan gap report", reason: "partial" },
-    ]);
-    expect(gapsIn("es")).toEqual([]);
+    const stored = await suite.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.id, id));
+    expect(stored).toEqual([{ id }]);
+    expect(report).toEqual(
+      beforeCounts.map(({ language, count }) => ({
+        language,
+        count: count + (language === "es" ? 0 : 1),
+      })),
+    );
   });
 
   it("answers the report only under the content-languages read's authorisation", async () => {
@@ -1386,7 +1491,7 @@ describe("mountCatalogueApi — location menus", () => {
 describe("mountCatalogueApi — categories", () => {
   it("POST /management-api/categories creates one (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/categories", {
-      body: { name: " Bebidas " },
+      body: { name: " ES drinks " },
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
@@ -1394,7 +1499,7 @@ describe("mountCatalogueApi — categories", () => {
       name: string;
       parentId: string | null;
     };
-    expect(body).toMatchObject({ name: "Bebidas", parentId: null });
+    expect(body).toMatchObject({ name: "ES drinks", parentId: null });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -1502,7 +1607,7 @@ describe("unique category and product names", () => {
 
   it("refuses duplicate Active product names on create and rename, and refuses reactivation of an archived duplicate", async () => {
     const app = mountApp();
-    const name = `Café ${tag()}`;
+    const name = `ES coffee ${tag()}`;
     await createNamedProductVia(app, name);
     const catalogueId = await createCatalogueVia(app, `Second menu ${tag()}`);
     const body = {
@@ -1576,7 +1681,7 @@ describe("unique category and product names", () => {
       name: name.toLowerCase(),
     });
     const accepted = await send(app, "POST", path, {
-      body: { ...body, variants: [variant(`Pequeño ${tag()}`), variant(name)] },
+      body: { ...body, variants: [variant(`ES small ${tag()}`), variant(name)] },
     });
     expect(accepted.status).toBe(201);
     const saved = (await accepted.json()) as { id: string };
@@ -1824,7 +1929,7 @@ describe("mountCatalogueApi — products", () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Product catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
-      body: { name: "Cafés" },
+      body: { name: "ES coffees" },
     });
     const categoryId = ((await catRes.json()) as { id: string }).id;
 
@@ -1832,8 +1937,8 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId,
-        name: "Café solo",
-        customerName: { es: "Café con leche" },
+        name: "ES coffee solo",
+        customerName: { es: "ES coffee con leche" },
         pricingUnit: "each",
         unitPrice: "1.20",
         vatClass: "general",
@@ -1860,8 +1965,8 @@ describe("mountCatalogueApi — products", () => {
       catalogueId,
       categoryId,
       primaryCategoryId: categoryId,
-      name: "Café solo",
-      customerName: { es: "Café con leche" },
+      name: "ES coffee solo",
+      customerName: { es: "ES coffee con leche" },
       unitPrice: "1.20",
       vatClass: "general",
       pricingUnit: "each",
@@ -1883,7 +1988,7 @@ describe("mountCatalogueApi — products", () => {
       await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
     const category = await send(app, "POST", "/management-api/categories", {
-      body: { name: "Cafés" },
+      body: { name: "ES coffees" },
     });
     const categoryId = ((await category.json()) as { id: string }).id;
     const optionList = await send(app, "POST", "/management-api/modifiers/options", {
@@ -1892,8 +1997,8 @@ describe("mountCatalogueApi — products", () => {
     const optionListId = ((await optionList.json()) as { optionList: { id: string } }).optionList
       .id;
     const value = {
-      name: "Café",
-      customerName: { es: "Café recién molido" },
+      name: "ES coffee",
+      customerName: { es: "Freshly ground ES coffee" },
       description: { es: "Recién molido" },
       kitchenName: "CAFÉ BAR",
       image: null,
@@ -1906,7 +2011,7 @@ describe("mountCatalogueApi — products", () => {
       variants: [
         {
           name: "Doble",
-          customerName: { es: "Doble ración" },
+          customerName: { es: "Doble portion" },
           kitchenName: "DBL",
           image: null,
           unitPrice: "3.25",
@@ -2214,7 +2319,7 @@ describe("mountCatalogueApi — products", () => {
     ownCategoryId: string;
   }> {
     const catalogueId = await createCatalogueVia(app, "Variant page");
-    const categoryId = await createCategoryVia(app, `Cafés ${crypto.randomUUID()}`);
+    const categoryId = await createCategoryVia(app, `ES coffees ${crypto.randomUUID()}`);
     const ownCategoryId = await createCategoryVia(app, `Solos ${crypto.randomUUID()}`);
     const created = await send(
       app,
@@ -2222,8 +2327,8 @@ describe("mountCatalogueApi — products", () => {
       `/management-api/catalogues/${catalogueId}/product-editor`,
       {
         body: await editorBody(app, {
-          name: "Café",
-          customerName: { es: "Café de la casa" },
+          name: "ES coffee",
+          customerName: { es: "ES coffee de la casa" },
           kitchenName: "CAFE",
           description: { es: "Tostado natural" },
           unitPrice: "2.00",
@@ -2233,7 +2338,7 @@ describe("mountCatalogueApi — products", () => {
           dietaryDeclarations: ["vegan"],
           variants: [
             {
-              name: "Café doble",
+              name: "ES coffee doble",
               customerName: { es: "Doble de la casa" },
               kitchenName: "DOBLE",
               image: null,
@@ -2284,7 +2389,7 @@ describe("mountCatalogueApi — products", () => {
     expect(await read.json()).toMatchObject({
       id: variantId,
       parentId,
-      name: "Café doble",
+      name: "ES coffee doble",
       customerName: { es: "Doble de la casa" },
       kitchenName: "DOBLE",
       description: null,
@@ -2296,7 +2401,7 @@ describe("mountCatalogueApi — products", () => {
       modifiers: [],
       variants: [],
       inherited: {
-        name: "Café",
+        name: "ES coffee",
         description: { es: "Tostado natural" },
         unitPrice: "2.00",
         vatClass: "reduced",
@@ -2519,7 +2624,7 @@ describe("mountCatalogueApi — products", () => {
       send(app, "PUT", `/management-api/products/${parentId}/editor`, { body });
     const flags = (value: Editor) => value.variants.map(({ name, active }) => ({ name, active }));
     const corto = {
-      name: "Café corto",
+      name: "Short ES coffee",
       customerName: null,
       kitchenName: null,
       image: null,
@@ -2531,8 +2636,8 @@ describe("mountCatalogueApi — products", () => {
     expect((await put({ ...parent, variants: [...parent.variants, corto] })).status).toBe(200);
     const saved = await read();
     expect(flags(saved)).toEqual([
-      { name: "Café doble", active: true },
-      { name: "Café corto", active: false },
+      { name: "ES coffee doble", active: true },
+      { name: "Short ES coffee", active: false },
     ]);
 
     expect((await put(saved)).status).toBe(200);
@@ -2560,16 +2665,15 @@ describe("mountCatalogueApi — products", () => {
     expect(flags(await read())).toEqual(flags(saved));
   });
 
-  it("checks a variant's customer name against the default language only when it is saved Active", async () => {
+  it("saves incomplete names on newly active and inactive variants without a default companion", async () => {
     const app = mountApp("es-ES");
     const { parentId } = await parentWithVariant(app);
     const parent = (await (
       await send(app, "GET", `/management-api/products/${parentId}/editor`)
     ).json()) as { variants: Record<string, unknown>[] };
-    // French only: it names neither the venue's default language nor any fallback.
     const french = {
-      name: "Café corto",
-      customerName: { fr: "Café court" },
+      name: "Short ES coffee",
+      customerName: { fr: "FR short coffee" },
       kitchenName: null,
       image: null,
       unitPrice: null,
@@ -2580,11 +2684,17 @@ describe("mountCatalogueApi — products", () => {
         body: { ...parent, variants: [...parent.variants, { ...french, active }] },
       });
     expect((await put(false)).status).toBe(200);
-    const refused = await put(true);
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "content.translation_required" },
-    });
+    const saved = await put(true);
+    expect(saved.status).toBe(200);
+    const reread = await (
+      await send(app, "GET", `/management-api/products/${parentId}/editor`)
+    ).json();
+    expect(
+      reread.variants.find(
+        (variant: { active: boolean; name: string }) =>
+          variant.active && variant.name === "Short ES coffee",
+      ),
+    ).toMatchObject({ customerName: { fr: "FR short coffee" }, active: true });
   });
 
   it("reads an archived variant without the default language, and refuses either save state", async () => {
@@ -2602,19 +2712,19 @@ describe("mountCatalogueApi — products", () => {
       {
         body: {
           ...(await editor(activeVariant)),
-          customerName: { fr: "Café double" },
+          customerName: { fr: "ES coffee double" },
           active: true,
         },
       },
     );
     expect(untranslated.status).toBe(400);
     expect(await untranslated.json()).toMatchObject({
-      error: { code: "content.translation_required" },
+      error: { code: "content.translation_invalid" },
     });
     const parent = await editor(parentId);
     const french = {
-      name: "Café corto",
-      customerName: { fr: "Café court" },
+      name: "Short ES coffee",
+      customerName: { fr: "FR short coffee" },
       kitchenName: null,
       image: null,
       unitPrice: null,
@@ -2628,11 +2738,13 @@ describe("mountCatalogueApi — products", () => {
         })
       ).status,
     ).toBe(200);
-    const { id } = (await editor(parentId)).variants.find(({ name }) => name === "Café corto")!;
+    const { id } = (await editor(parentId)).variants.find(
+      ({ name }) => name === "Short ES coffee",
+    )!;
     const own = await editor(id);
     const put = (active: boolean) =>
       send(app, "PUT", `/management-api/products/${id}/editor`, { body: { ...own, active } });
-    expect(own).toMatchObject({ customerName: { fr: "Café court" }, active: false });
+    expect(own).toMatchObject({ customerName: { fr: "FR short coffee" }, active: false });
     for (const active of [false, true]) {
       const refused = await put(active);
       expect(refused.status).toBe(409);
@@ -2646,8 +2758,8 @@ describe("mountCatalogueApi — products", () => {
   it("lists every variant, a removed one too, with its own price and its effective price, VAT and category", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
-    // Café doble sets its own price (2.40, where the parent's is 2.00) and here its own VAT class,
-    // and holds a stored category of its own, which it never reports; Café corto, added Inactive,
+    // ES coffee doble sets its own price (2.40, where the parent's is 2.00) and here its own VAT class,
+    // and holds a stored category of its own, which it never reports; Short ES coffee, added Inactive,
     // leaves all three blank.
     const own = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
@@ -2666,7 +2778,7 @@ describe("mountCatalogueApi — products", () => {
       await send(app, "GET", `/management-api/products/${parentId}/editor`)
     ).json()) as { variants: unknown[] };
     const corto = {
-      name: "Café corto",
+      name: "Short ES coffee",
       customerName: null,
       kitchenName: null,
       image: null,
@@ -2693,7 +2805,7 @@ describe("mountCatalogueApi — products", () => {
     expect(row.variants).toEqual([
       expect.objectContaining({
         id: variantId,
-        name: "Café doble",
+        name: "ES coffee doble",
         active: true,
         unitPrice: "2.40",
         allergensInherited: true,
@@ -2705,7 +2817,7 @@ describe("mountCatalogueApi — products", () => {
         },
       }),
       expect.objectContaining({
-        name: "Café corto",
+        name: "Short ES coffee",
         active: false,
         unitPrice: null,
         allergensInherited: true,
@@ -3402,8 +3514,8 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Menú con listas");
     const options = await createOptionsListVia(app, {
-      name: "Punto de la carne",
-      labels: [{ name: "Poco hecho" }],
+      name: "Cooking de la carne",
+      labels: [{ name: "Rare hecho" }],
     });
     const extras = await createExtrasListVia(app, catalogueId, "Salsas");
     // Options FIRST, so the read-back proves the stored order is the body's and not the two tables'.
@@ -3435,8 +3547,8 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Menú en mayúsculas");
     const options = await createOptionsListVia(app, {
-      name: "Punto",
-      labels: [{ name: "Poco hecho" }],
+      name: "Cooking",
+      labels: [{ name: "Rare hecho" }],
     });
     const sent = [{ kind: "options", id: options.id.toUpperCase() }];
     const createRes = await send(app, "POST", "/management-api/products", {
@@ -3582,11 +3694,11 @@ describe("mountCatalogueApi — option lists", () => {
    * the wrong one of the three cannot pass these assertions (CLAUDE.md §3).
    */
   const doneness = () => ({
-    name: "Punto de la carne",
+    name: "Cooking de la carne",
     customerName: { es: "¿Cómo la quiere?" },
     kitchenName: "PTO",
     labels: [
-      { name: "Poco hecho", customerName: { es: "Poco hecha" }, kitchenName: "POCO" },
+      { name: "Rare hecho", customerName: { es: "Rare hecha" }, kitchenName: "POCO" },
       { name: "Al punto", customerName: { es: "En su punto" }, kitchenName: "PUNTO" },
     ],
   });
@@ -3600,15 +3712,15 @@ describe("mountCatalogueApi — option lists", () => {
   it("POST creates a list (201) carrying all three names, with the labels in body order", async () => {
     const list = await createListVia(mountApp(), doneness());
     expect(list).toMatchObject({
-      name: "Punto de la carne",
+      name: "Cooking de la carne",
       customerName: { es: "¿Cómo la quiere?" },
       kitchenName: "PTO",
       active: true,
     });
     expect(list.defaultLabelId).toBe(list.labels[0]!.id);
-    expect(list.labels.map((label) => label.name)).toEqual(["Poco hecho", "Al punto"]);
+    expect(list.labels.map((label) => label.name)).toEqual(["Rare hecho", "Al punto"]);
     expect(list.labels[0]).toMatchObject({
-      customerName: { es: "Poco hecha" },
+      customerName: { es: "Rare hecha" },
       kitchenName: "POCO",
       available: true,
     });
@@ -3628,7 +3740,7 @@ describe("mountCatalogueApi — option lists", () => {
     const row = optionLists.find((entry) => entry.id === list.id)!;
     expect(row).toMatchObject({
       name: "Lista listada",
-      labels: [{ name: "Poco hecho" }, { name: "Al punto" }],
+      labels: [{ name: "Rare hecho" }, { name: "Al punto" }],
     });
     expect(row.usage).toEqual({ products: 1 });
   });
@@ -3643,7 +3755,7 @@ describe("mountCatalogueApi — option lists", () => {
         id: list.id,
         name: "Lista leída",
         kitchenName: "PTO",
-        labels: [{ name: "Poco hecho" }, { name: "Al punto" }],
+        labels: [{ name: "Rare hecho" }, { name: "Al punto" }],
       },
     });
   });
@@ -3696,10 +3808,10 @@ describe("mountCatalogueApi — option lists", () => {
   it("refuses an invalid body with 400 and the domain code, naming the field", async () => {
     const app = mountApp();
     for (const [body, field] of [
-      [{ name: "   ", labels: [{ name: "Poco hecho" }] }, "name"],
+      [{ name: "   ", labels: [{ name: "Rare hecho" }] }, "name"],
       // An ACTIVE list with no available label cannot be answered, so the contract refuses it.
       [{ name: "Sin etiquetas", labels: [] }, "labels"],
-      [{ name: "Clave de más", labels: [{ name: "Poco hecho" }], nope: 1 }, "optionList.nope"],
+      [{ name: "Clave de más", labels: [{ name: "Rare hecho" }], nope: 1 }, "optionList.nope"],
     ] as const) {
       const res = await send(app, "POST", "/management-api/modifiers/options", { body });
       expect(res.status).toBe(400);
@@ -3790,7 +3902,7 @@ describe("mountCatalogueApi — extras lists", () => {
    */
   const sauces = (productIds: string[]) => ({
     name: "Salsas",
-    customerName: { es: "¿Alguna salsa?" },
+    customerName: { es: "Any sauce?" },
     kitchenName: "SALSA",
     minPicks: 0,
     maxPicks: 2,
@@ -3832,7 +3944,7 @@ describe("mountCatalogueApi — extras lists", () => {
     const list = await createListVia(app, sauces([alioli, brava]));
     expect(list).toMatchObject({
       name: "Salsas",
-      customerName: { es: "¿Alguna salsa?" },
+      customerName: { es: "Any sauce?" },
       kitchenName: "SALSA",
       minPicks: 0,
       maxPicks: 2,
@@ -3850,7 +3962,7 @@ describe("mountCatalogueApi — extras lists", () => {
     const app = mountApp();
     const [alioli] = await twoProducts(app);
     const list = await createListVia(app, { ...sauces([alioli]), name: "Lista listada" });
-    const productId = await createNamedProductVia(app, `Patatas ${crypto.randomUUID()}`);
+    const productId = await createNamedProductVia(app, `ES potatoes ${crypto.randomUUID()}`);
     const attached = await saveEditorFixture(app, productId, {
       modifiers: [{ kind: "extras", id: list.id }],
     });
@@ -3877,7 +3989,7 @@ describe("mountCatalogueApi — extras lists", () => {
       extraList: {
         id: list.id,
         name: "Lista leída",
-        customerName: { es: "¿Alguna salsa?" },
+        customerName: { es: "Any sauce?" },
         kitchenName: "SALSA",
         items: [{ productId: alioli }, { productId: brava }],
       },
@@ -3950,25 +4062,22 @@ describe("mountCatalogueApi — extras lists", () => {
     }
   });
 
-  /**
-   * The VENUE's fallback language decides which language a customer-facing name must carry, so the
-   * mount here is `fr-FR` and nothing else in the file is: a route passing `FALLBACK_LOCALE`
-   * (`en-GB`) or nothing at all would report the gap as `en`, and a route passing the mounted
-   * `es-ES` of every other test would find no gap in an `es` map and answer 201.
-   */
-  it("reports a missing customer-facing name in the venue's own language, on create and on update", async () => {
+  it("saves incomplete customer names with the venue's own default, on create and update", async () => {
     const app = mountApp("fr-FR");
+    expect(
+      (
+        await send(app, "PUT", "/management-api/content-languages", {
+          body: { defaultLanguage: "fr", languages: ["fr", "es"] },
+        })
+      ).status,
+    ).toBe(204);
     const [alioli] = await twoProducts(app);
-    const refused = await send(app, "POST", "/management-api/modifiers/extras", {
+    const created = await send(app, "POST", "/management-api/modifiers/extras", {
       body: sauces([alioli]),
     });
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: {
-        code: "extras.translation_required",
-        params: { field: "customerName", language: "fr" },
-      },
-    });
+    expect(created.status).toBe(201);
+    const first = ((await created.json()) as { extraList: ExtraList }).extraList;
+    expect(first.customerName).toEqual({ es: "Any sauce?" });
     const list = await createListVia(app, {
       ...sauces([alioli]),
       customerName: { fr: "Une sauce ?" },
@@ -3976,13 +4085,12 @@ describe("mountCatalogueApi — extras lists", () => {
     const patched = await send(app, "PATCH", `/management-api/modifiers/extras/${list.id}`, {
       body: sauces([alioli]),
     });
-    expect(patched.status).toBe(400);
-    expect(await patched.json()).toMatchObject({
-      error: {
-        code: "extras.translation_required",
-        params: { field: "customerName", language: "fr" },
-      },
-    });
+    expect(patched.status).toBe(200);
+    const saved = ((await patched.json()) as { extraList: ExtraList }).extraList;
+    expect(saved.customerName).toEqual({ es: "Any sauce?" });
+    expect(saved.name).toBe("Salsas");
+    expect(saved.kitchenName).toBe("SALSA");
+    expect(saved.items.map((item) => item.productId)).toEqual([alioli]);
   });
 
   it("gates every extras-list route and refuses an id naming no list", async () => {
@@ -4125,7 +4233,7 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
 
   it("answers 409 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {
     const app = mountApp();
-    const pan = await createNamedProductVia(app, `Pan ${crypto.randomUUID()}`);
+    const pan = await createNamedProductVia(app, `Bread ${crypto.randomUUID()}`);
     const vino = await createNamedProductVia(app, `Vino ${crypto.randomUUID()}`);
     const withVariant = await send(app, "PUT", `/management-api/products/${vino}/editor`, {
       body: { ...(await editor(app, vino)), variants: [copa(true)] },
@@ -4160,11 +4268,11 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
     const app = mountApp();
     const cerveza = await createNamedProductVia(app, `Cerveza ${crypto.randomUUID()}`);
     const list = await send(app, "POST", "/management-api/modifiers/extras", {
-      body: { name: "Bebidas extra", items: [{ productId: cerveza }] },
+      body: { name: "ES drinks extra", items: [{ productId: cerveza }] },
     });
     expect(list.status).toBe(201);
     const { extraList } = (await list.json()) as { extraList: ExtraList };
-    const extraLists = [{ id: extraList.id, name: "Bebidas extra" }];
+    const extraLists = [{ id: extraList.id, name: "ES drinks extra" }];
     const parent = await editor(app, cerveza);
 
     const fromParent = await send(app, "PUT", `/management-api/products/${cerveza}/editor`, {
@@ -5156,12 +5264,12 @@ describe("mountCatalogueApi — sections", () => {
 
   it("creates, reads, updates and deletes an owned section", async () => {
     const app = mountApp();
-    const name = `Bebidas ${crypto.randomUUID()}`;
+    const name = `ES drinks ${crypto.randomUUID()}`;
     const menuId = await createCatalogueVia(app, "Owner");
     const root = await menuRootVia(app, menuId);
     const { id } = await json<{ id: string }>(
       await send(app, "POST", `/management-api/sections/${root}/sections`, {
-        body: { internalName: ` ${name} `, names: { es: "Bebidas" }, color: "#aabbcc" },
+        body: { internalName: ` ${name} `, names: { es: "ES drinks" }, color: "#aabbcc" },
       }),
       201,
     );
@@ -5172,7 +5280,7 @@ describe("mountCatalogueApi — sections", () => {
     expect(created).toEqual({
       id: created.id,
       internalName: name,
-      names: { es: "Bebidas" },
+      names: { es: "ES drinks" },
       image: null,
       color: "#aabbcc",
       members: [],
@@ -5196,7 +5304,7 @@ describe("mountCatalogueApi — sections", () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
     const root = await menuRootVia(app, menuId);
-    const drinks = await createSectionVia(app, `Bebidas ${crypto.randomUUID()}`);
+    const drinks = await createSectionVia(app, `ES drinks ${crypto.randomUUID()}`);
     const beer = await createSectionVia(app, `Cervezas ${crypto.randomUUID()}`);
     const water = await createNamedProductVia(app, "Agua");
     const juice = await createNamedProductVia(app, "Zumo");

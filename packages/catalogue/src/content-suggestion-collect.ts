@@ -1,3 +1,4 @@
+import type { TranslationTarget } from "./content-translation-targets.js";
 import { categories, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
@@ -15,7 +16,7 @@ import {
   type TranslationRow,
   type TranslationSettings,
 } from "./content-translation-targets.js";
-import type { TranslationRef, TranslationTarget } from "./content-translation-types.js";
+import type { TranslationRef } from "./content-translation-types.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
 import { menuRoots } from "./menu-structure.js";
 import { contentSuggestions } from "./schema/suggestions.js";
@@ -65,9 +66,8 @@ export function isLiveTarget(entry: ResolvedTranslationTarget): entry is LiveTar
   );
 }
 
-/** Blank as the listing judges a stored name: SQLite's one-argument `trim` removes spaces only. */
 export function blankName(text: string | null | undefined): boolean {
-  return /^ *$/.test(text ?? "");
+  return !(text ?? "").trim();
 }
 
 function fits(text: string): boolean {
@@ -414,13 +414,20 @@ export async function pruneSuggestions(
       text: contentSuggestions.text,
     })
     .from(contentSuggestions);
+  const notes = rows.filter((row) => row.text === null);
+  const noteRefs = new Map(
+    notes.map((row) => [
+      suggestionRef({ kind: row.kind, id: row.itemId }),
+      { kind: row.kind, id: row.itemId },
+    ]),
+  );
+  const liveNotes = await readLiveItems(tx, [...noteRefs.values()], gaps.settings);
   const gone = rows
     .filter((row) => {
       const gap = gaps.get(suggestionRef({ kind: row.kind, id: row.itemId }));
-      // A row with text has a language (content_suggestions_text_language_ck).
-      return (
-        !gap || gap.missing.size === 0 || (row.text !== null && !gap.missing.has(row.language!))
-      );
+      if (row.text === null)
+        return !liveNotes.has(suggestionRef({ kind: row.kind, id: row.itemId }));
+      return !gap || !gap.missing.has(row.language!);
     })
     .map((row) => row.id);
   for (const batch of batches(gone))

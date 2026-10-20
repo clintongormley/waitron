@@ -3,7 +3,7 @@ import { contentLanguageCode, resolveContentText } from "@waitron/shared";
 import type { ProductPresentation } from "@waitron/catalogue/src/product-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
-import { descriptionFor } from "./dish-format.js";
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import type { TillProduct } from "../api/client.js";
 
 /** The till carries the six name fields OPTIONALLY; the shared resolvers take them present-and-nullable. */
@@ -52,7 +52,7 @@ export function unitName(
   locale: string = currentLocale(),
 ): string {
   const unit = productUnit(product);
-  return descriptionFor(unit.abbreviation, descriptionFor(unit.name, "", locale), locale);
+  return unitPresentation(unit, locale, currentContentLanguages()).abbreviation;
 }
 
 export function productUnit(
@@ -63,6 +63,8 @@ export function productUnit(
     (product.pricingUnit === "weight"
       ? {
           id: "00000000-0000-0000-0000-000000000002",
+          staffName: "Kilogram",
+          staffAbbreviation: "kg",
           name: { en: "kg", es: "kg" },
           abbreviation: { en: "kg", es: "kg" },
           precision: 3,
@@ -70,6 +72,8 @@ export function productUnit(
         }
       : {
           id: "00000000-0000-0000-0000-000000000001",
+          staffName: "Each",
+          staffAbbreviation: "ea",
           name: { en: "each", es: "unidad" },
           abbreviation: { en: "ea", es: "ud" },
           precision: 0,

@@ -1,3 +1,4 @@
+import { setContentLanguages } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -170,7 +171,14 @@ function product(
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
     unitId: "unit-each",
-    unit: { id: "unit-each", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "unit-each",
+      name: { es: "Unidad" },
+      precision: 0,
+      abbreviation: { es: "ud" },
+    },
     description: null,
     kitchenName: null,
     dietaryDeclarations: [],
@@ -618,10 +626,16 @@ describe("product-list", () => {
   });
 
   it("shows a unit name holding placeholder and replacement-pattern text as it is", async () => {
-    const odd: Unit = { id: "odd", name: { es: "{from} $& $1" }, abbreviation: {}, precision: 0 };
+    const odd: Unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "{from} $& $1",
+      id: "odd",
+      name: { es: "Customer unit" },
+      abbreviation: {},
+      precision: 0,
+    };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", unitId: "odd", unit: odd })],
-      unitLanguage: "es",
     });
     const unit = cellUnder(await tableRoot(el), "bun", t("product.price"))
       .querySelector('[data-test="price-unit"]')!
@@ -1708,6 +1722,8 @@ describe("product-list", () => {
   });
 
   const kilo: Unit = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "kg",
     name: { en: "Kilogram", es: "Kilogramo" },
     abbreviation: { en: "kg", es: "kg" },
@@ -1718,7 +1734,7 @@ describe("product-list", () => {
   it.each([
     { locale: "en-GB", language: "en", each: "€19.00 each", weighed: "€48.00 / kg" },
     { locale: "es-ES", language: "es", each: "19,00 € la unidad", weighed: "48,00 € / kg" },
-  ])("names the unit after each price in $locale", async ({ locale, language, each, weighed }) => {
+  ])("names the unit after each price in $locale", async ({ locale, each, weighed }) => {
     setLocale(locale);
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -1730,7 +1746,6 @@ describe("product-list", () => {
         }),
         product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
       ],
-      unitLanguage: language,
     });
     const root = await tableRoot(el);
     const price = (key: string) =>
@@ -1739,11 +1754,17 @@ describe("product-list", () => {
     expect(price("ham")).toBe(weighed);
   });
 
-  it("names a stored unit with no abbreviation by its name, and a variant by its product's unit", async () => {
-    const tray: Unit = { id: "tray", name: { es: "bandeja" }, abbreviation: {}, precision: 0 };
+  it("names a stored unit with no translated abbreviation by its staff abbreviation, and a variant by its product's unit", async () => {
+    const tray: Unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "tray",
+      name: { es: "bandeja" },
+      abbreviation: {},
+      precision: 0,
+    };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", unitId: "tray", unit: tray, variants: [bunVariant] })],
-      unitLanguage: "es",
     });
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
@@ -1752,14 +1773,13 @@ describe("product-list", () => {
       cellUnder(root, key, t("product.price"))
         .querySelector('[data-test="price-unit"]')!
         .textContent!.trim();
-    expect(unit("bun")).toBe("/ bandeja");
-    expect(unit("bun:small")).toBe("/ bandeja");
+    expect(unit("bun")).toBe("/ su");
+    expect(unit("bun:small")).toBe("/ su");
   });
 
   it("names a measured unit after its price from the product's own unit", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "ham", unitId: "kg", unit: kilo, unitPrice: "48.00" })],
-      unitLanguage: "en",
     });
     const unit = cellUnder(await tableRoot(el), "ham", t("product.price"))
       .querySelector('[data-test="price-unit"]')!
@@ -1769,6 +1789,8 @@ describe("product-list", () => {
 
   it("calls a product sold by the Each unit 'each', by the unit's identity", async () => {
     const each: Unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: EACH_UNIT_ID,
       name: { en: "Each" },
       abbreviation: { en: "ea" },
@@ -1776,7 +1798,6 @@ describe("product-list", () => {
     };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "plate", unitId: EACH_UNIT_ID, unit: each })],
-      unitLanguage: "en",
     });
     const unit = cellUnder(await tableRoot(el), "plate", t("product.price"))
       .querySelector('[data-test="price-unit"]')!
@@ -6820,4 +6841,63 @@ describe("help mode", () => {
     await expect.element(badge.shadowRoot!.querySelector("button")!).toHaveAccessibleName(name);
     expect(badge.textContent!.trim()).toBe(t("help.products.availability"));
   });
+});
+
+it("uses the staff abbreviation for a stored unit with no customer text in product price labels", async () => {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    products: [
+      product({
+        id: "bun",
+        unitId: "tray",
+        unit: {
+          id: "tray",
+          staffName: "Staff tray",
+          staffAbbreviation: "st",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+        },
+      }),
+    ],
+  });
+  const root = await tableRoot(el);
+  expect(
+    cellUnder(root, "bun", t("product.price"))
+      .querySelector('[data-test="price-unit"]')!
+      .textContent!.trim(),
+  ).toBe("/ st");
+});
+
+it("refreshes live price unit labels after a content default change with the same product rows", async () => {
+  const before = currentLocale();
+  setLocale("fr-FR");
+  try {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "bun",
+          unitId: "live",
+          unit: {
+            id: "live",
+            staffName: "Staff crate",
+            staffAbbreviation: "sc",
+            name: { en: "English crate", es: "Spanish crate" },
+            abbreviation: { en: "ec", es: "se" },
+            precision: 0,
+          },
+        }),
+      ],
+    });
+    const root = await tableRoot(el);
+    const label = () =>
+      cellUnder(root, "bun", t("product.price"))
+        .querySelector('[data-test="price-unit"]')!
+        .textContent!.trim();
+    expect(label()).toBe("/ ec");
+    setContentLanguages({ defaultLanguage: "es", languages: ["en", "es"] });
+    await vi.waitFor(() => expect(label()).toBe("/ se"));
+  } finally {
+    setLocale(before);
+  }
 });

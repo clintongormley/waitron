@@ -50,9 +50,10 @@ lista que estás editando, no lo guardado: no se envía nada hasta que guardas l
 Da a la lista un nombre del personal en texto sin formato, el nombre con el que tú y tu personal la
 llamáis. Un **Nombre de cocina**, justo debajo, y un **Nombre para el cliente**, con un campo por
 cada idioma de contenido, son opcionales y recurren al nombre del personal cuando los dejas en
-blanco. En un ticket, los nombres para el cliente de una lista de opciones y de una opción se
-imprimen en el idioma predeterminado, o en otro idioma si el predeterminado está en blanco, y como
-el nombre del personal solo cuando ningún idioma tiene uno. El nombre para el cliente de una lista
+blanco. Las respuestas nuevas guardan los nombres para el cliente de la lista y de la opción
+en el idioma predeterminado. Si falta alguno, guardan su propio nombre del personal; tener texto
+solo en otro idioma no rellena el predeterminado. Las respuestas ya registradas conservan sus
+nombres guardados. El nombre para el cliente de una lista
 de extras no se imprime hoy en ningún sitio. Mientras un nombre está en blanco, su campo muestra en
 su lugar el nombre al que recurre.
 

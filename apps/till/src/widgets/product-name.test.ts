@@ -131,6 +131,8 @@ describe("unitName", () => {
     const p: TillProduct = {
       ...product(),
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "u",
         name: { en: "Kilogram" },
         abbreviation: { en: "kg" },
@@ -154,6 +156,8 @@ describe("unitName", () => {
 
 describe("soldByTheUnit", () => {
   const unit = (precision: number, hardwareUnit: "kg" | null) => ({
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "u1",
     name: { en: "unit" },
     abbreviation: { en: "u" },
@@ -183,12 +187,14 @@ describe("unit labels without ids", () => {
     expect(unitName(product({ pricingUnit: "weight" }))).toBe("kg");
   });
 
-  it("uses the enabled full name when the abbreviation has no enabled text", () => {
+  it("uses its staff abbreviation when translated abbreviations have no enabled text", () => {
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
     expect(
       unitName(
         product({
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "d6a9d42f-9252-4a83-b722-0fd7f951e9a0",
             name: { es: "Caja" },
             abbreviation: { en: "box" },
@@ -198,7 +204,7 @@ describe("unit labels without ids", () => {
         }),
         "es-ES",
       ),
-    ).toBe("Caja");
+    ).toBe("su");
   });
 
   it("uses the content default abbreviation when the requested translation is missing", () => {
@@ -207,6 +213,8 @@ describe("unit labels without ids", () => {
       unitName(
         product({
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "d6a9d42f-9252-4a83-b722-0fd7f951e9a0",
             name: { en: "Box" },
             abbreviation: { en: "box" },
@@ -219,12 +227,14 @@ describe("unit labels without ids", () => {
     ).toBe("box");
   });
 
-  it("returns no label when neither map holds enabled text", () => {
+  it("uses its staff abbreviation when neither map holds enabled text", () => {
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
     expect(
       unitName(
         product({
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "d6a9d42f-9252-4a83-b722-0fd7f951e9a0",
             name: { en: "Box" },
             abbreviation: { en: "box" },
@@ -234,7 +244,7 @@ describe("unit labels without ids", () => {
         }),
         "es-ES",
       ),
-    ).toBe("");
+    ).toBe("su");
   });
 });
 
@@ -252,4 +262,43 @@ describe("Valencian allergen sheet names", () => {
     expect(customerProductName(dish, "ca")).toBe("Coffee");
     expect(customerProductName(dish, "invalid_locale")).toBe("Coffee");
   });
+});
+
+it("uses each field's staff fallback without changing scale decisions when unit text is renamed", () => {
+  const counted = {
+    id: "counted",
+    staffName: "Staff counted",
+    staffAbbreviation: "staff-ea",
+    name: { fr: "Disabled count" },
+    abbreviation: { fr: "kg" },
+    precision: 0,
+    hardwareUnit: null,
+  };
+  const weighed = {
+    ...counted,
+    id: "mass",
+    staffName: "Renamed weight",
+    staffAbbreviation: "each",
+    precision: 3,
+    hardwareUnit: "kg" as const,
+  };
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  expect(unitName(product({ unit: counted }), "es")).toBe("staff-ea");
+  expect(soldByTheUnit(product({ unit: counted }))).toBe(true);
+  expect(unitName(product({ unit: weighed }), "es")).toBe("each");
+  expect(soldByTheUnit(product({ unit: weighed }))).toBe(false);
+  const renamedCounted = {
+    ...counted,
+    staffAbbreviation: "kg",
+    abbreviation: { en: "kg", es: "kg" },
+  };
+  expect(unitName(product({ unit: renamedCounted }), "es")).toBe("kg");
+  expect(soldByTheUnit(product({ unit: renamedCounted }))).toBe(true);
+  const renamedWeighed = {
+    ...weighed,
+    staffAbbreviation: "ea",
+    abbreviation: { en: "ea", es: "ea" },
+  };
+  expect(unitName(product({ unit: renamedWeighed }), "es")).toBe("ea");
+  expect(soldByTheUnit(product({ unit: renamedWeighed }))).toBe(false);
 });

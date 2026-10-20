@@ -50,6 +50,8 @@ import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
 const unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { es: "unidad", en: "unit" },
   abbreviation: { es: "ud", en: "ea" },
@@ -5779,6 +5781,14 @@ describe("till-app: a draft line that cannot be sold now", () => {
                       {
                         portion: "1",
                         unit,
+                        presentation: {
+                          name: "Lemon",
+                          customerName: null,
+                          kitchenName: null,
+                          variantName: null,
+                          variantCustomerName: null,
+                          variantKitchenName: null,
+                        },
                         productId: "p-lemon",
                         name: "Lemon",
                         customerName: null,
@@ -10305,6 +10315,14 @@ describe("native app phone Review with mixed dish families", () => {
               maxPicks: null,
               items: [
                 {
+                  presentation: {
+                    name: "Sauce",
+                    customerName: null,
+                    kitchenName: null,
+                    variantName: null,
+                    variantCustomerName: null,
+                    variantKitchenName: null,
+                  },
                   productId: "sauce",
                   name: "Sauce",
                   image: null,

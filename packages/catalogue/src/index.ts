@@ -53,6 +53,7 @@ export type {
 } from "./operations.js";
 export { foldName } from "./name-uniqueness.js";
 export * from "./content-languages.js";
+export { validateOptionalTranslations } from "./optional-translations.js";
 export * from "./content-translation-report.js";
 export * from "./allergens.js";
 export * from "./derivation.js";
@@ -157,6 +158,8 @@ export * from "./settings.js";
 
 export * from "./content-translation-types.js";
 export * from "./content-translation-targets.js";
+export { resolveTranslationCells } from "./content-translation-cells.js";
+export { listTranslationItems } from "./content-translation-pages.js";
 export * from "./content-translation-writes.js";
 
 export * from "./content-translations.js";

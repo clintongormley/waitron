@@ -90,13 +90,11 @@ Everything not listed here needs more spec work first.
    kitchen and pass work, following A773-1's Sent and New order panel.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
-2. **A682 — translations: nothing required, every missing name reported, all languages side by
-   side, with automatic translation** (_Menus and the catalogue_).
-3. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
+2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
    (_Modules, data and code health_). Its revised design awaits agreement.
-4. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
+3. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
    protection and legal compliance_). Adviser agreement, build and verification remain open.
-5. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
+4. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
 
 **Ready to queue when a lane is free (owner, 2026-10-18), not ranked against the list above:**
@@ -790,12 +788,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
   should go deeper (a shared table rule, so the Products tree changes too).
 
-- **Menu-root default fallback when content languages are unset (A420 review).**
-  `updateMenuDetails` validates against English; section and include-folder writers use
-  their supplied venue fallback. Decide whether the menu-root writer should take that
-  fallback too. `content-translations.test.ts`, “existing menu, section and folder checks
-  expose the unset default fallback”, exercises the difference. Inline saves already use
-  their resolved venue context.
+- **Menu-root enabled-language fallback when content languages are unset (A420 review).**
+  `updateMenuDetails` checks map keys using English as its fallback; section and include-folder
+  writers use their supplied venue fallback. Decide whether the menu-root writer should take
+  that fallback too. `content-translations.test.ts`, “menu, section and folder writes keep enabled
+  maps optional with %s configuration”, retains the unset-configuration difference. Inline saves
+  use their resolved venue context.
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs
@@ -855,8 +853,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   says otherwise** (plan, "Open points"): receipts outside Catalonia stay free, Spanish by default.
   Left by W109 (#1320, #1322); the decisions are in
   [products.md](developers/products.md#content-languages-per-region). The other open case, a
-  Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish is required
-  everywhere; relayed to A682).
+  Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
+  everywhere; entered customer text is optional).
 
 - **Loose ends left by W87 (#1191).**
   - Between 30rem and 50rem a long menu name can still make the Menus table wider than its box, so
@@ -964,10 +962,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   - A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
   - A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
     else the copy indexed last.
-  - Renaming or clearing the included menu's own customer names is not checked against the folders
-    that fix some languages, so a folder can end up with no name in the default language. The
-    missing-translations report lists it, and changing the default language is refused while it
-    lasts, but the write that caused it is allowed.
   - A fixed value that happens to equal the included menu's value when the dialog opens is saved
     back as "follow" the next time the dialog is saved: the dialog compares with the included
     menu's value and cannot tell the two apart.
@@ -1036,13 +1030,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   first Refresh status is a lease renewal, and only a configuration request asks for services
   version 2 (`apps/server/src/cloud-installation.ts`). Seen in the Santet run (A689-21).
 
-- **Content languages says the default language has nothing missing while Translate all sends a
-  default-language name for every item.** On Santet (default Catalan, no customer-facing names
-  set) the list read "Catalan · Nothing missing" and the job asked for Catalan for all 613 items;
-  each dialog row said the default name "will not be copied from the staff name". The two counts
-  use different rules for the default language; which one is meant was not traced. Seen in the
-  Santet run (A689-21).
-
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and
   both sides check would catch drift in CI. A contract change for Cloud's side.
@@ -1055,9 +1042,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-item-is-accounted-for-does-not-count-its-items-as-lost)
 
 - **Loose ends left by A689's fifth PR.**
-  - Translate all: a "Use fix" button for a spelling fix to a name someone entered; it waits for
-    the side-by-side translations dialog (plan Decision 6). Today the dialog shows such a fix only
-    as a note on the item's row.
   - Alert wording writes numbers without a thousands separator (`formatParam`,
     `packages/dashboard-kit/src/alert-messages.ts`); the Translate all notice reads "1050
     suggestions".
@@ -1092,13 +1076,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   do, `packages/dashboard-kit/src/request.ts`).
   [Detail](backlog/catalogue.md#translate-all-three-limits-the-translations-dialog-accepts-for-now-a689s-fourth-pr-2026-10-15)
 
-- **The translations dialog capitalises a language name mid-sentence in Spanish in two older
-  places** — `translations.default_needed` ("…predeterminado en Inglés…") and the table's
-  accessible label `content_gaps.table` ("Sin traducir al Inglés"): both go through the dialog's
-  `#name`, which passes `standalone=true` by default
-  (`apps/dashboard/src/widgets/content-translations-dialog.ts`). Fixing
-  them changes existing test assertions.
-
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
   default content language, under every receipt-language key, before it gets there
@@ -1121,19 +1098,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **Sales classification and the menus plan — what they left open.** `Product.categoryId` and
   `primaryCategoryId` always hold the same value.
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
-
-- **A682. Translations: every missing name reported, all languages side by side
-  (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
-  field per enabled language on each row. Translate all and its "Use fix" action use the same editor.
-  At 16:25 the owner approved unit A: required staff name and abbreviation, all translations optional,
-  with no automatic copying. At 16:40 the owner approved Spanish A: Save succeeds with blank Spanish
-  customer text, Spanish stays enabled everywhere in Spain whatever the province, and gaps remain.
-  The [dated design closure](superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
-  authorizes planning and build. The [executable plan](superpowers/plans/2026-10-17-a682-translations.md)
-  covers all five points and Use fix in one future PR. A fresh-context plan read is complete;
-  field-specific fallback and additive-upgrade checks are explicit. **OPEN:** implementation and
-  validation, respecting the plan's G/C/E reservations.
-  [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](../apps/server/src/guide/en/content-and-images.md). **A new picture consumer has to add a real database
@@ -1393,9 +1357,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
   action:** decide whether the columns want a check constraint and the write paths a domain refusal.
 
-- **A refused customer name cannot say which value it refused.** `content.translation_required`
-  carries only the language, so the editor resolves the field from the body it submitted — exact for
-  one missing value, the first of several otherwise. An owner call if it ever bites.
+- **Retire the product editor's required-translation refusal mapping.** Customer names are
+  optional, but `catalogue-screen.ts` still handles `content.translation_required` through
+  `productEditorTranslationField`. Trace the product routes before removing that branch and its
+  tests. Media still validates required image names and translates its refusal to
+  `image.translation_required` with an explicit `names` field.
 
 - **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line
@@ -3187,8 +3153,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Unresolved observation from W101 verification** — left open by W101 (#1351). Two full local
   `@waitron/till test:coverage` runs logged an unhandled rejection in `#holdIdentity` while
-  `#switchProfile` was reading identity. The triggering test and cause are unverified; isolate the
-  profile-switch case and its identity response before choosing a fix.
+  `#switchProfile` was reading identity. A682 isolated one test that deliberately returns null and
+  emits the same rejection; the real-response investigation remains open. The detail retains the
+  command and the limits of that probe.
   [Detail](backlog/till.md#unresolved-observation-from-w101-verification)
 
 - **Loose ends left by W97 (#1311).**

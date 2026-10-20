@@ -9,6 +9,8 @@ const cafe: TillProduct = {
   name: "Café",
   customerName: { es: "Café para el cliente" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-each",
     name: { en: "unit", es: "unidad" },
     abbreviation: { en: "ea", es: "ud" },

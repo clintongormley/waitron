@@ -421,6 +421,8 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       await db
         .insert(units)
         .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           seedKey: "each",
           name: { en: "each" },
           abbreviation: { en: "ea" },

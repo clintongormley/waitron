@@ -132,9 +132,9 @@ including a menu containing itself. `menu_section.member_duplicate` (409, `secti
 an already-held target. `menu_section.membership_invalid` (400) refuses missing or variant product
 ids, an Inactive product, and repeated ids in a product batch. `menu_section.invalid` (400, `field`) refuses a blank
 internal name, an invalid colour or image, and a negative or non-integer position.
-`menu_section.translation_required` (400, `field: "names"`, `language`) refuses a non-empty
-customer-name map without text in the default language; invalid language keys answer
-`content.language_invalid` (400).
+Customer names can be blank in every language, including the default. Invalid language keys
+answer `content.language_invalid` (400); noncanonical keys, nontext values and oversized text
+answer `content.translation_invalid` (400).
 
 ### Menu structure, prices and publication
 

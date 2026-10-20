@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  captureError,
   catalogues,
   CORE_MIGRATIONS,
   products,
@@ -35,21 +34,30 @@ import { menuDetails } from "./schema/menu.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {
-  it("requires a variant's customer name in a new default language but leaves the product's optional", async () => {
+  it("reports a variant's missing customer name without copying the product's staff name", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Bar" });
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
+      const catalogue = await createCatalogue(tx, {
+        name: "Bar",
+        names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
+      });
       const unit = await createUnit(
         tx,
-        { name: { en: "each", fr: "unité" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each", fr: "FR each" },
+          precision: 0,
+          abbreviation: { en: "u", fr: "u" },
+        },
         "en",
       );
-      // The product has only a staff name (no customer name), so it never gaps; the variant carries a
-      // partial customer name and is the sole gap until it is completed.
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
+        customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
         description: { en: "Freshly roasted" },
         unitPrice: "9.00",
         unitId: unit.id,
@@ -78,7 +86,7 @@ describe("site content languages", () => {
       await setProductVariants(
         tx,
         product.id,
-        [{ ...variant!, customerName: { en: "Small cup", fr: "Petit" } }],
+        [{ ...variant!, customerName: { en: "Small cup", fr: "FR small" } }],
         "en",
       );
       expect(await listContentTranslationGaps(tx, "fr")).toEqual([]);
@@ -86,15 +94,19 @@ describe("site content languages", () => {
       expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("fr");
     });
   });
-  it("does not let a removed variant block a change of default, while an Active one still does", async () => {
+  it("reports only the Active variant while allowing an incomplete new default", async () => {
     await seedTenant(suite.db);
     const { productId, kept } = await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const catalogue = await createCatalogue(tx, { name: "Bar" });
+      const catalogue = await createCatalogue(tx, {
+        name: "Bar",
+        names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
+      });
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
+        customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
         unitPrice: "9.00",
         pricingUnit: "each",
         vatClass: "reduced",
@@ -121,15 +133,19 @@ describe("site content languages", () => {
       withTransaction(suite.db, (tx) =>
         writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
       ),
-    ).rejects.toMatchObject({
-      code: "content.default_missing",
-      params: { language: "fr", count: 1 },
-    });
+    ).resolves.toBeUndefined();
     await withTransaction(suite.db, async (tx) => {
+      expect(
+        (await tx.select().from(products).where(eq(products.id, kept.id)))[0]!.customerName,
+      ).toEqual({ en: "Small cup" });
+      expect(await readContentLanguages(tx, "en")).toEqual({
+        defaultLanguage: "fr",
+        languages: ["fr", "en"],
+      });
       await setProductVariants(
         tx,
         productId,
-        [{ ...kept, customerName: { en: "Small cup", fr: "Petit" } }],
+        [{ ...kept, customerName: { en: "Small cup", fr: "FR small" } }],
         "en",
       );
       expect(await listContentTranslationGaps(tx, "fr")).toEqual([]);
@@ -137,13 +153,19 @@ describe("site content languages", () => {
       expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("fr");
     });
   });
-  it("counts a partial customer name as a gap but a blank one as none", async () => {
+  it("counts partial and absent customer names as gaps without copying fallback", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Bar" });
       const unit = await createUnit(
         tx,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const base = {
@@ -165,7 +187,6 @@ describe("site content languages", () => {
         customerName: { en: "Fresh Coffee" },
         unitPrice: "2.00",
       });
-      // A variant with no customer name → not a gap.
       const variants = await setProductVariants(
         tx,
         partial.id,
@@ -191,9 +212,9 @@ describe("site content languages", () => {
       );
       const esGaps = await listContentTranslationGaps(tx, "es");
       expect(esGaps).toContainEqual({ kind: "product", id: partial.id });
-      expect(esGaps).not.toContainEqual({ kind: "product", id: plain.id });
-      for (const v of variants) expect(esGaps).not.toContainEqual({ kind: "variant", id: v.id });
-      // In en, even the partial customer name is complete → no product/variant gap.
+      expect(esGaps).toContainEqual({ kind: "product", id: plain.id });
+      for (const v of variants)
+        expect(esGaps).toContainEqual({ kind: "variant", id: v.id, productId: partial.id });
       const enGaps = await listContentTranslationGaps(tx, "en");
       expect(enGaps).not.toContainEqual({ kind: "product", id: partial.id });
     });
@@ -239,9 +260,8 @@ describe("site content languages", () => {
 
       expect(gaps).toContainEqual({ kind: "option_list", id: named });
       expect(gaps).toContainEqual({ kind: "option_label", id: namedLabel });
-      // Both names are optional and fall back to the staff name, so a wholly-absent one is no gap.
-      expect(gaps).not.toContainEqual({ kind: "option_list", id: plain });
-      expect(gaps).not.toContainEqual({ kind: "option_label", id: plainLabel });
+      expect(gaps).toContainEqual({ kind: "option_list", id: plain });
+      expect(gaps).toContainEqual({ kind: "option_label", id: plainLabel });
     });
   });
 
@@ -261,14 +281,12 @@ describe("site content languages", () => {
       const gaps = await listContentTranslationGaps(tx, "fr");
 
       expect(gaps).toContainEqual({ kind: "extra_list", id: named });
-      // The customer name is optional and falls back to the staff `name`, so a wholly-absent one —
-      // null or an empty map — is no gap, the same split the option kinds above make.
-      expect(gaps).not.toContainEqual({ kind: "extra_list", id: plain });
-      expect(gaps).not.toContainEqual({ kind: "extra_list", id: blank });
+      expect(gaps).toContainEqual({ kind: "extra_list", id: plain });
+      expect(gaps).toContainEqual({ kind: "extra_list", id: blank });
     });
   });
 
-  it("reports a menu section's partly filled customer names as a gap, and an empty map as none", async () => {
+  it("reports partial and empty section maps, leaving out an unmatched menu root", async () => {
     await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Lunch" });
       const section = async (
@@ -286,21 +304,33 @@ describe("site content languages", () => {
             })
             .returning({ id: sections.id })
         )[0]!.id;
-      const spanishOnly = await section({ es: "Bebidas" });
+      const spanishOnly = await section({ es: "ES drinks" });
       const none = await section({});
-      const both = await section({ en: "Drinks", es: "Bebidas" });
+      const both = await section({ en: "Drinks", es: "ES drinks" });
       const root = await section({ es: "Carta" }, "menu_root");
 
       const gaps = await listContentTranslationGaps(tx, "en");
-
+      const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menu.id));
+      expect(gaps).toContainEqual({ kind: "menu_section", id: details!.rootSectionId });
       expect(gaps).toContainEqual({ kind: "menu_section", id: spanishOnly });
-      expect(gaps).not.toContainEqual({ kind: "menu_section", id: none });
+      expect(gaps).toContainEqual({ kind: "menu_section", id: none });
       expect(gaps).not.toContainEqual({ kind: "menu_section", id: both });
-      expect(gaps).toContainEqual({ kind: "menu_section", id: root });
+      expect(gaps).not.toContainEqual({ kind: "menu_section", id: root });
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
-      ).rejects.toMatchObject({ code: "content.default_missing", params: { language: "en" } });
+      ).resolves.toBeUndefined();
+      expect(await readContentLanguages(tx, "es")).toEqual({
+        defaultLanguage: "en",
+        languages: ["en", "es"],
+      });
+      expect(await listContentTranslationGaps(tx, "en")).toContainEqual({
+        kind: "menu_section",
+        id: spanishOnly,
+      });
+      expect(
+        (await tx.select().from(sections).where(eq(sections.id, spanishOnly)))[0]!.names,
+      ).toEqual({ es: "ES drinks" });
     });
   });
 
@@ -322,33 +352,38 @@ describe("site content languages", () => {
         names: { en: "CLIENT-EN Lunch", es: "CLIENT-ES Almuerzo" },
       });
       const drinks = await rootOf(tx, (await createCatalogue(tx, { name: "STAFF Drinks" })).id);
-      // Written straight into the row, which `createCatalogue` refuses without the default language.
       await tx.update(sections).set({ names: drinksNames }).where(eq(sections.id, drinks));
       const lunchRoot = await rootOf(tx, lunch.id);
       const member = await addMember(tx, lunchRoot, { kind: "section", sectionId: drinks });
-      return { lunchRoot, member: member.id };
+      return { lunchRoot, member: member.id, drinksRoot: drinks };
     }
 
-    it("refuses a default language a folder's names would lack", async () => {
+    it("keeps folder gaps visible after selecting an incomplete default", async () => {
       await withTransaction(suite.db, async (tx) => {
-        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {});
+        const { lunchRoot, member, drinksRoot } = await lunchIncludingDrinks(tx, {});
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
           overrides: { names: { en: "FOLDER-EN Bar" } },
         });
 
         expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
           { kind: "menu_include", id: member },
         ]);
-        expect(await listContentTranslationGaps(tx, "en")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "en")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
+        ]);
         await expect(
-          captureError(() =>
-            writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
-          ),
-        ).resolves.toMatchObject({
-          code: "content.default_missing",
-          params: { language: "es", count: 1 },
+          writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
+        ).resolves.toBeUndefined();
+        expect(await readContentLanguages(tx, "en")).toEqual({
+          defaultLanguage: "es",
+          languages: ["es", "en"],
         });
+        expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
+          { kind: "menu_include", id: member },
+        ]);
 
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
@@ -361,7 +396,7 @@ describe("site content languages", () => {
 
     it("still counts the fixed names while the include shows its sections directly", async () => {
       await withTransaction(suite.db, async (tx) => {
-        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {});
+        const { lunchRoot, member, drinksRoot } = await lunchIncludingDrinks(tx, {});
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
           overrides: { names: { en: "FOLDER-EN Bar" } },
@@ -369,6 +404,7 @@ describe("site content languages", () => {
         await setIncludeFolder(tx, lunchRoot, member, { showAsFolder: false });
 
         expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
           { kind: "menu_include", id: member },
         ]);
       });
@@ -388,7 +424,7 @@ describe("site content languages", () => {
     it("takes the included menu's own name in a language it does not fix", async () => {
       await withTransaction(suite.db, async (tx) => {
         const { lunchRoot, member } = await lunchIncludingDrinks(tx, {
-          es: "CLIENT-ES Bebidas",
+          es: "CLIENT-ES ES drinks",
         });
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
@@ -403,7 +439,7 @@ describe("site content languages", () => {
       await withTransaction(suite.db, async (tx) => {
         const { lunchRoot, member } = await lunchIncludingDrinks(tx, {
           en: "CLIENT-EN Drinks",
-          es: "CLIENT-ES Bebidas",
+          es: "CLIENT-ES ES drinks",
         });
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
@@ -455,22 +491,26 @@ describe("site content languages", () => {
       ).resolves.toBeUndefined();
     });
   });
-  it("checks contributed content before changing the default", async () => {
-    await withTransaction(suite.db, (tx) =>
-      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }),
-    );
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        writeContentLanguages(
-          tx,
-          { defaultLanguage: "fr", languages: ["fr", "en"] },
-          "en",
-          async () => [{ kind: "image", id: "photo" }],
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "content.default_missing",
-      params: { language: "fr", count: 1 },
+  it("selects a first default despite a unit with no translations", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(units).values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: {},
+        abbreviation: {},
+        precision: 0,
+      });
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] });
+      expect(await readContentLanguages(tx, "en")).toEqual({
+        defaultLanguage: "fr",
+        languages: ["fr", "en"],
+      });
+      expect((await tx.select().from(units))[0]).toMatchObject({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: {},
+        abbreviation: {},
+      });
     });
   });
   it("requires the configured default for content while allowing missing additional translations", async () => {
@@ -487,7 +527,7 @@ describe("site content languages", () => {
     ).rejects.toMatchObject({ code: "content.translation_required", params: { language: "en" } });
   });
 
-  it("refuses to change the default while a product lacks its translation", async () => {
+  it("changes the default while keeping a product's missing translation missing", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
@@ -508,12 +548,10 @@ describe("site content languages", () => {
       withTransaction(suite.db, (tx) =>
         writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
       ),
-    ).rejects.toMatchObject({
-      code: "content.default_missing",
-      params: { language: "fr", count: 1 },
-    });
+    ).resolves.toBeUndefined();
     await withTransaction(suite.db, async (tx) => {
-      expect((await readContentLanguages(tx, "es")).defaultLanguage).toBe("en");
+      expect((await readContentLanguages(tx, "es")).defaultLanguage).toBe("fr");
+      expect((await tx.select().from(products))[0]!.customerName).toEqual({ en: "Bread" });
       await tx.update(products).set({ customerName: { en: "Bread", fr: "Pain" } });
       await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
       expect(await readContentLanguages(tx, "es")).toEqual({
@@ -525,20 +563,33 @@ describe("site content languages", () => {
       expect(customerNames[0]!.customerName).toEqual({ en: "Bread", fr: "Pain" });
     });
   });
-  it("refuses to change the default while a unit lacks its translation", async () => {
+  it("changes the default while keeping a unit's missing translation missing", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      await tx
-        .insert(units)
-        .values({ name: { en: "cup" }, abbreviation: { en: "c" }, precision: 0 });
+      await tx.insert(units).values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "cup" },
+        abbreviation: { en: "c" },
+        precision: 0,
+      });
     });
     await expect(
       withTransaction(suite.db, (tx) =>
         writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
       ),
-    ).rejects.toMatchObject({
-      code: "content.default_missing",
-      params: { language: "fr", count: 1 },
+    ).resolves.toBeUndefined();
+    await withTransaction(suite.db, async (tx) => {
+      expect(await readContentLanguages(tx, "en")).toEqual({
+        defaultLanguage: "fr",
+        languages: ["fr", "en"],
+      });
+      expect((await tx.select().from(units))[0]).toMatchObject({
+        name: { en: "cup" },
+        abbreviation: { en: "c" },
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+      });
     });
   });
   it("uses the site's supplied default before configuration and persists runtime additions", async () => {
@@ -566,20 +617,12 @@ describe("site content languages", () => {
         writeContentLanguages(
           tx,
           { defaultLanguage: "ca", languages: ["ca", "es", "en"] },
-          "es",
-          undefined,
           REQUIRED,
         ),
       );
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeContentLanguages(
-            tx,
-            { defaultLanguage: "es", languages: ["es", "en"] },
-            "es",
-            undefined,
-            REQUIRED,
-          ),
+          writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }, REQUIRED),
         ),
       ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
       await withTransaction(suite.db, async (tx) =>
@@ -596,8 +639,6 @@ describe("site content languages", () => {
           writeContentLanguages(
             tx,
             { defaultLanguage: "en", languages: ["en", "es-ES"] },
-            "en",
-            undefined,
             REQUIRED,
           ),
         ),
@@ -609,15 +650,11 @@ describe("site content languages", () => {
         await writeContentLanguages(
           tx,
           { defaultLanguage: "es", languages: ["es", "ca-ES", "fr"] },
-          "es",
-          undefined,
           REQUIRED,
         );
         await writeContentLanguages(
           tx,
           { defaultLanguage: "es", languages: ["es", "ca"] },
-          "es",
-          undefined,
           REQUIRED,
         );
         expect(await readContentLanguages(tx, "es")).toEqual({
@@ -630,13 +667,7 @@ describe("site content languages", () => {
     it("lets a venue with no required language remove any language but its default", async () => {
       await withTransaction(suite.db, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
-        await writeContentLanguages(
-          tx,
-          { defaultLanguage: "es", languages: ["es"] },
-          "es",
-          undefined,
-          [],
-        );
+        await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es"] }, []);
         expect(await readContentLanguages(tx, "es")).toEqual({
           defaultLanguage: "es",
           languages: ["es"],

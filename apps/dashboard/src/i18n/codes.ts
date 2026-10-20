@@ -295,9 +295,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Waitron keeps this language enabled for venues in this region, so it cannot be removed.",
     es: "Waitron mantiene este idioma activado en los locales de esta región, así que no se puede quitar.",
   },
-  "content.default_missing": {
-    en: "Some products, units, menu sections, modifiers or images need translating before this can become the default language.",
-    es: "Debes traducir algunos productos, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
+  "unit.invalid": {
+    en: "Enter the unit's staff name and abbreviation.",
+    es: "Introduce el nombre y la abreviatura de la unidad para el personal.",
   },
   "unit.precision_invalid": {
     en: "Choose between 0 and 3 decimal places.",

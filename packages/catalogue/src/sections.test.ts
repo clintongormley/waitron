@@ -153,17 +153,20 @@ afterEach(() => {
 describe("section details", () => {
   it("creates, reads and updates an owned section", async () => {
     await fixture();
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
     const drinks = await app((tx) =>
       createOwned(tx, {
         internalName: "  Drinks  ",
-        names: { en: "Something to drink", es: "Bebidas" },
+        names: { en: "Something to drink", es: "ES drinks" },
         color: "#aabbcc",
       }),
     );
     expect(drinks).toEqual({
       id: drinks.id,
       internalName: "Drinks",
-      names: { en: "Something to drink", es: "Bebidas" },
+      names: { en: "Something to drink", es: "ES drinks" },
       image: null,
       color: "#aabbcc",
       members: [],
@@ -210,8 +213,8 @@ describe("section details", () => {
     await fixture();
     const drinks = await owned("Drinks");
     const refused: [Parameters<typeof updateSection>[2], object][] = [
-      [{ names: "Bebidas" as unknown as Record<string, string> }, { field: "names" }],
-      [{ names: ["Bebidas"] as unknown as Record<string, string> }, { field: "names" }],
+      [{ names: "ES drinks" as unknown as Record<string, string> }, { field: "names" }],
+      [{ names: ["ES drinks"] as unknown as Record<string, string> }, { field: "names" }],
       [{ names: null as unknown as Record<string, string> }, { field: "names" }],
       [{ color: "#ABCDEF" }, { field: "color" }],
       [{ color: "red" }, { field: "color" }],
@@ -237,26 +240,27 @@ describe("section details", () => {
     expect(await app((tx) => readSection(tx, drinks.id))).toEqual(drinks);
   });
 
-  it("refuses customer names with no text in the default content language, but accepts none", async () => {
+  it("saves customer names without default text and permits clearing them", async () => {
     await fixture();
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
     const drinks = await owned("Drinks");
-    const refusal = {
-      code: "menu_section.translation_required",
-      params: { field: "names", language: "en" },
-    };
-    await expect(
-      app((tx) => createOwned(tx, { internalName: "Bebidas", names: { es: "Bebidas" } })),
-    ).rejects.toMatchObject(refusal);
-    await expect(
-      app((tx) => updateSection(tx, drinks.id, { names: { es: "Bebidas" } })),
-    ).rejects.toMatchObject(refusal);
+    const created = await app((tx) =>
+      createOwned(tx, { internalName: "ES drinks", names: { es: "ES drinks" } }),
+    );
+    expect(created.names).toEqual({ es: "ES drinks" });
+    expect((await app((tx) => readSection(tx, created.id))).names).toEqual({ es: "ES drinks" });
     expect(
-      (await app((tx) => updateSection(tx, drinks.id, { names: { en: "Drinks", es: "Bebidas" } })))
-        .names,
-    ).toEqual({ en: "Drinks", es: "Bebidas" });
+      (await app((tx) => updateSection(tx, drinks.id, { names: { es: "ES drinks" } }))).names,
+    ).toEqual({ es: "ES drinks" });
+    expect(
+      (
+        await app((tx) =>
+          updateSection(tx, drinks.id, { names: { en: "Drinks", es: "ES drinks" } }),
+        )
+      ).names,
+    ).toEqual({ en: "Drinks", es: "ES drinks" });
     expect((await app((tx) => updateSection(tx, drinks.id, { names: {} }))).names).toEqual({});
   });
 

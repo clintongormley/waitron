@@ -757,7 +757,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
-  ["names", ["name", "customerName", "kitchenName"]],
+  ["names", ["name", "customerName", "kitchenName", "presentation"]],
   ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],
@@ -1108,15 +1108,12 @@ export function diffEntries(
         to: { portion: item.portion, abbreviation: item.unit?.abbreviation ?? {} },
         source: "shared_product",
       });
-    if (
-      same(
-        [was.unit?.id, was.unit?.abbreviation, was.unit?.precision],
-        [item.unit?.id, item.unit?.abbreviation, item.unit?.precision],
-      )
-    )
-      continue;
+    if (same(was.unit, item.unit)) continue;
     const unitFacts = (unit: FrozenExtraItemFacts["unit"]) => ({
+      name: unit?.name ?? {},
+      staffName: unit?.staffName ?? "Each",
       abbreviation: unit?.abbreviation ?? {},
+      staffAbbreviation: unit?.staffAbbreviation ?? "",
       precision: unit?.precision ?? 0,
     });
     push({

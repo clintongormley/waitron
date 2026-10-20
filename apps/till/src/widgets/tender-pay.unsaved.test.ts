@@ -18,6 +18,8 @@ const product: TillProduct = {
   name: "Staff coffee",
   customerName: { en: "Customer coffee" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "each",
     name: { en: "unit" },
     abbreviation: { en: "ea" },
@@ -35,6 +37,8 @@ const weighed: TillProduct = {
   name: "Staff cheese",
   customerName: { en: "Customer cheese" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "kg",
     name: { en: "kilogram" },
     abbreviation: { en: "kg" },

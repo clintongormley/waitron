@@ -4,7 +4,9 @@ import { products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
-import type { TranslationBatch } from "./content-translation-types.js";
+import type { TranslationCellEdit } from "./content-translation-types.js";
+type TranslationBatch = { edits: TranslationCellEdit[] };
+import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { BATCH_SIZE } from "./batches.js";
 import { pruneSuggestions } from "./content-suggestion-collect.js";
@@ -15,7 +17,8 @@ import {
   storeSuggestionPage,
   suggestionStale,
 } from "./content-suggestion-store.js";
-import type { ContentSuggestionView } from "./content-suggestion-types.js";
+import type { ContentSuggestionQuery, ContentSuggestionView } from "./content-suggestion-types.js";
+import { optionLists, optionLabels } from "./schema/options.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addPlainProducts,
@@ -70,8 +73,8 @@ async function storedVenue(): Promise<SuggestionVenue> {
   });
   return venue;
 }
-const page = (language: string, after?: string) =>
-  app((tx) => listContentSuggestions(tx, language, after === undefined ? {} : { after }, context));
+const page = (query: ContentSuggestionQuery = {}) =>
+  app((tx) => listContentSuggestions(tx, query, context));
 const summary = (views: readonly ContentSuggestionView[]) =>
   inOrder(
     views.map(({ itemId, language, text, placeholder, fix, stale }) => ({
@@ -92,10 +95,10 @@ const named = (itemId: string, language: string, text: string) => ({
   stale: false,
 });
 
-it("lists the page language, the default language and the item rows", async () => {
+it("lists every enabled language and the item rows", async () => {
   const venue = await storedVenue();
-  const listed = await page("es");
-  expect(listed.language).toBe("es");
+  const listed = await page();
+  expect(listed.config).toEqual({ defaultLanguage: "ca", languages: ["ca", "es", "en"] });
   expect(listed.next).toBeNull();
   expect(listed.run).toMatchObject({ state: "done", waiting: 6 });
   expect(listed.suggestions.every((view) => view.kind === "product")).toBe(true);
@@ -110,21 +113,29 @@ it("lists the page language, the default language and the item rows", async () =
         stale: false,
       },
       named(venue.bread, "es", "CLIENT-ES Pan"),
+      named(venue.bread, "en", "CLIENT-EN Bread"),
       named(venue.wine, "ca", "CLIENT-CA Vi"),
       named(venue.wine, "es", "CLIENT-ES Vino"),
+      named(venue.wine, "en", "CLIENT-EN Wine"),
+      named(venue.cheese, "en", "CLIENT-EN Cheese"),
       {
         itemId: venue.cheese,
         language: "ca",
         text: null,
         placeholder: false,
         fix: { field: "ca", wrong: "Formatge", right: "Formatges" },
-        stale: false,
+        stale: true,
       },
     ]),
   );
-  expect((await page("ca")).suggestions.map((view) => view.language).sort()).toEqual([
+  expect((await page()).suggestions.map((view) => view.language).sort()).toEqual([
     "ca",
     "ca",
+    "en",
+    "en",
+    "en",
+    "es",
+    "es",
     null,
   ]);
 });
@@ -144,10 +155,10 @@ it("lists 100 suggestions a page, by id", async () => {
     );
     return created;
   });
-  const first = await page("en");
+  const first = await page();
   expect(first.suggestions).toHaveLength(100);
   expect(first.next).toBe(first.suggestions.at(-1)!.id);
-  const second = await page("en", first.next!);
+  const second = await page({ after: first.next!, configuration: first.configuration });
   expect(second.suggestions).toHaveLength(20);
   expect(second.next).toBeNull();
   expect([...first.suggestions, ...second.suggestions].map((view) => view.itemId).sort()).toEqual(
@@ -155,9 +166,11 @@ it("lists 100 suggestions a page, by id", async () => {
   );
 });
 
-it("refuses a language the venue has not enabled with content.languages_invalid", async () => {
+it("refuses a single-language filter with content.translation_invalid", async () => {
   await seedSuggestionVenue(suite.db);
-  await expect(page("fr")).rejects.toMatchObject({ code: "content.languages_invalid" });
+  await expect(page({ language: "fr" } as never)).rejects.toMatchObject({
+    code: "content.translation_invalid",
+  });
 });
 
 it("a language added after the job leaves the suggestions current", async () => {
@@ -177,7 +190,7 @@ it("a language added after the job leaves the suggestions current", async () => 
     resolveTranslationTargets(tx, "es", [{ kind: "product", id: venue.bread }], context),
   );
   expect(stored!.expected).not.toBe(targets[0]!.target.expected);
-  const { suggestions } = await page("es");
+  const { suggestions } = await page();
   expect(
     suggestions.find((view) => view.itemId === venue.bread && view.language === "es"),
   ).toMatchObject({
@@ -195,13 +208,13 @@ it("marks a suggestion stale once that item's text in that language changes, and
       .set({ customerName: { ca: "CLIENT-CA Pa", en: "CLIENT-EN Bread typed" } })
       .where(eq(products.id, venue.bread)),
   );
-  const english = (await page("en")).suggestions;
+  const english = (await page()).suggestions;
   expect(
     english.find((view) => view.itemId === venue.bread && view.language === "en"),
   ).toMatchObject({
     stale: true,
   });
-  const spanish = (await page("es")).suggestions;
+  const spanish = (await page()).suggestions;
   expect(
     spanish.find((view) => view.itemId === venue.bread && view.language === "es"),
   ).toMatchObject({
@@ -212,7 +225,7 @@ it("marks a suggestion stale once that item's text in that language changes, and
 it("a suggestion for a deleted product is neither listed nor kept by the next run", async () => {
   const venue = await storedVenue();
   await app((tx) => deactivateProduct(tx, venue.wine));
-  const listed = (await page("es")).suggestions.map((view) => view.itemId);
+  const listed = (await page()).suggestions.map((view) => view.itemId);
   expect(listed).not.toContain(venue.wine);
   expect(listed).toContain(venue.bread);
   await app((tx) => startSuggestionRun(tx, context));
@@ -259,6 +272,13 @@ it("starting a run prunes suggestions for names that were filled elsewhere", asy
       { itemId: venue.wine, language: "ca", text: "CLIENT-CA Vi", placeholder: false, fix: null },
       { itemId: venue.wine, language: "es", text: "CLIENT-ES Vino", placeholder: false, fix: null },
       { itemId: venue.wine, language: "en", text: "CLIENT-EN Wine", placeholder: false, fix: null },
+      {
+        itemId: venue.cheese,
+        language: "ca",
+        text: null,
+        placeholder: false,
+        fix: { field: "ca", wrong: "Formatge", right: "Formatges" },
+      },
     ]),
   );
 });
@@ -311,22 +331,23 @@ it("discarding a suggestion deletes it, and discarding it again is content.sugge
 describe("saving a name", () => {
   async function saveWine(id: string): Promise<TranslationBatch> {
     return app(async (tx) => {
-      const { targets } = await resolveTranslationTargets(
+      const { cells } = await resolveTranslationCells(
         tx,
-        "es",
-        [{ kind: "product", id }],
+        [
+          { kind: "product", id, language: "es", field: "name" },
+          { kind: "product", id, language: "ca", field: "name" },
+        ],
         context,
       );
       return {
-        edits: [
-          {
-            kind: "product",
-            id,
-            expected: targets[0]!.target.expected,
-            text: "CLIENT-ES Vino de la casa",
-            defaultText: "CLIENT-CA Vi de la casa",
-          },
-        ],
+        edits: cells.map(({ kind, id, language, field, expected }) => ({
+          kind,
+          id,
+          language,
+          field,
+          expected,
+          text: language === "es" ? "CLIENT-ES Vino de la casa" : "CLIENT-CA Vi de la casa",
+        })),
       };
     });
   }
@@ -338,13 +359,20 @@ describe("saving a name", () => {
   it("deletes its suggestion and its default companion's", async () => {
     const venue = await storedVenue();
     const request = await saveWine(venue.wine);
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     expect(await wineLanguages(venue)).toEqual(["en"]);
   });
 
   it("deletes each saved item's suggestions in the saved languages, and nothing else", async () => {
     const venue = await storedVenue();
     const request = await app(async (tx) => {
+      const refs = [venue.bread, venue.wine, venue.cheese].flatMap((id) => [
+        { kind: "product" as const, id, language: "es", field: "name" as const },
+        ...(id === venue.wine
+          ? [{ kind: "product" as const, id, language: "ca", field: "name" as const }]
+          : []),
+      ]);
+      const { cells } = await resolveTranslationCells(tx, refs, context);
       const { targets } = await resolveTranslationTargets(
         tx,
         "es",
@@ -352,16 +380,20 @@ describe("saving a name", () => {
         context,
       );
       return {
-        edits: targets.map(({ target }) => ({
-          kind: "product" as const,
-          id: target.id,
-          expected: target.expected,
-          text: `CLIENT-ES ${target.name}`,
-          ...(target.id === venue.wine ? { defaultText: "CLIENT-CA Vi de la casa" } : {}),
+        edits: cells.map(({ kind, id, language, field, expected }) => ({
+          kind,
+          id,
+          language,
+          field,
+          expected,
+          text:
+            language === "ca"
+              ? "CLIENT-CA Vi de la casa"
+              : `CLIENT-ES ${targets.find((entry) => entry.target.id === id)!.target.name}`,
         })),
       };
     });
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     const languages = async (itemId: string) =>
       (await app(suggestionRows)).filter((row) => row.itemId === itemId).map((row) => row.language);
     expect(await languages(venue.bread)).toEqual([null, "en"]);
@@ -372,7 +404,7 @@ describe("saving a name", () => {
   it("deletes a suggestion that arrived before a retried save", async () => {
     const venue = await storedVenue();
     const request = await saveWine(venue.wine);
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     await app((tx) =>
       tx.insert(contentSuggestions).values({
         kind: "product",
@@ -383,7 +415,7 @@ describe("saving a name", () => {
       }),
     );
     expect(await wineLanguages(venue)).toEqual(["en", "es"]);
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     expect(await wineLanguages(venue)).toEqual(["en"]);
   });
 
@@ -392,7 +424,7 @@ describe("saving a name", () => {
     const request = await saveWine(venue.wine);
     await expect(
       app(async (tx) => {
-        await saveContentTranslations(tx, "es", request, context);
+        await saveContentTranslations(tx, request, context);
         expect((await suggestionRows(tx)).filter((row) => row.itemId === venue.wine)).toHaveLength(
           1,
         );
@@ -410,6 +442,15 @@ describe("suggestionStale", () => {
     JSON.stringify({
       ref: { kind: "product", id: "p1" },
       language: "es",
+      field: "name",
+      structure: {
+        role: "product",
+        active: true,
+        ownerActive: true,
+        rootMatched: true,
+        parentRole: null,
+        childActive: true,
+      },
       inheritedSelectedText: null,
       inheritedDefaultText: null,
       owners: { kind: "product", parentId: null },
@@ -455,4 +496,35 @@ describe("suggestionStale", () => {
       expect(suggestionStale(token(), bad)).toBe(true);
     },
   );
+});
+
+it("carries the current staff name and parent editor for notes outside the translation page", async () => {
+  await seedSuggestionVenue(suite.db);
+  const ids = await app(async (tx) => {
+    const [list] = await tx
+      .insert(optionLists)
+      .values({ name: "STAFF Doneness", customerName: { ca: "CLIENT Punt" } })
+      .returning();
+    const [label] = await tx
+      .insert(optionLabels)
+      .values({ listId: list!.id, name: "STAFF Rrae", customerName: { ca: "CLIENT Poc" } })
+      .returning();
+    await tx
+      .insert(contentSuggestions)
+      .values({ kind: "option_label", itemId: label!.id, language: null, placeholder: true });
+    return { list: list!.id, label: label!.id };
+  });
+  const first = (await page()).suggestions.find((view) => view.itemId === ids.label)!;
+  expect(first.cell).toBeNull();
+  expect(first.item).toEqual({
+    name: "STAFF Rrae",
+    parent: { id: ids.list, name: "STAFF Doneness" },
+  });
+  await app(async (tx) => {
+    await tx.update(optionLabels).set({ name: "STAFF Rare" }).where(eq(optionLabels.id, ids.label));
+  });
+  expect((await page()).suggestions.find((view) => view.id === first.id)?.item).toEqual({
+    name: "STAFF Rare",
+    parent: { id: ids.list, name: "STAFF Doneness" },
+  });
 });

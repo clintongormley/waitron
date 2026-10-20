@@ -99,6 +99,8 @@ it("A738 a decimal quantity changes Save and running price without rounding", as
         ...product,
         unit: {
           id: "kg",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "Kilograms" },
           abbreviation: { en: "kg" },
           precision: 3,

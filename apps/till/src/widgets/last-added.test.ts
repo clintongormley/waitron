@@ -61,6 +61,8 @@ it.each(["weight", "fractional"])(
             ...dish,
             unit: {
               id: "ml",
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
               name: { en: "Millilitre" },
               abbreviation: { en: "ml" },
               precision: 3,

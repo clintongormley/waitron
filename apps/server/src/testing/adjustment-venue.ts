@@ -383,7 +383,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       [
         {
           name: "Wine glass",
-          customerName: { [LOCALE]: "Copa de tinto" },
+          customerName: { es: "Copa de tinto" },
           kitchenName: "COPA",
           image: null,
           unitPrice: "4.00",

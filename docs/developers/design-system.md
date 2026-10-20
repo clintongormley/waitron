@@ -3096,6 +3096,15 @@ tree; the same reference inside the shadow root did describe it).
 
 #### A field that falls back to another value
 
+Customer translation fields remain optional, including the default language. Units keep required
+staff name and abbreviation fields separately. In Edit translations, compare languages in bounded
+columns; Missing in filters rows independently of Jump to language. Keep personal edits and the
+focused native input when the page or visible languages change. Save one deliberate batch of at
+most 100 fields; show original, current and draft text when a saved field changes. A full batch
+leaves additional suggestions waiting. Use fix stages a freshly checked correction; Save commits it.
+The language-row warning wraps, and the Actions column stays pinned at the end.
+
+
 Some fields store a value only to override one they would otherwise take from somewhere else — a
 variant's VAT or photo from its parent product, an extra's price from its product's. Such a field is
 **empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees

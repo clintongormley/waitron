@@ -230,7 +230,10 @@ describe("DashboardApi routes", () => {
       opened: false,
     };
     const read = {
-      language: "ca-ES-valencia",
+      config: { defaultLanguage: "es", languages: ["es", "ca-ES-valencia"] },
+      required: [],
+      configuration: "configuration &1",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,
@@ -246,15 +249,21 @@ describe("DashboardApi routes", () => {
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.startContentSuggestions()).resolves.toEqual({ run });
-    await expect(api.getContentSuggestions("ca-ES-valencia")).resolves.toEqual(read);
-    await expect(api.getContentSuggestions("ca-ES-valencia", "s 1&x")).resolves.toEqual(read);
+    await expect(api.getContentSuggestions()).resolves.toEqual(read);
+    await expect(
+      api.getContentSuggestions({
+        after: "s 1&x",
+        configuration: "configuration &1",
+        fixesOnly: true,
+      }),
+    ).resolves.toEqual(read);
     await expect(api.discardContentSuggestion("a/b c")).resolves.toEqual({ deleted: "a/b c" });
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/content-suggestions/jobs", "POST", {}],
-      ["/management-api/content-suggestions?language=ca-ES-valencia", "GET", undefined],
+      ["/management-api/content-suggestions", "GET", undefined],
       [
-        "/management-api/content-suggestions?language=ca-ES-valencia&after=s+1%26x",
+        "/management-api/content-suggestions?after=s+1%26x&configuration=configuration+%261&fixesOnly=1",
         "GET",
         undefined,
       ],

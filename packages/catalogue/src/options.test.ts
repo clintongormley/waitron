@@ -443,27 +443,22 @@ describe("option list CRUD", () => {
     );
   });
 
-  it("refuses a list customer name with no text in the venue's default language", async () => {
-    const error = await refusal((tx) =>
+  it("saves a list customer name with no text in the default language", async () => {
+    const created = await run((tx) =>
       createOptionList(
         tx,
         { name: "Cooked", customerName: { fr: "Cuisson" }, labels: [{ name: "Medium rare" }] },
         "en",
       ),
     );
-
-    expect(error).toEqual(
-      expect.objectContaining({
-        code: "options.translation_required",
-        params: { field: "customerName", language: "en" },
-      }),
-    );
+    expect((await run((tx) => getOptionList(tx, created.id))).customerName).toEqual({
+      fr: "Cuisson",
+    });
+    expect(created.name).toBe("Cooked");
   });
 
-  it("refuses a label customer name with no text in the venue's default language", async () => {
-    // Two labels, and the SECOND is the one with the gap, so a refusal that always reported the
-    // first label would fail here.
-    const error = await refusal((tx) =>
+  it("saves a label customer name with no text in the default language", async () => {
+    const created = await run((tx) =>
       createOptionList(
         tx,
         {
@@ -476,13 +471,15 @@ describe("option list CRUD", () => {
         "en",
       ),
     );
-
-    expect(error).toEqual(
-      expect.objectContaining({
-        code: "options.translation_required",
-        params: { field: "labels.1.customerName", language: "en" },
-      }),
-    );
+    expect(
+      (await run((tx) => getOptionList(tx, created.id))).labels.map((label) => [
+        label.name,
+        label.customerName,
+      ]),
+    ).toEqual([
+      ["Medium rare", { en: "Cooked medium rare" }],
+      ["Well done", { fr: "Bien cuit" }],
+    ]);
   });
 
   it("saves an all-blank customer name as nothing rather than refusing it", async () => {

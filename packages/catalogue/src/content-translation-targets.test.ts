@@ -55,7 +55,7 @@ async function fixture(tx: Transaction) {
     [
       {
         name: "STAFF Small",
-        customerName: { es: "CLIENT Pequeño" },
+        customerName: { es: "CLIENT ES small" },
         kitchenName: "KITCHEN Small",
         image: null,
         unitPrice: "2.00",
@@ -79,9 +79,12 @@ async function fixture(tx: Transaction) {
     .returning();
   const [extra] = await tx
     .insert(extraLists)
-    .values({ name: "STAFF Sides", customerName: { es: "CLIENT Guarnición" } })
+    .values({ name: "STAFF Sides", customerName: { es: "CLIENT ES side" } })
     .returning();
-  await tx.insert(extraLists).values({ name: "STAFF Omitted absent extras" });
+  const [absentExtra] = await tx
+    .insert(extraLists)
+    .values({ name: "STAFF Omitted absent extras" })
+    .returning();
   const [section] = await tx
     .insert(sections)
     .values({ internalName: "STAFF Mains", names: { es: "CLIENT Platos" }, ownerMenuId: menu.id })
@@ -94,9 +97,19 @@ async function fixture(tx: Transaction) {
     { showAsFolder: false, overrides: { names: { en: "" }, color: "#123456" } },
     "es",
   );
+  await tx
+    .update(sectionMembers)
+    .set({ folderOverrides: { names: { en: "" }, color: "#123456" } })
+    .where(eq(sectionMembers.id, member.id));
   const [unit] = await tx
     .insert(units)
-    .values({ name: { es: "ración" }, abbreviation: { es: "rac" }, precision: 2 })
+    .values({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      name: { es: "portion" },
+      abbreviation: { es: "rac" },
+      precision: 2,
+    })
     .returning();
   return {
     product: product.id,
@@ -108,6 +121,7 @@ async function fixture(tx: Transaction) {
     section: section!.id,
     included_menu: member.id,
     unit: unit!.id,
+    absentExtra: absentExtra!.id,
     menuId: menu.id,
     root,
     childRoot,
@@ -144,13 +158,15 @@ describe("inline translation targets", () => {
         { kind: "variant", id: ids.variant },
         { kind: "option_list", id: ids.option_list },
         { kind: "option_label", id: ids.option_label },
-        { kind: "extra_list", id: ids.extra_list },
+        ...[ids.extra_list, ids.absentExtra].sort().map((id) => ({ kind: "extra_list", id })),
         { kind: "menu", id: ids.menu },
         { kind: "section", id: ids.section },
         { kind: "included_menu", id: ids.included_menu },
         { kind: "unit", id: ids.unit },
       ]);
-      const byKind = Object.fromEntries(page.rows.map((row) => [row.kind, row]));
+      const byKind = Object.fromEntries(
+        page.rows.filter((row) => row.id !== ids.absentExtra).map((row) => [row.kind, row]),
+      );
       expect(byKind.product).toMatchObject({
         name: "STAFF Bread",
         reason: "absent",
@@ -181,7 +197,7 @@ describe("inline translation targets", () => {
         },
       });
       expect(page).toMatchObject({
-        total: 9,
+        total: 10,
         next: null,
         config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
         required: ["es"],
@@ -245,7 +261,13 @@ describe("inline translation targets", () => {
     await withTransaction(suite.db, async (tx) => {
       const [unit] = await tx
         .insert(units)
-        .values({ name: { es: "ración" }, abbreviation: { es: "rac" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "portion" },
+          abbreviation: { es: "rac" },
+          precision: 0,
+        })
         .returning();
       const page = await listTranslationTargets(tx, "es", {}, context);
       expect(page).toMatchObject({
@@ -260,8 +282,8 @@ describe("inline translation targets", () => {
         context,
       );
       expect(one.targets[0]!.target).toMatchObject({
-        selectedText: "ración",
-        defaultText: "ración",
+        selectedText: "portion",
+        defaultText: "portion",
         defaultRequired: false,
       });
       expect(JSON.parse(one.targets[0]!.target.expected)).toMatchObject({
@@ -276,8 +298,10 @@ describe("inline translation targets", () => {
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       await tx.insert(units).values(
         Array.from({ length: 51 }, (_, i) => ({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: `u-${String(i).padStart(3, "0")}`,
-          name: { es: "ración" },
+          name: { es: "portion" },
           abbreviation: { es: "rac" },
           precision: 0,
         })),
@@ -318,8 +342,10 @@ describe("inline translation targets", () => {
       }));
       await tx.insert(units).values(
         refs.map(({ id }) => ({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id,
-          name: { es: "ración" },
+          name: { es: "portion" },
           abbreviation: { es: "rac" },
           precision: 0,
         })),
@@ -432,12 +458,12 @@ describe("inline translation targets", () => {
       const before = await token();
       await tx
         .update(products)
-        .set({ customerName: { ca: "Altre", es: "CLIENT Pequeño" }, unitPrice: 800 })
+        .set({ customerName: { ca: "Altre", es: "CLIENT ES small" }, unitPrice: 800 })
         .where(eq(products.id, ids.variant));
       expect(await token()).toBe(before);
       await tx
         .update(products)
-        .set({ customerName: { es: "CLIENT Pequeño", en: "Small" } })
+        .set({ customerName: { es: "CLIENT ES small", en: "Small" } })
         .where(eq(products.id, ids.variant));
       expect(await token()).not.toBe(before);
       await tx
@@ -448,26 +474,38 @@ describe("inline translation targets", () => {
     });
   });
 
-  it("empty units remain partial gaps and whitespace default labels use a nonblank name", async () => {
+  it("empty units and whitespace default labels retain their independent staff name", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       const [empty] = await tx
         .insert(units)
-        .values({ name: {}, abbreviation: { es: "u" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: {},
+          abbreviation: { es: "u" },
+          precision: 0,
+        })
         .returning();
       const [blank] = await tx
         .insert(units)
-        .values({ name: { es: "  ", ca: "racció" }, abbreviation: { es: "u" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "  ", ca: "CA portion" },
+          abbreviation: { es: "u" },
+          precision: 0,
+        })
         .returning();
       const page = await listTranslationTargets(tx, "es", {}, context);
       expect(page.rows.find((row) => row.id === empty!.id)).toMatchObject({
         reason: "partial",
-        name: "",
+        name: "Staff unit",
         defaultRequired: true,
       });
       expect(page.rows.find((row) => row.id === blank!.id)).toMatchObject({
         reason: "partial",
-        name: "racció",
+        name: "Staff unit",
         defaultRequired: true,
       });
     });

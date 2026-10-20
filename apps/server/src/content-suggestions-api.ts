@@ -14,6 +14,7 @@ import {
   markSuggestionRunOpened,
   startSuggestionRun,
   type ContentSuggestionRead,
+  type ContentSuggestionQuery,
   type TranslationContext,
 } from "@waitron/catalogue";
 import type { CloudConnection } from "./cloud-client.js";
@@ -44,6 +45,7 @@ const run = createErrorBoundary(
     "cloud.not_primary": 409,
     "content.suggestion_job_running": 409,
     "content.suggestion_not_found": 404,
+    "content.translation_stale": 409,
   },
   "catalogue.failed",
 );
@@ -52,13 +54,24 @@ function invalid(): never {
   throw new AppError("content.translation_invalid", {});
 }
 
-function pageQuery(c: Context): { language: string; after: string | undefined } {
+function pageQuery(c: Context): ContentSuggestionQuery {
   const params = new URL(c.req.url).searchParams;
-  if ([...params.keys()].some((key) => key !== "language" && key !== "after")) invalid();
-  const languages = params.getAll("language");
-  const after = params.getAll("after");
-  if (languages.length !== 1 || after.length > 1) invalid();
-  return { language: languages[0], after: after[0] };
+  if (
+    [...params.keys()].some(
+      (key) =>
+        !["after", "configuration", "fixesOnly"].includes(key) || params.getAll(key).length !== 1,
+    )
+  )
+    invalid();
+  const after = params.get("after");
+  const configuration = params.get("configuration");
+  const fixesOnly = params.get("fixesOnly");
+  if (fixesOnly !== null && fixesOnly !== "1") invalid();
+  return {
+    ...(after === null ? {} : { after }),
+    ...(configuration === null ? {} : { configuration }),
+    ...(fixesOnly === null ? {} : { fixesOnly: true }),
+  };
 }
 
 const authorize = (tx: Transaction, managementSessionId: string) =>
@@ -102,13 +115,13 @@ export function mountContentSuggestionsApi(
   app.get(PATH, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { language, after } = pageQuery(c);
+      const query = pageQuery(c);
       const available = await service();
       const page = await withTransaction(deps.db, async (tx) => {
         await authorize(tx, sessionId);
         // The runner writes the run's records on the primary; a standby leaves them alone.
         if (deps.isPrimary()) await markSuggestionRunOpened(tx);
-        return listContentSuggestions(tx, language, { after }, deps.context);
+        return listContentSuggestions(tx, query, deps.context);
       });
       const reply: ContentSuggestionRead = {
         ...page,

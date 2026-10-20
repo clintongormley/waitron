@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, type ContentLanguages } from "@waitron/shared";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { productModifiers } from "./schema/extras.js";
 import {
@@ -11,7 +11,11 @@ import {
   type ParsedOptionList,
 } from "./option-contract.js";
 import type { OptionListDependants, OptionListRow } from "./modifier-list-types.js";
-import { findContentTranslationGap } from "./content-languages.js";
+import { readContentLanguages } from "./content-languages.js";
+import {
+  mergeOptionalTranslations,
+  validateOptionalTranslations,
+} from "./optional-translations.js";
 import "./errors.js";
 
 // A LIST's `sort` is never written from a body (`parseOptionListInput` does not accept it), so the
@@ -112,34 +116,32 @@ async function assertOptionList(tx: Transaction, optionListId: string): Promise<
   if (!list) throw new AppError("options.not_found", { optionListId });
 }
 
-/**
- * Only the optional customer-facing MAP must have text in the venue's default content language; a
- * null one is legal because it falls back to `name`. The refusal carries the offending map's dotted
- * field path, so an editor can put it beside the input.
- */
-async function validateNames(
-  tx: Transaction,
+function normalizeNames(
   input: ParsedOptionList,
-  fallbackLanguage: string,
-): Promise<void> {
-  const named = [
-    { field: "customerName", map: input.customerName },
-    ...input.labels.map((label, index) => ({
-      field: `labels.${index}.customerName`,
-      map: label.customerName,
-    })),
-  ].filter((entry): entry is { field: string; map: Record<string, string> } => entry.map != null);
-  if (named.length === 0) return;
-  const gap = await findContentTranslationGap(
-    tx,
-    named.map((entry) => entry.map),
-    fallbackLanguage,
-  );
-  if (gap !== null)
-    throw new AppError("options.translation_required", {
-      field: named[gap.index]!.field,
-      language: gap.language,
-    });
+  value: unknown,
+  config?: ContentLanguages,
+  stored?: OptionList,
+): void {
+  const body = value as {
+    customerName?: Record<string, string> | null;
+    labels: { customerName?: Record<string, string> | null }[];
+  };
+  const map = (
+    supplied: Record<string, string> | null | undefined,
+    previous?: OptionLabel | OptionList,
+  ) => {
+    if (previous === undefined) {
+      const normalized = supplied == null ? {} : validateOptionalTranslations(supplied);
+      return Object.keys(normalized).length === 0 ? null : normalized;
+    }
+    return supplied === undefined
+      ? previous.customerName
+      : mergeOptionalTranslations(previous.customerName, supplied, config!);
+  };
+  input.customerName = map(body.customerName, stored);
+  const labels = new Map(stored?.labels.map((label) => [label.id, label]));
+  for (const [index, label] of input.labels.entries())
+    label.customerName = map(body.labels[index]!.customerName, labels.get(label.id));
 }
 
 // Taken as "the rest" rather than field by field, so a column added to `ParsedOptionList` cannot be
@@ -218,8 +220,9 @@ export async function createOptionList(
   value: unknown,
   fallbackLanguage: string,
 ): Promise<OptionList> {
+  void fallbackLanguage;
   const input = parseOptionListInput(value);
-  await validateNames(tx, input, fallbackLanguage);
+  normalizeNames(input, value);
   const optionListId = randomUUID();
   await tx.insert(optionLists).values({ id: optionListId, ...listValues(input) });
   await writeLabels(tx, optionListId, input);
@@ -235,10 +238,8 @@ export async function updateOptionList(
   const input = parseOptionListInput(value);
   // Stored ids are lower-case and an id column compares byte for byte (packages/shared/src/ids.ts).
   const optionListId = callerListId.toLowerCase();
-  // The list has to exist before its names are worth checking, or updating an id that names nothing
-  // reports a translation problem for a list that is not there.
-  await assertOptionList(tx, optionListId);
-  await validateNames(tx, input, fallbackLanguage);
+  const stored = await getOptionList(tx, optionListId);
+  normalizeNames(input, value, await readContentLanguages(tx, fallbackLanguage), stored);
   await tx.update(optionLists).set(listValues(input)).where(eq(optionLists.id, optionListId));
   await writeLabels(tx, optionListId, input);
   return getOptionList(tx, optionListId);

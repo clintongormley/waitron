@@ -244,7 +244,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         [
           {
             name: "Doble",
-            customerName: { [LOCALE]: "Doble ración" },
+            customerName: { es: "Doble ración" },
             kitchenName: "DBL",
             image: null,
             unitPrice: "3.20",
@@ -1071,6 +1071,8 @@ describe("ordering extras and options — parent + child lines", () => {
         const [each] = await tx
           .insert(units)
           .values({
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             seedKey: "each",
             name: { es: "Unidad", en: "Each" },
             abbreviation: { es: "pzas", en: "pcs" },
@@ -1085,6 +1087,8 @@ describe("ordering extras and options — parent + child lines", () => {
         const [millilitres] = await tx
           .insert(units)
           .values({
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             seedKey: null,
             name: { es: "Mililitro", en: "Millilitre" },
             abbreviation: { es: "ml", en: "ml" },
@@ -2167,6 +2171,8 @@ describe("ordering extras and options — parent + child lines", () => {
       const litre = await createUnit(
         tx,
         {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { [v.defaultLanguage]: "Litro" },
           abbreviation: { [v.defaultLanguage]: "l" },
           precision: 3,
@@ -2221,6 +2227,8 @@ describe("ordering extras and options — parent + child lines", () => {
       const unit = await createUnit(
         tx,
         {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { [v.defaultLanguage]: unitName },
           abbreviation: { [v.defaultLanguage]: unitName.slice(0, 2) },
           precision,

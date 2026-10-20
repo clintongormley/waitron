@@ -112,6 +112,8 @@ export interface SeededVenue {
 export async function seedLegacySellingUnits(db: Database): Promise<void> {
   await db.insert(units).values([
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       seedKey: "each",
       name: { en: "each", fr: "unité" },
       abbreviation: { en: "ea", fr: "u" },
@@ -119,6 +121,8 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
       hardwareUnit: null,
     },
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       seedKey: "kg",
       name: { en: "kg", fr: "kg" },
       abbreviation: { en: "kg", fr: "kg" },
@@ -160,10 +164,30 @@ export async function seedCatalogueFixture(
   const food = await createCategory(tx, { name: "Food" });
   const drinks = await createCategory(tx, { name: "Drinks" });
   const eachUnitId = (
-    await createUnit(tx, { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } }, "en")
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      },
+      "en",
+    )
   ).id;
   const kgUnitId = (
-    await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } }, "en")
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "kg" },
+      },
+      "en",
+    )
   ).id;
   const slicedHam = await createProduct(tx, {
     catalogueId: catalogue.id,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EACH_UNIT,
+  customerOptionSnapshotLabels,
   type OptionLabel,
   type OptionList,
   type ResolvedExtraList,
@@ -144,6 +145,92 @@ const products = new Map<string, ExtraProductFacts>([
 ]);
 
 describe("buildLineExtras", () => {
+  it("keeps absent customer maps absent while freezing readable staff fallback", () => {
+    const list = {
+      ...cooked,
+      customerName: null,
+      labels: [{ ...mediumRare, customerName: null }],
+    };
+    const answer = buildLineExtras(
+      { extras: [], options: [list] },
+      products,
+      { options: [{ listId: list.id, labelId: mediumRare.id }] },
+      "en",
+    ).optionSnapshots;
+    expect(answer).toEqual([
+      {
+        listName: { en: "Cooked staff" },
+        listCustomerName: null,
+        listKitchenName: "Cook kitchen",
+        labelName: { en: "Medium rare staff" },
+        labelCustomerName: null,
+        labelKitchenName: "MR kitchen",
+      },
+    ]);
+    expect(customerOptionSnapshotLabels(answer, "fr")).toEqual(["Cooked staff: Medium rare staff"]);
+  });
+
+  it("freezes a new option's list and label from their own default or staff text", () => {
+    const list = {
+      ...cooked,
+      customerName: { fr: "French cooking" },
+      labels: [{ ...mediumRare, customerName: { en: "English rare", fr: "French rare" } }],
+    };
+    const source = structuredClone(list);
+    const answer = buildLineExtras(
+      { extras: [], options: [list] },
+      products,
+      { options: [{ listId: list.id, labelId: mediumRare.id }] },
+      "en",
+    ).optionSnapshots;
+    expect(answer).toEqual([
+      {
+        listName: { en: "Cooked staff" },
+        listCustomerName: { en: "Cooked staff" },
+        listKitchenName: "Cook kitchen",
+        labelName: { en: "Medium rare staff" },
+        labelCustomerName: { en: "English rare" },
+        labelKitchenName: "MR kitchen",
+      },
+    ]);
+    expect(list).toEqual(source);
+  });
+
+  it("prepares new extra receipt abbreviations and full context names separately", () => {
+    const unit = {
+      id: "staff-unit",
+      staffName: "Staff kilogram",
+      staffAbbreviation: "staff-kg",
+      name: { fr: "French kilogram" },
+      abbreviation: { fr: "fr-kg" },
+      precision: 3,
+      hardwareUnit: "kg" as const,
+    };
+    const offered = { ...drinks, items: [{ ...drinks.items[0]!, unit }] };
+    const before = structuredClone(offered);
+    const result = buildLineExtras(
+      { extras: [offered], options: [] },
+      products,
+      {
+        extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 2 }] }],
+      },
+      "en",
+    );
+    expect(result.extraChildren[0]).toMatchObject({
+      quantity: 2,
+      price: "4.50",
+      vatClass: "general",
+      unitName: { en: "staff-kg" },
+      unitContext: {
+        id: "staff-unit",
+        name: { en: "Staff kilogram" },
+        precision: 3,
+        hardwareUnit: "kg",
+      },
+    });
+    expect(offered).toEqual(before);
+  });
+
   it("carries the physical amount, priced portion and unit of a weighed pick", () => {
     const weighted = {
       ...drinks,
@@ -154,6 +241,8 @@ describe("buildLineExtras", () => {
           price: "0.01",
           unit: {
             id: "unit-kg",
+            staffName: "Staff kilogram",
+            staffAbbreviation: "staff-kg",
             name: { en: "Kilogram" },
             abbreviation: { en: "kg", es: "kg" },
             precision: 3,
@@ -175,7 +264,7 @@ describe("buildLineExtras", () => {
         quantity: 3,
         physicalQuantity: "0.150",
         priceQuantity: "0.050",
-        unitName: { en: "kg", es: "kg" },
+        unitName: { en: "kg" },
         unitPrecision: 3,
         unitContext: {
           id: "unit-kg",
@@ -290,11 +379,11 @@ describe("buildLineExtras", () => {
         quantity: 2,
         physicalQuantity: "2",
         priceQuantity: "1",
-        unitName: EACH_UNIT.abbreviation,
+        unitName: { en: "ea" },
         unitPrecision: 0,
         unitContext: {
           id: EACH_UNIT.id,
-          name: EACH_UNIT.name,
+          name: { en: "Each" },
           precision: 0,
           hardwareUnit: null,
         },
@@ -419,6 +508,32 @@ const freeze = (
   );
 
 describe("editLineOptions", () => {
+  it.each([null, { es: "Recorded French list" }])(
+    "keeps an unchanged answer's recorded optional fallback %j after a default change",
+    (recordedList) => {
+      const list = {
+        ...cooked,
+        customerName: recordedList === null ? null : { fr: "Recorded French list" },
+        labels: [{ ...mediumRare, customerName: null }],
+      };
+      const stored = [
+        {
+          listName: { es: "Cooked staff" },
+          listCustomerName: recordedList,
+          listKitchenName: "Cook kitchen",
+          labelName: { es: "Medium rare staff" },
+          labelCustomerName: null,
+          labelKitchenName: "MR kitchen",
+        },
+      ];
+      const before = structuredClone(stored);
+      expect(
+        editLineOptions([list], [{ listId: cooked.id, labelId: mediumRare.id }], stored, "en"),
+      ).toBeNull();
+      expect(stored).toEqual(before);
+    },
+  );
+
   it("keeps the line's two answers whichever order each side lists them in", () => {
     const requested = [
       { listId: cooked.id, labelId: mediumRare.id },
@@ -671,7 +786,7 @@ describe("editLineExtras", () => {
     children: Child[],
     dishQuantity = "1",
   ) => {
-    const result = editLineExtras(offered, products, extras, { children, dishQuantity });
+    const result = editLineExtras(offered, products, extras, { children, dishQuantity }, "en");
     return {
       kept: result.kept.map(({ child, perDish }) => [
         child.productId,
@@ -759,6 +874,8 @@ describe("editLineExtras", () => {
           price: "0.01",
           unit: {
             id: "unit-kg",
+            staffName: "Staff kilogram",
+            staffAbbreviation: "staff-kg",
             name: { en: "Kilogram" },
             abbreviation: { en: "kg", es: "kg" },
             precision: 3,
@@ -773,6 +890,7 @@ describe("editLineExtras", () => {
       products,
       [{ listId: weighted.id, picks: [{ productId: "product-wine", quantity: 3 }] }],
       { children: [], dishQuantity: "2" },
+      "en",
     );
 
     expect(result.added).toMatchObject([
@@ -781,7 +899,7 @@ describe("editLineExtras", () => {
         quantity: 3,
         physicalQuantity: "0.150",
         priceQuantity: "0.050",
-        unitName: { en: "kg", es: "kg" },
+        unitName: { en: "kg" },
         unitPrecision: 3,
         unitContext: {
           id: "unit-kg",

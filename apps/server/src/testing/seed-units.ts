@@ -13,11 +13,21 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
   await db.insert(units).values([
     {
       seedKey: "each",
+      staffName: "Each",
+      staffAbbreviation: "ea",
       name: EACH_NAMES,
       abbreviation: EACH_ABBR,
       precision: 0,
       hardwareUnit: null,
     },
-    { seedKey: "kg", name: KG_NAMES, abbreviation: KG_NAMES, precision: 3, hardwareUnit: "kg" },
+    {
+      staffName: "Kilogram",
+      staffAbbreviation: "kg",
+      seedKey: "kg",
+      name: KG_NAMES,
+      abbreviation: KG_NAMES,
+      precision: 3,
+      hardwareUnit: "kg",
+    },
   ]);
 }

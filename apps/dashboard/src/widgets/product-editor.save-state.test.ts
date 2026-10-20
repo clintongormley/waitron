@@ -94,7 +94,15 @@ async function mount(value: ProductEditorDraft | null) {
     open: true,
     value,
     locales: ["en", "es"],
-    units: [{ id: "each", name: { en: "Each" }, abbreviation: { en: "ea" } }],
+    units: [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "each",
+        name: { en: "Each" },
+        abbreviation: { en: "ea" },
+      },
+    ],
     taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
     categories: [{ id: "drinks", name: "Drinks", parentId: null, color: null }],
     extraLists: [{ id: "sauces", name: "Sauces" }],

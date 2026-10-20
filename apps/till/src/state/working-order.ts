@@ -10,6 +10,7 @@
 import { type BasketItem, priceBasket } from "@waitron/catalogue/src/pricing.js";
 import { localToday } from "@waitron/catalogue/src/vat-rates.js";
 import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
+import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
@@ -125,9 +126,11 @@ const ZERO = decimal("0.00");
 /** A priced line wants the CUSTOMER text already resolved. */
 function toPriceable(line: OrderLine): BasketItem {
   const p = line.product;
+  const config = currentContentLanguages();
   const text = customerPresentationText(
     toPresentation(p),
-    currentContentLanguages().defaultLanguage,
+    config.defaultLanguage,
+    config.languages,
   );
   return {
     ...line,
@@ -135,7 +138,7 @@ function toPriceable(line: OrderLine): BasketItem {
       ...p,
       descriptions: text.product,
       variantDescriptions: text.variant,
-      unit: productUnit(p),
+      unit: prepareUnitSnapshot(productUnit(p), config),
     },
   };
 }

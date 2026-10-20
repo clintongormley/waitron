@@ -30,6 +30,8 @@ export interface ProductModifierRef {
 /** A unit a product is priced and sold in (`Each`, or a stored `units` row). */
 export interface Unit {
   id: string;
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   precision: number;
   abbreviation: Record<string, string>;

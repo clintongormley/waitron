@@ -1622,8 +1622,8 @@ describe("a zone moved to another department", () => {
 async function recordedLine(v: Timed) {
   const nodeId = await seedNode(db, v.locationId);
   await db.execute(sql`
-    insert into units (id, seed_key, name, abbreviation, precision, hardware_unit)
-    values (${randomUUID()}, 'each', '{"en":"each"}', '{"en":"ea"}', 0, null)`);
+    insert into units (id, seed_key, staff_name, staff_abbreviation, name, abbreviation, precision, hardware_unit)
+    values (${randomUUID()}, 'each', 'Each', 'ea', '{"en":"each"}', '{"en":"ea"}', 0, null)`);
   return scoped(async (tx) => {
     const product = await createProduct(tx, {
       catalogueId: v.menus.Desayunos,

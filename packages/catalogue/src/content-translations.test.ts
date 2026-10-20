@@ -1,3 +1,4 @@
+import type { TranslationTarget } from "./content-translation-targets.js";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -16,12 +17,10 @@ import {
   listTranslationTargets,
   resolveTranslationTargets,
 } from "./content-translation-targets.js";
-import type {
-  TranslationBatch,
-  TranslationRef,
-  TranslationTarget,
-} from "./content-translation-types.js";
+import type { TranslationCellEdit, TranslationRef } from "./content-translation-types.js";
 import { saveContentTranslations } from "./content-translations.js";
+import { resolveTranslationCells } from "./content-translation-cells.js";
+type TranslationBatch = { edits: TranslationCellEdit[] };
 import { setProductVariants } from "./variants.js";
 import { addMember, updateSection } from "./sections.js";
 import { setIncludeFolder } from "./include-folder.js";
@@ -55,7 +54,7 @@ async function fixture() {
     });
     const child = await createCatalogue(tx, {
       name: "STAFF Drinks",
-      names: { es: "CLIENT Bebidas" },
+      names: { es: "CLIENT ES drinks" },
     });
     const roots = await tx.select().from(menuDetails);
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
@@ -66,7 +65,7 @@ async function fixture() {
       unitId: null,
       name: "STAFF Bread",
       kitchenName: "KITCHEN Bread",
-      customerName: { es: "CLIENT Pan" },
+      customerName: { es: "CLIENT ES bread" },
       unitPrice: "3.00",
       vatClass: "reduced",
     });
@@ -77,7 +76,7 @@ async function fixture() {
         {
           name: "STAFF Small",
           kitchenName: "KITCHEN Small",
-          customerName: { es: "CLIENT Pequeño" },
+          customerName: { es: "CLIENT ES small" },
           unitPrice: "2.00",
           image: null,
           available: true,
@@ -90,7 +89,7 @@ async function fixture() {
       .values({
         name: "STAFF Doneness",
         kitchenName: "KITCHEN Doneness",
-        customerName: { es: "CLIENT Punto" },
+        customerName: { es: "CLIENT Cooking" },
       })
       .returning();
     const [label] = await tx
@@ -99,7 +98,7 @@ async function fixture() {
         listId: list!.id,
         name: "STAFF Rare",
         kitchenName: "KITCHEN Rare",
-        customerName: { es: "CLIENT Poco" },
+        customerName: { es: "CLIENT Rare" },
         available: false,
       })
       .returning();
@@ -108,7 +107,7 @@ async function fixture() {
       .values({
         name: "STAFF Sides",
         kitchenName: "KITCHEN Sides",
-        customerName: { es: "CLIENT Guarnición" },
+        customerName: { es: "CLIENT ES side" },
       })
       .returning();
     const [section] = await tx
@@ -122,13 +121,19 @@ async function fixture() {
       member.id,
       {
         showAsFolder: false,
-        overrides: { names: { ca: "CLIENT Begudes" }, color: "#123456", image: null },
+        overrides: { names: { ca: "CLIENT CA drinks" }, color: "#123456", image: null },
       },
       "es",
     );
     const [unit] = await tx
       .insert(units)
-      .values({ name: { es: "CLIENT Ración" }, abbreviation: { es: "rac" }, precision: 2 })
+      .values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { es: "CLIENT Portion" },
+        abbreviation: { es: "rac" },
+        precision: 2,
+      })
       .returning();
     return {
       product: product!.id,
@@ -154,17 +159,18 @@ async function batch(
 ): Promise<TranslationBatch> {
   return app(async (tx) => ({
     edits: (
-      await resolveTranslationTargets(
+      await resolveTranslationCells(
         tx,
-        language,
-        selected.map((kind) => ({ kind, id: ids[kind] })),
+        selected.map((kind) => ({ kind, id: ids[kind], language, field: "name" })),
         context,
       )
-    ).targets.map(({ target }) => ({
-      kind: target.kind,
-      id: target.id,
-      expected: target.expected,
-      text: `  CLIENT English ${target.kind}  `,
+    ).cells.map(({ kind, id, language, field, expected }) => ({
+      kind,
+      id,
+      language,
+      field,
+      expected,
+      text: `  CLIENT English ${kind}  `,
     })),
   }));
 }
@@ -184,7 +190,7 @@ async function snapshot(tx: Transaction) {
 
 describe("atomic content translations", () => {
   it.each(["product", "variant", "option_list", "option_label", "menu", "section"] as const)(
-    "%s with no customer-facing name takes a default-language save, though that page leaves it out",
+    "%s with no customer-facing name is listed and takes a default-language save",
     async (kind) => {
       const ids = await fixture();
       await app(async (tx) => {
@@ -217,13 +223,13 @@ describe("atomic content translations", () => {
         } while (after !== undefined);
         return rows;
       });
-      expect(listed.some((row) => row.kind === kind && row.id === ids[kind])).toBe(false);
+      expect(listed.some((row) => row.kind === kind && row.id === ids[kind])).toBe(true);
       const request = await batch(ids, [kind], "es");
-      const result = await app((tx) => saveContentTranslations(tx, "es", request, context));
+      const result = await app((tx) => saveContentTranslations(tx, request, context));
       expect(result.saved[0]).toMatchObject({
         kind,
         id: ids[kind],
-        selectedText: `CLIENT English ${kind}`,
+        text: `CLIENT English ${kind}`,
       });
       const stored = await app((tx) =>
         resolveTranslationTargets(tx, "es", [{ kind, id: ids[kind] }], context),
@@ -235,9 +241,23 @@ describe("atomic content translations", () => {
     const ids = await fixture();
     const request = await batch(ids);
     const before = await app(snapshot);
-    const result = await app((tx) => saveContentTranslations(tx, "en", request, context));
-    expect(result.saved.map(({ kind, id, selectedText }) => ({ kind, id, selectedText }))).toEqual(
-      kinds.map((kind) => ({ kind, id: ids[kind], selectedText: `CLIENT English ${kind}` })),
+    const result = await app((tx) => saveContentTranslations(tx, request, context));
+    expect(
+      result.saved.map(({ kind, id, language, field, text }) => ({
+        kind,
+        id,
+        language,
+        field,
+        text,
+      })),
+    ).toEqual(
+      kinds.map((kind) => ({
+        kind,
+        id: ids[kind],
+        language: "en",
+        field: "name",
+        text: `CLIENT English ${kind}`,
+      })),
     );
     const after = await app(snapshot);
     for (const rows of [after.products, after.lists, after.labels, after.extras])
@@ -248,24 +268,25 @@ describe("atomic content translations", () => {
     for (const row of after.units) delete row.name.en;
     expect(after).toEqual(before);
   });
-  it("mixed batch rollback carries the name rule's target field and language", async () => {
+  it("mixed batch rollback carries the invalid final map's exact cell and cause", async () => {
     const ids = await fixture();
     await app((tx) =>
-      tx.update(products).set({ customerName: null }).where(eq(products.id, ids.variant)),
+      tx
+        .update(products)
+        .set({ customerName: { "!!": "Invalid key" } })
+        .where(eq(products.id, ids.variant)),
     );
     const request = await batch(ids);
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
       code: "content.translation_refused",
       params: {
         kind: "variant",
         id: ids.variant,
-        field: "defaultText",
-        language: "es",
-        causeCode: "content.translation_required",
-        causeParams: { language: "es" },
+        field: "name",
+        language: "en",
+        causeCode: "content.translation_invalid",
+        causeParams: {},
       },
     });
     expect(await app(snapshot)).toEqual(before);
@@ -276,15 +297,13 @@ describe("atomic content translations", () => {
     await app((tx) =>
       tx
         .update(products)
-        .set({ customerName: { es: "CLIENT Pequeño", en: "Another writer" } })
+        .set({ customerName: { es: "CLIENT ES small", en: "Another writer" } })
         .where(eq(products.id, ids.variant)),
     );
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
       code: "content.translation_stale",
-      params: { kind: "variant", id: ids.variant },
+      params: { kind: "variant", id: ids.variant, language: "en", field: "name" },
     });
     expect(await app(snapshot)).toEqual(before);
   });
@@ -294,7 +313,7 @@ describe("atomic content translations", () => {
     await app(async (tx) => {
       await tx
         .update(products)
-        .set({ unitPrice: 475, customerName: { ca: "CLIENT Pa", es: "CLIENT Pan" } })
+        .set({ unitPrice: 475, customerName: { ca: "CLIENT CA bread", es: "CLIENT ES bread" } })
         .where(eq(products.id, ids.product));
       await tx.update(contentLanguages).set({ languages: ["en", "es", "ca"] });
     });
@@ -311,24 +330,24 @@ describe("atomic content translations", () => {
       })(),
     }));
     const result = await app((tx) =>
-      saveContentTranslations(tx, "en", request, { ...context, required: ["ca", "es", "ca"] }),
+      saveContentTranslations(tx, request, { ...context, required: ["ca", "es", "ca"] }),
     );
     expect(result.saved).toHaveLength(9);
     const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.product));
     expect(stored).toMatchObject({
       unitPrice: 475,
-      customerName: { ca: "CLIENT Pa", es: "CLIENT Pan", en: "CLIENT English product" },
+      customerName: { ca: "CLIENT CA bread", es: "CLIENT ES bread", en: "CLIENT English product" },
     });
   });
   it("equivalent retry returns canonical names without issuing updates", async () => {
     const ids = await fixture();
     const request = await batch(ids);
-    const first = await app((tx) => saveContentTranslations(tx, "en", request, context));
+    const first = await app((tx) => saveContentTranslations(tx, request, context));
     expect(first.saved).toHaveLength(9);
     const second = await app(async (tx) => {
       const spy = vi.spyOn(tx, "update");
       try {
-        const result = await saveContentTranslations(tx, "en", request, context);
+        const result = await saveContentTranslations(tx, request, context);
         expect(spy).not.toHaveBeenCalled();
         return result;
       } finally {
@@ -340,7 +359,7 @@ describe("atomic content translations", () => {
   it("a divergent cell refuses the entire lost-response retry", async () => {
     const ids = await fixture();
     const request = await batch(ids);
-    await app((tx) => saveContentTranslations(tx, "en", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     await app((tx) =>
       tx
         .update(sections)
@@ -348,11 +367,9 @@ describe("atomic content translations", () => {
         .where(eq(sections.id, ids.section)),
     );
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
       code: "content.translation_stale",
-      params: { kind: "section", id: ids.section },
+      params: { kind: "section", id: ids.section, language: "en", field: "name" },
     });
     expect(await app(snapshot)).toEqual(before);
   });
@@ -424,7 +441,6 @@ describe("atomic content translations", () => {
       app((tx) =>
         saveContentTranslations(
           tx,
-          "en",
           request,
           change === "required" ? { ...context, required: ["es"] } : context,
         ),
@@ -441,20 +457,19 @@ describe("atomic content translations", () => {
     const request = await batch(ids);
     await app((tx) => tx.delete(units).where(eq(units.id, ids.unit)));
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
       code: "content.translation_unavailable",
-      params: { kind: "unit", id: ids.unit },
+      params: { kind: "unit", id: ids.unit, language: "en", field: "name" },
     });
     expect(await app(snapshot)).toEqual(before);
   });
   it("a baseline belongs to its selected language even when both cells were empty", async () => {
     const ids = await fixture();
     const request = await batch(ids, ["product"]);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "ca", request, context)),
-    ).rejects.toMatchObject({ code: "content.translation_stale" });
+    request.edits[0]!.language = "ca";
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
+      code: "content.translation_batch_invalid",
+    });
     expect(
       (
         await app((tx) =>
@@ -463,22 +478,42 @@ describe("atomic content translations", () => {
       ).targets[0]!.target.selectedText,
     ).toBeNull();
   });
-  it("explicit default companion is trimmed and its original request retries without writes", async () => {
+  it("an explicit default cell is trimmed and the original multilingual request retries without writes", async () => {
     const ids = await fixture();
     await app((tx) =>
       tx.update(products).set({ customerName: null }).where(eq(products.id, ids.product)),
     );
     const request = await batch(ids, ["product"]);
-    request.edits[0]!.defaultText = "  CLIENT Pan nuevo  ";
-    const first = await app((tx) => saveContentTranslations(tx, "en", request, context));
+    const defaultBatch = await batch(ids, ["product"], "es");
+    defaultBatch.edits[0]!.text = "  CLIENT ES bread new  ";
+    request.edits.push(...defaultBatch.edits);
+    const first = await app((tx) => saveContentTranslations(tx, request, context));
     expect(first.saved[0]).toMatchObject({
-      selectedText: "CLIENT English product",
-      defaultText: "CLIENT Pan nuevo",
+      language: "en",
+      field: "name",
+      text: "CLIENT English product",
+      defaultText: "CLIENT ES bread new",
     });
-    expect(await app((tx) => saveContentTranslations(tx, "en", request, context))).toEqual(first);
+    expect(first.saved[1]).toMatchObject({
+      language: "es",
+      field: "name",
+      text: "CLIENT ES bread new",
+      defaultText: "CLIENT ES bread new",
+    });
+    const second = await app(async (tx) => {
+      const spy = vi.spyOn(tx, "update");
+      try {
+        const reply = await saveContentTranslations(tx, request, context);
+        expect(spy).not.toHaveBeenCalled();
+        return reply;
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    expect(second).toEqual(first);
   });
   it.each(["existing", "selected default", "inherited"] as const)(
-    "rejects a gratuitous companion with %s default",
+    "rejects the retired companion field with %s default",
     async (mode) => {
       const ids = await fixture();
       const request = await batch(
@@ -486,13 +521,13 @@ describe("atomic content translations", () => {
         [mode === "inherited" ? "included_menu" : "product"],
         mode === "selected default" ? "es" : "en",
       );
-      request.edits[0]!.defaultText = "Gratuitous";
+      Object.assign(request.edits[0]!, { defaultText: "Gratuitous" });
       const before = await app(snapshot);
       await expect(
-        app((tx) =>
-          saveContentTranslations(tx, mode === "selected default" ? "es" : "en", request, context),
-        ),
-      ).rejects.toMatchObject({ code: "content.translation_batch_invalid" });
+        app((tx) => saveContentTranslations(tx, request, context)),
+      ).rejects.toMatchObject({
+        code: "content.translation_batch_invalid",
+      });
       expect(await app(snapshot)).toEqual(before);
     },
   );
@@ -509,84 +544,95 @@ describe("atomic content translations", () => {
       ];
       if (order === "include first") refs.reverse();
       const request: TranslationBatch = await app(async (tx) => ({
-        edits: (await resolveTranslationTargets(tx, "en", refs, context)).targets.map(
-          ({ target }) => ({
-            kind: target.kind,
-            id: target.id,
-            expected: target.expected,
-            text: target.kind === "menu" ? "Root English" : "Folder English",
-            ...(target.kind === "menu" ? { defaultText: "Root Español" } : {}),
-          }),
-        ),
+        edits: (
+          await resolveTranslationCells(
+            tx,
+            refs.flatMap((ref) => [
+              { ...ref, language: "en", field: "name" as const },
+              ...(ref.kind === "menu" ? [{ ...ref, language: "es", field: "name" as const }] : []),
+            ]),
+            context,
+          )
+        ).cells.map(({ kind, id, language, field, expected }) => ({
+          kind,
+          id,
+          language,
+          field,
+          expected,
+          text: language === "es" ? "ES root" : kind === "menu" ? "Root English" : "Folder English",
+        })),
       }));
-      const first = await app((tx) => saveContentTranslations(tx, "en", request, context));
+      const first = await app((tx) => saveContentTranslations(tx, request, context));
       expect(first.saved.find((row) => row.kind === "included_menu")).toMatchObject({
-        selectedText: "Folder English",
+        text: "Folder English",
         defaultText: null,
-        effectiveDefaultText: "Root Español",
-        defaultRequired: false,
+        effectiveDefaultText: "ES root",
       });
       const before = await app(snapshot);
-      expect(await app((tx) => saveContentTranslations(tx, "en", request, context))).toEqual(first);
+      expect(await app((tx) => saveContentTranslations(tx, request, context))).toEqual(first);
       expect(await app(snapshot)).toEqual(before);
     },
   );
   it("changed inherited default conflicts even when the requested override already matches", async () => {
     const ids = await fixture();
     const request = await batch(ids, ["included_menu"]);
-    await app((tx) => saveContentTranslations(tx, "en", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     await app((tx) =>
       tx
         .update(sections)
         .set({ names: { es: "Other default" } })
         .where(eq(sections.id, ids.childRoot)),
     );
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({ code: "content.translation_stale" });
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
+      code: "content.translation_stale",
+    });
   });
   it.each(["configured", "unset"] as const)(
-    "existing menu, section and folder checks expose the %s default fallback",
+    "menu, section and folder writes keep enabled maps optional with %s configuration",
     async (mode) => {
       const ids = await fixture();
       if (mode === "unset") await app((tx) => tx.delete(contentLanguages));
-      for (const [writer, language] of [
-        [
-          () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "Only català" } })),
-          mode === "configured" ? "es" : "en",
-        ],
-        [
-          () => app((tx) => updateSection(tx, ids.section, { names: { ca: "Only català" } }, "es")),
-          "es",
-        ],
-        [
-          () =>
-            app((tx) =>
-              setIncludeFolder(
-                tx,
-                ids.menu,
-                ids.included_menu,
-                {
-                  showAsFolder: false,
-                  overrides: { names: { ca: "Only català", es: "", en: "" } },
-                },
-                "es",
-              ),
+      for (const writer of [
+        () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "CA only" } })),
+        () => app((tx) => updateSection(tx, ids.section, { names: { ca: "CA only" } }, "es")),
+        () =>
+          app((tx) =>
+            setIncludeFolder(
+              tx,
+              ids.menu,
+              ids.included_menu,
+              {
+                showAsFolder: false,
+                overrides: { names: { ca: "CA only", es: "", en: "" } },
+              },
+              "es",
             ),
-          "es",
-        ],
-      ] as const) {
-        await expect(writer()).rejects.toMatchObject({
-          code: "menu_section.translation_required",
-          params: { field: "names", language },
-        });
+          ),
+      ]) {
+        if (mode === "unset") {
+          await expect(writer()).rejects.toMatchObject({ code: "content.translation_invalid" });
+        } else {
+          await writer();
+        }
+      }
+      if (mode === "configured") {
+        const rows = await suite.db
+          .select({ id: sections.id, names: sections.names })
+          .from(sections);
+        expect(rows.find((row) => row.id === ids.menu)!.names).toEqual({ ca: "CA only" });
+        expect(rows.find((row) => row.id === ids.section)!.names).toEqual({ ca: "CA only" });
+        const [member] = await suite.db
+          .select()
+          .from(sectionMembers)
+          .where(eq(sectionMembers.id, ids.included_menu));
+        expect(member!.folderOverrides).toEqual({ names: { ca: "CA only" } });
       }
       if (mode === "unset") {
         await expect(
           app((tx) => updateMenuDetails(tx, ids.menuId, { names: { es: "Español" } })),
         ).rejects.toMatchObject({
-          code: "menu_section.translation_required",
-          params: { language: "en" },
+          code: "content.translation_invalid",
+          params: {},
         });
         await app((tx) => updateSection(tx, ids.section, { names: { es: "Español" } }, "es"));
         await app((tx) =>
@@ -647,18 +693,20 @@ describe("atomic content translations", () => {
         break;
     }
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({ code: "content.translation_batch_invalid" });
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
+      code: "content.translation_batch_invalid",
+    });
     expect(await app(snapshot)).toEqual(before);
   });
-  it("one hundred saves use one configuration and one bounded target read", async () => {
+  it("one hundred saves use one configuration and bounded cell and replacement reads", async () => {
     const ids = await fixture();
     const refs = await app(async (tx) => {
       const rows = await tx
         .insert(units)
         .values(
           Array.from({ length: 100 }, (_, i) => ({
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             name: { es: `CLIENT Unit ${i}` },
             abbreviation: { es: `u${i}` },
             precision: 0,
@@ -669,26 +717,32 @@ describe("atomic content translations", () => {
     });
     for (const selected of [refs.slice(0, 1), refs]) {
       const request = await app(async (tx) => ({
-        edits: (await resolveTranslationTargets(tx, "en", selected, context)).targets.map(
-          ({ target }) => ({
-            kind: target.kind,
-            id: target.id,
-            expected: target.expected,
-            text: `English ${target.id}`,
-          }),
-        ),
+        edits: (
+          await resolveTranslationCells(
+            tx,
+            selected.map((ref) => ({ ...ref, language: "en", field: "name" as const })),
+            context,
+          )
+        ).cells.map(({ kind, id, language, field, expected }) => ({
+          kind,
+          id,
+          language,
+          field,
+          expected,
+          text: `English ${id}`,
+        })),
       }));
       await app(async (tx) => {
         const spy = vi.spyOn(tx, "execute");
         let result;
         try {
-          result = await saveContentTranslations(tx, "en", request, context);
-          expect(spy).toHaveBeenCalledTimes(2);
+          result = await saveContentTranslations(tx, request, context);
+          expect(spy).toHaveBeenCalledTimes(4);
         } finally {
           spy.mockRestore();
         }
         expect(result.saved).toHaveLength(selected.length);
-        expect(result.saved.every((row) => row.selectedText === `English ${row.id}`)).toBe(true);
+        expect(result.saved.every((row) => row.text === `English ${row.id}`)).toBe(true);
       });
     }
     expect(
@@ -702,16 +756,16 @@ describe("atomic content translations", () => {
   it("an external default change conflicts and cannot be mistaken for a retry", async () => {
     const ids = await fixture();
     const request = await batch(ids, ["product"]);
-    await app((tx) => saveContentTranslations(tx, "en", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     await app((tx) =>
       tx
         .update(products)
         .set({ customerName: { es: "Different default", en: "CLIENT English product" } })
         .where(eq(products.id, ids.product)),
     );
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({ code: "content.translation_stale" });
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
+      code: "content.translation_stale",
+    });
   });
   it("selected default root edits project both inherited cells for the retry", async () => {
     const ids = await fixture();
@@ -720,31 +774,37 @@ describe("atomic content translations", () => {
       { kind: "menu", id: ids.childRoot },
     ];
     const request = await app(async (tx) => ({
-      edits: (await resolveTranslationTargets(tx, "es", refs, context)).targets.map(
-        ({ target }) => ({
-          kind: target.kind,
-          id: target.id,
-          expected: target.expected,
-          text: target.kind === "menu" ? "Root español" : "Folder español",
-        }),
-      ),
+      edits: (
+        await resolveTranslationCells(
+          tx,
+          refs.map((ref) => ({ ...ref, language: "es", field: "name" as const })),
+          context,
+        )
+      ).cells.map(({ kind, id, language, field, expected }) => ({
+        kind,
+        id,
+        language,
+        field,
+        expected,
+        text: kind === "menu" ? "ES root" : "ES folder",
+      })),
     }));
-    const first = await app((tx) => saveContentTranslations(tx, "es", request, context));
+    const first = await app((tx) => saveContentTranslations(tx, request, context));
     expect(first.saved[0]).toMatchObject({
-      selectedText: "Folder español",
-      defaultText: "Folder español",
-      effectiveDefaultText: "Folder español",
+      text: "ES folder",
+      defaultText: "ES folder",
+      effectiveDefaultText: "ES folder",
     });
-    expect(await app((tx) => saveContentTranslations(tx, "es", request, context))).toEqual(first);
+    expect(await app((tx) => saveContentTranslations(tx, request, context))).toEqual(first);
   });
   it("mixed retry and unsaved rows cannot partially complete a batch", async () => {
     const ids = await fixture();
     const request = await batch(ids, ["product", "variant"]);
-    await app((tx) => saveContentTranslations(tx, "en", { edits: [request.edits[0]!] }, context));
+    await app((tx) => saveContentTranslations(tx, { edits: [request.edits[0]!] }, context));
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({ code: "content.translation_stale" });
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
+      code: "content.translation_stale",
+    });
     expect(await app(snapshot)).toEqual(before);
   });
   it.each([
@@ -801,111 +861,105 @@ describe("atomic content translations", () => {
     }
     if (mode !== "json") edit.expected = JSON.stringify(baseline);
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({ code: "content.translation_batch_invalid" });
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
+      code: "content.translation_batch_invalid",
+    });
     expect(await app(snapshot)).toEqual(before);
   });
   it("4 KiB multibyte names save without losing internal spaces", async () => {
     const ids = await fixture();
     const request = await batch(ids, ["product"]);
     request.edits[0]!.text = "é".repeat(2046) + "  ab";
-    const result = await app((tx) => saveContentTranslations(tx, "en", request, context));
-    expect(result.saved[0]!.selectedText).toBe("é".repeat(2046) + "  ab");
+    const result = await app((tx) => saveContentTranslations(tx, request, context));
+    expect(result.saved[0]!.text).toBe("é".repeat(2046) + "  ab");
   });
   it("other domain name refusals keep their cause and row for the caller", async () => {
     const ids = await fixture();
     await app((tx) =>
       tx
         .update(units)
-        .set({ name: { es: "CLIENT Ración", "!!": "Invalid language" } })
+        .set({ name: { es: "CLIENT Portion", "!!": "Invalid language" } })
         .where(eq(units.id, ids.unit)),
     );
     const request = await batch(ids, ["product", "unit"]);
     const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
       code: "content.translation_refused",
       params: {
         kind: "unit",
         id: ids.unit,
-        field: "text",
+        field: "name",
         language: "en",
-        causeCode: "content.language_invalid",
+        causeCode: "content.translation_invalid",
         causeParams: {},
       },
     });
     expect(await app(snapshot)).toEqual(before);
   });
-  it.each(kinds)("%s missing default carries its existing domain name refusal", async (kind) => {
-    const ids = await fixture();
-    await app(async (tx) => {
-      switch (kind) {
-        case "product":
-        case "variant":
-          await tx.update(products).set({ customerName: null }).where(eq(products.id, ids[kind]));
-          break;
-        case "option_list":
-          await tx
-            .update(optionLists)
-            .set({ customerName: null })
-            .where(eq(optionLists.id, ids[kind]));
-          break;
-        case "option_label":
-          await tx
-            .update(optionLabels)
-            .set({ customerName: null })
-            .where(eq(optionLabels.id, ids[kind]));
-          break;
-        case "extra_list":
-          await tx
-            .update(extraLists)
-            .set({ customerName: null })
-            .where(eq(extraLists.id, ids[kind]));
-          break;
-        case "unit":
-          await tx.update(units).set({ name: {} }).where(eq(units.id, ids[kind]));
-          break;
-        case "menu":
-        case "section":
-          await tx.update(sections).set({ names: {} }).where(eq(sections.id, ids[kind]));
-          break;
-        case "included_menu":
-          await tx
-            .update(sectionMembers)
-            .set({ folderOverrides: { names: { es: "" } } })
-            .where(eq(sectionMembers.id, ids[kind]));
-          break;
-      }
-    });
-    const causeCodes = {
-      product: "content.translation_required",
-      variant: "content.translation_required",
-      option_list: "options.translation_required",
-      option_label: "options.translation_required",
-      extra_list: "extras.translation_required",
-      unit: "unit.translation_required",
-      menu: "menu_section.translation_required",
-      section: "menu_section.translation_required",
-      included_menu: "menu_section.translation_required",
-    };
-    const request = await batch(ids, [kind]);
-    const before = await app(snapshot);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
-      code: "content.translation_refused",
-      params: {
+  it.each(kinds)(
+    "%s missing default saves only the selected language and leaves the default blank",
+    async (kind) => {
+      const ids = await fixture();
+      await app(async (tx) => {
+        switch (kind) {
+          case "product":
+          case "variant":
+            await tx.update(products).set({ customerName: null }).where(eq(products.id, ids[kind]));
+            break;
+          case "option_list":
+            await tx
+              .update(optionLists)
+              .set({ customerName: null })
+              .where(eq(optionLists.id, ids[kind]));
+            break;
+          case "option_label":
+            await tx
+              .update(optionLabels)
+              .set({ customerName: null })
+              .where(eq(optionLabels.id, ids[kind]));
+            break;
+          case "extra_list":
+            await tx
+              .update(extraLists)
+              .set({ customerName: null })
+              .where(eq(extraLists.id, ids[kind]));
+            break;
+          case "unit":
+            await tx.update(units).set({ name: {} }).where(eq(units.id, ids[kind]));
+            break;
+          case "menu":
+          case "section":
+            await tx.update(sections).set({ names: {} }).where(eq(sections.id, ids[kind]));
+            break;
+          case "included_menu":
+            await tx
+              .update(sectionMembers)
+              .set({ folderOverrides: { names: { es: "" } } })
+              .where(eq(sectionMembers.id, ids[kind]));
+            break;
+        }
+      });
+      const request = await batch(ids, [kind]);
+      const before = await app(snapshot);
+      const reply = await app((tx) => saveContentTranslations(tx, request, context));
+      expect(reply.saved[0]).toMatchObject({
         kind,
         id: ids[kind],
-        field: "defaultText",
-        language: "es",
-        causeCode: causeCodes[kind],
-      },
-    });
-    expect(await app(snapshot)).toEqual(before);
-  });
+        language: "en",
+        field: "name",
+        text: `CLIENT English ${kind}`,
+        defaultText: kind === "included_menu" ? "" : null,
+      });
+      const after = await app(snapshot);
+      for (const rows of [after.products, after.lists, after.labels, after.extras])
+        for (const row of rows) if (row.id === ids[kind]) row.customerName = null;
+      for (const row of after.sections) if (row.id === ids[kind]) row.names = {};
+      for (const row of after.members)
+        if (row.id === ids[kind]) row.folderOverrides.names = { es: "" };
+      for (const row of after.units) if (row.id === ids[kind]) row.name = {};
+      expect(after).toEqual(before);
+    },
+  );
 });
 
 it("saves only customer names on an explicitly selected archived product", async () => {
@@ -913,9 +967,9 @@ it("saves only customer names on an explicitly selected archived product", async
   await app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, ids.product)));
   const before = await app(snapshot);
   const request = await batch(ids, ["product"]);
-  await app((tx) => saveContentTranslations(tx, "en", request, context));
+  await app((tx) => saveContentTranslations(tx, request, context));
   const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.product));
-  expect(stored!.customerName).toEqual({ es: "CLIENT Pan", en: "CLIENT English product" });
+  expect(stored!.customerName).toEqual({ es: "CLIENT ES bread", en: "CLIENT English product" });
   const after = await app(snapshot);
   expect(after).toEqual({
     ...before,
@@ -936,9 +990,9 @@ it.each(["variant", "parent"] as const)(
         .where(eq(products.id, archived === "parent" ? ids.product : ids.variant)),
     );
     const request = await batch(ids, ["variant"]);
-    await app((tx) => saveContentTranslations(tx, "en", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.variant));
-    expect(stored!.customerName).toEqual({ es: "CLIENT Pequeño", en: "CLIENT English variant" });
+    expect(stored!.customerName).toEqual({ es: "CLIENT ES small", en: "CLIENT English variant" });
   },
 );
 
@@ -955,11 +1009,9 @@ it.each(["option_list", "extra_list", "menu"] as const)(
     });
     const before = await app(snapshot);
     const request = await batch(ids, [kind]);
-    await expect(
-      app((tx) => saveContentTranslations(tx, "en", request, context)),
-    ).rejects.toMatchObject({
+    await expect(app((tx) => saveContentTranslations(tx, request, context))).rejects.toMatchObject({
       code: "content.translation_unavailable",
-      params: { kind, id: ids[kind] },
+      params: { kind, id: ids[kind], language: "en", field: "name" },
     });
     expect(await app(snapshot)).toEqual(before);
   },

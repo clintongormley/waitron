@@ -18,7 +18,11 @@ import {
   type ExtraListInput,
 } from "./extra-contract.js";
 import type { ExtraListDependants, ExtraListRow } from "./modifier-list-types.js";
-import { findContentTranslationGap } from "./content-languages.js";
+import { readContentLanguages } from "./content-languages.js";
+import {
+  mergeOptionalTranslations,
+  validateOptionalTranslations,
+} from "./optional-translations.js";
 import { parentsWithActiveVariants } from "./variants.js";
 import { productUnits, units } from "./schema/units.js";
 import { parentJoin, parentProducts, unitOwnerJoin } from "./variant-fallback.js";
@@ -156,27 +160,6 @@ async function assertExtraListForWrite(tx: Transaction, extraListId: string): Pr
   if (!list) throw new AppError("extras.not_found", { extraListId });
 }
 
-/**
- * Only the optional customer-facing name map needs text in the venue's default content language; a
- * null one is legal because it falls back to `name`. The refusal carries the field path so an editor
- * can put it beside the input.
- */
-async function validateNames(
-  tx: Transaction,
-  input: ExtraListInput,
-  fallbackLanguage: string,
-): Promise<void> {
-  if (input.customerName === null) return;
-  const gap = await findContentTranslationGap(tx, [input.customerName], fallbackLanguage);
-  if (gap !== null)
-    throw new AppError("extras.translation_required", {
-      field: "customerName",
-      language: gap.language,
-    });
-}
-
-// Everything on the body EXCEPT the items, which live in their own table. Taken as "the rest" rather
-// than field by field, so a column added to `ExtraListInput` later cannot be left unwritten.
 function listValues(input: ExtraListInput) {
   const { items, ...values } = input;
   void items; // discarded on purpose; the lint rule does not exempt a rest sibling
@@ -352,8 +335,10 @@ export async function createExtraList(
   value: unknown,
   fallbackLanguage: string,
 ): Promise<ExtraList> {
+  void fallbackLanguage;
   const input = parseExtraListInput(value);
-  await validateNames(tx, input, fallbackLanguage);
+  const names = input.customerName === null ? {} : validateOptionalTranslations(input.customerName);
+  input.customerName = Object.keys(names).length === 0 ? null : names;
   const extraListId = randomUUID();
   await tx.insert(extraLists).values({ id: extraListId, ...listValues(input) });
   await writeItems(tx, extraListId, input);
@@ -370,10 +355,16 @@ export async function updateExtraList(
   // The caller's id does not come through the contract, so it is lower-cased here: `writeItems`
   // compares it in JavaScript against a stored `list_id`.
   const extraListId = callerListId.toLowerCase();
-  // The list has to exist before its name is worth checking, or updating an id that names nothing
-  // reports a translation problem for a list that is not there.
-  await assertExtraListForWrite(tx, extraListId);
-  await validateNames(tx, input, fallbackLanguage);
+  const stored = await getExtraList(tx, extraListId);
+  const body = value as { customerName?: Record<string, string> | null };
+  input.customerName =
+    body.customerName === undefined
+      ? stored.customerName
+      : mergeOptionalTranslations(
+          stored.customerName,
+          body.customerName,
+          await readContentLanguages(tx, fallbackLanguage),
+        );
   await tx.update(extraLists).set(listValues(input)).where(eq(extraLists.id, extraListId));
   await writeItems(tx, extraListId, input);
   return getExtraList(tx, extraListId);

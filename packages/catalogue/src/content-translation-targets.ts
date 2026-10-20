@@ -1,17 +1,47 @@
 import type { Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, type ContentLanguages } from "@waitron/shared";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { contentLanguagesOr } from "./content-languages.js";
 import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
-import type { TranslationGapKind } from "./content-translation-report-types.js";
 import type {
-  TranslationOwners,
-  TranslationPage,
-  TranslationRef,
-  TranslationTarget,
-} from "./content-translation-types.js";
+  TranslationGapKind,
+  TranslationGapReason,
+} from "./content-translation-report-types.js";
+import type { TranslationOwners, TranslationRef } from "./content-translation-types.js";
+import {
+  namedRows,
+  LIVE_CANDIDATE,
+  POSITION,
+  blankIn,
+  ABSENT,
+  type NamedRow,
+} from "./content-translation-candidates.js";
+export { liveTranslationRows, blankTranslationSql } from "./content-translation-candidates.js";
 import "./errors.js";
+
+export interface TranslationTarget extends TranslationRef {
+  name: string;
+  parent?: { id: string; name: string };
+  reason: TranslationGapReason;
+  selectedText: string | null;
+  defaultText: string | null;
+  effectiveSelectedText: string | null;
+  effectiveDefaultText: string | null;
+  defaultRequired: boolean;
+  eligible: boolean;
+  unavailableReason: "missing" | "inactive" | "ownership" | "role" | null;
+  owners: TranslationOwners | null;
+  expected: string;
+}
+export interface TranslationTargetPage {
+  language: string;
+  config: ContentLanguages;
+  required: string[];
+  rows: TranslationTarget[];
+  next: string | null;
+  total: number;
+}
 
 export interface TranslationContext {
   fallbackLanguage: string;
@@ -46,24 +76,6 @@ export interface TranslationResolution {
   targets: ResolvedTranslationTarget[];
 }
 export type TranslationRow = NamedRow;
-type NamedRow = {
-  kind: TranslationGapKind;
-  id: string;
-  name: string;
-  names: string | null;
-  inherited: string | null;
-  owner: string | null;
-  owner_name: string | null;
-  container: string | null;
-  child: string | null;
-  child_menu: string | null;
-  role: string | null;
-  active: number;
-  owner_active: number;
-  root_matched: number;
-  parent_role: string | null;
-  child_active: number;
-};
 function invalid(): never {
   throw new AppError("content.translation_invalid", {});
 }
@@ -82,28 +94,6 @@ function checkedRefs(refs: readonly TranslationRef[], limit: number): void {
     seen.add(`${ref.kind}:${ref.id}`);
   }
 }
-// What the translations dialog lists at all: a live row in its right role. The absent read below
-// applies the same fragment, so the two cannot drift apart.
-const LIVE_CANDIDATE = sql`active = 1 and owner_active = 1 and child_active = 1 and root_matched = 1
-      and (kind not in ('product', 'variant', 'menu', 'section', 'included_menu') or
-        (kind = 'product' and role = 'product') or (kind = 'variant' and role = 'variant') or
-        (kind = 'menu' and role = 'menu_root') or (kind = 'section' and role = 'section') or
-        (kind = 'included_menu' and role = 'menu_root' and parent_role in ('menu_root', 'section')))`;
-// The paging cursor compares a row's position with `KINDS.indexOf`, so both read the one list.
-const POSITION = sql`case kind ${sql.join(
-  KINDS.map((kind, index) => sql`when ${kind} then ${index}`),
-  sql` `,
-)} end`;
-// The listing's rule for a row blank in one language, `language` and `path` being SQL for the code
-// and its JSON path; listing one language and collecting every gap share it so they cannot drift.
-function blankIn(language: SQL, path: SQL, defaultLanguage: string): SQL {
-  return sql`(kind <> 'extra_list' or (names is not null and names <> '{}'))
-      and (kind <> 'included_menu' or names is not null)
-      and (kind = 'unit' or kind = 'included_menu' or names not in ('{}') or (${language} <> ${defaultLanguage} and names is null) or (${language} <> ${defaultLanguage} and names = '{}'))
-      and trim(coalesce(json_extract(case when kind = 'included_menu' then json_patch(inherited, names) else names end, ${path}), '')) = ''`;
-}
-const ABSENT = sql`kind in ('product', 'variant', 'option_list', 'option_label', 'menu', 'section')
-      and (names is null or names = '{}')`;
 export async function readTranslationSettings(
   tx: Transaction,
   context: TranslationContext,
@@ -130,59 +120,6 @@ async function configuration(tx: Transaction, language: string, context: Transla
   const { config, required } = await readTranslationSettings(tx, context);
   if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
   return { language, config, required };
-}
-// Each filtered branch binds at most one batch of ids; ownership joins never load an editor's graph.
-function namedRows(
-  refs?: readonly TranslationRef[],
-  kinds: readonly TranslationGapKind[] = KINDS,
-): SQL {
-  const filter = (kind: TranslationGapKind, id: SQL) =>
-    !kinds.includes(kind)
-      ? sql`0`
-      : refs
-        ? sql`${id} in (select json_extract(value, '$.id') from json_each(${JSON.stringify(refs)}) where json_extract(value, '$.kind') = ${kind})`
-        : sql`1`;
-  return sql`
-    select 'product' as kind, p.id, p.name, p.customer_name as names, null as inherited,
-      p.parent_id as owner, null as owner_name, null as container, null as child, null as child_menu,
-      case when p.parent_id is null then 'product' else 'variant' end as role,
-      p.active, 1 as owner_active, 1 as root_matched, null as parent_role, 1 as child_active
-    from products p where ${filter("product", sql`p.id`)}
-    union all select 'variant', p.id, p.name, p.customer_name, null, p.parent_id, a.name,
-      null, null, null, case when p.parent_id is null then 'product' else 'variant' end,
-      p.active, coalesce(a.active, 0), (a.id is not null), null, 1
-    from products p left join products a on a.id = p.parent_id where ${filter("variant", sql`p.id`)}
-    union all select 'option_list', l.id, l.name, l.customer_name, null, null, null,
-      null, null, null, null, l.active, 1, 1, null, 1
-    from option_lists l where ${filter("option_list", sql`l.id`)}
-    union all select 'option_label', l.id, l.name, l.customer_name, null, l.list_id, o.name,
-      null, null, null, null, 1, coalesce(o.active, 0), (o.id is not null), null, 1
-    from option_labels l left join option_lists o on o.id = l.list_id where ${filter("option_label", sql`l.id`)}
-    union all select 'extra_list', l.id, l.name, l.customer_name, null, null, null,
-      null, null, null, null, l.active, 1, 1, null, 1
-    from extra_lists l where ${filter("extra_list", sql`l.id`)}
-    union all select 'menu', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
-      null, null, null, s.role, 1, coalesce(c.active, 0), (d.root_section_id = s.id), null, 1
-    from sections s left join catalogues c on c.id = s.owner_menu_id
-      left join menu_details d on d.menu_id = s.owner_menu_id where ${filter("menu", sql`s.id`)}
-    union all select 'section', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
-      null, null, null, s.role, 1, coalesce(c.active, 0), (c.id is not null), null, 1
-    from sections s left join catalogues c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
-    union all select 'included_menu', m.id, s.internal_name, json_extract(m.folder_overrides, '$.names'),
-      s.names, l.owner_menu_id, c.name, m.section_id, m.child_section_id, s.owner_menu_id,
-      s.role, 1, coalesce(c.active, 0), (d.root_section_id = s.id), l.role, coalesce(a.active, 0)
-    from section_members m left join sections s on s.id = m.child_section_id
-      left join sections l on l.id = m.section_id left join catalogues c on c.id = l.owner_menu_id
-      left join catalogues a on a.id = s.owner_menu_id left join menu_details d on d.menu_id = s.owner_menu_id
-    where ${filter("included_menu", sql`m.id`)}
-    union all select 'unit', u.id, u.name, u.name, null, null, null,
-      null, null, null, null, 1, 1, 1, null, 1
-    from units u where ${filter("unit", sql`u.id`)}
-  `;
-}
-/** Every row of `kinds` the translations dialog may list, in any language and gap or not. */
-export function liveTranslationRows(kinds: readonly TranslationGapKind[]): SQL {
-  return sql`select * from (${namedRows(undefined, kinds)}) where ${LIVE_CANDIDATE}`;
 }
 function ownersOf(row: NamedRow): TranslationOwners | null {
   if (
@@ -274,16 +211,10 @@ function resolved(
         : null;
   const effectiveSelectedText = effective[language] ?? null;
   const effectiveDefaultText = effective[config.defaultLanguage] ?? null;
-  const defaultName = names?.[config.defaultLanguage];
   const target: Omit<TranslationTarget, "expected"> = {
     kind: row.kind,
     id: row.id,
-    name:
-      row.kind === "unit"
-        ? defaultName?.trim()
-          ? defaultName
-          : Object.values(names ?? {}).find((text) => text.trim()) || ""
-        : (row.name ?? ""),
+    name: row.name ?? "",
     ...(row.owner && row.kind !== "product"
       ? { parent: { id: row.owner, name: row.owner_name ?? "" } }
       : {}),
@@ -386,7 +317,7 @@ export async function listTranslationTargets(
   language: string,
   query: { after?: string; targets?: TranslationRef[] },
   context: TranslationContext,
-): Promise<TranslationPage> {
+): Promise<TranslationTargetPage> {
   if (query.targets !== undefined && query.after !== undefined) invalid();
   if (query.targets !== undefined) {
     checkedRefs(query.targets, 50);
@@ -412,7 +343,7 @@ export async function listTranslationTargets(
   const projection = sql`with candidates as (${namedRows()}), gaps as (
     select kind, id, ${POSITION} as position
     from candidates where ${LIVE_CANDIDATE}
-      and ${blankIn(sql`${language}`, sql`${path}`, state.config.defaultLanguage)}
+      and ${blankIn(sql`${path}`)}
   )`;
   const count = await tx.execute<{ total: number }>(
     sql`${projection} select count(*) as total from gaps`,
@@ -435,13 +366,6 @@ export async function listTranslationTargets(
   };
 }
 
-/**
- * The live products, variants, options lists, options labels, menus and sections whose
- * customer-facing name is stored as null or `{}`, in the dialog's order. Under the default language
- * {@link listTranslationTargets} leaves these out. Extras lists, includes and units are never absent here: an absent extras list's name reaches
- * no order or receipt, an include fixing no name is listed under the included menu, and a unit's
- * name is required.
- */
 export async function listAbsentTranslationRefs(tx: Transaction): Promise<TranslationRef[]> {
   const result = await tx.execute<{ kind: TranslationGapKind; id: string }>(sql`
     with candidates as (${namedRows()})
@@ -459,16 +383,12 @@ export async function listTranslationGapRows(
   tx: Transaction,
   config: ContentLanguages,
 ): Promise<TranslationRow[]> {
-  const blank = blankIn(
-    sql`language.value`,
-    sql`'$."' || language.value || '"'`,
-    config.defaultLanguage,
-  );
+  const blank = blankIn(sql`'$."' || language.value || '"'`);
   const result = await tx.execute<NamedRow>(sql`
     with candidates as (${namedRows()})
     select * from candidates
-    where ${LIVE_CANDIDATE} and ((${ABSENT}) or exists (
-      select 1 from json_each(${JSON.stringify(config.languages)}) as language where ${blank}))
+    where ${LIVE_CANDIDATE} and exists (
+      select 1 from json_each(${JSON.stringify(config.languages)}) as language where ${blank})
     order by ${POSITION}, id`);
   return result.rows;
 }
@@ -484,12 +404,7 @@ export function projectTranslationTarget(
   const target = {
     ...entry.target,
     reason: "partial" as const,
-    name:
-      entry.target.kind === "unit"
-        ? names[entry.config.defaultLanguage]?.trim()
-          ? names[entry.config.defaultLanguage]!
-          : Object.values(names).find((text) => text.trim()) || ""
-        : entry.target.name,
+    name: entry.target.name,
     selectedText: names[language] ?? null,
     defaultText: names[entry.config.defaultLanguage] ?? null,
     effectiveSelectedText: effective[language] ?? null,

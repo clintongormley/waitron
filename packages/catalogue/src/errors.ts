@@ -29,17 +29,19 @@ declare module "@waitron/shared" {
     };
     /** A unit precision must be a whole number from zero through three. */
     "unit.precision_invalid": Record<string, never>;
+    "unit.invalid": { field: "staffName" | "staffAbbreviation" };
     /** A quantity is malformed, non-positive, too precise, or past nine integer digits. */
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
     /** A unit id names no unit. */
     "unit.not_found": { unitId: string };
     /** A unit cannot be deleted while products are assigned to it. */
     "unit.in_use": { products: ProductUsingUnit[] };
-    /** A unit's name or abbreviation has no text in the venue's default content language. */
     "unit.translation_required": { field: "name" | "abbreviation"; language: string };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
-    "content.translation_stale": { kind: string; id: string };
+    "content.translation_stale":
+      | { kind: string; id: string; language: string; field: "name" | "abbreviation" }
+      | { scope: "configuration" };
     /** A Translate all job is already submitting or running for the venue. */
     "content.suggestion_job_running": Record<string, never>;
     /** The Cloud account has not agreed to menu text going to the named language-model providers. */
@@ -52,21 +54,24 @@ declare module "@waitron/shared" {
     "content.suggestion_expired": Record<string, never>;
     /** The suggestion being discarded is gone. */
     "content.suggestion_not_found": { suggestionId: string };
-    "content.translation_unavailable": { kind: string; id: string };
-    "content.translation_batch_invalid": Record<string, never>;
-    "content.translation_refused": {
-      causeCode: string;
-      causeParams: Readonly<Record<string, unknown>>;
+    "content.translation_unavailable": {
       kind: string;
       id: string;
-      field: "text" | "defaultText";
       language: string;
+      field: "name" | "abbreviation";
+    };
+    "content.translation_batch_invalid": Record<string, never>;
+    "content.translation_refused": {
+      kind: string;
+      id: string;
+      language: string;
+      field: "name" | "abbreviation";
+      causeCode: string;
+      causeParams: Readonly<Record<string, unknown>>;
     };
     "content.translation_invalid": Record<string, never>;
     /** Required content has no text in the configured default language. */
     "content.translation_required": { language: string };
-    /** Required content needs translating before the default can change. */
-    "content.default_missing": { language: string; count: number };
     /** A content-language save leaves out a language the venue's country pack keeps enabled for its area. */
     "content.language_required": { language: string };
     /** A key in a product's allergen declaration is not one of the EU-14 codes. */
@@ -161,7 +166,6 @@ declare module "@waitron/shared" {
     "menu_section.not_found": { sectionId: string; memberId?: string };
     /** A section write's value is malformed; `field` names it. */
     "menu_section.invalid": { field: string };
-    /** A section's customer names have no text in the venue's default content language. */
     "menu_section.translation_required": { field: string; language: string };
     /** Holding the child would let a section reach itself. */
     "menu_section.member_cycle": { sectionId: string; childSectionId: string };
@@ -179,12 +183,6 @@ declare module "@waitron/shared" {
     "options.invalid": { field: string };
     /** An options list id names no list. */
     "options.not_found": { optionListId: string };
-    /**
-     * An options list's customer-facing name — its own, or one of its labels' — has no text in the
-     * venue's default content language. Unlike `content.translation_required` it carries `field`
-     * (`"labels.2.customerName"`), because one save submits several translated maps and a refusal
-     * naming only the language cannot be placed beside an input.
-     */
     "options.translation_required": { field: string; language: string };
     /**
      * An order line answered an active options list with nothing, or with a label that list does not
@@ -206,7 +204,6 @@ declare module "@waitron/shared" {
      * orderable.
      */
     "extras.limit_exceeded": { extraListId: string };
-    /** The extras sibling of `options.translation_required`. */
     "extras.translation_required": { field: string; language: string };
     /**
      * An extras list save names a product with at least one Active variant, Available or not; the

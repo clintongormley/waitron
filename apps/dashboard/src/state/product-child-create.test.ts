@@ -35,7 +35,13 @@ async function fixture() {
       if (kind === "unit")
         el.units = [
           ...el.units,
-          { ...value, name: value.name as Record<string, string>, abbreviation: {} },
+          {
+            ...value,
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: value.name as Record<string, string>,
+            abbreviation: {},
+          },
         ];
       if (kind === "courses")
         el.courses = [...el.courses, { id: value.id, name: value.name as string }];

@@ -23,6 +23,8 @@ import { DeviceHomePreview } from "./device-home-preview.js";
 
 const KILO = {
   id: "unit-kg",
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   name: { en: "kilogram" },
   precision: 3,
   abbreviation: { en: "kg" },
@@ -367,7 +369,7 @@ describe("dashboard-device-home-preview", () => {
     );
   });
 
-  it("names the unit by its id when its abbreviation reads empty", async () => {
+  it("names the unit by its staff abbreviation when translated abbreviations are empty", async () => {
     const document = lunch();
     document.offers["mi-water"]!.unit = {
       ...document.offers["mi-water"]!.unit,
@@ -375,7 +377,7 @@ describe("dashboard-device-home-preview", () => {
     };
     const { el } = await mount({ document });
     expect(tile(el, "structure", "Water").querySelector(".price")!.textContent!.trim()).toBe(
-      `${formatMoney("3.00", currentLocale())}/unit-each`,
+      `${formatMoney("3.00", currentLocale())}/su`,
     );
   });
 
@@ -1576,4 +1578,19 @@ it("an unchanged menu document's product and section thumbnails follow photo rep
   const box = img.getBoundingClientRect();
   expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
   expect(JSON.stringify(document)).toBe(original);
+});
+
+it("keeps the staff unit abbreviation on a menu preview tile with empty customer maps", async () => {
+  const document = lunch();
+  document.offers["mi-water"]!.unit = {
+    ...document.offers["mi-water"]!.unit,
+    staffName: "Staff serving",
+    staffAbbreviation: "ss",
+    name: {},
+    abbreviation: {},
+  };
+  const { el } = await mount({ document });
+  expect(tile(el, "structure", "Water").querySelector(".price")!.textContent!.trim()).toBe(
+    `${formatMoney("3.00", currentLocale())}/ss`,
+  );
 });

@@ -31,7 +31,13 @@ beforeEach(async () => {
     catalogueId = menu.id;
     const unit = await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
       "en",
     );
     body = {

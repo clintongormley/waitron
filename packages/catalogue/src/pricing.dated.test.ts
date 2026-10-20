@@ -33,7 +33,13 @@ const FROM = "2027-01-01";
 const each = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
   name: "item",
   descriptions: { en: "item" },
-  unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
+  unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    name: { en: "each" },
+    precision: 0,
+    abbreviation: { en: "ea" },
+  },
   unitPrice,
   vatClass,
   category: null,

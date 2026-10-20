@@ -11,6 +11,8 @@ const jamon: TillProduct = {
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-kg",
     name: { en: "kg", es: "kg" },
     abbreviation: { en: "kg", es: "kg" },

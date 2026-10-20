@@ -73,6 +73,8 @@ function navigateMenuChanges(
 }
 
 const unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "each",
   name: { en: "Each" },
   abbreviation: { en: "ea" },
@@ -453,9 +455,17 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
     maxPicks: null,
     items: [
       {
+        presentation: {
+          name: "Staff lemon",
+          customerName: { en: "Guest lemon", es: "ES lemon" },
+          kitchenName: "LEMON",
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
         productId: "lemon",
         name: "Staff lemon",
-        customerName: { en: "Guest lemon", es: "Limón" },
+        customerName: { en: "Guest lemon", es: "ES lemon" },
         kitchenName: "LEMON",
         image: null,
         portion: "1.000",
@@ -585,8 +595,20 @@ describe("nested change subjects", () => {
         ? {
             ...identity,
             kind,
-            from: { abbreviation: { en: "ea" }, precision: 0 },
-            to: { abbreviation: { en: "kg" }, precision: 3 },
+            from: {
+              name: unit.name,
+              staffName: unit.staffName,
+              staffAbbreviation: unit.staffAbbreviation,
+              abbreviation: { en: "ea" },
+              precision: 0,
+            },
+            to: {
+              name: unit.name,
+              staffName: unit.staffName,
+              staffAbbreviation: unit.staffAbbreviation,
+              abbreviation: { en: "kg" },
+              precision: 3,
+            },
           }
         : kind === "extra_portion_changed"
           ? {

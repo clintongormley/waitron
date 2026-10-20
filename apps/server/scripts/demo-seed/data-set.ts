@@ -35,6 +35,8 @@ export interface SeedProduct<L extends string = string> {
   kitchenName?: string;
   dietaryDeclarations?: DietaryLabel[];
   unit?: {
+    staffName: string;
+    staffAbbreviation: string;
     name: DemoText<L>;
     precision: number;
     abbreviation: DemoText<L>;

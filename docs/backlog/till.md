@@ -1162,6 +1162,15 @@ triggering case and cause remain unverified. Local receipt: Lane F's
 `receipts/a739a-outcome/controller-all.log`. No profile-switch change was made.
 
 
+2026-10-18: A682 isolated `till-app.test.ts`'s "does not leave the dialog busy when a step after
+the switch throws" with `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts -t
+'does not leave the dialog busy when a step after the switch throws'`. That run passed one case,
+skipped the other 1,012 and logged the same null-identity rejection. The case deliberately returns
+null after switching and asserts one captured rejection. This reproduces one test source of the
+message; it does not attribute every historical run or establish whether a real device response
+can be null. Receipt: Lane F `receipts/resume-a682-extra-pairs/profile-rejection-probe.log`.
+
+
 ## A card payment stuck `attempting` holds its device's profile switch
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:

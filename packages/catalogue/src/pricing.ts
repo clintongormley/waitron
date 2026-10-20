@@ -17,6 +17,8 @@ import { localToday, vatRatesOn, type VatClass } from "./vat-rates.js";
 export type PricingUnit = "each" | "weight";
 
 export interface UnitSnapshot {
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   precision: number;
   abbreviation: Record<string, string>;

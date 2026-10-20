@@ -4,9 +4,14 @@ import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };
 import { AppError } from "@waitron/shared";
-import { findContentTranslationGap } from "./content-languages.js";
+import { contentLanguagesOr } from "./content-languages.js";
+import { contentLanguages } from "./schema/menu.js";
+import {
+  mergeOptionalTranslations,
+  validateOptionalTranslations,
+} from "./optional-translations.js";
 import { productUnits, units } from "./schema/units.js";
-import { EACH_UNIT_ID, validateUnitPrecision } from "./unit-validation.js";
+import { EACH_UNIT_ID, unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { clearedPricingUnit, isTopLevelProduct, productWithId } from "./variant-fallback.js";
 export {
   EACH_UNIT_ID,
@@ -22,6 +27,8 @@ export type { Unit, SellableUnit } from "./product-types.js";
  * `product_units`. */
 export const EACH_UNIT: SellableUnit = {
   id: EACH_UNIT_ID,
+  staffName: "Each",
+  staffAbbreviation: "ea",
   name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
   abbreviation: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
   precision: 0,
@@ -37,6 +44,8 @@ export function isEachUnit(unit: { id: string; seedKey: string | null }): boolea
 }
 
 export interface CreateUnitInput {
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   precision: number;
   abbreviation: Record<string, string>;
@@ -44,6 +53,8 @@ export interface CreateUnitInput {
 }
 
 export interface UpdateUnitInput {
+  staffName?: string;
+  staffAbbreviation?: string;
   name?: Record<string, string>;
   precision?: number;
   abbreviation?: Record<string, string>;
@@ -57,6 +68,8 @@ export function unitMeasure(measure: boolean): { measure?: true } {
 
 const UNIT_COLUMNS = {
   id: units.id,
+  staffName: units.staffName,
+  staffAbbreviation: units.staffAbbreviation,
   name: units.name,
   precision: units.precision,
   abbreviation: units.abbreviation,
@@ -74,29 +87,11 @@ function toSellableUnit(row: {
   precision: number;
   abbreviation: Record<string, string>;
   hardwareUnit: string | null;
+  staffName: string;
+  staffAbbreviation: string;
   measure: boolean;
 }): SellableUnit {
   return { ...toUnit(row), hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
-}
-
-/** Checks the supplied maps in one read of the content languages; a gap names its field. */
-async function requireTranslations(
-  tx: Transaction,
-  input: UpdateUnitInput,
-  fallbackLanguage: string,
-): Promise<void> {
-  const fields = (["name", "abbreviation"] as const).filter((field) => input[field] !== undefined);
-  if (fields.length === 0) return;
-  const gap = await findContentTranslationGap(
-    tx,
-    fields.map((field) => input[field]!),
-    fallbackLanguage,
-  );
-  if (gap !== null)
-    throw new AppError("unit.translation_required", {
-      field: fields[gap.index]!,
-      language: gap.language,
-    });
 }
 
 export async function createUnit(
@@ -104,13 +99,19 @@ export async function createUnit(
   input: CreateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
-  await requireTranslations(tx, input, fallbackLanguage);
+  void fallbackLanguage;
+  const staffName = unitStaffText(input.staffName, "staffName");
+  const staffAbbreviation = unitStaffText(input.staffAbbreviation, "staffAbbreviation");
+  const name = validateOptionalTranslations(input.name);
+  const abbreviation = validateOptionalTranslations(input.abbreviation);
   validateUnitPrecision(input.precision);
   const [row] = await tx
     .insert(units)
     .values({
-      name: input.name,
-      abbreviation: input.abbreviation,
+      staffName,
+      staffAbbreviation,
+      name,
+      abbreviation,
       precision: input.precision,
       measure: input.measure ?? false,
     })
@@ -154,19 +155,37 @@ export async function updateUnit(
   patch: UpdateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
-  await requireTranslations(tx, patch, fallbackLanguage);
-  if (patch.precision !== undefined) validateUnitPrecision(patch.precision);
-  if (
-    patch.name === undefined &&
-    patch.precision === undefined &&
-    patch.abbreviation === undefined &&
-    patch.measure === undefined
-  ) {
-    return getUnit(tx, unitId);
+  const values: UpdateUnitInput = {};
+  if (patch.staffName !== undefined) values.staffName = unitStaffText(patch.staffName, "staffName");
+  if (patch.staffAbbreviation !== undefined)
+    values.staffAbbreviation = unitStaffText(patch.staffAbbreviation, "staffAbbreviation");
+  if (patch.precision !== undefined) values.precision = validateUnitPrecision(patch.precision);
+  if (patch.name !== undefined || patch.abbreviation !== undefined) {
+    const [stored] = await tx
+      .select({
+        unit: UNIT_COLUMNS,
+        config: {
+          defaultLanguage: contentLanguages.defaultLanguage,
+          languages: contentLanguages.languages,
+        },
+      })
+      .from(units)
+      .leftJoin(contentLanguages, eq(contentLanguages.id, 1))
+      .where(eq(units.id, unitId));
+    if (stored === undefined) throw new AppError("unit.not_found", { unitId });
+    const config = contentLanguagesOr(stored.config ?? undefined, fallbackLanguage);
+    for (const field of ["name", "abbreviation"] as const) {
+      if (patch[field] !== undefined) {
+        validateOptionalTranslations(patch[field]);
+        values[field] = mergeOptionalTranslations(stored.unit[field], patch[field], config) ?? {};
+      }
+    }
   }
+  if (patch.measure !== undefined) values.measure = patch.measure;
+  if (Object.keys(values).length === 0) return getUnit(tx, unitId);
   const [row] = await tx
     .update(units)
-    .set(patch)
+    .set(values)
     .where(eq(units.id, unitId))
     .returning(UNIT_COLUMNS);
   if (row === undefined) throw new AppError("unit.not_found", { unitId });

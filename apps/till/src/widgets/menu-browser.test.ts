@@ -19,6 +19,8 @@ import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 
 const EACH = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { es: "unidad", en: "each" },
   abbreviation: { es: "ud", en: "ea" },
@@ -55,6 +57,8 @@ const burger = product("burger", "Burger", { available: false });
 const jamon = product("jamon", "Jamón", {
   unitPrice: "10.00",
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-kg",
     name: { es: "kg" },
     abbreviation: { es: "kg" },
@@ -810,6 +814,8 @@ describe("till-menu-browser", () => {
         const pain = product("pain", "Pain", {
           customerName: { fr: "Baguette", en: "Bread" },
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "unit-each",
             name: { fr: "pièce", en: "each" },
             abbreviation: { fr: "pc", en: "ea" },
@@ -1437,6 +1443,8 @@ describe("till-menu-browser", () => {
     it("a fractional custom unit asks for its quantity without touching the basket", async () => {
       const portion = product("portion", "Ración", {
         unit: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "custom-portion",
           name: { en: "portion" },
           abbreviation: { en: "pt" },
@@ -1458,6 +1466,8 @@ describe("till-menu-browser", () => {
     it("does not take a unit merely named kg for a weighed one", async () => {
       const namedKg = product("named-kg", "Queso", {
         unit: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "custom-kg",
           name: { en: "kg" },
           abbreviation: { en: "kg" },
@@ -2034,8 +2044,18 @@ describe("till-menu-browser", () => {
 
     it("still offers a product not sold separately as an extra on a dish that lists it", async () => {
       const extra = {
+        presentation: {
+          name: "Cola",
+          customerName: null,
+          kitchenName: null,
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
         portion: "1",
         unit: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
           hardwareUnit: null,
           id: "00000000-0000-0000-0000-000000000001",

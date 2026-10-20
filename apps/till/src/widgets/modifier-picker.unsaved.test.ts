@@ -61,8 +61,18 @@ const product: TillProduct = {
       maxPicks: null,
       items: [
         {
+          presentation: {
+            name: "Cheese",
+            customerName: { es: "Queso" },
+            kitchenName: "Kitchen cheese",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           portion: "1",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "each",
             name: { en: "Each", es: "Unidad" },
             abbreviation: { en: "ea", es: "ud" },
@@ -81,8 +91,18 @@ const product: TillProduct = {
           suitableFor: [],
         },
         {
+          presentation: {
+            name: "Bacon",
+            customerName: { es: "Bacon carta" },
+            kitchenName: "Kitchen bacon",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           portion: "1",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "each",
             name: { en: "Each", es: "Unidad" },
             abbreviation: { en: "ea", es: "ud" },

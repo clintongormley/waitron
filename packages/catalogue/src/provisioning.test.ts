@@ -269,3 +269,34 @@ describe("catalogue provisioning", () => {
     expect((await storedUnits()).map((unit) => unit.seed_key)).not.toContain("mg");
   });
 });
+
+it("authors seeded staff pairs independently and preserves staff edits on reseed", async () => {
+  const node = await venue("ES", "Madrid", "es-ES");
+  await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  const staffPairs = () =>
+    suite.db
+      .select({
+        seedKey: units.seedKey,
+        staffName: units.staffName,
+        staffAbbreviation: units.staffAbbreviation,
+      })
+      .from(units)
+      .orderBy(asc(units.seedKey));
+  expect(await staffPairs()).toEqual([
+    { seedKey: "g", staffName: "Gram", staffAbbreviation: "g" },
+    { seedKey: "kg", staffName: "Kilogram", staffAbbreviation: "kg" },
+    { seedKey: "l", staffName: "Litre", staffAbbreviation: "l" },
+    { seedKey: "mg", staffName: "Milligram", staffAbbreviation: "mg" },
+    { seedKey: "ml", staffName: "Millilitre", staffAbbreviation: "ml" },
+  ]);
+  await suite.db
+    .update(units)
+    .set({ staffName: "Masa", staffAbbreviation: "M", name: {}, abbreviation: {} })
+    .where(eq(units.seedKey, "kg"));
+  await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  expect((await staffPairs()).find((unit) => unit.seedKey === "kg")).toEqual({
+    seedKey: "kg",
+    staffName: "Masa",
+    staffAbbreviation: "M",
+  });
+});

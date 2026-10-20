@@ -118,6 +118,14 @@ for (const kind of ["counter", "table"] as const)
                 maxPicks: 3,
                 items: [
                   {
+                    presentation: {
+                      name: "Mature farmhouse sheep cheese",
+                      customerName: { en: "Customer cheese" },
+                      kitchenName: "Kitchen cheese",
+                      variantName: null,
+                      variantCustomerName: null,
+                      variantKitchenName: null,
+                    },
                     productId: "cheese",
                     name: "Mature farmhouse sheep cheese",
                     customerName: { en: "Customer cheese" },
@@ -127,6 +135,8 @@ for (const kind of ["counter", "table"] as const)
                     portion: "1",
                     unit: {
                       id: "each",
+                      staffName: "Staff unit",
+                      staffAbbreviation: "su",
                       name: { en: "Each" },
                       abbreviation: { en: "ea" },
                       precision: 0,

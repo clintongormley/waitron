@@ -86,6 +86,8 @@ useVenueDb({
       const [kg] = await tx
         .insert(units)
         .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           seedKey: "credit-test-kg",
           name: { "es-ES": "kilogramo" },
           abbreviation: { "es-ES": "kg" },

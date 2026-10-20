@@ -19,6 +19,14 @@ function extraList(id: string, price: string): OfferedModifier {
     maxPicks: 2,
     items: [
       {
+        presentation: {
+          name: `Staff cheese ${id}`,
+          customerName: null,
+          kitchenName: null,
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
         productId: "cheese",
         name: `Staff cheese ${id}`,
         customerName: null,
@@ -28,6 +36,8 @@ function extraList(id: string, price: string): OfferedModifier {
         portion: "1",
         unit: {
           id: "each",
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "Each" },
           abbreviation: { en: "ea" },
           precision: 0,

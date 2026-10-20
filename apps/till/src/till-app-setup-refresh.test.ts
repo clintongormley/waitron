@@ -31,6 +31,8 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 
 const unit = {
   id: "unit-each",
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   name: { es: "unidad", en: "unit" },
   abbreviation: { es: "ud", en: "ea" },
   precision: 0,

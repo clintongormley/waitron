@@ -19,12 +19,16 @@ const EGG_ITEM = "22222222-2222-4222-8222-222222222222";
 const CHEESE_ITEM = "33333333-3333-4333-8333-333333333333";
 
 const EACH = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "00000000-0000-0000-0000-000000000001",
   name: { es: "Unidad" },
   precision: 0,
   abbreviation: { es: "ud" },
 };
 const KG = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-kg",
   name: { en: "Kilogram", es: "Kilogramo" },
   precision: 3,

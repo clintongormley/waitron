@@ -289,3 +289,15 @@ it("fits a phone screen without scrolling sideways", async () => {
     host.getBoundingClientRect().right + 0.5,
   );
 });
+
+it("offers waiting-fix review even when there is no translation run or Cloud is off", async () => {
+  const { el } = await mount({ service: "off", waitingFixes: 4 } as Partial<ContentSuggestionsBar>);
+  const review = q(el, "[data-test=review-fixes]");
+  expect(review).not.toBeNull();
+  const notified = vi.fn();
+  el.addEventListener("review-fixes", notified);
+  review!.click();
+  expect(notified).toHaveBeenCalledOnce();
+  expect(review!.textContent).toContain("4");
+  expect(button(el).disabled).toBe(true);
+});

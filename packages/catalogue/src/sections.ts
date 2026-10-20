@@ -1,10 +1,14 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { tableExists, type Transaction } from "@waitron/db";
-import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
+import { AppError, contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
 import { colorOrNull } from "./color-inheritance.js";
-import { findContentTranslationGap } from "./content-languages.js";
+import { readContentLanguages } from "./content-languages.js";
+import {
+  mergeOptionalTranslations,
+  validateOptionalTranslations,
+} from "./optional-translations.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
   loadSectionGraph,
@@ -50,33 +54,11 @@ const details = {
 
 const internalNameOf = (value: unknown): string => nameOf(value, "internalName");
 
-/** Customer names are optional, so `{}` is accepted; a map that is supplied needs text in the
- * venue's default content language. */
-async function namesOf(
-  tx: Transaction,
-  value: unknown,
-  fallbackLanguage: string,
-): Promise<Record<string, string>> {
+function namesOf(value: unknown): Record<string, string> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new AppError("menu_section.invalid", { field: "names" });
-  const names = value as Record<string, string>;
-  await requireDefaultLanguageName(tx, names, fallbackLanguage);
-  return names;
-}
-
-/** Refuses a names map that has entries but no text in the venue's default content language. */
-export async function requireDefaultLanguageName(
-  tx: Transaction,
-  names: Record<string, string>,
-  fallbackLanguage: string,
-): Promise<void> {
-  if (Object.keys(names).length === 0) return;
-  const gap = await findContentTranslationGap(tx, [names], fallbackLanguage);
-  if (gap !== null)
-    throw new AppError("menu_section.translation_required", {
-      field: "names",
-      language: gap.language,
-    });
+  for (const language of Object.keys(value)) contentLanguageCode(language);
+  return validateOptionalTranslations(value);
 }
 
 /** Does the media library hold this file? Never, where the media module is not installed. */
@@ -166,11 +148,12 @@ export async function createSectionIn(
   position?: number,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<SectionDetails> {
+  void fallbackLanguage;
   const graph = await loadSectionGraph(tx);
   requireWritableList(graph, listId);
   requirePosition(position);
   const internalName = internalNameOf(input.internalName);
-  const names = input.names === undefined ? {} : await namesOf(tx, input.names, fallbackLanguage);
+  const names = input.names === undefined ? {} : namesOf(input.names);
   const color = input.color === undefined ? null : sectionColorOf(input.color);
   const image = input.image === undefined ? null : await sectionImageOf(tx, input.image);
   const [created] = await tx
@@ -201,11 +184,14 @@ export async function updateSection(
   patch: SectionPatch,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<SectionDetails> {
-  const [row] = await tx.select({ role: sections.role }).from(sections).where(eq(sections.id, id));
+  const [row] = await tx
+    .select({ role: sections.role, names: sections.names })
+    .from(sections)
+    .where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   if (row.role !== "section")
     throw new AppError("menu_section.wrong_role", { sectionId: id, role: row.role });
-  const values = await sectionPatchValues(tx, patch, fallbackLanguage);
+  const values = await sectionPatchValues(tx, patch, fallbackLanguage, row.names);
   if (Object.keys(values).length > 0)
     await tx.update(sections).set(values).where(eq(sections.id, id));
   return readSection(tx, id);
@@ -481,10 +467,21 @@ export async function sectionPatchValues(
   tx: Transaction,
   patch: SectionPatch,
   fallbackLanguage: string = FALLBACK_LOCALE,
+  storedNames?: Readonly<Record<string, string>>,
 ): Promise<SectionPatch> {
   const values: SectionPatch = {};
   if (patch.internalName !== undefined) values.internalName = internalNameOf(patch.internalName);
-  if (patch.names !== undefined) values.names = await namesOf(tx, patch.names, fallbackLanguage);
+  if (patch.names !== undefined) {
+    const names = namesOf(patch.names);
+    values.names =
+      storedNames === undefined
+        ? names
+        : (mergeOptionalTranslations(
+            storedNames,
+            patch.names,
+            await readContentLanguages(tx, fallbackLanguage),
+          ) ?? {});
+  }
   if (patch.color !== undefined) values.color = sectionColorOf(patch.color);
   if (patch.image !== undefined) values.image = await sectionImageOf(tx, patch.image);
   return values;

@@ -1,5 +1,7 @@
 # Translate all: suggested customer-facing names from Waitron Cloud
 
+> **2026-10-20, A682:** The multilingual editor replaces the language-in-the-path translation routes and default-companion rules described below. See [the current translation contract](../../developers/products.md#the-translation-gap-report). This document retains its historical design.
+
 **Status:** design, approved in conversation with the owner on 2026-10-14; this file awaits the
 owner's review.
 **Companion spec (Cloud side):** `waitron-cloud/docs/superpowers/specs/2026-10-14-translate-all-design.md`.

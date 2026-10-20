@@ -158,6 +158,8 @@ describe("resolveMenuText", () => {
 
 function offer(prices: string[] = []): FrozenOffer {
   const unit = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "each",
     name: { en: "Each" },
     abbreviation: { en: "ea" },

@@ -109,7 +109,13 @@ describe("extra list CRUD", () => {
     const productId = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 2, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 2,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
@@ -137,7 +143,13 @@ describe("extra list CRUD", () => {
     const productId = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
@@ -165,7 +177,13 @@ describe("extra list CRUD", () => {
     const productId = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "gram" }, precision: 0, abbreviation: { en: "g" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "gram" },
+          precision: 0,
+          abbreviation: { en: "g" },
+        },
         "en",
       );
       await tx.execute(sql`update units set hardware_unit = 'g' where id = ${unit.id}`);
@@ -197,7 +215,13 @@ describe("extra list CRUD", () => {
     const productId = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "millilitre" }, precision: 0, abbreviation: { en: "ml" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "millilitre" },
+          precision: 0,
+          abbreviation: { en: "ml" },
+        },
         "en",
       );
       await tx.execute(sql`update units set seed_key = ${seedKey} where id = ${unit.id}`);
@@ -230,7 +254,13 @@ describe("extra list CRUD", () => {
     const eachProductId = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       await tx.execute(sql`update units set seed_key = 'each' where id = ${unit.id}`);
@@ -266,7 +296,13 @@ describe("extra list CRUD", () => {
     run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "millilitre" }, precision: 0, abbreviation: { en: "ml" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "millilitre" },
+          precision: 0,
+          abbreviation: { en: "ml" },
+        },
         "en",
       );
       await tx.execute(sql`update units set seed_key = 'ml' where id = ${unit.id}`);
@@ -374,7 +410,13 @@ describe("extra list CRUD", () => {
     run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
@@ -634,7 +676,13 @@ describe("extra list CRUD", () => {
     const productId = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
@@ -661,7 +709,13 @@ describe("extra list CRUD", () => {
     const { productId, unitId } = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
@@ -1123,21 +1177,18 @@ describe("extra list CRUD", () => {
     ]);
   });
 
-  it("refuses a customer name with no text in the venue's default language", async () => {
-    const error = await refusal((tx) =>
+  it("saves a customer name with no text in the default language", async () => {
+    const created = await run((tx) =>
       createExtraList(
         tx,
         { name: "Bread", customerName: { fr: "Votre pain" }, items: [{ productId: breads.rye }] },
         "en",
       ),
     );
-
-    expect(error).toEqual(
-      expect.objectContaining({
-        code: "extras.translation_required",
-        params: { field: "customerName", language: "en" },
-      }),
-    );
+    const saved = await run((tx) => getExtraList(tx, created.id));
+    expect(saved.customerName).toEqual({ fr: "Votre pain" });
+    expect(saved.name).toBe("Bread");
+    expect(saved.items.map((item) => item.productId)).toEqual([breads.rye]);
   });
 
   it("saves an all-blank customer name as nothing rather than refusing it", async () => {

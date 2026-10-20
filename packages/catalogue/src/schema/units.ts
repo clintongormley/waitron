@@ -7,6 +7,8 @@ export const units = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     seedKey: label("seed_key"),
+    staffName: label("staff_name").notNull(),
+    staffAbbreviation: label("staff_abbreviation").notNull(),
     name: json<Record<string, string>>("name").notNull(),
     abbreviation: json<Record<string, string>>("abbreviation").notNull(),
     precision: count("precision").notNull(),

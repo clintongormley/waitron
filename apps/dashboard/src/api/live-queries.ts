@@ -76,6 +76,19 @@ const HIERARCHY_DELETE_READS = [
   "department_floor_plan_sets",
 ] as const;
 
+const TRANSLATION_READS = [
+  "content_languages",
+  "products",
+  "option_lists",
+  "option_labels",
+  "extra_lists",
+  "sections",
+  "section_members",
+  "menu_details",
+  "catalogues",
+  "units",
+] as const;
+
 export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
@@ -83,32 +96,10 @@ export const QUERY_DEPENDENCIES = {
   getContentLanguages: ["content_languages"],
   // The server works the rules out once at boot, so no table change moves them.
   getContentLanguageRules: [],
-  // `listTranslationGapReport` (packages/catalogue/src/content-translation-report.ts): the setting,
-  // then each table it names a row from.
-  getContentTranslationGaps: [
-    "content_languages",
-    "products",
-    "option_lists",
-    "option_labels",
-    "extra_lists",
-    "sections",
-    "section_members",
-    "catalogues",
-    "units",
-  ],
-  getContentSuggestions: ["content_suggestions", "content_suggestion_jobs"],
-  getContentTranslationTargets: [
-    "content_languages",
-    "products",
-    "option_lists",
-    "option_labels",
-    "extra_lists",
-    "sections",
-    "section_members",
-    "menu_details",
-    "catalogues",
-    "units",
-  ],
+  getContentTranslationGaps: TRANSLATION_READS,
+  getContentSuggestions: ["content_suggestions", "content_suggestion_jobs", ...TRANSLATION_READS],
+  getContentTranslationTargets: [...TRANSLATION_READS, "content_suggestions"],
+  getContentTranslationCells: TRANSLATION_READS,
   listPrinters: ["printers", "print_jobs", "printer_holders"],
   listPrinterProfiles: ["device_profile_printers", "device_profiles"],
   listPagePrinters: ["page_printers", "print_agents"],

@@ -1,5 +1,8 @@
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import {
   ReorderController,
+  ContentLanguageController,
+  currentContentLanguages,
   draftScopeFor,
   reorder,
   saveActionState,
@@ -11,7 +14,6 @@ import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
-import { resolveContentText } from "@waitron/shared";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import {
   VAT_CLASSES,
@@ -155,17 +157,6 @@ export function productEditorField(field: string, defaultLanguage: string): stri
   return mapped.endsWith("-") ? `${mapped}${defaultLanguage}` : mapped;
 }
 
-/**
- * The editor field a refused TRANSLATION belongs to. `content.translation_required` names the
- * language whose text is missing and never the value that lacks it
- * (`packages/catalogue/src/content-languages.ts`), and one save carries several translated values:
- * the product's customer name and one per variant. This points at the first, and the next save
- * reports whatever is still missing.
- *
- * A variant's names are edited in its own window, so a variant's problem belongs to its ROW. The
- * server checks only the variants saved Active (`writeProductVariants`,
- * packages/catalogue/src/variants.ts), so an Inactive one is never blamed.
- */
 export function productEditorTranslationField(
   value: {
     customerName: LocalizedText | null;
@@ -227,6 +218,11 @@ function emptyDraft(defaultVatClass: VatClass = "general"): ProductEditorDraft {
 
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     ReorderController.styles,
@@ -740,12 +736,11 @@ export class ProductEditor extends LitElement {
   private taxLabel(tax: { label: string; rate: string }) {
     return `${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`;
   }
-  private unitText(value: LocalizedText): string {
-    return resolveContentText(value, currentLocale(), this.language);
+  private unitText(unit: UnitChoice) {
+    return unitPresentation(unit, currentLocale(), currentContentLanguages());
   }
   private unitLabel(unit: UnitChoice) {
-    const name = this.unitText(unit.name);
-    const abbr = this.unitText(unit.abbreviation);
+    const { name, abbreviation: abbr } = this.unitText(unit);
     return abbr ? `${name} (${abbr})` : name;
   }
   /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
@@ -754,7 +749,7 @@ export class ProductEditor extends LitElement {
     if (!unitId) return "";
     const unit = this.units.find((unit) => unit.id === unitId);
     if (!unit) return t("editor.missing_choice");
-    return this.unitText(unit.abbreviation) || this.unitText(unit.name);
+    return this.unitText(unit).abbreviation;
   }
   /** Only while the editor itself is open, and on a product's own page: a variant's unit is its
    * product's. */
@@ -1475,8 +1470,8 @@ export class ProductEditor extends LitElement {
             .sort(
               (a, b) =>
                 new Intl.Collator(currentLocale()).compare(
-                  this.unitText(a.name),
-                  this.unitText(b.name),
+                  this.unitText(a).name,
+                  this.unitText(b).name,
                 ) || a.id.localeCompare(b.id),
             )
             .map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),

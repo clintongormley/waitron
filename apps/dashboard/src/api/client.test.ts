@@ -719,7 +719,14 @@ describe("DashboardApi", () => {
   });
 
   it("uses the canonical unit collection and item routes", async () => {
-    const unit = { id: "u1", name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 };
+    const unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u1",
+      name: { en: "portion" },
+      abbreviation: { en: "pt" },
+      precision: 2,
+    };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([unit]))
@@ -730,6 +737,8 @@ describe("DashboardApi", () => {
     await expect(api.listUnits()).resolves.toEqual([unit]);
     await expect(
       api.createUnit({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "portion" },
         abbreviation: { en: "pt" },
         precision: 2,
@@ -747,6 +756,8 @@ describe("DashboardApi", () => {
         "/management-api/units",
         "POST",
         JSON.stringify({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "portion" },
           abbreviation: { en: "pt" },
           precision: 2,
@@ -3046,9 +3057,9 @@ it("reads and replaces venue kitchen timing defaults with passive background rea
 });
 
 describe("inline translation transport", () => {
-  it("reads encoded language/cursor and repeated target references", async () => {
+  it("reads projected languages, encoded cursor and repeated target references", async () => {
     const page = {
-      language: "en",
+      configuration: "current-config",
       config: { defaultLanguage: "es", languages: ["es", "en"] },
       required: ["es"],
       rows: [],
@@ -3061,21 +3072,26 @@ describe("inline translation transport", () => {
       return new Response(JSON.stringify(page));
     });
     expect(
-      await api.getContentTranslationTargets("en", { after: '{"kind":"unit","id":"a&b"}' }),
+      await api.getContentTranslationTargets({
+        languages: ["en"],
+        missing: { mode: "language", language: "en" },
+        after: '{"kind":"unit","id":"a&b"}',
+      }),
     ).toEqual(page);
     expect(
-      await api.getContentTranslationTargets("en", {
+      await api.getContentTranslationTargets({
+        languages: ["en"],
         targets: [
           { kind: "unit", id: "a&b" },
           { kind: "product", id: "c d" },
         ],
       }),
     ).toEqual(page);
-    await api.getContentTranslationTargets("x/y", {});
+    await api.getContentTranslationTargets({ languages: ["x/y"], missing: { mode: "all" } });
     expect(paths).toEqual([
-      "/management-api/content-translations/en?after=%7B%22kind%22%3A%22unit%22%2C%22id%22%3A%22a%26b%22%7D",
-      "/management-api/content-translations/en?target=unit%3Aa%26b&target=product%3Ac+d",
-      "/management-api/content-translations/x%2Fy",
+      "/management-api/content-translations?language=en&missing=language&missingLanguage=en&after=%7B%22kind%22%3A%22unit%22%2C%22id%22%3A%22a%26b%22%7D",
+      "/management-api/content-translations?language=en&target=unit%3Aa%26b&target=product%3Ac+d",
+      "/management-api/content-translations?language=x%2Fy&missing=all",
     ]);
   });
   it("sends the complete batch once, receives canonical names and keeps background writes active", async () => {
@@ -3086,28 +3102,31 @@ describe("inline translation transport", () => {
           id: "unit",
           expected: "token",
           text: " English ",
-          defaultText: "Español",
+          language: "en",
+          field: "name" as const,
         },
       ],
     };
     let request: RequestInit | undefined;
-    const answer = { saved: [{ kind: "unit", id: "unit", selectedText: "English" }] };
+    const answer = {
+      saved: [{ kind: "unit", id: "unit", language: "en", field: "name", text: "English" }],
+    };
     const api = new DashboardApi("", async (_path, init) => {
       request = init;
       return new Response(JSON.stringify(answer));
     });
-    expect(await api.background.saveContentTranslations("en", input)).toEqual(answer);
+    expect(await api.background.saveContentTranslations(input)).toEqual(answer);
     expect(request?.method).toBe("PUT");
     expect(JSON.parse(request?.body as string)).toEqual(input);
     expect(new Headers(request?.headers).has("x-waitron-live")).toBe(false);
   });
   it("keeps domain cause, target, field and language in a refused batch", async () => {
     const params = {
-      causeCode: "content.translation_required",
-      causeParams: { language: "es" },
+      causeCode: "product.invalid",
+      causeParams: { field: "customerName" },
       kind: "product",
       id: "p",
-      field: "defaultText",
+      field: "name",
       language: "es",
     };
     const api = new DashboardApi(
@@ -3117,7 +3136,7 @@ describe("inline translation transport", () => {
           status: 400,
         }),
     );
-    await expect(api.saveContentTranslations("en", { edits: [] })).rejects.toMatchObject({
+    await expect(api.saveContentTranslations({ edits: [] })).rejects.toMatchObject({
       code: "content.translation_refused",
       params,
     });
@@ -3236,4 +3255,31 @@ it.each(["Zone", "Department"] as const)(
 
 it("does not offer reversible zone removal", () => {
   expect(new DashboardApi()).not.toHaveProperty("deactivateZone");
+});
+
+it("encodes retained translation cell tuples and keeps their background read passive", async () => {
+  const cells = [
+    { kind: "unit" as const, id: "u:a&b", language: "es", field: "abbreviation" as const },
+    { kind: "product" as const, id: "dish / two", language: "en", field: "name" as const },
+  ];
+  const reply = {
+    config: { defaultLanguage: "es", languages: ["es", "en"] },
+    required: ["es"],
+    configuration: "configuration",
+    cells: [],
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reply));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  expect(await api.background.getContentTranslationCells(cells)).toEqual(reply);
+  const [path, init] = fetchImpl.mock.calls[0]!;
+  const url = new URL(path, "http://localhost");
+  expect(url.pathname).toBe("/management-api/content-translations/cells");
+  expect([...url.searchParams]).toEqual([
+    ["cell", '["unit","u:a&b","es","abbreviation"]'],
+    ["cell", '["product","dish / two","en","name"]'],
+  ]);
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  expect(active).not.toHaveBeenCalled();
 });

@@ -67,6 +67,8 @@ it.each(cases)(
         customerName: { es: `${name} carta` },
         kitchenName: `${name} cocina`,
         unit: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "unit-each",
           name: { es: "unidad" },
           abbreviation: { es: "ud" },

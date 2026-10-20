@@ -2,6 +2,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  ContentLanguageController,
+  currentContentLanguages,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -18,10 +20,11 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
-type UnitField = "name" | "precision" | "abbreviation";
+type UnitField = "name" | "precision" | "abbreviation" | "staffName" | "staffAbbreviation";
 type TranslatedField = `${"name" | "abbreviation"}-${string}`;
 type UnitDraft = Omit<UnitInput, "precision"> & { precision: number | string };
 /** `name` and `abbreviation` mark the first locale's input; `_form`, and a translated field whose
@@ -34,6 +37,11 @@ export function unitRefusalErrors(error: unknown): UnitFormErrors {
   const message = codeMessage(code);
   const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
   if (code === "unit.precision_invalid") return { precision: message };
+  if (
+    (code === "unit.invalid" || code === "management.request_invalid") &&
+    (params.field === "staffName" || params.field === "staffAbbreviation")
+  )
+    return { [params.field]: message };
   if (
     code === "unit.translation_required" &&
     (params.field === "name" || params.field === "abbreviation") &&
@@ -51,6 +59,11 @@ export function unitRefusalErrors(error: unknown): UnitFormErrors {
 /** It owns a copy of its draft, never its host's object. */
 @customElement("dashboard-unit-form")
 export class UnitForm extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     css`
@@ -71,6 +84,8 @@ export class UnitForm extends LitElement {
 
   @state() private names: Record<string, string> = {};
   @state() private abbreviations: Record<string, string> = {};
+  @state() private staffName = "";
+  @state() private staffAbbreviation = "";
   @state() private precision = "0";
   @state() private measure = false;
   @state() private attempted = false;
@@ -99,26 +114,19 @@ export class UnitForm extends LitElement {
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    const needsDraft =
-      changed.has("open") ||
-      changed.has("value") ||
-      (changed.has("locales") && Object.keys(this.names).length === 0);
+    const needsDraft = changed.has("open") || changed.has("value");
     if (this.open && needsDraft) {
       this.#usageGeneration++;
       this.precisionUsage = [];
       this.precisionUsageUnavailable = false;
       this.names = {
         ...(this.value?.name ?? {}),
-        ...Object.fromEntries(
-          this.locales.map((locale) => [locale, this.value?.name[locale] ?? ""]),
-        ),
       };
       this.abbreviations = {
         ...(this.value?.abbreviation ?? {}),
-        ...Object.fromEntries(
-          this.locales.map((locale) => [locale, this.value?.abbreviation[locale] ?? ""]),
-        ),
       };
+      this.staffName = this.value?.staffName ?? "";
+      this.staffAbbreviation = this.value?.staffAbbreviation ?? "";
       this.precision = String(this.value?.precision ?? 0);
       this.measure = this.value?.measure === true;
       this.attempted = false;
@@ -142,6 +150,8 @@ export class UnitForm extends LitElement {
         restore: (value) => {
           this.names = { ...value.name };
           this.abbreviations = { ...value.abbreviation };
+          this.staffName = value.staffName;
+          this.staffAbbreviation = value.staffAbbreviation;
           this.precision = String(value.precision);
           this.measure = value.measure;
         },
@@ -162,14 +172,13 @@ export class UnitForm extends LitElement {
   }
 
   #validate(): Partial<Record<UnitField, string>> {
-    const defaultLocale = this.locales[0];
     const precision = Number(this.precision);
     const errors: Partial<Record<UnitField, string>> = {};
-    if (!defaultLocale || (this.names[defaultLocale] ?? "").trim() === "") {
-      errors.name = t("units.name_required");
+    if (this.staffName.trim() === "") {
+      errors.staffName = t("units.staff_name_required");
     }
-    if (!defaultLocale || (this.abbreviations[defaultLocale] ?? "").trim() === "") {
-      errors.abbreviation = t("units.abbreviation_required");
+    if (this.staffAbbreviation.trim() === "") {
+      errors.staffAbbreviation = t("units.staff_abbreviation_required");
     }
     if (
       this.precision.trim() === "" ||
@@ -188,6 +197,8 @@ export class UnitForm extends LitElement {
       "name",
       "abbreviation",
       "precision",
+      "staffName",
+      "staffAbbreviation",
       ...this.locales.flatMap((locale) => [`name-${locale}`, `abbreviation-${locale}`]),
     ]);
     return Object.entries(errors)
@@ -207,6 +218,16 @@ export class UnitForm extends LitElement {
     this.names = { ...this.names, [locale]: event.detail.value };
     this.#scope?.changed();
     this.#dismiss("name", `name-${locale}`);
+  }
+
+  #changeStaff(
+    field: "staffName" | "staffAbbreviation",
+    event: CustomEvent<{ value: string }>,
+  ): void {
+    event.stopPropagation();
+    this[field] = event.detail.value;
+    this.#scope?.changed();
+    this.#dismiss(field);
   }
 
   #changeAbbreviation(locale: string, event: CustomEvent<{ value: string }>): void {
@@ -275,7 +296,14 @@ export class UnitForm extends LitElement {
       if (translation === "") delete abbreviation[locale];
       else abbreviation[locale] = translation;
     }
-    return { name, abbreviation, precision: Number(this.precision), measure: this.measure };
+    return {
+      staffName: this.staffName.trim(),
+      staffAbbreviation: this.staffAbbreviation.trim(),
+      name,
+      abbreviation,
+      measure: this.measure,
+      precision: Number(this.precision),
+    };
   }
 
   #comparisonValue(): UnitDraft {
@@ -333,6 +361,20 @@ export class UnitForm extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]"))}
       >
+        ${(["staffName", "staffAbbreviation"] as const).map(
+          (field) => html`
+            <wt-input
+              class="field"
+              data-test=${field}
+              name=${field}
+              label=${t(field === "staffName" ? "units.staff_name" : "units.staff_abbreviation")}
+              required
+              error=${errors[field] ?? ""}
+              .value=${this[field]}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeStaff(field, event)}
+            ></wt-input>
+          `,
+        )}
         ${this.locales.map(
           (locale, index) => html`
             <wt-input
@@ -340,7 +382,7 @@ export class UnitForm extends LitElement {
               data-test=${`name-${locale}`}
               name=${`name-${locale}`}
               label=${`${t("units.name")} (${locale.toUpperCase()})`}
-              ?required=${index === 0}
+              placeholder=${this.#placeholder(locale).name}
               error=${errors[`name-${locale}`] ?? (index === 0 ? (errors.name ?? "") : "")}
               .value=${this.names[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeName(locale, event)}
@@ -350,7 +392,7 @@ export class UnitForm extends LitElement {
               data-test=${`abbreviation-${locale}`}
               name=${`abbreviation-${locale}`}
               label=${`${t("units.abbreviation")} (${locale.toUpperCase()})`}
-              ?required=${index === 0}
+              placeholder=${this.#placeholder(locale).abbreviation}
               error=${
                 errors[`abbreviation-${locale}`] ?? (index === 0 ? (errors.abbreviation ?? "") : "")
               }
@@ -438,6 +480,19 @@ export class UnitForm extends LitElement {
         </wt-form-actions>
       </wt-modal>
     `;
+  }
+
+  #placeholder(language: string): { name: string; abbreviation: string } {
+    return unitPresentation(
+      {
+        name: this.names,
+        abbreviation: this.abbreviations,
+        staffName: this.staffName.trim(),
+        staffAbbreviation: this.staffAbbreviation.trim(),
+      },
+      language,
+      currentContentLanguages(),
+    );
   }
 }
 

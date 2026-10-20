@@ -74,7 +74,7 @@ describe("setIncludeFolder", () => {
     expect("folder" in mains).toBe(false);
   });
 
-  it("trims fixed names, keeps a blank one, and drops an empty map", async () => {
+  it("trims fixed names, removes blank overrides, and drops an empty map", async () => {
     const f = await fixture();
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
@@ -88,7 +88,7 @@ describe("setIncludeFolder", () => {
       ),
     ).toEqual({
       showAsFolder: true,
-      overrides: { names: { en: "Bar", es: "" }, color: "#112233" },
+      overrides: { names: { en: "Bar" }, color: "#112233" },
     });
     expect(
       await app((tx) =>
@@ -160,35 +160,38 @@ describe("setIncludeFolder", () => {
     expect(await storedRow(f.include)).toEqual({ showAsFolder: true, overrides: {} });
   });
 
-  it("refuses effective names without the default language beside the names field", async () => {
+  it("saves partial overrides and reveals inherited default text after a clear", async () => {
     const f = await fixture();
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
-    expect(
-      await refusalOf(() =>
-        app((tx) =>
-          setIncludeFolder(tx, f.lunchRoot, f.include, {
-            showAsFolder: true,
-            overrides: { names: { en: "", es: "Bebidas" } },
-          }),
-        ),
-      ),
-    ).toEqual({
-      code: "menu_section.translation_required",
-      params: { field: "names", language: "en" },
-    });
-    expect(await storedRow(f.include)).toEqual({ showAsFolder: true, overrides: {} });
     const accepted = { showAsFolder: true, overrides: { names: { es: "Bebidas" } } };
+    expect(
+      await app((tx) =>
+        setIncludeFolder(tx, f.lunchRoot, f.include, {
+          showAsFolder: true,
+          overrides: { names: { en: "", es: "Bebidas" } },
+        }),
+      ),
+    ).toEqual(accepted);
+    expect(await storedRow(f.include)).toEqual(accepted);
     expect(await app((tx) => setIncludeFolder(tx, f.lunchRoot, f.include, accepted))).toEqual(
       accepted,
     );
   });
 
-  it("accepts a folder that fixes every name blank, which shows no name, as a section may", async () => {
+  it("clearing every fixed name reveals the included menu's names", async () => {
     const f = await fixture();
     const blank = { showAsFolder: true, overrides: { names: { en: "" } } };
-    expect(await app((tx) => setIncludeFolder(tx, f.lunchRoot, f.include, blank))).toEqual(blank);
+    expect(await app((tx) => setIncludeFolder(tx, f.lunchRoot, f.include, blank))).toEqual({
+      showAsFolder: true,
+      overrides: {},
+    });
+    expect(await storedRow(f.include)).toEqual({ showAsFolder: true, overrides: {} });
+    const { nodes } = await app((tx) => readMenuStructure(tx, f.lunch));
+    expect(nodes.find((node) => node.memberId === f.include)!.names).toEqual({
+      en: "Something to drink",
+    });
   });
 
   it("refuses a bad colour, a photo not in the library, and names that are not text", async () => {

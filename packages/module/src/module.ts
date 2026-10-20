@@ -209,6 +209,8 @@ export interface ZoneMenuOffer {
   readonly ordering?: "public" | "staff_only" | "not_sold_separately";
   readonly unit: {
     readonly id: string;
+    readonly staffName: string;
+    readonly staffAbbreviation: string;
     readonly name: Readonly<Record<string, string>>;
     // The printed short form, frozen onto a sold line as its unit label; the offer carries it so the
     // add-time pricing freeze does not re-read the unit.
@@ -252,6 +254,14 @@ export type ZoneOfferedModifier =
       readonly maxPicks: number | null;
       readonly items: readonly {
         readonly productId: string;
+        readonly presentation: {
+          readonly name: string;
+          readonly customerName: Readonly<Record<string, string>> | null;
+          readonly kitchenName: string | null;
+          readonly variantName: string | null;
+          readonly variantCustomerName: Readonly<Record<string, string>> | null;
+          readonly variantKitchenName: string | null;
+        };
         readonly name: string;
         readonly customerName: Readonly<Record<string, string>> | null;
         readonly kitchenName: string | null;
@@ -260,6 +270,8 @@ export type ZoneOfferedModifier =
         readonly portion: string;
         readonly unit: {
           readonly id: string;
+          readonly staffName: string;
+          readonly staffAbbreviation: string;
           readonly name: Readonly<Record<string, string>>;
           readonly abbreviation: Readonly<Record<string, string>>;
           readonly precision: number;
@@ -1551,7 +1563,6 @@ export interface WaitronModule {
   readonly alerts?: ModuleAlerts;
   readonly backup?: ModuleBackupContribution;
   readonly configurationTransfer?: ModuleConfigurationTransfer;
-  /** Required localized fields contributed to a content-default change check. */
   readonly contentTranslations?: {
     gaps(tx: Transaction, language: string): Promise<{ kind: string; id: string }[]>;
   };

@@ -14,17 +14,11 @@ export type TranslationGapKind =
   | "included_menu"
   | "unit";
 
-/**
- * `partial`: the customer-facing name has text, but none in this language. `absent`: there is no
- * customer-facing name at all, so the staff name is shown in its place. Only `partial` stops a
- * language becoming the default.
- */
 export type TranslationGapReason = "partial" | "absent";
 
 export interface TranslationGap {
   kind: TranslationGapKind;
   id: string;
-  /** The staff name; a unit has none, so its name in the default language. */
   name: string;
   reason: TranslationGapReason;
   /** Whose editor holds it: a variant's product, an option's list, a section's or root's menu, an
@@ -35,4 +29,9 @@ export interface TranslationGap {
 export interface LanguageTranslationGaps {
   language: string;
   gaps: TranslationGap[];
+}
+
+export interface LanguageTranslationGapCount {
+  language: string;
+  count: number;
 }

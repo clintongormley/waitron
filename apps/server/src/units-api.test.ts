@@ -83,6 +83,8 @@ async function send(method: string, path: string, body?: unknown) {
 describe("unit management routes", () => {
   it("returns canonical objects from create and update and lists the collection", async () => {
     const created = await send("POST", "/management-api/units", {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "portion" },
       precision: 2,
       abbreviation: { en: "pt" },
@@ -95,6 +97,8 @@ describe("unit management routes", () => {
       abbreviation: Record<string, string>;
     };
     expect(unit).toEqual({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: expect.any(String),
       name: { en: "portion" },
       precision: 2,
@@ -128,6 +132,8 @@ describe("unit management routes", () => {
 
   it("reads and writes a unit's measure switch", async () => {
     const created = await send("POST", "/management-api/units", {
+      staffName: "Millilitre",
+      staffAbbreviation: "ml",
       name: { en: "millilitre" },
       precision: 0,
       abbreviation: { en: "ml" },
@@ -152,6 +158,8 @@ describe("unit management routes", () => {
     ["null", null],
   ])("rejects a measure switch given as %s", async (_label, measure) => {
     const response = await send("POST", "/management-api/units", {
+      staffName: "Millilitre",
+      staffAbbreviation: "ml",
       name: { en: "millilitre" },
       precision: 0,
       abbreviation: { en: "ml" },
@@ -170,6 +178,8 @@ describe("unit management routes", () => {
   ])("rejects a measure switch change given as %s", async (_label, measure) => {
     const created = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
         name: { en: "millilitre" },
         precision: 0,
         abbreviation: { en: "ml" },
@@ -190,6 +200,8 @@ describe("unit management routes", () => {
 
   it("rejects a create with no abbreviation object", async () => {
     const response = await send("POST", "/management-api/units", {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Litre" },
       precision: 3,
     });
@@ -201,6 +213,8 @@ describe("unit management routes", () => {
 
   it("accepts and returns the abbreviation", async () => {
     const response = await send("POST", "/management-api/units", {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Litre" },
       precision: 3,
       abbreviation: { en: "l" },
@@ -210,38 +224,91 @@ describe("unit management routes", () => {
   });
 
   it.each([
-    [{ name: { en: "cup" }, precision: 4, abbreviation: { en: "c" } }, "unit.precision_invalid"],
     [
-      { name: { fr: "tasse" }, precision: 0, abbreviation: { en: "c" } },
-      "unit.translation_required",
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "cup" },
+        precision: 4,
+        abbreviation: { en: "c" },
+      },
+      "unit.precision_invalid",
     ],
-    [{ name: "cup", precision: 0, abbreviation: { en: "c" } }, "management.request_invalid"],
     [
-      { name: { en: "cup" }, precision: "0", abbreviation: { en: "c" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: "cup",
+        precision: 0,
+        abbreviation: { en: "c" },
+      },
       "management.request_invalid",
     ],
-    [{ name: { en: "cup" }, precision: 0, abbreviation: "c" }, "management.request_invalid"],
+    [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "cup" },
+        precision: "0",
+        abbreviation: { en: "c" },
+      },
+      "management.request_invalid",
+    ],
+    [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "cup" },
+        precision: 0,
+        abbreviation: "c",
+      },
+      "management.request_invalid",
+    ],
   ] as const)("rejects invalid create body %j", async (body, code) => {
     const response = await send("POST", "/management-api/units", body);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code } });
   });
 
-  it("names the abbreviation when its default-language text is missing", async () => {
-    const response = await send("POST", "/management-api/units", {
-      name: { en: "cup" },
-      precision: 0,
-      abbreviation: { fr: "t" },
-    });
-    expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: unknown }).error).toEqual({
-      code: "unit.translation_required",
-      params: { field: "abbreviation", language: "en" },
-    });
-  });
+  it.each([
+    { name: { fr: "tasse" }, abbreviation: { en: "c" } },
+    { name: { en: "cup" }, abbreviation: { fr: "t" } },
+  ])(
+    "keeps authored disabled translations on create, then refuses disabled edits: %j",
+    async (maps) => {
+      const response = await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        ...maps,
+        precision: 0,
+      });
+      expect(response.status).toBe(201);
+      const saved = await response.json();
+      expect(saved).toEqual({
+        id: expect.any(String),
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        ...maps,
+        precision: 0,
+      });
+      const read = await send("GET", `/management-api/units/${saved.id}`);
+      expect(await read.json()).toEqual(saved);
+      const field = maps.name.fr ? "name" : "abbreviation";
+      const refused = await send("PATCH", `/management-api/units/${saved.id}`, {
+        [field]: { fr: "Changed" },
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: { code: "content.translation_invalid", params: {} },
+      });
+      expect(await (await send("GET", `/management-api/units/${saved.id}`)).json()).toEqual(saved);
+    },
+  );
 
   it("reports the abbreviation field when the abbreviation shape is wrong", async () => {
     const response = await send("POST", "/management-api/units", {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "cup" },
       precision: 0,
       abbreviation: "c",
@@ -260,6 +327,8 @@ describe("unit management routes", () => {
   it("reassigns selected products to another unit and returns the shrunk list", async () => {
     const from = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "each" },
         precision: 0,
         abbreviation: { en: "ea" },
@@ -267,6 +336,8 @@ describe("unit management routes", () => {
     ).json()) as { id: string };
     const to = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "kg" },
         precision: 3,
         abbreviation: { en: "kg" },
@@ -293,6 +364,8 @@ describe("unit management routes", () => {
   it("GET /management-api/units/:id/products returns the products using the unit", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "each" },
         precision: 0,
         abbreviation: { en: "ea" },
@@ -311,13 +384,15 @@ describe("unit management routes", () => {
   it("names an extra's list before a unit precision edit without blocking the edit", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "kilogram" },
         precision: 3,
         abbreviation: { en: "kg" },
       })
     ).json()) as { id: string };
     const { productId, listId } = await withTransaction(suite.db, async (tx) => {
-      const productId = await seedProduct(tx, await seedCatalogue(tx), "Jamón", unit.id);
+      const productId = await seedProduct(tx, await seedCatalogue(tx), "Ham", unit.id);
       const list = await createExtraList(
         tx,
         { name: "Toppings", items: [{ productId, portion: "0.055", price: "0.01" }] },
@@ -331,7 +406,7 @@ describe("unit management routes", () => {
     expect(await usage.json()).toEqual([
       {
         productId,
-        productName: "Jamón",
+        productName: "Ham",
         lists: [{ id: listId, name: "Toppings", menus: [] }],
       },
     ]);
@@ -350,6 +425,8 @@ describe("unit management routes", () => {
   it("GET /management-api/units/:id/products requires a session", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "each" },
         precision: 0,
         abbreviation: { en: "ea" },
@@ -362,6 +439,8 @@ describe("unit management routes", () => {
   it("reassign accepts a null target and clears the products' unit", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "kg" },
         precision: 3,
         abbreviation: { en: "kg" },
@@ -383,6 +462,8 @@ describe("unit management routes", () => {
   it("rejects a reassign with a malformed body", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "each" },
         precision: 0,
         abbreviation: { en: "ea" },
@@ -398,6 +479,8 @@ describe("unit management routes", () => {
   it("GET /management-api/units/:id returns the one unit, and 404s an unknown one", async () => {
     const created = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "portion" },
         precision: 1,
         abbreviation: { en: "pt" },
@@ -406,6 +489,8 @@ describe("unit management routes", () => {
     const res = await send("GET", `/management-api/units/${created.id}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: created.id,
       name: { en: "portion" },
       precision: 1,
@@ -427,6 +512,8 @@ describe("unit management routes", () => {
   it("rejects a reassign whose target unitId is neither null nor a uuid", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "each" },
         precision: 0,
         abbreviation: { en: "ea" },
@@ -452,6 +539,8 @@ describe("unit management routes", () => {
   it("rejects an update whose precision is not a number, leaving the unit unchanged", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "kg" },
         precision: 3,
         abbreviation: { en: "kg" },
@@ -478,6 +567,8 @@ it.each(["target", "each"])(
     const makeUnit = async (name: string) =>
       (await (
         await send("POST", "/management-api/units", {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: name },
           precision: 0,
           abbreviation: { en: name },
@@ -521,3 +612,37 @@ it.each(["target", "each"])(
     ).toBe("weight");
   },
 );
+
+describe("explicit staff identity at the unit API", () => {
+  const input = {
+    staffName: "Kilogram",
+    staffAbbreviation: "kg",
+    name: {},
+    abbreviation: {},
+    precision: 3,
+  };
+  it("round-trips explicit staff fields and empty translations", async () => {
+    const created = await send("POST", "/management-api/units", input);
+    expect(created.status).toBe(201);
+    const unit = await created.json();
+    expect(unit).toEqual({ ...input, id: expect.any(String) });
+    const patched = await send("PATCH", `/management-api/units/${unit.id}`, {
+      staffName: "Masa",
+      staffAbbreviation: "M",
+    });
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).toEqual({ ...unit, staffName: "Masa", staffAbbreviation: "M" });
+  });
+  for (const field of ["staffName", "staffAbbreviation"] as const) {
+    it.each([undefined, null, "", "  ", 42, "é".repeat(2049)])(
+      `returns the exact invalid ${field} on create`,
+      async (value) => {
+        const response = await send("POST", "/management-api/units", { ...input, [field]: value });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { code: "unit.invalid", params: { field } },
+        });
+      },
+    );
+  }
+});

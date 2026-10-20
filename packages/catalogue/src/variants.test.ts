@@ -44,7 +44,13 @@ beforeEach(async () => {
     menuId = menu.id;
     const unit = await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
       "en",
     );
     const product = await createProduct(tx, {
@@ -73,7 +79,7 @@ describe("product variants", () => {
         tx,
         productId,
         [
-          { ...variant("Small", "2.00"), customerName: { en: "Small", es: "Pequeño" } },
+          { ...variant("Small", "2.00"), customerName: { en: "Small", es: "ES small" } },
           variant("Large", "3.00"),
         ],
         "en",
@@ -89,7 +95,7 @@ describe("product variants", () => {
     ).toEqual([
       {
         name: "Small",
-        customerName: { en: "Small", es: "Pequeño" },
+        customerName: { en: "Small", es: "ES small" },
         unitPrice: "2.00",
         available: true,
       },
@@ -143,21 +149,23 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "product.variant_not_found" });
   });
 
-  it("requires the default language in a variant's customer name when one is given", async () => {
-    await expect(
-      run((tx) =>
-        setProductVariants(
-          tx,
-          productId,
-          [{ ...variant("Small", "2.00"), customerName: { es: "Pequeño" } }],
-          "en",
-        ),
+  it("saves a supplied variant customer name without the default language", async () => {
+    const saved = await run((tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [{ ...variant("Small", "2.00"), customerName: { es: "ES small" } }],
+        "en",
       ),
-    ).rejects.toMatchObject({ code: "content.translation_required" });
+    );
+    expect(saved[0]!.customerName).toEqual({ es: "ES small" });
+    expect((await run((tx) => listProductVariants(tx, productId)))[0]!.customerName).toEqual({
+      es: "ES small",
+    });
   });
 
-  it("refuses the first Active variant's missing default language before a later variant's malformed name", async () => {
-    const missingDefault = { ...variant("Small", "2.00"), customerName: { es: "Pequeño" } };
+  it("refuses a later malformed name while allowing an earlier variant to omit the default language", async () => {
+    const missingDefault = { ...variant("Small", "2.00"), customerName: { es: "ES small" } };
     const laterNames: Record<string, string>[] = [
       { "!!": "Large" },
       { en: 3 as unknown as string },
@@ -173,8 +181,8 @@ describe("product variants", () => {
           ),
         ),
       ).rejects.toMatchObject({
-        code: "content.translation_required",
-        params: { language: "en" },
+        code: "content.translation_invalid",
+        params: {},
       });
   });
 
@@ -269,7 +277,13 @@ describe("product variants", () => {
     const [foreign] = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "plate" }, precision: 0, abbreviation: { en: "pl" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "plate" },
+          precision: 0,
+          abbreviation: { en: "pl" },
+        },
         "en",
       );
       const other = await createProduct(tx, {
@@ -307,9 +321,9 @@ describe("product variants", () => {
         tx,
         productId,
         [
-          variant("Ración 2", "2.00"),
+          variant("Portion 2", "2.00"),
           variant("0,5 kg", "5.00"),
-          variant("Ración 10", "10.00"),
+          variant("Portion 10", "10.00"),
           variant("0,25 kg", "2.50"),
         ],
         "en",

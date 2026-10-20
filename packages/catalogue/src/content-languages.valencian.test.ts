@@ -9,7 +9,6 @@ import {
   writeContentLanguages,
   listContentTranslationGaps,
 } from "./content-languages.js";
-import { createUnit } from "./units.js";
 import { units } from "./schema/units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
@@ -19,20 +18,20 @@ describe("stored Valencian content", () => {
   it("stores Catalan and Valencian separately without copying either text", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const unit = await createUnit(
-        tx,
-        {
+      const unit = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { es: "Spanish", ca: "Catalan", [valencian]: "Valencian" },
-          abbreviation: { es: "u" },
+          abbreviation: { es: "u", ca: "u", [valencian]: "u" },
           precision: 0,
-        },
-        "es",
-      );
+        })
+        .returning()
+        .then((rows) => rows[0]!);
       await writeContentLanguages(
         tx,
         { defaultLanguage: valencian, languages: [valencian, "ca", "es"] },
-        "es",
-        undefined,
         [valencian, "es"],
       );
       expect(await readContentLanguages(tx, "es")).toEqual({
@@ -50,42 +49,45 @@ describe("stored Valencian content", () => {
   it("reports missing Valencian text even when Catalan exists", async () => {
     await seedTenant(suite.db);
     const unit = await withTransaction(suite.db, (tx) =>
-      createUnit(
-        tx,
-        { name: { es: "Spanish", ca: "Catalan" }, abbreviation: { es: "u" }, precision: 0 },
-        "es",
-      ),
+      tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "Spanish", ca: "Catalan" },
+          abbreviation: { es: "u" },
+          precision: 0,
+        })
+        .returning()
+        .then((rows) => rows[0]!),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeContentLanguages(
-          tx,
-          { defaultLanguage: valencian, languages: [valencian, "ca", "es"] },
-          "es",
-        ),
+        writeContentLanguages(tx, {
+          defaultLanguage: valencian,
+          languages: [valencian, "ca", "es"],
+        }),
       ),
-    ).rejects.toMatchObject({
-      code: "content.default_missing",
-      params: { language: valencian, count: 1 },
-    });
+    ).resolves.toBeUndefined();
     expect(
       await withTransaction(suite.db, (tx) => listContentTranslationGaps(tx, valencian)),
     ).toEqual([{ kind: "unit", id: unit.id }]);
+    expect((await suite.db.select().from(units).where(eq(units.id, unit.id)))[0]!.name).toEqual({
+      es: "Spanish",
+      ca: "Catalan",
+    });
     expect(await withTransaction(suite.db, (tx) => readContentLanguages(tx, "es"))).toEqual({
-      defaultLanguage: "es",
-      languages: ["es"],
+      defaultLanguage: valencian,
+      languages: [valencian, "ca", "es"],
     });
   });
   it("refuses Catalan in place of the required Valencian code", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeContentLanguages(
-          tx,
-          { defaultLanguage: "es", languages: ["es", "ca"] },
+        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca"] }, [
+          valencian,
           "es",
-          undefined,
-          [valencian, "es"],
-        ),
+        ]),
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: valencian } });
   });

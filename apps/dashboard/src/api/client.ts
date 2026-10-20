@@ -201,28 +201,46 @@ export type {
 };
 import type {
   LanguageTranslationGaps,
+  LanguageTranslationGapCount,
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
 } from "@waitron/catalogue/src/content-translation-report-types.js";
-export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
+export type {
+  LanguageTranslationGaps,
+  LanguageTranslationGapCount,
+  TranslationGap,
+  TranslationGapKind,
+  TranslationGapReason,
+};
 import type {
   TranslationBatch,
-  TranslationPage,
+  TranslationCellRef,
+  TranslationCellPage,
+  TranslationCell,
+  TranslationItemPage,
+  TranslationQuery,
   TranslationRef,
-  TranslationTarget,
 } from "@waitron/catalogue/src/content-translation-types.js";
-export type { TranslationBatch, TranslationPage, TranslationRef, TranslationTarget };
+export type {
+  TranslationBatch,
+  TranslationCellRef,
+  TranslationCellPage,
+  TranslationRef,
+  TranslationQuery,
+};
 import type {
+  ContentSuggestionQuery,
   ContentSuggestionRead,
   ContentSuggestionView,
   SuggestionRunView,
 } from "@waitron/catalogue/src/content-suggestion-types.js";
-export type { ContentSuggestionRead, ContentSuggestionView, SuggestionRunView };
-export interface TranslationQuery {
-  after?: string;
-  targets?: TranslationRef[];
-}
+export type {
+  ContentSuggestionQuery,
+  ContentSuggestionRead,
+  ContentSuggestionView,
+  SuggestionRunView,
+};
 
 import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
 export type { MenuPriceRow, MenuPriceVariant };
@@ -507,6 +525,8 @@ export type ShownFolderCounts = Pick<
 >;
 export interface Unit {
   id: string;
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
@@ -514,6 +534,8 @@ export interface Unit {
 }
 
 export interface UnitInput {
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
@@ -521,6 +543,8 @@ export interface UnitInput {
 }
 
 export interface UnitPatch {
+  staffName?: string;
+  staffAbbreviation?: string;
   name?: Record<string, string>;
   abbreviation?: Record<string, string>;
   precision?: number;
@@ -2399,50 +2423,59 @@ export class DashboardApi {
     return this.#request<ContentLanguageRules>("/management-api/content-language-rules", "GET");
   }
 
-  getContentTranslationGaps(): Promise<LanguageTranslationGaps[]> {
-    return this.#request<LanguageTranslationGaps[]>(
+  getContentTranslationGaps(): Promise<LanguageTranslationGapCount[]> {
+    return this.#request<LanguageTranslationGapCount[]>(
       "/management-api/content-translation-gaps",
       "GET",
     );
   }
 
-  getContentTranslationTargets(
-    language: string,
-    query: TranslationQuery,
-  ): Promise<TranslationPage> {
-    const params = new URLSearchParams();
-    if (query.after !== undefined) params.append("after", query.after);
-    for (const ref of query.targets ?? []) params.append("target", `${ref.kind}:${ref.id}`);
-    const suffix = params.size ? `?${params}` : "";
-    return this.#request(
-      `/management-api/content-translations/${encodeURIComponent(language)}${suffix}`,
-      "GET",
+  getContentTranslationCells(cells: readonly TranslationCellRef[]): Promise<TranslationCellPage> {
+    const params = new URLSearchParams(
+      cells.map(({ kind, id, language, field }) => [
+        "cell",
+        JSON.stringify([kind, id, language, field]),
+      ]),
     );
+    return this.#request(`/management-api/content-translations/cells?${params}`, "GET");
+  }
+
+  getContentTranslationTargets(query: TranslationQuery): Promise<TranslationItemPage> {
+    const params = new URLSearchParams();
+    for (const code of query.languages) params.append("language", code);
+    if ("targets" in query) {
+      for (const ref of query.targets) params.append("target", `${ref.kind}:${ref.id}`);
+    } else {
+      params.append("missing", query.missing.mode);
+      if (query.missing.mode === "language")
+        params.append("missingLanguage", query.missing.language);
+      if (query.kind !== undefined) params.append("kind", query.kind);
+      if (query.search !== undefined) params.append("search", query.search);
+      if (query.after !== undefined) params.append("after", query.after);
+      if (query.waitingFixes) params.append("waitingFixes", "1");
+    }
+    return this.#request(`/management-api/content-translations?${params}`, "GET");
   }
 
   startContentSuggestions(): Promise<{ run: SuggestionRunView | null }> {
     return this.#request("/management-api/content-suggestions/jobs", "POST", {});
   }
 
-  getContentSuggestions(language: string, after?: string): Promise<ContentSuggestionRead> {
-    const params = new URLSearchParams({ language });
-    if (after !== undefined) params.append("after", after);
-    return this.#request(`/management-api/content-suggestions?${params}`, "GET");
+  getContentSuggestions(query: ContentSuggestionQuery = {}): Promise<ContentSuggestionRead> {
+    const params = new URLSearchParams();
+    if (query.after !== undefined) params.append("after", query.after);
+    if (query.configuration !== undefined) params.append("configuration", query.configuration);
+    if (query.fixesOnly) params.append("fixesOnly", "1");
+    const suffix = params.size ? `?${params}` : "";
+    return this.#request(`/management-api/content-suggestions${suffix}`, "GET");
   }
 
   discardContentSuggestion(id: string): Promise<{ deleted: string }> {
     return this.#request(`/management-api/content-suggestions/${encodeURIComponent(id)}`, "DELETE");
   }
 
-  saveContentTranslations(
-    language: string,
-    batch: TranslationBatch,
-  ): Promise<{ saved: TranslationTarget[] }> {
-    return this.#request(
-      `/management-api/content-translations/${encodeURIComponent(language)}`,
-      "PUT",
-      batch,
-    );
+  saveContentTranslations(batch: TranslationBatch): Promise<{ saved: TranslationCell[] }> {
+    return this.#request("/management-api/content-translations", "PUT", batch);
   }
 
   updateContentLanguages(config: ContentLanguages): Promise<void> {

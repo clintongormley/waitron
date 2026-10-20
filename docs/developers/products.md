@@ -20,17 +20,17 @@ A variant is itself a `products` row whose `parent_id` names its parent, so it c
 three in the same three columns.
 
 Two rules govern how those six fields become one displayed string, and both of them live in
-`packages/catalogue/src/product-presentation.ts`, apart from the per-language step named below.
-Nothing else re-implements either one, with one exception named under _What a sold line freezes_
-below.
+`packages/catalogue/src/product-presentation.ts`. New option answers use the shared customer-text
+resolver for their list and label separately; recorded answers use the snapshot readers described
+under _What a sold line freezes_ below.
 
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
-name falls back to Name. The text frozen for the receipt is the default language's under every
-receipt language, or, where the default is blank, another stored language's
-(`defaultLanguageDescriptions`, below), not Name; that step is `resolveSnapshotText`
-(`packages/shared/src/content-languages.ts`). They do not fall back
-to each other, and a product with a customer-facing name but no kitchen name still prints its staff
-Name to the kitchen.
+name falls back to Name. For a newly selected product, `customerPresentationText` prepares its
+default customer text or its staff name before pricing; a relative variant resolves from its own
+fields. `defaultLanguageDescriptions` then repeats the prepared default wording under the receipt
+keys. Stored snapshots use the readers described below. Customer and kitchen names do not fall
+back to each other: a product with a customer-facing name but no kitchen name still prints its
+staff Name to the kitchen.
 
 **Name a variant relative to its product.** Give Seagrams Gin and London Gin variants called
 Single or Double. A standalone line shows `Seagrams Gin (Single)`: the product and variant's
@@ -78,11 +78,11 @@ already *sold* — see below.
 
 ## Filling missing customer names together
 
-When several items lack the same language, open that language's translation dialog from
-Content languages. You enter customer-facing text without changing staff or kitchen names.
-A missing default-language name needs its own explicit entry. For example, with English as
-base, Spanish “Limonada para clientes” needs an English companion only if that item has no
-English customer name already.
+When several items lack the same language, open Edit translations from Content languages.
+Missing in starts with that language, and the same editor lets you edit other enabled languages
+beside it. You enter customer-facing text without changing staff or kitchen names. With English
+as the default, you can save Spanish “Limonada para clientes” and leave English blank. Each
+missing language remains reported until you enter its own text; a fallback hint does not fill it.
 
 A shared product, variant, option, extras list or unit changes wherever that definition is
 used in the working menus. A folder included in a menu keeps its own name override; translating
@@ -109,7 +109,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   renamed or deleted; on a variant line they join it with `variant_name`.
 - `descriptions` — the customer-facing text, resolved through `customerPresentationText`, then
   stored under exactly the location's saved receipt languages (`locations.invoice_locales`), every
-  key holding the venue's default content language's text, or another stored language's where the
+  key holding the venue's default content language's text, or that half's staff name where the
   default has none (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`,
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
   the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else the line's
@@ -127,9 +127,11 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   `packages/catalogue/src/product-presentation.ts`). A staff name containing only spaces resolves
   to empty customer entries; the receipt still takes its separately frozen `variant_name`.
   Keeping both sets is what lets a report group variant lines under their parent.
-  An extras item naming a variant freezes a composed pair from the published offer instead
-  (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`); its child line carries
-  that pair in its name fields, with no separate variant fields.
+  An extras item naming a variant resolves the published parent and variant independently in
+  the current default language, then composes them (`offerModifiers`,
+  `apps/server/src/working-order.ts`). Its child line carries that pair in its name fields,
+  with no separate variant fields. The publication retains both original source maps, so a
+  default-language change does not reuse wording composed under the previous default.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
   as the list's three names and the chosen label's three names, and no ids at all
   (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries
@@ -178,35 +180,25 @@ Because both customer maps (`descriptions` and `variant_descriptions`) had their
 no text at all. The kitchen names are frozen raw and fall back when drawn, through
 `kitchenPresentationName`.
 
-**An options answer is the exception to that, deliberately.** `buildLineExtras`
-(`apps/server/src/modifier-selection.ts`), or `editLineOptions` when an edit gives a new or changed
-answer, narrows the list's and the label's customer-facing map to one entry under the default
-content language of the time the answer was frozen, holding another stored language's text where
-that language has none, and leaves a `null` map `null` (`defaultLanguageText`,
-`packages/catalogue/src/default-language-text.ts`); it widens each plain staff name into a
-one-entry map under the same language. Nothing has fallen back by the time the
-row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
-`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`): it takes the customer
-map when `nonBlankTranslations` says that map holds text in some language and the staff map
-otherwise, then resolves whichever it picked against the locale it was asked for, then the
-default content language of the time the answer was frozen — read from the staff map's one key,
-which both builders write under that language (`buildLineExtras` or `editLineOptions`, and
-`optionSnapshotOf` in `apps/till/src/state/held-options.ts`) — then
-any language the map holds. The kitchen half
-(`optionSnapshotLabels`, same file) takes no language step: through `kitchenPresentationName` it
-prints the kitchen name and falls back to the staff map's one value.
+**A new options answer resolves its list and label independently.** `buildLineExtras` and
+`editLineOptions` (`apps/server/src/modifier-selection.ts`) prepare one customer-map entry under
+the current default content language, using that language's text or that half's staff name.
+They use `newCustomerText`, as does the till's `optionSnapshotOf`
+(`apps/till/src/state/held-options.ts`). With English as the default and only French customer
+text stored, a new answer freezes the staff wording. Its staff maps also keep one entry under
+that default; kitchen names stay raw.
 
-That customer-to-staff step is the exception the top of this file points at — the one place the
-rule is spelled out away from `product-presentation.ts`. A list and a label carry no variant, so
-there is no whole `customerPresentationText` to call, only the same
-`nonBlankTranslations(…) ?? <the staff name>` fold written out again. Checked by following every
-use of `nonBlankTranslations` in the tree: the other callers use it to normalise a map on a write
-path and none of them falls back to a staff name.
-These builders lived in `apps/server` until Task 12 (2026-09-21) and went into `packages/catalogue`
-there, because the till had to show the same labels on its own settled ticket and a browser cannot
-import from `apps/server`. A third builder for the till's own staff wording
-(`staffOptionSnapshotLabels`) sits beside them, and the till reaches all three through
-`apps/till/src/widgets/option-snapshot.ts`.
+An unchanged answer can retain a null customer map or a map under an earlier language. The
+server's retained-answer comparison and the till's selection matching recognize these recorded
+forms without rewriting them. A changed answer takes the new preparation path.
+
+The recorded-answer reader, `customerOptionSnapshotLabels`
+(`packages/catalogue/src/option-snapshot-labels.ts`), keeps its own fallback for those older
+forms. It takes a nonblank customer map or otherwise the frozen staff map, then resolves the
+requested locale, the default captured in the staff map's key, and finally another stored value.
+It does not consult today's catalogue. `optionSnapshotLabels` uses the frozen kitchen name or
+the frozen staff name; `staffOptionSnapshotLabels` supplies staff wording. The till reaches
+these readers through `apps/till/src/widgets/option-snapshot.ts`.
 
 None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
@@ -281,67 +273,96 @@ fixture gives the three DIFFERENT text**, or the test passes whether the surface
 name or the wrong one. Cost: a report reading the diner's wording, recorded above the fixtures in
 `packages/reporting/src/top-sellers.test.ts`.
 
+New option answers resolve an existing customer map before freezing it. If that map is absent,
+the snapshot keeps it absent and stores the staff name separately; the customer reader uses
+that frozen staff name. Neither path needs today's catalogue to read the answer later.
+
+## Unit names on future orders
+
+Give a unit its own staff name and abbreviation. Translated names and abbreviations can both
+be empty. `unitPresentation` resolves each field from the requested enabled language, then the
+default, then its staff value. The two fields resolve independently.
+
+A newly priced line uses the published unit facts: its receipt map holds the default abbreviation
+or staff abbreviation under the default key, while its line context holds the full unit name.
+The server prepares these through `prepareUnitSnapshot` and `newCustomerText`; the till uses
+the same preparation for previews. Changing a unit requires publication before new orders use
+it. Retained lines and reprints keep their recorded maps. The parent, added-extra, retained-pick
+and recalled-carrier cases in `apps/server/src/working-order.test.ts`, and the complete stored-row
+comparison in `apps/server/src/till-api.receipt.test.ts`, exercise these boundaries.
+
 ## The translation gap report
 
-`listContentTranslationGaps` (`packages/catalogue/src/content-languages.ts`) is what refuses to let
-you switch your default content language while text is still missing. A product's and a variant's
-customer-facing name is **optional** — absent, what is shown is the staff name
-(`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`) — so a wholly absent
-one (`null` or `{}`) is never a gap. Only a partly filled one is: fill in Spanish and leave English
-blank, and that is a gap, because you clearly meant to translate it and stopped. An options list's,
-an options label's and an extras list's customer-facing name is optional in the same way and is left
-out of the report for the same reason. Two of those three now reach a surface: an options list's and
-an options label's customer-facing name are what the printed receipt puts under the dish
-(`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`), which is also where
-the fallback to the staff name happens, so a missing one still is not a gap. An extras list's own
-name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
-PRODUCT's names, and nothing copies the list's name onto it. A menu section's customer-facing names
-(`sections.names`, kind `menu_section`) are optional too, and only a partly filled map is reported.
-The report reads owned sections and menu roots; a menu's customer-facing names are its root's. It
-also reads each include of a menu that fixes a customer-facing name of its own (kind `menu_include`,
-listed as `included_menu`, "Included menu folder"): the names that include's folder shows, which are
-the included menu's own names with the ones the include fixes laid over them
-(`readContentTranslationCandidates`, `packages/catalogue/src/content-languages.ts`). An include that
-fixes no name yields no row, because `json_patch` with a null patch answers null, so a gap in the
-names its folder shows is reported on the included menu's own row. As for a section, only a
-partly filled map is a gap. An include is counted while it shows its sections directly too, because
-switching the folder back on shows those names again. Its row shows the included menu root's staff
-name, under the menu that includes it. One kind the query reports, `unit`, has no optional
-customer-facing name to fall back from and stays required. A category has one plain internal name
-and is not in the report. An options list contributes two of the report's kinds and not one, both
-of them in the optional group: the list's own name (`option_list`) and each of its labels
-(`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no
-second one: each of its items names a product and carries no name of its own, so `extra_list_items`
-holds no map for the report to read.
+When you leave a translation blank, it remains a gap even if a staff name makes the item
+readable. The report includes every enabled language, including the default. A product with
+staff name “STAFF Product” and no customer-facing text appears once under each enabled language.
+Null, empty, whitespace-only and disabled-language-only maps all leave those languages missing.
+Changing the default remains independent of completeness.
 
-A content-language save that leaves out a language Waitron keeps enabled for the venue's area (its
-area's `requiredContentLocales` in the country pack) is refused (`content.language_required`,
-`writeContentLanguages` in `packages/catalogue/src/content-languages.ts`), but nothing makes that
-language's text complete. On the dashboard's Content languages page, **Edit translations** in a
-language's row menu opens the translations dialog (headed **Edit translations** and the language's name), which reads its rows 50 at a time
-through `GET /management-api/content-translations/:language` (`listTranslationTargets`,
-`packages/catalogue/src/content-translation-targets.ts`). The count on each language's row of the
-page comes from the gap report instead (`listTranslationGapReport`,
-`packages/catalogue/src/content-translation-report.ts`, read through
-`GET /management-api/content-translation-gaps`). For each enabled language the dialog lists the report's own
-gaps for that language, marked **Partly translated** (only these stop that language becoming the
-default), and, for every language except the default, what has no customer-facing name at all,
-marked **No customer-facing name**, because there the staff name is shown in its place (an absent
-extras list name is never listed: it reaches no receipt). Under the default language an absent name
-is not listed, because the staff name stands as that language's text. Each row shows the staff name
-— a unit, which has none, shows its name in the default language, or any text it has — and links to
-the screen that edits it. Both the list and the default-change check leave out an archived product, an archived variant and every
-variant of an archived product, a disabled options or extras list and its options, and what a
-switched-off menu owns. Image names (the media module's contribution) are checked on a change
-of default but are not in the list.
+The report covers products, variants, options lists, options labels, extras lists, menu roots,
+owned sections, included-menu folders and units. A unit is missing a language when either its
+name or its abbreviation is blank, and counts once when both are missing. Its row uses its
+separate staff name. The staff pair never becomes translated text. Categories carry a plain
+staff name and have no translated field to report.
+
+An included-menu folder with no name override leaves the missing text on the included menu's
+root row. With overrides, its own entries replace the root's entries in those languages, and
+other languages still inherit their text. Clearing an override through the normal folder editor
+removes that entry and reveals the root's text. The include remains eligible while it shows
+sections directly, because it can show its folder again.
+
+`content-translation-candidates.ts` shares the ownership and activity query across the full
+report, count summary and translation target reads. Discovery excludes archived products and
+variants, variants under archived products, disabled lists and their labels, and sections or
+includes whose owners, roles or root identities do not match. Direct translation reads still
+allow archived products and variants. The stored text's blank check uses JavaScript's trim
+character set in SQL as well, so tabs and nonbreaking spaces remain missing text. Translate all
+uses that same whitespace rule when collecting and storing name suggestions.
+
+`listTranslationGapReport` returns the full per-language gap lists, with staff names and parent
+identities. `listTranslationGapCounts` returns only `{language, count}` rows, including zero counts,
+in one database read. Both use the same gap query and count an item at most once per language.
+`listContentTranslationGaps` retains its catalogue-specific identifiers and a variant's product id
+for its internal callers, with the same discovery rules.
+
+When you choose Edit translations, you open the same editor from every language row. Missing in
+starts with that row's language. You can compare and edit the enabled languages independently;
+leaving the default blank does not require a second name. Staff fallback appears as a placeholder,
+so it does not fill a translation or remove its gap.
+
+The Content languages page reads count summaries through
+`GET /management-api/content-translation-gaps`. The editor reads up to 50 items and the viewed
+language fields through `GET /management-api/content-translations`. Retained edits refresh through
+`GET /management-api/content-translations/cells`. These reads replace the old language-in-the-path
+routes. One `PUT /management-api/content-translations` submits the selected fields together, each
+with its item, language, field and saved baseline. Clearing a saved value sends `text: null`;
+unchanged fields are omitted. This keeps a deliberate Save together across languages.
+
+The editor mounts at most 50 rows and the visible language window; Jump to language changes that
+window without dropping a personal draft. Missing in, Kind and search select rows separately from
+the language window. Next, Previous and Show edited preserve edits outside the current page.
+One batch admits at most 100 changed fields, with a unit name and abbreviation counted separately.
+The Save route bounds each raw non-null value at 4096 UTF-8 bytes before trimming; the editor
+sends trimmed values. The ordinary map validator trims before applying its normalized-value
+bound. A direct API caller must account for surrounding spaces in the raw Save limit.
+An uncertain write retains the exact batch for Retry these changes. Review latest restores the
+submitted fields for explicit per-field decisions before a different request can be prepared.
 
 Translate all (the button at the top of the same dialog) asks Waitron Cloud for every enabled
 language in which an item has no customer-facing text, the default language included. Its
 results are suggestions: they fill empty fields as drafts and reach no diner until someone saves
-them. A default-language suggestion for an item with no customer-facing name in any language is
-shown as a row of its own, although the dialog's own default-language list still leaves such a name out.
+them. Units receive suggestions for their names; abbreviations remain manual. Use fix rechecks
+the saved cell before staging a language-name correction; staff-name corrections link to the
+ordinary editor. All names makes corrections visible on otherwise complete rows. This editor
+does not change the 20-language Cloud contract documented in the open Translate all backlog item.
 
 ## Content languages per region
+
+**2026-10-17, A682:** Spanish stays enabled throughout Spain, including the Basque Country,
+Navarre and an unknown province. This is an enabled-language rule: you can save blank Spanish
+customer text and it remains a gap. Other regional defaults, additional enabled languages,
+notices and receipt choices keep their separate rules. This supersedes the Spanish exceptions
+in the historical decisions below.
 
 **2026-10-08, A419:** Valencian is a separate content language, `ca-ES-valencia`.
 Spain offers it alongside Catalan. New venues in the Valencian Community start with Valencian
@@ -371,7 +392,7 @@ ANSWERS"):
   Catalonia, the Valencian Community and the Balearic Islands; Galician in Galicia), Spanish
   elsewhere; the venue can still change it.
 
-As built (W109-6): Spain's pack requires Spanish in every area it
+Historical implementation (W109-6), before A682: Spain's pack requires Spanish in every area it
 does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to the regional
 language in the Valencian Community, the Balearic Islands and Galicia, and a new venue starts with
 `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`): its default,
@@ -379,7 +400,7 @@ its area's required languages, then English. The dashboard's required-language m
 Waitron keeps the language enabled for the region, not that the region requires it. The new rules reach existing venues
 at their next start; only their stored language list waits for a reset.
 
-As built for the demo (W109-4): a demo keeps the languages setup gives
+Historical demo implementation (W109-4): a demo keeps the languages setup gives
 its area (except a pack with no data set of its own: English is its default, its languages are
 English plus the area's required ones, and a required language the set has no text in is listed
 as missing, W109-2), writes every customer-facing text in each of them

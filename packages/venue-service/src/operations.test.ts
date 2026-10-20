@@ -450,9 +450,9 @@ async function seedUnitTenant(): Promise<{
 }> {
   // `id` is named because only the insert builder generates one.
   const seeded = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (id, seed_key, name, abbreviation, precision, hardware_unit) values
-      (${randomUUID()}, 'each', '{"en":"each"}', '{"en":"ea"}', 0, null),
-      (${randomUUID()}, 'kg', '{"en":"kg"}', '{"en":"kg"}', 3, 'kg')
+    insert into units (id, seed_key, staff_name, staff_abbreviation, name, abbreviation, precision, hardware_unit) values
+      (${randomUUID()}, 'each', 'Each', 'ea', '{"en":"each"}', '{"en":"ea"}', 0, null),
+      (${randomUUID()}, 'kg', 'Kilogram', 'kg', '{"en":"kg"}', '{"en":"kg"}', 3, 'kg')
     returning id, seed_key`);
   return {
     eachUnitId: seeded.rows.find((unit) => unit.seed_key === "each")!.id,

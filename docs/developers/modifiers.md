@@ -45,9 +45,9 @@ same six with one path segment different. They are mounted by one helper, `mount
 
 An id that is not a uuid is refused with `shared.invalid_id`, whose `kind` says which id was meant
 (`OptionListId`, `ExtraListId`). A body fault is `options.invalid` or `extras.invalid` naming the
-offending `field`; an unknown list id is `options.not_found` / `extras.not_found`; a name missing in
-an enabled content language is `options.translation_required` / `extras.translation_required`
-naming both the field and the language. An extras item naming a product that has an Active
+offending `field`; an unknown list id is `options.not_found` / `extras.not_found`. Customer-facing
+names are optional in every language, including the default. Malformed maps still answer
+`options.invalid` or `extras.invalid` beside their field. An extras item naming a product that has an Active
 variant is refused `extras.product_has_variants`, naming the item's `items.<i>.productId` and the
 product. Every code is registered in `packages/catalogue/src/errors.ts`.
 

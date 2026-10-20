@@ -5,6 +5,8 @@ import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
 import { checkIncludeFolderRows } from "./include-folder.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { storeProductNameKeys } from "./product-names.js";
+import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
+import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
 
 type Rows = readonly Record<string, unknown>[];
@@ -73,6 +75,32 @@ function sharedName(names: readonly string[]): string | undefined {
 }
 
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
+  for (const row of tables.units ?? []) {
+    for (const [column, field] of [
+      ["staff_name", "staffName"],
+      ["staff_abbreviation", "staffAbbreviation"],
+    ] as const) {
+      try {
+        unitStaffText(row[column], field);
+      } catch {
+        throw new AppError("setup.request_invalid", { field: `units.${column}` });
+      }
+    }
+    for (const field of ["name", "abbreviation"] as const) {
+      try {
+        validateOptionalTranslations(
+          typeof row[field] === "string" ? JSON.parse(row[field]) : row[field],
+        );
+      } catch {
+        throw new AppError("setup.request_invalid", { field: `units.${field}` });
+      }
+    }
+    try {
+      validateUnitPrecision(row.precision as number);
+    } catch {
+      throw new AppError("setup.request_invalid", { field: "units.precision" });
+    }
+  }
   for (const row of tables.catalogue_settings ?? []) {
     const value = row.default_product_vat_class;
     if (typeof value !== "string" || !VAT_CLASSES.includes(value as VatClass))

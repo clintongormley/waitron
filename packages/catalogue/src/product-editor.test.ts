@@ -32,14 +32,20 @@ beforeEach(async () => {
     catalogue: await createCatalogue(tx, { name: "Menu" }),
     unit: await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
       "en",
     ),
   }));
   catalogueId = setup.catalogue.id;
   input = {
     name: "Coffee",
-    customerName: { en: "Coffee", es: "Café" },
+    customerName: { en: "Coffee", es: "ES coffee" },
     // A non-default value so the canonical save/read round-trip proves ordering is actually persisted.
     ordering: "not_sold_separately",
     description: { en: "Freshly roasted" },
@@ -281,6 +287,11 @@ it("saves a product with exactly one variant, or none", async () => {
 });
 
 describe("a removed variant in the parent's editor", () => {
+  beforeEach(async () => {
+    await withTransaction(fx.db, (tx) =>
+      tx.insert(contentLanguages).values({ defaultLanguage: "en", languages: ["en", "es"] }),
+    );
+  });
   const save = (productId: string | null, body: unknown) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, catalogueId, body, "en"));
   const read = (productId: string) =>
@@ -332,9 +343,8 @@ describe("a removed variant in the parent's editor", () => {
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "variants.1.active" } });
   });
 
-  it("does not block the save on an Inactive variant's missing default language, where an Active one does", async () => {
-    // Customer names only in Spanish: neither resolves in the default language, English.
-    const spanishOnly = { customerName: { es: "Grande" } };
+  it("saves incomplete names on active variants while retaining archived variant refusals", async () => {
+    const spanishOnly = { customerName: { es: "ES large" } };
     const saved = await save(null, input);
     const [small, large] = saved.variants;
     const inactive = await save(saved.id, {
@@ -342,29 +352,29 @@ describe("a removed variant in the parent's editor", () => {
       variants: [small!, { ...large!, ...spanishOnly, active: false }],
     });
     expect(inactive.variants[1]).toMatchObject({ ...spanishOnly, active: false });
-    await expect(
-      save(saved.id, {
-        ...saved,
-        variants: [{ ...small!, ...spanishOnly }, inactive.variants[1]!],
-      }),
-    ).rejects.toMatchObject({ code: "content.translation_required", params: { language: "en" } });
+    const updated = await save(saved.id, {
+      ...saved,
+      variants: [{ ...small!, ...spanishOnly }, inactive.variants[1]!],
+    });
+    expect(updated.variants[0]!.customerName).toEqual({ es: "ES large" });
+    expect(updated.variants[1]).toEqual(inactive.variants[1]);
     await expect(
       save(saved.id, {
         ...saved,
         variants: [
           small!,
-          { ...large!, customerName: { en: "Large", es: "Grande" }, active: true },
+          { ...large!, customerName: { en: "Large", es: "ES large" }, active: true },
         ],
       }),
     ).rejects.toMatchObject({
       code: "product.archived",
       params: { productId: large!.id, field: "variants.1.active" },
     });
-    expect(await read(saved.id)).toEqual(inactive);
+    expect(await read(saved.id)).toEqual(updated);
   });
 
   it("refuses either active state on an archived variant's own page, retaining its untranslated name", async () => {
-    const spanishOnly = { customerName: { es: "Grande" } };
+    const spanishOnly = { customerName: { es: "ES large" } };
     const saved = await save(null, input);
     const [small, large] = saved.variants;
     await save(saved.id, {
@@ -390,7 +400,17 @@ it("changes the product's unit on update", async () => {
     saveProductEditor(tx, null, catalogueId, input, "en"),
   );
   const other = await withTransaction(fx.db, (tx) =>
-    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
   const updated = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),
@@ -564,21 +584,34 @@ async function refusal(value: unknown): Promise<{ code: string; params: unknown 
   return { code: error.code, params: error.params };
 }
 
-it("names the missing language, and nothing else, when a customer name skips the default", async () => {
-  expect(await refusal({ ...input, customerName: { es: "Café" } })).toEqual({
-    code: "content.translation_required",
-    params: { language: "en" },
-  });
-  // A VARIANT's customer name is checked the same way, and its refusal is indistinguishable from the
-  // product's: the language is all either one carries.
+it("saves and rereads product and variant names without default-language text", async () => {
+  const product = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...input, customerName: { es: "ES coffee" } }, "en"),
+  );
+  expect(product.customerName).toEqual({ es: "ES coffee" });
   expect(
-    await refusal({
-      ...input,
-      variants: input.variants.map((variant, index) =>
-        index === 1 ? { ...variant, customerName: { es: "Grande" } } : variant,
-      ),
-    }),
-  ).toEqual({ code: "content.translation_required", params: { language: "en" } });
+    (await withTransaction(fx.db, (tx) => readProductEditor(tx, product.id))).customerName,
+  ).toEqual({ es: "ES coffee" });
+  const variants = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(
+      tx,
+      null,
+      catalogueId,
+      {
+        ...input,
+        name: "Tea",
+        variants: input.variants.map((variant, index) =>
+          index === 1 ? { ...variant, customerName: { es: "ES large" } } : variant,
+        ),
+      },
+      "en",
+    ),
+  );
+  expect(variants.variants[1]!.customerName).toEqual({ es: "ES large" });
+  expect(
+    (await withTransaction(fx.db, (tx) => readProductEditor(tx, variants.id))).variants[1]!
+      .customerName,
+  ).toEqual({ es: "ES large" });
 });
 
 it.each([
@@ -615,7 +648,13 @@ describe("a variant's own page", () => {
       const ownCategory = await createCategory(tx, { name: "Espresso" });
       const kg = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       await tx.execute(sql`update units set hardware_unit = 'kg' where id = ${kg.id}`);
@@ -1070,4 +1109,122 @@ describe("a product an extras list offers", () => {
     ).rejects.toMatchObject({ code: "product.archived", params: { productId: variantId } });
     expect(await read(variantId)).toMatchObject({ active: false });
   });
+});
+
+describe("optional product customer translations", () => {
+  const save = (id: string | null, body: unknown) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, catalogueId, body, "en"));
+  const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
+
+  beforeEach(async () => {
+    await withTransaction(fx.db, (tx) =>
+      tx.insert(contentLanguages).values({
+        defaultLanguage: "es",
+        languages: ["es", "en"],
+      }),
+    );
+  });
+
+  it.each([null, {}, { en: " Potatoes " }])(
+    "saves Spanish blank with distinct staff and kitchen names: %j",
+    async (customerName) => {
+      const saved = await save(null, {
+        ...input,
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
+        customerName,
+        variants: [],
+      });
+      const expected = customerName?.en ? { en: "Potatoes" } : null;
+      expect(saved).toMatchObject({
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
+        customerName: expected,
+      });
+      expect((await read(saved.id)).customerName).toEqual(expected);
+    },
+  );
+
+  it("keeps canonical disabled translations supplied when creating a product and a variant", async () => {
+    const saved = await save(null, {
+      ...input,
+      customerName: { fr: "FR coffee" },
+      variants: [{ ...input.variants[0]!, customerName: { fr: "FR small coffee" } }],
+    });
+    expect(saved.customerName).toEqual({ fr: "FR coffee" });
+    expect(saved.variants[0]!.customerName).toEqual({ fr: "FR small coffee" });
+  });
+
+  it.each([null, {}, { en: "Coffee changed" }])(
+    "replaces enabled entries and preserves disabled product and variant text: %j",
+    async (customerName) => {
+      const saved = await save(null, {
+        ...input,
+        customerName: { es: "ES coffee", en: "Coffee", fr: "FR coffee" },
+        variants: [
+          { ...input.variants[0]!, customerName: { es: "ES small", en: "Small", fr: "FR small" } },
+        ],
+      });
+      const changed = await save(saved.id, {
+        ...saved,
+        customerName,
+        variants: [{ ...saved.variants[0]!, customerName }],
+      });
+      const productName = { ...customerName, fr: "FR coffee" };
+      const variantName = { ...customerName, fr: "FR small" };
+      expect(changed.customerName).toEqual(productName);
+      expect(changed.variants[0]!.customerName).toEqual(variantName);
+      const reread = await read(saved.id);
+      expect(reread.customerName).toEqual(productName);
+      expect(reread.variants[0]!.customerName).toEqual(variantName);
+    },
+  );
+
+  it("preserves omitted product and nested variant maps", async () => {
+    const saved = await save(null, {
+      ...input,
+      variants: [{ ...input.variants[0]!, customerName: { es: "ES small", fr: "FR small" } }],
+    });
+    const omitted: Record<string, unknown> = { ...saved };
+    const variant: Record<string, unknown> = { ...saved.variants[0]! };
+    delete omitted.customerName;
+    delete variant.customerName;
+    omitted.variants = [variant];
+    const changed = await save(saved.id, omitted);
+    expect(changed.customerName).toEqual(saved.customerName);
+    expect(changed.variants[0]!.customerName).toEqual({ es: "ES small", fr: "FR small" });
+  });
+
+  it.each([{ fr: "Changed" }, { fr: " " }, { de: "Neu" }])(
+    "refuses a disabled-language edit and leaves the whole product unchanged: %j",
+    async (customerName) => {
+      const saved = await save(null, {
+        ...input,
+        customerName: { es: "ES coffee", fr: "FR coffee" },
+        variants: [],
+      });
+      await expect(save(saved.id, { ...saved, customerName })).rejects.toMatchObject({
+        code: "content.translation_invalid",
+      });
+      expect(await read(saved.id)).toEqual(saved);
+    },
+  );
+
+  it("clears a variant's last translation through its own editor without copying its parent's names", async () => {
+    const saved = await save(null, input);
+    const variant = await read(saved.variants[0]!.id);
+    const changed = await save(variant.id, { ...variant, customerName: {} });
+    expect(changed.customerName).toBeNull();
+    expect(changed.name).toBe("Small");
+    expect((await read(saved.id)).customerName).toEqual({ en: "Coffee", es: "ES coffee" });
+  });
+
+  it.each([{ ES: "ES coffee" }, { "es-ES": "ES coffee" }, { en: "é".repeat(2048) + "a" }])(
+    "refuses noncanonical or oversized customer text: %j",
+    async (customerName) => {
+      await expect(save(null, { ...input, customerName, variants: [] })).rejects.toMatchObject({
+        code: "content.translation_invalid",
+      });
+    },
+  );
 });

@@ -1,7 +1,7 @@
 import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
 import {
   isProductOrdering,
-  nonBlankTranslations,
+  validateOptionalTranslations,
   type TranslationContext,
 } from "@waitron/catalogue";
 import "./errors.js";
@@ -28,9 +28,8 @@ import {
   readCatalogueSettings,
   saveCatalogueDefaultColor,
   readContentLanguages,
-  listTranslationGapReport,
+  listTranslationGapCounts,
   writeContentLanguages,
-  validateContentTranslations,
   createCatalogue,
   duplicateMenu,
   createCategory,
@@ -126,12 +125,9 @@ import { inArray } from "drizzle-orm";
 
 /** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
+  managementOrigin?: string;
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
-  contentTranslationGaps?: (
-    tx: Transaction,
-    language: string,
-  ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
   /** Required by the routes that read the venue's location; `requireVenueCfg` throws without it. */
   venueCfg?: TillConfig;
@@ -888,7 +884,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
   mountMenuHomeRoutes(app, gated, log);
-  mountContentTranslationsApi(app, gated, log, translationContextFor(deps));
+  mountContentTranslationsApi(app, gated, log, translationContextFor(deps), deps.managementOrigin);
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
@@ -919,7 +915,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       return c.json(
         await gated(c, sessionId, async (tx) =>
-          listTranslationGapReport(
+          listTranslationGapCounts(
             tx,
             await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE),
           ),
@@ -954,13 +950,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         languages: body.languages as string[],
       };
       await gated(c, sessionId, (tx) =>
-        writeContentLanguages(
-          tx,
-          config,
-          deps.venueLocale ?? FALLBACK_LOCALE,
-          deps.contentTranslationGaps,
-          deps.contentLanguageRules?.required,
-        ),
+        writeContentLanguages(tx, config, deps.contentLanguageRules?.required),
       );
       return c.body(null, 204);
     }),
@@ -1582,9 +1572,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.ordering === undefined ? {} : { ordering: body.ordering }),
       };
       const created = await gated(c, sessionId, async (tx) => {
-        if (customerName !== null) {
-          await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
-        }
         const product = await createProduct(tx, input);
         if (modifiers === undefined) return { ...product, modifiers: [] };
         await writeProductModifiers(tx, product.id, modifiers);
@@ -1615,10 +1602,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * A map with no non-blank entry means the same as `null` — the staff name is what a receipt shows —
- * so `nonBlankTranslations` folds it to `null`, the same fold the product editor's parser makes.
- */
 function screenCustomerName(value: unknown): Record<string, string> | null {
   if (value === undefined || value === null) return null;
   if (!isPlainObject(value)) {
@@ -1628,5 +1611,6 @@ function screenCustomerName(value: unknown): Record<string, string> | null {
   if (entries.some(([, text]) => typeof text !== "string")) {
     throw new AppError("management.request_invalid", { field: "customerName" });
   }
-  return nonBlankTranslations(Object.fromEntries(entries) as Record<string, string>);
+  const names = validateOptionalTranslations(value);
+  return Object.keys(names).length === 0 ? null : names;
 }

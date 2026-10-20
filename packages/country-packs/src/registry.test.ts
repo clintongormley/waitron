@@ -114,12 +114,15 @@ describe("content-language rules", () => {
     });
   });
 
-  it("requires nothing for a Spanish venue with no province", () => {
-    expect(resolveInstalledContentLanguageRules({ country: "ES", area: null })).toStrictEqual({
-      required: [],
-      official: SPAIN_OFFICIAL,
-    });
-  });
+  it.each([null, undefined, "missing", "99", "01", "20", "48", "31"])(
+    "keeps Spanish enabled for a Spanish venue in %s",
+    (area) => {
+      expect(resolveInstalledContentLanguageRules({ country: "ES", area })).toStrictEqual({
+        required: ["es"],
+        official: SPAIN_OFFICIAL,
+      });
+    },
+  );
 
   it("requires nothing and names no official language for a country with none, or no country", () => {
     for (const country of ["GB", "XX", null])
@@ -172,11 +175,11 @@ describe("starting content languages", () => {
     ],
     [
       { country: "ES", area: "Bizkaia" },
-      { defaultLanguage: "es", languages: ["es", "en"], required: [] },
+      { defaultLanguage: "es", languages: ["es", "en"], required: ["es"] },
     ],
     [
       { country: "ES", area: null },
-      { defaultLanguage: "es", languages: ["es", "en"], required: [] },
+      { defaultLanguage: "es", languages: ["es", "en"], required: ["es"] },
     ],
     [
       { country: "GB", area: null },

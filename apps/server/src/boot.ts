@@ -1945,14 +1945,7 @@ async function bootServer(
     {
       db,
       venueCfg: till,
-      contentTranslationGaps: async (tx, language) => {
-        const gaps = [];
-        for (const module of setsToMigrate) {
-          if (module.contentTranslations)
-            gaps.push(...(await module.contentTranslations.gaps(tx, language)));
-        }
-        return gaps;
-      },
+      managementOrigin: config.managementOrigin,
       contentLanguageRules,
       venueLocale,
     },

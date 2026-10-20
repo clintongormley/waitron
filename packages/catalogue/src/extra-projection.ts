@@ -19,6 +19,8 @@ export type ResolvedExtraListItem = Omit<ExtraListItem, "price" | "portion"> & {
   portion: string;
   unit: {
     id: string;
+    staffName: string;
+    staffAbbreviation: string;
     name: Record<string, string>;
     abbreviation: Record<string, string>;
     precision: number;
@@ -46,6 +48,8 @@ async function borrowedProductFacts(
       unitPrice: effectiveProductColumns.unitPrice,
       unitId: units.id,
       unitName: units.name,
+      unitStaffName: units.staffName,
+      unitStaffAbbreviation: units.staffAbbreviation,
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       unitHardwareUnit: units.hardwareUnit,
@@ -64,6 +68,8 @@ async function borrowedProductFacts(
           product.unitId === null
             ? {
                 id: EACH_UNIT.id,
+                staffName: EACH_UNIT.staffName,
+                staffAbbreviation: EACH_UNIT.staffAbbreviation,
                 name: EACH_UNIT.name,
                 abbreviation: EACH_UNIT.abbreviation,
                 precision: EACH_UNIT.precision,
@@ -71,6 +77,8 @@ async function borrowedProductFacts(
               }
             : {
                 id: product.unitId,
+                staffName: product.unitStaffName!,
+                staffAbbreviation: product.unitStaffAbbreviation!,
                 name: product.unitName!,
                 abbreviation: product.unitAbbreviation!,
                 precision: product.unitPrecision!,

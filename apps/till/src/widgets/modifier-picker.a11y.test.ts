@@ -8,8 +8,18 @@ import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/
 /** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
 function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {
   return {
+    presentation: {
+      name: staff,
+      customerName: { es: `${staff} carta` },
+      kitchenName: `${staff} KDS`,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",

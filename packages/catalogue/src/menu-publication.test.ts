@@ -47,11 +47,12 @@ import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit, assignProductUnit } from "./units.js";
+import { units } from "./schema/units.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { resolveTranslationTargets } from "./content-translation-targets.js";
+import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import {
   customerPresentationText,
@@ -71,6 +72,69 @@ import { sectionMembers, sections } from "./schema/sections.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
+
+describe("future unit presentation publication", () => {
+  it.each([
+    { staffName: "Renamed staff kilogram" },
+    { staffAbbreviation: "new-staff-kg" },
+    { name: {} },
+    { abbreviation: {} },
+  ])("reports an extras-only unit change %j while preserving its live document", async (patch) => {
+    const f = await menusFixture(fx.db);
+    const unit = await app(async (tx) => {
+      const created = await createUnit(
+        tx,
+        {
+          staffName: "Staff kilogram",
+          staffAbbreviation: "staff-kg",
+          name: { en: "Guest kilogram" },
+          abbreviation: { en: "guest-kg" },
+          precision: 3,
+        },
+        "en",
+      );
+      await assignProductUnit(tx, f.extraLemon, created.id);
+      return created;
+    });
+    await publish(f.lunch);
+    const rows = await versionRows();
+    const liveBefore = await app((tx) => readLiveDocuments(tx, [f.lunch]));
+    const liveJson = JSON.stringify(liveBefore.get(f.lunch)!.document);
+
+    await app((tx) => updateUnit(tx, unit.id, patch, "en"));
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.changes).toContainEqual(
+      expect.objectContaining({
+        kind: "extra_unit_changed",
+        productId: f.extraLemon,
+        listId: f.extrasList,
+      }),
+    );
+    expect((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch)!.state).toBe("changed");
+    expect(await versionRows()).toEqual(rows);
+    expect(
+      JSON.stringify((await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document),
+    ).toBe(liveJson);
+
+    await publish(f.lunch);
+    const liveAfter = (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document;
+    const extra = Object.values(liveAfter.offers)
+      .flatMap((offer) => offer.offeredModifiers)
+      .flatMap((entry) => (entry.kind === "extras" ? entry.items : []))
+      .find((item) => item.productId === f.extraLemon)!;
+    expect(extra.unit).toEqual({
+      id: unit.id,
+      staffName: "Staff kilogram",
+      staffAbbreviation: "staff-kg",
+      name: { en: "Guest kilogram" },
+      abbreviation: { en: "guest-kg" },
+      precision: 3,
+      hardwareUnit: null,
+      ...patch,
+    });
+    expect((await versionRows()).slice(0, 1)).toEqual(rows);
+  });
+});
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -119,11 +183,17 @@ describe("preview live snapshot", () => {
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
     await app(async (tx) => {
-      const unit = await createUnit(
-        tx,
-        { name: { en: "each", fr: "unité" }, abbreviation: { en: "ea", fr: "u" }, precision: 0 },
-        "en",
-      );
+      const unit = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each", fr: "FR each" },
+          abbreviation: { en: "ea", fr: "u" },
+          precision: 0,
+        })
+        .returning()
+        .then((rows) => rows[0]!);
       await assignProductUnit(tx, f.lemonade, unit.id);
     });
     const offerId = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
@@ -156,15 +226,23 @@ describe("preview live snapshot", () => {
       "unidad",
     ];
     const context = { fallbackLanguage: "en", required: [] };
-    const targets = await app((tx) => resolveTranslationTargets(tx, "es", refs, context));
+    const targets = await app((tx) =>
+      resolveTranslationCells(
+        tx,
+        refs.map((ref) => ({ ...ref, language: "es", field: "name" as const })),
+        context,
+      ),
+    );
     await app((tx) =>
       saveContentTranslations(
         tx,
-        "es",
         {
-          edits: targets.targets.map((entry, i) => ({
-            ...refs[i]!,
-            expected: entry.target.expected,
+          edits: targets.cells.map(({ kind, id, language, field, expected }, i) => ({
+            kind,
+            id,
+            language,
+            field,
+            expected,
             text: texts[i]!,
           })),
         },
@@ -179,7 +257,7 @@ describe("preview live snapshot", () => {
     });
     expect(offer.variants[0]!.customerName).toEqual({ en: "A big glass", es: "Vaso grande" });
     expect(offer.unit).toMatchObject({
-      name: { en: "each", fr: "unité", es: "unidad" },
+      name: { en: "each", fr: "FR each", es: "unidad" },
       abbreviation: { en: "ea", fr: "u" },
       precision: 0,
       hardwareUnit: null,
@@ -265,7 +343,7 @@ describe("preview live snapshot", () => {
         "es-ES",
       ),
     ).toEqual(["Ice?: Neat"]);
-    expect(recorded.unit.name).toEqual({ en: "each", fr: "unité" });
+    expect(recorded.unit.name).toEqual({ en: "each", fr: "FR each" });
     await publish(f.lunch);
     expect((await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document).toEqual(
       preview.document,
@@ -384,7 +462,13 @@ describe("publishMenu", () => {
     const unitId = await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });
@@ -1371,7 +1455,13 @@ describe("menuStatus", () => {
       await app(async (tx) => {
         const unit = await createUnit(
           tx,
-          { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg" },
+            precision: 3,
+          },
           "en",
         );
         await updateProduct(tx, f.extraLemon, { unitId: unit.id });

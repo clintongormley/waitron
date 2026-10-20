@@ -28,6 +28,8 @@ type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
 
 const each = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { en: "each" },
   abbreviation: { en: "ea" },
@@ -95,8 +97,18 @@ function variant(id: string, unitPrice: string): LiveVariant {
 
 function extraItem(productId: string, price: string, available = true) {
   return {
+    presentation: {
+      name: `${productId} staff`,
+      customerName: null,
+      kitchenName: null,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",

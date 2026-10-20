@@ -1,3 +1,4 @@
+import type { TranslationQuery } from "./client.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -89,6 +90,8 @@ it("reads a card reader's delete impact passively after the first read, and send
   expect(active).toHaveBeenCalledTimes(3);
 });
 
+const translationQuery: TranslationQuery = { languages: ["en"], missing: { mode: "any" } };
+
 it.each([
   ["listMyShifts", ["2026-05-04", "2026-05-11"], "roster_versions"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
@@ -112,8 +115,70 @@ it.each([
   ["listAlerts", [], "incidents"],
   ["listAlerts", [], "content_suggestion_jobs"],
   ["listAlerts", [], "content_suggestions"],
-  ["getContentSuggestions", ["es"], "content_suggestions"],
-  ["getContentSuggestions", ["es"], "content_suggestion_jobs"],
+  ["getContentSuggestions", [], "content_suggestions"],
+  ["getContentSuggestions", [], "content_suggestion_jobs"],
+  ["getContentTranslationGaps", [], "menu_details"],
+  ["getContentTranslationTargets", [translationQuery], "content_suggestions"],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "content_languages",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "products",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "option_lists",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "option_labels",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "extra_lists",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "sections",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "section_members",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "menu_details",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "catalogues",
+  ],
+  [
+    "getContentTranslationCells",
+    [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
+    "units",
+  ],
+  ["getContentSuggestions", [], "content_languages"],
+  ["getContentSuggestions", [], "products"],
+  ["getContentSuggestions", [], "option_lists"],
+  ["getContentSuggestions", [], "option_labels"],
+  ["getContentSuggestions", [], "extra_lists"],
+  ["getContentSuggestions", [], "sections"],
+  ["getContentSuggestions", [], "section_members"],
+  ["getContentSuggestions", [], "menu_details"],
+  ["getContentSuggestions", [], "catalogues"],
+  ["getContentSuggestions", [], "units"],
   ["listHandledAlerts", [], "incidents"],
   ["listHandledAlerts", [], "persons"],
   ["listStuckPayments", [], "payments"],
@@ -391,6 +456,7 @@ it.each([
       "extra_lists",
       "sections",
       "section_members",
+      "menu_details",
       "catalogues",
       "units",
     ],
@@ -729,7 +795,7 @@ it.each([
     calls.push(init);
     return new Response(
       JSON.stringify({
-        language: "en",
+        configuration: "translation-config",
         config: { defaultLanguage: "es", languages: ["es", "en"] },
         required: [],
         rows: [],
@@ -739,7 +805,7 @@ it.each([
     );
   });
   const observed = api.liveData.observe(
-    dashboardQuery(api, "getContentTranslationTargets", ["en", {}]),
+    dashboardQuery(api, "getContentTranslationTargets", [translationQuery]),
     () => {},
   );
   try {

@@ -29,6 +29,8 @@ const STATES: [string, Partial<ContentSuggestionsBar>][] = [
   ["not connected", { service: "not_connected" }],
   ["switched off", { service: "off" }],
   ["ready", {}],
+  ["waiting fixes without a run", { waitingFixes: 4 }],
+  ["waiting fixes while locked", { waitingFixes: 4, reviewDisabled: true }],
   ["sending", { run: run({ state: "sending", progress: 0, done: 0, waiting: 0 }) }],
   ["running", { run: run({ state: "running", progress: 180, done: 180, waiting: 0 }) }],
   ["done", { run: run({}) }],

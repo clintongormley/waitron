@@ -34,11 +34,7 @@ export function optionSnapshotLabels(snapshots: readonly OptionSnapshot[]): stri
  * The DINER's wording. Each side takes its customer text in `locale`, then in the default content
  * language of the time the answer was frozen, then in any other stored language, and falls back to
  * the STAFF name only when it has no customer text at all, never to the kitchen name, which is a
- * cook's shorthand and identifies the goods to nobody else. The order path freezes each customer map
- * as one entry under that default (`buildLineExtras`, or `editLineOptions` when an edit gives a new
- * or changed answer; `apps/server/src/modifier-selection.ts`), so that answer reads the same
- * whatever `locale` asks; the till's own copy keeps the whole maps
- * (`apps/till/src/state/held-options.ts`).
+ * cook's shorthand and identifies the goods to nobody else.
  *
  * The default is read from the staff map's one key: both builders key it by the default content
  * language at the time the answer was frozen.

@@ -129,11 +129,11 @@ async function setupVenue(): Promise<Seeded> {
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId, offers } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
+      const bebidas = await createCategory(tx, { name: "ES drinks" });
       const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        name: "Café",
+        name: "ES coffee",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -686,7 +686,7 @@ describe("readTabLines", () => {
         [
           {
             name: "Large",
-            customerName: { [LOCALE]: "Taza grande" },
+            customerName: { es: "Large cup" },
             kitchenName: "KDS large",
             image: null,
             unitPrice: "2.00",
@@ -1268,8 +1268,8 @@ it("returns a tab line's stored staff names and options answers", async () => {
       .set({
         name: "Recorded coffee",
         variantName: "Large",
-        descriptions: { [LOCALE]: "Café recién molido" },
-        variantDescriptions: { [LOCALE]: "Taza grande" },
+        descriptions: { [LOCALE]: "Freshly ground ES coffee" },
+        variantDescriptions: { [LOCALE]: "Large cup" },
         optionSnapshots,
       })
       .where(eq(workingOrderLines.workingOrderId, tabId));
@@ -1593,7 +1593,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     // The three names differ, so the notice is seen to carry the one a cook reads.
     await db.execute(sql`
       update products
-      set kitchen_name = 'Café de cocina', customer_name = ${JSON.stringify({ es: "Café del cliente" })}
+      set kitchen_name = 'ES coffee de cocina', customer_name = ${JSON.stringify({ es: "ES coffee del cliente" })}
       where id = ${cafeId}`);
     await withTransaction(db, republishMenus);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
@@ -1608,7 +1608,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     expect(await linesOf(tabId)).toEqual([]);
     // The notice keeps the line's name after the line is gone.
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café de cocina", quantity: "1.000", wasStarted: true },
+      { kind: "void", lineName: "ES coffee de cocina", quantity: "1.000", wasStarted: true },
     ]);
     // This venue's station has no printer: the notice is the only correction.
     expect(await db.select({ id: printJobs.id }).from(printJobs)).toEqual([]);
@@ -1653,7 +1653,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     ]);
     expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
 
@@ -1669,7 +1669,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
     expect(await linesOf(tabId)).toEqual([]);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café", quantity: "2.000", wasStarted: false },
+      { kind: "void", lineName: "ES coffee", quantity: "2.000", wasStarted: false },
     ]);
   });
 
@@ -1746,7 +1746,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1, 2]));
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "recalled", lineName: "Café", quantity: "2.000", wasStarted: false },
+      { kind: "recalled", lineName: "ES coffee", quantity: "2.000", wasStarted: false },
     ]);
   });
 });
@@ -1794,7 +1794,7 @@ describe("with changes to sent items switched off", () => {
 
     expect(await linesOf(tabId)).toEqual([]);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
 
@@ -1943,7 +1943,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     );
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     const fresh = await ticketRow(tabId, 1);
     expect(fresh).toMatchObject({ note: "no onions", quantity: 1000, state: "queued" });
@@ -1964,7 +1964,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     });
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     const fresh = await ticketRow(tabId, 1);
     expect(fresh).toMatchObject({ note: "no onions", quantity: 1000 });
@@ -2004,7 +2004,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     ]);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, quantity: 1000 });
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
 
@@ -2019,7 +2019,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([2]);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     // The tab has work sent, so the new line goes to the kitchen as a round's would.
     expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
@@ -2231,7 +2231,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       expect.objectContaining({ lineNo: 5, quantity: 2000, lineTotal: 160 }),
     ]);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     expect((await ticketRow(tabId, 4))!.firedAt).not.toBeNull();
   });
@@ -2246,7 +2246,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     });
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     expect(await linesOf(tabId)).toEqual([expect.objectContaining({ lineNo: 2, lineTotal: 200 })]);
     expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
@@ -2268,7 +2268,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     );
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "recalled", lineName: "Café", quantity: "1.000", wasStarted: false },
+      { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     expect(await linesOf(tabId)).toEqual([
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
@@ -2937,7 +2937,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
 });
 
 /**
- * The owner's decision of 2026-09-27 (A78): a dish counted in Each reads "2× Croqueta" on the
+ * The owner's decision of 2026-09-27 (A78): a dish counted in Each reads "2× Croquette" on the
  * kitchen screen, while every other unit keeps its text. The expo board followed on 2026-09-28
  * (A109). Five dishes, each sold in its own unit: Each as a product with no stored unit reads it;
  * the stored unit seeded as each, after its abbreviation was renamed; kg; the seeded g, a second
@@ -2956,8 +2956,21 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     const [gram, lookalike] = await db
       .insert(units)
       .values([
-        { seedKey: "g", name: { es: "gramo" }, abbreviation: { es: "g" }, precision: 0 },
-        { name: { es: "Ración" }, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          seedKey: "g",
+          name: { es: "gramo" },
+          abbreviation: { es: "g" },
+          precision: 0,
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "Portion" },
+          abbreviation: EACH_UNIT.abbreviation,
+          precision: 0,
+        },
       ])
       .returning({ id: units.id });
     const offerFor = await asApp(cfg, async (tx) => {
@@ -2971,11 +2984,11 @@ describe("the kitchen screen and the expo board are told which lines were sold i
           unitPrice,
           vatClass: "reduced",
         });
-      await dish("Croqueta", null, "1.50");
+      await dish("Croquette", null, "1.50");
       await dish("Gilda", seededEach!.id, "2.00");
       await dish("Pulpo", kg!.id, "40.00");
       await dish("Almendras", gram!.id, "0.05");
-      await dish("Pan", lookalike!.id, "1.00");
+      await dish("Bread", lookalike!.id, "1.00");
       return (await offerProducts(tx, cfg, { zone: "tables" })).offerFor;
     });
     const productIds = new Map(
@@ -2986,11 +2999,11 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { menuItemId: offerFor(productIds.get("Croqueta")!), quantity: "2" },
+        { menuItemId: offerFor(productIds.get("Croquette")!), quantity: "2" },
         { menuItemId: offerFor(productIds.get("Gilda")!), quantity: "2" },
         { menuItemId: offerFor(productIds.get("Pulpo")!), quantity: "0.5" },
         { menuItemId: offerFor(productIds.get("Almendras")!), quantity: "200" },
-        { menuItemId: offerFor(productIds.get("Pan")!), quantity: "2" },
+        { menuItemId: offerFor(productIds.get("Bread")!), quantity: "2" },
       ]),
     );
     return { cfg, tabId, stationId: (await ticketOfLine(tabId, 1)).stationId };
@@ -3002,11 +3015,11 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     const [group] = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
 
     expect(group!.items.map((item) => [item.name, item.soldInEach])).toEqual([
-      ["Croqueta", true],
+      ["Croquette", true],
       ["Gilda", true],
       ["Pulpo", false],
       ["Almendras", false],
-      ["Pan", false],
+      ["Bread", false],
     ]);
   });
 
@@ -3019,11 +3032,11 @@ describe("the kitchen screen and the expo board are told which lines were sold i
       .flatMap((order) => [...order.courses, ...order.groups])
       .flatMap((section) => section.items);
     expect(items.map((item) => [item.name, item.soldInEach])).toEqual([
-      ["Croqueta", true],
+      ["Croquette", true],
       ["Gilda", true],
       ["Pulpo", false],
       ["Almendras", false],
-      ["Pan", false],
+      ["Bread", false],
     ]);
   });
 
@@ -3037,11 +3050,11 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     expect(await linesOf(tabId)).toEqual([]);
     const notices = await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId));
     expect(notices.map((notice) => [notice.kind, notice.lineName, notice.soldInEach])).toEqual([
-      ["void", "Pan", false],
+      ["void", "Bread", false],
       ["void", "Almendras", false],
       ["void", "Pulpo", false],
       ["void", "Gilda", true],
-      ["void", "Croqueta", true],
+      ["void", "Croquette", true],
     ]);
   });
 });

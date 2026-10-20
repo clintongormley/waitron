@@ -23,6 +23,7 @@ import {
   updateUnit,
 } from "./units.js";
 import { assertQuantityPrecision } from "./units.js";
+import { contentLanguages } from "./schema/menu.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
@@ -62,51 +63,98 @@ describe("unit operations", () => {
   it.each<[string, Record<string, string>]>([
     ["an empty", { en: "" }],
     ["a missing", {}],
-  ])("names the abbreviation when %s one in the default language is refused", async (_, abbr) => {
-    expect(
-      await refusalOf(
-        run((tx) =>
-          createUnit(tx, { name: { en: "Litre" }, precision: 3, abbreviation: abbr }, "en"),
+  ])(
+    "retains staff identity when %s abbreviation translation is supplied",
+    async (_, abbreviation) => {
+      const saved = await run((tx) =>
+        createUnit(
+          tx,
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { en: "Litre" },
+            precision: 3,
+            abbreviation,
+          },
+          "en",
         ),
-      ),
-    ).toEqual({
-      code: "unit.translation_required",
-      params: { field: "abbreviation", language: "en" },
-    });
+      );
+      expect(saved).toEqual({
+        id: expect.any(String),
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "Litre" },
+        precision: 3,
+        abbreviation: {},
+      });
+      expect(await run((tx) => getUnit(tx, saved.id))).toEqual(saved);
+    },
+  );
+
+  it("accepts a missing default name with either a translated or an empty abbreviation", async () => {
+    await suite.db
+      .insert(contentLanguages)
+      .values({ defaultLanguage: "en", languages: ["en", "es"] });
+    for (const abbreviation of [{ en: "l" }, {}] as Record<string, string>[]) {
+      const saved = await run((tx) =>
+        createUnit(
+          tx,
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { es: "Litro" },
+            precision: 3,
+            abbreviation,
+          },
+          "en",
+        ),
+      );
+      expect(saved).toEqual({
+        id: expect.any(String),
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { es: "Litro" },
+        precision: 3,
+        abbreviation,
+      });
+      expect(await run((tx) => getUnit(tx, saved.id))).toEqual(saved);
+    }
   });
 
-  it("names the name when the name is refused, and the name first when both are", async () => {
-    for (const abbreviation of [{ en: "l" }, {}] as Record<string, string>[])
-      expect(
-        await refusalOf(
-          run((tx) => createUnit(tx, { name: { es: "Litro" }, precision: 3, abbreviation }, "en")),
-        ),
-      ).toEqual({ code: "unit.translation_required", params: { field: "name", language: "en" } });
-  });
-
-  it("names the abbreviation when an update supplies only an empty one", async () => {
+  it("clears only the abbreviation when an update supplies an empty map", async () => {
     const unit = await run((tx) =>
-      createUnit(tx, { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Litre" },
+          precision: 3,
+          abbreviation: { en: "l" },
+        },
+        "en",
+      ),
     );
-    expect(
-      await refusalOf(run((tx) => updateUnit(tx, unit.id, { abbreviation: {} }, "en"))),
-    ).toEqual({
-      code: "unit.translation_required",
-      params: { field: "abbreviation", language: "en" },
-    });
+    const saved = await run((tx) => updateUnit(tx, unit.id, { abbreviation: {} }, "en"));
+    expect(saved).toEqual({ ...unit, abbreviation: {} });
+    expect(await run((tx) => getUnit(tx, unit.id))).toEqual(saved);
   });
 
-  // The content-language read is the only SELECT a create, or an update that supplies both maps,
-  // issues; the write itself uses `returning`.
-  it("reads the content languages once for a create and once for an update", async () => {
+  it("reads content languages only for an update that merges stored translations", async () => {
     await run(async (tx) => {
       const reads = vi.spyOn(tx, "select");
       const unit = await createUnit(
         tx,
-        { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Litre" },
+          precision: 3,
+          abbreviation: { en: "l" },
+        },
         "en",
       );
-      expect(reads).toHaveBeenCalledTimes(1);
+      expect(reads).toHaveBeenCalledTimes(0);
       reads.mockClear();
       await updateUnit(tx, unit.id, { name: { en: "Liter" }, abbreviation: { en: "L" } }, "en");
       expect(reads).toHaveBeenCalledTimes(1);
@@ -117,7 +165,13 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Litre" },
+          precision: 3,
+          abbreviation: { en: "l" },
+        },
         "en",
       );
       expect(unit.abbreviation).toEqual({ en: "l" });
@@ -126,17 +180,24 @@ describe("unit operations", () => {
     });
   });
 
-  it("updates the abbreviation and revalidates it against the default language", async () => {
+  it("updates and clears the translated abbreviation without clearing staff identity", async () => {
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Litre" },
+          precision: 3,
+          abbreviation: { en: "l" },
+        },
         "en",
       );
       const updated = await updateUnit(tx, unit.id, { abbreviation: { en: "L" } }, "en");
       expect(updated.abbreviation).toEqual({ en: "L" });
-      await expect(updateUnit(tx, unit.id, { abbreviation: {} }, "en")).rejects.toMatchObject({
-        code: "unit.translation_required",
+      expect(await updateUnit(tx, unit.id, { abbreviation: {} }, "en")).toEqual({
+        ...unit,
+        abbreviation: {},
       });
     });
   });
@@ -146,13 +207,26 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "portion" }, precision: 2, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "portion" },
+          precision: 2,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       expect(await getUnit(tx, unit.id)).toEqual(unit);
       expect(await listUnits(tx)).toEqual([unit]);
-      await updateUnit(tx, unit.id, { name: { en: "serving" }, precision: 1 }, "en");
+      await updateUnit(
+        tx,
+        unit.id,
+        { staffName: "Staff unit", staffAbbreviation: "su", name: { en: "serving" }, precision: 1 },
+        "en",
+      );
       expect(await getUnit(tx, unit.id)).toMatchObject({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "serving" },
         precision: 1,
       });
@@ -173,7 +247,13 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "portion" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       expect(await productsUsingUnit(tx, unit.id)).toEqual([]);
@@ -201,12 +281,24 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const to = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const a = await product(tx, "A");
@@ -226,12 +318,24 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const to = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const a = await product(tx, "A");
@@ -252,7 +356,13 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const a = await product(tx, "A");
@@ -274,7 +384,17 @@ describe("unit operations", () => {
 
   it("starts a new unit as no measure unless the create asks for one", async () => {
     const plain = await run((tx) =>
-      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "portion",
+          staffAbbreviation: "u",
+          name: { en: "portion" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
     expect(plain).not.toHaveProperty("measure");
     expect(await run((tx) => getUnit(tx, plain.id))).not.toHaveProperty("measure");
@@ -282,7 +402,14 @@ describe("unit operations", () => {
     const measured = await run((tx) =>
       createUnit(
         tx,
-        { name: { en: "Centilitre" }, precision: 0, abbreviation: { en: "cl" }, measure: true },
+        {
+          staffName: "Centilitre",
+          staffAbbreviation: "cl",
+          name: { en: "Centilitre" },
+          precision: 0,
+          abbreviation: { en: "cl" },
+          measure: true,
+        },
         "en",
       ),
     );
@@ -294,7 +421,17 @@ describe("unit operations", () => {
 
   it("turns the measure switch on and off by itself", async () => {
     const unit = await run((tx) =>
-      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "portion",
+          staffAbbreviation: "u",
+          name: { en: "portion" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
 
     const on = await run((tx) => updateUnit(tx, unit.id, { measure: true }, "en"));
@@ -330,7 +467,17 @@ describe("what a unit operation refuses for an id that names nothing", () => {
   it("refuses to assign a unit to a product no row holds", async () => {
     await seedTenant(suite.db);
     const unit = await run((tx) =>
-      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "portion" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
 
     await expect(run((tx) => assignProductUnit(tx, MISSING, unit.id))).rejects.toMatchObject({
@@ -343,7 +490,17 @@ describe("what a unit operation refuses for an id that names nothing", () => {
 
   it("answers an empty patch with the unit as stored, changing nothing", async () => {
     const unit = await run((tx) =>
-      createUnit(tx, { name: { en: "portion" }, precision: 2, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "portion" },
+          precision: 2,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
 
     expect(await run((tx) => updateUnit(tx, unit.id, {}, "en"))).toEqual(unit);

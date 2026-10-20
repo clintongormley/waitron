@@ -91,7 +91,17 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
       const kgUnitId = (
-        await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en")
+        await createUnit(
+          tx,
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { en: "kg" },
+            precision: 3,
+            abbreviation: { en: "u" },
+          },
+          "en",
+        )
       ).id;
       const product = await createProduct(tx, {
         catalogueId: cat.id,

@@ -21,6 +21,8 @@ const cafe: TillProduct = {
   name: "Café",
   customerName: { es: "Café para el cliente" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-each",
     name: { en: "unit", es: "unidad" },
     abbreviation: { en: "ea", es: "ud" },
@@ -39,6 +41,8 @@ const jamon: TillProduct = {
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-kg",
     name: { en: "kg", es: "kg" },
     abbreviation: { en: "kg", es: "kg" },
@@ -129,7 +133,15 @@ describe("order-line pricing", () => {
     it("reads the quantity alone when the unit has no name to show", () => {
       const nameless = {
         ...cafe,
-        unit: { id: "", name: {}, abbreviation: {}, precision: 3, hardwareUnit: null },
+        unit: {
+          staffName: "",
+          staffAbbreviation: "",
+          id: "",
+          name: {},
+          abbreviation: {},
+          precision: 3,
+          hardwareUnit: null,
+        },
       };
       expect(quantityLabel({ product: nameless, quantity: "2" })).toBe("2");
     });
@@ -282,6 +294,8 @@ describe("offeredListsOf", () => {
   };
   const unit = (measure: boolean): NonNullable<TillProduct["unit"]> => ({
     id: "unit-ml",
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     name: { en: "millilitre", es: "mililitro" },
     abbreviation: { en: "ml", es: "ml" },
     precision: 0,

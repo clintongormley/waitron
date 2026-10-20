@@ -9,7 +9,7 @@ import {
   submitOnEnter,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import { resolveContentText, type ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages } from "@waitron/shared";
 import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
 import {
   FOLLOWING_FOLDER,
@@ -213,20 +213,17 @@ export class IncludeFolderForm extends LitElement {
     this.#dismiss(...Object.keys(this.fieldErrors));
     this.#emit(event, "wt-submit", this.#submissionValue());
   }
-  /** Each name field's hint: what a customer reading that language sees while the field is blank,
-   * worked out from the names this form would save. Names the save would refuse are never shown, so
-   * they hint nothing. */
   #placeholderFor(): (locale: string) => string {
+    const overrides = this.#overrides();
     const { names } = folderPresentation(this.#loaded.own, {
       showAsFolder: true,
-      overrides: this.#overrides(),
+      overrides: {
+        ...overrides,
+        names: Object.fromEntries(
+          Object.entries(overrides.names ?? {}).filter(([, text]) => text.trim() !== ""),
+        ),
+      },
     });
-    const { defaultLanguage } = this.languages;
-    if (
-      Object.keys(names).length > 0 &&
-      !resolveContentText(names, defaultLanguage, defaultLanguage)
-    )
-      return () => "";
     return (locale) =>
       resolveMenuText(names, this.menuName, { kind: "customer", language: locale }, this.languages)
         .text;

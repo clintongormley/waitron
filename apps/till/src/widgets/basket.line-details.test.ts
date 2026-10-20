@@ -48,6 +48,14 @@ it("A738 extra and note removal stage the same window without changing the line"
           maxPicks: 2,
           items: [
             {
+              presentation: {
+                name: "Staff cheese",
+                customerName: null,
+                kitchenName: null,
+                variantName: null,
+                variantCustomerName: null,
+                variantKitchenName: null,
+              },
               productId: "cheese",
               name: "Staff cheese",
               customerName: null,
@@ -55,6 +63,8 @@ it("A738 extra and note removal stage the same window without changing the line"
               portion: "1",
               unit: {
                 id: "each",
+                staffName: "Staff unit",
+                staffAbbreviation: "su",
                 name: { en: "Each" },
                 abbreviation: { en: "ea" },
                 precision: 0,

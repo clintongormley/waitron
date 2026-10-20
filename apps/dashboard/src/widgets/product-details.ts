@@ -1,7 +1,7 @@
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
-import { resolveContentText } from "@waitron/shared";
+import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -15,6 +15,11 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-product-details")
 export class ProductDetails extends LitElement {
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   static override styles = [
     baseStyles,
     css`
@@ -90,7 +95,7 @@ export class ProductDetails extends LitElement {
       unitId === null
         ? null
         : unit
-          ? resolveContentText(unit.name, currentLocale(), currentLocale())
+          ? unitPresentation(unit, currentLocale(), currentContentLanguages()).name
           : t("editor.missing_choice");
     return `${priceText(price)} ${name === null ? t("product.price_each") : fill("product.price_per", { unit: name })}`;
   }

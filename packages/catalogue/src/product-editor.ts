@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { catalogues, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { readCategory } from "./categories.js";
-import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
+import { readContentLanguages } from "./content-languages.js";
+import { mergeOptionalTranslations } from "./optional-translations.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import {
   createProductSkippingNameCheck,
@@ -144,12 +145,28 @@ export async function saveProductEditor(
     await archiveProducts(tx, [productId]);
     return readProductEditor(tx, productId);
   }
-  // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
-  // must satisfy the default content language. A blank one is legal (it falls back to `name`), so
-  // only a supplied customer name is validated.
   const config = await readContentLanguages(tx, fallbackLanguage);
-  if (value.customerName !== null && (!isVariant || value.active))
-    assertContentTranslations([value.customerName], config);
+  const body = input as Record<string, unknown>;
+  if (productId !== null) {
+    const [previous] = await tx
+      .select({ customerName: products.customerName })
+      .from(products)
+      .where(eq(products.id, productId));
+    value.customerName =
+      body.customerName === undefined
+        ? previous!.customerName
+        : mergeOptionalTranslations(
+            previous!.customerName,
+            body.customerName as Record<string, string> | null,
+            config,
+          );
+  }
+  // Preserve the supplied maps until merging so a cleared disabled key is still an explicit edit.
+  const variantInputs = value.variants.map((variant, index) => ({
+    ...variant,
+    customerName: (body.variants as Record<string, unknown>[])[index]!.customerName as
+      Record<string, string> | null | undefined,
+  }));
   if (productId === null) {
     const [catalogue] = await tx
       .select({ id: catalogues.id })
@@ -215,7 +232,7 @@ export async function saveProductEditor(
       .update(products)
       .set({ categoryId: value.primaryCategoryId, color: value.color, updatedAt: now() })
       .where(eq(products.id, productId));
-    await writeProductVariantsSkippingNameCheck(tx, productId, value.variants, config);
+    await writeProductVariantsSkippingNameCheck(tx, productId, variantInputs, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }
   return readProductEditor(tx, productId);
