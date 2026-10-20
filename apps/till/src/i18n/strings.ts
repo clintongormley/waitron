@@ -832,6 +832,9 @@ export const en = {
   "pay_equipment.take_back": "Close",
   "pay_equipment.reader_gone": "{item} is no longer available",
   "pay_equipment.choose_in_hand": "Choose the reader in your hand.",
+  "pay_equipment.printer_switched_off":
+    "{item} is switched off: unless you choose another, no ticket will print",
+  "pay_equipment.printer_none": "No ticket printer: unless you choose one, no ticket will print",
   "product_info.add": "Add to order",
   "product_info.dietary": "Dietary",
   "product_info.not_reviewed": "Allergens not yet reviewed",
@@ -1508,6 +1511,8 @@ export const en = {
   "bill_pay.sending_title": "Waiting for the server",
   "bill_pay.sending":
     "A payment on this bill is still waiting for the server. Wait for its answer before taking anything else on this bill.",
+  "bill_pay.reader_not_held":
+    "This phone no longer has that card reader. Choose the reader in your hand. No card was charged.",
   "bill_pay.not_checked":
     "The server could not check this payment. Look at the bill's payments before taking it again.",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
@@ -2523,6 +2528,10 @@ export const es: Record<StringKey, string> = {
   "pay_equipment.take_back": "Cerrar",
   "pay_equipment.reader_gone": "{item} ya no está disponible",
   "pay_equipment.choose_in_hand": "Elige el lector que tienes en la mano.",
+  "pay_equipment.printer_switched_off":
+    "{item} está desactivada: si no eliges otra, no se imprimirá el ticket",
+  "pay_equipment.printer_none":
+    "Sin impresora de tickets: si no eliges una, no se imprimirá el ticket",
   "product_info.add": "Añadir al pedido",
   "product_info.dietary": "Dieta",
   "product_info.not_reviewed": "Alérgenos pendientes de revisión",
@@ -3180,6 +3189,8 @@ export const es: Record<StringKey, string> = {
   "bill_pay.sending_title": "Esperando al servidor",
   "bill_pay.sending":
     "Un cobro de esta cuenta sigue esperando al servidor. Espera su respuesta antes de cobrar nada más en esta cuenta.",
+  "bill_pay.reader_not_held":
+    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. No se ha cobrado ninguna tarjeta.",
   "bill_pay.not_checked":
     "El servidor no ha podido comprobar este cobro. Mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",

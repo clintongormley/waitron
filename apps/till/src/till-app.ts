@@ -16040,6 +16040,7 @@ export class TillApp extends LitElement {
       api !== this.api ||
       billId !== this.activeTabId;
     let paidMeanwhile = false;
+    let readerLost = false;
     try {
       if (!(await this.#flushDraft()) || left() || !(await this.#flushPartyKitchenNote()) || left())
         return;
@@ -16068,15 +16069,22 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (left()) return;
       paidMeanwhile = isPaymentsReceived(error);
-      this.#showPresentedRefusal(
-        id,
-        this.#counterRefusal(
-          isReaderRefusal(error) ? "card_reader.not_set_up" : wholeTabErrorOf(error),
-        ),
-      );
+      // `api.pay` is never resent, so every refusal it answers is a first send's.
+      readerLost =
+        this.handheldMode &&
+        this.#presentedNow(id) !== null &&
+        (error as { code?: unknown } | null)?.code === "reader.not_held";
+      if (!readerLost)
+        this.#showPresentedRefusal(
+          id,
+          this.#counterRefusal(
+            isReaderRefusal(error) ? "card_reader.not_set_up" : wholeTabErrorOf(error),
+          ),
+        );
     } finally {
       this.submitting = false;
     }
+    if (readerLost) await this.#onReaderNotHeld();
     if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
   }
 
@@ -16668,6 +16676,8 @@ export class TillApp extends LitElement {
     if (refusal.unsent !== undefined)
       refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
+    // A send that may have been recorded arrives here as `not_checked`, so this is a first send.
+    const readerLost = stage === "take" && this.handheldMode && refusal.code === "reader.not_held";
     if (refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
     } else if (refusal.code === "bill.allocation_changed" && preview !== undefined) {
@@ -16679,8 +16689,15 @@ export class TillApp extends LitElement {
         busy: false,
       };
     } else {
-      this.billPaying = { ...now, asked: null, preview: null, refusal, busy: false };
+      this.billPaying = {
+        ...now,
+        asked: null,
+        preview: null,
+        refusal: readerLost ? null : refusal,
+        busy: false,
+      };
     }
+    const equipmentRead = readerLost ? this.#onReaderNotHeld() : undefined;
     if (
       stage === "preview" &&
       refusal.code === "management.request_invalid" &&
@@ -16689,6 +16706,23 @@ export class TillApp extends LitElement {
       return;
     const balance = await this.#rereadBillPaying(id, now.billId);
     await this.#rereadPayingOrder(now, balance);
+    await equipmentRead;
+  }
+
+  /** A handheld's first send of a card refused `reader.not_held`: the server refuses that before it
+   * records anything, so the reader field can say no card was charged. The equipment is read again,
+   * bounded and passively, so the row opens on the reader the phone now has (design default 19). */
+  async #onReaderNotHeld(): Promise<void> {
+    this.payEquipmentErrors = {
+      ...this.payEquipmentErrors,
+      card_terminal: t("bill_pay.reader_not_held"),
+    };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await this.#readEquipment(limit.signal);
+    } finally {
+      limit.done();
+    }
   }
 
   #onBillPayEdit(): void {

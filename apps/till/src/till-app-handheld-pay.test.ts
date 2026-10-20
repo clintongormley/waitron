@@ -26,7 +26,7 @@ import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/prese
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { cameraFilming } from "../test/qr-camera.js";
-import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
+import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   balanceOf,
   BARRA,
@@ -4051,5 +4051,373 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     } finally {
       await page.viewport(viewport.width, viewport.height);
     }
+  });
+});
+
+describe("till-app: a reader refused at Cobrar, and a printer that has gone (default 19)", () => {
+  const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
+  const MARC = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
+  const TERRAZA = equipmentItem("p2", "Terraza");
+  const BARRA_OFF = { ...BARRA, available: false };
+
+  const holding = (
+    receipt: RoleEquipment = roleOf("receipt", BARRA, [BARRA]),
+  ): DeviceEquipment => ({
+    roles: [receipt, roleOf("card_terminal", LECTOR_2, [LECTOR_2, LECTOR_3])],
+  });
+  const takenByMarc: DeviceEquipment = {
+    roles: [
+      roleOf("receipt", BARRA, [BARRA]),
+      roleOf("card_terminal", null, [{ ...LECTOR_2, heldBy: MARC }, LECTOR_3]),
+    ],
+  };
+  const notHeld = () => ({ code: "reader.not_held", status: 409 });
+
+  const presented = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+  const sheet = (el: TillApp) => dialog(el) ?? presented(el);
+  const row = (el: TillApp) =>
+    sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+  async function settled(el: TillApp): Promise<TillPayEquipment> {
+    await flush(el);
+    await sheet(el)!.updateComplete;
+    await row(el).updateComplete;
+    return row(el);
+  }
+  const field = (el: TillApp, name: string) =>
+    row(el).shadowRoot!.querySelector<WtCombobox>(`wt-combobox[name="${name}"]`)!;
+  const printerWarning = (el: TillApp) =>
+    row(el).shadowRoot!.querySelector("[data-pay-printer-warning]")?.textContent!.trim();
+  const bottom = (el: TillApp) =>
+    sheet(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+  const shownText = (root: ParentNode): string =>
+    [...root.querySelectorAll("*")]
+      .map((node) => (node.shadowRoot === null ? "" : shownText(node.shadowRoot)))
+      .join(" ") + ` ${root.textContent ?? ""}`;
+
+  async function billOnConfirmation(overrides: Record<string, unknown> = {}) {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(holding());
+    const { el } = await mountApp(onPhone({ getDeviceEquipment, ...overrides }));
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    return { el, order, getDeviceEquipment };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  describe("a card refused reader.not_held on its first send", () => {
+    it("on the bill path, says so under the reader field, reads the equipment once, and opens the row with the reader empty", async () => {
+      const { el, getDeviceEquipment } = await billOnConfirmation({
+        takeBillPayment: vi.fn().mockRejectedValue(notHeld()),
+      });
+      getDeviceEquipment.mockResolvedValue(takenByMarc);
+      const readsBefore = getDeviceEquipment.mock.calls.length;
+
+      await press(el, "[data-pay-confirm]");
+      const shown = await settled(el);
+
+      expect(sent()).toHaveLength(1);
+      expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
+      expect(getDeviceEquipment.mock.calls.at(-1)).toEqual([{ signal: expect.any(AbortSignal) }]);
+      expect(shown.open).toBe(true);
+      expect(field(el, "cardReaderId").value).toBe("");
+      expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
+      expect(bottom(el)).toBe("");
+      expect(shownText(dialog(el)!.shadowRoot!)).not.toContain(codeMessage("reader.not_held"));
+    });
+
+    it("on the presented path through api.pay, says so under the reader field, reads the equipment once, and opens the row with the reader empty", async () => {
+      const getDeviceEquipment = vi.fn().mockResolvedValue(holding());
+      const pay = vi.fn().mockRejectedValue(notHeld());
+      const { el } = await mountApp(
+        onPhone({
+          getDeviceEquipment,
+          pay,
+          getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+        }),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await presented(el)!.updateComplete;
+      getDeviceEquipment.mockResolvedValue(takenByMarc);
+      const readsBefore = getDeviceEquipment.mock.calls.length;
+
+      presented(el)!.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+      const shown = await settled(el);
+
+      expect(pay).toHaveBeenCalledOnce();
+      expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
+      expect(getDeviceEquipment.mock.calls.at(-1)).toEqual([{ signal: expect.any(AbortSignal) }]);
+      expect(shown.open).toBe(true);
+      expect(field(el, "cardReaderId").value).toBe("");
+      expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
+      expect(bottom(el)).toBe("");
+      expect(shownText(presented(el)!.shadowRoot!)).not.toContain(codeMessage("reader.not_held"));
+    });
+
+    it("a re-read that never answers is cut off at the request limit", async () => {
+      const { el, getDeviceEquipment } = await billOnConfirmation({
+        takeBillPayment: vi.fn().mockRejectedValue(notHeld()),
+      });
+      const signals: AbortSignal[] = [];
+      getDeviceEquipment.mockImplementation(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise<DeviceEquipment>((_resolve, reject) => {
+            if (options?.signal !== undefined) signals.push(options.signal);
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }),
+      );
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signals).toHaveLength(1);
+      expect(signals[0]!.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+      expect(signals[0]!.aborted).toBe(true);
+    });
+
+    it("a counter till keeps reader.not_held's general message above the action", async () => {
+      const readers = [
+        { id: "r1", name: "Lector 1", provider: "stripe_terminal" },
+        { id: "r2", name: "Lector 2", provider: "stripe_terminal" },
+      ];
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+          activeReaders: readers,
+          defaultReaderId: "r1",
+        }),
+        previewBillPayment: vi
+          .fn()
+          .mockResolvedValue({ ...wholeCard, applied: "40.00", charged: "40.00" }),
+        takeBillPayment: vi.fn().mockRejectedValue(notHeld()),
+      });
+      await openTable(el);
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40");
+      await press(el, 'input[name="method"][value="card"]');
+      await press(el, 'input[name="reader"][value="r2"]');
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+
+      expect(dialog(el)!.handheld).toBe(false);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("reader.not_held"));
+      expect(shownText(dialog(el)!.shadowRoot!)).not.toContain(t("bill_pay.reader_not_held"));
+    });
+  });
+
+  const lookBackgrounds = new Map<string, string>();
+  it.each([
+    ["reader-refused", "light", 390],
+    ["reader-refused", "dark", 390],
+    ["reader-refused", "light", 1280],
+    ["reader-refused", "dark", 1280],
+    ["printer-off", "light", 390],
+    ["printer-off", "dark", 390],
+    ["printer-off", "light", 1280],
+    ["printer-off", "dark", 1280],
+  ] as const)("looks right, %s, %s at %i px", async (state, theme, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const refused = state === "reader-refused";
+      const getDeviceEquipment = vi
+        .fn()
+        .mockResolvedValue(
+          refused ? holding() : holding(roleOf("receipt", BARRA_OFF, [BARRA_OFF, TERRAZA])),
+        );
+      api = stubApi(
+        onPhone(
+          { getDeviceEquipment, takeBillPayment: vi.fn().mockRejectedValue(notHeld()) },
+          // A person with no language of their own signs in to the venue's (`resolveActiveLocale`).
+          { locale: "es-ES" },
+        ),
+      );
+      const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await press(el, 'input[name="method"][value="card"]');
+      if (refused) {
+        await press(el, "[data-pay-continue]");
+        getDeviceEquipment.mockResolvedValue(takenByMarc);
+        await press(el, "[data-pay-confirm]");
+      }
+      await settled(el);
+      expect(currentLocale()).toBe("es-ES");
+      expect(row(el).open).toBe(true);
+      if (refused) expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
+      else
+        expect(printerWarning(el)).toBe(
+          t("pay_equipment.printer_switched_off").replace("{item}", "Barra"),
+        );
+      const panel = dialog(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      lookBackgrounds.set(`${state}-${theme}-${width}`, background);
+      if (theme === "dark")
+        expect(background).not.toBe(lookBackgrounds.get(`${state}-light-${width}`));
+      const shot = `__screenshots__/look/a796-${state}-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const rowBox = row(el).getBoundingClientRect();
+      await commands.writeFile(
+        `src/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          rowInside: rowBox.left >= box.left && rowBox.right <= box.right,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  it("a retry after a network failure refused reader.not_held says the server could not check it, never that nothing was charged (review 2's C1)", async () => {
+    const answers: ((error: unknown) => void)[] = [];
+    const takeBillPayment = vi.fn(
+      () => new Promise<BillPaymentResult>((_resolve, reject) => answers.push(reject)),
+    );
+    const { el, getDeviceEquipment } = await billOnConfirmation({ takeBillPayment });
+    getDeviceEquipment.mockResolvedValue(takenByMarc);
+    const readsBefore = getDeviceEquipment.mock.calls.length;
+    await press(el, "[data-pay-confirm]");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      answers[0]!(new TypeError("Failed to fetch"));
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(answers).toHaveLength(2);
+    answers[1]!(notHeld());
+    await settled(el);
+
+    expect(bottom(el)).toBe(t("bill_pay.not_checked"));
+    expect(shownText(dialog(el)!.shadowRoot!)).not.toContain(t("bill_pay.reader_not_held"));
+    expect(field(el, "cardReaderId")?.error ?? "").toBe("");
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore);
+  });
+
+  describe("a printer that would print nothing", () => {
+    const off = (selection: "item" | "default"): RoleEquipment =>
+      selection === "item"
+        ? roleOf("receipt", BARRA_OFF, [BARRA_OFF, TERRAZA])
+        : {
+            ...roleOf("receipt", BARRA_OFF, [BARRA_OFF, TERRAZA]),
+            selection: "default",
+            chosenId: null,
+            chosen: null,
+            default: BARRA_OFF,
+          };
+    const switchedOffLine = () =>
+      t("pay_equipment.printer_switched_off").replace("{item}", "Barra");
+
+    async function onForm(receipt: RoleEquipment) {
+      const { el } = await mountApp(
+        onPhone({ getDeviceEquipment: vi.fn().mockResolvedValue(holding(receipt)) }),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await press(el, 'input[name="method"][value="card"]');
+      await settled(el);
+      return el;
+    }
+    const continueDisabled = (el: TillApp) =>
+      (inDialog(el, "[data-pay-continue]") as HTMLElement & { disabled: boolean }).disabled;
+    async function paid(el: TillApp): Promise<void> {
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(1);
+      expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: "r2" });
+    }
+
+    it.each([
+      ["chosen and switched off", off("item"), switchedOffLine],
+      ["the default, switched off", off("default"), switchedOffLine],
+      [
+        "listed with none set",
+        roleOf("receipt", null, [BARRA, TERRAZA]),
+        () => t("pay_equipment.printer_none"),
+      ],
+    ] as const)(
+      "a printer %s opens the row with the printer empty and a warning; Continuar stays enabled and the card is sent",
+      async (_how, receipt, warning) => {
+        const el = await onForm(receipt);
+
+        expect(row(el).open).toBe(true);
+        expect(field(el, "receiptPrinterId").value).toBe("");
+        expect(printerWarning(el)).toBe(warning());
+        expect(continueDisabled(el)).toBe(false);
+        await paid(el);
+      },
+    );
+
+    it("a printer the server forgot falls back to the profile's default: row closed, labelled, and the card is sent", async () => {
+      const el = await onForm({
+        ...roleOf("receipt", TERRAZA, [TERRAZA]),
+        selection: "default",
+        chosenId: null,
+        chosen: null,
+        default: TERRAZA,
+      });
+
+      expect(row(el).open).toBe(false);
+      expect(await rowSummary(el)).toContain(
+        t("pay_equipment.ticket_at_default").replace("{printer}", "Terraza"),
+      );
+      expect(printerWarning(el)).toBeUndefined();
+      await paid(el);
+    });
+
+    it("a profile with no receipt printer reads sin ticket with the row closed, and the card is sent", async () => {
+      const el = await onForm(roleOf("receipt", null, []));
+
+      expect(row(el).open).toBe(false);
+      expect(await rowSummary(el)).toContain(t("pay_equipment.no_ticket"));
+      expect(printerWarning(el)).toBeUndefined();
+      await paid(el);
+    });
+
+    it("the presented sheet shows the switched-off printer's warning and still takes the card", async () => {
+      const pay = vi
+        .fn()
+        .mockResolvedValue({ outcome: "captured", ticket: invoiceOf("120.00", "F2") });
+      const { el } = await mountApp(
+        onPhone({
+          getDeviceEquipment: vi.fn().mockResolvedValue(holding(off("item"))),
+          pay,
+          getPartyBills: vi
+            .fn()
+            .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
+        }),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await settled(el);
+
+      expect(row(el).open).toBe(true);
+      expect(printerWarning(el)).toBe(switchedOffLine());
+      const take = presented(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-presented-pay-take]",
+      )!;
+      expect(take.disabled).toBe(false);
+      take.click();
+      await flush(el);
+      expect(pay).toHaveBeenCalledOnce();
+    });
   });
 });

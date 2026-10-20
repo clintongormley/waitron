@@ -13,11 +13,20 @@ import { carriedText, t } from "../i18n/t.js";
 import type { DeviceEquipment, EquipmentItem } from "../api/client.js";
 import type { EquipmentCode } from "../state/equipment-nfc.js";
 import {
+  type PayPrinter,
   payPrinterOf,
   payReaderOf,
   printerChoices,
   readerChoices,
 } from "../state/pay-equipment.js";
+
+/** What the open row says under the printer field when the receipt would print nothing; the
+ * payment still goes ahead (design default 19). */
+function printerWarning(printer: PayPrinter): string | null {
+  if (printer.kind === "switched_off")
+    return t("pay_equipment.printer_switched_off").replace("{item}", () => printer.name);
+  return printer.kind === "unset" ? t("pay_equipment.printer_none") : null;
+}
 
 export type PayEquipmentRole = "card_terminal" | "receipt";
 
@@ -162,6 +171,14 @@ export class TillPayEquipment extends LitElement {
         margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      .warning {
+        margin: var(--wt-space-1) 0 0;
+        padding-inline-start: var(--wt-space-2);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        font-size: var(--wt-font-size-sm);
+        overflow-wrap: anywhere;
       }
 
       .reason {
@@ -313,6 +330,7 @@ export class TillPayEquipment extends LitElement {
     role: PayEquipmentRole,
     ready: { id: string; name: string; fromDefault: boolean } | null,
     choices: EquipmentItem[],
+    warning: string | null = null,
   ): TemplateResult {
     const reader = role === "card_terminal";
     const saving = this.saving?.role === role ? this.saving : null;
@@ -356,6 +374,10 @@ export class TillPayEquipment extends LitElement {
         hint === ""
           ? nothing
           : html`<p class="note" aria-hidden="true" data-pay-note=${role}>${hint}</p>`
+      }${
+        warning === null
+          ? nothing
+          : html`<p class="warning" role="status" data-pay-printer-warning>${warning}</p>`
       }
     </div>`;
   }
@@ -376,6 +398,16 @@ export class TillPayEquipment extends LitElement {
       "card_terminal",
       reader.kind === "ready" ? reader : null,
       readerChoices(equipment),
+    );
+  }
+
+  #printerField(equipment: DeviceEquipment): TemplateResult {
+    const printer = payPrinterOf(equipment);
+    return this.#field(
+      "receipt",
+      printer.kind === "ready" ? printer : null,
+      printerChoices(equipment),
+      printerWarning(printer),
     );
   }
 
@@ -448,7 +480,6 @@ export class TillPayEquipment extends LitElement {
           ${this.#buttons()}
         </div>
       </div>`;
-    const printer = equipment === null ? null : payPrinterOf(equipment);
     return html`<div class="row" data-pay-equipment>
       <div class="line">
         <div class="text">${heading}</div>
@@ -457,12 +488,7 @@ export class TillPayEquipment extends LitElement {
       ${
         equipment === null
           ? html`<span data-pay-equipment-summary>${t("pay_equipment.reading")}</span>`
-          : html`${this.#readerField(equipment)}
-            ${this.#field(
-              "receipt",
-              printer?.kind === "ready" ? printer : null,
-              printerChoices(equipment),
-            )}`
+          : html`${this.#readerField(equipment)} ${this.#printerField(equipment)}`
       }
       ${this.#question()}
     </div>`;

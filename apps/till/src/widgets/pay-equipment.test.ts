@@ -363,6 +363,58 @@ describe("till-pay-equipment", () => {
     });
   });
 
+  describe("a printer that would print nothing (default 19)", () => {
+    const OFF = item("p1", "Barra", { available: false });
+    const warning = (el: TillPayEquipment) =>
+      q(el, "[data-pay-printer-warning]")?.textContent!.trim();
+
+    it.each([
+      ["chosen", chosen(OFF, [BARRA, TERRAZA])],
+      ["by default", byDefault(OFF, [BARRA, TERRAZA])],
+    ] as const)(
+      "a switched-off printer %s leaves the printer field empty and warns no ticket will print",
+      async (_how, receipt) => {
+        const el = await mount({ open: true, equipment: equipment(receipt) });
+        expect(box(el, "receiptPrinterId")!.value).toBe("");
+        expect(box(el, "receiptPrinterId")!.invalid).toBe(false);
+        expect(warning(el)).toBe(
+          t("pay_equipment.printer_switched_off").replace("{item}", "Barra"),
+        );
+        expect(q(el, "[data-pay-printer-warning]")!.getAttribute("role")).toBe("status");
+      },
+    );
+
+    it("printers listed with none set warns there is no ticket printer", async () => {
+      const el = await mount({ open: true, equipment: equipment({ choices: [BARRA, TERRAZA] }) });
+      expect(box(el, "receiptPrinterId")!.value).toBe("");
+      expect(warning(el)).toBe(t("pay_equipment.printer_none"));
+    });
+
+    it("a ready printer, or a profile with no receipt printer, warns of nothing", async () => {
+      const ready = await mount({ open: true });
+      expect(warning(ready)).toBeUndefined();
+      const fromDefault = await mount({
+        open: true,
+        equipment: equipment(byDefault(TERRAZA, [BARRA, TERRAZA])),
+      });
+      expect(warning(fromDefault)).toBeUndefined();
+      const none = await mount({ open: true, equipment: equipment({}) });
+      expect(warning(none)).toBeUndefined();
+    });
+
+    it("the warning sits under the printer field, and shows only while the row is open", async () => {
+      const el = await mount({ equipment: equipment(chosen(OFF, [BARRA, TERRAZA])) });
+      expect(warning(el)).toBeUndefined();
+      el.open = true;
+      await el.updateComplete;
+      const field = box(el, "receiptPrinterId")!.closest(".field")!;
+      expect(field.querySelector("[data-pay-printer-warning]")).not.toBeNull();
+      expect(
+        box(el, "cardReaderId")!.closest(".field")!.querySelector("[data-pay-printer-warning]"),
+      ).toBeNull();
+    });
+  });
+
   describe("QR and NFC", () => {
     for (const open of [false, true]) {
       it(`show only when asked for, and send their events (${open ? "opened" : "closed"})`, async () => {
