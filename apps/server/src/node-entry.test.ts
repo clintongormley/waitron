@@ -1894,7 +1894,13 @@ describe("serveRecovery's landing listener", () => {
       startLanding,
     });
     try {
-      expect(startLanding).toHaveBeenCalledWith(landing, expect.any(Function));
+      expect(startLanding).toHaveBeenCalledWith(
+        {
+          ...landing,
+          connection: expect.objectContaining({ stateDir, onRepaired: expect.any(Function) }),
+        },
+        expect.any(Function),
+      );
       expect(close).not.toHaveBeenCalled();
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1974,7 +1980,7 @@ describe("recoveryTlsFiles", () => {
 });
 
 describe("serveRecovery", () => {
-  it("serves the page over plain HTTP when there is no leaf to serve it with", async () => {
+  it("serves only public connection help over HTTP when there is no leaf", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-serve-"));
     const onRetry = vi.fn(() => Promise.resolve());
     const app = recoveryApp({
@@ -1988,19 +1994,18 @@ describe("serveRecovery", () => {
       const port = typeof address === "object" && address !== null ? address.port : 0;
       const res = await fetch(`http://127.0.0.1:${port}/`);
       expect(res.status).toBe(200);
-      expect(await res.text()).toContain("module.config_invalid");
+      const html = await res.text();
+      expect(html).toContain('data-connection-state="repair-required"');
+      expect(html).not.toContain("module.config_invalid");
       const trust = await fetch(`http://127.0.0.1:${port}/setup/trust`);
       expect(trust.status).toBe(200);
       expect(await trust.text()).toContain("to this Waitron server");
 
-      // The retry, over a REAL socket: the body must arrive in full BEFORE `onRetry` (which exits
-      // the process in production) runs. A test through `app.request()` cannot see this ordering at
-      // all — there is no Node response to finish.
       const retried = await fetch(`http://127.0.0.1:${port}/recovery-api/retry`, {
         method: "POST",
       });
-      expect(await retried.json()).toEqual({ ok: true });
-      await vi.waitFor(() => expect(onRetry).toHaveBeenCalledWith("normal"));
+      expect(retried.status).toBe(404);
+      expect(onRetry).not.toHaveBeenCalled();
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -2013,7 +2018,11 @@ describe("serveRecovery and the box's tls folder", () => {
 
   async function mintedStateDir(prefix: string): Promise<string> {
     const stateDir = await mkdtemp(join(tmpdir(), prefix));
-    await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
     return stateDir;
   }
 

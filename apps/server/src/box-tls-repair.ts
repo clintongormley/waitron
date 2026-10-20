@@ -70,18 +70,18 @@ async function readMember(path: string): Promise<Buffer | null> {
     await handle.close();
   }
 }
-async function snapshot(deps: BoxTlsRepairDeps): Promise<Snapshot> {
+async function snapshot(deps: BoxTlsRepairDeps, directory = tlsDir(deps)): Promise<Snapshot> {
   try {
-    await regularDirectory(tlsDir(deps));
+    await regularDirectory(directory);
   } catch (error) {
     if (!missing(error)) throw error;
   }
   const result = {} as Snapshot;
-  for (const name of names) result[name] = await readMember(join(tlsDir(deps), name));
+  for (const name of names) result[name] = await readMember(join(directory, name));
   return result;
 }
-async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
-  const value = await readDurableHostJson(pendingPath(deps), limit);
+async function pending(deps: BoxTlsRepairDeps, directory = tlsDir(deps)): Promise<Pending | null> {
+  const value = await readDurableHostJson(join(directory, "repair-pending.json"), limit);
   if (value === null) return null;
   const p = value as Pending;
   if (
@@ -162,9 +162,14 @@ function inspection(s: Snapshot, deps: BoxTlsRepairDeps, p: Pending | null): Box
     ...(ca === null ? {} : { fingerprint: ca.fingerprint256 }),
   };
 }
-export async function inspectBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspection> {
+export async function inspectBoxTls(
+  deps: BoxTlsRepairDeps,
+  options: { allowLinkedTlsDirectory?: boolean } = {},
+): Promise<BoxTlsInspection> {
   try {
-    return inspection(await snapshot(deps), deps, await pending(deps));
+    const directory =
+      options.allowLinkedTlsDirectory === true ? await fs.realpath(tlsDir(deps)) : tlsDir(deps);
+    return inspection(await snapshot(deps, directory), deps, await pending(deps, directory));
   } catch {
     return { state: "refused", trust: "new-required", caAvailable: false };
   }

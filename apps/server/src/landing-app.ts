@@ -4,6 +4,7 @@ import { caCertPath } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
+import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
 
 /**
  * Public certificate help on the separate HTTP listener. It never redirects to HTTPS;
@@ -18,6 +19,7 @@ export interface LandingDeps {
   /** The box's canonical HTTPS URL, used by the "Continue to Waitron" link. */
   httpsUrl: string;
   log: Logger;
+  connection?: ConnectionBootstrapDeps;
 }
 
 /** Keep the established agent-download path as well as the HTTPS discovery alias. */
@@ -30,6 +32,10 @@ const CA_DOWNLOAD_PATH = "/ca.crt";
 export function buildLandingApp(deps: LandingDeps): Hono {
   const caPath = caCertPath(deps.stateDir);
   const app = new Hono();
+  if (deps.connection !== undefined) {
+    mountConnectionBootstrap(app, deps.connection);
+    return app;
+  }
 
   // A page view is not a deliberate download, so any read failure is `false` and nothing is logged;
   // the `/ca.crt` route below is the deliberate action and distinguishes ENOENT from other failures.

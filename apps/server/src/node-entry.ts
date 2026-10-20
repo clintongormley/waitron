@@ -1,6 +1,7 @@
 import {
   httpPortFrom,
   landingConfigFrom,
+  needsConnectionBootstrap,
   serveRecovery,
   type RecoveryServeOptions,
 } from "./recovery-listener.js";
@@ -280,6 +281,26 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     () => (deps.exit ?? DEFAULT_EXIT)(0),
     deps.log,
   );
+  const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
+  const transportPort = httpPortFrom(transportEnv);
+  const transport: RecoveryServeOptions = {
+    stateDir: admission.roots.stateDir,
+    port: transportPort,
+    log: deps.log,
+    httpHost: isUnset(transportEnv.WAITRON_HTTP_HOST)
+      ? DEFAULT_HTTP_HOST
+      : transportEnv.WAITRON_HTTP_HOST,
+    landing: landingConfigFrom(transportEnv, admission.roots.stateDir, transportPort),
+    onRepaired: async () => {
+      (deps.exit ?? DEFAULT_EXIT)(0);
+    },
+    operatorTls:
+      !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
+  };
+  if (await needsConnectionBootstrap(transport, transportEnv)) {
+    await deps.serveRecovery(new Hono(), { ...transport, bootstrapOnly: true });
+    return;
+  }
   if (admission.kind === "resolution") {
     const port = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(admission.app, {
@@ -290,6 +311,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
         : deps.baseEnv.WAITRON_HTTP_HOST,
       log: deps.log,
       landing: landingConfigFrom(deps.baseEnv, admission.roots.stateDir, port),
+      onRepaired: transport.onRepaired,
+      operatorTls: transport.operatorTls,
     });
     return;
   }
@@ -307,10 +330,10 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
             WAITRON_VENUE_DIR: admission.roots.venueDir,
           },
         };
-  return admission.run(() => runAdmittedEntry(selected));
+  return admission.run(() => runAdmittedEntry(selected, transport));
 }
 
-async function runAdmittedEntry(deps: EntryDeps): Promise<void> {
+async function runAdmittedEntry(deps: EntryDeps, transport: RecoveryServeOptions): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
@@ -339,6 +362,10 @@ async function runAdmittedEntry(deps: EntryDeps): Promise<void> {
         port: httpPort,
         log: deps.log,
         landing: landingConfigFrom(deps.baseEnv, deps.stateDir, httpPort),
+        onRepaired: async () => {
+          exit(0);
+        },
+        operatorTls: transport.operatorTls,
       },
     );
     return;

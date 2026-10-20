@@ -364,7 +364,7 @@ export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url
 export const BOX_HOSTNAME = "waitron.local";
 
 /** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
-const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
+export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
 
 /**
  * The upper bound on a single product-image upload, in bytes: how large an upload the server will
@@ -663,8 +663,7 @@ function startTradingListener(
  * any of our JS runs, so the "trust the CA" page must be served over plain HTTP. It never redirects
  * and sends no HSTS — both would strand the phone back on the interstitial.
  *
- * `undefined` when the port is 0 (disabled), when operator TLS is set, or when the box has no minted
- * leaf: the page appears only when the HTTPS origin presents the box's own self-signed leaf.
+ * Public bootstrap may precede a usable leaf; operator TLS and port 0 still disable this listener.
  *
  * Takes only the fields it reads so the recovery entrypoint, which never runs `loadConfig`, can build
  * one (`node-entry.ts`).
@@ -672,7 +671,7 @@ function startTradingListener(
 export type LandingListenerConfig = Pick<
   ServerConfig,
   "landingPort" | "httpHost" | "stateDir" | "httpPort" | "boxAddresses" | "tls"
->;
+> & { connection?: import("./connection-bootstrap.js").ConnectionBootstrapDeps };
 
 export function startLandingListener(
   config: LandingListenerConfig,
@@ -681,7 +680,7 @@ export function startLandingListener(
   if (
     config.landingPort === 0 ||
     config.tls !== undefined ||
-    mintedBoxLeaf(config.stateDir) === undefined
+    (config.connection === undefined && mintedBoxLeaf(config.stateDir) === undefined)
   ) {
     return undefined;
   }
@@ -696,6 +695,7 @@ export function startLandingListener(
     reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
     httpsUrl: reach.hostnameUrl,
     log,
+    connection: config.connection,
   });
   const server = serve(
     buildServeOptions(

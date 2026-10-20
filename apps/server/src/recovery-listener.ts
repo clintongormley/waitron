@@ -1,7 +1,16 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import { BOX_HOSTNAME, startLandingListener, type LandingListenerConfig } from "./boot.js";
+import {
+  BOX_HOSTNAME,
+  BOX_LEAF_HOSTNAMES,
+  startLandingListener,
+  type LandingListenerConfig,
+} from "./boot.js";
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
+import { inspectBoxTls } from "./box-tls-repair.js";
+import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
 import { listBoxIpv4, parseBoxAddresses } from "./box-reach.js";
 import {
   DEFAULT_HTTP_HOST,
@@ -18,10 +27,7 @@ import { mountDiscovery } from "./discovery-api.js";
 import { isLoopbackHost } from "./primary-url.js";
 import "./errors.js";
 
-/**
- * The box's own minted leaf for the recovery page, or `undefined` when it has never minted one, in
- * which case the page is served over plain HTTP.
- */
+/** Existence-only candidate; `serveRecovery` validates before exposing the protected app. */
 export function recoveryTlsFiles(stateDir: string): TlsFiles | undefined {
   return mintedBoxLeaf(stateDir);
 }
@@ -40,17 +46,56 @@ export interface RecoveryServeOptions {
   ) => { close(): Promise<void> } | undefined;
   /** Defaults to the real `tightenTlsDir`. */
   tightenTls?: (stateDir: string) => Promise<void>;
+  onRepaired?: () => Promise<void>;
+  bootstrapOnly?: boolean;
+  operatorTls?: boolean;
 }
 
-/**
- * Bind the recovery page on the box's own HTTPS port with the box's existing leaf, so an
- * already-trusting phone reaches it at the same URL. Beside it, when `opts.landing` is given and
- * `startLandingListener` binds one, the plain-HTTP trust/landing page: a phone that does not yet
- * trust the leaf hits the certificate interstitial before any recovery page loads.
- *
- * Resolves once the socket is bound and rejects if the bind fails; the caller lets that escape, so
- * the process exits non-zero rather than leaving a page-less container up.
- */
+export function connectionDepsFor(
+  opts: RecoveryServeOptions,
+  listenerPort: number,
+): ConnectionBootstrapDeps {
+  const ips =
+    opts.landing?.boxAddresses ??
+    (opts.httpHost !== undefined && isLoopbackHost(opts.httpHost) ? [] : listBoxIpv4());
+  const hosts = [...BOX_LEAF_HOSTNAMES, "127.0.0.1", ...ips];
+  const origin = (scheme: string, hostname: string, port: number) =>
+    new URL(`${scheme}://${hostname}:${port}`).origin;
+  return {
+    stateDir: opts.stateDir,
+    hostnames: BOX_LEAF_HOSTNAMES,
+    listIpv4: () => ips,
+    now: () => new Date(),
+    origins: hosts.map((host) => origin("http", host, listenerPort)),
+    reachUrls: hosts.map((host) => origin("https", host, opts.port)),
+    onRepaired: opts.onRepaired ?? (async () => {}),
+    log: opts.log,
+    repairAllowed: opts.operatorTls !== true,
+  };
+}
+
+export async function needsConnectionBootstrap(
+  opts: RecoveryServeOptions,
+  env: NodeJS.ProcessEnv,
+): Promise<boolean> {
+  if (!isUnset(env.WAITRON_TLS_CERT_FILE) || !isUnset(env.WAITRON_TLS_KEY_FILE)) return false;
+  let retained = false;
+  for (const path of [join(opts.stateDir, "tls"), join(opts.stateDir, "secrets.env")]) {
+    try {
+      await lstat(path);
+      retained = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return true;
+    }
+  }
+  return (
+    retained &&
+    (await inspectBoxTls(connectionDepsFor(opts, opts.port), { allowLinkedTlsDirectory: true }))
+      .state !== "healthy"
+  );
+}
+
+/** Unusable box TLS admits only public connection routes, never the supplied recovery app. */
 export async function serveRecovery(
   app: Hono,
   opts: RecoveryServeOptions,
@@ -62,39 +107,53 @@ export async function serveRecovery(
   } catch (error: unknown) {
     opts.log("warn", "tls.tighten_failed", { errno: errnoOf(error) });
   }
+  const connection = connectionDepsFor(opts, opts.port);
+  const bootstrap =
+    opts.bootstrapOnly === true ||
+    (await inspectBoxTls(connection, { allowLinkedTlsDirectory: true })).state !== "healthy";
   return new Promise((resolve, reject) => {
-    const tls = recoveryTlsFiles(opts.stateDir);
+    const tls = bootstrap ? undefined : recoveryTlsFiles(opts.stateDir);
     const surface = new Hono();
-    mountDiscovery(
-      surface,
-      {
-        stateDir: opts.stateDir,
-        hostname:
-          opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
-            ? opts.httpHost
-            : BOX_HOSTNAME,
-        port: opts.port,
-        secure: tls !== undefined,
-        listIpv4: () =>
-          opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
-            ? []
-            : (opts.landing?.boxAddresses ?? listBoxIpv4()),
-        discoveryEnabled: false,
-      },
-      opts.log,
-    );
-    surface.route("/", app);
+    if (bootstrap) mountConnectionBootstrap(surface, connection);
+    else
+      mountDiscovery(
+        surface,
+        {
+          stateDir: opts.stateDir,
+          hostname:
+            opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
+              ? opts.httpHost
+              : BOX_HOSTNAME,
+          port: opts.port,
+          secure: tls !== undefined,
+          listIpv4: () =>
+            opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
+              ? []
+              : (opts.landing?.boxAddresses ?? listBoxIpv4()),
+          discoveryEnabled: false,
+        },
+        opts.log,
+      );
+    if (!bootstrap) surface.route("/", app);
     const server = serve(
       buildServeOptions(
         { fetch: surface.fetch, port: opts.port, hostname: opts.httpHost ?? DEFAULT_HTTP_HOST },
         tls,
       ),
       (info) => {
+        connection.origins = connectionDepsFor(opts, info.port).origins;
         opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
         // Best-effort: `startLandingListener` logs its own bind failure rather than throwing, so an
         // unbindable landing page never takes the recovery page down.
         const startLanding = opts.startLanding ?? startLandingListener;
-        const landing = opts.landing ? startLanding(opts.landing, opts.log) : undefined;
+        const landing = opts.landing
+          ? startLanding(
+              bootstrap
+                ? { ...opts.landing, connection: connectionDepsFor(opts, opts.landing.landingPort) }
+                : opts.landing,
+              opts.log,
+            )
+          : undefined;
         if (landing !== undefined) {
           server.on("close", () => void landing.close().catch(() => {}));
         }
