@@ -115,6 +115,23 @@ describe("colours set by hand", () => {
     expect(theme.dark[P("primary-disabled")]).toBe("#1a3023");
   });
 
+  test("a worked-out colour stays put when its move would break a rule naming no colour set by hand", () => {
+    // Moving primary-disabled to within 1.5 of both hand-set surfaces would take on-primary-disabled
+    // on it below 4.5: two rules would pass, and one naming only worked-out colours would newly fail.
+    const theme = deriveTheme(
+      withHand(WAITRON_CHOICES, "dark", { surface: "#c22d7d", "surface-raised": "#6319dd" }),
+    );
+    expect(theme.dark[P("primary-disabled")]).toBe(
+      deriveTheme(WAITRON_CHOICES).dark[P("primary-disabled")],
+    );
+    expect(ratio(theme.dark[P("on-primary-disabled")]!, theme.dark[P("primary-disabled")]!)).toBe(
+      "4.75",
+    );
+    expect(theme.warnings.find(({ field }) => field === "handSet.dark.surface")?.against).toContain(
+      "primary-disabled",
+    );
+  });
+
   test("an uppercase hand-set value gives the same theme as lowercase", () => {
     expect(deriveTheme(withHand(DARK_GREEN_FIXED, "light", { bg: "#F8F1E1" }))).toEqual(
       deriveTheme(withHand(DARK_GREEN_FIXED, "light", { bg: CREAM })),

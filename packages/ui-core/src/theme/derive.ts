@@ -62,8 +62,8 @@ const KEPT_ENTRIES = 500;
 const memos = new Map<string, Memo>();
 
 /**
- * Runs `work` with the memo for `defaults`. A call leaves the most recently used memos, each cut
- * to its newest entries; nothing is dropped while a call runs.
+ * Runs `work` with the memo for `defaults`. When a call ends, the memos of the calls that started
+ * last are kept, each cut to its newest entries.
  */
 export function withMemo<T>(defaults: WaitronDefaults, work: (memo: Memo) => T): T {
   const key = JSON.stringify(defaults);
@@ -78,6 +78,11 @@ export function withMemo<T>(defaults: WaitronDefaults, work: (memo: Memo) => T):
       for (const old of [...map.keys()].slice(0, -KEPT_ENTRIES)) map.delete(old);
     }
   }
+}
+
+/** Not part of the package: lets each test work its answers out afresh. */
+export function forgetRemembered(): void {
+  memos.clear();
 }
 
 export function remember<T>(cache: Map<string, T>, key: string, make: () => T): T {

@@ -70,6 +70,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    setupFiles: ["src/vitest-setup.ts"],
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
     // source. Without this exclude Vitest discovers them as real test files, so
     // one interrupted mutation run makes every later test run fail confusingly.

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { WaitronDefaults } from "./defaults.js";
+import { forgetRemembered, type Memo, withMemo } from "./derive.js";
 import { canFixAll, deriveThemeFrom, fixAll, WAITRON_CHOICES, type ThemeChoices } from "./theme.js";
 import { colourToken, THEME_COLOURS } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
@@ -107,5 +108,61 @@ describe("answers remembered between calls", () => {
       });
       expect(together).toEqual(alone);
     }
+  });
+});
+
+const memoFor = (defaults: WaitronDefaults): Memo => withMemo(defaults, (memo) => memo);
+
+describe("what a call leaves remembered", () => {
+  test("is one memo, for the defaults used last, which the next call with the same content reuses", () => {
+    const [a, b] = [unseen(), unseen()];
+    const first = memoFor(a);
+    expect(memoFor(a)).toBe(first);
+    expect(memoFor({ ...a })).toBe(first);
+    const second = memoFor(b);
+    expect(second).not.toBe(first);
+    expect(memoFor(b)).toBe(second);
+    expect(memoFor(a)).not.toBe(first);
+  });
+
+  test("is the memo whose call started last, when calls run inside calls", () => {
+    const [a, b, c] = [unseen(), unseen(), unseen()];
+    let again: Memo | undefined;
+    const outer = withMemo(a, (memo) => {
+      withMemo(b, () => {
+        again = memoFor(a);
+      });
+      return memo;
+    });
+    expect(again).toBe(outer);
+    expect(memoFor(a)).toBe(outer);
+
+    let innermost: Memo | undefined;
+    withMemo(a, () => withMemo(b, () => withMemo(c, (memo) => (innermost = memo))));
+    expect(memoFor(c)).toBe(innermost);
+  });
+
+  test("is each map's newest 500 entries, and nothing is dropped before the call ends", () => {
+    const defaults = unseen();
+    const keys = (from: number, to: number) =>
+      Array.from({ length: to - from }, (_, i) => `${from + i}`);
+    withMemo(defaults, (memo) => {
+      for (const map of Object.values(memo) as Map<string, unknown>[]) {
+        for (const key of keys(0, 600)) map.set(key, "#000000");
+        expect([...map.keys()]).toEqual(keys(0, 600));
+      }
+    });
+    const kept = withMemo(defaults, (memo) =>
+      (Object.values(memo) as Map<string, unknown>[]).map((map) => [...map.keys()]),
+    );
+    expect(kept).toHaveLength(10);
+    for (const map of kept) expect(map).toEqual(keys(100, 600));
+  });
+
+  test("is nothing once forgotten", () => {
+    const defaults = unseen();
+    const first = memoFor(defaults);
+    forgetRemembered();
+    expect(memoFor(defaults)).not.toBe(first);
   });
 });
