@@ -142,7 +142,7 @@ Chromium, project `browser`; `packages/catalogue` and `apps/server` in Node).
    (`docs/developers/design-system.md:1299-1303`) — so that measurement keeps its setup.
 10. **The red asterisk stays exactly as built** (`unroutedFolderIds`, `isRouted`,
     `product-list.ts:1446-1458`).
-11. **`folderMadeAt` is trimmed to what the asterisk reads (Task 7). The spec did not ask for
+11. **`folderMadeAt` loses its `source` and `someElsewhere` outputs (Task 7). The spec did not ask for
     this; the PR says so, with this reason.** With the second line gone, its `source` and
     `someElsewhere` outputs have no reader, and `someElsewhere` costs a `chooseMaker` call per
     active product per zone on every routing, product or category change
@@ -598,7 +598,7 @@ no course.
   `"made-at"` keys).
 - [ ] **Step 5.** Commit: "The Products screen stops reading where each dish is made (A655)".
 
-### Task 7: trim `folderMadeAt` to what the asterisk reads
+### Task 7: `folderMadeAt` loses its `source` and `someElsewhere` outputs
 
 A choice the spec did not ask for (Decision 11); the PR says so, with its reason.
 

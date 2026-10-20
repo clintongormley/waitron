@@ -480,17 +480,17 @@ it("reads the active course list on course changes alone", () => {
   expect(query.dependencies).toEqual([{ type: "kitchen_courses" }]);
 });
 
-it("reads the folders' Made at again when a routing cell's period lines change", () => {
+it("reads the categories' routing again when a routing cell's period lines change", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
   expect(query.dependencies).toContainEqual({ type: "routing_cell_periods" });
 });
 
-it("reads the folders' Made at again when a zone's department changes", () => {
+it("reads the categories' routing again when a zone's department changes", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
   expect(query.dependencies).toContainEqual({ type: "zone_service_policies" });
 });
 
-it("reads the folders' Made at again when a season week changes", () => {
+it("reads the categories' routing again when a season week changes", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
   for (const type of [
     "seasons",
@@ -502,13 +502,13 @@ it("reads the folders' Made at again when a season week changes", () => {
     expect(query.dependencies).toContainEqual({ type });
 });
 
-it("reads the folders' Made at again when a special day or one of its dates changes", () => {
+it("reads the categories' routing again when a special day or one of its dates changes", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
   for (const type of ["special_days", "special_day_dates"])
     expect(query.dependencies).toContainEqual({ type });
 });
 
-it("reads the folders' Made at again when a period, its department or the products its menus reach change", () => {
+it("reads the categories' routing again when a period, its department or the products its menus reach change", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
   for (const type of [
     "menu_periods",

@@ -5061,7 +5061,7 @@ async function shownIn(el: ProductEditor, name: string): Promise<string | undefi
     ?.textContent?.trim();
 }
 
-it("picks the default course from a shared dropdown, with none as a chosen value and a row", async () => {
+it("picks the course from a shared dropdown, with none as a chosen value and a row", async () => {
   const before = currentLocale();
   setLocale("en-GB");
   try {

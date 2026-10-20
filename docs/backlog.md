@@ -749,10 +749,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 
 - **The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
-  the dashboard's `listMadeAt` and its live query are read only by tests:
-  `apps/server/src/catalogue-api.test.ts:1731` pins the route itself and
-  `apps/server/src/kitchen-delete.integration.test.ts:271` checks station deletion through it.
-  Delete them, or give the read a screen.
+  the venue-service seat behind it (`describeMakers`), the dashboard's `listMadeAt`, its `MadeAt`
+  type and its live query are read only by tests. `apps/server/src/catalogue-api.test.ts:1731` pins
+  the route, `apps/server/src/kitchen-delete.integration.test.ts:271` checks station deletion
+  through it, `packages/venue-service/src/routing-store.test.ts` and `service.test.ts` pin the seat
+  (declared at `packages/module/src/module.ts:996`), `apps/dashboard/src/api/client.test.ts` and
+  `live-queries.test.ts` pin the client side, and several dashboard test files stub `listMadeAt`
+  (`catalogue-screen.test.ts:363` asserts it is never called). Delete them together, or give the
+  read a screen.
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
