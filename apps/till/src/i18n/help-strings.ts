@@ -1,4 +1,4 @@
-// The till's help-mode texts, kept apart from `strings.ts`. English is the source of truth and `es`
+// The till's help-mode texts, kept apart from `strings.ts`. English is the source of truth and `helpEs`
 // is typed `Record<HelpKey, string>`, so a key added without its Spanish sibling fails typecheck.
 import { currentLocale } from "./t.js";
 

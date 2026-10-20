@@ -2504,7 +2504,7 @@ reach them.
 
 A question for the owner, left open by A582 slice 4a. On a till (not a handheld) the bar's
 session row now holds the Help switch, then the person's menu, then More
-(`apps/till/src/widgets/till-shell.ts:984`). The plan's decision 3 moved nothing else off the bar for
+(`till-shell`'s `render`, `apps/till/src/widgets/till-shell.ts`). The plan's decision 3 moved nothing else off the bar for
 it, because A738 put the person's name and More there on purpose, so the "?" takes 52 px from the tab
 strip, which scrolls sideways at every phone width already.
 

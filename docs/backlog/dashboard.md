@@ -1114,7 +1114,7 @@ help about anything you want very quickly."
 - **Left open by 3:**
   - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
     guide link.
-  - The till's `/help` proxy and the guide sheet belong to slice 4. A guide link opens a new tab;
+  - The till's `/help` proxy and the guide sheet belong to slice 4b. A guide link opens a new tab;
     a till needs a hook to open its sheet instead, such as a cancelable `wt-*` event on the link's
     click.
   - Products' VAT and Availability badges have no guide link.
@@ -1145,7 +1145,7 @@ help about anything you want very quickly."
     direct child). No menu needs it yet.
   - Help on the dashboard's other screens, added as each is next touched; Products is the only
     screen with it.
-- **Slice 4 must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
+- **Slice 4b must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
   overflows `wt-modal`'s 12 px side padding at phone width (the body scrolls sideways: the 390 px
   case in `packages/ui/src/components/wt-help-tooltip.slots.test.ts` shows it with the 32 px
   control) and reaches 4 px above `wt-disclosure`'s 12 px top padding.
