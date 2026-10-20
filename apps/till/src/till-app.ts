@@ -9031,9 +9031,7 @@ export class TillApp extends LitElement {
     const changed = this.#equipmentChanged;
     let answered = true;
     try {
-      const read = await (signal === undefined
-        ? this.api.getDeviceEquipment()
-        : this.api.getDeviceEquipment({ signal }));
+      const read = await this.api.getDeviceEquipment({ signal });
       if (changed === this.#equipmentChanged) {
         this.#holdEquipment(read);
       } else {
@@ -9048,17 +9046,25 @@ export class TillApp extends LitElement {
     return answered;
   }
 
+  /** A read cut off after the request limit counts as failed, so a server that never answers can
+   * neither hold payments nor keep the sheet's row shut. */
+  async #readEquipmentBounded(): Promise<boolean> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      return await this.#readEquipment(limit.signal);
+    } finally {
+      limit.done();
+    }
+  }
+
   /** Cleared while the read is out, so a second caller does not read too. */
   async #rereadIfStale(): Promise<void> {
     if (this.equipmentWaiting > 0 || !this.#equipmentStale) return;
     this.#equipmentStale = false;
     this.equipmentRereads++;
-    // A read that is cut off counts as failed, so a server that never answers cannot hold payments.
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      if (!(await this.#readEquipment(limit.signal))) this.#equipmentStale = true;
+      if (!(await this.#readEquipmentBounded())) this.#equipmentStale = true;
     } finally {
-      limit.done();
       this.equipmentRereads--;
       this.#endSavingIfSettled();
     }
@@ -9096,14 +9102,7 @@ export class TillApp extends LitElement {
     const opening = ++this.#paySheetOpenings;
     const picks = this.#payEquipmentPicks.card_terminal;
     this.payAutoPicking = this.#autoPickCandidate() !== null;
-    // A read that is cut off counts as failed, so the row cannot stay shut on a server that never answers.
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    let answered: boolean;
-    try {
-      answered = await this.#readEquipment(limit.signal);
-    } finally {
-      limit.done();
-    }
+    const answered = await this.#readEquipmentBounded();
     if (opening !== this.#paySheetOpenings) return;
     // A change out or a pick of the reader made since the opening has the waiter's say instead.
     const id =
@@ -16753,12 +16752,7 @@ export class TillApp extends LitElement {
     this.shadowRoot!.querySelector<TillBillPayDialog | TillPresentedPayDialog>(
       sheet,
     )?.openEquipmentRow();
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    try {
-      await this.#readEquipment(limit.signal);
-    } finally {
-      limit.done();
-    }
+    await this.#readEquipmentBounded();
   }
 
   #onBillPayEdit(): void {
