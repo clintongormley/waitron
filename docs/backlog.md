@@ -3150,7 +3150,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   text set by hand under Advanced, which is folded into sections (owner, Q4, 2026-10-20); and saved
   custom themes, one in use everywhere at a time (owner, 2026-10-20). Design:
   [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
-  Answered: Q1, Q2, Q3 (one look for the whole business), Q4 (a slider; its range, 100% to 130%, is the designer's call) and the extra
+  Answered: Q1, Q2, Q3 (one look for the whole business), Q4 (a slider; its range, 100% to 130%, is the designer's call; long names hyphenate in Spanish, and Chromium does not hyphenate English) and the extra
   question (colours set by hand are kept). Next: the owner's answers to Q5 (does the logo also print
   on receipts), Q6 (what happens to Waitron's own logo), Q7 (system typefaces only, or uploaded
   fonts too) and Q8 (a new name for the account menu's "Theme"), then a plan.

@@ -9,7 +9,8 @@ extra question, colours set by hand are kept — and their request the same nigh
 allow uploading a new logo" (section 8a); and after their answer to Q4 the same night, with what
 followed it — a text-size slider, text set by hand under Advanced, Advanced folded into sections,
 and saved **custom themes** (sections 5a and 8b); then fixed after review round 6 (long words and
-hyphenation, Google's button, rounding, the storage shape, the name dialog). Waiting for the owner's answers to the two logo
+hyphenation, Google's button, rounding, the storage shape, the name dialog) and round 7 (which
+language the till hyphenates in, and English, which Chromium does not hyphenate). Waiting for the owner's answers to the two logo
 questions, Q5 and Q6, and to the two new questions, Q7 (typefaces) and Q8 (the account menu's
 "Theme" item) (section 19). Backlog: A841 (owner, 2026-10-17).
 Builds on A681 (#1842), the per-browser Light / Dark / Follow device choice. Mock-ups:
@@ -561,9 +562,9 @@ Product text, English (Spanish to be written with the strings):
 | Text rows (section 5a) | Typeface · Small text · Normal text · Large text · Largest text · Normal weight · Medium weight · Bold weight |
 | A text value | Worked out · Set by hand · Use worked-out size / Use worked-out typeface / Use worked-out weight · at {n}%: {n} px |
 | Typeface choices (Q7 A) | The device's own · Serif |
-| Too small, under its row | {name}: {n} px is smaller than 12 px; text that small is often hard to read. · Use {s} px ({n} px at {step}%) |
+| Too small, under its row | {name}: {d} px is smaller than 12 px; text that small is often hard to read. · Use {s} px ({f} px at {step}%) — {d} the size drawn, {s} the size the fix stores, {f} the size it draws; the bracket is left out at 100% |
 | A text size refused | Enter a whole number from 8 to 40. |
-| Larger than checked, under its row | {name}: {n} px is larger than Waitron checks the tills at; long names may wrap more or be cut off. · Use {s} px ({n} px at {step}%) |
+| Larger than checked, under its row | {name}: {d} px is larger than Waitron checks the tills at; long names may wrap more or be cut off. · Use {s} px ({f} px at {step}%), the same placeholders |
 | Editor, under the heading | Theme in use: {name}. Saving changes every screen. / Not in use. Saving changes no screen until you use it. |
 | Editor, beside Save | Save as new theme… |
 | Themes card (section 8b) | Themes · New theme · Waitron (built in) · In use · {n} hard to read |
@@ -759,28 +760,60 @@ the owner meant it, it is its own item.
     control that the detector does not invent breaks.
   - Plain, Serif: "Hamburguesa" and "Champiñones" already broken in the product buttons at 105%.
   - With `hyphens: auto` on the names and `lang="es"` on the screen: words still break at 115% and
-    130% (the detector counts any word on two lines), but the screenshots show every break at a
-    syllable with a hyphen — "Hambur-guesa", "Champi-ñones", "Albóndi-gas" (system, 130%), and
-    "Beren-jenas", "Ensaladi-lla" (Serif, 130%) — where the plain run drew "Tortill / a" and
-    "Cerve / za". It also hyphenates a word that plain CSS would have moved whole to the next line:
-    "Tinto de verano con limón" became "ve-rano" in its button at 115%. The computed `hyphens` read
-    `auto`, so the style reached the names.
+    130% (the detector counts any word on two lines), but the screenshots, taken for the long-word
+    set at 130%, show every break at a syllable with a hyphen — "Hambur-guesa", "Champiño-nes" in its
+    button and "Champi-ñones" in the bill, "Albóndi-gas" (system), and "Berenje-nas", "Ensaladi-lla"
+    (Serif). The plain run at 115% instead drew "Hamburguesa" split with no hyphen. Hyphenation also
+    splits a word that plain CSS would have moved whole to the next line: the detector reported
+    "verano" broken in the "Tinto de verano con limón" button at 115% and 130% in the system font,
+    and in the Serif bill at 115%, where the reviewer's plain run of the same names reported none; no
+    screenshot was taken of those names, so where the hyphen falls is not recorded. The computed
+    `hyphens` read `auto`, so the style reached the names. The log prints `lang=-` in every case
+    because its `closest("[lang]")` does not cross a shadow root; it does not mean the `lang` was
+    missing — Chromium hyphenates only with a `lang` (below), so the hyphens in the screenshots show
+    it reached the names.
+  - **English is not hyphenated** (the round-7 reviewer's run, `/tmp/a841r7.4ifw/hy.mjs`, nine words
+    in 70 px boxes with `hyphens: auto` and `overflow-wrap: normal`, where a word can take two lines
+    only if the browser hyphenated it): in Chromium 156.0.8078.4 on macOS (Playwright 1.64.1),
+    `es`, `es-ES`, `ca`, `fr`, `de` and `it` hyphenated, while `en`, `en-US`, `en-GB` and no `lang`
+    left every word on one line; in Chromium 153.0.8010.12 on Linux (the Playwright 1.63.0 image,
+    aarch64), `es` hyphenated and `en`, `en-US`, `ca` and no `lang` did not. With the till's own
+    `overflow-wrap`, the `en` screenshot drew "Hambur / guesa", "Strawbe / rries", "Cheeseb / urger".
 - **What the design does about it** — three ways weighed, with those numbers: (b) a lower top step
   does not help: the plain Serif run broke words at 105%, and the plain system run at 115%, so the
   top would have to be 110% in the device's font and 100% in Serif; (c) accepting mid-word breaks
-  leaves "Tortill / a" on a bill at 115%; (a) **chosen: hyphenation**, keeping 130%. The build puts
-  `hyphens: auto` on the product button's name and the bill line's name, and a `lang` on each name
-  saying the language the name is written in (the content language it comes from; `apps/till/index.html`
-  sets no `lang` today, `grep -n 'lang=' apps/till/index.html` printed nothing). What the owner is
-  told: at the top step a long word such as "Hamburguesa" can split across two lines at a syllable,
-  with a hyphen. What this rests on: Spanish only, in Chromium on macOS; English names and the till
-  devices' own browsers were not measured, and a browser that cannot hyphenate a language breaks
-  as today. The 150% result stands: its bill broke short words too, so 130% stays the top. Going
+  leaves "Hamburguesa" split with no hyphen in the bill at 115% (`d6.txt`: `bill "Hamburguesa" w 95
+  broken [Hamburguesa]`; the "Tortill / a" of the first probe was at 150%); (a) **chosen:
+  hyphenation**, keeping 130%. The build puts `hyphens: auto` on the product button's name and the
+  bill line's name, and a `lang` on them. **Which `lang`:** a till's names carry no language — the
+  button and the bill show the product's staff name, one plain string (`productName` and
+  `lineProductName`, `apps/till/src/widgets/product-name.ts:22-27,34-36`, whose comment says it
+  "takes no locale") — so the `lang` is the venue's default content language,
+  `currentContentLanguages().defaultLanguage`, which the till already reads
+  (`apps/till/src/state/working-order.ts:130`). That is an assumption: that staff names are typed in
+  the venue's default content language. A name typed in another language is hyphenated by the wrong
+  rules ("Strawbe-rries" under Spanish), and `apps/till/index.html` sets no `lang` today. **What
+  happens in English** (my call, after the measurement above): Chromium does not hyphenate English,
+  so a venue whose default content language is English keeps today's behaviour — long names break
+  mid-word with no hyphen from 115% — and I keep 130% as the top for it too, rather than a top step
+  that depends on the language. The reasons: which languages hyphenate differs between browsers
+  (Catalan on the Mac, not on Linux), so a per-language top would need a list kept against browsers
+  Waitron does not control; Waitron's venues are Spanish, where the default content language
+  hyphenates; and the slider is the owner's to set, with the preview showing the wrap. The owner is
+  told this in plain words. What it rests on: Chromium on macOS and Linux as above; WebKit and the
+  tills' own browsers were not measured. The 150% result stands: its bill broke short words too, so 130% stays the top. Going
   higher needs the bill line laid out differently at large text first, which is a backlog item of its
   own, not A841. The build adds layout cases at 130% to the
   till's own suites — counter at 1280 × 800, 1024 × 768 and 390 × 844, the floor list and map, a
   bill with "Tinto de verano con limón" and "Champiñones al ajillo", a kitchen station's queue —
-  each asserting no word breaks without a hyphen, beside today's cases at 100%, and the dashboard's
+  checking nothing is cut off and the page fits, beside today's cases at 100%. **The hyphen
+  assertion** applies only to the names that get `hyphens: auto` (the product button and the bill
+  line), and tells the two kinds of break apart this way: the case sets `overflow-wrap: normal` on
+  those names and asserts that no name overflows its box, so a word that takes two lines can only
+  have been hyphenated (the reviewer's method, above); it runs with the content language Spanish,
+  which Linux CI's Chromium does hyphenate (measured on 153 aarch64, not yet on the repository's
+  1.64.1 x86-64 image, which the first CI run shows). Kitchen and floor names get no hyphenation in
+  A841, so their cases do not assert it; and the dashboard's
   product editor already runs its phone-width cases at raised sizes larger than 130%
   (`design-system.md:615-623`).
 - **The preview** applies the draft's text size to both panels and adds a till product button
@@ -811,7 +844,7 @@ branding rules fix, as section 2 leaves Google's button colours alone — and, s
 Google button's size and weight too. Today that button reads `font-size: var(--wt-font-size-md)`
 and `font-weight: var(--wt-font-weight-medium)` beside Google's own typeface and line height
 (`apps/dashboard/src/screens/login-screen.ts:156-166`), so the slider and the Normal text and Medium
-weight rows would reach it: at 130% its text would be 18.2 px on Google's fixed 20 px line. Google's
+weight rows would reach it: at 130% its text would be 18 px (14 × 1.3 = 18.2, drawn whole) on Google's fixed 20 px line. Google's
 guideline gives the button's type as "Font: #1F1F1F | Google Sans Medium | 14/20" (light and
 neutral buttons; "#E3E3E3" for dark; <https://developers.google.com/identity/branding-guidelines>,
 last updated 2026-07-07, fetched 2026-10-20 with `curl` and read as text). So the build adds
@@ -849,7 +882,12 @@ measured at — Waitron's own value times 1.3, rounded the same way (16, 18, 23 
 under its row: "Largest text: 33 px is larger than Waitron checks the tills at; long names may wrap
 more or be cut off." with **Use {s} px**, where s is the largest whole number whose drawn size at
 the current step is no more than that limit. Both fixes store the size at 100%, and the button says
-what it draws: "Use 22 px (29 px at 130%)". Worked example at 130%: Largest text set by hand to 25
+what it draws: "Use 22 px (29 px at 130%)"; at 100% the part in brackets is left out. The limit is
+rounded the way the screens draw, so Waitron's own sizes never get the note: at 130% they draw
+16, 18, 23 and 29 px, exactly the limits, while the unrounded 15.6, 18.2, 23.4 and 28.6 would flag
+the small and largest sizes. **Every check re-runs at the draft's current step**, so a size fixed
+at one step can warn again at another: a Small text fixed to 9 at 130% draws 9 px at 100% and 10 or
+11 px between, and its row warns again there, offering 12, 11 or 10. Worked example at 130%: Largest text set by hand to 25
 draws 32.5, rounded to 33 px, above 29; the fix offers 22 (22 × 1.3 = 28.6, drawn 29), since 23
 would draw 29.9, rounded to 30. Small text set by hand to 8 draws 10.4, rounded to 10 px, under 12;
 the fix offers 9 (11.7, drawn 12). The note is not a readability warning: it does not count as hard
@@ -1568,7 +1606,7 @@ and may require users to zoom in to display text at a comfortable reading size."
 font size of at least 12 px on at least 60% of the text on your page."
 (<https://developer.chrome.com/docs/lighthouse/seo/font-size>, "Document doesn't use legible font
 sizes", last updated 2019-05-02; fetched 2026-10-20 with `curl` and read as text). So a size the
-screens would draw under 12 px warns, with the fix "Use 12 px" (section 5a). Lighthouse judges a
+screens would draw under 12 px warns, with the fix of section 5a (the smallest size that draws at least 12 px at the current step; "Use 12 px" at 100%). Lighthouse judges a
 page by its share of small text; this design is stricter and warns for any of the four sizes under
 12 px, because each one is used across hundreds of places (section 3). Waitron's own smallest size
 is exactly 12 px, so Waitron's theme never warns. The slider does not stand in for 1.4.4: browser
@@ -1630,7 +1668,10 @@ theme in use.
   belongs to the business, one database holds one business (`design-system.md:3282`, the banner
   shows "the deployment tenant's legal name, not a location name"), so it has no location key.
   **`custom_themes`** (new, in the core set, replacing `tenant_themes`): `id`, `name` (as typed),
-  `name_key` (section 8b's key, with a unique index), `in_use` (nullable; a CHECK allows only `1`;
+  `name_key` (section 8b's key, with the unique index `custom_themes_name_key_uq`), `in_use`
+  (declared with the vocabulary's `count` builder, nullable — not `flag`, whose boolean mode would
+  write `0` for false, which the CHECK refuses; the one writer stores NULL for "not in use"; the
+  CHECK `custom_themes_in_use_ck` allows only `1`, and the unique index is `custom_themes_in_use_uq`;
   `1` on the theme in use and NULL on every other), `theme` (the JSON document below) and
   `updated_at`. A plain unique index on `in_use` lets at most one row hold `1`, because SQLite's
   unique index lets NULLs repeat. Measured 2026-10-20 with `node:sqlite` (Node v26.11.1, SQLite
@@ -1726,7 +1767,7 @@ theme in use.
   the table is retired, and deleting a custom theme is an intended path;
   `design-system.md:189-208` is rewritten.
 - **Configuration copy:** the theme already travels (`configuration-transfer.ts:72`); the build
-  replaces `tenant_themes` in that list with `custom_themes`, and adds to `validateCoreConfiguration`
+  replaces `tenant_themes` in that list with `custom_themes` and moves the bundle format to 6 (slice 2), and adds to `validateCoreConfiguration`
   (section 9) the check of every theme's document, at most one row with `in_use`, and each
   `name_key` recomputed from its `name` rather than taken as sent, including that a logo
   names an image the same copy carries — the library's tables travel too (`packages/media/src/module.ts:21-30`); the
@@ -1748,8 +1789,8 @@ fetched without holding anything** (B4: I chose the stored copy).
   `null` when there is none; section 8a); and `hash`, a SHA-256 of `css` and `logo` together (like
   `setupRevisionOf`, `till-setup.ts:115-117`). A rendition's address names its source and framing
   (`presentation.ts:10-16`), so an edit to the logo in the library changes the hash. A content hash,
-  not a row counter, because switching to Waitron's theme and back, or deleting and re-creating a
-  theme, could repeat a counter. The
+  not a row counter, because deleting a theme and creating another could repeat a counter while the
+  content differs. The
   server keeps the last answer in memory keyed by which theme is in use and its stored document,
   together with, for each logo
   image, what its rendition address is made of: the image's current source file and framing
@@ -1889,8 +1930,10 @@ and administrators change it.
 - Custom themes' table (section 11): `scripts/classification-complete.test.ts` refuses an
   unclassified `custom_themes` (the `tenant_themes` entry goes with its table);
   `scripts/schema-constraints.test.ts` holds the two unique indexes to the TypeScript schema —
-  weaker than its name, it matches a unique index by name (CLAUDE.md §3), so the plan fixes both
-  names; `scripts/migrations-match-schema.test.ts` and `scripts/migration-upgrade.test.ts` run the
+  weaker than its name, it matches unique indexes and check constraints by name
+  (`schema-constraints.test.ts:20-22`; CLAUDE.md §3), so `custom_themes_name_key_uq`,
+  `custom_themes_in_use_uq` and `custom_themes_in_use_ck` go into its lists, and
+  `tenant_themes_singleton_ck` leaves `EXPECTED_CHECK_CONSTRAINTS` (`:793`); `scripts/migrations-match-schema.test.ts` and `scripts/migration-upgrade.test.ts` run the
   new migration. With no foreign key, `scripts/id-columns-are-references.test.ts` and
   `scripts/two-file-foreign-keys.test.ts` have nothing new to see. Nothing guards "at most one in
   use" but the unique index and its case (section 15), nor the name rules but the `name_key` index
@@ -1930,7 +1973,7 @@ and administrators change it.
   choice from `/api/theme` as picked; refuses without `layout.configure`; a supervisor's `GET` is
   answered and its `PUT` refused; a configuration import with an invalid theme row is refused and
   one that is only hard to read is accepted; `/api/theme` answers empty with no row and the three
-  blocks with one, and the hash changes after switching to Waitron's theme and back; the till's revision moves when
+  blocks with one, and the hash changes on each switch and returns to its first value after switching to Waitron's theme and back; the till's revision moves when
   the theme changes. The six existing cases in `management-api.canvas-retirement.test.ts:146-229`
   are rewritten for the new document, keeping their refusal cases.
 - Browser (real Chromium, and WebKit for the start-up probe): the section-7 probe as a test against
@@ -1968,9 +2011,11 @@ and administrators change it.
 - Text size and text set by hand (section 5a). The derivation: each step from 100% to 130% gives
   the four sizes as Waitron's times the step rounded half up to whole pixels, a hand-set size the
   same way, and nothing else changes; section 5a's worked example at 130% as cases (Use 22 px for a
-  Largest text of 25, Use 9 px for a Small text of 8, each clearing its note or warning); a size the screens would draw under 12 px warns with the fix 12, Waitron's own theme at
-  100% does not (the control), and a size above Waitron's times 1.3 gives the note and never a
-  warning; weights and typefaces never warn. Server: `textScale` outside 100–130 or off the 5% steps,
+  Largest text of 25, Use 9 px for a Small text of 8, each clearing its note or warning); a size the screens would draw under 12 px warns, with the
+  smallest whole size that draws at least 12 px at the current step as its fix; Waitron's own theme
+  at 100% does not warn (the control); a size drawn above the rounded limit (16, 18, 23, 29 px) gives
+  the note and never a warning, and Waitron's own theme at 130% gives no note (the control); a Small
+  text fixed to 9 at 130% warns again when the slider moves to 100%; weights and typefaces never warn. Server: `textScale` outside 100–130 or off the 5% steps,
   a size outside 8–40, a weight outside the list and an unknown typeface are refused as
   `theme.invalid` naming the field; a 10 px Small text is stored and answered with its warning. The
   layout cases at 130% of section 5a in the till's and dashboard's suites, each with a control at
@@ -2015,6 +2060,15 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
    their read permission (a supervisor reads, and is refused every write), `brandFix`,
    `theme.invalid` with `field` for invalid choices only, `warnings` in the answers, the import
    check over both tables, `/api/theme` serving the theme in use, the till's `themeHash`; retire
+   `tenant_themes` everywhere it is named — its schema file `packages/db/src/schema/tenant-themes.ts`,
+   its export `packages/db/src/index.ts:174`, its classification and transfer entries, and
+   `"tenant_themes_singleton_ck"` in `scripts/schema-constraints.test.ts:793`; the configuration
+   bundle format moves from 5 to 6, as the A757 retirement moved it to 5 (`eb16d3805`: "moves to
+   format 5 as A182 part 2 and A725 did"), because the import accepts only `version === 5` and answers
+   `setup.configuration_outdated` for older ones (`apps/server/src/configuration-transfer.ts:483-486`)
+   but refuses an undeclared table with the generic `setup.request_invalid { field: "tables" }`
+   (`:565-569`), so a version-5 bundle carrying `tenant_themes` must be refused as outdated, with a
+   "pre-theme-retirement export" case beside the older formats in `configuration-import.test.ts`;
    `THEMEABLE_TOKENS`, `validateThemeOverride`, the till's copy, `/management-api/theme`
    (`apps/server/src/management-api.ts:1260,1274`), `getTenantTheme` and `putTenantTheme`
    (`packages/layouts/src/theme-store.ts`, exported at `packages/layouts/src/index.ts:79`) with their
@@ -2060,12 +2114,21 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
     `wt-slider` gains what the card needs, with the token-painting and axe cases a changed primitive
     takes (CLAUDE.md §3): today it shows the bare number in `<span part="value" aria-hidden="true">`
     and has no unit, hint or `aria-valuetext` (`packages/ui/src/components/wt-slider.ts:52-61,92-96`),
-    so it gains a value format (to show "115%"), a hint below it, and an accessible value text read
-    from the strings ("115 percent"), so a screen reader hears the unit.
+    so it gains a value format (to show "115%"), a hint below it, an accessible value text read
+    from the strings ("115 percent"), so a screen reader hears the unit, and a mark at each step under
+    the track with the value drawn at the track's end, as the pictures show (today the value sits on
+    the label row, `wt-slider.ts:94-97`, and there are no marks).
 11. **Text set by hand.** The `text` part of the document and its validity check; the two weights
     written as numbers on themed screens moved to tokens (`font-weight: 600` at
     `apps/till/src/widgets/basket.ts:293`, the till's bill, and
-    `apps/dashboard/src/screens/payments-screen.ts:215`), so a hand-set Bold weight reaches them; the Text section's
+    `apps/dashboard/src/screens/payments-screen.ts:215`), so a hand-set Bold weight reaches them;
+    and a rule in the shared base styles, `strong, b, h1, h2, h3, h4, h5, h6, th { font-weight:
+    var(--wt-font-weight-bold) }`, with a browser case, because neither base style sets those today
+    (the round-7 reviewer read `packages/ui-core/src/base-styles.ts` and `packages/ui/src/base-styles.ts`)
+    and the browser's own bold does not read the token: rendered in Chromium 156.0.8078.4
+    (`/tmp/a841t-r7/bold.mjs`) with the Bold weight set to 800, `<strong>`, `<h1>` and `<th>`
+    computed 700 without the rule and 800 with it, while a span reading the token computed 800 both
+    times (the control that the setting was there); the Text section's
     eight rows, Set by hand, Use worked-out, the too-small warning and its fix, the larger-than-checked
     note; the typeface choices of Q7's answer; the saved card's "Text set by hand" row.
 12. **Advanced in sections.** The five sections, their closed lines and "hard to read" counts, what
@@ -2082,7 +2145,8 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
     `CLAUDE.md:324` (§3's banner rule, "Account settings, Theme, Language and Log out"),
     `docs/developers/design-system.md:66`, `:738` (`wt-theme-chooser`'s "Theme: Follow device"),
     `:3285`, `:3290`, `:3294` (the account menu's "First Theme: one row holding the visible label
-    \"Theme\""), and `:4891-4902` (setup's and the till's Theme chooser). The user guides never name
+    \"Theme\""), and `:4891-4904` (setup's and the till's Theme chooser), and the receipt behind
+    CLAUDE.md's line, `docs/developers/conventions-ui.md:616`. The user guides never name
     it (`git grep -i theme` over `apps/server/src/guide` found nothing).
 15. **Uploaded fonts — only if Q7 comes back B.** Its own design pass first (section 19, Q7).
 
@@ -2167,8 +2231,9 @@ permission-gated write (CLAUDE.md's risk triggers).
   prints.
 - **Text size was measured on one machine's fonts, in Spanish.** The 130% top, and hyphenation
   keeping long words readable at it, rest on probes in Chromium on macOS with Spanish names
-  (section 5a). English names and the tills' own browsers were not measured; a browser that cannot
-  hyphenate a language breaks a long word without a hyphen, as at 115% today. Android and Windows tills, and CI's Linux runners, draw other fonts; a wider
+  (section 5a). Chromium does not hyphenate English (macOS 156 and Linux 153, the round-7 reviewer's
+  run), so a venue whose default content language is English keeps long names breaking mid-word from
+  115%; WebKit and the tills' own browsers were not measured. Android and Windows tills, and CI's Linux runners, draw other fonts; a wider
   one wraps sooner. Mitigation: the build's 130% layout cases run in CI on every change, and the
   probe's screens are the busiest the till has; screens the probe did not render (dialogs, the
   kitchen screens, the dashboard beyond the product editor) are covered only by those cases.
@@ -2210,7 +2275,10 @@ worktree left every picture byte for byte as committed (`git status` clean), and
 21 and 22 were still unchanged. Round 6 redrew 02, 03, 12, 13, 15, 25, 26, 28, 29 and 30: Save as
 new theme is no longer drawn quiet (section 8b), Advanced's opening line says a hand-set text size
 grows with Text size, the text warning's words follow section 9's quote, and the stylesheet carries
-whole pixels (section 5a). Since Q2 every
+whole pixels (section 5a). Round 7 redrew 03, 13, 18, 25 (light and dark), 26 and 29: "px" no
+longer wraps away from its number, and at phone width the editor's buttons wrap inside the card
+instead of running past its edge (29's did since d147208c4). The slider's step marks and its value
+at the track's end, which these pictures draw, are listed as `wt-slider` additions in slice 10. Since Q2 every
 picture shows colours as picked; Bar Lucía's saved look has taken the fix for her green on dark
 screens. Pictures 01 to 16 show her look before she uploads a logo; the logo revision (2026-10-20)
 redrew 01 to 05, 12, 13, 15 and 16 to add the Logo row or field and the preview's banner strip, and
@@ -2256,7 +2324,7 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `27-text-size-top-step-{light,dark}.png` | The probe's screenshots of the real counter screen at 1280 × 800 in Bar Lucía's look, 100% beside 130%, the top step (section 5a). The probe's products carry no colour of their own, so the product buttons are drawn plain; the runner framed the screen at 1152 × 720 |
 | `28-advanced-sections-light.png` | Advanced opened with every section closed, each closed line saying what is set by hand (Page (light), Normal text); and the same with Text opened |
 | `29-advanced-sections-phone-light.png` | At 390 px: every section closed; and Page and surfaces opened |
-| `30-text-too-small-light.png` | The Text section with Typeface set by hand to Serif and Small text to 10 px, its warning "Small text: 10 px is smaller than 12 px, …" with Use 12 px; the preview drawing serif and 10 px |
+| `30-text-too-small-light.png` | The Text section with Typeface set by hand to Serif and Small text to 10 px, its warning "Small text: 10 px is smaller than 12 px; text that small is often hard to read." with Use 12 px (at 100%, so no bracket); the preview drawing serif and 10 px |
 | `31-themes-{light,dark}.png` | The Appearance page: the Look card for the theme in use and the Themes card listing Waitron (built in), Bar Lucía (In use), Christmas and Summer terrace ("1 hard to read"), with Christmas's row menu open |
 | `32-themes-phone-light.png` | The same at 390 px, the colours column left out |
 | `33-theme-save-and-switch-{light,dark}.png` | Make a copy's name dialog ("Christmas", Use it on every screen now off), and the switch dialog — for Christmas (light) and for Summer terrace with its warning listed (dark) |
