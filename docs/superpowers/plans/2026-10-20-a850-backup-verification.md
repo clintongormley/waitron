@@ -433,10 +433,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/fiscal-verifactu/src/backup-verification.ts`, `packages/fiscal-verifactu/src/backup-verification.test.ts`; modify `packages/fiscal-verifactu/src/index.ts`, `packages/composition/src/modules.ts`.
 **Consumes:** Tasks 8/9/12 and pure history projection; execute this task after Task 12, before Task 13. **Produces:** `FISCAL_BACKUP_VERIFICATION:BackupVerificationContribution`.
 
-- [ ] RED `validates retained history before scope filtering`, `covers retired and foreign-node histories`, `absence follows the genuine capture rule`, `unresolved required data effect needs authority`, `activation-only effects stay unattempted`. Assert contradictions/extra private fields/schema-zero evidence refuse; genuine empty history is accepted only under its owner rule.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification.test.ts src/hour-backup-state.test.ts src/hour-history-reader.test.ts`; expect new declaration then omitted-history/effect denial red.
-- [ ] Implement independent query-only mapping across every stored hour-history source plus optional `secrets/module-evidence/fiscal-verifactu/hour-history.json`. Classify fresh identity/series/registration/promotion as activation-only; all data effects have independent checks. Aggregate completed Tasks 8/9/12 without swallowing refusals; incomplete secret checking cannot pass. GREEN same command including a real complete fiscal owner pass.
-- [ ] Commit `git commit -s -m "feat(fiscal): declare backup history and effect obligations"`.
+- [x] RED `validates retained history before scope filtering`, `covers retired and foreign-node histories`, `absence follows the genuine capture rule`, `unresolved required data effect needs authority`, `activation-only effects stay unattempted`. Assert contradictions/extra private fields/schema-zero evidence refuse; genuine empty history is accepted only under its owner rule.
+- [x] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification.test.ts src/hour-backup-state.test.ts src/hour-history-reader.test.ts`; expect new declaration then omitted-history/effect denial red.
+- [x] Implement independent query-only mapping across every stored hour-history source plus optional `secrets/module-evidence/fiscal-verifactu/hour-history.json`. Classify fresh identity/series/registration/promotion as activation-only; all data effects have independent checks. Aggregate completed Tasks 8/9/12 without swallowing refusals; incomplete secret checking cannot pass. GREEN same command including a real complete fiscal owner pass.
+- [x] Commit `git commit -s -m "feat(fiscal): declare backup history and effect obligations"`.
 
 ### Task 11: Authenticate every application-vault row without a dependency cycle
 
@@ -829,3 +829,13 @@ installation fields before and after migration, and compares complete installati
 It accepts intact expired or future-valid material without renewal. Missing vault keys or an
 unconfirmed PFX passphrase remain unavailable; unsupported encryption remains unsupported.
 The fiscal contribution still needs Task 10 wiring; this is not artifact qualification.
+
+### Task 10 implementation checkpoint
+
+The registered fiscal owner combines the full-chain, registration, certificate and retained-hour
+readers. Query-only hour projection includes retired series, all registrations, allocations and
+reservations before and after migration. Retained evidence is validated before scope filtering;
+conflicts are checked in each captured taxpayer/environment scope. Schema-zero claims cannot
+hide database or retained hour evidence. Non-hour stored formats remain unsupported by this
+hour policy. Fresh installation, series, registration and promotion stay activation effects.
+The artifact verifier and the remaining owners remain open.

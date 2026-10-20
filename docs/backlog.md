@@ -5195,7 +5195,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [approved Cloud contract](https://github.com/waitron-io/waitron-cloud/blob/f8e243f4b6fa232756a64c7113f05e3bf835158b/docs/superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md).
   The plan's declaration, query-only reader, inventory and strict private protocol foundations are
   implemented, together with core row/counter, membership signature and key-pair, amendment, daily-close and complete
-  fiscal-chain, registration/allocation, retained filing-history, authenticated application-vault and offline fiscal-certificate checks.
+  fiscal-chain, registration/allocation, retained filing-history, authenticated application-vault, offline fiscal-certificate and retained-hour checks.
   Signed paper needs release-reviewed public roots; stored Cloud receipt references remain unsupported.
   Embedded build identity, the artifact verifier and remaining module checks, and
   target-bound recovery remain open. Cloud integration

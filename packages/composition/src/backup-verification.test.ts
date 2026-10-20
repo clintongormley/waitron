@@ -151,3 +151,17 @@ describe("backup verification inventory", () => {
     expect(() => backupVerificationInventory([module])).toThrow(failure);
   });
 });
+
+it("admits the actual fiscal descriptor only with its complete verification owner", () => {
+  const owners = ALL_MODULES.filter((module) =>
+    ["core", "credentials", "fiscal-verifactu"].includes(module.name),
+  );
+  const inventory = backupVerificationInventory(owners);
+  expect(inventory.map((owner) => owner.module.name).sort()).toEqual([
+    "core",
+    "credentials",
+    "fiscal-verifactu",
+  ]);
+  const fiscal = inventory.find((owner) => owner.module.name === "fiscal-verifactu")!.verification;
+  expect(fiscal.data.checks).toEqual(["chain", "history", "secret", "entries"]);
+});
