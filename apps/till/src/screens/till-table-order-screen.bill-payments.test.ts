@@ -383,7 +383,6 @@ describe("till-table-order-screen: items already paid for", () => {
               movable: false,
               state: "queued",
               firedAt: null,
-              awayAt: null,
             },
           }),
         ]),

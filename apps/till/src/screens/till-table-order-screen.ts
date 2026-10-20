@@ -4200,7 +4200,6 @@ export class TillTableOrderScreen extends LitElement {
     if (!row.released) return t("table.group_held");
     const kitchen = row.kitchen;
     if (kitchen === null || kitchen.firedAt === null) return nothing;
-    if (kitchen.awayAt !== null) return t("table.group_away");
     if (kitchen.state === "ready") return t("table.group_ready");
     if (kitchen.state === "preparing") return t("table.row_preparing");
     return html`<till-fired-ago .firedAt=${kitchen.firedAt} .now=${this.now}></till-fired-ago>`;

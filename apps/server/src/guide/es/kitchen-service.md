@@ -66,6 +66,9 @@ comida hasta que la marques como servida o termines el servicio de la mesa. Si l
 unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
 que las reúne.
 
+En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
+como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
+
 Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
 Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.
 Una cantidad anulada deja de contar como comida pendiente, aunque se conserve su importe en la

@@ -210,7 +210,7 @@ describe("Current orders and Sent service", () => {
     for (const [id, kind, wanted] of [
       ["l-salad", "served", t("table.row_served")],
       ["l-beer", "fired", t("table.group_ready")],
-      ["l-bravas", "fired", t("table.group_away")],
+      ["l-bravas", "fired", t("table.group_ready")],
       ["l-fish", "fired", t("table.row_preparing")],
       ["l-steak", "fired", ""],
     ] as const) {

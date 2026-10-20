@@ -8227,7 +8227,6 @@ describe("recalled draft source splitting", () => {
                   movable: true,
                   state: "queued",
                   firedAt: "2026-10-17T08:00:00Z",
-                  awayAt: null,
                 },
                 extras: reference().source.extras.map((extra) => ({
                   lineId: extra.id,

@@ -32,15 +32,16 @@ export function row(
     servedQuantity: "0.000",
     servedAt: null,
     released: true,
-    kitchen: { stationId: null, movable: false, state: "queued", firedAt: fired, awayAt: null },
+    kitchen: { stationId: null, movable: false, state: "queued", firedAt: fired },
     note: null,
     extras: [],
     ...over,
   } satisfies CurrentOrderRow;
 }
 
-// Group 1: Croquetas ×4 half served, a Salad served, a Beer the pass marked ready, and Bravas the pass
-// sent away, fired by Luis. Group 2: a Steak needing no preparation, a Fish a station is preparing,
+// Group 1: Croquetas ×4 half served, a Salad served, and ready Beer and Bravas. Bravas carries a
+// legacy dispatch stamp; both remain ready. Fired by Luis. Group 2: a Steak needing no preparation,
+// a Fish a station is preparing,
 // and a Pulpo at a station that records nothing, on another bill of the party, fired by someone the
 // server has no name for. Group 3 was held by Ana and its reminder is due. Group 4 was held by someone
 // the server has no name for. A Coffee sits in no group.
@@ -50,7 +51,7 @@ export const salad = row("l-salad", "Salad", "1.000", {
   servedAt: "2026-09-28T20:05:00.000Z",
 });
 export const beer = row("l-beer", "Beer", "1.000", {
-  kitchen: { stationId: null, movable: false, state: "ready", firedAt: fired, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "ready", firedAt: fired },
 });
 export const bravas = row("l-bravas", "Bravas", "1.000", {
   kitchen: {
@@ -58,17 +59,17 @@ export const bravas = row("l-bravas", "Bravas", "1.000", {
     movable: false,
     state: "ready",
     firedAt: fired,
-    awayAt: "2026-09-28T20:10:00.000Z",
+    ...{ awayAt: "2026-09-28T20:10:00.000Z" },
   },
 });
 export const steak = row("l-steak", "Steak", "1.000", { kitchen: null });
 export const fish = row("l-fish", "Fish", "1.000", {
-  kitchen: { stationId: null, movable: false, state: "preparing", firedAt: fired, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "preparing", firedAt: fired },
 });
 export const pulpo = row("l-pulpo", "Pulpo", "1.000", { workingOrderId: "wo-check" });
 export const flan = row("l-flan", "Flan", "2.000", {
   released: false,
-  kitchen: { stationId: null, movable: false, state: "queued", firedAt: null, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "queued", firedAt: null },
   netAmount: "6.00",
   extras: [
     {
@@ -83,7 +84,7 @@ export const flan = row("l-flan", "Flan", "2.000", {
 });
 export const tarta = row("l-tarta", "Tarta", "1.000", {
   released: false,
-  kitchen: { stationId: null, movable: false, state: "queued", firedAt: null, awayAt: null },
+  kitchen: { stationId: null, movable: false, state: "queued", firedAt: null },
 });
 export const coffee = row("l-coffee", "Coffee", "1.000", { kitchen: null });
 

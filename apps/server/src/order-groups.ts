@@ -1651,8 +1651,6 @@ export interface CurrentOrderKitchen {
   movable: boolean;
   /** Null while the item is held, or since it was recalled. */
   firedAt: string | null;
-  /** When the pass sent it away, if it recorded that. */
-  awayAt: string | null;
 }
 
 /** An extra picked with a dish; it is served with its dish, never on its own. */
@@ -1811,7 +1809,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketFiredAt: ticketItems.firedAt,
       ticketReadyAt: ticketItems.readyAt,
       ticketMadeHere: ticketItems.madeHere,
-      awayAt: ticketItems.awayAt,
       stationId: ticketItems.stationId,
     })
     .from(workingOrderLines)
@@ -1937,7 +1934,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
           : {
               state: line.ticketState,
               firedAt: line.ticketFiredAt,
-              awayAt: line.awayAt,
               stationId: line.stationId!,
               movable: stillMovable(
                 { state: line.ticketState, madeHere: line.ticketMadeHere! },

@@ -5551,7 +5551,6 @@ describe("till-app: the order's groups", () => {
                         movable: line.movable,
                         state: line.state,
                         firedAt: line.firedAt,
-                        awayAt: null,
                       },
                 note: line.note,
                 extras: [],

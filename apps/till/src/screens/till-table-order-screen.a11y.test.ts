@@ -669,7 +669,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
                 movable: false,
                 state: "queued",
                 firedAt: null,
-                awayAt: null,
               },
             }),
           ]),

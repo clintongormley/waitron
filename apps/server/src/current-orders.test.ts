@@ -1013,6 +1013,41 @@ async function linesByName(partyId: string) {
 }
 
 describe("readCurrentOrders (spec §4)", () => {
+  it.each(["queued", "preparing", "ready"] as const)(
+    "A773 no dispatch state: a %s dish keeps its kitchen facts without an Away projection",
+    async (state) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const sent = await group(v, s.partyId, "fire", [line(v, "steak", "2")]);
+      const before = (await currentOrders(s.partyId)).groups[0]!.rows[0]!;
+      const readyAt = state === "ready" ? "2026-10-20T18:00:00.000Z" : null;
+      await inTx((tx) =>
+        tx
+          .update(ticketItems)
+          .set({ state, readyAt, awayAt: "2026-10-20T18:01:00.000Z" })
+          .where(eq(ticketItems.workingOrderLineId, sent.lineIds[0]!)),
+      );
+
+      const read = (await currentOrders(s.partyId)).groups[0]!.rows[0]!;
+      expect(read).toEqual({
+        ...before,
+        readyAt,
+        kitchen: {
+          state,
+          firedAt: before.kitchen!.firedAt,
+          stationId: before.kitchen!.stationId,
+          movable: state === "queued",
+        },
+      });
+      expect(read).toMatchObject({
+        quantity: "2.000",
+        servedQuantity: "0.000",
+        netAmount: "44.00",
+        released: true,
+      });
+    },
+  );
+
   it("carries effective live dish nutrition on a sent current-order row", async () => {
     const v = await setupVenue();
     const s = await seated(v);
@@ -1201,7 +1236,6 @@ describe("readCurrentOrders (spec §4)", () => {
               kitchen: {
                 state: "queued",
                 firedAt: expect.any(String),
-                awayAt: null,
                 stationId: expect.any(String),
                 movable: false,
               },
@@ -1221,7 +1255,6 @@ describe("readCurrentOrders (spec §4)", () => {
               kitchen: {
                 state: "queued",
                 firedAt: expect.any(String),
-                awayAt: null,
                 stationId: expect.any(String),
                 movable: true,
               },
@@ -1249,7 +1282,6 @@ describe("readCurrentOrders (spec §4)", () => {
               kitchen: {
                 state: "queued",
                 firedAt: null,
-                awayAt: null,
                 stationId: expect.any(String),
                 movable: true,
               },
@@ -1276,7 +1308,6 @@ describe("readCurrentOrders (spec §4)", () => {
           kitchen: {
             state: "queued",
             firedAt: expect.any(String),
-            awayAt: null,
             stationId: expect.any(String),
             movable: true,
           },
@@ -1301,7 +1332,6 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(croq!.kitchen).toEqual({
       state: "queued",
       firedAt: expect.any(String),
-      awayAt: null,
       stationId: expect.any(String),
       movable: true,
     });
@@ -1310,7 +1340,6 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(steak!.kitchen).toEqual({
       state: "ready",
       firedAt: expect.any(String),
-      awayAt: null,
       stationId: expect.any(String),
       movable: false,
     });
@@ -1340,7 +1369,6 @@ describe("readCurrentOrders (spec §4)", () => {
       kitchen: {
         state: "queued",
         firedAt: null,
-        awayAt: null,
         stationId: expect.any(String),
         movable: true,
       },

@@ -38,7 +38,7 @@ it.each(["editable", "service-only"] as const)(
               lineNo: 1,
               netAmount: "6.50",
               firedAt,
-              kitchen: { stationId: "bar", movable: true, state: "queued", firedAt, awayAt: null },
+              kitchen: { stationId: "bar", movable: true, state: "queued", firedAt },
             }),
           ]),
         ],

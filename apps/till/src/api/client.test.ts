@@ -4128,7 +4128,7 @@ describe("TillApi: a seated party", () => {
               servedQuantity: "2.000",
               servedAt: null,
               released: true,
-              kitchen: { state: "queued", firedAt: "2026-09-28T19:50:00.000Z", awayAt: null },
+              kitchen: { state: "queued", firedAt: "2026-09-28T19:50:00.000Z" },
               note: null,
               extras: [],
             },

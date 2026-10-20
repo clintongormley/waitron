@@ -605,7 +605,6 @@ export interface ReleaseReminder {
 export interface CurrentOrderKitchen {
   state: TicketState;
   firedAt: string | null;
-  awayAt: string | null;
   stationId: string | null;
   movable: boolean;
 }
