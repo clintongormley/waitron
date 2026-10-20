@@ -93,12 +93,12 @@ const seated = (id: string, zoneId: string, over: Partial<TableState> = {}): Tab
 const held: TableSignal = { kind: "held", count: 2 };
 
 // Inside comes first, so it is the zone on screen.
-const mount = (tables: TableState[]) =>
+const mount = (tables: TableState[], reducedMotion = true) =>
   mountWidget<TillFloorScreen>("till-floor-screen", {
     zones,
     tables,
     now,
-    reducedMotion: true,
+    reducedMotion,
   });
 
 const tabOf = (el: TillFloorScreen, zoneId: string) =>
@@ -110,6 +110,9 @@ const stateOf = (el: TillFloorScreen, zoneId: string) =>
 const buttonOf = (el: TillFloorScreen, zoneId: string) =>
   tabOf(el, zoneId).shadowRoot!.querySelector<HTMLButtonElement>('[part="button"]')!;
 
+const pulseOf = (el: TillFloorScreen, zoneId: string) =>
+  tabOf(el, zoneId).closest(".zone-tab")!.querySelector<HTMLElement>(".pulse");
+
 const originalUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
@@ -118,11 +121,14 @@ afterEach(() => {
 
 describe("till-floor-screen: zone tabs", () => {
   it("tints a hidden zone's tab with its most urgent state, a bar and its icon", async () => {
-    const { el, host } = await mount([
-      seated("t1", "z1"),
-      seated("t2", "z2", { signals: [{ kind: "bill_requested", requestedAt: inMinutes(-3) }] }),
-      seated("t3", "z2", { timingBand: "forgotten" }),
-    ]);
+    const { el, host } = await mount(
+      [
+        seated("t1", "z1"),
+        seated("t2", "z2", { signals: [{ kind: "bill_requested", requestedAt: inMinutes(-3) }] }),
+        seated("t3", "z2", { timingBand: "forgotten" }),
+      ],
+      false,
+    );
     host.style.setProperty("--wt-color-tab-danger-tint", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
 
@@ -212,6 +218,80 @@ describe("till-floor-screen: zone tabs", () => {
     const style = getComputedStyle(button);
     expect(style.backgroundColor).toBe("rgb(1, 2, 3)");
     expect(style.boxShadow).toBe("rgb(4, 5, 6) 0px -4px 0px 0px inset");
+  });
+
+  it.each<[string, Partial<TableState>, string | null]>([
+    ["forgotten", { timingBand: "forgotten" }, "wt-pulse-fast"],
+    ["overdue", { timingBand: "overdue" }, "wt-pulse-slow"],
+    [
+      "fire",
+      { party: party("p-t2", { reminder: { groupId: "g", dueAt: inMinutes(-1) } }) },
+      "wt-pulse-slow",
+    ],
+    ["step", { signals: [{ kind: "take_order" }] }, null],
+  ])("pulses at the state's speed: %s", async (kind, over, speed) => {
+    const { el } = await mount([seated("t1", "z1"), seated("t2", "z2", over)], false);
+    expect(stateOf(el, "z2")).toBe(kind);
+    const pulse = pulseOf(el, "z2");
+    if (speed === null) {
+      expect(pulse).toBeNull();
+    } else {
+      expect(pulse).not.toBeNull();
+      expect(pulse!.classList.contains(speed)).toBe(true);
+      expect(pulse!.getAttribute("data-pulse")).toBe(kind);
+    }
+    expect(pulseOf(el, "z1")).toBeNull();
+  });
+
+  it("the strip leaves room for the ring", async () => {
+    // Vitest's Chromium runs with --hide-scrollbars, so no case here sees a scrollbar.
+    const { el, host } = await mount(
+      [seated("t1", "z1"), seated("t2", "z2", { timingBand: "forgotten" })],
+      false,
+    );
+    const probe = document.createElement("div");
+    probe.style.width = "calc(var(--wt-space-1) * 1.5)";
+    host.appendChild(probe);
+    const reach = probe.getBoundingClientRect().width;
+    probe.remove();
+    expect(reach).toBeGreaterThan(0);
+
+    const ring = pulseOf(el, "z2")!.getBoundingClientRect();
+    const nav = el.shadowRoot!.querySelector<HTMLElement>(".tabs")!;
+    const box = nav.getBoundingClientRect();
+    const left = box.left + nav.clientLeft;
+    const top = box.top + nav.clientTop;
+    expect(ring.left - reach).toBeGreaterThanOrEqual(left);
+    expect(ring.top - reach).toBeGreaterThanOrEqual(top);
+    expect(ring.right + reach).toBeLessThanOrEqual(left + nav.clientWidth);
+    expect(ring.bottom + reach).toBeLessThanOrEqual(top + nav.clientHeight);
+  });
+
+  it("under reduced motion nothing moves and a forgotten tab is filled red", async () => {
+    const zonesThree = [...zones, zone("z3", "Bar", 2)];
+    const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: zonesThree,
+      tables: [
+        seated("t1", "z1"),
+        seated("t2", "z2", { timingBand: "forgotten" }),
+        seated("t3", "z3", { timingBand: "overdue" }),
+      ],
+      now,
+      reducedMotion: true,
+    });
+    host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-on-danger", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-tab-danger-tint", "rgb(1, 2, 3)");
+
+    expect(el.shadowRoot!.querySelector(".zone-tab .pulse")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(".zone-tab .wt-pulse-fast, .zone-tab .wt-pulse-slow"),
+    ).toBeNull();
+    const forgotten = getComputedStyle(buttonOf(el, "z2"));
+    expect(forgotten.backgroundColor).toBe("rgb(4, 5, 6)");
+    expect(forgotten.color).toBe("rgb(7, 8, 9)");
+    // Only Forgotten fills; an overdue tab keeps its tint.
+    expect(getComputedStyle(buttonOf(el, "z3")).backgroundColor).toBe("rgb(1, 2, 3)");
   });
 
   it("leaves the zone on screen plain", async () => {

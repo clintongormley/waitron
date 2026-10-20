@@ -23,6 +23,7 @@ import {
   MAP_SEPARATOR,
   mergeLabel,
   renderFloorChips,
+  renderFloorPulse,
   renderFloorRing,
   resolveActiveTabKey,
   toFloorTable,
@@ -31,6 +32,7 @@ import type {
   FloorCueIcon,
   FloorMapDrop,
   FloorMapTable,
+  FloorPulse,
   FloorRing,
   FloorTable,
   ZoneTab,
@@ -157,6 +159,8 @@ function shownPartyName(table: TableState): string | undefined {
   const name = table.party?.displayName;
   return name === undefined || name === shownUnder(table) ? undefined : name;
 }
+
+const TAB_PULSES: readonly FloorPulse[] = ["forgotten", "overdue", "fire"];
 
 const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
   forgotten: "forgotten",
@@ -375,6 +379,7 @@ export class TillFloorScreen extends LitElement {
         overflow-x: auto;
         flex-wrap: nowrap;
         gap: var(--wt-space-2);
+        padding: calc(var(--wt-space-1) * 1.5);
       }
       .tabs > * {
         flex: none;
@@ -423,6 +428,11 @@ export class TillFloorScreen extends LitElement {
       .zone-tab[data-zone-state] wt-button::part(button) {
         background: var(--zone-tint);
         box-shadow: inset 0 calc(var(--wt-space-1) * -1) 0 var(--zone-bar);
+      }
+
+      .zone-tab.filled-forgotten wt-button::part(button) {
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
       }
 
       .map {
@@ -2297,8 +2307,11 @@ export class TillFloorScreen extends LitElement {
 
   #tab(tab: ZoneTab, activeKey: string | undefined, mark: ZoneTabMark | undefined): TemplateResult {
     const active = tab.key === activeKey;
-    return html`<span class="zone-tab" data-zone-state=${mark?.kind ?? nothing}
-      ><wt-button
+    const moving = !this.#prefersReducedMotion();
+    const pulse = TAB_PULSES.find((kind) => kind === mark?.kind) ?? null;
+    const filled = mark?.kind === "forgotten" && !moving ? " filled-forgotten" : "";
+    return html`<span class="zone-tab${filled}" data-zone-state=${mark?.kind ?? nothing}
+      >${renderFloorPulse(pulse, moving)}<wt-button
         class="tab"
         data-zone=${tab.key}
         variant=${active ? "primary" : "secondary"}
