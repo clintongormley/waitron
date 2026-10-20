@@ -273,9 +273,15 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
     : { ...table, today: { ...table.today, placement } };
 }
 
-/** What a hidden zone's tab shows: its tables' most urgent state. */
 type TabsEdge = "start" | "end";
 
+/** Half a pixel or less cut off is layout rounding, not a tab out of sight. */
+const SUBPIXEL = 0.5;
+
+const tabKey = (zoneTab: Element): string =>
+  zoneTab.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
+
+/** What a hidden zone's tab shows: its tables' most urgent state. */
 interface ZoneTabMark {
   kind: MapKind;
   icon: FloorCueIcon | null;
@@ -804,7 +810,7 @@ export class TillFloorScreen extends LitElement {
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
   /** Zone keys of the tabs the strip does not show whole, by the end they are beyond. */
-  readonly #hiddenTabs = new Map<string, TabsEdge>();
+  #hiddenTabs = new Map<string, TabsEdge>();
   #tabsObserver?: IntersectionObserver;
   /** The strip being watched: `null` while there is none, `undefined` while not watching. */
   #tabsStrip?: HTMLElement | null;
@@ -2392,7 +2398,7 @@ export class TillFloorScreen extends LitElement {
     this.#tabsStrip = strip;
     this.#tabsKeys = keys;
     if (strip === null) return;
-    this.#tabsObserver = new IntersectionObserver((entries) => this.#onTabsSeen(entries), {
+    this.#tabsObserver = new IntersectionObserver(() => this.#placeTabs(), {
       root: strip,
       threshold: 1,
     });
@@ -2403,19 +2409,27 @@ export class TillFloorScreen extends LitElement {
     this.#tabsObserver?.disconnect();
     this.#tabsObserver = undefined;
     this.#tabsStrip = undefined;
-    this.#hiddenTabs.clear();
+    this.#hiddenTabs = new Map();
   }
 
-  #onTabsSeen(entries: IntersectionObserverEntry[]): void {
-    for (const entry of entries) {
-      const key = entry.target.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
-      if (entry.intersectionRatio >= 1) this.#hiddenTabs.delete(key);
-      else
-        this.#hiddenTabs.set(
-          key,
-          entry.boundingClientRect.left < entry.rootBounds!.left ? "start" : "end",
-        );
+  /** Reads from layout which tabs the strip cuts off, and beyond which end. The observer only says
+   * when to read: a tab one scroll jump carries from beyond one end to beyond the other gets no
+   * callback of its own. */
+  #placeTabs(): void {
+    const strip = this.#tabsStrip!;
+    const left = strip.getBoundingClientRect().left + strip.clientLeft;
+    const right = left + strip.clientWidth;
+    const sides = new Map<string, TabsEdge>();
+    for (const tab of strip.querySelectorAll(".zone-tab")) {
+      const box = tab.getBoundingClientRect();
+      if (box.left < left - SUBPIXEL) sides.set(tabKey(tab), "start");
+      else if (box.right > right + SUBPIXEL) sides.set(tabKey(tab), "end");
     }
+    const same =
+      sides.size === this.#hiddenTabs.size &&
+      [...sides].every(([key, side]) => this.#hiddenTabs.get(key) === side);
+    if (same) return;
+    this.#hiddenTabs = sides;
     this.requestUpdate();
   }
 

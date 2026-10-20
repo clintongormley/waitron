@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { TableSignal } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -397,12 +397,13 @@ describe("till-floor-screen: the zone strip's edge", () => {
     tables: TableState[],
     check: (el: TillFloorScreen, host: HTMLElement) => Promise<void>,
     reducedMotion = false,
+    zoneList = many,
   ) => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
       const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
-        zones: many,
+        zones: zoneList,
         tables,
         now,
         reducedMotion,
@@ -546,11 +547,66 @@ describe("till-floor-screen: the zone strip's edge", () => {
         const strip = stripOf(el);
         strip.scrollLeft = strip.scrollWidth;
         await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
-        host.removeChild(el);
+        const disconnect = vi.spyOn(IntersectionObserver.prototype, "disconnect");
+        try {
+          host.removeChild(el);
+          expect(disconnect).toHaveBeenCalled();
+        } finally {
+          disconnect.mockRestore();
+        }
         host.appendChild(el);
         stripOf(el).scrollLeft = 0;
         await expect.poll(() => edgeOf(el, "start")).toBeNull();
       },
+    );
+  });
+
+  it("moves a tab's mark to the start edge when one jump carries it past the strip", async () => {
+    await onPhone(
+      [
+        seated("t1", "z1"),
+        seated("t3", "z3", { readyToServe: 2 }),
+        seated("t6", "z6", { timingBand: "forgotten" }),
+      ],
+      async (el) => {
+        await expect
+          .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
+          .toBe("Show Private room");
+        await userEvent.click(edgeOf(el, "end")!);
+        // Upstairs lounge went from beyond the end to beyond the start without ever being shown.
+        await expect
+          .poll(() => edgeOf(el, "start")?.getAttribute("aria-label"))
+          .toBe("Show Upstairs lounge");
+        // The start edge narrows the strip; the tab asked for stays in view.
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        const tab = tabOf(el, "z6").closest(".zone-tab")!.getBoundingClientRect();
+        expect(tab.right).toBeLessThanOrEqual(paddingBox(stripOf(el)).right);
+        expect(edgeOf(el, "start")?.getAttribute("aria-label")).toBe("Show Upstairs lounge");
+      },
+    );
+  });
+
+  it("watches the new tabs when the zones grow", async () => {
+    await onPhone(
+      [...urgentRight(), seated("t4", "z4", { readyToServe: 2 })],
+      async (el) => {
+        // The observer has read the four tabs before the zones grow.
+        await expect
+          .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
+          .toBe("Show Garden terrace");
+        const observe = vi.spyOn(IntersectionObserver.prototype, "observe");
+        try {
+          el.zones = many;
+          await el.updateComplete;
+          expect(observe).toHaveBeenCalledWith(tabOf(el, "z5").closest(".zone-tab"));
+          expect(observe).toHaveBeenCalledWith(tabOf(el, "z6").closest(".zone-tab"));
+        } finally {
+          observe.mockRestore();
+        }
+        await expect.poll(() => edgeOf(el, "end")?.getAttribute("aria-label")).toBe("Show Patio");
+      },
+      false,
+      many.slice(0, 4),
     );
   });
 
