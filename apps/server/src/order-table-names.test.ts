@@ -28,23 +28,28 @@ beforeEach(async () => {
 });
 
 describe("A765 table names in order lists", () => {
-  it("leaves a table-free counter order's own label separate", async () => {
-    const id = randomUUID();
-    await withTransaction(venue.db, (tx) =>
-      tx.insert(workingOrders).values({
-        id,
-        ...dashboardOrderAt(venue.cfg.locationId),
-        nodeId: venue.cfg.nodeId,
-        orderNumber: 204,
-        label: "Alex",
-      }),
-    );
-    const row = (await listHeldOrders({ db: venue.db }, venue.cfg)).find(
-      (order) => order.id === id,
-    )!;
-    expect(row.label).toBe("Alex");
-    expect(row).not.toHaveProperty("tableLabel");
-  });
+  it.each(["open", "placed"] as const)(
+    "leaves a table-free %s counter order's label separate",
+    async (status) => {
+      const id = randomUUID();
+      await withTransaction(venue.db, (tx) =>
+        tx.insert(workingOrders).values({
+          id,
+          ...dashboardOrderAt(venue.cfg.locationId),
+          nodeId: venue.cfg.nodeId,
+          orderNumber: 204,
+          status,
+          label: "Alex",
+        }),
+      );
+      const rows = await (status === "open"
+        ? listHeldOrders({ db: venue.db }, venue.cfg)
+        : listCounterWaiting({ db: venue.db }, venue.cfg));
+      const row = rows.find((order) => order.id === id)!;
+      expect(row.label).toBe("Alex");
+      expect(row).not.toHaveProperty("tableLabel");
+    },
+  );
 
   it("names a party's joined table in the HTTP held list without replacing its bill label", async () => {
     const id = randomUUID();

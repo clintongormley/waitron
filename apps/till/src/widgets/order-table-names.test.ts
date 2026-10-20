@@ -125,26 +125,23 @@ describe("A765 visible order table names", () => {
     expect(el.shadowRoot!.querySelector("[data-current-tab]")!.textContent).toContain(base.label);
   });
 
-  it.each([null, "Alex"])(
-    "keeps a table-free order label %s without repeating it",
-    async (label) => {
-      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-        orders: [
-          {
-            ...base,
-            label,
-            tableLabel: label ?? undefined,
-            itemCount: 0,
-            outstanding: "18.50",
-            hasPayments: false,
-            partyId: null,
-            signals: [],
-          },
-        ],
-      });
-      expect(el.shadowRoot!.querySelector(".label")?.textContent.trim() ?? null).toBe(label);
-    },
-  );
+  it.each([null, "Alex"])("shows an absent or duplicate order label %s once", async (label) => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [
+        {
+          ...base,
+          label,
+          tableLabel: label ?? undefined,
+          itemCount: 0,
+          outstanding: "18.50",
+          hasPayments: false,
+          partyId: null,
+          signals: [],
+        },
+      ],
+    });
+    expect(el.shadowRoot!.querySelector(".label")?.textContent.trim() ?? null).toBe(label);
+  });
 });
 
 describe.each(["en-GB", "es-ES"])("A765 native table names %s", (locale) => {

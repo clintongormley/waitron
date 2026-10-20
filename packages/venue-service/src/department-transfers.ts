@@ -541,19 +541,22 @@ async function summarizeTransfers(tx: Transaction, cfg: VenueScope, rows: Depart
     })),
   );
   const byId = new Map(
-    identities.map((row) => [
-      row.id,
-      {
-        currentDepartmentId: row.currentDepartmentId,
-        summary: {
-          orderNumber: row.orderNumber,
-          tabLabel: row.tabLabel,
-          sourceDepartmentName: row.sourceDepartmentName,
-          destinationDepartmentName: row.destinationDepartmentName,
-          ...(labels.get(row.orderId) ? { tableLabel: labels.get(row.orderId)! } : {}),
+    identities.map((row) => {
+      const tableLabel = labels.get(row.orderId) ?? null;
+      return [
+        row.id,
+        {
+          currentDepartmentId: row.currentDepartmentId,
+          summary: {
+            orderNumber: row.orderNumber,
+            tabLabel: row.tabLabel,
+            sourceDepartmentName: row.sourceDepartmentName,
+            destinationDepartmentName: row.destinationDepartmentName,
+            ...(tableLabel === null ? {} : { tableLabel }),
+          },
         },
-      },
-    ]),
+      ];
+    }),
   );
   return rows.map((row) => ({ ...row, ...byId.get(row.id)! }));
 }
