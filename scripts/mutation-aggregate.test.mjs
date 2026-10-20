@@ -392,7 +392,7 @@ describe("the shard count in the mutation workflow", () => {
     return end === -1 ? rest : rest.slice(0, end + 1);
   }
 
-  it.each(["db", "ui"])(
+  it.each(["db", "ui", "ui-core"])(
     "matches between mutation-%s's shard matrix and its own aggregate job's --shards",
     (pkg) => {
       const matrix = section(`mutation-${pkg}`).match(/shard: \[([^\]]*)\]/);

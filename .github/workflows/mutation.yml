@@ -26,13 +26,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  mutation:
+  # packages/ui-core, sharded and gated like packages/ui below: no thresholds.break in
+  # packages/ui-core/stryker.config.json, one bar on the merged score in
+  # `mutation-ui-core-aggregate`. One job took 6m44s on run 39373226000 (2026-10-20) for 612 mutants
+  # at 4 test runners; the theme derivation under src/theme/ added about 1,180 more. Shard times
+  # measured locally are in docs/developers/ci-and-gates.md, "Job time limits".
+  mutation-ui-core:
     strategy:
       fail-fast: false
       matrix:
-        package: [ui-core]
+        shard: [1, 2, 3, 4]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       # Each checkout is three steps: docs/developers/ci-and-gates.md, "Every checkout is bounded".
       - id: checkout
@@ -67,7 +72,7 @@ jobs:
 
       - name: Resolve installed Playwright version
         id: playwright-version
-        run: echo "version=$(pnpm --filter @waitron/${{ matrix.package }} exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(pnpm --filter @waitron/ui-core exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -79,24 +84,58 @@ jobs:
       # apt step it would run is wasted wall-clock — same change and rationale as ci.yml's test-ui
       # shard, where the full receipt lives. This job's own real-Chromium mutation run below is the
       # proof for THIS workflow: if a library were missing, Stryker's first mutant would fail to launch
-      # the browser. Proven on dispatch run 32304224136, where this step took 1s and the `mutation` job
-      # then ran the real-Chromium suite green. If a runner-image or Playwright bump drops one, apt-get
-      # it, or run `--with-deps`, as docs/developers/ci-and-gates.md, "Every apt wait is bounded",
-      # requires.
-      - run: pnpm --filter @waitron/${{ matrix.package }} exec playwright install chromium
+      # the browser. Proven on dispatch run 32304224136, where this step took 1s and the then
+      # unsharded ui-core job ran the real-Chromium suite green. If a runner-image or Playwright bump
+      # drops one, apt-get it, or run `--with-deps`, as docs/developers/ci-and-gates.md, "Every apt
+      # wait is bounded", requires.
+      - run: pnpm --filter @waitron/ui-core exec playwright install chromium
 
-      # ui-core's stryker.config.json sets thresholds.break to 90, so this step FAILS the
-      # job if the score drops below it. The report is still published below
-      # either way, which is what a human reads to find the new survivors.
-      - run: pnpm --filter @waitron/${{ matrix.package }} mutation
+      - name: Run mutation shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          FILES=$(node scripts/mutation-shard.mjs ui-core "$SHARD" "$TOTAL")
+          # Never hand stryker an empty `--mutate ""`, for the reason given on `mutation-db` below.
+          if [ -z "$FILES" ]; then
+            echo "shard $SHARD/$TOTAL selected no files — refusing to run stryker with an empty --mutate" >&2
+            exit 1
+          fi
+          echo "Shard $SHARD/$TOTAL mutates: $FILES"
+          pnpm --filter @waitron/ui-core exec stryker run --mutate "$FILES"
 
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mutation-report-${{ matrix.package }}
-          path: packages/${{ matrix.package }}/reports/mutation/
+          name: mutation-report-ui-core-shard-${{ matrix.shard }}
+          path: packages/ui-core/reports/mutation/
           retention-days: 30
+
+  # packages/ui-core's gate, for the reasons given on `mutation-db-aggregate` below.
+  mutation-ui-core-aggregate:
+    needs: mutation-ui-core
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # No pnpm here, as on `mutation-db-aggregate`.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Download every shard report
+        uses: actions/download-artifact@v8
+        with:
+          pattern: mutation-report-ui-core-shard-*
+          path: mutation-reports
+
+      - name: Score the package
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package ui-core --shards 4 --break 90
 
   # packages/ui, sharded the same way as packages/db below, and gated the same way: no
   # thresholds.break in packages/ui/stryker.config.json, one bar on the merged score in
@@ -155,7 +194,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
-      # No `--with-deps`, for the reason given on the `mutation` job above.
+      # No `--with-deps`, for the reason given on the `mutation-ui-core` job above.
       - run: pnpm --filter @waitron/ui exec playwright install chromium
 
       - name: Run mutation shard ${{ matrix.shard }} of ${{ strategy.job-total }}

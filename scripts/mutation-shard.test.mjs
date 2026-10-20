@@ -213,10 +213,20 @@ describe("the selection follows each package's own stryker config", () => {
       "src/test-helpers.ts",
     ]);
   });
+
+  it("leaves out exactly ui-core's test-helper files of its non-test .ts files", () => {
+    const selected = mutateFiles(packageDir("ui-core"), configOf("ui-core").mutate);
+    expect(eligibleFiles("ui-core").filter((path) => !selected.includes(path))).toEqual([
+      "src/a11y-helpers.ts",
+      "src/test-helpers.ts",
+      "src/tokens/token-test-helpers.ts",
+      "src/vitest-park-pointer.ts",
+    ]);
+  });
 });
 
 describe("HEAVY_FILES", () => {
-  it("splits db's sales schema in three and ui's combobox, data table and dialog", () => {
+  it("splits db's sales schema in three and ui's combobox, data table and dialog, and no ui-core file", () => {
     expect(HEAVY_FILES).toEqual({
       db: { "src/schema/sales.ts": 3 },
       ui: {
@@ -224,6 +234,7 @@ describe("HEAVY_FILES", () => {
         "src/components/wt-data-table.ts": 12,
         "src/components/wt-dialog.ts": 6,
       },
+      "ui-core": {},
     });
   });
 
@@ -231,7 +242,7 @@ describe("HEAVY_FILES", () => {
     expect(missingHeavyFiles({ "src/gone.ts": 2, "src/here.ts": 2 }, ["src/here.ts"])).toEqual([
       "src/gone.ts",
     ]);
-    for (const pkg of ["db", "ui"]) {
+    for (const pkg of ["db", "ui", "ui-core"]) {
       const config = JSON.parse(readFileSync(join(packageDir(pkg), "stryker.config.json"), "utf8"));
       expect(
         missingHeavyFiles(HEAVY_FILES[pkg], mutateFiles(packageDir(pkg), config.mutate)),
@@ -353,7 +364,7 @@ function workflowShardCount(pkg) {
   return list[1].split(",").filter((entry) => entry.trim() !== "").length;
 }
 
-for (const pkg of ["db", "ui"]) {
+for (const pkg of ["db", "ui", "ui-core"]) {
   describe(`the CLI over the real @waitron/${pkg} tree at the workflow's shard count`, () => {
     const heavy = HEAVY_FILES[pkg];
     const fileOf = (entry) => entry.replace(/:\d+-\d+$/, "");

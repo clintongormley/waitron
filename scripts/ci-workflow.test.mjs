@@ -1420,12 +1420,23 @@ describe("the test shards", () => {
     };
     const lines = (text) => text.split("\n").map((line) => line.trim());
 
-    const uiCore = section("mutation");
-    expect(uiCore).toContain("package: [ui-core]");
+    expect(workflow, "the unsharded `mutation` matrix is back").not.toContain("\n  mutation:\n");
+    const uiCore = section("mutation-ui-core");
+    expect(uiCore).toMatch(/shard: \[1(, \d+)*\]/);
     expect(uiCore).toContain("fail-fast: false");
-    expect(lines(uiCore)).toContain("- run: pnpm --filter @waitron/${{ matrix.package }} mutation");
-    expect(uiCore).toContain("name: mutation-report-${{ matrix.package }}");
-    expect(uiCore).toContain("path: packages/${{ matrix.package }}/reports/mutation/");
+    expect(uiCore).toContain("pnpm --filter @waitron/ui-core exec playwright install chromium");
+    expect(lines(uiCore)).toContain(
+      'FILES=$(node scripts/mutation-shard.mjs ui-core "$SHARD" "$TOTAL")',
+    );
+    expect(lines(uiCore)).toContain(
+      'pnpm --filter @waitron/ui-core exec stryker run --mutate "$FILES"',
+    );
+    expect(uiCore).toContain("name: mutation-report-ui-core-shard-${{ matrix.shard }}");
+    expect(uiCore).toContain("path: packages/ui-core/reports/mutation/");
+    const uiCoreAggregate = section("mutation-ui-core-aggregate");
+    expect(uiCoreAggregate).toContain("needs: mutation-ui-core");
+    expect(uiCoreAggregate).toContain("if: always()");
+    expect(uiCoreAggregate).toContain("pattern: mutation-report-ui-core-shard-*");
 
     const ui = section("mutation-ui");
     expect(ui).toMatch(/shard: \[1(, \d+)*\]/);
