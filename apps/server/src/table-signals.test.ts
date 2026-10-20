@@ -15,6 +15,8 @@ import {
   diningTables,
   kitchenStations,
   lineServiceCancellations,
+  orderDraftRecalledLines,
+  orderDrafts,
   orderGroups,
   parties,
   partyTables,
@@ -599,6 +601,71 @@ describe("the floor's attention signals", () => {
 
     await cancel(paella.id, 350);
     expect(await heldSignal()).toEqual([]);
+  });
+
+  it("does not count a held dish on an abandoned bill", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, mesa2);
+    await holdGroup(v, partyId, "Burger");
+    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 1 });
+
+    await inTx(v, (tx) =>
+      tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, tabId)),
+    );
+
+    expect((await floorRow(v, mesa2)).signals).not.toContainEqual(
+      expect.objectContaining({ kind: "held" }),
+    );
+  });
+
+  it("does not count a held dish that was recalled", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, mesa2);
+    const mains = await holdGroup(v, partyId, "Burger", "Paella");
+    const lucia = await person(v, "Lucía");
+    await inTx(v, (tx) =>
+      saveDraft(tx, v.cfg, partyId, lucia, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: [draftLine(v, "Agua")],
+      }),
+    );
+    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 2 });
+
+    await inTx(v, async (tx) => {
+      const [draft] = await tx
+        .select({ id: orderDrafts.id })
+        .from(orderDrafts)
+        .where(eq(orderDrafts.partyId, partyId));
+      const [burger] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.groupId, mains), eq(workingOrderLines.name, "Burger")));
+      await tx
+        .insert(orderDraftRecalledLines)
+        .values({ draftId: draft!.id, sourceLineId: burger!.id, position: 1 });
+    });
+
+    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 1 });
+  });
+
+  it("readHeldCounts counts nothing for a party that is no longer open", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { partyId } = await seat(v, await v.table("Mesa 2"));
+    await holdGroup(v, partyId, "Burger");
+    expect(await inTx(v, (tx) => readHeldCounts(tx, [partyId]))).toEqual(new Map([[partyId, 1]]));
+
+    await inTx(v, (tx) =>
+      tx
+        .update(parties)
+        .set({ state: "closed", closedAt: new Date().toISOString() })
+        .where(eq(parties.id, partyId)),
+    );
+
+    expect(await inTx(v, (tx) => readHeldCounts(tx, [partyId]))).toEqual(new Map());
   });
 
   it("readHeldCounts answers an empty list without reading", async () => {
