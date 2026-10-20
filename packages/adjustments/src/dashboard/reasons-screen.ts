@@ -918,9 +918,9 @@ export class AdjustmentReasonsScreen extends LitElement {
     </wt-row-actions>`;
   }
 
-  /** The rows drawn, in list order. */
+  /** The rows drawn, in list order; called only once the reasons have loaded. */
   #shown(): AdjustmentReason[] {
-    return this.reasons ?? [];
+    return this.reasons!;
   }
 
   #row(reason: AdjustmentReason) {

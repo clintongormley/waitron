@@ -258,9 +258,10 @@ function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disa
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 describe("the reasons list", () => {
+  /** Each reason's translations differ from its staff name, so a cell reading either shows which. */
   const reason = (fields: Partial<AdjustmentReason> & Pick<AdjustmentReason, "id" | "name">) =>
     ({
-      names: {},
+      names: { en: `${fields.name} for guests`, es: `${fields.name} for guests (es)` },
       kind: "void",
       actions: ["cancel"],
       maxPercentBp: null,
@@ -333,6 +334,7 @@ describe("the reasons list", () => {
       ],
       ["Staff meal", "Comp", "Everyone", "Manager, Admin", "50% an item"],
     ]);
+    expect(table(el).textContent).not.toContain("for guests");
     const row = (id: string) => wrap.querySelector(`tr[data-reason="${id}"]`)!;
     expect(row("x").querySelector("td:nth-child(2) wt-lozenge")!.textContent!.trim()).toBe(
       "Note required",
@@ -378,7 +380,7 @@ describe("the reasons list", () => {
         kindName("comp", "es"),
         roles("supervisor", "manager", "admin"),
         roles("supervisor", "manager", "admin"),
-        tf("adjustments.limit_amount", { amount: "30,00 €" }, "es"),
+        tf("adjustments.limit_amount", { amount: "30,00\u00a0€" }, "es"),
       ],
       [
         "Staff meal",
@@ -388,6 +390,7 @@ describe("the reasons list", () => {
         tf("adjustments.limit_percent", { percent: "50" }, "es"),
       ],
     ]);
+    expect(table(el).textContent).not.toContain("for guests");
     expect(text(el.shadowRoot!.querySelector(".table-wrap + p.hint")!)).toBe(
       ES["adjustments.order_note"],
     );
