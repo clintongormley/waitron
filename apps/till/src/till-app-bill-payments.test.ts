@@ -4707,6 +4707,11 @@ describe("till-app: a bill payment on the card reader", () => {
         name: "Móvil",
         formFactor: "phone-portrait",
       }),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValue(
+          equipmentWith(equipmentItem(readers[1]!.id, readers[1]!.name, { provider: "stripe" })),
+        ),
       previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
       takeBillPayment,
     });
@@ -4723,7 +4728,6 @@ describe("till-app: a bill payment on the card reader", () => {
     await flush(el);
     await type(el, "amount", "40");
     await press(el, 'input[name="method"][value="card"]');
-    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
     return el;
