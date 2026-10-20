@@ -3178,6 +3178,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `apps/server` depend on `@waitron/ui-core`, and retires `THEMEABLE_TOKENS` with
   `packages/layouts/src/theme-registry.test.ts`.
 
+- **A841 slice 1 tidy-ups its review left (#1927's finish-branch, 2026-10-21).** Optional, no
+  behaviour change: `checkRules` (`packages/ui-core/src/theme/contrast-rules.ts`) and `failing`
+  (`derive.ts`) both evaluate contrast rules and could share one evaluator; the black-or-white text
+  choice could be shared with `packages/ui`; `deriveAt` could be tidied and the hues kept in one
+  list; `packages/ui-core/src/tokens/colors.test.ts` still keeps its own station lists rather than
+  reading `STATIONS`. Separately, the design's mock-up pictures still show Café Limón's light fix as
+  `#9f8b18` and Bar Lucía's dark fix as `#417c59`; the code now gives `#9d8a15` and `#437e5b` (a dated
+  note in the design says so). Redraw them when the editor's slice is built.
+
 - **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's
   Typeface may also be a font file the venue uploads, so every screen draws the bar's own face. The
   owner asked for it "designed and built after this as their own item". To settle in its own design:
@@ -5948,6 +5957,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
   move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
+
+- **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN (left by A841 slice 1,
+  #1927, 2026-10-21). `mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
+  shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
+  also repeat the list of sharded packages. Do it on its own branch.
   [Detail](backlog/ci.md#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left
