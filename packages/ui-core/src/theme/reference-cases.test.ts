@@ -13,8 +13,9 @@ import { colourToken, THEME_COLOURS } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
 
 // Inputs that tell apart code shapes the hand-written cases do not; the expected values are the
-// reference implementation's output. A file:line:col label names where a search found the input in
-// an earlier revision of the theme source, not a line in the current one.
+// output of the prototype named under "The reference" in
+// docs/superpowers/plans/2026-10-20-a841-1-theme-derivation.md. A file:line:col label names where a
+// search found the input in an earlier revision of the theme source, not a line in the current one.
 
 interface ReferenceCase {
   readonly label: string;

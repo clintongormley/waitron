@@ -84,8 +84,8 @@ jobs:
       # apt step it would run is wasted wall-clock — same change and rationale as ci.yml's test-ui
       # shard, where the full receipt lives. This job's own real-Chromium mutation run below is the
       # proof for THIS workflow: if a library were missing, Stryker's first mutant would fail to launch
-      # the browser. Proven on dispatch run 32304224136, where this step took 1s and the then
-      # unsharded ui-core job ran the real-Chromium suite green. If a runner-image or Playwright bump
+      # the browser. Proven on dispatch run 32304224136, where this step took 1s and ui-core's
+      # real-Chromium mutation suite then ran green. If a runner-image or Playwright bump
       # drops one, apt-get it, or run `--with-deps`, as docs/developers/ci-and-gates.md, "Every apt
       # wait is bounded", requires.
       - run: pnpm --filter @waitron/ui-core exec playwright install chromium

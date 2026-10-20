@@ -154,6 +154,8 @@ purpose:
   (`packages/ui-core/stryker.config.json:9-16`) with no new exclude of source. Coverage holds
   98/98/98/95 (`vitest.config.ts:101`); the mutation floor is 90 (`stryker.config.json`
   `thresholds.break`), bitten by the nightly `mutation` job (`.github/workflows/mutation.yml:29-35`).
+  (2026-10-20, Task 11: the bar moved to `mutation-ui-core-aggregate`'s `--break 90` on the merged
+  score of four `mutation-ui-core` shards; `stryker.config.json` no longer sets `break`.)
 - **The derivation core imports no CSS and touches no DOM.** Only `waitron.ts` imports the two token
   files, as `?raw`, and no other theme source imports `waitron.ts` (Task 3 guards both). This does
   not make the server able to import the theme code as it stands: see "Left for slice 2".
@@ -229,6 +231,9 @@ All under `packages/ui-core/`.
 
 Nothing else in the repository changes except `docs/developers/design-system.md` (one sentence,
 Task 10) and, at land time, `docs/backlog.md` (a driver step).
+(2026-10-20: sharding ui-core's mutation run also changed `.github/workflows/mutation.yml`,
+`ci.yml`'s comment, `stryker.config.json`, `scripts/mutation-shard.mjs`, four `scripts/*.test.mjs`
+guards, `CLAUDE.md` and `docs/developers/ci-and-gates.md`.)
 
 ## The design document is corrected in this branch
 
@@ -977,5 +982,5 @@ files at 90 or above keep the package at 90 or above.
 - Every ratio-asserting test in `colors.test.ts` (one per group 1-18, run per mode where it was)
   keeps its name and asserts the same rules — by token name, comparison and bound — through its
   shared group (Task 4's census and names diff). The luminance cut-off moves from 0.03928 to
-  0.04045 with no `#rrggbb` changing ratio (Global constraints). Nothing else in the repository
-  changes an assertion.
+  0.04045 with no `#rrggbb` changing ratio (Global constraints). Outside ui-core, only the
+  mutation guards in `scripts/` change assertions (Task 11).

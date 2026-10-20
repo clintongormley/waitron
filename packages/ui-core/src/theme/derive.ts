@@ -252,7 +252,7 @@ function deriveAt(
 }
 
 export interface ModeResult {
-  /** The 25 theme tokens, Waitron's values wherever the derivation writes nothing. */
+  /** Every token in THEME_TOKENS, Waitron's values wherever the derivation writes nothing. */
   readonly tokens: Record<string, string>;
   /** The rules still failing on the settled colours. */
   readonly failures: readonly RuleResult[];
@@ -344,7 +344,7 @@ function settleAfresh(
   for (let round = 0; ; round++) {
     const { written, fails } = current;
     const failingNow = new Set(fails.map(({ rule }) => rule));
-    // Departs from the reference: a move never newly fails a rule naming no colour the owner picked.
+    // A move never newly fails a rule naming no colour the owner picked.
     const tried = (token: string, value: string) => {
       const next = settled({ ...work, [token]: value, ...hand });
       return next.fails.length < fails.length &&
@@ -371,7 +371,7 @@ function settleAfresh(
       }
       if (next !== null) break;
     }
-    // The 60th round's move is not settled, as in the reference.
+    // The 60th round's move is not settled.
     if (next === null || round === 59) break;
     current = next;
   }

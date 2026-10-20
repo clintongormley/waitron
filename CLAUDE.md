@@ -106,8 +106,8 @@ More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 `shared`, `fiscal` and `db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
 differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
 `db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
-name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which package bites where:
-[ci-and-gates.md](docs/developers/ci-and-gates.md).
+name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which
+package bites where: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
 [ci-and-gates.md](docs/developers/ci-and-gates.md) — read it before changing anything about CI, the

@@ -48,7 +48,7 @@ function fixFor(
   const namedBefore = Object.keys(hand).filter((other) => names(picked.failures, other).length);
   const cannotMove = (other: string) => !THEME_COLOUR_TOKENS.has(other) || other in hand;
   const brandAsPicked = choices.brandColor !== null && choices.brandFix[mode] !== true;
-  // Departs from the reference: a rule failing on the brand colour as picked is the brand's warning,
+  // A rule failing on the brand colour as picked is the brand's warning,
   // so it must not take away a hand-set colour's fix.
   const workedOut = ({ rule }: RuleResult, trial: Readonly<Record<string, string>>) =>
     !(rule.a in trial) &&
