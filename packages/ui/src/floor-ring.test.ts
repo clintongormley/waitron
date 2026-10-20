@@ -1,7 +1,13 @@
 import { LitElement, css, html } from "lit";
 import { afterEach, expect, it, test } from "vitest";
 import { commands } from "vitest/browser";
-import { type FloorRing, floorRingStyles, renderFloorRing } from "./floor-ring.js";
+import {
+  type FloorPulse,
+  type FloorRing,
+  floorRingStyles,
+  renderFloorPulse,
+  renderFloorRing,
+} from "./floor-ring.js";
 import { cleanup, mount } from "./test-helpers.js";
 import "./components/wt-icon.js";
 
@@ -12,7 +18,12 @@ declare module "vitest/browser" {
 }
 
 class FloorRingProbe extends LitElement {
-  static override properties = { ring: { attribute: false }, moving: { attribute: false } };
+  static override properties = {
+    ring: { attribute: false },
+    moving: { attribute: false },
+    pulse: { attribute: false },
+    onFill: { attribute: false },
+  };
   static override styles = [
     floorRingStyles,
     css`
@@ -27,15 +38,23 @@ class FloorRingProbe extends LitElement {
   ];
   declare ring: FloorRing | null;
   declare moving: boolean;
+  declare pulse: FloorPulse | null;
+  declare onFill: boolean | undefined;
 
   constructor() {
     super();
     this.ring = null;
     this.moving = true;
+    this.pulse = null;
+    this.onFill = undefined;
   }
 
   override render() {
-    return html`<div class="box">${renderFloorRing(this.ring, this.moving)}</div>`;
+    const ring =
+      this.onFill === undefined
+        ? renderFloorRing(this.ring, this.moving)
+        : renderFloorRing(this.ring, this.moving, { onFill: this.onFill });
+    return html`<div class="box">${ring}${renderFloorPulse(this.pulse, this.moving)}</div>`;
   }
 }
 customElements.define("floor-ring-probe", FloorRingProbe);
@@ -55,6 +74,37 @@ async function probe(
   el.moving = moving;
   await el.updateComplete;
   return el;
+}
+
+async function pulseProbe(
+  pulse: FloorPulse | null,
+  moving: boolean,
+  tokens: Record<string, string> = {},
+): Promise<FloorRingProbe> {
+  const el = (await mount("<floor-ring-probe></floor-ring-probe>")) as FloorRingProbe;
+  for (const [name, value] of Object.entries(tokens)) el.style.setProperty(name, value);
+  el.pulse = pulse;
+  el.moving = moving;
+  await el.updateComplete;
+  return el;
+}
+
+async function fillProbe(
+  ring: FloorRing,
+  onFill: boolean,
+  tokens: Record<string, string>,
+): Promise<FloorRingProbe> {
+  const el = (await mount("<floor-ring-probe></floor-ring-probe>")) as FloorRingProbe;
+  for (const [name, value] of Object.entries(tokens)) el.style.setProperty(name, value);
+  el.ring = ring;
+  el.moving = false;
+  el.onFill = onFill;
+  await el.updateComplete;
+  return el;
+}
+
+function pulseOf(el: FloorRingProbe): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>("[data-pulse]")!;
 }
 
 function ringOf(el: FloorRingProbe): HTMLElement {
@@ -214,4 +264,85 @@ test("registers the check icon", async () => {
   const path = icon.shadowRoot!.querySelector("svg path");
   expect(path).not.toBeNull();
   expect(path!.getAttribute("d")).not.toBe("");
+});
+
+test("draws no pulse for none, or while still", async () => {
+  expect((await pulseProbe(null, true)).shadowRoot!.querySelector("[data-pulse]")).toBeNull();
+  expect(
+    (await pulseProbe("forgotten", false)).shadowRoot!.querySelector("[data-pulse]"),
+  ).toBeNull();
+});
+
+it.each([
+  ["forgotten", "wt-pulse-fast"],
+  ["overdue", "wt-pulse-slow"],
+  ["fire", "wt-pulse-slow"],
+] as const)("draws the %s pulse, hidden from assistive technology, at %s", async (name, speed) => {
+  const pulse = pulseOf(await pulseProbe(name, true));
+  expect(pulse.dataset.pulse).toBe(name);
+  expect(pulse.getAttribute("aria-hidden")).toBe("true");
+  expect(pulse.classList.contains("pulse")).toBe(true);
+  expect(pulse.classList.contains(`ring-${name}`)).toBe(true);
+  expect(pulseClasses(pulse)).toEqual([speed]);
+});
+
+test("rings outside its box, after a gap in the surface colour", async () => {
+  const el = await pulseProbe("forgotten", true, {
+    "--wt-space-1": "8px",
+    "--wt-color-surface": "rgb(9, 9, 9)",
+    "--wt-color-danger": "rgb(1, 2, 3)",
+    "--wt-radius-md": "9px",
+  });
+  const pulse = pulseOf(el);
+  const [animation] = pulse.getAnimations();
+  animation!.pause();
+  animation!.currentTime = 0;
+  const style = getComputedStyle(pulse);
+  expect(style.boxShadow).toBe("rgb(9, 9, 9) 0px 0px 0px 4px, rgb(1, 2, 3) 0px 0px 0px 12px");
+  expect(style.boxShadow).not.toContain("inset");
+  expect(style.position).toBe("absolute");
+  expect(style.top).toBe("0px");
+  expect(style.left).toBe("0px");
+  expect(style.right).toBe("0px");
+  expect(style.bottom).toBe("0px");
+  expect(style.pointerEvents).toBe("none");
+  const box = getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>(".box")!);
+  expect(box.borderRadius).toBe("9px");
+  expect(style.borderRadius).toBe(box.borderRadius);
+});
+
+test("a pulse dims to its colour's dim token half-way", async () => {
+  const pulse = pulseOf(
+    await pulseProbe("fire", true, {
+      "--wt-color-warning": "rgb(4, 5, 6)",
+      "--wt-color-warning-pulse-dim": "rgb(6, 5, 4)",
+      "--wt-duration-pulse-slow": "2000ms",
+    }),
+  );
+  const [animation] = pulse.getAnimations();
+  animation!.pause();
+  animation!.currentTime = 1000;
+  expect(getComputedStyle(pulse).color).toBe("rgb(6, 5, 4)");
+  expect(getComputedStyle(pulse).opacity).toBe("1");
+});
+
+test("an outline on a fill has a surface line inside it", async () => {
+  const tokens = { "--wt-space-1": "8px", "--wt-color-surface": "rgb(9, 9, 9)" };
+  const overdue = getComputedStyle(ringOf(await fillProbe("overdue", true, tokens))).boxShadow;
+  expect(overdue.match(/inset/g)).toHaveLength(2);
+  expect(overdue.split(/, (?=rgb)/)[1]).toBe("rgb(9, 9, 9) 0px 0px 0px 9px inset");
+  expect(overdue).toContain(" 0px 0px 0px 8px inset");
+
+  const waiting = getComputedStyle(ringOf(await fillProbe("waiting", true, tokens))).boxShadow;
+  expect(waiting.match(/inset/g)).toHaveLength(2);
+  expect(waiting).toContain(" 0px 0px 0px 4px inset");
+  expect(waiting.split(/, (?=rgb)/)[1]).toBe("rgb(9, 9, 9) 0px 0px 0px 5px inset");
+
+  for (const name of ["overdue", "waiting"] as const) {
+    const ring = ringOf(await fillProbe(name, false, tokens));
+    expect(ring.classList.contains("on-fill"), name).toBe(false);
+    const plain = getComputedStyle(ring).boxShadow;
+    expect(plain.match(/inset/g), name).toHaveLength(1);
+    expect(plain, name).not.toContain("rgb(9, 9, 9)");
+  }
 });

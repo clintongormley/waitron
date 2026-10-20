@@ -6,8 +6,19 @@ export {
   floorTrayStyles,
   visuallyHiddenStyles,
 } from "./base-styles.js";
-export { floorChipStyles, renderFloorChips } from "./floor-chips.js";
-export { floorRingStyles, renderFloorRing, type FloorRing } from "./floor-ring.js";
+export {
+  FLOOR_CUE_ICONS,
+  floorChipStyles,
+  renderFloorChips,
+  type FloorCueIcon,
+} from "./floor-chips.js";
+export {
+  floorRingStyles,
+  renderFloorPulse,
+  renderFloorRing,
+  type FloorPulse,
+  type FloorRing,
+} from "./floor-ring.js";
 export { iconButtonStyles, trackIconTooltip } from "./icon-button.js";
 export {
   delegatesFocusShadowRootOptions,
