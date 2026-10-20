@@ -1,5 +1,6 @@
 import type { Mode, WaitronDefaults } from "./defaults.js";
 import { type ModeResult, settleMode } from "./derive.js";
+import { warningsFor } from "./warnings.js";
 import type { Corners, ThemeColour } from "./tokens.js";
 
 export type Background = "neutral" | "tinted";
@@ -58,7 +59,10 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
   return {
     light: light.tokens,
     dark: dark.tokens,
-    warnings: [],
+    warnings: [
+      ...warningsFor(defaults, normalised, "light", light),
+      ...warningsFor(defaults, normalised, "dark", dark),
+    ],
     tintStrength:
       normalised.background === "tinted"
         ? { light: light.tintStrength, dark: dark.tintStrength }
