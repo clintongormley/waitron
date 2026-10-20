@@ -11,7 +11,7 @@ import {
 } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
-import { helpText } from "../i18n/help-strings.js";
+import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { FormFactor } from "../layout.js";
 import {
@@ -25,6 +25,7 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 
@@ -622,6 +623,15 @@ export class TillShell extends LitElement {
     ></wt-help-switch>`;
   }
 
+  /** A menu option with its help badge beside it; `help` is undefined for an option without one. */
+  #withHelp(option: TemplateResult, help: HelpKey | undefined, label: string): TemplateResult {
+    return help === undefined
+      ? option
+      : html`<wt-menu-row help=${helpText(help)} help-label=${helpBadgeLabel(label)}
+          >${option}</wt-menu-row
+        >`;
+  }
+
   #transferText(): string {
     return this.transferCount === undefined
       ? ""
@@ -644,16 +654,21 @@ export class TillShell extends LitElement {
       cls: string | typeof nothing,
       type: string,
       label: string,
+      help?: HelpKey,
       opensTransfers = false,
     ): TemplateResult =>
-      html`<wt-button
-        class=${cls}
-        ?data-open-transfers=${opensTransfers}
-        variant=${variant}
-        align=${inMore ? "start" : nothing}
-        @click=${() => this.#emit(type)}
-        >${label}</wt-button
-      >`;
+      this.#withHelp(
+        html`<wt-button
+          class=${cls}
+          ?data-open-transfers=${opensTransfers}
+          variant=${variant}
+          align=${inMore ? "start" : nothing}
+          @click=${() => this.#emit(type)}
+          >${label}</wt-button
+        >`,
+        inMore ? help : undefined,
+        label,
+      );
     const affordance = (item: ShellAffordance & BarItem, type: string, label: string) =>
       here(item) && this.affordances.includes(item) ? button(item, type, label) : nothing;
     return html`${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
@@ -666,9 +681,9 @@ export class TillShell extends LitElement {
       t("schedule.open"),
     )}${
       here("profile") && this.canSwitchProfile
-        ? button("profile", "open-profile", t("profile.open"))
+        ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
         : nothing
-    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open")) : nothing}${
+    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment") : nothing}${
       here("transfers") && this.transferCount !== undefined
         ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
             >${this.#transferText()}</span
@@ -676,7 +691,13 @@ export class TillShell extends LitElement {
         : nothing
     }${
       here("transfers") && this.transferAvailable
-        ? button(nothing, "open-transfers", t("department_transfer.short"), true)
+        ? button(
+            nothing,
+            "open-transfers",
+            t("department_transfer.short"),
+            "help.more.transfers",
+            true,
+          )
         : nothing
     }`;
   }
@@ -759,14 +780,18 @@ export class TillShell extends LitElement {
               @click=${() => this.#emit("my-hours")}
               >${t("hours.mine")}</wt-button
             >
-            <wt-button
-              data-fix-hours
-              variant="secondary"
-              align="start"
-              .disabled=${this.hoursBusy}
-              @click=${() => this.#emit("fix-my-hours")}
-              >${t("attendance.fix_hours")}</wt-button
-            >
+            ${this.#withHelp(
+              html`<wt-button
+                data-fix-hours
+                variant="secondary"
+                align="start"
+                .disabled=${this.hoursBusy}
+                @click=${() => this.#emit("fix-my-hours")}
+                >${t("attendance.fix_hours")}</wt-button
+              >`,
+              "help.person.fix_hours",
+              t("attendance.fix_hours"),
+            )}
           `
         : nothing
     }${
@@ -810,17 +835,20 @@ export class TillShell extends LitElement {
           : nothing
       }
       ${this.#items(moved, true)}
-      ${this.formFactor === "till" ? html`<wt-button class="settings" variant="ghost" align="start" @click=${() => this.#emit("open-settings")}>${t("device_zones.settings")}</wt-button>` : nothing}
       ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
       ${this.chooserInMore ? this.#chooser("group") : nothing}
     </wt-row-actions>`;
   }
 
   #tillMenu(): TemplateResult {
-    const action = (cls: string, event: string, label: string) =>
-      html`<wt-button class=${cls} variant="ghost" align="start" @click=${() => this.#emit(event)}
-        >${label}</wt-button
-      >`;
+    const action = (cls: string, event: string, label: string, help?: HelpKey) =>
+      this.#withHelp(
+        html`<wt-button class=${cls} variant="ghost" align="start" @click=${() => this.#emit(event)}
+          >${label}</wt-button
+        >`,
+        help,
+        label,
+      );
     return html`<wt-row-actions
       icon="hamburger"
       align="end"
@@ -830,8 +858,9 @@ export class TillShell extends LitElement {
     >
       ${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}
       ${this.affordances.includes("schedule") ? action("schedule", "show-schedule", t("schedule.open")) : nothing}
-      ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open")) : nothing}
-      ${this.#chooser("group")} ${action("settings", "open-settings", t("device_zones.settings"))}
+      ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
+      ${this.#chooser("group")}
+      ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
       ${action("logout", "logout", t("shell.logout"))}
       ${
         this.testingKitchen && this.affordances.includes("station")

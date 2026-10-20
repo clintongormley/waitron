@@ -256,7 +256,11 @@ describe("till-shell", () => {
     await el.updateComplete;
     const profile = el.shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!;
     expect(profile.textContent).toContain(t("profile.open"));
-    expect(profile.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.equipment"));
+    const item = (option: Element) =>
+      option.parentElement?.localName === "wt-menu-row" ? option.parentElement : option;
+    expect(item(profile).nextElementSibling).toBe(
+      item(el.shadowRoot!.querySelector("wt-button.equipment")!),
+    );
     let fired = 0;
     el.addEventListener("open-profile", () => (fired += 1));
     profile.click();
@@ -908,6 +912,7 @@ describe("till-shell at phone width", () => {
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       const order = [...menu.children]
         .filter((c) => c.slot !== "badge")
+        .map((c) => (c.localName === "wt-menu-row" ? c.firstElementChild! : c))
         .map(
           (c) =>
             (c.getAttribute("data-test") ??
@@ -1507,6 +1512,7 @@ describe("till-shell above phone width", () => {
       const menu = menuOf(el)!;
       const order = [...menu.children]
         .filter((c) => c.slot !== "badge")
+        .map((c) => (c.localName === "wt-menu-row" ? c.firstElementChild! : c))
         .map(
           (c) =>
             (c.getAttribute("data-test") ??

@@ -101,3 +101,42 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+const clockState = {
+  personId: "ana",
+  locationId: "venue",
+  businessDay: "2026-10-14",
+  state: "working" as const,
+  activeLocationId: "venue",
+  lastEntryId: "entry",
+  firstClockIn: false,
+};
+
+describe.each(["light", "dark"] as const)("till-shell's menu badges a11y (%s theme)", (theme) => {
+  it.each([
+    ["till", 1280, "wt-row-actions.operator-menu"],
+    ["till", 1280, 'header [data-test="more-menu"]'],
+    ["handheld", 320, 'header [data-test="more-menu"]'],
+  ] as const)("%s at %ipx with %s open and help on", async (form, width, selector) => {
+    await page.viewport(width, 844);
+    setHelpMode(true);
+    const { el, host } = await mountWidget<TillShell>(
+      "till-shell",
+      { ...shells[form], transferAvailable: true, clockAvailable: true, clockState },
+      theme,
+    );
+    await frame();
+    await frame();
+    await el.updateComplete;
+    const menu = el.shadowRoot!.querySelector<HTMLElement & LitElement>(selector)!;
+    await menu.updateComplete;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+    const rows = [...menu.querySelectorAll<HTMLElement & LitElement>("wt-menu-row")];
+    expect(rows.length).toBeGreaterThan(0);
+    await Promise.all(rows.map((row) => row.updateComplete));
+    await expectNoA11yViolations(host);
+    await userEvent.keyboard("{Escape}");
+  });
+});
