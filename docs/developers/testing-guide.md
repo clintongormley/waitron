@@ -1502,6 +1502,16 @@ dialog's `wt-close` first, with their assertions unchanged; `wt-dialog` itself w
 owner's decision (2026-10-09, A452: fix the tests, not the dialog). Holding the Pair dialog's native close back 1.5 s, the old wait failed and the new
 one passed after 1617 ms. Nothing guards the rule across suites.
 
+The same gap catches a test that waits for the dialog to LOOK closed and then checks what the closed
+screen refuses. `wt-dialog`'s `open` turns false as soon as a close is granted, and the screen around
+it learns of the close only from `wt-close`. A927 measured it on
+`apps/till/src/widgets/finish-table-dialog.ts`: after `requestClose("cancel")` resolved, a scripted
+`.click()` on the confirm button still sent a choice, with no close reported yet; a real
+`userEvent.click` on the same button was refused, "element is not visible". Its test polled
+`wt-dialog.open` and then clicked; with 16 `yes` processes loading an 18-core Mac, that failed 3 of
+42 runs at the "nothing sent" check, and waiting for the screen's own close event first failed none
+of 90.
+
 ## A browser test sees a push through `pushState`, not `history.length`
 
 Chromium stops `history.length` at 50. Measured 2026-10-14 in A506-12's run-it review, in

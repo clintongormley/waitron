@@ -368,7 +368,11 @@ it("cannot dispatch a choice from a detached or closed dialog", async () => {
   expect(calls).toEqual([]);
   document.body.appendChild(el);
   await el.updateComplete;
+  const closed = new Promise<void>((resolve) =>
+    el.addEventListener("finish-table-close", () => resolve(), { once: true }),
+  );
   await click(el, "[data-close]");
+  await closed;
   await expect.poll(() => root(el).querySelector("wt-dialog")!.open).toBe(false);
   button(el).click();
   expect(calls).toEqual([]);
