@@ -1,3 +1,4 @@
+import { FISCAL_NONE_BACKUP_VERIFICATION } from "@waitron/fiscal-none";
 import {
   ADJUSTMENTS_CHANGE_SOURCES,
   ADJUSTMENTS_CLASSIFICATION,
@@ -299,11 +300,11 @@ describe("ALL_MODULES fiscal-none member", () => {
     expect(none?.fiscal?.id).toBe("none");
     expect(none?.tier).toBe("provision-only");
   });
-  it("declares no provisioning or vocabulary — it owns nothing beyond the slot", () => {
+  it("declares no provisioning or vocabulary and explicitly verifies its empty backup obligations", () => {
     const none = ALL_MODULES.find((m) => m.name === "fiscal-none");
     expect(none?.provisioning).toBeUndefined();
     expect(none?.vocabulary).toBeUndefined();
-    expect(none?.backup).toBeUndefined();
+    expect(none?.backup).toEqual({ verification: FISCAL_NONE_BACKUP_VERIFICATION });
   });
 });
 

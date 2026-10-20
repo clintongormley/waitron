@@ -174,3 +174,19 @@ it("admits the actual identity descriptor with all authenticator and ceremony ob
   expect(owner.data.tables).toContain("google_oidc_states");
   expect(owner.data.checks).toEqual(["data", "secret"]);
 });
+
+it.each(["scheduler", "bookings", "fiscal-none"])(
+  "registers the real %s verification owner without an activation hook",
+  (name) => {
+    const modules = ALL_MODULES.filter((module) => module.name === "core" || module.name === name);
+    expect(() => backupVerificationInventory(modules)).not.toThrow();
+    const inventory = backupVerificationInventory(modules);
+    expect(inventory.map((entry) => entry.module.name).sort()).toEqual(["core", name].sort());
+    const item = inventory.find((entry) => entry.module.name === name)!;
+    expect(item.verification.data.tables).toEqual(
+      (item.module.classification ?? []).map((row) => row.table),
+    );
+    expect(item.verification.effects).toEqual([]);
+    expect(item.module.backup?.restore).toBeUndefined();
+  },
+);

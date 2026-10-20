@@ -5204,6 +5204,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   ordinary archive callers retain their trailing-byte behavior.
   Private placement uses the existing file writers and real migrations, with a populated catalogue
   predecessor check; it validates captured backup settings and excludes the old destination file.
+  Scheduler and bookings compare captured state without actions; fiscal-none explicitly declares
+  its empty obligations. Complete generated owner coverage still waits for the payment check.
   Signed paper needs release-reviewed public roots; stored Cloud receipt references remain unsupported.
   Embedded build identity, the artifact verifier and remaining module checks, and
   target-bound recovery remain open. Cloud integration

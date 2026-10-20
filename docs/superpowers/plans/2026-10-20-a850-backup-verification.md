@@ -902,3 +902,35 @@ failed their intended assertions beside accepting controls in an installed dispo
 restoring the code passed all 16 new cases. The copy matched 8,553 tracked/candidate paths and was
 removed. An initial omission exposed a weak new excluded-file assertion; checking each filename
 separately caught the omission. No existing test assertion, migration or protected writer changed.
+
+### Task 21 small-owner checkpoint, 20 October 2026
+
+Scheduler and bookings now supply query-only checks that preserve every captured table value and
+refuse an owned-table presence inconsistent with an absent or applied source schema. Their real
+classifications supply their table lists. Fiscal-none explicitly declares database-only obligations
+with no owned tables, private inputs or effects; its empty journal and a real migrated table
+inventory are checked. All three are registered in composition without restore hooks.
+
+This is **partial Task 21**. The complete generated real inventory and independent removal of every
+real owner remain pending the payment contribution in Task 14. That task still follows the owner's
+Lane B-first ordering. No enabled-module filter or fallback supplies complete verification.
+
+Full scheduler coverage passed 120 tests, fiscal-none passed 20 and composition passed 100; all
+three package coverage bars passed. Four focused bookings Node suites passed 106 tests, and its
+new source's focused coverage passed all four measures with 23 cases. Five root suites passed
+5,295 tests; the four package type checks and scoped lint passed. Seven installed omissions caught
+row-preservation, source-schema and registration failures beside accepting controls; restored
+suites passed 26, 23, 4 and 34 cases respectively. The disposable installed copy matched 8,559
+candidate paths before removal. These checks do not establish full artifact or release acceptance.
+
+Two existing checks deliberately change under Task 21: scheduler's public-export list gains
+`SCHEDULER_BACKUP_VERIFICATION`; composition's fiscal-none check replaces absent `backup` with the
+exact `{ verification: FISCAL_NONE_BACKUP_VERIFICATION }` object. Other original expectations and
+protected fiscal assertions stay unchanged. The complete inventory acceptance remains open.
+
+The final four server consumer suites passed 228 tests and the protected fiscal pair passed 20
+unchanged. The first final formatting command flagged two new test fixtures and the ignored
+lockfile. The fixtures were formatted and the applicable source and explicit plan checks then
+passed. Their TypeScript parse trees and nontrivia token sequences matched before and after;
+a deliberately changed value differed in both comparisons. The installed control tree preceded
+that fixture formatting. The complete Task 21 inventory remains pending Task 14.

@@ -24,7 +24,7 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
-import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
+import { FISCAL_NONE_SLOT, FISCAL_NONE_BACKUP_VERIFICATION } from "@waitron/fiscal-none";
 import {
   FISCAL_ALERTS,
   FISCAL_CLASSIFICATION,
@@ -41,6 +41,7 @@ import {
 } from "@waitron/fiscal-verifactu";
 import {
   BOOKINGS_CLASSIFICATION,
+  BOOKINGS_BACKUP_VERIFICATION,
   BOOKINGS_CHANGE_SOURCES,
   BOOKINGS_FLOOR_ANNOTATIONS,
   BOOKINGS_TABLE_REMOVAL,
@@ -61,7 +62,7 @@ import {
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
 } from "@waitron/payments";
-import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
+import { SCHEDULER_CLASSIFICATION, SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
 import {
   STAFFING_BACKUP_VERIFICATION,
   STAFFING_CHANGE_SOURCES,
@@ -255,6 +256,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../scheduler/drizzle",
     },
     classification: SCHEDULER_CLASSIFICATION,
+    backup: { verification: SCHEDULER_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
@@ -308,6 +310,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-none/drizzle",
     },
     fiscal: FISCAL_NONE_SLOT,
+    backup: { verification: FISCAL_NONE_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
@@ -321,6 +324,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../bookings/drizzle",
     },
     classification: BOOKINGS_CLASSIFICATION,
+    backup: { verification: BOOKINGS_BACKUP_VERIFICATION },
     changes: BOOKINGS_CHANGE_SOURCES,
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,

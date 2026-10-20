@@ -9,3 +9,4 @@ export { BOOKINGS_PERMISSIONS } from "./permissions.js";
 export { BOOKINGS_ROUTES } from "./routes.js";
 export { BOOKINGS_TABLE_REMOVAL } from "./table-removal.js";
 export { BOOKINGS_CHANGE_SOURCES } from "./classification.js";
+export { BOOKINGS_BACKUP_VERIFICATION } from "./backup-verification.js";

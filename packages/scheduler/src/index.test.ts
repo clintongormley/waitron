@@ -7,6 +7,7 @@ describe("the public surface", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
         "DEFAULTS",
+        "SCHEDULER_BACKUP_VERIFICATION",
         "SCHEDULER_CLASSIFICATION",
         "SCHEDULER_MIGRATIONS",
         "runDue",
