@@ -1538,8 +1538,17 @@ received or no longer lists it. Pinned by `apps/till/src/till-app-handheld-pay.t
 open-time read under "till-app: paying a table from a handheld" and "a presented bill on a
 handheld", the 5-second read under "till-app: a card the reader has not answered, on a handheld".
 Neither read counts as activity for the idle logout: the till notes activity only from a
-`pointerdown` or `keydown` on the app (`#onInteraction`, `apps/till/src/till-app.ts`). That is
-read, not tested: no case in that file checks the idle timer.
+`pointerdown` or `keydown` on the app (`#onInteraction`, `apps/till/src/till-app.ts`). Pinned by
+two cases under "the sheet's automatic re-reads never keep the till signed in" in the same file:
+"the 5-second re-reads of a pending card run on, and the till still logs out on time" and "the
+equipment read when the sheet opens does not move the logout past the tap that opened it". Each
+failed when its read was made to call `#onInteraction` (2026-10-20). Neither read is passive on
+the server: both GETs (`/api/working-orders/:id/payments`, `/api/device/equipment`) record the
+device's last-seen time when a minute has passed (`requireSession`, `apps/server/src/till-session.ts`;
+`readDeviceProof`, `apps/server/src/device-session.ts`), which is all `passive: true` skips. Nothing on the server
+ends a till session for want of requests — a session row holds only `opened_at` and `ended_at`, and
+every writer of `ended_at` is a logout, a device or profile change, or a credential change (read
+2026-10-20, not tested) — so neither read keeps a session open there.
 
 
 ## Public secure-connection repair

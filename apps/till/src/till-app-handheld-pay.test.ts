@@ -2689,6 +2689,100 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     expect(getBillBalance.mock.calls.length).toBe(before + 1);
   });
+
+  describe("the sheet's automatic re-reads never keep the till signed in", () => {
+    const IDLE_SECONDS = 30;
+    const signedIn = (el: TillApp) => (el as unknown as { operatorName: string }).operatorName;
+
+    async function settle(el: TillApp): Promise<void> {
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+      }
+    }
+
+    it("the 5-second re-reads of a pending card run on, and the till still logs out on time", async () => {
+      const getBillBalance = vi.fn(async () => balanceOf());
+      const { el } = await mountApp(
+        onPhone(
+          {
+            getBillBalance,
+            previewBillPayment: vi.fn().mockResolvedValue(share),
+            takeBillPayment: vi.fn().mockResolvedValue({
+              ...takenOf({ ...own, state: "pending" }, { reserved: "40.00", outstanding: "80.00" }),
+              outcome: "timeout",
+            }),
+          },
+          { inactivityTimeoutSeconds: IDLE_SECONDS },
+        ),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      await press(el, 'input[name="way"][value="share"]');
+      await type(el, "people", "3");
+      await press(el, 'input[name="method"][value="card"]');
+      await press(el, "[data-pay-continue]");
+      vi.useFakeTimers({
+        toFake: ["setInterval", "clearInterval", "Date", "setTimeout", "clearTimeout"],
+      });
+      emit(el, "pointerdown");
+      inDialog(el, "[data-pay-confirm]")!.click();
+      await settle(el);
+      await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+      getBillBalance.mockImplementation(async () => ownIs("pending"));
+      const before = getBillBalance.mock.calls.length;
+
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(PENDING_REREAD_MS - 1);
+        await settle(el);
+        await vi.advanceTimersByTimeAsync(1);
+        await settle(el);
+      }
+
+      expect(getBillBalance.mock.calls.length - before).toBe(5);
+      expect(signedIn(el)).not.toBe("");
+      expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(PENDING_REREAD_MS);
+      await settle(el);
+
+      expect(signedIn(el)).toBe("");
+      expect(dialog(el)).toBeNull();
+    });
+
+    it("the equipment read when the sheet opens does not move the logout past the tap that opened it", async () => {
+      let answer!: (equipment: DeviceEquipment) => void;
+      const overrides = onPhone({}, { inactivityTimeoutSeconds: IDLE_SECONDS });
+      const { el } = await mountApp(overrides);
+      const order = await openPhoneTable(el);
+      overrides.getDeviceEquipment.mockImplementationOnce(
+        () => new Promise<DeviceEquipment>((resolve) => (answer = resolve)),
+      );
+      const readsBefore = overrides.getDeviceEquipment.mock.calls.length;
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+
+      const cobrar = inOrder(order, "[data-pay-sheet]")!;
+      emit(cobrar, "pointerdown");
+      cobrar.click();
+      await settle(el);
+      expect(overrides.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      answer(equipmentWith(LECTOR_2));
+      await settle(el);
+
+      expect(dialog(el)).not.toBeNull();
+      expect(await rowSummary(el)).toContain("Lector 2");
+
+      await vi.advanceTimersByTimeAsync(IDLE_SECONDS * 1000 - 10_001);
+      await settle(el);
+      expect(signedIn(el)).not.toBe("");
+
+      await vi.advanceTimersByTimeAsync(1);
+      await settle(el);
+      expect(signedIn(el)).toBe("");
+      expect(dialog(el)).toBeNull();
+    });
+  });
 });
 
 describe("the paid screen on a handheld", () => {
