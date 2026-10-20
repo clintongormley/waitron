@@ -2921,6 +2921,8 @@ export class TillApp extends LitElement {
   @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
   /** Why the pay sheet's own pick of a field was not saved, shown under that field. */
   @state() private payEquipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  /** Each field's latest sheet pick; only that pick's failure is shown under the field. */
+  #payEquipmentPicks: Record<PayEquipmentRole, number> = { card_terminal: 0, receipt: 0 };
   /** A refusal is shown only in the dialog opening it was picked in. */
   #equipmentOpenings = 0;
   /** When a read of the equipment and a choice were out at once, either answer may be the older, so
@@ -9201,7 +9203,7 @@ export class TillApp extends LitElement {
   #onEquipmentChange(
     event: CustomEvent<EquipmentChange>,
     nfc?: { session: number; name: string },
-    sheet?: { role: PayEquipmentRole; payId: number },
+    sheet?: { role: PayEquipmentRole; payId: number; pick: number },
   ): Promise<void> {
     const opening = this.#equipmentOpenings;
     this.equipmentWaiting++;
@@ -9217,7 +9219,7 @@ export class TillApp extends LitElement {
     change: EquipmentChange,
     opening: number,
     nfc?: { session: number; name: string },
-    sheet?: { role: PayEquipmentRole; payId: number },
+    sheet?: { role: PayEquipmentRole; payId: number; pick: number },
   ): Promise<void> {
     const current = () =>
       nfc === undefined ||
@@ -9295,7 +9297,11 @@ export class TillApp extends LitElement {
           message: codeMessage(typeof code === "string" ? code : "server.internal"),
           tone: "error",
         };
-      if (sheet !== undefined && sheet.payId === this.billPaying?.id)
+      if (
+        sheet !== undefined &&
+        sheet.payId === this.billPaying?.id &&
+        sheet.pick === this.#payEquipmentPicks[sheet.role]
+      )
         this.payEquipmentErrors = {
           ...this.payEquipmentErrors,
           [sheet.role]:
@@ -9471,7 +9477,7 @@ export class TillApp extends LitElement {
         detail: { role, selection: { id }, via: "list", takeOver },
       }),
       undefined,
-      { role, payId: this.billPaying!.id },
+      { role, payId: this.billPaying!.id, pick: ++this.#payEquipmentPicks[role] },
     );
   }
 

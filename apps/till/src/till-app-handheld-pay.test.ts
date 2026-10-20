@@ -596,12 +596,16 @@ describe("till-app: a pick from the sheet", () => {
 describe("till-app: a pick from the sheet that fails", () => {
   const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
   const COCINA = equipmentItem("p2", "Cocina");
+  const LECTOR_4 = equipmentItem("c45f83b1-3333-4333-8333-333333333333", "Lector 4", {
+    portable: true,
+    provider: "sumup",
+  });
 
   function equipmentOf(reader: EquipmentItem): DeviceEquipment {
     return {
       roles: [
         roleOf("receipt", BARRA, [BARRA, COCINA]),
-        roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3]),
+        roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3, LECTOR_4]),
       ],
     };
   }
@@ -689,16 +693,40 @@ describe("till-app: a pick from the sheet that fails", () => {
     const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(LECTOR_2));
     const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
     const readsBefore = getDeviceEquipment.mock.calls.length;
-    getDeviceEquipment.mockResolvedValue(equipmentOf(LECTOR_3));
+    getDeviceEquipment.mockResolvedValue(equipmentOf(LECTOR_4));
 
     await pick(el, "cardReaderId", "Lector 3");
     await flush(el);
 
     expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
     const reader = await field(el, "cardReaderId");
-    expect(reader.value).toBe(READER_ID);
+    expect(reader.value).toBe(LECTOR_4.id);
     expect(reader.error).toBe(t("pay_equipment.not_saved"));
     expect(continueButton(el).disabled).toBe(false);
+  });
+
+  it("an earlier pick's refusal is not shown once a later pick of that field has saved", async () => {
+    const answers: Array<{ ok: (equipment: DeviceEquipment) => void; fail: (e: unknown) => void }> =
+      [];
+    const setDeviceEquipment = vi.fn(
+      () =>
+        new Promise<DeviceEquipment>((resolve, reject) => {
+          answers.push({ ok: resolve, fail: reject });
+        }),
+    );
+    const el = await phoneSheet({ setDeviceEquipment });
+
+    await pick(el, "receiptPrinterId", "Cocina");
+    await pick(el, "receiptPrinterId", "Barra");
+    answers[0]!.fail({ code: "device.binding_invalid", status: 400 });
+    await flush(el);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+    answers[1]!.ok(equipmentOf(LECTOR_2));
+    await flush(el);
+
+    const printer = await field(el, "receiptPrinterId");
+    expect(printer.value).toBe("p1");
+    expect(printer.error).toBe("");
   });
 
   it("the next pick of that field clears its message", async () => {
