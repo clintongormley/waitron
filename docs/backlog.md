@@ -3146,11 +3146,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A841. A theme editor (owner, 2026-10-17).** Lets the owner change how Waitron looks by setting
   the `--wt-*` CSS variables it already reads, and upload the venue's own logo (owner, 2026-10-20),
-  which takes Waitron's place in the dashboard banner and the till's top bar. Design:
+  which takes Waitron's place in the dashboard banner and the till's top bar; a text-size slider and
+  text set by hand under Advanced, which is folded into sections (owner, Q4, 2026-10-20); and saved
+  custom themes, one in use everywhere at a time (owner, 2026-10-20). Design:
   [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
-  Answered: Q1, Q2, Q3 (one look for the whole business) and the extra question (colours set by
-  hand are kept). Next: the owner's answers to Q4 (text size), Q5 (does the logo also print on
-  receipts) and Q6 (what happens to Waitron's own logo), then a plan.
+  Answered: Q1, Q2, Q3 (one look for the whole business), Q4 (a slider, 100% to 130%) and the extra
+  question (colours set by hand are kept). Next: the owner's answers to Q5 (does the logo also print
+  on receipts), Q6 (what happens to Waitron's own logo), Q7 (system typefaces only, or uploaded
+  fonts too) and Q8 (a new name for the account menu's "Theme"), then a plan.
 
 - **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
   `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file
