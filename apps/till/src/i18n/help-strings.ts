@@ -8,6 +8,14 @@ export const helpEn = {
   "help.guide_link": "Read more in the guide",
   "help.guide_title": "Guide",
   "help.guide_close": "Close",
+  "help.counter.park":
+    "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Pick the order up again from Parked orders, on this till or any other that serves its zone.",
+  "help.counter.parked_orders":
+    "Orders still open and not fully paid, in the zones this device serves. Retrieve puts one in the basket to finish it or take payment. Discard deletes it at once, but not while it holds money from a payment, or while a payment or refund is going through.",
+  "help.counter.waiting_orders":
+    "Counter orders in the zones this device serves that are not finished: sent but not paid, handed over but not paid, or paid but not yet handed over. Pay takes payment; Hand over, where it shows, records that the customer has taken the order.",
+  "help.counter.guests":
+    "Leave it empty for no guests line. With a number, the receipt shows the guests and what each person pays.",
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
   "help.more.profile":
@@ -32,6 +40,14 @@ export const helpEs: Record<HelpKey, string> = {
   "help.guide_link": "Más información en la guía",
   "help.guide_title": "Guía",
   "help.guide_close": "Cerrar",
+  "help.counter.park":
+    "Guarda este pedido sin cobrarlo y vacía la cesta para el siguiente cliente. El nombre es opcional. Recupéralo desde Pedidos aparcados, en esta caja o en cualquier otra que atienda su zona.",
+  "help.counter.parked_orders":
+    "Pedidos todavía abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo. Descartar lo borra en el acto, pero no si tiene dinero de un pago, ni mientras hay un pago o una devolución en curso.",
+  "help.counter.waiting_orders":
+    "Pedidos de barra de las zonas que atiende este dispositivo que no están terminados: enviados sin cobrar, entregados sin cobrar, o cobrados sin entregar. Cobrar cobra el pedido; Entregar, donde aparece, anota que el cliente se lo ha llevado.",
+  "help.counter.guests":
+    "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.more.profile":
