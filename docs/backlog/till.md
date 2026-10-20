@@ -1489,7 +1489,7 @@ whether those reads should follow today's map once a group is left.
 ### `timingBand` counts only dishes sent (A757 Q17, owner 2026-10-17; built by A757 slice 3)
 
 A held dish does not turn a card's outline, its Forgotten badge, the map's dot or the order screen's
-pin, however long it is held; firing restarts its age.
+pin, however long it is held; sending or releasing it restarts its age.
 
 ### Counter cleanup choices (A738, owner amendments 2026-10-16 to 2026-10-19)
 
