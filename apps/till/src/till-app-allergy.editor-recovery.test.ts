@@ -211,8 +211,8 @@ it.each(["group", "held-line"] as const)(
   "ignores a late %s Fire answer after changing parties",
   async (kind) => {
     let finish!: (value: { revision: number }) => void;
-    const write = vi.fn(
-      (..._args: unknown[]) =>
+    const write = vi.fn<(...args: unknown[]) => Promise<{ revision: number }>>(
+      () =>
         new Promise<{ revision: number }>((resolve) => {
           finish = resolve;
         }),
