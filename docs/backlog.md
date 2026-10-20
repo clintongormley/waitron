@@ -5193,8 +5193,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **A850. Verify backup data without fiscal activation.** Implement the
   [Waitron plan](superpowers/plans/2026-10-20-a850-backup-verification.md) for the
   [approved Cloud contract](https://github.com/waitron-io/waitron-cloud/blob/f8e243f4b6fa232756a64c7113f05e3bf835158b/docs/superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md).
-  The plan's declaration, query-only reader and inventory foundations are implemented; the artifact
-  verifier, module checks and target-bound recovery remain open. Cloud integration
+  The plan's declaration, query-only reader, inventory and strict private protocol foundations are
+  implemented. Embedded build identity, the artifact verifier, module checks and target-bound
+  recovery remain open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.
 

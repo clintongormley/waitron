@@ -371,10 +371,10 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `apps/server/src/backup-verification-protocol.ts`, `apps/server/src/backup-verification-protocol.test.ts`, `apps/server/src/backup-verification-target.ts`, `apps/server/src/backup-verification-target.test.ts`.
 **Consumes:** Tasks 1–3 and actual migration assets. **Produces:** all private protocol types/readers/digest functions and `buildBackupVerificationTarget` above. Task 5 connects current build provenance.
 
-- [ ] RED `binds every request field independently`, `module ordering leaves digest stable`, `rejects duplicate JSON keys unknown nested keys noncanonical integers and oversized input`, `rejects incomplete or forged passed output`, `target changes with SQL package version or policy bytes`. Assert null measurement and missing module cannot pass; no secret/free-form/path result fields accepted.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-protocol.test.ts src/backup-verification-target.test.ts`; expect missing exports then binding/shape assertions red.
-- [ ] Implement bounded readers and fixed canonical arrays. Publish deterministic literal vectors for lane D; no request-provided source revision. GREEN same command, mutating each field separately.
-- [ ] Commit `git commit -s -m "feat(server): bind private backup verification protocol"`.
+- [x] RED `binds every request field independently`, `module ordering leaves digest stable`, `rejects duplicate JSON keys unknown nested keys noncanonical integers and oversized input`, `rejects incomplete or forged passed output`, `target changes with SQL package version or policy bytes`. Assert null measurement and missing module cannot pass; no secret/free-form/path result fields accepted.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/backup-verification-protocol.test.ts src/backup-verification-target.test.ts`; expect missing exports then binding/shape assertions red.
+- [x] Implement bounded readers and fixed canonical arrays. Publish deterministic literal vectors for lane D; no request-provided source revision. GREEN same command, mutating each field separately.
+- [x] Commit `git commit -s -m "feat(server): bind private backup verification protocol"`.
 
 ### Task 5: Embed build identity and expose a boot-free distribution
 
@@ -693,3 +693,47 @@ The function cases assert the exact authorization message as well as the code.
 Task 4 is next. Artifact placement, module-owned checks, installed independent guard-removal
 controls, qualified v2 recovery, branch review, current-head CI and joint release acceptance remain
 open. No source-level unit result in this checkpoint establishes a successful archive verification.
+
+### Task 4 execution and private protocol vector, 20 October 2026
+
+Task 4 adds bounded request/result readers, duplicate-key and integer-spelling admission,
+request binding, complete target-module coverage for passed output, and a target builder over
+resolved migration assets and declared package versions. Build provenance and the actual package
+version embedding remain Task 5. Owner checks, artifact verification and recovery integration
+remain open; these readers do not qualify a backup.
+
+The complete literal request is `VECTOR` in
+[`backup-verification-protocol.test.ts`](../../../apps/server/src/backup-verification-protocol.test.ts).
+Its independently calculated SHA-256 values are:
+
+| Value       | Literal digest                                                     |
+| ----------- | ------------------------------------------------------------------ |
+| Composition | `b4856410cd1eb08bbbbdca82780768cb4ede5c00c7a8bb3a1c17589ad0c4a7a5` |
+| Migrations  | `185384d2b168dcc542e78692a3649d220c8841ae26bab6cf93c7f1f997ac06c0` |
+| Policy      | `bd085f106c2acf118ed5d22b2b32b6104ab5d0546f6146a750c3e210025c15d5` |
+| Target      | `e7a8e1dc880ec7f846a6f22750dc610ea8159d02393b08d5c4bb08ed181a9e76` |
+| Request     | `ecac239bf44b948246432671c1f896219d079c9a3a11b1e3a96d7bd6240e786a` |
+
+For code-unit-sorted modules `m`, the composition subdigest hashes
+`m.map(x => [x.name, x.packageVersion, sortedRequiresPairs])`; the migration subdigest hashes
+`m.map(x => [x.name, x.schema, x.migrationTable, x.migrationDigest])`; the policy subdigest hashes
+`m.map(x => [x.name, x.semanticsVersion, x.policyDigest])`. Each module migration digest hashes
+`[1, sha256(rawJournalBytes), sortedRelativeSqlNameAndSha256Pairs]`, including SQL files outside the
+journal. The raw journal bytes bind its migration order. The target digest hashes
+`[1, [release, revision, fingerprint], completeSortedModuleArrays, compositionDigest,
+migrationDigest, policyDigest]`; each complete module array is
+`[name, packageVersion, sortedRequiresPairs, schema, migrationTable, migrationDigest,
+semanticsVersion, policyDigest]`. Array digests hash UTF-8 JSON; file digests hash their original bytes. Both use lowercase hexadecimal SHA-256.
+Dependency ranges preserve their literal printable spaces; opaque IDs reject whitespace.
+
+The result reader checks unique fixed check codes, aggregate status and complete module coverage.
+The host's contribution validator must additionally match each owner's declared check set; the
+wire target carries its policy digest, not the declaration itself. Cloud must still validate the
+actual child/image/claim and confirmed cleanup. A parsed result alone supplies none of those facts.
+
+Independent installed controls removed duplicate-key admission, request-digest comparison, passed
+module coverage, target-digest comparison, SQL-byte hashing and public-evidence policy binding one
+at a time. Each selected denial test failed an assertion beside a passing legitimate control;
+restoring the candidate returned both complete files to passing. The later semver correction
+changes only dependency-range text admission; those six guarded statements retain their tested
+shape. No existing test check or protected fiscal file changed.
