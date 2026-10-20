@@ -2111,8 +2111,12 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
   });
 
   /** A share of three sent from the phone and answered that the card is still at the reader, with
-   * the interval clock faked from just before the send. */
-  async function pendingShare(getBillBalance = vi.fn(async () => ownIs("pending"))) {
+   * the interval clock faked from just before the send — and the timeout clock too, with
+   * `timeouts`. */
+  async function pendingShare(
+    getBillBalance = vi.fn(async () => ownIs("pending")),
+    timeouts = false,
+  ) {
     getBillBalance.mockImplementation(async () => balanceOf());
     const { el } = await mountApp(
       onPhone({
@@ -2130,13 +2134,28 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     await type(el, "people", "3");
     await press(el, 'input[name="method"][value="card"]');
     await press(el, "[data-pay-continue]");
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    await press(el, "[data-pay-confirm]");
-    await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
-    await flush(el);
+    if (timeouts) {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+      inDialog(el, "[data-pay-confirm]")!.click();
+      await settleFaked(el);
+    } else {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      await press(el, "[data-pay-confirm]");
+      await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+      await flush(el);
+    }
+    expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
     getBillBalance.mockImplementation(async () => ownIs("pending"));
     const before = getBillBalance.mock.calls.length;
     return { el, order, reads: () => getBillBalance.mock.calls.length - before };
+  }
+
+  /** Lets the app's work run while the timeout clock is faked, where `flush` would wait forever. */
+  async function settleFaked(el: TillApp): Promise<void> {
+    for (let i = 0; i < 12; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    }
   }
 
   async function tick(el: TillApp, times = 1): Promise<void> {
@@ -2172,6 +2191,35 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     await tick(el, 3);
 
     expect(reads()).toBe(1);
+  });
+
+  it("a read that never answers is given up at the request limit, keeping the warning, and a later tick reads again", async () => {
+    const getBillBalance = vi.fn(async () => ownIs("pending"));
+    const { el, reads } = await pendingShare(getBillBalance, true);
+    vi.mocked(api.getBillBalance).mockImplementationOnce(
+      (_id, options) =>
+        new Promise<BillBalance>((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(new TypeError("Timed out")));
+        }),
+    );
+    const at = async (ms: number) => {
+      await vi.advanceTimersByTimeAsync(ms);
+      await settleFaked(el);
+    };
+
+    await at(PENDING_REREAD_MS);
+    expect(reads()).toBe(1);
+    await at(TABLE_REQUEST_LIMIT_MS - 1);
+    expect(reads()).toBe(1);
+    await at(1);
+    expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
+    expect(dialog(el)!.refusal).toBeNull();
+    getBillBalance.mockResolvedValue(ownIs("received"));
+    await at(PENDING_REREAD_MS);
+
+    expect(reads()).toBe(2);
+    expect(dialog(el)!.balance!.payments[0]!.state).toBe("received");
+    expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
   });
 
   it("a failed read changes nothing shown, and the next tick reads again", async () => {

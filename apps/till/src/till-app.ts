@@ -16314,8 +16314,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * One timed read. Passive: it never counts as activity. A failed read changes nothing and the
-   * next tick tries again; an answer older than the balance the dialog shows, or sent before the
+   * One timed read. Passive: it never counts as activity. A failed read, or one unanswered at the
+   * request limit, changes nothing and a later tick tries again; an answer older than the balance the dialog shows, or sent before the
    * bill's last send ended, is dropped. A tick is out until every outcome it found is shown. Each
    * watched payment no longer pending stops being watched once its outcome is shown; the reads
    * stop when none is left.
@@ -16338,11 +16338,14 @@ export class TillApp extends LitElement {
 
   async #pendingRead(reread: PendingReread, billId: string): Promise<void> {
     const sentAt = ++this.#payTicks;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let balance: BillBalance;
     try {
-      balance = await this.api.getBillBalance(billId);
+      balance = await this.api.getBillBalance(billId, { signal: limit.signal });
     } catch {
       return;
+    } finally {
+      limit.done();
     }
     if (
       this.#pendingReread !== reread ||
