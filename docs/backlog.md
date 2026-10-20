@@ -3511,9 +3511,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#the-receipts-preview-redraws-the-whole-receipt-once-per-highlighted-part)
 
 - **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
-  A841's design adds the venue's logo as a second image only the app keeps from deletion (its
-  section 8a). Receipt contact length limits are still copied into the dashboard form. A493
-  removes the live venue-receipt transfer entry; the import follow-up about that entry is retired.
+  A841's design adds the venue's logo as a second kind of logo use that only the app keeps from
+  deletion (its section 8a). Receipt contact length limits are still copied into the dashboard
+  form. A493 removes the live venue-receipt transfer entry; the import follow-up about that entry
+  is retired.
   [Detail](backlog/printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
 
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**

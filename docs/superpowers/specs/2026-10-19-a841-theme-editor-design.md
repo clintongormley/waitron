@@ -57,7 +57,7 @@ Non-goals (not in A841; each could be its own item later)
 - Colour on receipts, kitchen tickets and anything else a printer prints (section 8). Whether the
   venue's logo also prints on receipts is Q5 (section 8a).
 - The server's own pages: the trust page, the user guide pages, the recovery page. Their colours
-  and their logo stay Waitron's.
+  stay Waitron's, and none of them shows the venue's logo.
 - Setup (the first-run wizard): it runs before the venue has a theme.
 - Colours that carry a meaning: red for danger, green for success, amber for warning, the table
   states on the floor plan, prep-station colours, calendar colours, Google's sign-in button, and the
@@ -75,7 +75,9 @@ Anti-goals (things this must never do)
 - Delay or block the till's start-up or a sale: fetching the theme never holds the page (section 12).
 - Become a second, hand-kept copy of Waitron's default colours: a venue's theme stores only the
   owner's choices — the logo, the three main choices, any fix they took and any colour they set by
-  hand — and everything else is worked out from the current release's defaults (section 11).
+  hand — and everything else is worked out from the current release's defaults (section 11). (With
+  Q5 A it also keeps the logo's printed dots, which are drawn from the logo, not copied from
+  Waitron; section 8a.)
 
 ## 3. What Waitron does today (receipts)
 
@@ -175,21 +177,23 @@ dashboard banner shows Waitron's own logo, picking its light or dark drawing fro
   (`dashboard-app.ts:1562`), whose legal name comes from the unauthenticated locales read
   (`dashboard-app.ts:1079-1084`). Below 48rem the lockup and the trailing controls share the first
   row and the legal name moves to a second (`dashboard-app.ts:737-773`).
-- **The till draws no logo image on its own screens.** Its top bar starts with the word "Waitron"
-  in bold text, "a fixed name, never translated UI copy" (`apps/till/src/widgets/till-shell.ts:29-30,
-  123-127,740`), left out at phone width and whenever the bar is short of room (`till-shell.ts:340-341,
-  740`); the kiosk and kitchen-display modes draw no bar (`till-shell.ts:734-737`). The sign-in screen
-  shows the device's name, or "Choose your name", above the list of people, and no logo
-  (`apps/till/src/screens/till-lock-screen.ts:310-370`, `apps/till/src/i18n/strings.ts:423`).
-  Pictures 06 and 11 drew "Bar Lucía" in the bar's first place; 06 is redrawn with the word
-  (section 18).
+- **The till draws no logo image on its own screens.** Its top bar starts with the word "Waitron" in
+  bold text, "a fixed name, never translated UI copy" (`apps/till/src/widgets/till-shell.ts:29-30,
+  123-127,740`), left out at phone width and whenever the bar is short of room
+  (`till-shell.ts:340-341, 740`); the kiosk and kitchen-display modes draw no bar
+  (`till-shell.ts:734-737`). The sign-in screen shows the device's name, or "Choose your name",
+  above the list of people, and no logo (`apps/till/src/screens/till-lock-screen.ts:310-370`,
+  `apps/till/src/i18n/strings.ts:423`). Pictures 06 and 11 drew "Bar Lucía" in the bar's first
+  place; 06 is redrawn with the word (section 18).
 - **The trust page** inlines a copy of Waitron's lockup, which "must stay one self-contained string
-  with nothing to fetch" (`packages/ui/brand/README.md:40-41`; `apps/server/src/trust-page-logo.ts:12`,
-  `trust-page.ts:120-124`). Setup draws the lockup inline too (`README.md:49`).
+  with nothing to fetch" (`packages/ui/brand/README.md:40-41`;
+  `apps/server/src/trust-page-logo.ts:12`, `trust-page.ts:120-124`). Setup draws the lockup inline
+  too (`README.md:49`).
 - **The favicon and the installed till's icon** are Waitron's files in `packages/ui/brand/public/`,
-  served by all three apps (`README.md:16-25`). The till's manifest names `/icon-192.png` and
-  `/icon-512.png` and is written when the app is built (`apps/till/src/manifest.ts:3-17`,
-  `apps/till/vite.config.ts:14-20`).
+  served by all three apps (`README.md:16-25`; `ls packages/ui/brand/public` printed
+  `apple-touch-icon.png favicon.ico favicon.svg icon-192.png icon-512.png`). The till's manifest
+  names `/icon-192.png` and `/icon-512.png` and is written when the app is built
+  (`apps/till/src/manifest.ts:3-17`, `apps/till/vite.config.ts:14-20`).
 - **Receipt logos belong to departments.** A department's Receipt tab
   (`packages/venue-service/src/dashboard/department-settings.ts:41`) holds a logo picked from the
   image library through `dashboard-image-upload` in its `logo` mode, which draws the box at the size
@@ -233,7 +237,8 @@ dashboard banner shows Waitron's own logo, picking its light or dark drawing fro
   (`packages/media/src/presentation.ts:49-66`). Listing, uploading and deleting need
   `image.manage` (`routes.ts:85-91`), granted from manager up (`packages/media/src/module.ts:35`).
   An image in use is refused deletion (`packages/media/src/images.ts:399-415`); the uses counted are
-  products, sections, menu versions and department receipt logos, in two counters that "must stay
+  products, variants, sections, include folders, menu versions and department receipt logos, in a
+  typed list (`ImageUsage`, `images.ts:53`) and two counters that "must stay
   in step" (`images.ts:46-50,240-250,590-600`). An edit updates `media_images`
   (`image-edits.ts:83`), a live-update source (`packages/media/src/module.ts:18-20`).
 
@@ -323,10 +328,11 @@ open while it holds a validation error (`docs/developers/design-system.md:708`).
 sources at start (`apps/server/src/boot.ts:1459-1466`).
 
 **How settings reach an open till.** `GET /api/till` is unauthenticated (`apps/server/src/
-till-api.ts:1382-1395`). It answers `readTillSetup` (`apps/server/src/till-setup.ts:17-110`), plus
-`setupRevision`, a hash of `readTillSetup`'s answer (`till-setup.ts:115-117`), plus `servers`, added
-outside that hash (`till-api.ts:1390-1394`). `/api/menu-state` repeats the revision
-(`till-api.ts:1518`). A signed-in till polls menu state every 15 s
+till-api.ts:1427-1442`, re-read on main 8c3d8abed). It answers `readTillSetup`
+(`apps/server/src/till-setup.ts:17-110`), plus `setupRevision`, a hash of `readTillSetup`'s answer
+(`till-setup.ts:115-118`), plus `servers`, added outside that hash (`till-api.ts:1436-1440`).
+`/api/menu-state` repeats the revision, running `readTillSetup` again on every call
+(`till-api.ts:1563`). A signed-in till polls menu state every 15 s
 (`apps/till/src/state/menu-state-poll.ts:3-4`); the poll starts at sign-in (`till-app.ts:4011`) and
 stops at sign-out (`till-app.ts:1785`). When the revision moves the till reads `/api/till` again
 (`apps/till/src/till-app.ts:8105-8121`). A new field reaches an open till only once
@@ -367,14 +373,15 @@ background and round corners.
    paints, section 11), and a warning saved with "Save anyway" shows as a line under the rows (step
    7). Mock-up `01-appearance-card-{light,dark}.png`.
 2. **Edit** opens the card in place, like the Defaults card. Left: the **Logo** field (section 8a),
-   the three main choices, and under them the closed **Advanced: set colours by hand** section, whose closed line says "None set by
-   hand. Waitron works out every colour." or names the ones that are (`wt-disclosure`'s `summary`,
-   section 3). Right: **Preview**, one Light and one Dark panel side by side, each showing a strip
-   like the banner (the logo, or Waitron's lockup while there is none, and the legal name), a sidebar
-   item, a field with focus, Save and Cancel buttons, a switch, a link and a two-way choice, painted
-   with the draft. Mock-up `02-editor-{light,dark}.png` (Bar Lucía has taken the fix for dark
-   screens, so a line under Brand colour says "Buttons on dark screens: #417c59 · Undo"); at phone
-   width the preview goes below the choices, Light above Dark (`03-editor-phone-light.png`).
+   the three main choices, and under them the closed **Advanced: set colours by hand** section,
+   whose closed line says "None set by hand. Waitron works out every colour." or names the ones that
+   are (`wt-disclosure`'s `summary`, section 3). Right: **Preview**, one Light and one Dark panel
+   side by side, each showing a strip like the banner (the logo, or Waitron's lockup while there is
+   none, and the legal name), a sidebar item, a field with focus, Save and Cancel buttons, a switch,
+   a link and a two-way choice, painted with the draft. Mock-up `02-editor-{light,dark}.png` (Bar
+   Lucía has taken the fix for dark screens, so a line under Brand colour says "Buttons on dark
+   screens: #417c59 · Undo"); at phone width the preview goes below the choices, Light above Dark
+   (`03-editor-phone-light.png`).
 3. **Advanced, opened**, lists the 22 colours of section 5 in plain words ("Page", "Cards",
    "Secondary text", "Main buttons", "Focus ring" …), one row each, with a Light and a Dark value.
    Each value shows its colour and its six-digit code. A worked-out value says "Worked out"; Main
@@ -411,10 +418,11 @@ background and round corners.
    colour is never refused, and a warning never disables Save (section 9 says how the fix is found,
    and what has no fix).
 6. **Changing a main choice keeps the colours set by hand** (owner, the extra question, 2026-10-20:
-   "A — hand-set colours are kept"; section 19). When any are set, a note under Brand colour says so after a change: "You
-   set 1 colour by hand, and it is kept: Page (light). Advanced shows it." (mock-up
-   `14-q-hand-kept-or-put-back-light.png`, left). A fix to the brand colour is not a colour set by
-   hand: picking another brand colour drops it, because it belonged to the old colour (my call).
+   "A — hand-set colours are kept"; section 19). When any are set, a note under Brand colour says so
+   after a change: "You set 1 colour by hand, and it is kept: Page (light). Advanced shows it."
+   (mock-up `14-q-hand-kept-or-put-back-light.png`, left). A fix to the brand colour is not a colour
+   set by hand: picking another brand colour drops it, because it belonged to the old colour (my
+   call).
 7. **Save** stores the choices. With no warning showing it saves at once. With a warning still
    unfixed it first asks, once, in a small dialog headed "Hard to read" that lists each warning,
    with **Back**, **Save anyway** and **Fix and save** (`16-save-hard-to-read-light.png`, left). Fix
@@ -492,6 +500,7 @@ Product text, English (Spanish to be written with the strings):
 | Its hint, while there is none | Without one, dark screens show your logo on a light plate. |
 | Saved card row | Logo: None / {image} · Dark screens: own version / Dark screens: on a light plate |
 | Logo refused by the server | That image is no longer in the image library. Pick another. |
+| Dark version refused by the server (no main image) | Add the main logo before a version for dark screens. |
 | Sign-in screens, with a venue logo (Q6 A) | Powered by {Waitron's lockup} |
 | Under the logo (Q5 A) | How it prints on receipts of departments with no receipt logo of their own. · This logo prints blank on receipts. |
 
@@ -699,14 +708,15 @@ answered A on 2026-10-20; section 19).
      colour the owner picked — the brand colour or a hand-set value — because Waitron's own colours
      give way first; a failing rule that named none would be a fault in the working out, which the
      sweeps below and in section 15 hold at zero.
-- **Changing a main choice later keeps hand-set values** (owner, the extra question, 2026-10-20:
-  "A — hand-set colours are kept"). Each stays exactly as set, marked "Set by hand", with **Use worked-out colour** on
-  its row and **Reset all to worked-out** at the end of the section. After a change, a note under
-  Brand colour names what was kept. The trade-off: a colour chosen to go with the old brand (a pale
-  green selected-item background, say) stays when the brand turns burgundy, and can clash; the note
-  and the preview show it, and one tap puts it back. The way not taken — a change of brand colour
-  or background puts every hand-set value back — would always give a matching set, but throws away
-  deliberate work without asking. Corners touch no colour, so they never affect a hand-set value either way.
+- **Changing a main choice later keeps hand-set values** (owner, the extra question, 2026-10-20: "A
+  — hand-set colours are kept"). Each stays exactly as set, marked "Set by hand", with **Use
+  worked-out colour** on its row and **Reset all to worked-out** at the end of the section. After a
+  change, a note under Brand colour names what was kept. The trade-off: a colour chosen to go with
+  the old brand (a pale green selected-item background, say) stays when the brand turns burgundy,
+  and can clash; the note and the preview show it, and one tap puts it back. The way not taken — a
+  change of brand colour or background puts every hand-set value back — would always give a matching
+  set, but throws away deliberate work without asking. Corners touch no colour, so they never affect
+  a hand-set value either way.
 - **Use Waitron's look** puts every hand-set value back as well (section 4).
 
 **Worked example — Bar Lucía** (prototype: `deriveHand` in `a841-mockups-src/derive.mjs`, run by
@@ -800,11 +810,11 @@ because the blocks ask nothing new of a till's browser; whether every till's bro
 | Dashboard, signed in and signed out | Yes | The owner's main surface. |
 | Till: counter, tables, bills, kitchen and station screens, handhelds | Yes | Same app (`apps/till`). When each follows a change: section 12. |
 | Setup wizard | No | Runs before a theme exists; my call. |
-| Trust page, user guide, server recovery page | No | Server-built pages with hand-copied tokens (section 3); my call, could follow later. Their logo stays Waitron's (section 8a). |
+| Trust page, user guide, server recovery page | No | Server-built pages with hand-copied tokens (section 3); my call, could follow later. None shows the venue's logo (section 8a). |
 | Dashboard recovery sheet | Partly | It copies tokens from the page (section 3), so on screen it shows the theme; printed, its text and background are forced plain, and its border colour and corner radius stay the theme's. My call: leave it, since the printed words and page are plain. |
 | Equipment label | No | It copies font tokens only (section 3). |
 | Waitron's logo in the dashboard banner and the till's top bar | Replaced | By the venue's logo, when one is set (section 8a); what stays of Waitron's is Q6. |
-| Favicon, installed app icon, till browser-bar colour | No | Waitron's own frame (section 3). My call: the browser-bar colour and the manifest stay Waitron's blue, like the favicon; an installed app takes a changed manifest only on the browser's own schedule, and Chrome on desktop never takes a changed icon (section 8a). |
+| Favicon, installed app icon, till browser-bar colour | No | Waitron's own frame (section 3). My call: the browser-bar colour and the manifest stay Waitron's blue, like the favicon; Chrome takes a changed manifest only on its own schedule, and on desktop "doesn't yet support changes to icons" (section 8a). |
 | Product tiles, categories | No | Painted from the product's stored colour (section 3). |
 | Floor-plan table states, stations, calendars, danger/success/warning | No | Their colours carry meaning and are tested apart from each other (`colors.test.ts:446-576`). |
 | Receipts, kitchen tickets | No | Printer commands, not web pages (section 3). Whether the venue's logo prints on receipts is Q5 (section 8a). |
@@ -814,24 +824,29 @@ because the blocks ask nothing new of a till's browser; whether every till's bro
 Added for the owner's request of 2026-10-20: "Also we should allow uploading a new logo". Q5 and Q6
 (section 19) are the owner's to decide; every other call here is mine, with its trade-off. The
 mock-ups give Bar Lucía a made-up logo: a green roundel with "BL" in cream, and "Bar Lucía" in green
-beside it, on a see-through background (`a841-mockups-src/lucia-logo.svg`, outside the repository).
+beside it over a smaller "SINCE 1998", on a see-through background
+(`a841-mockups-src/lucia-logo.svg`, outside the repository).
 
 **What the owner does.** The Look card gains a **Logo** field, first on the card (my call: it is the
 first thing most venues will set). With no logo it is one "+ Add a logo" box. Pressing it opens the
 image library's picker — the one a department's receipt logo already uses (section 3) — where the
 owner uploads a file or picks one already in the library. With a logo, the box shows it on the
-look's light card colour, with **Replace** and **Remove** beside it. Under it, **For dark screens
-(optional)** offers a second image the same way. Both are part of the draft, like a colour: the
+plate's white (below), with **Replace** and **Remove** beside it. Under it, **For dark screens
+(optional)** offers a second image the same way. That field is offered only while there is a main
+image, and Remove on the main image takes the dark one with it, so the draft never holds a dark
+image alone (my call, round 5); the server refuses one sent alone (`dark_without_light`,
+section 11), worded "Add the main logo before a version for dark screens." Both are part of the
+draft, like a colour: the
 preview shows them at once, Save stores them, Cancel drops them, and the quiet-Save rule
 (section 4) counts them as changes. Mock-ups `17-logo-editor-{light,dark}.png` and
 `18-logo-editor-phone-light.png`.
 
-Worked example. Bar Lucía's manager presses "+ Add a logo" and uploads `bar-lucia.png`, 1200 × 400
-pixels with a see-through background. The Light preview's banner strip shows it; the Dark one shows
-it on a plate of her light card colour, since she has given no dark version. She presses Save. Her
-own dashboard shows it at once, other open dashboards follow through their live read, and every
-signed-in till within one menu-state poll, 15 s (section 12). Picture `20-logo-banner-{light,dark}.png`
-shows the saved card and the banner; `21-logo-till-{light,dark}.png` a till.
+Worked example. Lucía, the bar's manager, presses "+ Add a logo" and uploads `bar-lucia.png`, 1200 ×
+400 pixels with a see-through background. The Light preview's banner strip shows it; the Dark one
+shows it on the plate, since she has given no dark version. She presses Save. Her own dashboard
+shows it at once, other open dashboards follow through their live read, and every signed-in till
+within one menu-state poll, 15 s (section 12). Picture `20-logo-banner-{light,dark}.png` shows the
+saved card and the banner; `21-logo-till-{light,dark}.png` a till.
 
 **Where it shows.** This is the recommended answer to Q6; B and C change only what happens to
 Waitron's own logo (section 16).
@@ -843,7 +858,7 @@ Waitron's own logo (section 16).
 | Till top bar | Where the word "Waitron" is today, left out by the same rules (section 3) | 32 px tall, at most 128 px wide |
 | Till sign-in screen | Above the heading | At most 96 px tall and 320 px wide |
 | Kiosk and kitchen-display modes | Nowhere: they draw no bar (section 3) | — |
-| Trust page, setup, user guide, recovery page | Nowhere: Waitron's lockup stays | — |
+| Trust page, setup, user guide, recovery page | Nowhere. The trust page and setup draw Waitron's lockup (`apps/server/src/trust-page.ts:124`, `apps/setup/src/setup-app.ts:1498`); the user guide and the recovery page draw no logo at all (`/usr/bin/grep -c -i -E "logo\|<svg\|<img\|lockup"` printed 0 for `guide-pages.ts` and `recovery-surface.ts`) | — |
 | Favicon, installed app icon, browser-bar colour | Nowhere: Waitron's stay (below) | — |
 | Receipts and the A4 invoice | Q5 (below) | — |
 
@@ -858,9 +873,16 @@ banner), so a screen reader does not read the name twice (my call).
 
 **Light and dark** (my call). One image is required; a second, for dark screens, is optional. With
 both, each screen draws the one for its mode, the A681 choice deciding as it does for colours
-(section 7). With one, dark screens draw it on a **plate**: a rounded box in the look's light card
-colour, filling the logo's box, with the logo inside it 4 px from each edge (picture
-`19-logo-dark-plate-or-version-dark.png`, left). The plate means a dark green or black logo never
+(section 7). With one, dark screens draw it on a **plate**: a rounded box filling the logo's box,
+with the logo inside it 4 px from each edge (picture `19-logo-dark-plate-or-version-dark.png`,
+left). The plate is white, from a new token, `--wt-color-logo-plate`, declared `#ffffff` in all four
+blocks of `colors.css` and written by no look: it is kept out of the colours a manager can set by
+hand (section 5), as the scrim is, and out of the list `deriveTheme` writes (section 14), so nothing
+a look does can darken it (round 5: the earlier plate in the look's light card colour would have
+gone dark with a hand-set dark Cards colour, such as the sweep's pure blue). For Waitron's own
+palette and Bar Lucía's the light card colour is white anyway (`colors.css:7`; the bar's Cards `#ffffff`
+in picture 12), so the pictures do not change; the trade-off is a white plate beside cream cards on
+a look whose light cards are set to cream. The plate means a dark green or black logo never
 disappears on a dark till; its cost is a light patch on a dark bar, which a second image removes
 (the same picture, right). Rejected: inverting the colours automatically (it would turn a green
 roundel pink), and checking a logo's contrast like a colour (a logo is many colours, and no rule
@@ -871,27 +893,25 @@ says which of them must read).
 - PNG, JPEG or WebP, judged by their bytes; up to 20 MB and 100 million pixels; kept with the
   longer side at most 1600 px. A see-through background is kept; a JPEG has none, so it shows its
   own rectangle.
-- **No SVG.** The library refuses it, and this design keeps that. An SVG can carry a script, and
-  the box serves library images from its own address. Probe
+- **No SVG.** The library refuses it, and this design keeps that. An SVG can carry a script, and the
+  box serves library images from its own address. Probe
   (`a841-mockups-src/logo-probes/svg-probe.mjs`, Playwright's Chromium 156.0.8078.4): a page set a
-  cookie and showed an SVG holding `<script>fetch("/stolen?cookie=" + encodeURIComponent(document.cookie))</script>` from
-  `/media/logo.svg`. Drawn through `<img>`, the server saw only `/` and `/media/logo.svg`; opened
-  directly, it saw `/media/logo.svg` and then `/stolen?cookie=session%3Dsecret123`. So the screens'
-  `<img>` would not run it, but anyone opening the image's own address would, as the box. A PNG of
-  the same drawing loses nothing a screen needs.
+  cookie and showed an SVG holding `<script>fetch("/stolen?cookie=" +
+  encodeURIComponent(document.cookie))</script>` from `/media/logo.svg`. Drawn through `<img>`, the
+  server saw only `/` and `/media/logo.svg`; opened directly, it saw `/media/logo.svg` and then
+  `/stolen?cookie=session%3Dsecret123`. So the screens' `<img>` would not run it, but anyone opening
+  the image's own address would, as the box. A PNG of the same drawing loses nothing a screen needs.
 - Scaled to fit its box keeping its shape, never stretched or cropped. A small image is drawn up to
   the box and may look soft; the hint says so ("at least 200 pixels tall": the till sign-in's 96 px
   box on a screen with two device pixels to each CSS pixel needs 192).
 - The image drawn is the library's "display" rendition, so a later crop or a replaced file in the
   library shows everywhere (section 3); the library's edit path already updates `media_images`,
   which the delivery path watches (section 12).
-- **While it loads**, the box keeps its height and stays empty. **If it fails** to load, or the
-  stored name has no image behind it, the screen draws what it draws with no logo: Waitron's lockup
-  in the banner, the word in the till bar. The library refuses to delete an image in use, and the
-  logo is counted as a use (below), so this is a fault path rather than a normal one. A till that
-  starts while the box is out of reach still draws the logo if its browser kept the image (library
-  images are marked unchanging for a year, `routes.ts:270,287`); whether a given till's browser
-  kept it is the browser's choice.
+- **While it loads**, the box keeps its height and stays empty; before `/api/theme` has answered at
+  all, section 12 says what the place shows. **If it fails** to load, or the stored name has no
+  image behind it, the screen draws what it draws with no logo: Waitron's lockup in the banner, the
+  word in the till bar. The library refuses to delete an image in use, and the logo is counted as a
+  use (below), so this is a fault path rather than a normal one.
 
 **Waitron's own logo** is Q6. Recommended, A: the venue's logo takes Waitron's place in the banner
 and the till bar, and both sign-in screens gain one small line under the form, "Powered by" with
@@ -902,15 +922,18 @@ today. Options side by side: `24-q6-waitron-logo-light.png`.
 changed favicon at once: in Playwright's Chromium 156.0.8078.4 run with a window
 (`a841-mockups-src/logo-probes/favicon-probe.mjs`), changing the icon link's address from script
 made the browser fetch the new image (`/waitron.png`, then `/venue.png` about 1.5 s later), and
-adding a second link did the same; run without a window, the same browser fetched no icon at all, so that mode cannot
-measure this. An installed app does not follow: "Once installed, all fields from the new manifest
-except icons are updated … Note: Chrome on desktop doesn't yet support changes to icons", and on
-Android a changed manifest waits until "all windows of the PWA have been closed, the device is
-plugged in, and connected to WiFi" (<https://web.dev/articles/manifest-updates>, "How Chrome
-handles updates to the web app manifest", last updated 2024-09-19). The till's manifest is also a
-file written when the app is built (section 3), the same for every venue. A tab icon in the venue's
-logo beside an installed icon in Waitron's would be two answers to one question, so both stay
-Waitron's, like the browser-bar colour (section 8).
+adding a second link did the same; run without a window, the same browser fetched no icon at all, so
+that mode cannot measure this. An installed app is another matter. The source, for desktop Chrome:
+"Once installed, all fields from the new manifest except icons are updated" and "Note: Chrome on
+desktop doesn't yet support changes to icons"; for Android it lists `icons` among the properties
+that trigger an update, which Chrome requests "after all windows of the PWA have been closed, the
+device is plugged in, and connected to WiFi" (<https://web.dev/articles/manifest-updates>, "How
+Chrome handles updates to the web app manifest", last updated 2024-09-19). So, on that page's
+account, an installed till's icon would not change on desktop Chrome for now, and on Android only
+some time after the change, once those conditions are met. The till's manifest is also a file
+written when the app is built (section 3), the same for every venue. A tab icon in the venue's logo
+beside an installed icon in Waitron's would be two answers to one question, so both stay Waitron's,
+like the browser-bar colour (section 8).
 
 **Use Waitron's look removes the logo too** (my call; section 4, step 8). The button promises
 Waitron's look, and a screen showing Bar Lucía's logo is not it — the reason it also puts colours
@@ -924,30 +947,69 @@ managers and administrators hold both (`packages/identity/src/permissions.ts:55-
 `packages/media/src/module.ts:35`), and supervisors neither.
 
 **Storage and delivery.** The theme document gains `logo` (section 11); no migration. The library
-counts the logo as a use, in both of its counters, so it refuses to delete it. `/api/theme` carries
-the logo's addresses and its hash covers them, so tills and open dashboards follow a new logo, a
-removed one, or an edit to the image in the library (section 12).
+counts the logo as a use, in its typed list and both of its counters, so it refuses to delete it,
+and shows that use as "Venue logo" with a link to the Appearance page, beside today's "<department>
+receipt logo" and its link to the department's Receipt tab
+(`packages/media/src/dashboard/image-library.ts:36-63`,
+`packages/media/src/dashboard/strings.ts:76,159`). The user guide's page on the library lists those
+uses and says how to free a photo (`apps/server/src/guide/en/content-and-images.md:170,214-217`,
+`guide/es/content-and-images.md:182,229-232`); both languages gain the venue logo (slice 8).
+`/api/theme` carries the logo's addresses and its hash covers them, with the cache keyed so that a
+replaced or reframed image misses it (section 12), so tills and open dashboards follow a new logo, a
+removed one, or an edit to the image in the library.
 
 **Receipts** are Q5 (`23-q5-logo-on-receipts-light.png`). With A, recommended, the logo also prints
-on the receipts and A4 invoices of any department with no receipt logo of its own; a department's
-own receipt logo still wins, and is how paper gets a different picture. The light image is the one
-printed, never the dark one. The real drawing code (`drawLogoRasters` after `prepareImage`, run on
-the made-up logo in a throwaway case in `apps/server`, deleted afterwards) printed 13,723 of 76,800
-dots at 80 mm for the light version, its words readable, and 8,404 for the dark version, whose
-cream words came out as scattered dots (`a841-mockups-src/lucia-logo{,-dark}-receipt-80mm.png`). The
-Look card then shows how it prints, from the receipt preview's own drawing (`drawPreviewLogo`,
-`receipt-logo.ts:66-85`), and says so when it prints nothing: in an earlier run of the same code on
-400 px squares, a white circle on a see-through background printed 0 of 25,600 dots, the same circle
-in black 11,305 and in lemon `#f2d300` 1,896. How A is built: the theme's save draws the printed
-pictures outside the transaction, as a department's save does, and writes them with the logo's name
-into the `tenant_receipts` row in the same transaction as the theme (`putReceipt` already requires
-the pictures with a logo, `receipt-store.ts:164-188`); the print paths pass that row to
-`resolveReceiptTrim` in place of the empty one (`receipt-print.ts:210-211`,
-`invoice-document.ts:114-115`, and the till's ticket view and the receipt preview,
-`apps/server/src/receipt-presentation.ts:20-55`, `apps/server/src/receipt-preview-api.ts:227-293`);
-and the library's edit path redraws the venue's pictures as it does a department's
-(`image-edits.ts:65-80`). With B none of that is built. With C the card gains a second upload, for
-receipts only, stored in the same row.
+on every receipt and A4 invoice that has no department receipt logo: a department with none, and a
+sale with no department at all. A department's own receipt logo still wins, and is how paper gets a
+different picture (which is why the question offers no second upload for receipts, round 5). With B,
+nothing about receipts changes. The light image is the one printed, never the dark one. The real
+drawing code (`drawLogoRasters` after `prepareImage`, run on the made-up logo in a throwaway case in
+`apps/server`, deleted afterwards) printed 13,723 of 76,800 dots at 80 mm for the light version, its
+words readable, and 8,404 for the dark version, whose cream words came out as scattered dots
+(`a841-mockups-src/lucia-logo{,-dark}-receipt-80mm.png`). The Look card then shows how it prints,
+from the receipt preview's own drawing (`drawPreviewLogo`, `receipt-logo.ts:66-85`), and says so
+when it prints nothing: in an earlier run of the same code on 400 px squares, a white circle on a
+see-through background printed 0 of 25,600 dots, the same circle in black 11,305 and in lemon
+`#f2d300` 1,896.
+
+How A is built (my calls; rewritten after review round 5, which found the first version printed
+nothing and left two holes):
+
+- **Where the dots are kept.** The theme's save draws the printed pictures of the light image
+  outside the transaction, from its "display" rendition, as a department's save does
+  (`department-receipt-api.ts:110,118-133`, keeping the old pictures when the image is unchanged),
+  and stores them in the theme document beside the choices, under `printedLogo`, one per paper
+  width. They are derived, kept only because a receipt is drawn inside the sale's transaction, where
+  an image cannot be decoded (`receipt-logo.ts:12`), and are always redrawn from the logo, never
+  edited on their own. With a logo the save requires them, as `putReceipt` requires them for the
+  venue receipt row (`receipt-store.ts:164-188`). I chose the theme row over the unused
+  `tenant_receipts` row so that the pictures travel and disappear with the look: a configuration
+  copy carries `tenant_themes` (`packages/db/src/configuration-transfer.ts:77`) but, since A493, not
+  `tenant_receipts` (`docs/backlog/printers.md:502-505`). Trade-off: the theme document is no longer
+  choices only; section 2's anti-goal is about not copying Waitron's default colours, which this
+  does not do.
+- **What prints.** Both print paths give `resolveReceiptTrim` the venue's logo name in place of the
+  empty receipt (`receipt-print.ts:210`, `invoice-document.ts:114`); it already prefers the
+  department's (`receipt-text.ts:85`). The dots are a separate line today, the department's alone
+  (`receipt-print.ts:211`, `invoice-document.ts:115`), and `readPrintedDepartmentReceipt` answers
+  `logo: null` for a department with none
+  (`packages/venue-service/src/department-receipts.ts:227-229`). That line becomes: the department's
+  dots when the department names a logo, otherwise `printedLogo`. A department that names a logo
+  whose pictures cannot be read still prints none, as today, rather than the venue's: the fallback
+  follows the name, as `resolveReceiptTrim` does.
+- **A sale with no department** (`receipt-print.ts:193-197`, `invoice-document.ts:98-103`) prints
+  the venue's logo too; `resolveReceiptTrim` already renders "venue-only" for a null department
+  (`receipt-text.ts:73`).
+- **The till's ticket view and the receipt preview** follow the same rule
+  (`apps/server/src/receipt-presentation.ts:20-55`,
+  `apps/server/src/receipt-preview-api.ts:227-293`).
+- **A configuration copy** carries `printedLogo` with the theme. The import check refuses a copy
+  whose look names a logo without a readable picture for each paper, as `printable` judges one
+  (`receipt-store.ts:190-195`).
+- **Remove and Use Waitron's look**, once saved, rewrite or delete the theme row, and `printedLogo`
+  goes with the logo: the next receipt prints no venue logo, while a department's own still prints.
+- **A library edit** redraws `printedLogo` as it redraws a department's pictures, matching the
+  image's name inside the write transaction (`image-edits.ts:65-80`).
 
 **The two logo entries in the backlog.**
 
@@ -961,8 +1023,9 @@ receipts only, stored in the same row.
   so the first stays true; tidy-up (1) still applies to Waitron's lockup, drawn whenever a venue has
   no logo of its own. A venue's logo cannot be token-coloured: it is the venue's own picture.
 
-**English only.** The new words live in the dashboard's and the till's strings files
-(`apps/dashboard/src/i18n/strings.ts`, `apps/till/src/i18n/strings.ts`). No file name, image or
+**English only.** The new words live in the dashboard's, the till's and the image library's strings
+files (`apps/dashboard/src/i18n/strings.ts`, `apps/till/src/i18n/strings.ts`,
+`packages/media/src/dashboard/strings.ts`). No file name, image or
 starter text is added to general code: a new venue has no logo.
 
 ## 9. Readability protection
@@ -1123,47 +1186,50 @@ out of a declaration.
   itself. Reset is Save with
   Waitron's choices, no fix, no hand-set values and no logo, which deletes the row.
 - **Use worked-out colour**, **Reset all to worked-out**, a warning's fix, **Fix all**, **Undo** and
-  the logo's **Replace** and **Remove** change the draft only, like every other control on the card; Save stores the result and Cancel
-  undoes them.
+  the logo's **Replace** and **Remove** change the draft only, like every other control on the card;
+  Save stores the result and Cancel undoes them.
 
 ## 11. Storage
 
 My call: **reuse and reshape what exists** rather than adding a parallel table.
 
 - **Table:** `tenant_themes` stays, one row for the business. Scope: the whole business, not one
-  location or one kind of device (owner, Q3, 2026-10-20: "one look for the whole business") — a brand belongs to the business, one database holds one business
-  (`design-system.md:3256-3261`, the banner shows "the deployment tenant's legal name, not a
-  location name"), and a single row needs no location key. Its `theme` document changes from `{
-  tokens }` to the owner's **choices only**: `{ logo, brandColor, brandFix, background, corners,
-  handSet }` (`logo` is `null`, or `{ light, dark? }`, each the image library's name for an image,
-  such as `"3f9a….webp"`, `dark` optional, section 8a; `brandColor` is `#rrggbb`, or `null` for Waitron's; `brandFix` is `{ light?: true, dark?: true
+  location or one kind of device (owner, Q3, 2026-10-20: "one look for the whole business") — a
+  brand belongs to the business, one database holds one business (`design-system.md:3256-3261`, the
+  banner shows "the deployment tenant's legal name, not a location name"), and a single row needs no
+  location key. Its `theme` document changes from `{ tokens }` to the owner's **choices only**: `{
+  logo, brandColor, brandFix, background, corners, handSet }` (`logo` is `null`, or `{ light, dark?
+  }`, each the image library's name for an image, such as `"3f9a….webp"`, `dark` optional, section
+  8a; `brandColor` is `#rrggbb`, or `null` for Waitron's; `brandFix` is `{ light?: true, dark?: true
   }`, saying the owner took the brand colour's fix for that mode — empty when none, and never set
   with Waitron's or for a mode whose Main buttons is set by hand; `background` and `corners` from
   fixed lists; `handSet` is `{ light: {…}, dark: {…} }`, each mapping one of the 22 names of section
   5, written without `--wt-color-`, to a `#rrggbb` value, and empty when nothing is set by hand).
   For example, Bar Lucía after step 3 of section 6's worked example, with the burgundy's dark fix
-  taken, and her logo with no dark version: `{ "logo": { "light": "<library name>" }, "brandColor":
-  "#7a1f2b", "brandFix": { "dark": true }, "background": "tinted", "corners": "round", "handSet": {
-  "light": { "bg": "#f8f1e1" }, "dark": {} } }`, which paints dark buttons `#b05157`. **A fix is stored as a flag, not a shade** (round 4, changed from the shade
-  first written here). The shade is whatever the shared rule gives for the stored brand colour, mode
-  and surroundings, so a stored fix can never be a shade that does not belong to its brand colour,
-  and a change of background or of a hand-set page re-works the shade rather than leaving a stale
-  one. The trade-off: a release that changes the rule can move a fixed shade slightly, like any
-  worked-out colour; the card and editor show the shade as it is now. Prototype: `derive.mjs` paints
-  a flag with the same `until` search that offers the fix, and `warn` throws if the two ever differ;
-  the brand sweep ran all 360 warnings through it without a throw. A hand-set value is stored as
-  typed, or as the fixed shade if its fix was taken. No worked-out values are stored, so a release
-  that improves Waitron's defaults reaches a themed venue too; the cost is that a release changing
-  the defaults or the formula can shift a venue's worked-out colours slightly, which the editor
-  shows as it works them out now. A release never changes a brand colour or hand-set value as
-  stored, but it can make one hard to read that was not: it is then served as stored, and the card
-  and editor show the new warning and its fix (section 17).
+  taken, and the bar's logo with no dark version: `{ "logo": { "light": "<library name>" },
+  "brandColor": "#7a1f2b", "brandFix": { "dark": true }, "background": "tinted", "corners": "round",
+  "handSet": { "light": { "bg": "#f8f1e1" }, "dark": {} } }`, which paints dark buttons `#b05157`.
+  **A fix is stored as a flag, not a shade** (round 4, changed from the shade first written here).
+  The shade is whatever the shared rule gives for the stored brand colour, mode and surroundings, so
+  a stored fix can never be a shade that does not belong to its brand colour, and a change of
+  background or of a hand-set page re-works the shade rather than leaving a stale one. The
+  trade-off: a release that changes the rule can move a fixed shade slightly, like any worked-out
+  colour; the card and editor show the shade as it is now. Prototype: `derive.mjs` paints a flag
+  with the same `until` search that offers the fix, and `warn` throws if the two ever differ; the
+  brand sweep ran all 360 warnings through it without a throw. A hand-set value is stored as typed,
+  or as the fixed shade if its fix was taken. No worked-out values are stored, so a release that
+  improves Waitron's defaults reaches a themed venue too; the cost is that a release changing the
+  defaults or the formula can shift a venue's worked-out colours slightly, which the editor shows as
+  it works them out now. A release never changes a brand colour or hand-set value as stored, but it
+  can make one hard to read that was not: it is then served as stored, and the card and editor show
+  the new warning and its fix (section 17).
 - **No migration is needed:** the table and its JSON column stay; the document's shape is checked in
   code. The logo is a name inside the document, not a column, so the library's use of it is counted
   by code: both of the library's usage counters (`images.ts:46-50`) learn a "venue logo" use, so
-  the library refuses to delete the image while the look names it. With Q5 A, the printed pictures
-  of the logo go into the existing `tenant_receipts` row (section 8a), also with no migration. Before go-live any installation may be reset (CLAUDE.md §3), so an old `{ tokens }` row is
-  not carried forward: the server reads one as no theme (my call).
+  the library refuses to delete the image while the look names it. With Q5 A, the logo's printed
+  pictures go into the same document, under `printedLogo` (section 8a), also with no migration.
+  Before go-live any installation may be reset (CLAUDE.md §3), so an old `{ tokens }` row is not
+  carried forward: the server reads one as no theme (my call).
 - **Routes:** `GET` and `PUT /management-api/theme` stay and take the new document; `GET` answers
   the choices, the worked-out values and the warnings for the stored choice (keys only, section 10),
   so the editor and the saved card — including a supervisor's read-only card — show the same
@@ -1203,19 +1269,35 @@ in 3.2 s of samples. So the theme is **applied from script, from a copy kept in 
 fetched without holding anything** (B4: I chose the stored copy).
 
 - **The answer.** `GET /api/theme` with no session (the colours are not secret, and the signed-out
-  dashboard and the till's start screen need them) answers `{ hash, css, logo }`: the section-7 sheet
-  built from the stored choices by the current release, or an empty `css` with no row; `logo`,
+  dashboard and the till's start screen need them) answers `{ hash, css, logo }`: the section-7
+  sheet built from the stored choices by the current release, or an empty `css` with no row; `logo`,
   `null` or `{ light, dark }` holding the addresses of the images' "display" renditions (`dark`
   `null` when there is none; section 8a); and `hash`, a SHA-256 of `css` and `logo` together (like
   `setupRevisionOf`, `till-setup.ts:115-117`). A rendition's address names its source and framing
-  (`presentation.ts:10-16`), so an edit to the logo in the library changes the hash. A content hash, not a row
-  counter, because Reset deletes the row and a later save could repeat a counter. The server keeps
-  the last answer in memory keyed by the stored document, so serving it reads one row and derives
-  nothing new; it never waits on anything but that read.
+  (`presentation.ts:10-16`), so an edit to the logo in the library changes the hash. A content hash,
+  not a row counter, because Reset deletes the row and a later save could repeat a counter. The
+  server keeps the last answer in memory keyed by the stored document together with, for each logo
+  image, what its rendition address is made of: the image's current source file and framing
+  (`packages/media/src/image-page-query.ts:11-17`, read by `readPresentations`,
+  `presentation.ts:49-66`, which builds the address from them, `presentation.ts:10-16`). Replacing
+  the image's file changes its source (`media_image_edits.source_hash`, `image-page-query.ts:17`)
+  and reframing it changes its framing, so either one misses the cache and moves the hash, though
+  the theme row has not changed (round 5: keyed by the document alone, the cache served the old
+  address). Serving reads the theme row and, with a logo, the image rows; it derives nothing new
+  when neither changed, and never waits on anything but those reads.
 - **Applied at start-up, in the same step as the token layer.** Each app's `main.ts`, right after
   `applyTokens`, adopts a second sheet holding the copy stored in the browser under
   `waitron-venue-theme` (if any), then fetches `/api/theme` with a time limit; a newer answer
-  replaces the sheet's text and the stored copy. Nothing waits on the fetch.
+  replaces the sheet's text and the stored copy. Nothing waits on the fetch. The stored copy is the
+  whole answer, `logo` included.
+- **The logo's place before the answer** (my call, round 5). With a stored copy, the banner, the
+  till bar and the till sign-in draw the stored copy's logo, or Waitron's lockup or word when the
+  copy has none. With no stored copy, the logo's place stays empty, its height kept, until the
+  answer arrives or the fetch's time limit passes; only then does it draw the venue's logo or, with
+  none, Waitron's. So no screen draws Waitron's logo and then swaps it for the venue's. The
+  trade-off: on a browser's first visit to a venue with no logo, Waitron's lockup appears only when
+  the answer does; and a stored copy from before a logo change shows the old logo until the answer,
+  as it shows old colours.
 - **Experiment** (`a841-mockups-src/probe7.mjs`, Chromium 156.0.8078.4): a one-file page shaped
   like that (`index.html` styled from `--wt-color-bg`, a module script applying the tokens and the
   stored copy, then fetching with a 2 s limit). In every case the browser may paint an empty page
@@ -1241,7 +1323,9 @@ fetched without holding anything** (B4: I chose the stored copy).
   (section 3), and on `media_images`, so an edit to the logo in the library reaches them too
   (section 3). It is passive (house rule: automatic reads do not keep a session alive) and open to
   every signed-in person, with no permission; on a new hash the shell replaces the sheet's text.
-- **Signed-in tills** get a `themeHash` field in `readTillSetup`, which moves `setupRevision`;
+- **Signed-in tills** get a `themeHash` field in `readTillSetup`, the same hash as `/api/theme`'s,
+  worked out the same way, so it moves `setupRevision` after a reframe as well as after a save;
+  `/api/menu-state` runs `readTillSetup` on every poll (section 3);
   `#applyVenueSetup` fetches `/api/theme` and replaces the sheet. A signed-in till therefore follows
   within one menu-state poll (15 s).
 - **Signed-out tills** run no poll (section 3): they follow at their next start-up, or at the next
@@ -1356,10 +1440,18 @@ and administrators change it.
   banner, the till bar and the till sign-in draw the logo inside their boxes without stretching (a
   tall 1:4 image and a wide 4:1 one); dark screens draw the plate with one image and the dark image
   with two; a failed load falls back to Waitron's lockup or word; the editor's Replace, Remove and
-  Use Waitron's look change the draft and Cancel undoes them; phone width; axe in both themes.
-  With Q5 A: a department with no receipt logo prints the venue's pictures and one with its own
-  prints its own; reframing the image in the library redraws the venue's pictures; the card says
-  when the logo prints blank (a white image on a see-through background must, and a black one must
+  Use Waitron's look change the draft and Cancel undoes them; Remove on the main image clears the
+  dark one too; the plate stays white with Cards set by hand to `#0000ff` (light and dark); with a
+  stored copy the logo's place draws its logo before the answer, and with none it stays empty until
+  the answer and never draws Waitron's lockup first; phone width; axe in both themes. Server, the
+  cache key: reframing the logo's image in the library, with the theme row untouched, must change
+  `/api/theme`'s hash and the till's `setupRevision` on its next menu-state call (the control:
+  reading twice with nothing changed gives the same hash). The library lists the use as "Venue
+  logo", linking to the Appearance page. With Q5 A: a department with no receipt logo, and a sale
+  with no department, print `printedLogo`; a department with its own prints its own; a configuration
+  copy whose look names a logo with no readable pictures is refused; Remove, and Use Waitron's look,
+  saved, stop the venue logo printing; reframing the image redraws `printedLogo`; the card says when
+  the logo prints blank (a white image on a see-through background must, and a black one must
   not).
 
 ## 16. Build slices (each one pull request)
@@ -1389,17 +1481,23 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
    hand marks, Use worked-out colour, Reset all to worked-out, the kept-colours note, warnings and
    fixes under rows, the closed line's "hard to read" count, and their `*.unsaved.test.ts` and axe
    cases.
-7. **The logo, stored and served.** The document's `logo`, its validity check and the import check,
-   the library's new use in both counters, `/api/theme`'s addresses and hash, the till's
-   `themeHash`, and the dashboard theme read's dependency on `media_images`.
+7. **The logo, stored and served.** The document's `logo`, its validity check (`dark_without_light`
+   included) and the import check; the library's new use, a `venue_logo` member of `ImageUsage`
+   (`images.ts:53`) counted in both counters; `/api/theme`'s addresses, its cache key over the
+   images' source and framing, and its hash; the till's `themeHash`; and the dashboard theme read's
+   dependency on `media_images`.
 8. **The logo on the screens.** The Logo field, the preview's banner strip and the saved card's row;
-   the banner, the till bar and the till sign-in screen; the plate; the loading and failure
-   fallbacks; Q6's answer (under A, the "Powered by" line on both sign-in screens); Use Waitron's
-   look removing the logo; the strings in both languages; the user guide's Appearance page.
-9. **The logo on receipts — only if Q5 comes back A or C.** Under A: the `tenant_receipts` copy and
-   its printed pictures, the print paths' fallback to it, the redraw on a library edit, "How it
-   prints" and the blank-print line. Under C: the second upload instead of the fallback to the screen
-   image.
+   the banner, the till bar and the till sign-in screen; the plate and its token,
+   `--wt-color-logo-plate`; what the logo's place shows before the first answer, while loading and
+   on failure; Q6's answer (under A, the "Powered by" line on both sign-in screens); Use Waitron's
+   look removing the logo; the strings in both languages; the image library's wording and link for
+   the new use ("Venue logo", to the Appearance page, `image-library.ts:36-63`); the user guide's
+   Appearance page, and its image library page's list of uses in English and Spanish
+   (`guide/en/content-and-images.md:170,214-217`, `guide/es/content-and-images.md:182,229-232`).
+9. **The logo on receipts — only if Q5 comes back A.** `printedLogo` in the theme document and its
+   import check; the print paths' fallback to it, for departments with no receipt logo and for
+   sales with no department; the ticket view and the preview; its redraw on a library edit; "How it
+   prints" and the blank-print line.
 
 ### The answers, and the branches not taken
 
@@ -1417,9 +1515,8 @@ between packages (the theme document and `/api/theme`), and with Q5 A, what a re
 - **Q4 B (text size):** a fourth knob scaling the four font-size tokens; every layout test that
   measures text in pixels is re-run at Large, and the slices gain one for the screens that break.
 - **Q5 B (screens only):** slice 9 is dropped; receipts stay as they are today, and the Look card
-  says nothing about paper. **Q5 C (two uploads):** slice 9 adds a "For receipts (optional)" upload
-  under the logo, stored with its printed pictures in `tenant_receipts`, and the print paths fall
-  back to that image rather than to the screen one; nothing prints until it is set.
+  says nothing about paper. (A third option, a second upload on the card for receipts only, was
+  dropped before asking, round 5: a department's own receipt logo already does that.)
 - **Q6 B (no Waitron logo):** the "Powered by" line is not built; nothing else changes. **Q6 C
   (both logos):** the banner draws Waitron's lockup, then the venue's logo, then the legal name, and
   the till bar the word "Waitron", then the logo; both are left out together when the bar is short
@@ -1485,7 +1582,10 @@ picture shows colours as picked; Bar Lucía's saved look has taken the fix for h
 screens. Pictures 01 to 16 show her look before she uploads a logo; the logo revision (2026-10-20)
 redrew 01 to 05, 12, 13, 15 and 16 to add the Logo row or field and the preview's banner strip, and
 06 to show the word "Waitron" where the till's bar has it (section 3: it had shown "Bar Lucía");
-07 rendered the same file as before. Pictures 17 to 24 show the logo. The side menu is the one a
+07 rendered the same file as before. Pictures 17 to 24 show the logo. After review round 5, 22 gained
+the till sign-in's Theme and language corner (`till-lock-screen.ts:312-318`) and 23 lost its third
+option; making the plate a white token of its own changed no picture, since every plate drawn was
+already white (a rebuild changed only 22 and 23). The side menu is the one a
 manager sees on that page: every group starts folded and the open page's group unfolds
 (`apps/dashboard/src/dashboard-app.ts:863-867`), and the Settings group lists the eight pages a
 manager may open — all of `dashboard-app.ts:280-291` but Servers, which needs `mirror.create`, an
@@ -1510,14 +1610,14 @@ the dashboard around the card, the card included, keeps the saved look (section 
 | `14-q-hand-kept-or-put-back-light.png` | The extra question: with the cream page saved, the brand changed to burgundy in the draft; the cream page kept (A) or put back (B). On both sides the green's dark fix is dropped with the green, so burgundy warns for dark screens with its fix. Kept unchanged as the record of what the owner saw when they answered A (2026-10-20); its left side is the behaviour now decided |
 | `15-hand-set-and-dark-warnings-light.png` | Left: Bar Lucía with the cream page saved, the sage typed for Secondary text and her green's dark fix not yet taken — two warnings, the sage's under its row with **Use #526a5b**, the green's under Brand colour with **Use #417c59 on dark screens**, and "2 colours are hard to read. · Fix all" above the buttons. Right: the same after Fix all, the sage row showing "Light screens: fixed from #8fa898 · Undo" until the editor closes. Replaces `15-q2-hand-set-adjust-or-refuse-light.png`, which the owner saw beside 09 (in git history at 1f88662fb) |
 | `16-save-hard-to-read-light.png` | Left: Save pressed with the lemon unfixed — the "Hard to read" dialog with Back, Save anyway and Fix and save. Right: after Save anyway — the lemon on the page and on a till's Pay button, and the warning line on the saved card |
-| `17-logo-editor-{light,dark}.png` | The editor just after Bar Lucía uploads her logo: the Logo field with Replace and Remove, "+ Add a version for dark screens" with its hint, and the preview's banner strips — the logo on the light panel, on a plate on the dark one. The dashboard around the card still shows Waitron's lockup: the logo is not saved yet |
+| `17-logo-editor-{light,dark}.png` | The editor just after Lucía, the manager, uploads the bar's logo: the Logo field with Replace and Remove, "+ Add a version for dark screens" with its hint, and the preview's banner strips — the logo on the light panel, on a plate on the dark one. The dashboard around the card still shows Waitron's lockup: the logo is not saved yet |
 | `18-logo-editor-phone-light.png` | The same at 390 px |
 | `19-logo-dark-plate-or-version-dark.png` | Dark screens, the banner and a till bar: with one image, drawn on a plate (left); with a second image for dark screens (right) |
-| `20-logo-banner-{light,dark}.png` | After Save: the banner shows her logo before "BAR LUCÍA S.L." (on a plate in dark), and the saved card's Logo row says "Dark screens: on a light plate" |
-| `21-logo-till-{light,dark}.png` | A till counter screen with her logo in the bar's first place |
-| `22-logo-sign-in-{light,dark}.png` | The dashboard's sign-in page and a till's sign-in screen with her logo, and "Powered by" with Waitron's lockup under each (Q6 A) |
-| `23-q5-logo-on-receipts-light.png` | Q5's options side by side: A, one upload that also prints, with "How it prints" and a receipt carrying the real 80 mm dots of her logo; B, screens only and a receipt with no logo, as today; C, a second upload for receipts |
-| `24-q6-waitron-logo-light.png` | Q6's options side by side, each as the dashboard's sign-in page and a signed-in till bar: A, her logo in Waitron's place and "Powered by" on the sign-in page; B, the same without "Powered by"; C, both logos |
+| `20-logo-banner-{light,dark}.png` | After Save: the banner shows the bar's logo before "BAR LUCÍA S.L." (on a plate in dark), and the saved card's Logo row says "Dark screens: on a light plate" |
+| `21-logo-till-{light,dark}.png` | A till counter screen with the bar's logo at the start of the top bar |
+| `22-logo-sign-in-{light,dark}.png` | The dashboard's sign-in page and a till's sign-in screen, with its Theme and language corner, showing the bar's logo, and "Powered by" with Waitron's lockup under each (Q6 A) |
+| `23-q5-logo-on-receipts-light.png` | Q5's options side by side: A, one upload that also prints, with "How it prints" and a receipt carrying the real 80 mm dots of the logo; B, screens only and a receipt with no logo, as today |
+| `24-q6-waitron-logo-light.png` | Q6's options side by side, each as the dashboard's sign-in page and a signed-in till bar: A, the bar's logo in Waitron's place and "Powered by" on the sign-in page; B, the same without "Powered by"; C, both logos |
 
 ## 19. Questions for the owner
 
@@ -1588,30 +1688,29 @@ bigger at once, so longer names wrap (in the picture "Tinto de verano" takes two
 **Q5 — Should the new logo also print on receipts?** (asked with the logo design, 2026-10-20)
 Today each department sets its own receipt logo on its Receipt tab, and a department without one
 prints none (section 3). A receipt printer prints black dots only: a colour logo comes out in grey
-dots, and a white or pale one comes out faint or blank (section 8a). Bar Lucía uploads her green
-logo for the screens; her bar department has no receipt logo of its own. With A, the bar's receipts
-and A4 invoices print her logo in dots from then on — in the picture its words are readable — and
-the Look card shows how it prints; if she wants something else on paper, she sets a receipt logo on
-the department, and that wins. With B, the logo is for screens only, and the bar's receipts stay
-without a logo until she sets one on the department, as today. With C, the Look card has two
-uploads, one for screens and one for receipts, and the receipt one prints wherever a department has
-none. Pictures: `23-q5-logo-on-receipts-light.png`.
+dots, and a white or pale one comes out faint or blank (section 8a). Lucía, the manager, uploads
+the bar's green logo for the screens; the bar department has no receipt logo of its own. With A,
+the bar's receipts and A4 invoices print the logo in dots from then on — in the picture its words
+are readable — and the Look card shows how it prints; for something else on paper, she sets a
+receipt logo on the department, and that wins. With B, the logo is for screens only, and the bar's
+receipts stay without a logo until she sets one on the department, as today. Pictures:
+`23-q5-logo-on-receipts-light.png`.
 
-- **A (recommended):** one upload; it also prints wherever a department has no receipt logo. One
+- **A (recommended):** one upload; it also prints wherever no department receipt logo applies. One
   upload covers the usual venue with one logo, the department's own receipt logo already gives paper
   a different picture where one is needed, and the printing code was written to fall back to a venue
   logo (section 3).
 - **B:** screens only; receipts stay as they are.
-- **C:** two uploads on the Look card, one for screens and one for receipts.
 
 **Q6 — When a venue sets its logo, what happens to Waitron's?** (asked with the logo design,
 2026-10-20) Today the top of the dashboard shows Waitron's logo and then "BAR LUCÍA S.L.", and the
 till's top bar starts with the word "Waitron". With A, Bar Lucía's logo takes Waitron's place in
 both, and the dashboard's and the till's sign-in screens show a small "Powered by" line with
-Waitron's logo under the form. With B, her logo takes Waitron's place and Waitron's logo is gone
-from her screens; it stays only in the browser tab's icon, the installed till's icon, setup, the
-trust page and the user guide. With C, both logos show side by side, Waitron's first. Pictures:
-`24-q6-waitron-logo-light.png` (and `22-logo-sign-in-{light,dark}.png` for A's sign-in screens).
+Waitron's logo under the form. With B, the bar's logo takes Waitron's place and Waitron's logo is
+gone from the bar's screens; it stays only in the browser tab's icon, the installed till's icon, the
+first-time setup and the certificate (trust) page (section 8a). With C, both logos show side by
+side, Waitron's first. Pictures: `24-q6-waitron-logo-light.png` (and
+`22-logo-sign-in-{light,dark}.png` for A's sign-in screens).
 
 - **A (recommended):** the venue's logo in Waitron's place; "Powered by Waitron" on the sign-in
   screens. The working screens are the venue's, and Waitron is still named where it takes no working
