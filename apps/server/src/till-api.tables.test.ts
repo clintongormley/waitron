@@ -37,6 +37,8 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // The schema is the whole manifest: the tables here span modules that FK into core.
 let cfg: TillConfig;
 let ana: { id: string };
+/** A supervisor, who holds the refund permission a sent dish's cancel needs. */
+let sara: { id: string };
 // The one product seeded into the counter location's catalogue, so a tab can open with a real line
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the location's `es-ES` locale).
@@ -72,6 +74,11 @@ const suite = useVenueDb({
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
+    const [supervisor] = await db
+      .insert(persons)
+      .values({ displayName: "Sara", pinHash: hashPin("6666"), role: "supervisor" })
+      .returning({ id: persons.id });
+    sara = { id: supervisor!.id };
     // Through the catalogue verbs, so the active/assignment filters are real.
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
@@ -146,14 +153,10 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-async function openSession(db: Database): Promise<string> {
+async function openSession(db: Database, who = { personId: ana.id, pin: "5555" }): Promise<string> {
   const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
-    return loginWithPin(tx, {
-      deviceId,
-      personId: ana.id,
-      pin: "5555",
-    });
+    return loginWithPin(tx, { deviceId, ...who });
   });
   return session.token;
 }
@@ -163,11 +166,13 @@ async function openSession(db: Database): Promise<string> {
 // (`.toContainEqual` / `.find`), never an exact-list assertion that would depend on execution order.
 let app: Hono;
 let cookie: string;
+let supervisorCookie: string;
 
 beforeAll(async () => {
   app = new Hono();
   mountTillApi(app, deps(suite.db), collect([]));
   cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  supervisorCookie = `${SESSION_COOKIE}=${await openSession(suite.db, { personId: sara.id, pin: "6666" })}`;
 });
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
@@ -189,10 +194,11 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
-/** Cancels `quantity` of line `lineNo`, all of it when absent, through the adjustment route. */
+/** Cancels `quantity` of line `lineNo`, all of it when absent, through the adjustment route, as Sara. */
 async function cancel(tabId: string, lineNo: number, quantity?: string): Promise<Response> {
   return request(`/api/working-orders/${tabId}/adjustments`, {
     method: "POST",
+    headers: { cookie: supervisorCookie },
     body: JSON.stringify(await cancelBody(suite.db, tabId, lineNo, quantity)),
   });
 }

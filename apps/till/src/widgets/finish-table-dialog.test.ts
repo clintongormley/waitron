@@ -15,8 +15,9 @@ const house: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "manager",
-  approverRole: "manager",
+  kind: "void",
+  applyRoles: [],
+  approverRoles: [],
 };
 const other = { ...house, id: "other", name: "Other", noteRequired: true };
 function dish(lineId: string, stage: "held" | "fired" | "started" = "held"): UnservedDish {

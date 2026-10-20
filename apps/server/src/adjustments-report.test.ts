@@ -64,13 +64,13 @@ interface Member {
   sessionId: string;
 }
 
-/** A new staff member signed in at the venue's till, on its enrolled device. */
-async function member(name: string): Promise<Member> {
+/** A new person, staff unless named otherwise, signed in at the venue's till, on its enrolled device. */
+async function member(name: string, role: "staff" | "supervisor" = "staff"): Promise<Member> {
   const device = venue.cookie.staff.split("; ").find((part) => part.startsWith(DEVICE_COOKIE))!;
   return inTx(venue, async (tx) => {
     const [row] = await tx
       .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("2468"), role: "staff" })
+      .values({ displayName: name, pinHash: hashPin("2468"), role })
       .returning({ id: persons.id });
     const session = await loginWithPin(tx, {
       deviceId: venue.deviceId,
@@ -170,7 +170,7 @@ async function adjust(
     submissionId: randomUUID(),
     expectedRevision: bill!.revision,
     lineId: await lineNamed(billId, dish),
-    reasonId: venue.reasonId.house,
+    reasonId: action === "cancel" ? venue.reasonId.houseVoid : venue.reasonId.house,
     action,
     note: null,
   });
@@ -280,7 +280,8 @@ describe("whose sales an adjustment rate is measured against (plan D21, spec §7
 describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
   it("reports the cancellation as a cancellation, writes no void, and reads nothing from an invoice's later void", async () => {
     const lucia = await member("Lucía");
-    const pablo = await member("Pablo");
+    // A sent dish's cancel needs the refund permission, which a supervisor holds.
+    const pablo = await member("Pablo", "supervisor");
     const rosa = await member("Rosa");
     const { partyId, billId } = await seat(lucia);
     await submit(lucia, partyId, await draft(lucia, partyId, ["Burger", "Steak"]));

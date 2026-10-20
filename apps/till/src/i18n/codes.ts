@@ -585,10 +585,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That reason cannot be used for this. Choose another reason",
     es: "Ese motivo no sirve para esto. Elige otro motivo",
   },
-  "adjustment.over_limit": {
-    en: "That goes over what this reason allows on this bill. Choose another reason or ask a manager",
-    es: "Supera lo que permite este motivo en esta cuenta. Elige otro motivo o pregunta a un encargado",
-  },
   "adjustment.note_required": {
     en: "This reason needs a note. Add one and try again",
     es: "Este motivo necesita una nota. Añádela e inténtalo de nuevo",
@@ -602,8 +598,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese descuento es mayor que el importe al que se aplica. Introduce un importe menor",
   },
   "adjustment.approval_required": {
-    en: "Someone with a higher role must approve this with their PIN",
-    es: "Alguien con un puesto superior debe aprobarlo con su PIN",
+    en: "Someone who can approve this must enter their PIN",
+    es: "Alguien que pueda autorizarlo debe introducir su PIN",
   },
   "adjustment.weighed_partial": {
     en: "Part of an item sold by weight or measure can't be given away or discounted. Discount the whole line instead",

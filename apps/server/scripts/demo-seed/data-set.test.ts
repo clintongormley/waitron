@@ -98,7 +98,6 @@ const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = 
     "Café",
     "ración",
     "rac",
-    "Cambio de opinión",
   ],
 };
 

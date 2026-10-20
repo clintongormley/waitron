@@ -7,7 +7,6 @@ import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
 } from "@waitron/adjustments";
-import { decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -116,7 +115,7 @@ async function askFor(
       quantity,
       expectedEdit: await readBillEditState(tx, order.billId),
       outcome,
-      ...(outcome === "keep_charge" ? { reasonId: venue.reasonId.house } : {}),
+      ...(outcome === "keep_charge" ? { reasonId: venue.reasonId.houseVoid } : {}),
       expectedPartyRevision: party!.revision,
       expectedBillRevision: bill!.revision,
       expectedContext: await readCancellationContext(tx, order.partyId, order.parent.id),
@@ -220,6 +219,7 @@ describe("Cancel item service command", () => {
       preparationStarted: true,
       reasonId: venue.reasonId.mistake,
       note: "Wrong dish",
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
     };
     const before = await snapshot(order);
     const preview = await inTx(venue, (tx) =>
@@ -242,7 +242,7 @@ describe("Cancel item service command", () => {
     expect(preview).toMatchObject({
       reduction: "60.00",
       nominalValue: "60.00",
-      needsApproval: null,
+      needsApproval: { by: "refund" },
     });
     expect(await snapshot(order)).toEqual(before);
     await cancel(order, ask);
@@ -289,11 +289,12 @@ describe("Cancel item service command", () => {
           createAdjustmentReason(tx, {
             name: `Retired cancellation ${randomUUID()}`,
             names: {},
+            kind: "void",
             actions: ["cancel"],
             maxPercentBp: null,
             maxAmount: null,
-            applyRole: "staff",
-            approverRole: "staff",
+            applyRoles: [],
+            approverRoles: [],
             noteRequired: false,
           }),
         );
@@ -326,11 +327,12 @@ describe("Cancel item service command", () => {
       createAdjustmentReason(tx, {
         name: `Charged cancellation ${randomUUID()}`,
         names: { en: "Guest declined", es: "Rechazado" },
+        kind: "void",
         actions: ["cancel"],
         maxPercentBp: null,
-        maxAmount: decimal("0.01"),
-        applyRole: "manager",
-        approverRole: "manager",
+        maxAmount: null,
+        applyRoles: [],
+        approverRoles: [],
         noteRequired: true,
       }),
     );
@@ -358,7 +360,7 @@ describe("Cancel item service command", () => {
       requestedBy: venue.staffId,
       approvedBy: null,
       note: ask.note,
-      policySnapshot: { applyRole: "manager", approverRole: "manager", noteRequired: true },
+      policySnapshot: { kind: "void", applyRoles: [], approverRoles: [], noteRequired: true },
     });
     expect(after.cancellations).toMatchObject([{ quantity: 2000, wasStarted: true }]);
     await cancel(order, ask);
@@ -440,13 +442,19 @@ describe("Cancel item service command", () => {
       params: { field: "reasonId" },
     });
     expect(await snapshot(order)).toEqual(before);
-    await cancel(order, { ...ask, reasonId: venue.reasonId.house });
+    await cancel(order, {
+      ...ask,
+      reasonId: venue.reasonId.houseVoid,
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
     const after = await snapshot(order);
     expect(after.lines.map((row) => ({ quantity: row.quantity, total: row.lineTotal }))).toEqual([
       { quantity: 1000, total: 900 },
       { quantity: 2000, total: 300 },
     ]);
-    expect(after.adjustments).toMatchObject([{ action: "cancel", reasonId: venue.reasonId.house }]);
+    expect(after.adjustments).toMatchObject([
+      { action: "cancel", reasonId: venue.reasonId.houseVoid },
+    ]);
     const notices = [];
     for (const station of new Set(order.tickets.map((row) => row.stationId)))
       notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
@@ -633,7 +641,7 @@ describe("Cancel item service command", () => {
   it("refuses the old confirmation after an extra starts without moving either revision", async () => {
     const order = await fixture();
     const ask = await askFor(order, "remove_charge");
-    ask.reasonId = venue.reasonId.house;
+    ask.reasonId = venue.reasonId.houseVoid;
     const unopened = await snapshot(order);
     await startExtra(order);
     const before = await snapshot(order);
@@ -648,7 +656,8 @@ describe("Cancel item service command", () => {
     });
     expect(await snapshot(order)).toEqual(before);
     const fresh = await askFor(order, "remove_charge", "2");
-    fresh.reasonId = venue.reasonId.house;
+    fresh.reasonId = venue.reasonId.houseVoid;
+    fresh.approver = { personId: venue.supervisorId, pin: PINS.supervisor };
     await cancel(order, fresh);
     const after = await snapshot(order);
     expect(
@@ -830,7 +839,7 @@ describe("Cancel item service command", () => {
     );
     const before = await snapshot(order);
     const current = await askFor(order, "remove_charge");
-    current.reasonId = venue.reasonId.house;
+    current.reasonId = venue.reasonId.houseVoid;
     const edit = await inTx(venue, (tx) => readBillEditState(tx, order.parent.workingOrderId));
     await expect(cancel(order, current)).rejects.toMatchObject({
       code: "draft.out_of_date",
@@ -915,7 +924,12 @@ describe("Cancel item service command", () => {
       { code: "adjustment.note_required" },
     );
     expect(await snapshot(order)).toEqual(before);
-    await cancel(order, { ...ask, reasonId: venue.reasonId.mistake, note: "Wrong table" });
+    await cancel(order, {
+      ...ask,
+      reasonId: venue.reasonId.mistake,
+      note: "Wrong table",
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
     const after = await snapshot(order);
     expect(after.lines.map((row) => row.quantity)).toEqual([1000, 2000]);
     expect(after.adjustments).toMatchObject([
@@ -1012,7 +1026,7 @@ describe("Cancel item service command", () => {
         const beforeJobs = await inTx(venue, (tx) => tx.select().from(printJobs));
         const ask = {
           ...(await askFor(order, "remove_charge", "2")),
-          reasonId: venue.reasonId.house,
+          reasonId: venue.reasonId.houseVoid,
         };
         await cancel(order, ask);
         const after = await snapshot(order);
@@ -1086,11 +1100,12 @@ describe("Cancel item service command", () => {
       createAdjustmentReason(tx, {
         name: `Manager cancel ${randomUUID()}`,
         names: { en: "Manager cancel" },
+        kind: "void",
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "supervisor",
-        approverRole: "manager",
+        applyRoles: [],
+        approverRoles: [],
         noteRequired: true,
       }),
     );
@@ -1102,7 +1117,7 @@ describe("Cancel item service command", () => {
     const before = await snapshot(order);
     await expect(cancel(order, ask)).rejects.toMatchObject({
       code: "adjustment.approval_required",
-      params: { approverRole: "manager" },
+      params: { approval: "refund" },
     });
     expect(await snapshot(order)).toEqual(before);
     await cancel(order, { ...ask, approver: { personId: venue.managerId, pin: PINS.manager } });

@@ -129,7 +129,7 @@ async function confirm(p: Fixture) {
       quantity: line.quantity,
       expectedBillRevision: bill!.revision,
       expectedContext: await readCancellationContext(venue.db, p.partyId, line.id),
-      reasonId: venue.reasonId.house,
+      reasonId: venue.reasonId.houseVoid,
     });
   return { ...p.body, cancellations };
 }

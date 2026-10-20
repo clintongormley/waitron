@@ -803,15 +803,15 @@ describe("stages, reasons and guests", () => {
         by: alex,
         at,
       });
-    await comp("Queja", "2026-09-15T20:00:00.000Z");
+    await comp("Complaint (es)", "2026-09-15T20:00:00.000Z");
     await comp("Complaint", "2026-09-15T19:00:00.000Z");
 
     const read = await report();
 
     expect(read.overall.byReason).toEqual([
-      { reasonId: reason.id, reasonName: "Queja", ...tally(2, "3.00", "0.00") },
+      { reasonId: reason.id, reasonName: "Complaint (es)", ...tally(2, "3.00", "0.00") },
     ]);
-    expect((await entries()).map((row) => row.reasonName)).toEqual(["Queja", "Complaint"]);
+    expect((await entries()).map((row) => row.reasonName)).toEqual(["Complaint (es)", "Complaint"]);
   });
 
   it("names a reason by the row with the larger id when its two newest rows share a time", async () => {
@@ -832,7 +832,7 @@ describe("stages, reasons and guests", () => {
         at: "2026-09-15T20:00:00.000Z",
       });
     const named = [
-      { id: await comp("Queja"), name: "Queja" },
+      { id: await comp("Complaint (es)"), name: "Complaint (es)" },
       { id: await comp("Complaint"), name: "Complaint" },
     ].sort((a, b) => b.id.localeCompare(a.id));
 

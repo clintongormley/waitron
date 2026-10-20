@@ -84,6 +84,7 @@ import {
   tenantReceipts,
   withTransaction,
   workingOrders,
+  type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -109,6 +110,7 @@ import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
 import {
+  adjustmentReasons,
   createAdjustmentReason,
   deactivateAdjustmentReason,
   listAdjustmentReasons,
@@ -1768,15 +1770,16 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
   });
   const prepared = await withTransaction(suite.db, async (tx) => {
     const policy = {
-      names: { en: "Complaint", es: "Queja" },
+      names: { en: "Guest complaint", es: "Queja" },
+      kind: "comp" as const,
       actions: ["comp", "discount_percent"] as ("comp" | "discount_percent")[],
-      maxPercentBp: 5000,
+      maxPercentBp: null,
       maxAmount: decimal("30.00"),
-      applyRole: "supervisor" as const,
-      approverRole: "manager" as const,
+      applyRoles: ["supervisor" as const, "manager" as const, "admin" as const],
+      approverRoles: ["manager" as const, "admin" as const],
       noteRequired: true,
     };
-    await createAdjustmentReason(tx, { ...policy, name: "Complaint" });
+    await createAdjustmentReason(tx, { ...policy, name: "Guest complaint" });
     const retired = await createAdjustmentReason(tx, { ...policy, name: "Retired" });
     await deactivateAdjustmentReason(tx, retired.id);
     return listAdjustmentReasons(tx, { includeInactive: true });
@@ -1789,7 +1792,7 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
     new Date("2026-09-26T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.adjustment_reasons).toHaveLength(3);
+  expect(transferred.tables.adjustment_reasons).toHaveLength(11);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -1803,6 +1806,116 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
   const withoutId = (reasons: typeof imported) =>
     reasons.map((reason) => ({ ...reason, id: undefined }));
   expect(withoutId(imported)).toEqual(withoutId(prepared));
+});
+
+/** A starter venue's bundle, its reason rows as the export writes them. */
+async function starterReasonsBundle(taxId: string, change?: (tx: Transaction) => Promise<void>) {
+  const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  if (change !== undefined) await withTransaction(suite.db, change);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-19T12:00:00Z"),
+    versions,
+  );
+  const encoded = transferred.tables.adjustment_reasons!.map((row) => [
+    row.kind,
+    row.active,
+    row.note_required,
+  ]);
+  return { transferred, versions, encoded };
+}
+
+it("imports a starter venue's reasons, which keep a switched-on Void reason asking for a note", async () => {
+  const { transferred, versions, encoded } = await starterReasonsBundle("B19283746");
+  expect(encoded).toEqual([
+    ["void", 1, 0],
+    ["void", 1, 0],
+    ["void", 1, 0],
+    ["void", 1, 0],
+    ["void", 1, 1],
+    ["comp", 1, 0],
+    ["comp", 1, 0],
+    ["comp", 1, 0],
+    ["comp", 1, 0],
+  ]);
+  await applyVenue(planVenue(venue("B19283747"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, (tx) =>
+    listAdjustmentReasons(tx, { includeInactive: true }),
+  );
+  expect(imported.filter((reason) => reason.kind === "void" && reason.noteRequired)).toHaveLength(
+    1,
+  );
+});
+
+it("refuses a bundle whose only Void reason asking for a note was switched off", async () => {
+  const { transferred, versions, encoded } = await starterReasonsBundle("B19283748", async (tx) => {
+    // Straight to the row: the operations refuse to switch this reason off.
+    await tx
+      .update(adjustmentReasons)
+      .set({ active: false })
+      .where(and(eq(adjustmentReasons.kind, "void"), eq(adjustmentReasons.noteRequired, true)));
+  });
+  expect(encoded.filter(([kind, , note]) => kind === "void" && note === 1)).toEqual([
+    ["void", 0, 1],
+  ]);
+  const target = venue("B19283749");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "adjustment_reasons" },
+  });
+  const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+    select count(*) as count from tenants where tax_id = ${target.taxId}
+  `);
+  expect(persisted.rows[0]!.count).toBe(0);
+});
+
+it("refuses a bundle whose only Void reason asking for a note cannot cancel", async () => {
+  const { transferred, versions } = await starterReasonsBundle("B19283750", async (tx) => {
+    // Straight to the row: the operations refuse a Void reason that does not cancel.
+    await tx
+      .update(adjustmentReasons)
+      .set({ actions: ["comp"] })
+      .where(and(eq(adjustmentReasons.kind, "void"), eq(adjustmentReasons.noteRequired, true)));
+  });
+  expect(
+    transferred.tables
+      .adjustment_reasons!.filter((row) => row.kind === "void" && row.note_required === 1)
+      .map((row) => [row.active, row.actions]),
+  ).toEqual([[1, '["comp"]']]);
+  const target = venue("B19283751");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "adjustment_reasons.actions" },
+  });
+  const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+    select count(*) as count from tenants where tax_id = ${target.taxId}
+  `);
+  expect(persisted.rows[0]!.count).toBe(0);
 });
 
 it("transfers staff roles, who holds them and a painted season week under new ids", async () => {
@@ -2041,12 +2154,16 @@ it("transfers a station's painted season day and a special day's painted date un
       if (row[key] !== null) expect(original).not.toContain(row[key]);
 });
 
-it("transfers the venue's limit on a bill's total discount", async () => {
+it("transfers the venue's limit on a bill's comps and who approves past it", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  await withTransaction(suite.db, (tx) => saveAdjustmentSettings(tx, { maxBillDiscountBp: 4000 }));
+  const settings = {
+    maxBillComp: decimal("40.00"),
+    billApproverRoles: ["supervisor" as const, "manager" as const, "admin" as const],
+  };
+  await withTransaction(suite.db, (tx) => saveAdjustmentSettings(tx, settings));
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -2061,9 +2178,7 @@ it("transfers the venue's limit on a bill's total discount", async () => {
     beforeCommit: (tx, result) =>
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
-  expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual({
-    maxBillDiscountBp: 4000,
-  });
+  expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual(settings);
 });
 
 it("transfers a department's receipt logo with its image and pictures, and the imported receipt prints it", async () => {

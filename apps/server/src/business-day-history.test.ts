@@ -227,11 +227,12 @@ describe("dated business-day reporting through real storage", () => {
       const reason = await createAdjustmentReason(tx, {
         name: "Clock fixture",
         names: {},
+        kind: "comp",
         actions: ["discount_amount"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "staff",
-        approverRole: "manager",
+        applyRoles: ["staff", "supervisor", "manager", "admin"],
+        approverRoles: ["manager", "admin"],
         noteRequired: false,
       });
       await recordAdjustment(tx, {

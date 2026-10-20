@@ -200,37 +200,65 @@ const MENU: {
 
 /** The reasons every suite shares; a case that edits a reason makes its own. */
 export const REASONS = {
-  /** Comp and every discount; €30.00 a bill and 50% a line; supervisors apply, managers approve. */
+  /** Free and every discount; €30.00 a bill; supervisors and above apply, managers and admins
+   * approve. */
   complaint: {
-    name: "Complaint",
-    names: { en: "Complaint", es: "Queja" },
+    name: "Guest complaint",
+    names: { en: "Guest complaint", es: "Queja" },
+    kind: "comp",
     actions: ["comp", "discount_percent", "discount_amount"],
-    maxPercentBp: 5000,
+    maxPercentBp: null,
     maxAmount: decimal("30.00"),
-    applyRole: "supervisor",
-    approverRole: "manager",
+    applyRoles: ["supervisor", "manager", "admin"],
+    approverRoles: ["manager", "admin"],
     noteRequired: false,
   },
-  /** Every action, no limits, anyone. */
+  /** A percentage or an amount, 50% an item; anyone applies, managers and admins approve. */
+  staffMeal: {
+    name: "Crew meal",
+    names: { en: "Crew meal", es: "Comida de personal" },
+    kind: "comp",
+    actions: ["discount_percent", "discount_amount"],
+    maxPercentBp: 5000,
+    maxAmount: null,
+    applyRoles: ["staff", "supervisor", "manager", "admin"],
+    approverRoles: ["manager", "admin"],
+    noteRequired: false,
+  },
+  /** Free and every discount, no limits, anyone. */
   house: {
     name: "House",
     names: { en: "House", es: "Casa" },
-    actions: ["cancel", "comp", "discount_percent", "discount_amount"],
+    kind: "comp",
+    actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRole: "staff",
-    approverRole: "staff",
+    applyRoles: ["staff", "supervisor", "manager", "admin"],
+    approverRoles: ["staff", "supervisor", "manager", "admin"],
     noteRequired: false,
   },
-  /** Cancel only, with a note. */
-  mistake: {
-    name: "Mistake",
-    names: { en: "Mistake", es: "Error" },
+  /** A cancel, with no note. */
+  houseVoid: {
+    name: "House void",
+    names: { en: "House void", es: "Casa anulación" },
+    kind: "void",
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRole: "staff",
-    approverRole: "staff",
+    applyRoles: [],
+    approverRoles: [],
+    noteRequired: false,
+  },
+  /** A cancel, with a note. */
+  mistake: {
+    name: "Mistake",
+    names: { en: "Mistake", es: "Error" },
+    kind: "void",
+    actions: ["cancel"],
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
     noteRequired: true,
   },
 } satisfies Record<string, AdjustmentReasonInput>;

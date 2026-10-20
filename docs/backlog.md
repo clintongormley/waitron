@@ -662,12 +662,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   constraints A2's rework left
   behind](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).
 
-- A configuration imported at setup replaces the default "Entry error" cancel reason with the
-  imported venue's reasons, so importing from a venue with none leaves the new venue with none, and
-  the till's dialog then says so (`adjust.no_reasons`); whether setup should add the default after
-  such an import is the owner's to decide. Left open by service Task 11 (#916).
-  [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-
 - **The till's "This device hasn't trusted the till yet" page has never been seen on a real
   device.** **Next action:** during the on-device trust rows above, click past the certificate
   warning on one device and confirm the page appears.
@@ -2183,9 +2177,59 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   switch on a cash refund; a fired dish removed before preparation started is not listed; the refund
   screen's Reason is the same drop-down. **The owner answered the last question (§11, D28): a cash
   refund only on a device whose profile takes cash, as today.** No question is open.
+  **A758-1 built the rules** ([plan](superpowers/plans/2026-10-19-a758-reason-rules.md)): Void and Comp
+  reasons, Comp role lists, limits that ask for a PIN, the bill's comp limit in euros, nine starter
+  reasons (English only, owner 2026-10-19; their translation at setup is A918), and the till naming
+  whose PIN it needs. Left: A758-2 (the page), A758-3 (the report),
+  A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
+  "collect it at the counter" slices.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
+
+- **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been
+  started (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish
+  not started with no PIN (`apps/server/src/line-cancel.ts`). A recalled draft's Discard previews
+  each sent dish as a cancel through the adjustment path (`apps/till/src/till-app.ts`
+  `#onAdjustPreview`), which cannot ask, so a fired dish counts as possibly started and needs
+  someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy.ts`). Stricter
+  than design D12. Decide whether Discard should ask the question too.
+
+- **A910. A reason's item limit errs toward asking (left open by A758-1).** Each share is rounded
+  up to a whole basis point (`shareBp`, `packages/adjustments/src/record.ts`). What the reason's
+  discounts on the whole bill took off each row is not recorded, so `judgeComp`
+  (`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
+  about, and its dish or its extras), capped at what that row is now below its list value less what
+  comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
+  whole line, nothing split off, at the row's present quantity and list value); the item counts the
+  largest of those. A row no bill discount reached, such as one added after them, counts nothing for
+  them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
+  reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
+  priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
+  moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
+  that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
+  item's count starts again on another bill, because the reason's earlier comps are read from the
+  item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
+  reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
+  with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
+  an item's count should follow it to another bill.
+
+- **A911. When an amount comp prints "Descuento 100%" (left open by A758-1, for A758-4).** "Full"
+  means the comp took the item's whole list price. An amount comp that takes what another comp left
+  prints "Descuento" with its amount. Confirm with the owner when A758-4 is built.
+
+- **A918. Starter content in the venue's languages at setup (owner question, left open by A758-1).**
+  Starter content a module writes into a new venue is English, translated when the box is set up
+  (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
+  on every venue. The owner is asked how (lane C's questions, 2026-10-20): (A) each module ships a
+  translation file of its starter names and setup writes every content language the venue has; (B)
+  Cloud's Translate all runs at the end of setup; (C) English until someone translates. The same
+  answer covers the kitchen station, device profiles, service steps and units
+  ([audit](backlog/english-only-audit.md)).
+
+- **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
+  A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
+  in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
 
 - **Review follow-up: nutrition for extras in Sent.** The Current orders wire's extra summaries
   carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill
@@ -2824,7 +2868,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 11 (#916, cancellations, comps and discounts; B11a–B11g).**
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-  - **The adjustment history records who approved, but not whether the bill's discount limit,
+  - **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
     rather than the reason, is why.** **Next action:** decide whether to record it.
   - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
     it is paid) cannot be adjusted.** **Next action:** decide whether a placed order can be

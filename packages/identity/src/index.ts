@@ -49,7 +49,6 @@ export {
   PERMISSIONS,
   permissionsForRole,
   registerModulePermissions,
-  roleAtLeast,
   roleHasPermission,
 } from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
@@ -79,8 +78,8 @@ export {
   clearPersonPin,
   deactivatePerson,
   invitePerson,
-  listActivePersonsAtOrAboveRole,
   listActivePersonsWithPermission,
+  listActivePersonsWithRoles,
   listActiveStaff,
   listPersons,
   normalizeAndValidateEmail,

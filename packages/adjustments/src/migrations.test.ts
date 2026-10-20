@@ -25,22 +25,32 @@ beforeAll(() => {
 
 interface Row {
   name?: string;
+  kind?: string;
   actions?: string;
   maxPercent?: number | null;
   maxAmount?: number | null;
-  applyRole?: string;
-  approverRole?: string;
+  applyRoles?: string;
+  approverRoles?: string;
   active?: number;
   position?: number;
 }
 
+/** A Void reason, as the columns store one: cancel only, no role lists, no limits. */
+const VOID: Row = {
+  kind: "void",
+  actions: '["cancel"]',
+  applyRoles: "[]",
+  approverRoles: "[]",
+};
+
 function insert(row: Row = {}) {
   return sql`insert into adjustment_reasons
-      (id, name, names, actions, max_percent, max_amount, apply_role, approver_role,
+      (id, name, names, kind, actions, max_percent, max_amount, apply_roles, approver_roles,
        note_required, active, position, created_at)
-    values (${randomUUID()}, ${row.name ?? "Complaint"}, '{}', ${row.actions ?? '["comp"]'},
-      ${row.maxPercent ?? null}, ${row.maxAmount ?? null}, ${row.applyRole ?? "supervisor"},
-      ${row.approverRole ?? "manager"}, 1, ${row.active ?? 1}, ${row.position ?? 0},
+    values (${randomUUID()}, ${row.name ?? "Complaint"}, '{}', ${row.kind ?? "comp"},
+      ${row.actions ?? '["comp"]'}, ${row.maxPercent ?? null}, ${row.maxAmount ?? null},
+      ${row.applyRoles ?? '["supervisor","manager","admin"]'},
+      ${row.approverRoles ?? '["manager","admin"]'}, 1, ${row.active ?? 1}, ${row.position ?? 0},
       ${new Date().toISOString()})`;
 }
 
@@ -51,7 +61,7 @@ async function refusedBy(row: Row, constraint: string): Promise<void> {
 }
 
 describe("the adjustments migration set", () => {
-  it("creates adjustment_reasons with the policy's columns and no tenant column", async () => {
+  it("creates adjustment_reasons with the kind and both role lists, and no single-role columns", async () => {
     const columns = await db.execute<{ name: string; notnull: number; pk: number }>(
       sql`select name, "notnull", pk from pragma_table_info('adjustment_reasons')`,
     );
@@ -61,11 +71,12 @@ describe("the adjustments migration set", () => {
       id: { notNull: 1, pk: 1 },
       name: { notNull: 1, pk: 0 },
       names: { notNull: 1, pk: 0 },
+      kind: { notNull: 1, pk: 0 },
       actions: { notNull: 1, pk: 0 },
       max_percent: { notNull: 0, pk: 0 },
       max_amount: { notNull: 0, pk: 0 },
-      apply_role: { notNull: 1, pk: 0 },
-      approver_role: { notNull: 1, pk: 0 },
+      apply_roles: { notNull: 1, pk: 0 },
+      approver_roles: { notNull: 1, pk: 0 },
       note_required: { notNull: 1, pk: 0 },
       active: { notNull: 1, pk: 0 },
       position: { notNull: 1, pk: 0 },
@@ -81,9 +92,27 @@ describe("the adjustments migration set", () => {
     ]);
   });
 
-  it("refuses a role outside the ladder in either role column", async () => {
-    await refusedBy({ applyRole: "owner" }, "adjustment_reasons_apply_role_ck");
-    await refusedBy({ approverRole: "owner" }, "adjustment_reasons_approver_role_ck");
+  it("refuses a Void reason with a role list or a limit, and a Comp reason with an empty list", async () => {
+    const check = "adjustment_reasons_kind_fields_ck";
+    await refusedBy({ ...VOID, applyRoles: '["manager"]' }, check);
+    await refusedBy({ ...VOID, approverRoles: '["manager"]' }, check);
+    await refusedBy({ ...VOID, maxPercent: 5000 }, check);
+    await refusedBy({ ...VOID, maxAmount: 3000 }, check);
+    await refusedBy({ applyRoles: "[]" }, check);
+    await refusedBy({ approverRoles: "[]" }, check);
+    await db.execute(insert({ ...VOID, name: "Mistake" }));
+    await db.execute(insert({ name: "Complaint" }));
+    const kinds = await db.execute<{ name: string; kind: string }>(
+      sql`select name, kind from adjustment_reasons order by name`,
+    );
+    expect(kinds.rows).toEqual([
+      { name: "Complaint", kind: "comp" },
+      { name: "Mistake", kind: "void" },
+    ]);
+  });
+
+  it("refuses a kind outside void and comp", async () => {
+    await refusedBy({ kind: "discount" }, "adjustment_reasons_kind_ck");
   });
 
   it("refuses a percentage limit of zero or above 100%, and an amount limit of zero", async () => {
@@ -326,23 +355,25 @@ describe("the adjustments table", () => {
   });
 });
 
-function insertSettings(id: number, maxBillDiscount: number | null) {
-  return db.execute(sql`insert into adjustment_settings (id, max_bill_discount, updated_at)
-    values (${id}, ${maxBillDiscount}, ${new Date().toISOString()})`);
+function insertSettings(id: number, maxBillComp: number | null, billApproverRoles = '["admin"]') {
+  return db.execute(sql`insert into adjustment_settings
+      (id, max_bill_comp, bill_approver_roles, updated_at)
+    values (${id}, ${maxBillComp}, ${billApproverRoles}, ${new Date().toISOString()})`);
 }
 
 async function settingsRefused(
   id: number,
-  maxBillDiscount: number | null,
+  maxBillComp: number | null,
   constraint: string,
+  billApproverRoles?: string,
 ): Promise<void> {
-  const error = await captureError(() => insertSettings(id, maxBillDiscount));
+  const error = await captureError(() => insertSettings(id, maxBillComp, billApproverRoles));
   expect(isRefusal(error, CHECK_VIOLATION), constraint).toBe(true);
   expect(engineErrorMessage(error), constraint).toContain(constraint);
 }
 
 describe("the adjustment_settings table", () => {
-  it("has one optional limit beside its pinned id and its timestamp", async () => {
+  it("has an optional amount and an approver list beside its pinned id and its timestamp", async () => {
     const columns = await db.execute<{ name: string; notnull: number; pk: number }>(
       sql`select name, "notnull", pk from pragma_table_info('adjustment_settings')`,
     );
@@ -350,7 +381,8 @@ describe("the adjustment_settings table", () => {
       Object.fromEntries(columns.rows.map((c) => [c.name, { notNull: c.notnull, pk: c.pk }])),
     ).toEqual({
       id: { notNull: 1, pk: 1 },
-      max_bill_discount: { notNull: 0, pk: 0 },
+      max_bill_comp: { notNull: 0, pk: 0 },
+      bill_approver_roles: { notNull: 1, pk: 0 },
       updated_at: { notNull: 1, pk: 0 },
     });
   });
@@ -362,15 +394,21 @@ describe("the adjustment_settings table", () => {
     expect(isRefusal(second, UNIQUE_VIOLATION)).toBe(true);
   });
 
-  it("takes a limit from 1 to 10000 basis points, or none", async () => {
-    await settingsRefused(1, 0, "adjustment_settings_max_bill_discount_ck");
-    await settingsRefused(1, 10001, "adjustment_settings_max_bill_discount_ck");
-    for (const limit of [null, 1, 10000]) {
-      await db.execute(sql`delete from adjustment_settings`);
-      await insertSettings(1, limit);
-    }
-    expect((await db.execute(sql`select max_bill_discount from adjustment_settings`)).rows).toEqual(
-      [{ max_bill_discount: 10000 }],
+  it("adjustment_settings has an optional amount and a never-empty approver list, Manager and Admin to start", async () => {
+    await db.execute(sql`delete from adjustment_settings`);
+    await db.execute(
+      sql`insert into adjustment_settings (id, updated_at) values (1, ${new Date().toISOString()})`,
     );
+    expect(
+      (await db.execute(sql`select max_bill_comp, bill_approver_roles from adjustment_settings`))
+        .rows,
+    ).toEqual([{ max_bill_comp: null, bill_approver_roles: '["manager","admin"]' }]);
+    await db.execute(sql`delete from adjustment_settings`);
+    await settingsRefused(1, 0, "adjustment_settings_max_bill_comp_ck");
+    await settingsRefused(1, null, "adjustment_settings_bill_approver_roles_ck", "[]");
+    await insertSettings(1, 1);
+    expect((await db.execute(sql`select max_bill_comp from adjustment_settings`)).rows).toEqual([
+      { max_bill_comp: 1 },
+    ]);
   });
 });

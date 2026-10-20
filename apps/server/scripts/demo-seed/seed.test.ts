@@ -718,9 +718,14 @@ describe("seedDemoRestaurant", () => {
     const reasons = await withTransaction(suite.db, (tx) => listAdjustmentReasons(tx));
     expect(reasons.map((reason) => reason.name)).toEqual([
       "Entry error",
-      "Changed mind",
-      "Unavailable item",
+      "Item not available",
+      "Customer changed mind",
+      "Not served",
+      "Other",
       "Complaint",
+      "On the house",
+      "Staff meal",
+      "Discount",
       "Friends and family",
       "Employee discount",
       "Manager special",

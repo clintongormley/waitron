@@ -195,11 +195,12 @@ async function setup(withVariant = false) {
     const reason = await createAdjustmentReason(tx, {
       name: `Modifier discount ${randomUUID()}`,
       names: {},
+      kind: "comp",
       actions: ["discount_percent"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRole: "staff",
-      approverRole: "staff",
+      applyRoles: ["staff", "supervisor", "manager", "admin"],
+      approverRoles: ["staff", "supervisor", "manager", "admin"],
       noteRequired: false,
     });
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, tabId));

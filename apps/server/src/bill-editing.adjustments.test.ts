@@ -30,6 +30,7 @@ import {
 import {
   billWith,
   inTx,
+  PINS,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
@@ -88,7 +89,8 @@ async function request(
     expectedRevision: bill!.revision,
     expectedEdit: expectedEdit!,
     action: "comp" as const,
-    reasonId: venue.reasonId.house,
+    reasonId:
+      op === "cancel" || op === "cancel-keep" ? venue.reasonId.houseVoid : venue.reasonId.house,
     note: null,
     operatorId: venue.staffId,
     submissionId: randomUUID(),
@@ -322,8 +324,9 @@ it("Discard still resolves its own recalled family and releases the bill", async
         submissionId: randomUUID(),
         revision: current.draftRevision!,
         expectedRevision: bill!.revision,
-        reasonId: venue.reasonId.house,
+        reasonId: venue.reasonId.houseVoid,
         note: null,
+        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
       },
       venue.venueLocale,
     ),
@@ -434,6 +437,12 @@ for (const action of ["cancel", "comp", "discount_percent"] as const)
       ...(action === "discount_percent"
         ? { percentBp: 1000, lineId: null, quantity: undefined }
         : {}),
+      ...(action === "cancel"
+        ? {
+            reasonId: venue.reasonId.houseVoid,
+            approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+          }
+        : {}),
     };
     const previewBefore = frozen();
     const preview = await inTx(venue, (tx) => previewAdjustment(tx, ask, venue.venueLocale));
@@ -471,10 +480,11 @@ it("the last owned-source removal closes its draft and releases only that bill",
         sourceDraftId: current.draftId!,
         action: "cancel",
         quantity: "3",
-        reasonId: venue.reasonId.house,
+        reasonId: venue.reasonId.houseVoid,
         note: null,
         operatorId: venue.staffId,
         submissionId: randomUUID(),
+        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
       },
       venue.venueLocale,
     ),
@@ -560,6 +570,8 @@ it("removing the last recalled source keeps a remaining fresh dish owned", async
     sourceDraftId: saved!.edit.draftId!,
     action: "cancel" as const,
     quantity: "3",
+    reasonId: venue.reasonId.houseVoid,
+    approver: { personId: venue.supervisorId, pin: PINS.supervisor },
   };
   await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale));
   expect(await edit(p.billId)).toEqual({
@@ -579,6 +591,8 @@ it("a new editor acquires the bill after source cancellation without reopening i
     sourceDraftId: current.draftId!,
     action: "cancel" as const,
     quantity: "3",
+    reasonId: venue.reasonId.houseVoid,
+    approver: { personId: venue.supervisorId, pin: PINS.supervisor },
   };
   const outcome = await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale));
   const next = await save(p, venue.managerId);

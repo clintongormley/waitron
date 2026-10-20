@@ -62,12 +62,13 @@ const menus: TillZoneMenu[] = servedMenus(
 const mistake: AdjustmentReason = {
   id: "error",
   name: "Error",
+  kind: "void",
   actions: ["cancel"],
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "staff",
-  approverRole: "staff",
+  applyRoles: [],
+  approverRoles: [],
 };
 
 const lines: TabLine[] = [

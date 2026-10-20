@@ -1,6 +1,6 @@
 import { and, asc, eq, max, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { roleAtLeast, type PersonRoleValue } from "@waitron/identity";
+import type { PersonRoleValue } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
@@ -10,19 +10,20 @@ import {
   decimalToCents,
   type Decimal,
 } from "@waitron/shared";
-import { isPercentBp, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
-import { adjustmentReasons } from "./schema/reasons.js";
+import { reasonShapeFault, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
+import { adjustmentReasons, type ReasonKind } from "./schema/reasons.js";
 import "./errors.js";
 
 /** Everything an owner edits on a reason; `active` and `position` have operations of their own. */
 export interface AdjustmentReasonInput {
   name: string;
   names: Record<string, string>;
+  kind: ReasonKind;
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: Decimal | null;
-  applyRole: PersonRoleValue;
-  approverRole: PersonRoleValue;
+  applyRoles: PersonRoleValue[];
+  approverRoles: PersonRoleValue[];
   noteRequired: boolean;
 }
 
@@ -40,11 +41,12 @@ function toReason(row: ReasonRow): AdjustmentReason {
     id: row.id,
     name: row.name,
     names: row.names,
+    kind: row.kind,
     actions: row.actions,
     maxPercentBp: row.maxPercent,
     maxAmount: row.maxAmount === null ? null : centsToDecimal(row.maxAmount),
-    applyRole: row.applyRole,
-    approverRole: row.approverRole,
+    applyRoles: row.applyRoles,
+    approverRoles: row.approverRoles,
     noteRequired: row.noteRequired,
     active: row.active,
     position: row.position,
@@ -76,13 +78,8 @@ function nonBlankNames(names: Record<string, string>): Record<string, string> {
 function reasonValues(input: AdjustmentReasonInput) {
   const name = input.name.trim();
   if (name === "") throw invalid("name");
-  if (input.actions.length === 0 || new Set(input.actions).size !== input.actions.length) {
-    throw invalid("actions");
-  }
-  const percent = input.maxPercentBp;
-  if (percent !== null && !isPercentBp(percent)) {
-    throw invalid("maxPercentBp");
-  }
+  const fault = reasonShapeFault(input);
+  if (fault !== null) throw invalid(fault);
   const amount = input.maxAmount;
   if (
     amount !== null &&
@@ -91,18 +88,47 @@ function reasonValues(input: AdjustmentReasonInput) {
   ) {
     throw invalid("maxAmount");
   }
-  // An approver below the applying role could allow what they may not do themselves.
-  if (!roleAtLeast(input.approverRole, input.applyRole)) throw invalid("approverRole");
   return {
     name,
     names: nonBlankNames(input.names),
+    kind: input.kind,
     actions: input.actions,
-    maxPercent: percent,
+    maxPercent: input.maxPercentBp,
     maxAmount: amount === null ? null : decimalToCents(amount),
-    applyRole: input.applyRole,
-    approverRole: input.approverRole,
+    applyRoles: input.applyRoles,
+    approverRoles: input.approverRoles,
     noteRequired: input.noteRequired,
   };
+}
+
+/**
+ * Refuses a change to a switched-on Void reason that would leave the venue no switched-on Void
+ * reason, or none that asks for a note (A758 D27). `after` is the reason's state once changed;
+ * a reason that was not a switched-on Void reason is never refused.
+ */
+async function assertVoidKept(
+  tx: Transaction,
+  before: ReasonRow,
+  after: { active: boolean; kind: ReasonKind; noteRequired: boolean },
+): Promise<void> {
+  if (!before.active || before.kind !== "void") return;
+  const others = await tx
+    .select({ noteRequired: adjustmentReasons.noteRequired })
+    .from(adjustmentReasons)
+    .where(
+      and(
+        eq(adjustmentReasons.active, true),
+        eq(adjustmentReasons.kind, "void"),
+        ne(adjustmentReasons.id, before.id),
+      ),
+    );
+  const remaining = after.active && after.kind === "void" ? [...others, after] : others;
+  if (remaining.length === 0) {
+    throw new AppError("adjustment_reason.void_required", { withNote: false });
+  }
+  if (before.noteRequired && !remaining.some((reason) => reason.noteRequired)) {
+    throw new AppError("adjustment_reason.void_required", { withNote: true });
+  }
 }
 
 /** Only active names are unique, so an inactive reason's name is never "taken". */
@@ -174,6 +200,7 @@ export async function updateAdjustmentReason(
   const values = reasonValues(input);
   const existing = await findReason(tx, reasonId);
   if (existing.active) await assertNameFree(tx, values.name, reasonId);
+  await assertVoidKept(tx, existing, { ...values, active: existing.active });
   const [row] = await tx
     .update(adjustmentReasons)
     .set(values)
@@ -184,12 +211,12 @@ export async function updateAdjustmentReason(
 
 /** Kept, never deleted, so anything naming the reason by id can still read it. */
 export async function deactivateAdjustmentReason(tx: Transaction, reasonId: string): Promise<void> {
-  const [row] = await tx
+  const existing = await findReason(tx, reasonId);
+  await assertVoidKept(tx, existing, { ...existing, active: false });
+  await tx
     .update(adjustmentReasons)
     .set({ active: false })
-    .where(eq(adjustmentReasons.id, reasonId))
-    .returning({ id: adjustmentReasons.id });
-  if (row === undefined) throw new AppError("adjustment_reason.not_found", { reasonId });
+    .where(eq(adjustmentReasons.id, reasonId));
 }
 
 /** Keeps its position, so no two reasons come to share one. Refused while an active reason holds

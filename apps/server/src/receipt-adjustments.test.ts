@@ -50,7 +50,6 @@ useVenueDb({
 
 type Ask = Partial<Omit<AdjustmentArgs, "amount">> & { action: AdjustmentAction; amount?: string };
 
-/** Apply `ask` to the bill at its current revision, as the supervisor, under House. */
 async function adjust(billId: string, ask: Ask): Promise<void> {
   await inTx(venue, async (tx) => {
     const [order] = await tx
@@ -67,7 +66,7 @@ async function adjust(billId: string, ask: Ask): Promise<void> {
         submissionId: randomUUID(),
         expectedRevision: order!.revision,
         lineId: null,
-        reasonId: venue.reasonId.house,
+        reasonId: ask.action === "cancel" ? venue.reasonId.houseVoid : venue.reasonId.house,
         note: null,
         operatorId: venue.supervisorId,
         ...rest,

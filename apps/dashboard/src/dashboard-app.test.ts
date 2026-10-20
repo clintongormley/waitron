@@ -71,7 +71,7 @@ const adjustmentsRequest: DashboardRequest = async (path, method, body, options)
   path.startsWith("/management-api/adjustments/reasons")
     ? ({ reasons: [] } as never)
     : path === "/management-api/adjustments/settings"
-      ? ({ maxBillDiscountBp: null } as never)
+      ? ({ maxBillComp: null, billApproverRoles: ["manager", "admin"] } as never)
       : stubRequest(path, method, body, options);
 
 const people: PersonSummary[] = [

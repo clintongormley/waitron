@@ -1,6 +1,8 @@
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { PersonRoleValue } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import {
@@ -13,6 +15,7 @@ import {
   updateAdjustmentReason,
   type AdjustmentReasonInput,
 } from "./operations.js";
+import { adjustmentReasons } from "./schema/reasons.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
 
@@ -26,12 +29,28 @@ const MISSING = "00000000-0000-4000-8000-00000000dead";
 function complaint(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentReasonInput {
   return {
     name: "Complaint",
-    names: { en: "Complaint", es: "Queja" },
+    names: { en: "Complaint", es: "Complaint (es)" },
+    kind: "comp",
     actions: ["comp", "discount_percent"],
-    maxPercentBp: 5000,
+    maxPercentBp: null,
     maxAmount: decimal("30.00"),
-    applyRole: "supervisor",
-    approverRole: "manager",
+    applyRoles: ["supervisor", "manager", "admin"],
+    approverRoles: ["manager", "admin"],
+    noteRequired: true,
+    ...overrides,
+  };
+}
+
+function voidReason(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentReasonInput {
+  return {
+    name: "Other",
+    names: { en: "Other", es: "Other (es)" },
+    kind: "void",
+    actions: ["cancel"],
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
     noteRequired: true,
     ...overrides,
   };
@@ -47,27 +66,22 @@ describe("adjustment reason operations", () => {
     expect(created).toEqual({
       id: expect.any(String),
       name: "Complaint",
-      names: { en: "Complaint", es: "Queja" },
+      names: { en: "Complaint", es: "Complaint (es)" },
+      kind: "comp",
       actions: ["comp", "discount_percent"],
-      maxPercentBp: 5000,
+      maxPercentBp: null,
       maxAmount: "30.00",
-      applyRole: "supervisor",
-      approverRole: "manager",
+      applyRoles: ["supervisor", "manager", "admin"],
+      approverRoles: ["manager", "admin"],
       noteRequired: true,
       active: true,
       position: 0,
     });
     const error = await inTx((tx) =>
-      createAdjustmentReason(tx, {
-        name: "  Entry error  ",
-        names: {},
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-        applyRole: "staff",
-        approverRole: "staff",
-        noteRequired: false,
-      }),
+      createAdjustmentReason(
+        tx,
+        voidReason({ name: "  Entry error  ", names: {}, noteRequired: false }),
+      ),
     );
     expect(error).toMatchObject({ name: "Entry error", position: 1, maxAmount: null });
 
@@ -81,8 +95,8 @@ describe("adjustment reason operations", () => {
           actions: ["comp"],
           maxPercentBp: null,
           maxAmount: decimal("45.50"),
-          applyRole: "manager",
-          approverRole: "admin",
+          applyRoles: ["manager", "admin"],
+          approverRoles: ["admin"],
           noteRequired: false,
         }),
       ),
@@ -91,11 +105,12 @@ describe("adjustment reason operations", () => {
       id: created.id,
       name: "Guest complaint",
       names: { en: "Guest complaint" },
+      kind: "comp",
       actions: ["comp"],
       maxPercentBp: null,
       maxAmount: "45.50",
-      applyRole: "manager",
-      approverRole: "admin",
+      applyRoles: ["manager", "admin"],
+      approverRoles: ["admin"],
       noteRequired: false,
       active: true,
       position: 0,
@@ -110,9 +125,9 @@ describe("adjustment reason operations", () => {
       ["Guest complaint", 1],
     ]);
 
-    await inTx((tx) => deactivateAdjustmentReason(tx, error.id));
+    await inTx((tx) => deactivateAdjustmentReason(tx, created.id));
     expect((await inTx((tx) => listAdjustmentReasons(tx))).map((r) => r.name)).toEqual([
-      "Guest complaint",
+      "Entry error",
     ]);
   });
 
@@ -228,8 +243,17 @@ describe("adjustment reason operations", () => {
     ["maxAmount", { maxAmount: decimal("0.00") }],
     ["maxAmount", { maxAmount: decimal("-1.00") }],
     ["maxAmount", { maxAmount: decimal("1.005") }],
-    ["approverRole", { applyRole: "manager", approverRole: "supervisor" }],
-  ])("refuses a reason whose %s is out of bounds (%o)", async (field, overrides) => {
+    ["actions", { actions: ["cancel"] }],
+    ["actions", { actions: ["discount_amount", "cancel"] }],
+    ["applyRoles", { applyRoles: [] }],
+    ["applyRoles", { applyRoles: ["staff", "staff"] }],
+    ["applyRoles", { applyRoles: ["chef" as PersonRoleValue] }],
+    ["approverRoles", { approverRoles: [] }],
+    ["approverRoles", { approverRoles: ["manager", "manager"] }],
+    ["approverRoles", { approverRoles: ["owner" as PersonRoleValue] }],
+    ["maxPercentBp", { actions: ["comp"], maxPercentBp: 5000 }],
+    ["maxPercentBp", { actions: ["discount_percent", "comp"], maxPercentBp: 9999 }],
+  ])("refuses a Comp reason whose %s is out of bounds (%o)", async (field, overrides) => {
     await expect(
       inTx((tx) => createAdjustmentReason(tx, complaint(overrides))),
     ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field } });
@@ -239,8 +263,187 @@ describe("adjustment reason operations", () => {
     ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field } });
   });
 
+  it.each<[string, Partial<AdjustmentReasonInput>]>([
+    ["actions", { actions: [] }],
+    ["actions", { actions: ["comp"] }],
+    ["actions", { actions: ["cancel", "comp"] }],
+    ["actions", { actions: ["cancel", "cancel"] }],
+    ["applyRoles", { applyRoles: ["staff"] }],
+    ["approverRoles", { approverRoles: ["manager"] }],
+    ["maxPercentBp", { maxPercentBp: 5000 }],
+    ["maxAmount", { maxAmount: decimal("10.00") }],
+  ])("refuses a Void reason whose %s it cannot hold (%o)", async (field, overrides) => {
+    await expect(
+      inTx((tx) => createAdjustmentReason(tx, voidReason(overrides))),
+    ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field } });
+    const reason = await inTx((tx) => createAdjustmentReason(tx, voidReason({ name: "Valid" })));
+    await expect(
+      inTx((tx) => updateAdjustmentReason(tx, reason.id, voidReason(overrides))),
+    ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field } });
+  });
+
+  it("creates a Void reason and a Comp reason and reads each back in its own shape", async () => {
+    const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+    const staffMeal = await inTx((tx) =>
+      createAdjustmentReason(
+        tx,
+        complaint({
+          name: "Staff meal",
+          names: { en: "Staff meal" },
+          actions: ["discount_percent"],
+          maxPercentBp: 5000,
+          maxAmount: null,
+          applyRoles: ["staff"],
+          approverRoles: ["supervisor", "manager"],
+          noteRequired: false,
+        }),
+      ),
+    );
+    expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual({
+      id: other.id,
+      name: "Other",
+      names: { en: "Other", es: "Other (es)" },
+      kind: "void",
+      actions: ["cancel"],
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRoles: [],
+      approverRoles: [],
+      noteRequired: true,
+      active: true,
+      position: 0,
+    });
+    expect(await inTx((tx) => findAdjustmentReason(tx, staffMeal.id))).toEqual({
+      id: staffMeal.id,
+      name: "Staff meal",
+      names: { en: "Staff meal" },
+      kind: "comp",
+      actions: ["discount_percent"],
+      maxPercentBp: 5000,
+      maxAmount: null,
+      applyRoles: ["staff"],
+      approverRoles: ["supervisor", "manager"],
+      noteRequired: false,
+      active: true,
+      position: 1,
+    });
+    // Free under a full item limit is a Comp reason's to offer.
+    await inTx((tx) =>
+      updateAdjustmentReason(
+        tx,
+        staffMeal.id,
+        complaint({ actions: ["comp"], maxPercentBp: 10000 }),
+      ),
+    );
+  });
+
+  describe("keeping a Void reason switched on", () => {
+    it("refuses to switch off the last Void reason, and leaves it on", async () => {
+      const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+      await inTx((tx) => createAdjustmentReason(tx, complaint()));
+      const retired = await inTx((tx) =>
+        createAdjustmentReason(tx, voidReason({ name: "Retired" })),
+      );
+      await inTx((tx) => deactivateAdjustmentReason(tx, retired.id));
+
+      await expect(inTx((tx) => deactivateAdjustmentReason(tx, other.id))).rejects.toMatchObject({
+        code: "adjustment_reason.void_required",
+        params: { withNote: false },
+      });
+      expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual(other);
+    });
+
+    it("refuses to turn the last Void reason into a Comp", async () => {
+      const other = await inTx((tx) =>
+        createAdjustmentReason(tx, voidReason({ noteRequired: false })),
+      );
+      await expect(
+        inTx((tx) => updateAdjustmentReason(tx, other.id, complaint({ name: "Other" }))),
+      ).rejects.toMatchObject({
+        code: "adjustment_reason.void_required",
+        params: { withNote: false },
+      });
+      expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual(other);
+    });
+
+    it("refuses to switch the note off on the last Void reason that asks for one, and allows it once another Void reason asks for a note", async () => {
+      const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+      await inTx((tx) =>
+        createAdjustmentReason(tx, voidReason({ name: "Mistake", noteRequired: false })),
+      );
+
+      await expect(
+        inTx((tx) => updateAdjustmentReason(tx, other.id, voidReason({ noteRequired: false }))),
+      ).rejects.toMatchObject({
+        code: "adjustment_reason.void_required",
+        params: { withNote: true },
+      });
+      expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual(other);
+
+      await inTx((tx) => createAdjustmentReason(tx, voidReason({ name: "Wrong table" })));
+      expect(
+        await inTx((tx) =>
+          updateAdjustmentReason(tx, other.id, voidReason({ noteRequired: false })),
+        ),
+      ).toMatchObject({ id: other.id, noteRequired: false });
+    });
+
+    it("refuses to switch off the last Void reason that asks for a note while one that does not stays on", async () => {
+      const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+      await inTx((tx) =>
+        createAdjustmentReason(tx, voidReason({ name: "Mistake", noteRequired: false })),
+      );
+      await expect(inTx((tx) => deactivateAdjustmentReason(tx, other.id))).rejects.toMatchObject({
+        code: "adjustment_reason.void_required",
+        params: { withNote: true },
+      });
+      expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual(other);
+    });
+
+    it("allows Other to be switched off while another Void reason asks for a note", async () => {
+      const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+      const wrongTable = await inTx((tx) =>
+        createAdjustmentReason(tx, voidReason({ name: "Wrong table" })),
+      );
+      await inTx((tx) => deactivateAdjustmentReason(tx, other.id));
+      expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([wrongTable]);
+    });
+
+    it("edits the last Void reason while it stays a switched-on Void reason asking for a note", async () => {
+      const other = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+      expect(
+        await inTx((tx) =>
+          updateAdjustmentReason(tx, other.id, voidReason({ name: "Anything else" })),
+        ),
+      ).toMatchObject({ id: other.id, name: "Anything else", kind: "void", noteRequired: true });
+    });
+
+    it("edits and switches off Comp reasons in a venue holding no Void reason", async () => {
+      const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
+      await inTx((tx) => updateAdjustmentReason(tx, reason.id, complaint({ noteRequired: false })));
+      await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
+      expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([]);
+    });
+
+    it("lets a switched-off Void reason be edited, or switched off again, while no Void reason is on", async () => {
+      const old = await inTx((tx) => createAdjustmentReason(tx, voidReason()));
+      const spare = await inTx((tx) => createAdjustmentReason(tx, voidReason({ name: "Spare" })));
+      await inTx((tx) => deactivateAdjustmentReason(tx, old.id));
+      // A venue the guard never saw, such as one imported before it: no Void reason switched on.
+      await db
+        .update(adjustmentReasons)
+        .set({ active: false })
+        .where(eq(adjustmentReasons.id, spare.id));
+
+      await inTx((tx) => deactivateAdjustmentReason(tx, old.id));
+      expect(
+        await inTx((tx) => updateAdjustmentReason(tx, old.id, complaint({ name: "Old" }))),
+      ).toMatchObject({ id: old.id, kind: "comp", active: false });
+    });
+  });
+
   it("refuses a name keyed by something that is not a language, on create and on update", async () => {
-    const names = { en: "Complaint", "not a language": "Queja" };
+    const names = { en: "Complaint", "not a language": "Complaint (es)" };
     await expect(
       inTx((tx) => createAdjustmentReason(tx, complaint({ names }))),
     ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field: "names" } });
@@ -257,9 +460,13 @@ describe("adjustment reason operations", () => {
     );
     expect(created.names).toEqual({ en: "Complaint" });
     const updated = await inTx((tx) =>
-      updateAdjustmentReason(tx, created.id, complaint({ names: { en: " ", es: "Queja" } })),
+      updateAdjustmentReason(
+        tx,
+        created.id,
+        complaint({ names: { en: " ", es: "Complaint (es)" } }),
+      ),
     );
-    expect(updated.names).toEqual({ es: "Queja" });
+    expect(updated.names).toEqual({ es: "Complaint (es)" });
   });
 
   it("reads one reason by its id, an inactive one included, and refuses an id that names none", async () => {

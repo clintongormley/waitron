@@ -545,12 +545,13 @@ export type DraftServer = ReturnType<typeof draftServer>;
 export const cancelReason: AdjustmentReason = {
   id: "r-cancel",
   name: "Mistake",
+  kind: "void",
   actions: ["cancel"],
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "staff",
-  approverRole: "staff",
+  applyRoles: [],
+  approverRoles: [],
 };
 
 /** An app API stub's adjustment calls: the cancel reason, a preview nobody need approve, and an

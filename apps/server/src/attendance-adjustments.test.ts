@@ -78,7 +78,7 @@ async function prepare(action: Action) {
     expectedRevision: bill.revision,
     expectedEdit: await readBillEditState(v.db, bill.billId),
     lineId: await lineIdOf(v, bill.billId, 1),
-    reasonId: v.reasonId.house,
+    reasonId: action === "cancel" ? v.reasonId.houseVoid : v.reasonId.house,
     action,
     note: null,
     ...(action === "discount_percent"
@@ -111,7 +111,7 @@ async function heldCancellation(app: Hono) {
     expectedRevision: bill.revision,
     expectedEdit: await readBillEditState(v.db, bill.billId),
     lineId: await lineIdOf(v, bill.billId, 1),
-    reasonId: v.reasonId.house,
+    reasonId: v.reasonId.houseVoid,
     action: "cancel",
     note: null,
   };

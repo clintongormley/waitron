@@ -18,8 +18,9 @@ const cancelReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "manager" as const,
-  approverRole: "manager" as const,
+  kind: "void" as const,
+  applyRoles: [],
+  approverRoles: [],
 };
 const consent = (
   status: "open" | "settled",

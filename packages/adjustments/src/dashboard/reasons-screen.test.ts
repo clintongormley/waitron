@@ -4,6 +4,7 @@ import { LiveData, codeMessage, setLocale, tableNoMatches } from "@waitron/dashb
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
+  chooseOptions,
   expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
@@ -11,6 +12,9 @@ import {
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
+import { ADJUSTMENTS_STRINGS, actionChoice, kindName, offerName, roleName, tf } from "./strings.js";
+
+const ES = ADJUSTMENTS_STRINGS.es;
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
@@ -30,12 +34,13 @@ afterEach(() => {
 const entryError: AdjustmentReason = {
   id: "e",
   name: "Entry error",
-  names: { en: "Keyed by mistake", es: "Error al marcar" },
+  names: { en: "Keyed by mistake", es: "Keyed by mistake (es)" },
+  kind: "void",
   actions: ["cancel"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRole: "staff",
-  approverRole: "supervisor",
+  applyRoles: [],
+  approverRoles: [],
   noteRequired: false,
   active: true,
   position: 0,
@@ -43,12 +48,13 @@ const entryError: AdjustmentReason = {
 const complaint: AdjustmentReason = {
   id: "c",
   name: "Complaint",
-  names: { en: "Guest complaint", es: "Queja" },
+  names: { en: "Guest complaint", es: "Guest complaint (es)" },
+  kind: "comp",
   actions: ["comp", "discount_percent"],
-  maxPercentBp: 5000,
+  maxPercentBp: null,
   maxAmount: "30.00",
-  applyRole: "supervisor",
-  approverRole: "manager",
+  applyRoles: ["supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
   noteRequired: true,
   active: true,
   position: 1,
@@ -57,11 +63,12 @@ const employee: AdjustmentReason = {
   id: "d",
   name: "Employee discount",
   names: {},
+  kind: "comp",
   actions: ["discount_percent"],
   maxPercentBp: 3000,
   maxAmount: "20.00",
-  applyRole: "supervisor",
-  approverRole: "manager",
+  applyRoles: ["supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
   noteRequired: false,
   active: true,
   position: 2,
@@ -70,11 +77,12 @@ const retired: AdjustmentReason = {
   id: "o",
   name: "Old promotion",
   names: {},
+  kind: "comp",
   actions: ["discount_amount"],
   maxPercentBp: null,
   maxAmount: "5.00",
-  applyRole: "staff",
-  approverRole: "manager",
+  applyRoles: ["staff", "supervisor", "manager", "admin"],
+  approverRoles: ["manager", "admin"],
   noteRequired: false,
   active: false,
   position: 3,
@@ -86,7 +94,7 @@ it("names the reasons Filters panel in Spanish", async () => {
   const el = await mount(fakeApi());
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   expect(table.shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe(
-    "Filtros 1",
+    `${ES["adjustments.filters"]} 1`,
   );
 });
 
@@ -105,7 +113,9 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
     deactivateReason: vi.fn().mockResolvedValue(undefined),
     reactivateReason: vi.fn().mockResolvedValue({ ...retired, active: true }),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
-    getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp: null }),
+    getSettings: vi
+      .fn()
+      .mockResolvedValue({ maxBillComp: null, billApproverRoles: ["manager", "admin"] }),
     saveSettings: vi.fn(async (settings: unknown) => settings),
     ...overrides,
   } as unknown as FakeApi;
@@ -198,11 +208,31 @@ async function choose(el: AdjustmentReasonsScreen, name: string, value: string):
 
 type RoleField = Named & {
   label: string;
+  hint: string;
   search: string;
+  multiple: boolean;
+  required: boolean;
+  values: string[];
   options: { value: string; label: string }[];
 };
 function roleField(el: AdjustmentReasonsScreen, name: string): RoleField {
   return field(el, name) as RoleField;
+}
+
+async function chooseRoles(
+  el: AdjustmentReasonsScreen,
+  name: string,
+  values: string[],
+): Promise<void> {
+  await chooseOptions(field(el, name), values);
+  await settle(el);
+}
+
+/** What the closed role list shows on its button. */
+async function closedText(el: AdjustmentReasonsScreen, name: string): Promise<string> {
+  const box = field(el, name) as Named & { updateComplete: Promise<unknown> };
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger")!.textContent!.trim();
 }
 
 /** The shared dropdown's own button, which carries its invalid mark. */
@@ -228,7 +258,7 @@ function noteSwitch(el: AdjustmentReasonsScreen): HTMLInputElement {
 /** The message shown beside a field: a text or price field's own error, or the line under a group. */
 function besideField(el: AdjustmentReasonsScreen, key: string): string {
   const input = el.shadowRoot!.querySelector<Named>(
-    `wt-input[name="${key}"], wt-price-input[name="${key}"], wt-combobox[name="${key}"]`,
+    `wt-input[name="${key}"], wt-price-input[name="${key}"], wt-combobox[name="${key}"], wt-segmented-control[name="${key}"]`,
   );
   if (input) return input.error ?? "";
   return el.shadowRoot!.querySelector(`[data-field-error="${key}"]`)?.textContent?.trim() ?? "";
@@ -301,14 +331,15 @@ describe("the reasons list", () => {
     const text = rowText(el, "c");
     expect(text).toContain("Complaint");
     expect(text).not.toContain("Guest complaint");
-    expect(text).toContain("Give away");
+    expect(text).toContain("Free");
     expect(text).toContain("Percentage discount");
-    expect(text).toContain("Up to 50% off an item");
+    expect(rowText(el, "d")).toContain("Up to 30% off an item");
     expect(text).toContain("Up to €30.00 off a bill");
-    expect(text).toContain("Supervisor");
-    expect(text).toContain("Manager approves");
+    expect(text).toContain("Supervisor, Manager, Admin");
+    expect(text).toContain("Approves: Manager, Admin");
     expect(text).toContain("Note required");
     expect(rowText(el, "e")).toContain("No limit");
+    expect(rowText(el, "e")).toContain("Void");
   });
 
   it("shows the disabled reasons when the status filter asks for them, without reorder buttons", async () => {
@@ -367,16 +398,26 @@ describe("the reasons list", () => {
     setLocale("es");
     const el = await mount(fakeApi());
     expect(el.shadowRoot!.querySelector("h1")).toBeNull();
-    expect(table(el).getAttribute("aria-label")).toBe("Motivos de ajuste");
+    expect(table(el).getAttribute("aria-label")).toBe(ES["adjustments.title"]);
     const text = rowText(el, "c");
-    expect(text).toContain("Invitación");
-    expect(text).toContain("Hasta un 50% de un artículo");
-    expect(text).toContain("Hasta 30,00\u00a0€ de una cuenta");
-    expect(text).toContain("Aprueba: Encargado");
+    expect(text).toContain(offerName("comp", "es"));
+    expect(rowText(el, "d")).toContain(tf("adjustments.limit_percent", { percent: "30" }, "es"));
+    expect(text).toContain(tf("adjustments.limit_amount", { amount: "30,00\u00a0€" }, "es"));
+    expect(text).toContain(
+      tf(
+        "adjustments.approves",
+        { roles: `${roleName("manager", "es")}, ${roleName("admin", "es")}` },
+        "es",
+      ),
+    );
+    expect(rowText(el, "e")).toContain(kindName("void", "es"));
     const filter = table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       'wt-combobox[data-filter="status"]',
     )!;
-    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
+      ES["adjustments.combobox_search"],
+      ES["adjustments.combobox_no_results"],
+    ]);
   });
 });
 
@@ -423,7 +464,7 @@ describe("the reasons list's column chooser", () => {
   it("names the chooser in Spanish when the dashboard speaks it", async () => {
     setLocale("es");
     const el = await mount(fakeApi());
-    expect(chooser(el)).toBe("Personalizar columnas");
+    expect(chooser(el)).toBe(ES["adjustments.customise_columns"]);
   });
 
   it("words a column that is always shown, and the last one shown, in Spanish", async () => {
@@ -433,13 +474,13 @@ describe("the reasons list's column chooser", () => {
       alwaysShownColumnLabel: string;
       lastShownColumnLabel: string;
     };
-    expect(list.alwaysShownColumnLabel).toBe("Siempre visible");
-    expect(list.lastShownColumnLabel).toBe("Deja al menos una visible");
+    expect(list.alwaysShownColumnLabel).toBe(ES["adjustments.column_always_shown"]);
+    expect(list.lastShownColumnLabel).toBe(ES["adjustments.column_last_shown"]);
   });
 });
 
 describe("at phone width", () => {
-  const longName = "Queja del comensal por el tiempo de espera en la terraza";
+  const longName = "Guest complaint about the long wait for a table on the terrace (es)";
 
   it("puts the row controls in the last column, pinned to the table's edge", async () => {
     const el = await mount(fakeApi());
@@ -569,95 +610,161 @@ describe("the editor", () => {
     setLocale(locale);
     const el = await mount(fakeApi());
     await press(el, "edit-c");
-    for (const name of ["applyRole", "approverRole"]) {
+    for (const name of ["applyRoles", "approverRoles"]) {
       const select = roleField(el, name);
       expect(select.options.map((option) => option.value)).toEqual(roles);
     }
-    expect(field(el, "applyRole").value).toBe("supervisor");
-    expect(field(el, "approverRole").value).toBe("manager");
+    expect(roleField(el, "applyRoles").values).toEqual(["supervisor", "manager", "admin"]);
+    expect(roleField(el, "approverRoles").values).toEqual(["manager", "admin"]);
   });
 
   it.each([
     [
       "en",
-      "Lowest role that applies it without approval",
-      "Lowest role that may approve it",
-      "Manager",
+      "Who can apply it",
+      "Who can approve it",
+      "They use it straight away, up to its limits.",
+      "They enter their PIN when anyone else asks, or above a limit.",
     ],
     [
       "es",
-      "Rol mínimo que lo aplica sin aprobación",
-      "Rol mínimo que lo puede aprobar",
-      "Encargado",
+      ES["adjustments.field.apply_roles"],
+      ES["adjustments.field.approver_roles"],
+      ES["adjustments.field.apply_roles_hint"],
+      ES["adjustments.field.approver_roles_hint"],
     ],
   ] as const)(
-    "draws both role choices as the shared dropdown, labelled and showing the stored role, in %s",
-    async (locale, applyLabel, approverLabel, manager) => {
+    "draws both role lists as the shared multiple dropdown, labelled, required and hinted, in %s",
+    async (locale, applyLabel, approverLabel, applyHint, approverHint) => {
       setLocale(locale);
       const el = await mount(fakeApi());
       await press(el, "edit-c");
-      const apply = roleField(el, "applyRole");
-      const approver = roleField(el, "approverRole");
-      expect(apply.tagName).toBe("WT-COMBOBOX");
-      expect(approver.tagName).toBe("WT-COMBOBOX");
-      expect(apply.label).toBe(applyLabel);
-      expect(approver.label).toBe(approverLabel);
-      expect(apply.search).toBe("auto");
-      expect(approver.search).toBe("auto");
-      expect(approver.options.find((option) => option.value === "manager")!.label).toBe(manager);
-      expect(approver.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe(manager);
+      const apply = roleField(el, "applyRoles");
+      const approver = roleField(el, "approverRoles");
+      for (const [box, label, hint] of [
+        [apply, applyLabel, applyHint],
+        [approver, approverLabel, approverHint],
+      ] as const) {
+        expect(box.tagName).toBe("WT-COMBOBOX");
+        expect(box.multiple).toBe(true);
+        expect(box.required).toBe(true);
+        expect(box.label).toBe(label);
+        expect(box.hint).toBe(hint);
+      }
     },
   );
 
-  it("keeps a role's change inside the screen", async () => {
+  it("names the chosen roles in the closed field, and Everyone for all four", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    expect(await closedText(el, "applyRoles")).toBe("Supervisor, Manager, Admin");
+    expect(await closedText(el, "approverRoles")).toBe("Manager, Admin");
+    await chooseRoles(el, "applyRoles", ["admin", "staff", "manager", "supervisor"]);
+    expect(await closedText(el, "applyRoles")).toBe("Everyone");
+    await chooseRoles(el, "approverRoles", ["admin"]);
+    expect(await closedText(el, "approverRoles")).toBe("Admin");
+  });
+
+  it("names the chosen roles, and everyone for all four, in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    await chooseRoles(el, "approverRoles", ["admin", "manager"]);
+    expect(await closedText(el, "approverRoles")).toBe(
+      `${roleName("manager", "es")}, ${roleName("admin", "es")}`,
+    );
+    await chooseRoles(el, "approverRoles", ["staff", "supervisor", "manager", "admin"]);
+    expect(await closedText(el, "approverRoles")).toBe(ES["adjustments.everyone"]);
+  });
+
+  it("keeps a role list's change inside the screen", async () => {
     const el = await mount(fakeApi());
     await press(el, "edit-c");
     const heard = vi.fn();
     document.addEventListener("wt-change", heard);
     try {
-      await choose(el, "applyRole", "manager");
+      await chooseRoles(el, "applyRoles", ["manager"]);
     } finally {
       document.removeEventListener("wt-change", heard);
     }
     expect(heard).not.toHaveBeenCalled();
   });
 
-  it("focuses the approving role when it is the first thing wrong", async () => {
-    const el = await mount(fakeApi());
+  it("refuses an empty list beside its field and keeps Save disabled", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
     await press(el, "edit-c");
-    await choose(el, "approverRole", "staff");
+    await chooseRoles(el, "approverRoles", []);
     await press(el, "save-editor");
-    expect(el.shadowRoot!.activeElement).toBe(field(el, "approverRole"));
-    expect(roleTrigger(el, "approverRole").getAttribute("aria-invalid")).toBe("true");
+    expect(api.updateReason).not.toHaveBeenCalled();
+    expect(besideField(el, "approverRoles")).toBe("Choose at least one role.");
+    expect(besideField(el, "applyRoles")).toBe("");
+    expect(await bottom(el)).toBe(FIX_FIELDS);
+    expect(button(el, "save-editor").disabled).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "approverRoles"));
+    expect(roleTrigger(el, "approverRoles").getAttribute("aria-invalid")).toBe("true");
+    await chooseRoles(el, "applyRoles", []);
+    expect(besideField(el, "applyRoles")).toBe("Choose at least one role.");
+    await chooseRoles(el, "applyRoles", ["staff"]);
+    await chooseRoles(el, "approverRoles", ["admin"]);
+    expect(button(el, "save-editor").disabled).toBe(false);
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
+      applyRoles: ["staff"],
+      approverRoles: ["admin"],
+    });
   });
 
-  it("locks both role choices while a save is in flight", async () => {
+  it("refuses an empty list in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    await chooseRoles(el, "applyRoles", []);
+    await press(el, "save-editor");
+    expect(besideField(el, "applyRoles")).toBe(ES["adjustments.error.applyRoles"]);
+  });
+
+  it("refuses Free under a 50% item limit", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await type(el, "maxPercent", "50");
+    await press(el, "save-editor");
+    expect(api.updateReason).not.toHaveBeenCalled();
+    expect(besideField(el, "maxPercent")).toBe(
+      "Free takes 100% off: raise this limit or untick Free.",
+    );
+    expect(button(el, "save-editor").disabled).toBe(true);
+    await type(el, "maxPercent", "100");
+    expect(besideField(el, "maxPercent")).toBe("");
+    await type(el, "maxPercent", "50");
+    await toggleAction(el, "comp");
+    expect(besideField(el, "maxPercent")).toBe("");
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
+      actions: ["discount_percent"],
+      maxPercentBp: 5000,
+    });
+  });
+
+  it("refuses Free under an item limit in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    await type(el, "maxPercent", "50");
+    await press(el, "save-editor");
+    expect(besideField(el, "maxPercent")).toBe(ES["adjustments.error.free_over_limit"]);
+  });
+
+  it("locks both role lists and the kind while a save is in flight", async () => {
     const api = fakeApi({ updateReason: vi.fn(() => new Promise<AdjustmentReason>(() => {})) });
     const el = await mount(api);
     await press(el, "edit-c");
     await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
-    expect(roleTrigger(el, "applyRole").disabled).toBe(true);
-    expect(roleTrigger(el, "approverRole").disabled).toBe(true);
-  });
-
-  it.each(["en", "es"])("keeps role seniority separate from name order in %s", async (locale) => {
-    setLocale(locale);
-    const api = fakeApi();
-    const el = await mount(api);
-    await press(el, "edit-c");
-    await choose(el, "applyRole", "manager");
-    await choose(el, "approverRole", "supervisor");
-    await press(el, "save-editor");
-    expect(api.updateReason).not.toHaveBeenCalled();
-    expect(roleTrigger(el, "approverRole").getAttribute("aria-invalid")).toBe("true");
-    await choose(el, "approverRole", "admin");
-    await press(el, "save-editor");
-    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
-      applyRole: "manager",
-      approverRole: "admin",
-    });
-    expect(modal(el)).toBeNull();
+    expect(roleTrigger(el, "applyRoles").disabled).toBe(true);
+    expect(roleTrigger(el, "approverRoles").disabled).toBe(true);
+    expect((field(el, "kind") as Named & { disabled: boolean }).disabled).toBe(true);
   });
 
   it("holds both role fields, their labels and a role error to the form width on a wide window", async () => {
@@ -667,8 +774,7 @@ describe("the editor", () => {
     try {
       const el = await mount(fakeApi());
       await press(el, "edit-c");
-      await choose(el, "applyRole", "manager");
-      await choose(el, "approverRole", "supervisor");
+      await chooseRoles(el, "approverRoles", []);
       await press(el, "save-editor");
       const probe = document.createElement("div");
       probe.style.width = "var(--wt-form-max-width)";
@@ -689,24 +795,275 @@ describe("the editor", () => {
     }
   });
 
+  it.each([
+    ["en", "Kind", ["Void", "Comp"]],
+    ["es", ES["adjustments.field.kind"], [kindName("void", "es"), kindName("comp", "es")]],
+  ] as const)(
+    "asks for the kind first, as a segmented choice, in %s",
+    async (locale, label, words) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      const kind = field(el, "kind") as Named & {
+        label: string;
+        options: { value: string; label: string }[];
+      };
+      expect(kind.tagName).toBe("WT-SEGMENTED-CONTROL");
+      expect(kind.label).toBe(label);
+      expect(kind.options).toEqual([
+        { value: "void", label: words[0] },
+        { value: "comp", label: words[1] },
+      ]);
+      expect(kind.value).toBe("comp");
+      const form = modal(el)!.querySelector(".form")!;
+      expect(form.firstElementChild).toBe(kind);
+    },
+  );
+
+  it("shows only Kind, Name and Note required for a Void reason, with the refund-permission line", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-e");
+    expect(field(el, "kind").value).toBe("void");
+    expect(field(el, "name").value).toBe("Entry error");
+    expect(field(el, "names-es").value).toBe("Keyed by mistake (es)");
+    for (const name of ["applyRoles", "approverRoles", "maxPercent", "maxAmount"]) {
+      expect(el.shadowRoot!.querySelector(`[name="${name}"]`), name).toBeNull();
+    }
+    expect(el.shadowRoot!.querySelector('input[name="actions"]')).toBeNull();
+    expect(noteSwitch(el)).not.toBeNull();
+    expect(modal(el)!.querySelector('[data-test="note-hint"]')!.textContent!.trim()).toBe(
+      "The till asks for the note with “Say why”.",
+    );
+    expect(modal(el)!.querySelector('[data-test="void-rule"]')!.textContent!.trim()).toBe(
+      "Who may cancel is set by the refund permission, not by the reason.",
+    );
+  });
+
+  it("says the Void reason's lines in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await press(el, "edit-e");
+    expect(modal(el)!.querySelector('[data-test="note-hint"]')!.textContent!.trim()).toBe(
+      ES["adjustments.field.note_required_void_hint"],
+    );
+    expect(modal(el)!.querySelector('[data-test="void-rule"]')!.textContent!.trim()).toBe(
+      ES["adjustments.void_rule"],
+    );
+  });
+
+  it.each([
+    [
+      "en",
+      ["Who can apply it", "Who can approve it", "Most off one item", "Most off one bill"],
+      ["Free (100%)", "A percentage", "An amount"],
+      "How it can be taken off",
+      "Note required",
+    ],
+    [
+      "es",
+      [
+        ES["adjustments.field.apply_roles"],
+        ES["adjustments.field.approver_roles"],
+        ES["adjustments.field.max_percent"],
+        ES["adjustments.field.max_amount"],
+      ],
+      [
+        actionChoice("comp", "es"),
+        actionChoice("discount_percent", "es"),
+        actionChoice("discount_amount", "es"),
+      ],
+      ES["adjustments.field.actions"],
+      ES["adjustments.field.note_required"],
+    ],
+  ] as const)(
+    "shows both lists, the offers and both limits for a Comp reason (%s)",
+    async (locale, labels, offers, offersLabel, noteLabel) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      const order = [...modal(el)!.querySelectorAll<Named & { label: string }>("[name]")]
+        .map((each) => each.getAttribute("name"))
+        .filter((name, index, all) => all.indexOf(name) === index);
+      expect(order).toEqual([
+        "kind",
+        "name",
+        "names-en",
+        "names-es",
+        "applyRoles",
+        "approverRoles",
+        "actions",
+        "maxPercent",
+        "maxAmount",
+        "noteRequired",
+      ]);
+      expect(
+        ["applyRoles", "approverRoles", "maxPercent", "maxAmount"].map(
+          (name) => (field(el, name) as Named & { label: string }).label,
+        ),
+      ).toEqual(labels);
+      expect(
+        ["comp", "discount_percent", "discount_amount"].map((action) =>
+          actionBox(el, action).closest("label")!.textContent!.trim(),
+        ),
+      ).toEqual(offers);
+      expect(modal(el)!.querySelector("fieldset.offers legend")!.textContent).toContain(
+        offersLabel,
+      );
+      expect((field(el, "noteRequired") as Named & { label: string }).label).toBe(noteLabel);
+      expect(modal(el)!.querySelector('[data-test="void-rule"]')).toBeNull();
+      expect(modal(el)!.querySelector('[data-test="note-hint"]')).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "en",
+      "No limit",
+      "Everything this reason took off the item counts.",
+      "The venue's own amount. Above it, someone who can approve it is asked.",
+    ],
+    [
+      "es",
+      ES["adjustments.no_limit"],
+      ES["adjustments.field.max_percent_hint"],
+      ES["adjustments.field.max_amount_hint"],
+    ],
+  ] as const)(
+    "hints both limits and says an empty one is no limit (%s)",
+    async (locale, none, item, bill) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      const percent = field(el, "maxPercent") as Named & { placeholder: string; hint: string };
+      const money = field(el, "maxAmount") as Named & { placeholder: string; hint: string };
+      expect([percent.placeholder, percent.hint]).toEqual([none, item]);
+      expect([money.placeholder, money.hint]).toEqual([none, bill]);
+    },
+  );
+
+  it("clears the Comp fields when the kind changes to Void, and sends none", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await choose(el, "kind", "void");
+    expect(el.shadowRoot!.querySelector('[name="applyRoles"]')).toBeNull();
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledWith("c", {
+      name: "Complaint",
+      names: { en: "Guest complaint", es: "Guest complaint (es)" },
+      kind: "void",
+      actions: ["cancel"],
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRoles: [],
+      approverRoles: [],
+      noteRequired: true,
+    });
+  });
+
+  it("starts a Void reason turned Comp with nothing chosen, so it must be filled in", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await choose(el, "kind", "void");
+    await choose(el, "kind", "comp");
+    expect(roleField(el, "applyRoles").values).toEqual([]);
+    expect(roleField(el, "approverRoles").values).toEqual([]);
+    expect(actionBox(el, "comp").checked).toBe(false);
+    expect(field(el, "maxAmount").value).toBe("");
+    await press(el, "save-editor");
+    expect(api.updateReason).not.toHaveBeenCalled();
+    expect(besideField(el, "applyRoles")).toBe("Choose at least one role.");
+    expect(besideField(el, "approverRoles")).toBe("Choose at least one role.");
+    expect(besideField(el, "actions")).toBe("Choose at least one action.");
+  });
+
+  it("sends kind, applyRoles and approverRoles", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-e");
+    await choose(el, "kind", "comp");
+    await toggleAction(el, "discount_amount");
+    await chooseRoles(el, "applyRoles", ["admin", "staff"]);
+    await chooseRoles(el, "approverRoles", ["manager", "admin"]);
+    await type(el, "maxAmount", "12");
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledTimes(1);
+    expect(api.updateReason.mock.calls[0]).toEqual([
+      "e",
+      {
+        name: "Entry error",
+        names: { en: "Keyed by mistake", es: "Keyed by mistake (es)" },
+        kind: "comp",
+        actions: ["discount_amount"],
+        maxPercentBp: null,
+        maxAmount: "12",
+        applyRoles: ["staff", "admin"],
+        approverRoles: ["manager", "admin"],
+        noteRequired: false,
+      },
+    ]);
+  });
+
+  it.each([
+    [false, "kind", "A venue keeps at least one Void reason."],
+    [true, "noteRequired", "A venue keeps at least one Void reason that asks for a note."],
+  ] as const)(
+    "shows void_required under Kind, and under Note required with withNote (withNote=%s)",
+    async (withNote, under, message) => {
+      const el = await mount(
+        fakeApi({
+          updateReason: vi
+            .fn()
+            .mockRejectedValue({ code: "adjustment_reason.void_required", params: { withNote } }),
+        }),
+      );
+      await press(el, "edit-e");
+      await type(el, "name", "Wrong key");
+      await press(el, "save-editor");
+      expect(besideField(el, under)).toBe(message);
+      expect(besideField(el, under === "kind" ? "noteRequired" : "kind")).toBe("");
+      expect(await bottom(el)).toBe(FIX_FIELDS);
+      expect(button(el, "save-editor").disabled).toBe(false);
+    },
+  );
+
+  it.each([
+    [false, ES["adjustments.error.void_required"]],
+    [true, ES["adjustments.error.void_required_note"]],
+  ] as const)("says void_required in Spanish (withNote=%s)", async (withNote, message) => {
+    setLocale("es");
+    const el = await mount(
+      fakeApi({
+        updateReason: vi
+          .fn()
+          .mockRejectedValue({ code: "adjustment_reason.void_required", params: { withNote } }),
+      }),
+    );
+    await press(el, "edit-e");
+    await type(el, "name", "Error");
+    await press(el, "save-editor");
+    expect(besideField(el, withNote ? "noteRequired" : "kind")).toBe(message);
+  });
+
   it("opens with every field of the reason, each with a semantic name", async () => {
     const el = await mount(fakeApi());
     await press(el, "edit-c");
     expect(modal(el)!.getAttribute("heading")).toBe("Edit reason");
     expect(field(el, "name").value).toBe("Complaint");
     expect(field(el, "names-en").value).toBe("Guest complaint");
-    expect(field(el, "names-es").value).toBe("Queja");
-    expect(actionBox(el, "cancel").checked).toBe(false);
+    expect(field(el, "names-es").value).toBe("Guest complaint (es)");
+    expect(actionBox(el, "cancel")).toBeNull();
     expect(actionBox(el, "comp").checked).toBe(true);
     expect(actionBox(el, "discount_percent").checked).toBe(true);
     expect(actionBox(el, "discount_amount").checked).toBe(false);
-    expect(field(el, "maxPercent").value).toBe("50");
+    expect(field(el, "maxPercent").value).toBe("");
     expect(field(el, "maxAmount").value).toBe("30.00");
-    expect((field(el, "applyRole") as unknown as HTMLSelectElement).value).toBe("supervisor");
-    expect((field(el, "approverRole") as unknown as HTMLSelectElement).value).toBe("manager");
+    expect(roleField(el, "applyRoles").values).toEqual(["supervisor", "manager", "admin"]);
+    expect(roleField(el, "approverRoles").values).toEqual(["manager", "admin"]);
     expect(noteSwitch(el).checked).toBe(true);
     for (const input of modal(el)!.querySelectorAll(
-      "wt-input, wt-price-input, wt-combobox, input, wt-switch",
+      "wt-segmented-control, wt-input, wt-price-input, wt-combobox, input, wt-switch",
     )) {
       expect(input.getAttribute("name"), input.outerHTML).toMatch(/^[a-zA-Z]+(-[a-z]+)?$/);
     }
@@ -717,24 +1074,25 @@ describe("the editor", () => {
     const el = await mount(api);
     await press(el, "edit-c");
     await type(el, "name", "Guest complaint ");
-    await type(el, "names-es", "Queja grave");
+    await type(el, "names-es", "Serious complaint (es)");
     await toggleAction(el, "comp");
     await toggleAction(el, "discount_amount");
     await type(el, "maxPercent", "12,5");
     await type(el, "maxAmount", "45,5");
-    await choose(el, "applyRole", "manager");
-    await choose(el, "approverRole", "admin");
+    await chooseRoles(el, "applyRoles", ["manager", "admin"]);
+    await chooseRoles(el, "approverRoles", ["admin"]);
     noteSwitch(el).click();
     await settle(el);
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledWith("c", {
       name: "Guest complaint",
-      names: { en: "Guest complaint", es: "Queja grave" },
+      names: { en: "Guest complaint", es: "Serious complaint (es)" },
+      kind: "comp",
       actions: ["discount_percent", "discount_amount"],
       maxPercentBp: 1250,
       maxAmount: "45.5",
-      applyRole: "manager",
-      approverRole: "admin",
+      applyRoles: ["manager", "admin"],
+      approverRoles: ["admin"],
       noteRequired: false,
     });
     expect(modal(el)).toBeNull();
@@ -747,10 +1105,10 @@ describe("the editor", () => {
     await press(el, "edit-c");
     actionBox(el, "comp").click();
     actionBox(el, "discount_percent").click();
-    actionBox(el, "cancel").click();
+    actionBox(el, "discount_amount").click();
     for (const [language, text] of [
       ["en", "Complaint about food"],
-      ["es", "Queja grave"],
+      ["es", "Serious complaint (es)"],
     ] as const) {
       const input = field(el, `names-${language}`).shadowRoot!.querySelector("input")!;
       input.value = text;
@@ -759,8 +1117,8 @@ describe("the editor", () => {
     await settle(el);
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
-      actions: ["cancel"],
-      names: { en: "Complaint about food", es: "Queja grave" },
+      actions: ["discount_amount"],
+      names: { en: "Complaint about food", es: "Serious complaint (es)" },
     });
   });
 
@@ -775,11 +1133,12 @@ describe("the editor", () => {
     expect(api.createReason).toHaveBeenCalledWith({
       name: "Birthday",
       names: {},
+      kind: "comp",
       actions: ["comp"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRole: "manager",
-      approverRole: "manager",
+      applyRoles: ["manager", "admin"],
+      approverRoles: ["manager", "admin"],
       noteRequired: false,
     });
     expect(modal(el)).toBeNull();
@@ -795,7 +1154,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1].names).toEqual({
       en: "Guest complaint",
-      es: "Queja",
+      es: "Guest complaint (es)",
     });
   });
 
@@ -805,7 +1164,7 @@ describe("the editor", () => {
     await press(el, "add-reason");
     await type(el, "maxPercent", "150");
     await type(el, "maxAmount", "12.345");
-    await choose(el, "approverRole", "staff");
+    await chooseRoles(el, "approverRoles", []);
     await press(el, "save-editor");
     expect(api.createReason).not.toHaveBeenCalled();
     const expected = {
@@ -813,7 +1172,7 @@ describe("the editor", () => {
       actions: "Choose at least one action.",
       maxPercent: "Enter a percentage above 0 and up to 100, with at most two decimals.",
       maxAmount: "Enter an amount above 0 with at most two decimals, such as 30.00.",
-      approverRole: "The approving role must be the same as, or above, the role that applies it.",
+      approverRoles: "Choose at least one role.",
     };
     expect(await bottom(el)).toBe(FIX_FIELDS);
     for (const [key, message] of Object.entries(expected)) {
@@ -842,7 +1201,7 @@ describe("the editor", () => {
   it("sends a whole number without decimals or leading zeros, as the route reads it", async () => {
     const api = fakeApi();
     const el = await mount(api);
-    await press(el, "edit-c");
+    await press(el, "edit-d");
     await type(el, "maxPercent", "7");
     await type(el, "maxAmount", "030");
     await press(el, "save-editor");
@@ -853,12 +1212,12 @@ describe("the editor", () => {
   });
 
   it("opens a reason with no limits with both limit fields empty", async () => {
-    const el = await mount(fakeApi());
-    await press(el, "edit-e");
+    const el = await mount(
+      fakeApi({ listReasons: vi.fn().mockResolvedValue([{ ...complaint, maxAmount: null }]) }),
+    );
+    await press(el, "edit-c");
     expect(field(el, "maxPercent").value).toBe("");
     expect(field(el, "maxAmount").value).toBe("");
-    expect((field(el, "applyRole") as unknown as HTMLSelectElement).value).toBe("staff");
-    expect((field(el, "approverRole") as unknown as HTMLSelectElement).value).toBe("supervisor");
   });
 
   it("sends one save while it is in flight, and Escape does not close the editor meanwhile", async () => {
@@ -892,7 +1251,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Enter a name.");
     await type(el, "name", "Birthday");
-    await toggleAction(el, "cancel");
+    await toggleAction(el, "comp");
     await press(el, "save-editor");
     expect(api.createReason).toHaveBeenCalledTimes(1);
   });
@@ -917,15 +1276,14 @@ describe("the editor", () => {
 
   it.each([
     ["management.request_invalid", "names", "Check the names in each language."],
-    ["management.request_invalid", "applyRole", "Choose who may apply this reason."],
+    ["management.request_invalid", "applyRoles", "Choose at least one role."],
+    ["management.request_invalid", "approverRoles", "Choose at least one role."],
+    ["management.request_invalid", "kind", "Choose Void or Comp."],
     ["management.request_invalid", "noteRequired", "Choose whether staff must write a note."],
     ["adjustment_reason.invalid", "name", "Enter a name."],
     ["adjustment_reason.invalid", "names", "Check the names in each language."],
-    [
-      "adjustment_reason.invalid",
-      "approverRole",
-      "The approving role must be the same as, or above, the role that applies it.",
-    ],
+    ["adjustment_reason.invalid", "applyRoles", "Choose at least one role."],
+    ["adjustment_reason.invalid", "approverRoles", "Choose at least one role."],
   ])("puts the %s refusal of %s beside it", async (code, fieldName, message) => {
     const el = await mount(
       fakeApi({
@@ -1002,7 +1360,9 @@ describe("the editor", () => {
   it("fills the limits with the dashboard's decimal mark, and sends them back unchanged", async () => {
     setLocale("es");
     const api = fakeApi({
-      listReasons: vi.fn().mockResolvedValue([{ ...complaint, maxPercentBp: 1250 }]),
+      listReasons: vi
+        .fn()
+        .mockResolvedValue([{ ...complaint, actions: ["discount_percent"], maxPercentBp: 1250 }]),
     });
     const el = await mount(api);
     await press(el, "edit-c");
@@ -1017,8 +1377,8 @@ describe("the editor", () => {
   });
 
   it.each([
-    ["en", "Most taken off a bill", "30.00", "before"],
-    ["es", "Máximo por cuenta", "30,00", "after"],
+    ["en", "Most off one bill", "30.00", "before"],
+    ["es", ES["adjustments.field.max_amount"], "30,00", "after"],
   ])(
     "shows the %s limit on a bill as a money field, the euro sign in it and not in its label",
     async (locale, label, value, side) => {
@@ -1045,8 +1405,8 @@ describe("the editor", () => {
         .map((id) => money.shadowRoot!.getElementById(id)?.textContent?.trim());
       expect(described).toContain(
         locale === "en"
-          ? "Everything this reason takes off one bill, added together. Leave it empty for no limit."
-          : "Todo lo que este motivo descuenta de una cuenta, sumado. Déjalo vacío para no poner límite.",
+          ? "The venue's own amount. Above it, someone who can approve it is asked."
+          : ES["adjustments.field.max_amount_hint"],
       );
     },
   );
@@ -1100,7 +1460,7 @@ describe("the editor's messages", () => {
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Enter a name.");
     expect(besideField(el, "actions")).toBe("Choose at least one action.");
-    expect(actionBox(el, "cancel").getAttribute("aria-invalid")).toBe("true");
+    expect(actionBox(el, "comp").getAttribute("aria-invalid")).toBe("true");
     expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(el.shadowRoot!.activeElement).toBe(field(el, "name"));
     expect(button(el, "save-editor").disabled).toBe(true);
@@ -1113,7 +1473,7 @@ describe("the editor's messages", () => {
     await toggleAction(el, "comp");
     await toggleAction(el, "discount_percent");
     await press(el, "save-editor");
-    expect(el.shadowRoot!.activeElement).toBe(actionBox(el, "cancel"));
+    expect(el.shadowRoot!.activeElement).toBe(actionBox(el, "comp"));
   });
 
   it("re-checks on every change: fixing every field brings Save back, breaking one holds it again", async () => {
@@ -1128,7 +1488,7 @@ describe("the editor's messages", () => {
     expect(button(el, "save-editor").disabled).toBe(true);
     await toggleAction(el, "comp");
     expect(besideField(el, "actions")).toBe("");
-    expect(actionBox(el, "cancel").getAttribute("aria-invalid")).toBe("false");
+    expect(actionBox(el, "comp").getAttribute("aria-invalid")).toBe("false");
     expect(await bottom(el)).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
     await type(el, "maxPercent", "150");
@@ -1137,7 +1497,7 @@ describe("the editor's messages", () => {
     );
     expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(true);
-    await type(el, "maxPercent", "15");
+    await type(el, "maxPercent", "100");
     expect(button(el, "save-editor").disabled).toBe(false);
     await press(el, "save-editor");
     expect(api.createReason).toHaveBeenCalledTimes(1);
@@ -1152,7 +1512,7 @@ describe("the editor's messages", () => {
         }),
       }),
     );
-    await press(el, "edit-c");
+    await press(el, "edit-d");
     await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(button(el, "save-editor").disabled).toBe(false);
@@ -1180,7 +1540,7 @@ describe("the editor's messages", () => {
     await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(el.shadowRoot!.activeElement).toBe(field(el, "names-en"));
-    await type(el, "names-es", "Queja grave");
+    await type(el, "names-es", "Serious complaint (es)");
     expect(besideField(el, "names")).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
   });
@@ -1236,7 +1596,7 @@ describe("the editor's messages", () => {
     await press(el, "add-reason");
     await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
-    expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
+    expect(await bottom(el)).toBe(ES["adjustments.fix_fields"]);
   });
 });
 
@@ -1254,10 +1614,10 @@ describe("disabling", () => {
     },
     {
       locale: "es",
-      action: "Deshabilitar",
-      heading: "Deshabilitar motivo",
-      body: "El personal dejará de ver Complaint. Seguirá en la lista como deshabilitado.",
-      filter: ["Todos los motivos", "Activo", "Deshabilitado"],
+      action: ES["adjustments.disable"],
+      heading: ES["adjustments.disable_heading"],
+      body: tf("adjustments.disable_explained", { name: "Complaint" }, "es"),
+      filter: [ES["adjustments.filter_all"], ES["adjustments.active"], ES["adjustments.disabled"]],
     },
   ])(
     "in $locale, offers Disable and confirms it",
@@ -1343,6 +1703,26 @@ describe("disabling", () => {
     expect(await bottom(el)).toBe("Something went wrong, try again");
     expect(button(el, "confirm-deactivate").disabled).toBe(false);
   });
+
+  it.each([
+    [false, "A venue keeps at least one Void reason."],
+    [true, "A venue keeps at least one Void reason that asks for a note."],
+  ] as const)(
+    "keeps the confirmation open and says void_required (withNote=%s)",
+    async (withNote, message) => {
+      const api = fakeApi({
+        deactivateReason: vi
+          .fn()
+          .mockRejectedValue({ code: "adjustment_reason.void_required", params: { withNote } }),
+      });
+      const el = await mount(api);
+      await press(el, "deactivate-e");
+      await press(el, "confirm-deactivate");
+      expect(api.deactivateReason).toHaveBeenCalledWith("e");
+      expect(modal(el)).not.toBeNull();
+      expect(await bottom(el)).toBe(message);
+    },
+  );
 });
 
 describe("enabling", () => {
@@ -1367,7 +1747,7 @@ describe("enabling", () => {
 
   it.each([
     { locale: "en", action: "Enable" },
-    { locale: "es", action: "Habilitar" },
+    { locale: "es", action: ES["adjustments.enable"] },
   ])(
     "in $locale, offers Enable and not Disable on a disabled reason, and Enable on no active one",
     async ({ locale, action }) => {
@@ -1385,7 +1765,7 @@ describe("enabling", () => {
 
   it.each([
     { locale: "en", status: "Active" },
-    { locale: "es", status: "Activo" },
+    { locale: "es", status: ES["adjustments.active"] },
   ])(
     "in $locale, enables at once with no confirmation, then reloads the reason as $status",
     async ({ locale, status }) => {
@@ -1538,9 +1918,10 @@ describe("enabling", () => {
   });
 });
 
-describe("the bill discount limit", () => {
-  const LIMIT_INVALID = "Enter a percentage above 0 and up to 100, with at most two decimals.";
-  const limit = (el: AdjustmentReasonsScreen) => field(el, "maxBillDiscount");
+describe("the bill comp limit", () => {
+  const LIMIT_INVALID = "Enter an amount above 0 with at most two decimals, such as 40.00.";
+  const NO_ROLES = "Choose at least one role.";
+  const limit = (el: AdjustmentReasonsScreen) => field(el, "maxBillComp");
   const section = (el: AdjustmentReasonsScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="limit"]')!;
   const limitBottom = (el: AdjustmentReasonsScreen) =>
@@ -1552,189 +1933,245 @@ describe("the bill discount limit", () => {
     el.shadowRoot!.querySelector('[data-test="limit-alert"]')?.textContent?.trim() ?? "";
   const saved = (el: AdjustmentReasonsScreen) =>
     el.shadowRoot!.querySelector('[data-test="limit-saved"]')?.textContent?.trim() ?? "";
-  const explained = (el: AdjustmentReasonsScreen) =>
-    section(el).querySelector<HTMLElement>('[data-test="limit-explained"]')!;
-  const withLimit = (maxBillDiscountBp: number | null, over: Record<string, unknown> = {}) =>
-    fakeApi({ getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp }), ...over });
-
-  it("shows the saved limit as a percentage, labelled and explained", async () => {
-    const el = await mount(withLimit(1250));
-    const input = limit(el) as Named & { label: string };
-    expect(input.value).toBe("12.5");
-    expect(input.label).toBe("Largest total discount on one bill");
-    expect(explained(el).textContent!.trim()).toBe(
-      "Discounts on a bill's items and on the whole bill, added together, as a share of the full price of what is still on the bill. When the person making the change is below a manager, a discount that goes past it, or a cancellation that leaves the bill past it with a larger share than before, needs the PIN of a manager or someone more senior. Give-aways made on this bill are not counted as discount. Leave it empty for no limit.",
-    );
-    expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
-      "Limit on a bill's discounts",
-    );
+  const withLimit = (
+    maxBillComp: string | null,
+    over: Record<string, unknown> = {},
+    billApproverRoles: string[] = ["manager", "admin"],
+  ) =>
+    fakeApi({
+      getSettings: vi.fn().mockResolvedValue({ maxBillComp, billApproverRoles }),
+      ...over,
+    });
+  const body = (maxBillComp: string | null, billApproverRoles = ["manager", "admin"]) => ({
+    maxBillComp,
+    billApproverRoles,
   });
 
-  it("explains the limit in the text above the field, not inside it", async () => {
-    const el = await mount(withLimit(null));
-    const input = limit(el) as Named & { hint: string; updateComplete: Promise<unknown> };
-    await input.updateComplete;
-    expect(
-      explained(el).compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(explained(el).classList.contains("intro")).toBe(true);
-    expect(input.hint).toBe("");
-    expect(
-      input.shadowRoot!.querySelector("[part=amount]")!.getAttribute("placeholder"),
-    ).toBeNull();
-  });
+  it.each([
+    {
+      locale: "en",
+      heading: "Limit on a bill's comps",
+      label: "Most comped on one bill",
+      placeholder: "No limit",
+      hint: "Every comp on the bill counts, whatever its reason. Above it, someone on the next list enters their PIN.",
+      roles: "Who can approve past it",
+      value: "40.00",
+      chosen: "Manager, Admin",
+      everyone: "Everyone",
+      save: "Save limit",
+    },
+    {
+      locale: "es",
+      heading: ES["adjustments.limit.heading"],
+      label: ES["adjustments.limit.field"],
+      placeholder: ES["adjustments.no_limit"],
+      hint: ES["adjustments.limit.hint"],
+      roles: ES["adjustments.limit.approvers"],
+      value: "40,00",
+      chosen: `${roleName("manager", "es")}, ${roleName("admin", "es")}`,
+      everyone: ES["adjustments.everyone"],
+      save: ES["adjustments.limit.save"],
+    },
+  ])(
+    "in $locale, shows the saved amount and who can approve past it, labelled and hinted",
+    async ({ locale, heading, label, placeholder, hint, roles, value, chosen, everyone, save }) => {
+      setLocale(locale);
+      const el = await mount(withLimit("40.00"));
+      expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(heading);
+      const input = limit(el) as Named & {
+        label: string;
+        placeholder: string;
+        hint: string;
+        updateComplete: Promise<unknown>;
+      };
+      await input.updateComplete;
+      expect(input.tagName).toBe("WT-PRICE-INPUT");
+      expect(input.value).toBe(value);
+      expect(input.label).toBe(label);
+      expect(input.placeholder).toBe(placeholder);
+      expect(input.hint).toBe(hint);
+      expect(input.shadowRoot!.querySelector("[part=currency]")).not.toBeNull();
+      expect(section(el).querySelector('[data-test="limit-explained"]')).toBeNull();
+      const approvers = roleField(el, "billApproverRoles");
+      expect(approvers.tagName).toBe("WT-COMBOBOX");
+      expect(approvers.multiple).toBe(true);
+      expect(approvers.required).toBe(true);
+      expect(approvers.label).toBe(roles);
+      expect(approvers.values).toEqual(["manager", "admin"]);
+      expect(await closedText(el, "billApproverRoles")).toBe(chosen);
+      await chooseRoles(el, "billApproverRoles", ["staff", "supervisor", "manager", "admin"]);
+      expect(await closedText(el, "billApproverRoles")).toBe(everyone);
+      expect(button(el, "save-limit").textContent!.trim()).toBe(save);
+    },
+  );
 
-  it("shows the percentage in a narrow box marked %, the mark also read to screen readers", async () => {
-    const el = await mount(withLimit(1250));
-    const input = limit(el) as Named & { updateComplete: Promise<unknown> };
-    await input.updateComplete;
-    expect(input.tagName).toBe("WT-PRICE-INPUT");
-    const box = input.shadowRoot!.querySelector("[part=amount]")!;
-    const unit = input.shadowRoot!.querySelector("[part=unit]")!;
-    expect(unit.textContent!.trim()).toBe("%");
-    expect(input.shadowRoot!.querySelector("[part=currency]")).toBeNull();
-    const narrow = parseFloat(getComputedStyle(input).getPropertyValue("--wt-price-field-width"));
-    expect(box.getBoundingClientRect().width).toBeCloseTo(narrow, 0);
-    expect(box.getAttribute("aria-describedby")!.split(" ")).toContain(unit.id);
-  });
-
-  it("shows an empty field when the venue sets no limit", async () => {
+  it("shows an empty amount when the venue sets no limit", async () => {
     const el = await mount(withLimit(null));
     expect(limit(el).value).toBe("");
   });
 
-  it("speaks Spanish, with the Spanish decimal mark, when the dashboard does", async () => {
-    setLocale("es");
-    const el = await mount(withLimit(1));
-    const input = limit(el) as Named & { label: string };
-    expect(input.value).toBe("0,01");
-    expect(input.label).toBe("Descuento total máximo en una cuenta");
-    expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
-      "Límite de descuento por cuenta",
-    );
-    // Its start and end only: the middle names words the English-only guard refuses in this file.
-    const explanation = explained(el).textContent!.trim();
-    expect(explanation).toMatch(
-      /^Los descuentos en los artículos de una cuenta y en toda la cuenta,/,
-    );
-    expect(explanation).toMatch(
-      /Las invitaciones hechas en esta cuenta no cuentan como descuento\. Déjalo vacío para no poner límite\.$/,
-    );
-    expect(button(el, "save-limit").textContent!.trim()).toBe("Guardar límite");
-  });
-
-  it.each([
-    ["15", 1500],
-    ["12,5", 1250],
-    ["12.34", 1234],
-    ["0.01", 1],
-    ["100", 10000],
-    [" 7 ", 700],
-  ])("saves %j as %i basis points, says so, and reads the limit again", async (typed, bp) => {
-    const api = withLimit(null);
+  it("saves €40.00 and Manager, Admin together", async () => {
+    const api = withLimit(null, {}, ["admin"]);
     const el = await mount(api);
-    await type(el, "maxBillDiscount", typed);
+    await type(el, "maxBillComp", "40");
+    await chooseRoles(el, "billApproverRoles", ["admin", "manager"]);
     await press(el, "save-limit");
-    expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: bp });
+    expect(api.saveSettings.mock.calls[0]![0]).toEqual({
+      maxBillComp: "40.00",
+      billApproverRoles: ["manager", "admin"],
+    });
     expect(api.getSettings).toHaveBeenCalledTimes(2);
     expect(saved(el)).toBe("Limit saved.");
     expect(limitBottom(el)).toBe("");
   });
 
-  it("saves an emptied field as no limit", async () => {
-    const api = withLimit(1250);
+  it.each([
+    ["40", "40.00"],
+    ["12,5", "12.50"],
+    ["12.34", "12.34"],
+    ["0.01", "0.01"],
+    ["007", "7.00"],
+    [" 7 ", "7.00"],
+  ])("saves %j as %j, keeping the approvers", async (typed, money) => {
+    const api = withLimit(null);
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "");
+    await type(el, "maxBillComp", typed);
     await press(el, "save-limit");
-    expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: null });
+    expect(api.saveSettings).toHaveBeenCalledWith(body(money));
+  });
+
+  it("clears the amount to no limit", async () => {
+    const api = withLimit("40.00");
+    const el = await mount(api);
+    await type(el, "maxBillComp", "");
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledWith(body(null));
+  });
+
+  it("saves a change of approvers alone, with the amount as it was", async () => {
+    const api = withLimit("40.00");
+    const el = await mount(api);
+    await chooseRoles(el, "billApproverRoles", ["supervisor", "manager", "admin"]);
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledWith(
+      body("40.00", ["supervisor", "manager", "admin"]),
+    );
+  });
+
+  it("refuses an empty approver list beside it and above Save, focuses it, and holds Save until it is fixed", async () => {
+    const api = withLimit("40.00");
+    const el = await mount(api);
+    await chooseRoles(el, "billApproverRoles", []);
+    await press(el, "save-limit");
+    expect(api.saveSettings).not.toHaveBeenCalled();
+    expect(besideField(el, "billApproverRoles")).toBe(NO_ROLES);
+    expect(besideField(el, "maxBillComp")).toBe("");
+    expect(limitBottom(el)).toBe(FIX_FIELDS);
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "billApproverRoles"));
+    expect(roleTrigger(el, "billApproverRoles").getAttribute("aria-invalid")).toBe("true");
+    expect(button(el, "save-limit").disabled).toBe(true);
+    await chooseRoles(el, "billApproverRoles", ["admin"]);
+    expect(besideField(el, "billApproverRoles")).toBe("");
+    expect(button(el, "save-limit").disabled).toBe(false);
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledWith(body("40.00", ["admin"]));
   });
 
   it("shows the limit the refresh reads after a save", async () => {
     const api = withLimit(null, {
       getSettings: vi
         .fn()
-        .mockResolvedValueOnce({ maxBillDiscountBp: null })
-        .mockResolvedValue({ maxBillDiscountBp: 2500 }),
+        .mockResolvedValueOnce(body(null))
+        .mockResolvedValue(body("25.00", ["admin"])),
     });
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
-    expect(limit(el).value).toBe("25");
+    expect(limit(el).value).toBe("25.00");
+    expect(roleField(el, "billApproverRoles").values).toEqual(["admin"]);
   });
 
   it("reads the limit first as the person's own request, and passively after a save", async () => {
-    const background = { getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp: 1500 }) };
+    const background = { getSettings: vi.fn().mockResolvedValue(body("15.00")) };
     const api = fakeApi({ background });
     const el = await mount(api);
     expect(api.getSettings).toHaveBeenCalledTimes(1);
-    await type(el, "maxBillDiscount", "15");
+    await type(el, "maxBillComp", "16");
     await press(el, "save-limit");
     expect(background.getSettings).toHaveBeenCalledTimes(1);
   });
 
   it("says nothing and keeps Save working before the first press, even with the value wrong", async () => {
     const el = await mount(withLimit(null));
-    await type(el, "maxBillDiscount", "abc");
-    expect(besideField(el, "maxBillDiscount")).toBe("");
+    await type(el, "maxBillComp", "abc");
+    expect(besideField(el, "maxBillComp")).toBe("");
     expect(limitBottom(el)).toBe("");
     expect(button(el, "save-limit").disabled).toBe(false);
   });
 
-  it.each(["0", "0.00", "100.01", "150", "12.345", "abc", "-5", "1e2"])(
+  it.each(["0", "0.00", "12.345", "abc", "-5", "1e2", "1234567890"])(
     "refuses %j beside the field and above Save, focuses it, and holds Save until it is fixed",
     async (typed) => {
       const api = withLimit(null);
       const el = await mount(api);
-      await type(el, "maxBillDiscount", typed);
+      await type(el, "maxBillComp", typed);
       await press(el, "save-limit");
       expect(api.saveSettings).not.toHaveBeenCalled();
-      expect(besideField(el, "maxBillDiscount")).toBe(LIMIT_INVALID);
+      expect(besideField(el, "maxBillComp")).toBe(LIMIT_INVALID);
       expect(limitBottom(el)).toBe(FIX_FIELDS);
       expect(el.shadowRoot!.activeElement).toBe(limit(el));
       expect(button(el, "save-limit").disabled).toBe(true);
       expect(limit(el).value).toBe(typed);
-      await type(el, "maxBillDiscount", "20");
-      expect(besideField(el, "maxBillDiscount")).toBe("");
+      await type(el, "maxBillComp", "20");
+      expect(besideField(el, "maxBillComp")).toBe("");
       expect(limitBottom(el)).toBe("");
       expect(button(el, "save-limit").disabled).toBe(false);
       await press(el, "save-limit");
-      expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: 2000 });
+      expect(api.saveSettings).toHaveBeenCalledWith(body("20.00"));
     },
   );
 
-  it("puts the server's refusal of the limit under the field, keeps Save working, and clears it on a change", async () => {
-    const el = await mount(
-      withLimit(null, {
-        saveSettings: vi.fn().mockRejectedValue({
-          code: "management.request_invalid",
-          params: { field: "maxBillDiscountBp" },
+  it.each([
+    ["maxBillComp", LIMIT_INVALID, "billApproverRoles"],
+    ["billApproverRoles", NO_ROLES, "maxBillComp"],
+  ])(
+    "maps a refusal naming %s to its field, keeps Save working, and clears it on a change",
+    async (named, message, other) => {
+      const el = await mount(
+        withLimit(null, {
+          saveSettings: vi.fn().mockRejectedValue({
+            code: "management.request_invalid",
+            params: { field: named },
+          }),
         }),
-      }),
-    );
-    await type(el, "maxBillDiscount", "20");
-    await press(el, "save-limit");
-    expect(besideField(el, "maxBillDiscount")).toBe(LIMIT_INVALID);
-    expect(limitBottom(el)).toBe(FIX_FIELDS);
-    expect(el.shadowRoot!.activeElement).toBe(limit(el));
-    expect(button(el, "save-limit").disabled).toBe(false);
-    expect(saved(el)).toBe("");
-    await type(el, "maxBillDiscount", "25");
-    expect(besideField(el, "maxBillDiscount")).toBe("");
-    expect(limitBottom(el)).toBe("");
-  });
+      );
+      await type(el, "maxBillComp", "20");
+      await press(el, "save-limit");
+      expect(besideField(el, named)).toBe(message);
+      expect(besideField(el, other)).toBe("");
+      expect(limitBottom(el)).toBe(FIX_FIELDS);
+      expect(el.shadowRoot!.activeElement).toBe(field(el, named));
+      expect(button(el, "save-limit").disabled).toBe(false);
+      expect(saved(el)).toBe("");
+      if (named === "maxBillComp") await type(el, "maxBillComp", "25");
+      else await chooseRoles(el, "billApproverRoles", ["admin"]);
+      expect(besideField(el, named)).toBe("");
+      expect(limitBottom(el)).toBe("");
+    },
+  );
 
   it("says any other refusal above Save, keeps Save working, and says it until the next press", async () => {
     const api = withLimit(null, {
       saveSettings: vi
         .fn()
         .mockRejectedValueOnce({ code: "server.internal" })
-        .mockResolvedValue({ maxBillDiscountBp: 2000 }),
+        .mockResolvedValue(body("20.00")),
     });
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
     expect(limitBottom(el)).toBe("Something went wrong, try again");
-    expect(besideField(el, "maxBillDiscount")).toBe("");
+    expect(besideField(el, "maxBillComp")).toBe("");
     expect(button(el, "save-limit").disabled).toBe(false);
     await press(el, "save-limit");
     expect(limitBottom(el)).toBe("");
@@ -1743,72 +2180,72 @@ describe("the bill discount limit", () => {
 
   it("treats a failed refresh after a save as a load failure, not a failed save", async () => {
     const api = withLimit(null, {
-      getSettings: vi
-        .fn()
-        .mockResolvedValueOnce({ maxBillDiscountBp: null })
-        .mockRejectedValue({ code: "x" }),
+      getSettings: vi.fn().mockResolvedValueOnce(body(null)).mockRejectedValue({ code: "x" }),
     });
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
     expect(api.saveSettings).toHaveBeenCalledTimes(1);
     expect(limitBottom(el)).toBe("");
-    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(limitAlert(el)).toBe("The bill's comp limit could not be loaded.");
     expect(alert(el)).toBe("");
-    expect(limit(el).value).toBe("20");
+    expect(limit(el).value).toBe("20.00");
   });
 
   it("says the limit could not be loaded, apart from the reasons, and offers no field", async () => {
     const el = await mount(
       withLimit(null, { getSettings: vi.fn().mockRejectedValue({ code: "x" }) }),
     );
-    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(limitAlert(el)).toBe("The bill's comp limit could not be loaded.");
     expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')!.getAttribute("role")).toBe(
       "alert",
     );
     expect(alert(el)).toBe("");
-    expect(el.shadowRoot!.querySelector('[name="maxBillDiscount"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[name="maxBillComp"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[name="billApproverRoles"]')).toBeNull();
     expect(rowKeys(el)).toEqual(["e", "c", "d"]);
   });
 
-  it("sends one save while it is in flight, holding the field", async () => {
-    let finish!: (value: { maxBillDiscountBp: number | null }) => void;
+  it("sends one save while it is in flight, holding both fields", async () => {
+    let finish!: (value: unknown) => void;
     const api = withLimit(null, {
       saveSettings: vi.fn(() => new Promise((resolve) => (finish = resolve))),
     });
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
     expect(button(el, "save-limit").disabled).toBe(true);
     expect((limit(el) as Named & { disabled: boolean }).disabled).toBe(true);
+    expect(roleTrigger(el, "billApproverRoles").disabled).toBe(true);
     await press(el, "save-limit");
     expect(api.saveSettings).toHaveBeenCalledTimes(1);
-    finish({ maxBillDiscountBp: 2000 });
+    finish(body("20.00"));
     await settle(el);
     expect(button(el, "save-limit").disabled).toBe(true);
     expect((limit(el) as Named & { disabled: boolean }).disabled).toBe(false);
+    expect(roleTrigger(el, "billApproverRoles").disabled).toBe(false);
   });
 
-  it("saves when Enter is pressed in the field", async () => {
+  it("saves when Enter is pressed in the amount", async () => {
     const api = withLimit(null);
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     const input = limit(el).shadowRoot!.querySelector("input")!;
     input.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
     );
     await settle(el);
-    expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: 2000 });
+    expect(api.saveSettings).toHaveBeenCalledWith(body("20.00"));
   });
 
   it("says nothing of a wrong value typed after a save until Save is pressed again", async () => {
     const el = await mount(withLimit(null));
-    await type(el, "maxBillDiscount", "abc");
+    await type(el, "maxBillComp", "abc");
     await press(el, "save-limit");
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
-    await type(el, "maxBillDiscount", "abc");
-    expect(besideField(el, "maxBillDiscount")).toBe("");
+    await type(el, "maxBillComp", "abc");
+    expect(besideField(el, "maxBillComp")).toBe("");
     expect(limitBottom(el)).toBe("");
     expect(button(el, "save-limit").disabled).toBe(false);
   });
@@ -1817,26 +2254,30 @@ describe("the bill discount limit", () => {
     const api = withLimit(null, {
       getSettings: vi
         .fn()
-        .mockResolvedValueOnce({ maxBillDiscountBp: null })
+        .mockResolvedValueOnce(body(null))
         .mockRejectedValueOnce({ code: "x" })
-        .mockResolvedValue({ maxBillDiscountBp: 2500 }),
+        .mockResolvedValue(body("25.00")),
     });
     const el = await mount(api);
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
-    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
-    await type(el, "maxBillDiscount", "25");
+    expect(limitAlert(el)).toBe("The bill's comp limit could not be loaded.");
+    await type(el, "maxBillComp", "25");
     await press(el, "save-limit");
     expect(limitAlert(el)).toBe("");
     expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).toBeNull();
   });
 
-  it("drops the saved note once the field changes again", async () => {
+  it("drops the saved note once either field changes again", async () => {
     const el = await mount(withLimit(null));
-    await type(el, "maxBillDiscount", "20");
+    await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
     expect(saved(el)).toBe("Limit saved.");
-    await type(el, "maxBillDiscount", "25");
+    await type(el, "maxBillComp", "25");
+    expect(saved(el)).toBe("");
+    await press(el, "save-limit");
+    expect(saved(el)).toBe("Limit saved.");
+    await chooseRoles(el, "billApproverRoles", ["admin"]);
     expect(saved(el)).toBe("");
   });
 });
@@ -1846,7 +2287,7 @@ for (const locale of ["en", "es"]) {
     setLocale(locale);
     const api = fakeApi();
     const el = await mount(api);
-    await press(el, "edit-c");
+    await press(el, "edit-d");
     const control = field(el, "maxPercent") as Named & { updateComplete: Promise<unknown> };
     await control.updateComplete;
     const native = control.shadowRoot!.querySelector("input")!;
@@ -1857,7 +2298,7 @@ for (const locale of ["en", "es"]) {
     }
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledWith(
-      "c",
+      "d",
       expect.objectContaining({ maxPercentBp: 1250 }),
     );
   });

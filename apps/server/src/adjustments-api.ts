@@ -1,11 +1,10 @@
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { ADJUSTMENT_ACTIONS, listAdjustmentReasons } from "@waitron/adjustments";
+import { ADJUSTMENT_ACTIONS, isRoleList, listAdjustmentReasons } from "@waitron/adjustments";
 import { withTransaction, type Database } from "@waitron/db";
 import {
-  listActivePersonsAtOrAboveRole,
-  personRole,
+  listActivePersonsWithRoles,
   persons,
   type PersonRoleValue,
   type PinThrottle,
@@ -86,11 +85,11 @@ function parseAsk(
   };
 }
 
-function requireRole(value: string | undefined): PersonRoleValue {
-  if (value === undefined || !(personRole.enumValues as readonly string[]).includes(value)) {
-    throw invalid("role");
-  }
-  return value as PersonRoleValue;
+/** `?roles=` as a comma-separated list: each a role, at least one, none twice. */
+function requireRoles(value: string | undefined): PersonRoleValue[] {
+  const roles = value === undefined ? [] : value.split(",");
+  if (!isRoleList(roles)) throw invalid("roles");
+  return roles;
 }
 
 /**
@@ -104,13 +103,13 @@ export async function approverToCheck(
   venueLocale: string,
 ): Promise<{ personId: string; pin: string } | undefined> {
   if (approver === undefined) return undefined;
-  let approverRole;
+  let approval;
   try {
-    ({ approverRole } = await planAdjustment(db, ask, venueLocale));
+    ({ approval } = await planAdjustment(db, ask, venueLocale));
   } catch {
     return undefined;
   }
-  return approverRole === null ? undefined : approver;
+  return approval === null ? undefined : approver;
 }
 
 /**
@@ -258,12 +257,13 @@ export function mountAdjustmentsApi(
         return (await listAdjustmentReasons(tx)).map((reason) => ({
           id: reason.id,
           name: reasonNameIn(reason, person?.locale ?? null, deps.venueLocale),
+          kind: reason.kind,
           actions: reason.actions,
           noteRequired: reason.noteRequired,
           maxPercentBp: reason.maxPercentBp,
           maxAmount: reason.maxAmount,
-          applyRole: reason.applyRole,
-          approverRole: reason.approverRole,
+          applyRoles: reason.applyRoles,
+          approverRoles: reason.approverRoles,
         }));
       });
       return c.json(reasons);
@@ -274,9 +274,9 @@ export function mountAdjustmentsApi(
   app.get("/api/adjustment-approvers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const role = requireRole(c.req.query("role"));
+      const roles = requireRoles(c.req.query("roles"));
       const approvers = await withTransaction(deps.db, (tx) =>
-        listActivePersonsAtOrAboveRole(tx, role),
+        listActivePersonsWithRoles(tx, roles),
       );
       return c.json(approvers);
     }),

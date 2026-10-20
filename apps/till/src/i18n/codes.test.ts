@@ -361,7 +361,6 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
   };
   for (const code of [
     "adjustment.action_not_allowed",
-    "adjustment.over_limit",
     "adjustment.note_required",
     "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
@@ -375,6 +374,13 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     expect(codeMessage(code, "es"), code).not.toBe(generic.es);
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage(code, "es"));
   }
+  expect(codeMessage("adjustment.approval_required", "en")).toBe(
+    "Someone who can approve this must enter their PIN",
+  );
+  expect(codeMessage("adjustment.approval_required", "es")).toBe(
+    "Alguien que pueda autorizarlo debe introducir su PIN",
+  );
+  expect(codeMessage("adjustment.over_limit", "en")).toBe(codeMessage("server.internal", "en"));
   expect(codeMessage("adjustment.no_reduction", "en")).toBe(
     "That takes nothing off. Check whether it is already free, or enter a larger discount",
   );

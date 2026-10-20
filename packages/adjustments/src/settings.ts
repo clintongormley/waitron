@@ -1,35 +1,68 @@
 import { nowIso, type Transaction } from "@waitron/db";
-import { isPercentBp } from "./policy.js";
-import { adjustmentSettings } from "./schema/settings.js";
+import type { PersonRoleValue } from "@waitron/identity";
+import {
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  decimalToCents,
+  type Decimal,
+} from "@waitron/shared";
+import { isRoleList } from "./policy.js";
+import { DEFAULT_BILL_APPROVER_ROLES, adjustmentSettings } from "./schema/settings.js";
 
 export interface AdjustmentSettings {
-  /** In basis points; null is no limit. The share it caps is `shareOf` in
-   * `apps/server/src/adjustments-apply.ts`. */
-  maxBillDiscountBp: number | null;
+  /** What comps may take off one bill before someone on `billApproverRoles` must approve; null is
+   * no limit. */
+  maxBillComp: Decimal | null;
+  billApproverRoles: PersonRoleValue[];
 }
 
-/** The venue's settings; no row reads as no limit. */
+/** The venue's settings; no row reads as no limit, approved past by managers and admins. */
 export async function readAdjustmentSettings(tx: Transaction): Promise<AdjustmentSettings> {
   const [row] = await tx
-    .select({ maxBillDiscount: adjustmentSettings.maxBillDiscount })
+    .select({
+      maxBillComp: adjustmentSettings.maxBillComp,
+      billApproverRoles: adjustmentSettings.billApproverRoles,
+    })
     .from(adjustmentSettings);
-  return { maxBillDiscountBp: row?.maxBillDiscount ?? null };
+  if (row === undefined) {
+    return { maxBillComp: null, billApproverRoles: [...DEFAULT_BILL_APPROVER_ROLES] };
+  }
+  return {
+    maxBillComp: row.maxBillComp === null ? null : centsToDecimal(row.maxBillComp),
+    billApproverRoles: row.billApproverRoles,
+  };
 }
 
-/** Replaces the venue's settings. A limit outside 1..10000 is the caller's bug: the route screens
- * it first. */
+/** Replaces the venue's settings. An amount that is not a positive count of whole cents, or an
+ * approver list that is empty, repeats a role or names none, is the caller's bug: the route screens
+ * both first. */
 export async function saveAdjustmentSettings(
   tx: Transaction,
   settings: AdjustmentSettings,
 ): Promise<AdjustmentSettings> {
-  const limit = settings.maxBillDiscountBp;
-  if (limit !== null && !isPercentBp(limit)) {
-    throw new RangeError("maxBillDiscountBp is not a whole count of basis points in 1..10000");
+  const { maxBillComp, billApproverRoles } = settings;
+  if (
+    maxBillComp !== null &&
+    (compareDecimal(maxBillComp, decimal("0")) <= 0 ||
+      compareDecimal(centsToDecimal(decimalToCents(maxBillComp)), maxBillComp) !== 0)
+  ) {
+    throw new RangeError("maxBillComp is not a positive amount in whole cents");
   }
-  const values = { maxBillDiscount: limit, updatedAt: nowIso() };
+  if (!isRoleList(billApproverRoles)) {
+    throw new RangeError("billApproverRoles is not a non-empty list of distinct roles");
+  }
+  const values = {
+    maxBillComp: maxBillComp === null ? null : decimalToCents(maxBillComp),
+    billApproverRoles,
+    updatedAt: nowIso(),
+  };
   await tx
     .insert(adjustmentSettings)
     .values({ id: 1, ...values })
     .onConflictDoUpdate({ target: adjustmentSettings.id, set: values });
-  return { maxBillDiscountBp: limit };
+  return {
+    maxBillComp: maxBillComp === null ? null : centsToDecimal(values.maxBillComp!),
+    billApproverRoles,
+  };
 }

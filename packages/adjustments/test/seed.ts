@@ -1,6 +1,6 @@
-import { locations, workingOrders, type Database } from "@waitron/db";
+import { locations, withTransaction, workingOrders, type Database } from "@waitron/db";
 import { decimal } from "@waitron/shared";
-import { createAdjustmentReason } from "../src/operations.js";
+import { createAdjustmentReason, type AdjustmentReasonInput } from "../src/operations.js";
 import type { AdjustmentReason } from "../src/policy.js";
 
 let orderNumber = 0;
@@ -21,17 +21,37 @@ export async function seedWorkingOrder(db: Database): Promise<string> {
 
 let reasonCount = 0;
 
-/** An active reason allowing every action, under a name no other reason in the run has. */
-export async function seedReason(db: Database): Promise<AdjustmentReason> {
+function seed(db: Database, input: (name: string) => AdjustmentReasonInput) {
   reasonCount += 1;
-  return createAdjustmentReason(db, {
-    name: `Complaint ${reasonCount}`,
-    names: { en: `Complaint ${reasonCount}` },
-    actions: ["cancel", "comp", "discount_percent", "discount_amount"],
-    maxPercentBp: 5000,
+  return withTransaction(db, (tx) => createAdjustmentReason(tx, input(`${reasonCount}`)));
+}
+
+/** An active Comp reason offering every comp action, under a name no other reason in the run has. */
+export function seedReason(db: Database): Promise<AdjustmentReason> {
+  return seed(db, (n) => ({
+    name: `Complaint ${n}`,
+    names: { en: `Complaint ${n}` },
+    kind: "comp",
+    actions: ["comp", "discount_percent", "discount_amount"],
+    maxPercentBp: null,
     maxAmount: decimal("30.00"),
-    applyRole: "supervisor",
-    approverRole: "manager",
+    applyRoles: ["supervisor", "manager", "admin"],
+    approverRoles: ["manager", "admin"],
     noteRequired: false,
-  });
+  }));
+}
+
+/** An active Void reason, which only cancels, under a name no other reason in the run has. */
+export function seedVoidReason(db: Database): Promise<AdjustmentReason> {
+  return seed(db, (n) => ({
+    name: `Mistake ${n}`,
+    names: { en: `Mistake ${n}` },
+    kind: "void",
+    actions: ["cancel"],
+    maxPercentBp: null,
+    maxAmount: null,
+    applyRoles: [],
+    approverRoles: [],
+    noteRequired: false,
+  }));
 }

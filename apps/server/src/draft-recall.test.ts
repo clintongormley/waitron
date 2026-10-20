@@ -355,11 +355,12 @@ describe("party Recall to draft", () => {
       const reason = await createAdjustmentReason(tx, {
         name: `Keep-discount-${randomUUID()}`,
         names: {},
+        kind: "comp",
         actions: ["discount_percent"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "staff",
-        approverRole: "staff",
+        applyRoles: ["staff", "supervisor", "manager", "admin"],
+        approverRoles: ["staff", "supervisor", "manager", "admin"],
         noteRequired: false,
       });
       const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
@@ -882,11 +883,12 @@ describe("party Recall to draft", () => {
       const reason = await createAdjustmentReason(tx, {
         name: `Discount-${randomUUID()}`,
         names: {},
+        kind: "comp",
         actions: ["discount_percent"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRole: "staff",
-        approverRole: "staff",
+        applyRoles: ["staff", "supervisor", "manager", "admin"],
+        approverRoles: ["staff", "supervisor", "manager", "admin"],
         noteRequired: false,
       });
       const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));

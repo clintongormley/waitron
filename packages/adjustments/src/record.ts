@@ -77,99 +77,111 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
   return written!.id;
 }
 
-/** What a reason has already taken, in the shape `evaluateAdjustment` asks for its priors. */
 export interface ReasonTotals {
   priorReductionOnBill: Decimal;
-  priorPercentOnLineBp: number;
 }
 
-/**
- * This reason's earlier reductions on the bill, bill-level discounts included, and its earlier
- * percentage discounts on `lineId` ({@link readLinePercents}). `lineId` null asks for a bill-level
- * discount, which has no line percentage.
- */
+/** This reason's earlier comps and discounts on the bill, bill-level discounts included. Its cancels
+ * are left out: a reason changed from Void to Comp keeps its id. */
 export async function readReasonTotals(
   tx: Transaction,
-  query: { workingOrderId: string; reasonId: string; lineId: string | null },
+  query: { workingOrderId: string; reasonId: string },
 ): Promise<ReasonTotals> {
-  const { workingOrderId, reasonId, lineId } = query;
+  const { workingOrderId, reasonId } = query;
   const reduction = await tx.execute<{ total: string }>(sql`
     select cast(coalesce(sum(reduction), 0) as text) as total
     from adjustments
-    where working_order_id = ${workingOrderId} and reason_id = ${reasonId}`);
-  const priorReductionOnBill = rawCentsToDecimal(reduction.rows[0]!.total);
-  if (lineId === null) return { priorReductionOnBill, priorPercentOnLineBp: 0 };
-  const percents = await readLinePercents(tx, { workingOrderId, reasonId, lineIds: [lineId] });
-  return { priorReductionOnBill, priorPercentOnLineBp: percents.get(lineId)! };
+    where working_order_id = ${workingOrderId} and reason_id = ${reasonId}
+      and action <> 'cancel'`);
+  return { priorReductionOnBill: rawCentsToDecimal(reduction.rows[0]!.total) };
+}
+
+/** {@link readReasonItemShares}'s answer: each line's own share, and the whole bill's apart. */
+export interface ReasonItemShares {
+  lines: Map<string, number>;
+  /** What this reason's rows on the whole bill took off the bill in all, in cents. */
+  billReduction: number;
 }
 
 /**
- * This reason's earlier percentage discounts on each of `lineIds`, in one statement. A row split off
- * another by an adjustment on this bill, a bill discount included, also counts the percentages
- * taken off the row it came from, at any remove — including ones taken after the split, which err
- * toward refusing. A split made by anything other than an adjustment is not recorded here, so a row
- * split that way starts with none.
+ * The basis points this reason has already taken off each of `lineIds`, in one statement: each of
+ * its rows adds `ceil(reduction × 10000 ÷ nominal_value)`, or 0 where the list value is 0. A row
+ * counts on its own line and on every row split off that line by an adjustment on this bill, a bill
+ * discount included, at any remove — including rows taken after the split, which err toward asking.
+ * A row that covered part of its line counts only on the rows it carved off and theirs, not on the
+ * rest of the line. The reason's rows on the whole bill are answered apart, as `billReduction`. A
+ * split made by anything other than an adjustment is not recorded here, so a row split that way
+ * starts with none. The reason's cancels count nowhere, as in {@link readReasonTotals}.
  */
-export async function readLinePercents(
+export async function readReasonItemShares(
   tx: Transaction,
   query: { workingOrderId: string; reasonId: string; lineIds: readonly string[] },
-): Promise<Map<string, number>> {
+): Promise<ReasonItemShares> {
   const { workingOrderId, reasonId, lineIds } = query;
-  // `percent_bp` is null on every action but `discount_percent` (`adjustments_percent_ck`).
-  const percent = await tx.execute<{ seed: string; total: number }>(sql`
+  const seeds = JSON.stringify(lineIds);
+  const taken = await tx.execute<{ seed: string | null; reduction: number; nominal: number }>(sql`
     with recursive lineage(seed, line_id) as (
-      select value, value from json_each(${JSON.stringify(lineIds)})
+      select value, value from json_each(${seeds})
       union
       select lineage.seed, json_extract(split.value, '$.from')
       from adjustments a, json_each(a.splits) split
       join lineage on json_extract(split.value, '$.to') = lineage.line_id
       where a.working_order_id = ${workingOrderId}
     )
-    select lineage.seed as seed, coalesce(sum(taken.percent_bp), 0) as total
+    select lineage.seed as seed, row.reduction as reduction, row.nominal_value as nominal
     from lineage
-    left join adjustments taken on taken.line_id = lineage.line_id
-      and taken.working_order_id = ${workingOrderId} and taken.reason_id = ${reasonId}
-    group by lineage.seed`);
-  return new Map(percent.rows.map((row) => [row.seed, row.total]));
-}
-
-/** The rows a bill's own comps priced at zero. `rows`: the rows each part comp split off (a dish
- * and its extras) and the extras rows a whole comp of a dish priced with it; `dishes`: the line of
- * each whole comp. Each also names the copies later adjustments on the bill split off those rows,
- * at any remove. */
-export interface CompedLines {
-  rows: string[];
-  dishes: string[];
-}
-
-/** The rows this bill's adjustments prove comped; a comp recorded on another bill is not read. */
-export async function readCompedLines(
-  tx: Transaction,
-  workingOrderId: string,
-): Promise<CompedLines> {
-  // In the order they were written: a copy split off a row before the row was comped keeps the
-  // price it had.
-  const written = await tx
-    .select({
-      lineId: adjustments.lineId,
-      splits: adjustments.splits,
-      compedExtras: adjustments.compedExtras,
-      action: adjustments.action,
-    })
-    .from(adjustments)
-    .where(eq(adjustments.workingOrderId, workingOrderId))
-    .orderBy(sql`rowid`);
-  const rows = new Set<string>();
-  const dishes = new Set<string>();
-  for (const { lineId, splits, compedExtras, action } of written) {
-    if (action === "comp" && splits.length === 0) dishes.add(lineId!);
-    for (const extra of compedExtras) rows.add(extra);
-    for (const { from, to } of splits) {
-      if (action === "comp" || rows.has(from)) rows.add(to);
-      if (dishes.has(from)) dishes.add(to);
-    }
+    join adjustments row on row.line_id = lineage.line_id
+      and row.working_order_id = ${workingOrderId} and row.reason_id = ${reasonId}
+      and row.action <> 'cancel'
+    where row.quantity = row.line_quantity or exists (
+      select 1 from json_each(row.splits) carve
+      join lineage carved on carved.seed = lineage.seed
+        and carved.line_id = json_extract(carve.value, '$.to'))
+    union all
+    select null, row.reduction, row.nominal_value
+    from adjustments row
+    where row.line_id is null
+      and row.working_order_id = ${workingOrderId} and row.reason_id = ${reasonId}`);
+  const lines = new Map(lineIds.map((lineId) => [lineId, 0]));
+  let billReduction = 0;
+  for (const { seed, reduction, nominal } of taken.rows) {
+    if (seed === null) billReduction += reduction;
+    else lines.set(seed, lines.get(seed)! + shareBp(reduction, nominal));
   }
-  return { rows: [...rows], dishes: [...dishes] };
+  return { lines, billReduction };
+}
+
+/** A comp or discount of a whole line that split no row off it: its quantity, list value and
+ * reduction then, in thousandths and cents. */
+export type WholeLineReduction = {
+  lineId: string;
+  lineQuantity: number;
+  nominal: number;
+  reduction: number;
+};
+
+/** The comps and discounts of any reason on each of `lineIds` that covered the whole line and
+ * split no row off it. */
+export async function readWholeLineReductions(
+  tx: Transaction,
+  query: { workingOrderId: string; lineIds: readonly string[] },
+): Promise<WholeLineReduction[]> {
+  const { workingOrderId, lineIds } = query;
+  const found = await tx.execute<WholeLineReduction>(sql`
+    select line_id as lineId, line_quantity as lineQuantity, nominal_value as nominal, reduction
+    from adjustments
+    where working_order_id = ${workingOrderId}
+      and line_id in (select value from json_each(${JSON.stringify(lineIds)}))
+      and action <> 'cancel' and quantity = line_quantity and json_array_length(splits) = 0`);
+  return found.rows;
+}
+
+/** `ceil(reduction × 10000 ÷ nominal)` in exact integers; 0 where `nominal` is 0. */
+export function shareBp(reduction: number, nominal: number): number {
+  if (nominal === 0) return 0;
+  const scaled = BigInt(reduction) * 10000n;
+  const divisor = BigInt(nominal);
+  return Number((scaled + divisor - 1n) / divisor);
 }
 
 /** A comp or discount still standing on a bill. `lineId` is null for one on the whole bill. */

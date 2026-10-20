@@ -12,22 +12,24 @@ const reasons: AdjustmentReason[] = [
   {
     id: "queja",
     name: "Queja",
+    kind: "comp",
     actions: ["comp", "discount_percent", "discount_amount"],
     noteRequired: false,
-    maxPercentBp: 5000,
+    maxPercentBp: null,
     maxAmount: "30.00",
-    applyRole: "supervisor",
-    approverRole: "manager",
+    applyRoles: ["supervisor", "manager", "admin"],
+    approverRoles: ["manager", "admin"],
   },
   {
     id: "error",
     name: "Error",
+    kind: "void",
     actions: ["cancel"],
     noteRequired: true,
     maxPercentBp: null,
     maxAmount: null,
-    applyRole: "staff",
-    approverRole: "staff",
+    applyRoles: [],
+    approverRoles: [],
   },
 ];
 
@@ -99,14 +101,13 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
-      needsApproval: "manager",
-      overBillDiscountLimit: false,
+      needsApproval: { by: "reason", roles: ["manager", "admin"] },
       lines: [],
     });
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations saying a discount leaves the bill past the venue's limit", async () => {
+  it("has no violations saying a discount takes the bill past its limit", async () => {
     const { el, host } = await mount({ kind: "discount" });
     await pressed(el, 'input[name="reason"]');
     const input = el
@@ -118,15 +119,14 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "15.00",
       nominalValue: "50.00",
-      needsApproval: "manager",
-      overBillDiscountLimit: true,
+      needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "40.00" },
       lines: [],
     });
-    expect(el.shadowRoot!.querySelector("[data-over-bill-limit]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-needs-approval]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations saying a cancel leaves the bill past the venue's limit", async () => {
+  it("has no violations saying a cancel needs someone who can give refunds", async () => {
     const { el, host } = await mount({ kind: "cancel", target: { ...steaks, started: true } });
     await pressed(el, 'input[name="reason"]');
     const note = el
@@ -138,11 +138,10 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
-      needsApproval: "manager",
-      overBillDiscountLimit: true,
+      needsApproval: { by: "refund" },
       lines: [],
     });
-    expect(el.shadowRoot!.querySelector("[data-over-bill-limit]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-needs-approval]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -160,7 +159,6 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
       reduction: "3.28",
       nominalValue: "50.00",
       needsApproval: null,
-      overBillDiscountLimit: false,
       lines: [],
     });
     el.refusal = "order.payment_in_flight";

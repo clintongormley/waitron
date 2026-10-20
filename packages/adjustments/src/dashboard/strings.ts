@@ -42,7 +42,8 @@ const en = {
   "adjustments.limit_percent": "Up to {percent}% off an item",
   "adjustments.limit_amount": "Up to {amount} off a bill",
   "adjustments.no_limit": "No limit",
-  "adjustments.approves": "{role} approves",
+  "adjustments.approves": "Approves: {roles}",
+  "adjustments.everyone": "Everyone",
   "adjustments.note_required": "Note required",
   "adjustments.move_up": "Move up",
   "adjustments.move_down": "Move down",
@@ -51,19 +52,24 @@ const en = {
   "adjustments.enable": "Enable",
   "adjustments.new": "Add reason",
   "adjustments.edit_heading": "Edit reason",
+  "adjustments.field.kind": "Kind",
   "adjustments.field.name": "Name",
   "adjustments.field.names": "Name in each language",
   "adjustments.field.name_in": "Name in {language}",
-  "adjustments.field.actions": "What staff may do with this reason",
-  "adjustments.field.max_percent": "Most taken off an item (%)",
-  "adjustments.field.max_percent_hint":
-    "Counts percentage discounts only. Leave it empty for no limit.",
-  "adjustments.field.max_amount": "Most taken off a bill",
+  "adjustments.field.apply_roles": "Who can apply it",
+  "adjustments.field.apply_roles_hint": "They use it straight away, up to its limits.",
+  "adjustments.field.approver_roles": "Who can approve it",
+  "adjustments.field.approver_roles_hint":
+    "They enter their PIN when anyone else asks, or above a limit.",
+  "adjustments.field.actions": "How it can be taken off",
+  "adjustments.field.max_percent": "Most off one item",
+  "adjustments.field.max_percent_hint": "Everything this reason took off the item counts.",
+  "adjustments.field.max_amount": "Most off one bill",
   "adjustments.field.max_amount_hint":
-    "Everything this reason takes off one bill, added together. Leave it empty for no limit.",
-  "adjustments.field.apply_role": "Lowest role that applies it without approval",
-  "adjustments.field.approver_role": "Lowest role that may approve it",
-  "adjustments.field.note_required": "Staff must write a note",
+    "The venue's own amount. Above it, someone who can approve it is asked.",
+  "adjustments.field.note_required": "Note required",
+  "adjustments.field.note_required_void_hint": "The till asks for the note with “Say why”.",
+  "adjustments.void_rule": "Who may cancel is set by the refund permission, not by the reason.",
   "adjustments.save": "Save",
   "adjustments.cancel": "Cancel",
   "adjustments.disable_heading": "Disable reason",
@@ -77,21 +83,25 @@ const en = {
     "Enter a percentage above 0 and up to 100, with at most two decimals.",
   "adjustments.error.maxAmount":
     "Enter an amount above 0 with at most two decimals, such as 30.00.",
-  "adjustments.error.applyRole": "Choose who may apply this reason.",
-  "adjustments.error.approverRole":
-    "The approving role must be the same as, or above, the role that applies it.",
+  "adjustments.error.kind": "Choose Void or Comp.",
+  "adjustments.error.applyRoles": "Choose at least one role.",
+  "adjustments.error.approverRoles": "Choose at least one role.",
+  "adjustments.error.free_over_limit": "Free takes 100% off: raise this limit or untick Free.",
   "adjustments.error.noteRequired": "Choose whether staff must write a note.",
+  "adjustments.error.void_required": "A venue keeps at least one Void reason.",
+  "adjustments.error.void_required_note":
+    "A venue keeps at least one Void reason that asks for a note.",
   "adjustments.load_error": "The adjustment reasons could not be loaded.",
   "adjustments.reorder_error": "The new order could not be saved.",
-  "adjustments.limit.heading": "Limit on a bill's discounts",
-  "adjustments.limit.field": "Largest total discount on one bill",
-  "adjustments.limit.explained":
-    "Discounts on a bill's items and on the whole bill, added together, as a share of the full price of what is still on the bill. When the person making the change is below a manager, a discount that goes past it, or a cancellation that leaves the bill past it with a larger share than before, needs the PIN of a manager or someone more senior. Give-aways made on this bill are not counted as discount. Leave it empty for no limit.",
+  "adjustments.limit.heading": "Limit on a bill's comps",
+  "adjustments.limit.field": "Most comped on one bill",
+  "adjustments.limit.hint":
+    "Every comp on the bill counts, whatever its reason. Above it, someone on the next list enters their PIN.",
+  "adjustments.limit.approvers": "Who can approve past it",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
-  "adjustments.limit.load_error": "The bill discount limit could not be loaded.",
-  "adjustments.limit.invalid":
-    "Enter a percentage above 0 and up to 100, with at most two decimals.",
+  "adjustments.limit.load_error": "The bill's comp limit could not be loaded.",
+  "adjustments.limit.invalid": "Enter an amount above 0 with at most two decimals, such as 40.00.",
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
   "adjustment_report.intro":
@@ -189,7 +199,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.limit_percent": "Hasta un {percent}% de un artículo",
   "adjustments.limit_amount": "Hasta {amount} de una cuenta",
   "adjustments.no_limit": "Sin límite",
-  "adjustments.approves": "Aprueba: {role}",
+  "adjustments.approves": "Aprueba: {roles}",
+  "adjustments.everyone": "Todos",
   "adjustments.note_required": "Nota obligatoria",
   "adjustments.move_up": "Subir",
   "adjustments.move_down": "Bajar",
@@ -198,19 +209,24 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.enable": "Habilitar",
   "adjustments.new": "Añadir motivo",
   "adjustments.edit_heading": "Editar motivo",
+  "adjustments.field.kind": "Tipo",
   "adjustments.field.name": "Nombre",
   "adjustments.field.names": "Nombre en cada idioma",
   "adjustments.field.name_in": "Nombre en {language}",
-  "adjustments.field.actions": "Qué puede hacer el personal con este motivo",
-  "adjustments.field.max_percent": "Máximo por artículo (%)",
-  "adjustments.field.max_percent_hint":
-    "Solo cuenta los descuentos en porcentaje. Déjalo vacío para no poner límite.",
+  "adjustments.field.apply_roles": "Quién puede aplicarlo",
+  "adjustments.field.apply_roles_hint": "Lo usan directamente, hasta sus límites.",
+  "adjustments.field.approver_roles": "Quién puede autorizarlo",
+  "adjustments.field.approver_roles_hint":
+    "Introducen su PIN cuando lo pide otra persona o se pasa un límite.",
+  "adjustments.field.actions": "Cómo se descuenta",
+  "adjustments.field.max_percent": "Máximo por artículo",
+  "adjustments.field.max_percent_hint": "Cuenta todo lo que este motivo ha quitado del artículo.",
   "adjustments.field.max_amount": "Máximo por cuenta",
   "adjustments.field.max_amount_hint":
-    "Todo lo que este motivo descuenta de una cuenta, sumado. Déjalo vacío para no poner límite.",
-  "adjustments.field.apply_role": "Rol mínimo que lo aplica sin aprobación",
-  "adjustments.field.approver_role": "Rol mínimo que lo puede aprobar",
-  "adjustments.field.note_required": "El personal debe escribir una nota",
+    "Lo fija el local. Por encima, se pide a alguien que pueda autorizarlo.",
+  "adjustments.field.note_required": "Pide una nota",
+  "adjustments.field.note_required_void_hint": "La caja pide la nota con «Indica el motivo».",
+  "adjustments.void_rule": "Quién puede cancelar lo decide el permiso de devolución, no el motivo.",
   "adjustments.save": "Guardar",
   "adjustments.cancel": "Cancelar",
   "adjustments.disable_heading": "Deshabilitar motivo",
@@ -224,21 +240,26 @@ const es: Record<keyof typeof en, string> = {
     "Escribe un porcentaje mayor que 0 y hasta 100, con dos decimales como máximo.",
   "adjustments.error.maxAmount":
     "Escribe un importe mayor que 0 con dos decimales como máximo, como 30,00.",
-  "adjustments.error.applyRole": "Elige quién puede aplicar este motivo.",
-  "adjustments.error.approverRole":
-    "El rol que aprueba debe ser igual o superior al que lo aplica.",
+  "adjustments.error.kind": "Elige Cancelar o Descuento.",
+  "adjustments.error.applyRoles": "Elige al menos un rol.",
+  "adjustments.error.approverRoles": "Elige al menos un rol.",
+  "adjustments.error.free_over_limit": "Gratis quita el 100 %: sube este límite o desmarca Gratis.",
   "adjustments.error.noteRequired": "Elige si el personal debe escribir una nota.",
+  "adjustments.error.void_required": "El local necesita al menos un motivo de cancelación.",
+  "adjustments.error.void_required_note":
+    "El local necesita al menos un motivo de cancelación que pida una nota.",
   "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
-  "adjustments.limit.heading": "Límite de descuento por cuenta",
-  "adjustments.limit.field": "Descuento total máximo en una cuenta",
-  "adjustments.limit.explained":
-    "Los descuentos en los artículos de una cuenta y en toda la cuenta, sumados, como proporción del precio completo de lo que sigue en la cuenta. Cuando quien hace el cambio está por debajo de un encargado, un descuento que lo supere, o una anulación que deje la cuenta por encima de él con una proporción mayor que antes, necesita el PIN de un encargado o de alguien de rango superior. Las invitaciones hechas en esta cuenta no cuentan como descuento. Déjalo vacío para no poner límite.",
+  "adjustments.limit.heading": "Límite de descuentos por cuenta",
+  "adjustments.limit.field": "Máximo descontado en una cuenta",
+  "adjustments.limit.hint":
+    "Cuenta cada descuento de la cuenta, sea cual sea su motivo. Por encima, alguien de la lista siguiente introduce su PIN.",
+  "adjustments.limit.approvers": "Quién puede autorizar más",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",
   "adjustments.limit.load_error": "No se pudo cargar el límite de descuento por cuenta.",
   "adjustments.limit.invalid":
-    "Escribe un porcentaje mayor que 0 y hasta 100, con dos decimales como máximo.",
+    "Escribe un importe mayor que 0 con dos decimales como máximo, como 40,00.",
   "nav.adjustment_report": "Informe de ajustes",
   "adjustment_report.title": "Informe de ajustes",
   "adjustment_report.intro":
@@ -304,7 +325,6 @@ const es: Record<keyof typeof en, string> = {
 
 export const ADJUSTMENTS_STRINGS = { en, es };
 
-/** Only the `adjustment_reason.*` codes the screen can meet; the rest are the app's. */
 export const ADJUSTMENTS_CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "adjustment_reason.name_taken": {
     en: "Another active reason already has this name",
@@ -335,12 +355,23 @@ const ACTION_NAMES: NameTable = {
   discount_amount: { en: "Amount discount", es: "Descuento en importe" },
 };
 
-/** The fuller wording an editor's checkbox uses for each action. */
+/** How the editor's checkboxes name a Comp reason's offers. */
 const ACTION_CHOICES: NameTable = {
-  cancel: { en: "Cancel an item", es: "Anular un artículo" },
-  comp: { en: "Give an item away", es: "Invitar: no cobrar el artículo" },
-  discount_percent: { en: "Discount by a percentage", es: "Descontar un porcentaje" },
-  discount_amount: { en: "Discount by an amount", es: "Descontar un importe" },
+  comp: { en: "Free (100%)", es: "Gratis (100 %)" },
+  discount_percent: { en: "A percentage", es: "Un porcentaje" },
+  discount_amount: { en: "An amount", es: "Un importe" },
+};
+
+/** How the reasons list names a Comp reason's offers. */
+const OFFER_NAMES: NameTable = {
+  comp: { en: "Free", es: "Gratis" },
+  discount_percent: { en: "Percentage discount", es: "Descuento en porcentaje" },
+  discount_amount: { en: "Amount discount", es: "Descuento en importe" },
+};
+
+const KIND_NAMES: NameTable = {
+  void: { en: "Void", es: "Cancelar" },
+  comp: { en: "Comp", es: "Descuento" },
 };
 
 /** How a report heads each action's total. */
@@ -372,6 +403,14 @@ export function actionName(action: string, locale?: string): string {
 
 export function actionChoice(action: string, locale?: string): string {
   return resolveNameTable(ACTION_CHOICES, action, locale);
+}
+
+export function offerName(action: string, locale?: string): string {
+  return resolveNameTable(OFFER_NAMES, action, locale);
+}
+
+export function kindName(kind: string, locale?: string): string {
+  return resolveNameTable(KIND_NAMES, kind, locale);
 }
 
 export function roleName(role: string, locale?: string): string {

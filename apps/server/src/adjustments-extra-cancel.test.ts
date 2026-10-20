@@ -176,8 +176,12 @@ async function revisionOf(tx: Transaction, billId: string): Promise<number> {
 
 type Command = Parameters<typeof applyAdjustment>[2];
 
-/** Cancelling the gherkins, line 4 of the bill (the dish is 1, its extras 2 to 4 in the order picked). */
-async function gherkinsCancel(billId: string): Promise<Command> {
+/** Cancelling the gherkins, line 4 of the bill (the dish is 1, its extras 2 to 4 in the order picked),
+ * by default as a supervisor, who holds the refund permission a sent dish's cancel needs. */
+async function gherkinsCancel(
+  billId: string,
+  operatorId: string = venue.supervisorId,
+): Promise<Command> {
   const lineId = await lineIdOf(venue, billId, 4);
   return inTx(venue, async (tx) => ({
     orderId: billId,
@@ -186,9 +190,9 @@ async function gherkinsCancel(billId: string): Promise<Command> {
     expectedRevision: await revisionOf(tx, billId),
     lineId,
     action: "cancel" as const,
-    reasonId: venue.reasonId.house,
+    reasonId: venue.reasonId.houseVoid,
     note: null,
-    operatorId: venue.staffId,
+    operatorId,
   }));
 }
 
@@ -196,8 +200,12 @@ function apply(tx: Transaction, command: Command, cfg: TillConfig = english()) {
   return applyAdjustment(tx, cfg, command, venue.venueLocale);
 }
 
-async function cancelGherkins(billId: string, cfg: TillConfig = english()): Promise<void> {
-  const command = await gherkinsCancel(billId);
+async function cancelGherkins(
+  billId: string,
+  cfg: TillConfig = english(),
+  operatorId?: string,
+): Promise<void> {
+  const command = await gherkinsCancel(billId, operatorId);
   await inTx(venue, (tx) => apply(tx, command, cfg));
 }
 
@@ -533,7 +541,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       let recorded: Awaited<ReturnType<typeof notices>> = [];
 
       const printed = await jobsDuring(async () => {
-        recorded = await noticesDuring(() => cancelGherkins(billId));
+        recorded = await noticesDuring(() => cancelGherkins(billId, english(), venue.staffId));
       });
 
       expect(printed).toHaveLength(1);
@@ -565,7 +573,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
     let recorded: Awaited<ReturnType<typeof notices>> = [];
 
     const printed = await jobsDuring(async () => {
-      recorded = await noticesDuring(() => cancelGherkins(billId));
+      recorded = await noticesDuring(() => cancelGherkins(billId, english(), venue.staffId));
     });
 
     expect(printed).toEqual([]);
@@ -595,7 +603,7 @@ describe("cancelling an extra of a dish the kitchen does not have (B11g)", () =>
     let recorded: Awaited<ReturnType<typeof notices>> = [];
 
     const printed = await jobsDuring(async () => {
-      recorded = await noticesDuring(() => cancelGherkins(billId));
+      recorded = await noticesDuring(() => cancelGherkins(billId, english(), venue.staffId));
     });
 
     expect(printed).toEqual([]);

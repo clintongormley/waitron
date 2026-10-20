@@ -5,23 +5,26 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 
 export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
+export type ReasonKind = "void" | "comp";
 
-/** Every field an owner edits. `maxAmount` is euros as a decimal string; a `null` limit is no limit. */
+/** Every field an owner edits. `maxAmount` is euros as a decimal string; a `null` limit is no limit.
+ * A Void reason's `actions` is `["cancel"]`, with empty lists and no limits. */
 export interface AdjustmentReasonInput {
   name: string;
   names: Record<string, string>;
+  kind: ReasonKind;
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: string | null;
-  applyRole: PersonRole;
-  approverRole: PersonRole;
+  applyRoles: PersonRole[];
+  approverRoles: PersonRole[];
   noteRequired: boolean;
 }
 
-/** `maxBillDiscountBp` is in basis points of the price before adjustments of what is still on a
- * bill; null is no limit. */
+/** `maxBillComp` is the money every comp on one bill may take off together; null is no limit. */
 export interface AdjustmentSettings {
-  maxBillDiscountBp: number | null;
+  maxBillComp: string | null;
+  billApproverRoles: PersonRole[];
 }
 
 export interface AdjustmentReason extends AdjustmentReasonInput {
