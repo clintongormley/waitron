@@ -381,7 +381,9 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       theme,
     );
     expect(list.el.shadowRoot!.querySelector('[data-chip="held"]')).not.toBeNull();
-    expect(list.el.shadowRoot!.querySelector("[data-fire-due] wt-icon[name=fire]")).not.toBeNull();
+    expect(
+      list.el.shadowRoot!.querySelector("[data-fire-due] wt-icon[name=floor-fire]"),
+    ).not.toBeNull();
     await expectNoA11yViolations(list.host);
   });
 

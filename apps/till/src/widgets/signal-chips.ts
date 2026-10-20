@@ -14,10 +14,10 @@ const WAIT_WORDS: Record<WaitBand, { words: StringKey; tone: FloorChipTone }> = 
 };
 
 /**
- * The chips for the signals no other mark already shows. An unsent draft, held dishes (which the
- * floor draws with their countdown), a group due to fire and a table needing clearing each have a
- * mark of their own on the floor, so they give no chip here; nor does a forgotten wait where
- * `forgottenShown` says the caller shows its own Forgotten badge.
+ * The chips for the signals no other mark already shows. An unsent draft, a group due to fire and a
+ * table needing clearing each have a mark of their own on the floor, and the list card and the
+ * unplaced token draw held dishes with `heldChip`, so none of them gives a chip here; nor does a
+ * forgotten wait where `forgottenShown` says the caller shows its own Forgotten badge.
  */
 export function signalChips(
   signals: readonly TableSignal[],
@@ -80,7 +80,7 @@ export function heldChip(
           "{m}",
           String(minutesToFire(dueAt, now)),
         );
-  return { key: "held", text, tone: "muted", icon: "held" };
+  return { key: "held", text, tone: "muted", icon: "floor-held" };
 }
 
 export const signalChipStyles = [

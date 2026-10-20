@@ -210,7 +210,7 @@ describe("the fire-due chip", () => {
     for (const el of [labelled, unlabelled]) {
       const icon = chip(el)!.firstElementChild as
         (HTMLElement & { updateComplete: Promise<unknown> }) | null;
-      expect(icon?.matches("wt-icon[name=fire]")).toBe(true);
+      expect(icon?.matches("wt-icon[name=floor-fire]")).toBe(true);
       await icon!.updateComplete;
       expect(icon!.shadowRoot!.querySelector("svg path")).not.toBeNull();
     }
@@ -283,6 +283,7 @@ describe("the signal chips", () => {
     ["primary", "--wt-color-primary"],
     ["warning", "--wt-color-warning"],
     ["danger", "--wt-color-danger"],
+    ["muted", "--wt-color-text-muted"],
   ] as const)(
     "a %s chip paints its words on the neutral chip tokens with %s as its border",
     async (tone, token) => {
@@ -300,26 +301,12 @@ describe("the signal chips", () => {
     },
   );
 
-  test("a muted chip paints its words on the neutral chip tokens with --wt-color-text-muted as its border", async () => {
-    const el = await mountToken(
-      table({ state: "open-tab", chips: [{ key: "k", text: "Words", tone: "muted" }] }),
-    );
-    host.style.setProperty("--wt-color-text-muted", "rgb(4, 5, 6)");
-    host.style.setProperty("--wt-color-surface-raised", "rgb(7, 8, 9)");
-    host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
-    const style = getComputedStyle(chips(el)[0]!);
-    expect(style.borderTopColor).toBe("rgb(4, 5, 6)");
-    expect(style.borderTopStyle).toBe("solid");
-    expect(style.backgroundColor).toBe("rgb(7, 8, 9)");
-    expect(style.color).toBe("rgb(10, 11, 12)");
-  });
-
   test("draws a chip's icon before its words, and none for a chip without one", async () => {
     const el = await mountToken(
       table({
         state: "open-tab",
         chips: [
-          { key: "held", text: "Held 2", tone: "muted", icon: "held" },
+          { key: "held", text: "Held 2", tone: "muted", icon: "floor-held" },
           { key: "ready", text: "Bar: 1 ready", tone: "success" },
         ],
       }),
@@ -327,7 +314,7 @@ describe("the signal chips", () => {
     const [held, ready] = chips(el);
     const icon = held!.firstElementChild as
       (HTMLElement & { updateComplete: Promise<unknown> }) | null;
-    expect(icon?.matches("wt-icon[name=held]")).toBe(true);
+    expect(icon?.matches("wt-icon[name=floor-held]")).toBe(true);
     await icon!.updateComplete;
     expect(icon!.shadowRoot!.querySelector("svg path")).not.toBeNull();
     expect(ready!.querySelector("wt-icon")).toBeNull();
@@ -340,7 +327,7 @@ describe("the signal chips", () => {
     const el = await mountToken(
       table({
         state: "open-tab",
-        chips: [{ key: "held", text: "Held 2 · fire in 4 min", tone: "muted", icon: "held" }],
+        chips: [{ key: "held", text: "Held 2 · fire in 4 min", tone: "muted", icon: "floor-held" }],
       }),
     );
     el.style.width = "90px";
@@ -354,7 +341,7 @@ describe("the signal chips", () => {
     const el = await mountToken(
       table({
         state: "open-tab",
-        chips: [{ key: "k", text: "Words", tone: "primary-filled", icon: "held" }],
+        chips: [{ key: "k", text: "Words", tone: "primary-filled", icon: "floor-held" }],
       }),
     );
     host.style.setProperty("--wt-color-on-primary", "rgb(13, 14, 15)");

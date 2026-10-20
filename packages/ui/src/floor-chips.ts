@@ -3,8 +3,8 @@ import type { FloorChip } from "./floor.js";
 import { registerIcons } from "./components/wt-icon.js";
 
 registerIcons({
-  held: "M4 3h3v10H4zM9 3h3v10H9z",
-  fire: "M5 3v10l8-5z",
+  "floor-held": "M4 3h3v10H4zM9 3h3v10H9z",
+  "floor-fire": "M5 3v10l8-5z",
 });
 
 /** Theme text on a neutral chip with its tone as the border, except `primary-filled`, which is the

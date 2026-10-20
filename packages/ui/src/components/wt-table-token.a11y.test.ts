@@ -132,11 +132,12 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
           { key: "wait", text: "Waiting", tone: "warning" },
           { key: "unavailable", text: "Unavailable: Steak", tone: "danger" },
           { key: "bill", text: "Bill requested", tone: "primary-filled" },
+          { key: "held", text: "Held 2", tone: "muted" },
         ],
       }),
       theme,
     );
-    expect(el.shadowRoot!.querySelectorAll("[data-chip]").length).toBe(5);
+    expect(el.shadowRoot!.querySelectorAll("[data-chip]").length).toBe(6);
     await expectNoA11yViolations(host);
   });
 
@@ -145,7 +146,7 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
       tableData({
         state: "open-tab",
         tabTotal: "12.00",
-        chips: [{ key: "held", text: "Held 2", tone: "muted", icon: "held" }],
+        chips: [{ key: "held", text: "Held 2", tone: "muted", icon: "floor-held" }],
       }),
       theme,
     );

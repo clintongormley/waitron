@@ -319,10 +319,10 @@ export class WtTableToken extends LitElement {
     const label = this.labels.fireDue;
     return label
       ? html`<span class="badge fire-due" data-fire-due
-          ><wt-icon name="fire" size="sm"></wt-icon>${label}</span
+          ><wt-icon name="floor-fire" size="sm"></wt-icon>${label}</span
         >`
       : html`<span class="badge fire-due" data-fire-due aria-hidden="true"
-          ><wt-icon name="fire" size="sm"></wt-icon
+          ><wt-icon name="floor-fire" size="sm"></wt-icon
         ></span>`;
   }
 

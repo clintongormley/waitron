@@ -48,7 +48,7 @@ describe("heldChip", () => {
       key: "held",
       text: "Held 2",
       tone: "muted",
-      icon: "held",
+      icon: "floor-held",
     });
   });
 

@@ -142,7 +142,7 @@ describe("till-floor-screen: a table holding dishes", () => {
     ]);
     for (const id of ["t4", "t5"]) {
       expect(heldText(el, id)).toBe("Held 2");
-      expect(heldOn(el, id)!.querySelector("wt-icon[name=held]")).not.toBeNull();
+      expect(heldOn(el, id)!.querySelector("wt-icon[name=floor-held]")).not.toBeNull();
       expect(fireDue(el, id)).toBeNull();
     }
   });
@@ -163,7 +163,7 @@ describe("till-floor-screen: a table holding dishes", () => {
     el.style.setProperty("--wt-color-on-warning", "rgb(200, 210, 220)");
     const badge = fireDue(el)!;
     expect(badge.textContent!.trim()).toBe("Time to fire");
-    expect(badge.querySelector("wt-icon[name=fire]")).not.toBeNull();
+    expect(badge.querySelector("wt-icon[name=floor-fire]")).not.toBeNull();
     expect(heldOn(el)).toBeNull();
     const style = getComputedStyle(badge);
     expect(style.backgroundColor).toBe("rgb(10, 20, 30)");

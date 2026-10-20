@@ -2409,7 +2409,7 @@ export class TillFloorScreen extends LitElement {
         ${
           this.#fireDue(table)
             ? html`<span class="badge fire-due" data-fire-due
-                ><wt-icon name="fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
+                ><wt-icon name="floor-fire" size="sm"></wt-icon>${t("floor.fire_due")}</span
               >`
             : nothing
         }
