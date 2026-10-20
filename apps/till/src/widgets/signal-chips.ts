@@ -4,6 +4,7 @@ import type { TableSignal } from "@waitron/shared";
 import { countText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { minutesToFire } from "../state/release-reminder.js";
+import type { TableStateKind } from "../state/table-precedence.js";
 
 type WaitBand = Extract<TableSignal, { kind: "long_wait" }>["band"];
 
@@ -81,6 +82,31 @@ export function heldChip(
           String(minutesToFire(dueAt, now)),
         );
   return { key: "held", text, tone: "muted", icon: "floor-held" };
+}
+
+/** The table state a chip from `signalChips` or `heldChip` shows; `undefined` for any other key. */
+export function chipState(
+  chip: FloorChip,
+  signals: readonly TableSignal[],
+): TableStateKind | undefined {
+  switch (chip.key) {
+    case "long-wait": {
+      const band = signals.find((signal) => signal.kind === "long_wait")?.band;
+      return band === "warm" ? "waiting" : band;
+    }
+    case "held-unavailable":
+      return "unavailable";
+    case "bill-requested":
+      return "bill";
+    case "ready":
+      return "ready";
+    case "take-order":
+      return "step";
+    case "held":
+      return "held";
+    default:
+      return undefined;
+  }
 }
 
 export const signalChipStyles = [
