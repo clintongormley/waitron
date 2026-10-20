@@ -13,6 +13,11 @@ export type TableSignal =
   | { kind: "ready"; byStation: ReadyAtStation[] }
   /** The worst waiting band over fired dishes still to serve, each against its own station. */
   | { kind: "long_wait"; band: "warm" | "overdue" | "forgotten" }
+  /**
+   * Dishes waiting in the party's held groups, counted as items: a counted dish by its quantity left
+   * after cancellation, a weighed dish as one unless cancelled whole, extras not at all.
+   */
+  | { kind: "held"; count: number }
   /** The held group waiting to be released, once it has a due time, which may still be ahead. */
   | { kind: "release_due"; groupId: string; dueAt: string }
   /** A held group holding a line whose product cannot be sold now, and those lines' staff names. */

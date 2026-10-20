@@ -1274,7 +1274,10 @@ with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-
 `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`); slice 7, the service steps'
 settings in the department dialog's Service tab, landed (plan
 `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slice 2, retiring venue-made
-statuses, landed (plan `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`).
+statuses, landed (plan `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`);
+slice 3, the held mark and its countdown, landed (plan
+`docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`; pictures as built in
+`docs/backlog/mockups/a757-table-states/built-3/`).
 
 Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
@@ -1312,14 +1315,11 @@ drawn out and a recommendation. The open note that the Tables tab's colour field
 **Widened 2026-10-16 (owner): how each state is shown, on the floor and in the order lists.** The
 board shows every state as it looks today beside a proposal, for the owner to choose. Today a table
 can carry the signals `take_order`, `ready` (per station), `long_wait` (warm, overdue, forgotten),
-`held_unavailable`, `bill_requested`, `unsent_draft`, `release_due` and `needs_clearing`
-(`apps/server/src/table-signals.ts`, chips in `apps/till/src/widgets/signal-chips.ts`), besides
-seated, joined, paid and taken off. Three additions the owner asked for:
+`held` (how many dishes its held groups hold), `held_unavailable`, `bill_requested`,
+`unsent_draft`, `release_due` and `needs_clearing` (`apps/server/src/table-signals.ts`, chips in
+`apps/till/src/widgets/signal-chips.ts`), besides seated, joined, paid and taken off. Two additions
+the owner asked for:
 
-- **Items held in the kitchen.** The floor marks a held group only when its release reminder is
-  due (`till-floor-screen.ts`, the `reminderDueAt` check); a table with held groups and no due
-  reminder looks like one with nothing held. Mark every table with held items; a due reminder keeps
-  a stronger mark.
 - **Late orders pulse.** Decide which of warm, overdue and forgotten pulse; the same pulse as A738's
   Waiting tab; a colour change instead under reduced motion.
 - **Item counts by state in the order lists.** Held orders' rows read "4 · €24.50", where 4 is the
@@ -1486,6 +1486,11 @@ while 4 and 5 needed moving, so Leave it here only makes it last until the next 
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
+
+### `timingBand` counts only fired dishes (A757 Q17, owner 2026-10-17; built by A757 slice 3)
+
+A held dish does not turn a card's outline, its Forgotten badge, the map's dot or the order screen's
+pin, however long it is held; sending or releasing it restarts its age.
 
 ### Counter cleanup choices (A738, owner amendments 2026-10-16 to 2026-10-19)
 
@@ -2487,12 +2492,9 @@ reach them.
 
 ## Task 10 (#908, the service dashboard's attention signals)
 
-- **Decided by A757 (owner, 2026-10-17); built in A757's slices 3 and 4.** The floor's older
-  waiting band (`timingBand`, which colours the card and shows "Forgotten") counts HELD dishes, while
-  the long-wait chip counts only dishes sent, so a held course queued long ago shows "Forgotten":
-  `timingBand` will count only dishes sent (A757 Q17). "Take order" looks like "Reserved": Reserved
-  takes the map's reserved colour and Take order becomes a service step (Q20). "Bill requested" no
-  longer looks like "N en camino": it has been filled purple since A472.
+- **Decided by A757 (owner, 2026-10-17); built in A757's slice 4:** "Take order" looks like
+  "Reserved": Reserved takes the map's reserved colour and Take order becomes a service step (Q20).
+  "Bill requested" no longer looks like "N en camino": it has been filled purple since A472.
   [A757's design](../superpowers/specs/2026-10-17-a757-table-states-design.md).
 - The till drops the bill request's late answer, a refusal included, once the waiter has signed out
   or left the party (`#onRequestBill`, `apps/till/src/till-app.ts`), stricter than most of C81's

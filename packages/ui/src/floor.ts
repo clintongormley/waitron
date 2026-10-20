@@ -13,13 +13,16 @@ export interface TableServiceStatus {
 
 /** Which token a chip's colour reads: a border in that colour, or `primary-filled` for a chip painted
  * in the primary colour itself. */
-export type FloorChipTone = "success" | "primary" | "warning" | "danger" | "primary-filled";
+export type FloorChipTone =
+  "success" | "primary" | "warning" | "danger" | "muted" | "primary-filled";
 
 /** A chip the consumer has already worded; `key` names it for the consumer's own tests. */
 export interface FloorChip {
   key: string;
   text: string;
   tone: FloorChipTone;
+  /** The name of a registered `wt-icon`, drawn before the words. */
+  icon?: string;
 }
 
 export interface FloorTable {

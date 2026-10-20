@@ -2284,7 +2284,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
 }
 
 /**
- * Release held items of a course by stamping fired_at. Require the course to exist
+ * Release held items of a course by stamping fired_at and queued_at. Require the course to exist
  * in this venue, including a deleted course whose food still needs release.
  *
  * On a party's order, the held groups holding the course's dishes fire whole first
@@ -2414,7 +2414,7 @@ async function releaseHeld(
   const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: firedNow })
+    .set({ firedAt: firedNow, queuedAt: firedNow })
     .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, isNull(ticketItems.firedAt)))
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
@@ -2666,7 +2666,7 @@ async function releasedCourses(
  * Recall selected lines of an open tab only while their items remain queued.
  * Refuse the whole call if a line is missing or any item has started. Previously
  * fired lines record a RECALLED kitchen notice and enqueue correction slips in the same
- * transaction; held lines do neither. Leave queued_at untouched until a later send refreshes it.
+ * transaction; held lines do neither. Leave queued_at untouched until a later send or release refreshes it.
  *
  * With changes to sent items switched off (`readEditSentLines`), a line that was ever sent to a
  * station — stamped sent and holding a ticket item — is refused `ticket.already_fired`: a
@@ -8127,7 +8127,10 @@ export interface TableState {
   readyToServe: number;
   /** Those unserved lines the pass has sent away. Such a line counts in `readyToServe` too. */
   enRoute: number;
-  /** The worst age band over those unserved lines; a counter delivery does not feed it. */
+  /**
+   * The worst age band over those unserved lines that were fired; a counter delivery does not feed
+   * it.
+   */
   timingBand: TimingBand;
   today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
@@ -8214,10 +8217,10 @@ export async function listTablesWithState(
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
              -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved
-             -- kitchen line with a ticket item (ti.id is not null), a HELD one included, one JSON object per
-             -- line -- never a band label (§3's raw-material-in-SQL, classified-in-JS split), reduced
-             -- with classifyBand/worstBand in JS below. A line never sent has no ticket_items row and
-             -- is excluded, same as a served one.
+             -- kitchen line whose ticket item was fired (ti.fired_at is not null), so a HELD one does not
+             -- age here, one JSON object per line -- never a band label (§3's raw-material-in-SQL,
+             -- classified-in-JS split), reduced with classifyBand/worstBand in JS below. A line never
+             -- sent has no ticket_items row and is excluded, same as a served one.
              --
              -- json_group_array returns JSON TEXT rather than a value the driver parses, so the
              -- row mapping parses it.
@@ -8228,7 +8231,7 @@ export async function listTablesWithState(
                  'overdueAfterMinutes', coalesce(kst.overdue_after_minutes, ktd.overdue_after_minutes),
                  'forgottenAfterMinutes', coalesce(kst.forgotten_after_minutes, ktd.forgotten_after_minutes)
                )
-             ) filter (where wol.served_at is null and ti.id is not null) as unserved_lines
+             ) filter (where wol.served_at is null and ti.fired_at is not null) as unserved_lines
       from party_tables pt
       join family f on f.root = pt.party_id
       join working_orders wo

@@ -16,6 +16,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { classifyBand, worstBand, compareStationNames } from "@waitron/shared";
 import type { KitchenSignal, ReadyAtStation, TableSignal } from "@waitron/shared";
+import { readHeldCounts } from "./order-groups.js";
 import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
@@ -212,6 +213,8 @@ export async function readPartySignals(
     ).map((row) => row.partyId),
   );
 
+  const heldCounts = await readHeldCounts(tx, partyIds);
+
   const signals = new Map<string, TableSignal[]>();
   for (const party of seated) {
     const own = billsOf.get(party.id)!;
@@ -231,6 +234,8 @@ export async function readPartySignals(
         nowMs,
       ),
     );
+    const heldCount = heldCounts.get(party.id) ?? 0;
+    if (heldCount > 0) list.push({ kind: "held", count: heldCount });
     if (party.reminder?.dueAt != null) {
       list.push({
         kind: "release_due",
