@@ -90,6 +90,7 @@ export type {
   ZoneTab,
 } from "./floor.js";
 export {
+  CUE_MIN_PX,
   GRID_SQUARE_PX,
   NAME_MIN_PX,
   NEW_TABLE_SIZE,
@@ -101,6 +102,7 @@ export {
   fitScale,
   gridExtent,
   rotatedRect,
+  showsCue,
   showsName,
   snapToSquare,
 } from "./floor-plan-geometry.js";
@@ -108,7 +110,13 @@ export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.j
 export { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Gestures, LONG_PRESS_MS, SLOP_PX } from "./gestures.js";
 export type { GestureHandlers, GesturePoint } from "./gestures.js";
 export { FLOOR_MAP_FILLS, floorMapFillStyles } from "./floor-map-fills.js";
-export type { FloorMapDot, FloorMapFill } from "./floor-map-fills.js";
+export type {
+  FloorMapCue,
+  FloorMapDot,
+  FloorMapFill,
+  FloorMapOutline,
+  FloorMapPulse,
+} from "./floor-map-fills.js";
 export { UndoHistory } from "./history.js";
 export { submitOnEnter } from "./submit-on-enter.js";
 export {

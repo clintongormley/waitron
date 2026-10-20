@@ -4,17 +4,20 @@ import { countText, t } from "../i18n/t.js";
 import { needsMovingToday, onTodaysPlan } from "./floor-today.js";
 import { signalOf } from "./table-signals.js";
 
+/** The fills the till draws today; `fillWords` names each. */
+type StandInFill = Extract<FloorMapFill, "free" | "reserved" | "seated" | "bill" | "clearing">;
+
 export interface StandInStatus {
-  fill: FloorMapFill;
+  fill: StandInFill;
   dot: FloorMapDot | null;
 }
 
 /** Most urgent last. A table that needs moving takes `clearing` too: staff must act on it before it
  * is seated, as for one needing clearing. */
-const FILL_RANK: readonly FloorMapFill[] = ["free", "reserved", "seated", "bill", "clearing"];
+const FILL_RANK: readonly StandInFill[] = ["free", "reserved", "seated", "bill", "clearing"];
 const DOT_RANK: readonly (FloorMapDot | null)[] = [null, "ready", "forgotten"];
 
-function fillOf(table: TableState): FloorMapFill {
+function fillOf(table: TableState): StandInFill {
   if (table.condition === "needs_clearing") return "clearing";
   if (needsMovingToday(table)) return "clearing";
   if (signalOf(table.signals, "bill_requested")) return "bill";
@@ -32,7 +35,7 @@ export function standInStatus(table: TableState): StandInStatus {
 }
 
 export function combinedStatus(statuses: readonly StandInStatus[]): StandInStatus {
-  let fill: FloorMapFill = "free";
+  let fill: StandInFill = "free";
   let dot: FloorMapDot | null = null;
   for (const status of statuses) {
     if (FILL_RANK.indexOf(status.fill) > FILL_RANK.indexOf(fill)) fill = status.fill;
@@ -72,7 +75,7 @@ function sources(tables: TableState | readonly TableState[]): Sources {
   return { members, statuses, status, fillFrom, dotFrom };
 }
 
-function fillWords(table: TableState, fill: FloorMapFill): string {
+function fillWords(table: TableState, fill: StandInFill): string {
   switch (fill) {
     case "clearing":
       return table.condition === "needs_clearing"

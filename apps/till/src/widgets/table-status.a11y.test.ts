@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FLOOR_MAP_FILLS, type FloorMapFill } from "@waitron/ui";
+import type { FloorMapFill } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./table-status.js";
@@ -48,7 +48,16 @@ function table(over: Partial<TableState> = {}): TableState {
 
 const seated = { state: "open-tab" as const, condition: "held" as const, hasOpenTab: true };
 
-const forFill: Record<FloorMapFill, TableState> = {
+/** The five fills the pin draws today. */
+const PIN_FILLS = [
+  "free",
+  "reserved",
+  "seated",
+  "bill",
+  "clearing",
+] as const satisfies readonly FloorMapFill[];
+
+const forFill: Record<(typeof PIN_FILLS)[number], TableState> = {
   free: table(),
   reserved: table({ nextReservation: { time: "20:30" } }),
   seated: table({ ...seated, pendingToServe: 2 }),
@@ -62,7 +71,7 @@ const forFill: Record<FloorMapFill, TableState> = {
 
 describe.each(["light", "dark"] as const)("till-table-status a11y (%s theme)", (theme) => {
   it.each(
-    FLOOR_MAP_FILLS.map(
+    PIN_FILLS.map(
       (fill) =>
         [fill === "clearing" ? "clearing (a shape the server does not send)" : fill, fill] as const,
     ),
