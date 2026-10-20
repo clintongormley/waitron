@@ -1519,8 +1519,44 @@ Healthy baseline on `main`: the `Run actions/checkout@v7` step over the 10 lates
 seconds), 378 step records: median 10, 90th percentile 17, 99th 24, longest 285 (the `test-till (3)`
 stall above); next longest 37.
 
-TODO(Task 6): the final CI controls — `transfer-stall`, `handshake-stall`, the normal-speed timings
-and the CodeQL run — go here.
+The three steps as committed, on a real runner (throwaway branch `probe/a935-final`, run
+`39477790287`, 2026-10-20). Each job ran the steps exactly as written in `ci.yml`'s `lint` job,
+with one addition carried identically on both attempts so the guard's "second attempt differs"
+check still passes:
+`github-server-url: ${{ steps.checkout.outcome == 'failure' && 'https://github.com' || '<silent server>' }}`
+— during the first attempt its own outcome is still empty, so only the first attempt was pointed at
+a local server that accepts a connection and never answers. A background loop wrote
+`ps -eo pid,comm,args | grep -E ' git(-remote-http)?( |$)'` every second, and a report step printed
+each process's first sighting, then the same `ps` line once more. Before the run, the failing cases
+were stated: a step timeout or a red job for the transfer stall; a red job or a `git-remote-http`
+line in the final `ps` for the handshake stall.
+
+- `transfer-stall` (`http://127.0.0.1:18081`): three fetches each ended
+  `Operation too slow. Less than 1000 bytes/sec transferred the last 20 seconds`, with
+  `Waiting 19 seconds before trying again` and `Waiting 10 seconds before trying again` between,
+  then `The process '/usr/bin/git' failed with exit code 128`. The first attempt took 89 s
+  (18:47:22 → 18:48:51) and never reached its step limit; the stop step printed nothing; the second
+  attempt took 9 s. Report: `first attempt outcome=failure conclusion=success`, HEAD equal to
+  `GITHUB_SHA`, `status lines: 0`, `no git process left`. Each failed fetch had shown three
+  processes — `git` (the fetch), `git` (`git remote-http`) and `git-remote-http`.
+- `handshake-stall` (`https://127.0.0.1:18081`): the first attempt printed its `git … fetch`
+  command at 18:47:22, then nothing until
+  `##[error]The action 'Check out the code' has timed out after 2 minutes.` at 18:49:22. The
+  background `ps` had seen `2088 git /usr/bin/git -c protocol.version=2 fetch …`,
+  `2089 git /usr/lib/git-core/git remote-https origin https://127.0.0.1:18081/…` and
+  `2090 git-remote-http /usr/lib/git-core/git-remote-https origin https://127.0.0.1:18081/…`. The
+  stop step printed `stopped git 2088`, `stopped git 2089`, `stopped git 2090` — the child holding
+  the socket included. The second attempt took 11 s. Report:
+  `first attempt outcome=failure conclusion=success`, HEAD equal to `GITHUB_SHA`, `status lines: 0`,
+  `no git process left`. The job passed.
+- `normal`, five of each, the first attempt's step seconds from the jobs API: `fetch-depth: 1` 8,
+  11, 9, 8, 9 (median 9) and `fetch-depth: 0` 14, 15, 14, 15, 14 (median 14). Every stop step and
+  second attempt `skipped`. The failing case set beforehand was a shallow median over 15 s, a
+  full-history median over 25 s, or any second attempt that ran.
+- CodeQL, the converted `codeql.yml` dispatched on the probe branch
+  (`gh workflow run codeql.yml --ref probe/a935-final`), run `39477797238`: all four legs (`actions`, `c-cpp`,
+  `javascript-typescript`, `python`) `success`, the first attempt's step seconds 10, 5, 9, 9, and
+  every stop step and second attempt `skipped`; the `javascript-typescript` leg took 1129 s.
 
 #### Why 2 minutes and two attempts
 
