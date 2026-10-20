@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
@@ -202,10 +202,7 @@ export async function recordKitchenNotices(
   );
 }
 
-/**
- * A station's unacknowledged notices, oldest first: the newest fifty, and none from before the
- * venue's current business day, so a station nobody watches does not accumulate them.
- */
+// Allergy instructions stay actionable until acknowledged, independently of the ordinary notice cap.
 export async function listStationNotices(
   tx: Transaction,
   cfg: VenueScope,
@@ -226,6 +223,7 @@ export async function listStationsNotices(
   const byStation = new Map<string, KitchenNotice[]>(stationIds.map((id) => [id, []]));
   if (stationIds.length === 0) return byStation;
   const since = businessDayStart(new Date(), await readLocationClock(tx, cfg.locationId));
+  const allergy = inArray(kitchenNotices.kind, ["allergy_changed", "allergy_removed"]);
   const ranked = tx
     .select({
       id: kitchenNotices.id,
@@ -246,8 +244,9 @@ export async function listStationsNotices(
       allergyBlock: kitchenNotices.allergyBlock,
       reroutedTo: kitchenNotices.reroutedTo,
       createdAt: kitchenNotices.createdAt,
+      insertionOrder: INSERTION_ORDER.as("insertion_order"),
       newest:
-        sql<number>`row_number() over (partition by ${kitchenNotices.stationId} order by ${kitchenNotices.createdAt} desc, ${INSERTION_ORDER} desc)`.as(
+        sql<number>`row_number() over (partition by ${kitchenNotices.stationId}, ${allergy} order by ${kitchenNotices.createdAt} desc, ${INSERTION_ORDER} desc)`.as(
           "newest",
         ),
     })
@@ -258,17 +257,22 @@ export async function listStationsNotices(
         inArray(kitchenNotices.stationId, [...stationIds]),
         eq(kitchenStations.locationId, cfg.locationId),
         isNull(kitchenNotices.acknowledgedAt),
-        gte(kitchenNotices.createdAt, since),
+        or(allergy, gte(kitchenNotices.createdAt, since)),
       ),
     )
     .as("ranked");
   const rows = await tx
     .select()
     .from(ranked)
-    .where(lte(ranked.newest, NOTICE_LIMIT))
-    .orderBy(desc(ranked.newest));
+    .where(
+      or(
+        inArray(ranked.kind, ["allergy_changed", "allergy_removed"]),
+        lte(ranked.newest, NOTICE_LIMIT),
+      ),
+    )
+    .orderBy(ranked.createdAt, asc(ranked.insertionOrder));
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rank is not part of a notice
-  for (const { newest, orderNoteChange, allergyBlock, ...row } of rows) {
+  for (const { newest, insertionOrder, orderNoteChange, allergyBlock, ...row } of rows) {
     byStation.get(row.stationId)!.push({
       ...row,
       quantity: thousandthsToDecimal(row.quantity),

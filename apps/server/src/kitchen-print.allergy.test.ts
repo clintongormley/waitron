@@ -52,6 +52,8 @@ async function send(
   assigned = true,
 ) {
   const expectedPartyRevision = await revisionOf(v, p.partyId);
+  const existing = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
+  const guestId = existing.guests[0]?.id;
   return inTx(v, async (tx) =>
     submitGroups(tx, v.cfg, p.partyId, {
       submissionId: randomUUID(),
@@ -64,7 +66,14 @@ async function send(
       allergy: {
         party: {
           answer: "allergies",
-          guests: [{ who: "Window guest", allergens: { milk: {} }, note: "Separate pan" }],
+          guests: [
+            {
+              ...(guestId === undefined ? {} : { id: guestId }),
+              who: "Window guest",
+              allergens: { milk: {} },
+              note: "Separate pan",
+            },
+          ],
         },
         ticks: [
           {

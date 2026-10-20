@@ -18,7 +18,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import {
   AppError,
   compareStationNames,
@@ -788,6 +788,7 @@ type CorrectionChange =
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
   | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
+  | { kind: "ALLERGY"; blocks: ReadonlyMap<string, KitchenAllergyBlock | null> }
   | HoldCorrection;
 
 export async function enqueueOrderKitchenNoteChange(
@@ -1048,6 +1049,18 @@ function toNoticeItem(item: CorrectionItem) {
   };
 }
 
+export async function enqueueAllergyCorrectionSlips(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: readonly (CorrectionItem & { allergyBlock: KitchenAllergyBlock | null })[],
+): Promise<void> {
+  await printCorrectionSlips(tx, cfg, orderId, [...items], {
+    kind: "ALLERGY",
+    blocks: new Map(items.map((item) => [item.workingOrderLineId, item.allergyBlock])),
+  });
+}
+
 /** One slip per item, to its station's printers, headed with the current table. */
 async function printCorrectionSlips(
   tx: Transaction,
@@ -1095,10 +1108,18 @@ async function printCorrectionSlips(
     if (targets === undefined) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
     const item = atFiredQuantity(entry.item, target);
+    const block =
+      change.kind === "ALLERGY" ? (change.blocks.get(target.workingOrderLineId) ?? null) : null;
+    const correction =
+      change.kind !== "ALLERGY"
+        ? change
+        : block === null
+          ? { kind: "ALLERGY REMOVED" as const, allergyBlock: null }
+          : { kind: "ALLERGY CHANGED" as const, allergyBlock: block };
     for (const group of groupByLayout(targets)) {
       const bytes = formatCorrectionSlip(
         {
-          ...change,
+          ...correction,
           locale: cfg.locale,
           kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
           stationName: stationNames.get(target.stationId)!.name,

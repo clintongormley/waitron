@@ -17,6 +17,7 @@ import {
   readPartyAllergyView,
   survivingParty,
 } from "./party-allergy.js";
+import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { requestCfg } from "./request-config.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
@@ -142,14 +143,16 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
               async () => {
                 await checkAndBumpParty(tx, partyId, parsed.expectedPartyRevision, "open");
                 const view = await readPartyAllergyView(tx, cfg, partyId);
-                if (parsed.allergy !== undefined)
-                  await applyPartyAllergyPatch(
+                if (parsed.allergy !== undefined) {
+                  const changes = await applyPartyAllergyPatch(
                     tx,
                     partyId,
                     parsed.allergy,
                     session.personId,
                     allergyTargets(view),
                   );
+                  await enqueueKitchenAllergyChanges(tx, cfg, changes);
+                }
                 return readPartyAllergyView(tx, cfg, partyId);
               },
             );

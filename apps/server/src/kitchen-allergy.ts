@@ -1,16 +1,28 @@
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
   ticketItems,
+  orderGroups,
+  parties,
   workingOrderLines,
   workingOrders,
   type AllergenMap,
   type Transaction,
 } from "@waitron/db";
-import type { KitchenAllergyBlock, PartyAllergyGuest, TicketAllergyCopy } from "@waitron/module";
+import type {
+  AllergyChangeSet,
+  KitchenAllergyBlock,
+  PartyAllergyGuest,
+  TicketAllergyCopy,
+} from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readLineNutrition } from "./line-nutrition.js";
-import { readLineCancellations } from "./line-service-state.js";
+import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
+import { survivingParty } from "./party-allergy.js";
+import { fingerprint, partyFamily } from "./parties.js";
+import { isRecalledDish } from "./draft-source.js";
+import { enqueueAllergyCorrectionSlips, type CorrectionItem } from "./kitchen-print.js";
+import { thousandthsToDecimal } from "@waitron/shared";
 import { kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
 
 function canonicalAllergens(maps: readonly (AllergenMap | null | undefined)[]): AllergenMap {
@@ -82,7 +94,10 @@ export async function resolveKitchenAllergyBlocks(
     byParent.set(parentId, entries);
   }
   const guestsByLine = new Map<string, PartyAllergyGuest>();
-  for (const partyId of new Set(tickets.map((ticket) => ticket.partyId!))) {
+  const survivors = new Map<string, string>();
+  for (const partyId of new Set(tickets.map((ticket) => ticket.partyId!)))
+    survivors.set(partyId, await survivingParty(tx, partyId));
+  for (const partyId of new Set(survivors.values())) {
     const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
     const guests = new Map(snapshot.guests.map((guest) => [guest.id, guest]));
     for (const tick of snapshot.ticks) {
@@ -189,4 +204,118 @@ export async function freezeKitchenAllergyItems(
       .filter((ticket) => selected.get(ticket.lineId) === ticket.stationId)
       .map((ticket) => ticket.id),
   );
+}
+
+export async function enqueueKitchenAllergyChanges(
+  tx: Transaction,
+  cfg: TillConfig,
+  changes: AllergyChangeSet,
+): Promise<void> {
+  if (changes.workingLineIds.length === 0) return;
+  const family = await partyFamily(tx, changes.partyId);
+  const rows = await tx
+    .select({
+      id: ticketItems.id,
+      lineId: workingOrderLines.id,
+      orderId: ticketItems.workingOrderId,
+      stationId: ticketItems.stationId,
+      firedAt: ticketItems.firedAt,
+      madeHere: ticketItems.madeHere,
+      state: ticketItems.state,
+      quantity: workingOrderLines.quantity,
+      firedQuantity: ticketItems.quantity,
+      served: workingOrderLines.servedQuantity,
+      orderStatus: workingOrders.status,
+      collectedAt: workingOrders.collectedAt,
+      partyState: parties.state,
+      group: orderGroups.displayNumber,
+      groupState: orderGroups.state,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+      recalled: isRecalledDish(tx),
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(parties, eq(parties.id, changes.partyId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(
+      and(
+        eq(workingOrders.locationId, cfg.locationId),
+        inArray(workingOrders.partyId, family),
+        or(
+          inArray(workingOrderLines.id, changes.workingLineIds),
+          inArray(workingOrderLines.parentLineId, changes.workingLineIds),
+        ),
+      ),
+    );
+  const frozen = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    rows.map((row) => row.id),
+  );
+  const selected = rows.filter((row) => frozen.has(row.id));
+  const after = await resolveKitchenAllergyBlocks(
+    tx,
+    cfg,
+    selected.map((row) => row.id),
+  );
+  const cancelled = await readLineCancellations(
+    tx,
+    selected.map((row) => row.lineId),
+  );
+  const byOrder = new Map<
+    string,
+    (CorrectionItem & { allergyBlock: KitchenAllergyBlock | null })[]
+  >();
+  for (const row of selected) {
+    const block = after.get(row.id) ?? null;
+    if (fingerprint({ block: frozen.get(row.id)!.currentBlock }) === fingerprint({ block }))
+      continue;
+    await VENUE_SERVICE.setTicketAllergyCurrent(tx, row.id, block);
+    const remaining = Math.min(
+      row.firedQuantity ?? row.quantity,
+      serviceQuantities(row.quantity, row.served, cancelled.get(row.lineId) ?? 0).remaining,
+    );
+    // Copy presence identifies the exact HOLD recipient; the group's stamp alone does not.
+    const exposed =
+      row.firedAt !== null || (row.groupState === "held" && row.holdPrintedAt !== null);
+    if (
+      remaining <= 0 ||
+      !exposed ||
+      row.recalled ||
+      row.madeHere ||
+      row.collectedAt !== null ||
+      row.orderStatus === "abandoned" ||
+      row.partyState !== "open"
+    )
+      continue;
+    const items = byOrder.get(row.orderId) ?? [];
+    items.push({
+      workingOrderLineId: row.lineId,
+      stationId: row.stationId,
+      quantity: remaining,
+      wasStarted: row.state !== "queued",
+      allergyBlock: block,
+      ...(row.firedAt === null && row.group !== null ? { group: row.group } : {}),
+    });
+    byOrder.set(row.orderId, items);
+  }
+  for (const [orderId, items] of byOrder) {
+    for (const item of items)
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        cfg,
+        orderId,
+        [
+          {
+            workingOrderLineId: item.workingOrderLineId,
+            stationId: item.stationId,
+            quantity: thousandthsToDecimal(item.quantity),
+            wasStarted: item.wasStarted,
+          },
+        ],
+        item.allergyBlock === null ? "allergy_removed" : "allergy_changed",
+        { allergyBlock: item.allergyBlock },
+      );
+    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+  }
 }

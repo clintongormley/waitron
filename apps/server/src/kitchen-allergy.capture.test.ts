@@ -435,6 +435,8 @@ describe("A669 capture", () => {
     const first = await command(p, "hold");
     const sent = await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, first));
     const next = await command(p, "hold", true, sent.groups[0]!.id);
+    const existing = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
+    next.allergy!.party!.guests[0] = { ...guest, id: existing.guests[0]!.id };
     next.groups[0]!.lines[0]!.note = "Second dish note";
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, next));
     const rows = copies(p.tabId);

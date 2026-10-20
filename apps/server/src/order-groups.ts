@@ -90,6 +90,7 @@ import {
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
+import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import {
   applyPartyAllergyPatch,
   assertPartyAllergyAnswered,
@@ -211,8 +212,10 @@ export async function submitGroups(
               workingLineId: parentIds[parent++]!,
             })),
           );
-          if (allergy !== undefined)
-            await applyPartyAllergyPatch(tx, partyId, allergy, operatorId, targets);
+          if (allergy !== undefined) {
+            const changes = await applyPartyAllergyPatch(tx, partyId, allergy, operatorId, targets);
+            await enqueueKitchenAllergyChanges(tx, cfg, changes);
+          }
           await assertPartyAllergyAnswered(tx, partyId);
         },
       );

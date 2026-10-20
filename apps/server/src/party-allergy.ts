@@ -38,6 +38,7 @@ import { readDrafts } from "./order-drafts.js";
 import { readCurrentOrders, requireGroup, type CurrentOrderRow } from "./order-groups.js";
 import { fingerprint, partyFamily, partyZone } from "./parties.js";
 import { extraQuantityFor } from "./working-order.js";
+import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { readLineCancellations } from "./line-service-state.js";
 import "./errors.js";
 
@@ -532,7 +533,14 @@ export async function prepareAllergyRelease(
   const view = await readAllergySendView(tx, cfg, partyId, target);
   if (allergy !== undefined) {
     if (personId === null) invalid("allergy");
-    await applyPartyAllergyPatch(tx, view.partyId, allergy, personId, allergyTargets(view));
+    const changes = await applyPartyAllergyPatch(
+      tx,
+      view.partyId,
+      allergy,
+      personId,
+      allergyTargets(view),
+    );
+    await enqueueKitchenAllergyChanges(tx, cfg, changes);
   }
   if (view.dishes.length === 0) return;
   await assertPartyAllergyAnswered(tx, view.partyId);

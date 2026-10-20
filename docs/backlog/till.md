@@ -2328,13 +2328,12 @@ confirm an answer and arriving assignments before adopting the table. The owner 
 **A669-4 handoff.** `applyPartyAllergyPatch` in `apps/server/src/party-allergy.ts` returns
 `AllergyChangeSet` within its caller's transaction. Its `before` snapshot retains the old guest and
 ticks after guest deletion; `workingLineIds` includes removed as well as changed assignments.
-Production callers currently await and discard that return: the PUT in `party-allergy-api.ts`,
-`submitDraft` in `order-drafts.ts`, `submitGroups` in `order-groups.ts`, `prepareAllergyRelease`
-in `party-allergy.ts`, and `recordAllergy` in `move-bill.ts`. Slice 4 must consume the change set
-there before committing, including deletion of the last guest. `prepareAllergyRelease` serves
-line, group, held-line and course Fire callers; the move hook runs after bill attachment and before
-zone adoption. The kitchen branch captures frozen ticket copies; acknowledged allergy change
-delivery is not yet connected to these callers.
+On the kitchen branch, all five callers consume that return before committing: the PUT in
+`party-allergy-api.ts`, `submitDraft` in `order-drafts.ts`, `submitGroups` in `order-groups.ts`,
+`prepareAllergyRelease` in `party-allergy.ts`, and `recordAllergy` in `move-bill.ts`.
+`prepareAllergyRelease` serves line, group, held-line and course Fire callers; the move hook runs
+after bill attachment and before zone adoption. Corrections include removal of a deleted guest's
+assignment and follow the surviving party when a paid bill stays on a merged party.
 
 The [reviewed kitchen implementation plan](../superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
 defines nine tasks. It captures localized allergen names with kinds alongside their codes, keeps
@@ -2350,14 +2349,15 @@ prints the captured blocks, and replacement tickets retain both original and cur
 Station and pass reads return the original copy, with explicit null for unticked or unexposed
 work; signed-in and device HTTP checks cover these reads. Station and pass screens show those
 originals; station notices show the corrected block or removal, through the existing
-acknowledgement path. Remaining lifecycle preservation and change delivery remain.
+acknowledgement path. All five change-set callers now enqueue corrections with the remaining
+service quantity, including proportional extras. A HOLD correction goes only to the exact station
+with a frozen paper copy. Allergy notices remain available across business days and outside the
+ordinary fifty-notice limit until acknowledged.
 
-**Remaining: A669-4.** Freeze the guest details beside each ticket item and render the allergy
-heading, block and clash at both paper widths and on station/pass screens. Enqueue acknowledged
-change/removal notices for affected unserved dishes already with the kitchen, including held
-work with a printed HOLD ticket. Served work receives no notice. Cover all five change-set
-callers above, exact replay, guest deletion and both languages. Obtain the owner's answer for
-kitchen paper and notice wording. Recheck other lanes' reservations before implementation.
+**Remaining: A669-4.** Finish split, recall/resend and station-rerouting preservation, then exercise
+failure, exact replay and fresh-process persistence. Update the guides and complete the branch
+review, push hook and current-head CI. Obtain the owner's answer for kitchen paper and notice
+wording before landing. Recheck other lanes' reservations before implementation.
 [Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
 [mockups](mockups/a669-allergy-at-the-table/).
 

@@ -112,6 +112,46 @@ describe("A669 storage notice payload", () => {
     expect(notices[2]).not.toHaveProperty("allergyBlock");
   });
 
+  it("A669 notices keeps every allergy correction until acknowledgement across days and the ordinary fifty limit", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const items = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: ONE,
+        wasStarted: false,
+      },
+    ];
+    for (let n = 0; n < 55; n++)
+      await inTx((tx) =>
+        recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_changed", {
+          allergyBlock: { ...block, who: `Guest ${n}` },
+        }),
+      );
+    await inTx((tx) =>
+      recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_removed", {
+        allergyBlock: null,
+      }),
+    );
+    await db.update(kitchenNotices).set({ createdAt: "2001-01-01T00:00:00.000Z" });
+    for (let n = 0; n < 55; n++)
+      await inTx((tx) => recordKitchenNotices(tx, v.cfg, order.orderId, items, "void"));
+    const read = () => inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await read();
+    expect(
+      notices.filter((row) => row.kind === "allergy_changed").map((row) => row.allergyBlock?.who),
+    ).toEqual(Array.from({ length: 55 }, (_, n) => `Guest ${n}`));
+    const removed = notices.filter((row) => row.kind === "allergy_removed");
+    expect(removed.map((row) => row.allergyBlock)).toEqual([null]);
+    expect(notices.filter((row) => row.kind === "void")).toHaveLength(50);
+    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, removed[0]!.id, { stationId: v.grill }));
+    expect((await read()).some((row) => row.id === removed[0]!.id)).toBe(false);
+    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, notices[0]!.id, { stationId: v.grill }));
+    expect((await read()).filter((row) => row.kind === "allergy_changed")).toHaveLength(54);
+    expect((await read()).some((row) => row.id === notices[0]!.id)).toBe(false);
+  });
+
   it.each([
     { kind: "allergy_changed" as const, options: {}, field: "allergyBlock" },
     { kind: "allergy_changed" as const, options: { allergyBlock: null }, field: "allergyBlock" },

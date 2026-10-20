@@ -2360,9 +2360,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   upgrade check, first-exposure capture and frozen-block paper formatting are implemented on the
   kitchen branch, including preservation across ticket replacement. Station and pass reads return
   the original frozen blocks in batches. Station and pass screens render those blocks, and station
-  notices render the corrected block separately. Correction delivery and the remaining
-  split/recall/rerouting work remain. Kitchen Spanish wording
-  still needs the owner's answer.
+  notices render the corrected block separately. All five change-set callers now deliver
+  station-specific corrections for remaining work, with exact HOLD recipients and notices retained
+  until acknowledgement. Remaining work covers split/recall/rerouting, failure/replay/restart checks
+  and the guides. Kitchen Spanish wording still needs the owner's answer.
   [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
