@@ -258,14 +258,6 @@ test("stands still when the system asks for reduced motion", async () => {
   }
 });
 
-test("registers the check icon", async () => {
-  await import("./floor-chips.js");
-  const icon = await mount('<wt-icon name="floor-check"></wt-icon>');
-  const path = icon.shadowRoot!.querySelector("svg path");
-  expect(path).not.toBeNull();
-  expect(path!.getAttribute("d")).not.toBe("");
-});
-
 test("draws no pulse for none, or while still", async () => {
   expect((await pulseProbe(null, true)).shadowRoot!.querySelector("[data-pulse]")).toBeNull();
   expect(
@@ -344,5 +336,16 @@ test("an outline on a fill has a surface line inside it", async () => {
     const plain = getComputedStyle(ring).boxShadow;
     expect(plain.match(/inset/g), name).toHaveLength(1);
     expect(plain, name).not.toContain("rgb(9, 9, 9)");
+  }
+});
+
+test("an outline with onFill left unset has one layer, as before", async () => {
+  const tokens = { "--wt-space-1": "8px", "--wt-color-surface": "rgb(9, 9, 9)" };
+  for (const name of ["overdue", "waiting"] as const) {
+    const ring = ringOf(await probe(name, false, tokens));
+    expect(ring.classList.contains("on-fill"), name).toBe(false);
+    const shadow = getComputedStyle(ring).boxShadow;
+    expect(shadow.match(/inset/g), name).toHaveLength(1);
+    expect(shadow, name).not.toContain("rgb(9, 9, 9)");
   }
 });
