@@ -414,12 +414,6 @@ export class TillFloorScreen extends LitElement {
         border-left-width: var(--wt-space-3);
       }
 
-      /* The forgotten badge (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
-         table (not just under reduced motion), so a colour-blind operator or a reduced-motion setting
-         still sees the escalation without relying on the flashing-red accent alone. A FILLED danger
-         chip (like .badge.en-route's filled-primary treatment above) rather than plain text, since
-         this card already has a rich badge system — the same a11y-correct danger/on-danger token pair
-         every other filled chrome in this app uses. */
       .badge.forgotten {
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);

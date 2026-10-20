@@ -121,6 +121,13 @@ describe("till-floor-screen: the card's ring", () => {
     expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
     expect(getComputedStyle(ring).animationDuration).toBe("5s");
     expect(card(el).dataset.top).toBe("overdue");
+    const box = card(el).getBoundingClientRect();
+    const outline = ring.getBoundingClientRect();
+    expect(outline.width).toBeGreaterThan(0);
+    expect(outline.left).toBeGreaterThanOrEqual(box.left);
+    expect(outline.top).toBeGreaterThanOrEqual(box.top);
+    expect(outline.right).toBeLessThanOrEqual(box.right);
+    expect(outline.bottom).toBeLessThanOrEqual(box.bottom);
   });
 
   it("rings a forgotten card fast, keeps its badge, and dims the ring to the token half-way", async () => {
@@ -175,6 +182,7 @@ describe("till-floor-screen: the card's ring", () => {
     const rings = card(el).querySelectorAll<HTMLElement>("[data-ring]");
     expect(rings).toHaveLength(1);
     expect(rings[0]!.dataset.ring).toBe("forgotten");
+    expect(pulses(rings[0]!)).toEqual(["wt-pulse-fast"]);
     expect(ringOf(card(el, "t3"))).toBeNull();
     expect(card(el, "t3").dataset.top).toBe("bill");
   });
@@ -258,5 +266,24 @@ describe("till-floor-screen: the card's ring", () => {
       }
     ).updateComplete;
     expect(pulses(tokenRing(moving.el))).toEqual(["wt-pulse-fast"]);
+  });
+
+  it("outlines an unplaced token from its wait chip when the floored band has not caught up", async () => {
+    const tables = [
+      table({ id: "t1", label: "Table 1", party: null, state: "free", today: today() }),
+      table({
+        timingBand: "fresh",
+        signals: [longWait("overdue")],
+        today: today({ placement: null }),
+      }),
+    ];
+    const { el } = await mountFloor(tables, { reducedMotion: false });
+    const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-tray-table=t2] wt-table-token",
+    )!;
+    await token.updateComplete;
+    const ring = token.shadowRoot!.querySelector<HTMLElement>('[data-ring="overdue"]')!;
+    expect(ring).not.toBeNull();
+    expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
   });
 });

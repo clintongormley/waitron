@@ -377,7 +377,7 @@ describe("till-floor-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-forgotten]')).toBeNull();
     });
 
-    it("forgotten flashes by default (motion allowed) and shows the non-colour forgotten badge", async () => {
+    it("forgotten pulses fast when motion is allowed and shows the non-colour forgotten badge", async () => {
       const { el } = await mount({
         tables: [table({ id: "t1", timingBand: "forgotten" })],
         reducedMotion: false,
@@ -391,7 +391,7 @@ describe("till-floor-screen", () => {
       expect(badge.textContent).toContain(t("floor.forgotten"));
     });
 
-    it("reduced motion: a forgotten table renders steady red with NO flash class, but keeps the badge", async () => {
+    it("reduced motion: a forgotten table's ring stands still, its left edge turns wide, and it keeps the badge", async () => {
       const { el } = await mount({
         tables: [table({ id: "t1", timingBand: "forgotten" })],
         reducedMotion: true,
@@ -416,7 +416,7 @@ describe("till-floor-screen", () => {
       expect(card.classList.contains("edge-forgotten")).toBe(false);
     });
 
-    it("coexists with the occupancy accent — a forgotten OPEN-TAB table carries BOTH classes", async () => {
+    it("coexists with the occupancy accent — a forgotten OPEN-TAB table keeps its state class and draws the forgotten ring", async () => {
       // The occupancy state-* accent and the timing ring must never clobber one another.
       const { el } = await mount({
         tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, timingBand: "forgotten" })],
