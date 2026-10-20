@@ -682,11 +682,13 @@ describe("an unanswered presented payment on a handheld", () => {
   /** Signs out, signs in as Luis, opens the table again and presses the bill's Pay. */
   /** A share taken from the open bill's sheet gets no answer — or, with `out`, is still waiting for
    * one — the sheet is closed, and the bill is then presented: the table is opened again on it. */
-  async function partUnconfirmedThenPresented(out = false) {
-    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
-    const takeBillPayment = out
+  async function partUnconfirmedThenPresented(
+    out = false,
+    takeBillPayment: Mock = out
       ? vi.fn(() => new Promise<BillPaymentResult>(() => {}))
-      : vi.fn().mockRejectedValue(noAnswer());
+      : vi.fn().mockRejectedValue(noAnswer()),
+  ) {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
     const { el } = await mountApp(
       onPhone({
         getPartyBills,
@@ -758,6 +760,31 @@ describe("an unanswered presented payment on a handheld", () => {
     expect(takeBillPayment).toHaveBeenCalledTimes(sends);
     expect(api.collectOrder).not.toHaveBeenCalled();
     expect(api.pay).not.toHaveBeenCalled();
+  });
+
+  it("a share answered while Pay's held sheet is open leaves the form whose Pay items lists the bill's items", async () => {
+    let answer: (value: BillPaymentResult) => void = () => {};
+    const takeBillPayment = vi.fn(
+      () => new Promise<BillPaymentResult>((resolve) => (answer = resolve)),
+    );
+    const { el, order } = await partUnconfirmedThenPresented(true, takeBillPayment);
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(dialog(el)?.confirmationLocked).toBe(true));
+
+    answer(
+      takenOf(
+        { method: "card", entry: "reader", applied: "40.00", tendered: null, change: null },
+        { received: "40.00", outstanding: "80.00" },
+      ),
+    );
+    await flush(el);
+    await vi.waitFor(() => expect(dialog(el)!.confirmationLocked).toBe(false));
+    await press(el, 'input[name="way"][value="items"]');
+
+    expect(inDialog(el, "[data-items-none]")).toBeNull();
+    expect(dialog(el)!.shadowRoot!.querySelectorAll('input[name="line"]').length).toBeGreaterThan(
+      0,
+    );
   });
 
   async function signInAgainAndReopen(el: TillApp): Promise<void> {

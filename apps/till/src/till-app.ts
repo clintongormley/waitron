@@ -15955,7 +15955,7 @@ export class TillApp extends LitElement {
     // The presented sheet cannot check a bill payment again, and the bill takes nothing while one
     // holds it, so that payment's own sheet opens instead.
     if (this.#billPaymentHeld(workingOrderId)) {
-      void this.#openBillPaying("whole", []);
+      void this.#openBillPaying("whole", this.#payLinesOnScreen());
       return;
     }
     this.presentedPaying = {
