@@ -2469,6 +2469,10 @@ Away and Done routes, and counter release of every course on Send or payment. Ex
 holding checks use seated parties; counter retries retain their existing sale and print counts.
 The Done helper and split-copy operation are removed; dark-pass alerts use remaining service
 quantity and ignore legacy Done/Away stamps. Historical mark rows remain until schema retirement.
+The server's movement predicate ignores Away; queued/unserved and made-here restrictions remain.
+Closing/deletion checks include work only while its kitchen quantity exceeds what was served;
+the existing allowance for fired ready history on station deletion remains. Rest-of-order reads show only the remaining
+quantity, and kitchen-note corrections still reach unserved food carrying an old Away stamp.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan

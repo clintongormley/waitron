@@ -167,7 +167,7 @@ describe("saved kitchen note corrections", () => {
   });
 
   it.each(["served", "away", "made-here", "collected"] as const)(
-    "does not correct %s work",
+    "corrects only remaining service work: %s",
     async (kind) => {
       const p = await sent();
       await inTx(v, async (tx) => {
@@ -197,7 +197,46 @@ describe("saved kitchen note corrections", () => {
         );
       }
       await set({ partyId: p.partyId }, "New time");
-      expect(await v.db.select().from(kitchenNotices)).toEqual([]);
+      expect(await v.db.select().from(kitchenNotices)).toEqual(
+        kind === "away"
+          ? [
+              expect.objectContaining({
+                kind: "changed",
+                orderNoteChange: { before: "Old time", after: "New time" },
+              }),
+            ]
+          : [],
+      );
+    },
+  );
+
+  it.each([
+    ["partly served", 1000, 500, 1],
+    ["cancelled remainder served", 500, 500, 0],
+    ["fully cancelled", 0, 0, 0],
+  ] as const)(
+    "A773 no dispatch state: note correction follows remaining service quantity: %s",
+    async (_kind, active, served, expected) => {
+      await printer();
+      const p = await sent();
+      await inTx(v, async (tx) => {
+        await tx
+          .update(ticketItems)
+          .set({ state: "ready", quantity: active, awayAt: new Date().toISOString() })
+          .where(eq(ticketItems.workingOrderId, p.tabId));
+        await tx
+          .update(workingOrderLines)
+          .set({ servedQuantity: served })
+          .where(eq(workingOrderLines.workingOrderId, p.tabId));
+      });
+      const beforeLines = await v.db.select().from(workingOrderLines);
+      const beforeJobs = await v.db.select().from(printJobs);
+      await expect(set({ partyId: p.partyId }, "Updated instructions")).resolves.toBeDefined();
+      expect(await v.db.select().from(kitchenNotices)).toHaveLength(expected);
+      const afterJobs = await v.db.select().from(printJobs);
+      expect(afterJobs).toHaveLength(beforeJobs.length + expected);
+      expect(afterJobs.slice(0, beforeJobs.length)).toEqual(beforeJobs);
+      expect(await v.db.select().from(workingOrderLines)).toEqual(beforeLines);
     },
   );
 

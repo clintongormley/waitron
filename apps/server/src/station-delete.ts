@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
   createLabelComparator,
@@ -26,6 +26,7 @@ import {
 import { clearStationDeleteSettings, readStationDeleteSettings } from "@waitron/venue-service";
 import { bumpRevision } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
+import { firedQuantity } from "./kitchen-print.js";
 
 function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
   const targets = [...new Map(rows.map((row) => [row.id, row])).values()];
@@ -69,11 +70,10 @@ async function stationDeleteRules(tx: Transaction, cfg: TillConfig, id: string) 
         eq(ticketItems.stationId, id),
         eq(workingOrders.locationId, cfg.locationId),
         eq(ticketItems.madeHere, false),
-        isNull(ticketItems.awayAt),
         isNull(workingOrders.collectedAt),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrderLines.servedAt),
-        sql`${workingOrderLines.servedQuantity} < ${workingOrderLines.quantity}`,
+        gt(firedQuantity, workingOrderLines.servedQuantity),
         or(isNull(ticketItems.firedAt), inArray(ticketItems.state, ["queued", "preparing"])),
       ),
     );

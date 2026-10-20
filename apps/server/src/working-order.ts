@@ -4075,7 +4075,6 @@ export async function readTabLines(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
-      awayAt: ticketItems.awayAt,
       madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
@@ -4132,8 +4131,7 @@ export async function readTabLines(
       state: row.state,
       stationId: row.stationId,
       movable:
-        row.state !== null &&
-        stillMovable({ state: row.state, awayAt: row.awayAt, madeHere: row.madeHere! }, row),
+        row.state !== null && stillMovable({ state: row.state, madeHere: row.madeHere! }, row),
       groupId: row.groupId,
       note: row.note,
       listId: row.listId,
@@ -7122,7 +7120,6 @@ export async function listCounterWaiting(
               lineId: workingOrderLines.id,
               stationId: ticketItems.stationId,
               state: ticketItems.state,
-              awayAt: ticketItems.awayAt,
               madeHere: ticketItems.madeHere,
               servedAt: workingOrderLines.servedAt,
               servedQuantity: workingOrderLines.servedQuantity,

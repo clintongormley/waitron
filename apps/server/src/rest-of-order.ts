@@ -1,8 +1,8 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { kitchenStations, ticketItems, workingOrderLines, type Transaction } from "@waitron/db";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { thousandthsToDecimal, compareStationNames } from "@waitron/shared";
-import type { TicketState } from "./kitchen-print.js";
+import { firedQuantity, type TicketState } from "./kitchen-print.js";
 
 export interface RestOfOrderItem {
   ticketItemId: string;
@@ -30,7 +30,7 @@ export function restOfOrderQuery(tx: Transaction, orderIds: readonly string[]) {
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
-      quantity: sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`,
+      quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       state: ticketItems.state,
@@ -43,8 +43,7 @@ export function restOfOrderQuery(tx: Transaction, orderIds: readonly string[]) {
       and(
         inArray(ticketItems.workingOrderId, [...orderIds]),
         eq(ticketItems.madeHere, false),
-        isNull(ticketItems.awayAt),
-        isNull(workingOrderLines.servedAt),
+        gt(firedQuantity, workingOrderLines.servedQuantity),
       ),
     )
     .orderBy(kitchenStations.name, workingOrderLines.lineNo, ticketItems.id);

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
@@ -818,9 +818,8 @@ export async function enqueueOrderKitchenNoteChange(
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
         eq(ticketItems.madeHere, false),
-        isNull(ticketItems.awayAt),
         isNull(workingOrderLines.servedAt),
-        sql`${workingOrderLines.servedQuantity} < ${workingOrderLines.quantity}`,
+        gt(firedQuantity, workingOrderLines.servedQuantity),
         or(
           isNotNull(ticketItems.firedAt),
           and(eq(orderGroups.state, "held"), isNotNull(orderGroups.holdPrintedAt)),

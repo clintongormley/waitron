@@ -1977,7 +1977,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
               awayAt: line.awayAt,
               stationId: line.stationId!,
               movable: stillMovable(
-                { state: line.ticketState, awayAt: line.awayAt, madeHere: line.ticketMadeHere! },
+                { state: line.ticketState, madeHere: line.ticketMadeHere! },
                 line,
               ),
             },

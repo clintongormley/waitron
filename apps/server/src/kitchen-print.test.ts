@@ -380,14 +380,14 @@ describe("show the rest of the order", () => {
         );
       await tx
         .update(workingOrderLines)
-        .set({ servedAt: nowIso() })
+        .set({ servedAt: nowIso(), servedQuantity: 1000 })
         .where(eq(workingOrderLines.id, chipsLine!.id));
       const beforeServed = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);
       const served = (await printJobsFor(tx)).filter((job) => !beforeServed.has(job.id));
       await tx
         .update(workingOrderLines)
-        .set({ servedAt: null })
+        .set({ servedAt: null, servedQuantity: 0 })
         .where(eq(workingOrderLines.id, chipsLine!.id));
       await tx
         .update(ticketItems)
@@ -418,7 +418,8 @@ describe("show the rest of the order", () => {
       const grillText = decodeTicket(
         jobs.find((job) => job.printerId === result.grillPrinter)!.payload,
       );
-      expect(grillText).not.toContain("Chips — Fryer");
+      if (jobs === result.served) expect(grillText).not.toContain("Chips — Fryer");
+      else expect(grillText).toContain("Chips — Fryer");
       expect(grillText).toContain("Salad — Cold");
     }
   });

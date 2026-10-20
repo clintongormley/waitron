@@ -4,6 +4,7 @@ import { ticketItems, workingOrderLines, workingOrders, type Transaction } from 
 import { invalid } from "./bill-allocation.js";
 import { moveDishesToStation, stillMovable, type StationMoveActor } from "./station-move.js";
 import type { TillConfig } from "./till-config.js";
+import { firedQuantity } from "./kitchen-print.js";
 
 export async function openDishCount(
   tx: Transaction,
@@ -24,8 +25,7 @@ function unfinishedAtStation(locationId: string, stationId: string) {
     eq(workingOrders.locationId, locationId),
     eq(ticketItems.stationId, stationId),
     eq(ticketItems.madeHere, false),
-    isNull(ticketItems.awayAt),
-    gt(workingOrderLines.quantity, workingOrderLines.servedQuantity),
+    gt(firedQuantity, workingOrderLines.servedQuantity),
     ne(workingOrders.status, "abandoned"),
     isNull(workingOrders.collectedAt),
   );
@@ -55,7 +55,6 @@ export async function withStationDishes(
       orderId: ticketItems.workingOrderId,
       lineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
-      awayAt: ticketItems.awayAt,
       madeHere: ticketItems.madeHere,
       servedAt: workingOrderLines.servedAt,
       servedQuantity: workingOrderLines.servedQuantity,

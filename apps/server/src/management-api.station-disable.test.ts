@@ -188,7 +188,7 @@ it.each(["queued", "preparing", "ready", "held"] as const)(
   },
 );
 it.each(["away", "served", "collected", "abandoned", "made_here", "another_station"] as const)(
-  "Delete impact excludes %s work",
+  "Delete impact follows remaining preparation work: %s",
   async (kind) => {
     const item = await dish(kind === "another_station" ? pastry : grill);
     const at = new Date().toISOString();
@@ -210,7 +210,16 @@ it.each(["away", "served", "collected", "abandoned", "made_here", "another_stati
     expect(answer.status).toBe(200);
     expect(await answer.json()).toEqual({
       target: { id: grill, name: "Grill" },
-      refusals: [],
+      refusals:
+        kind === "away"
+          ? [
+              {
+                code: "station.work_in_progress",
+                params: { stationId: grill, count: 1 },
+                targets: [{ id: item.workingOrderId, name: item.tableName }],
+              },
+            ]
+          : [],
       ends: [],
       removes:
         kind === "another_station" ? [] : [{ key: "station_routing_cells", count: 1, targets: [] }],

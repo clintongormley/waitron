@@ -24,7 +24,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setDeviceKitchenScreens, setProfileKitchenScreens } from "@waitron/venue-service";
+import {
+  closeStationForToday,
+  setDeviceKitchenScreens,
+  setProfileKitchenScreens,
+} from "@waitron/venue-service";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { createStation, listStations, updateStation, setDefaultStation } from "./kitchen.js";
 import { listStationPrinters } from "./station-printers.js";
@@ -37,6 +41,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { listStationQueue } from "./working-order.js";
+import { openDishCount, withStationDishes } from "./station-closing.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -57,6 +62,8 @@ async function food(
     away?: boolean;
     served?: boolean;
     collected?: boolean;
+    servedQuantity?: number;
+    ticketQuantity?: number;
     status?: "open" | "settled" | "abandoned";
     ticket?: boolean;
   } = {},
@@ -89,7 +96,7 @@ async function food(
         productId: v.productId("Flan"),
         makeAtStationId: id,
         servedAt: flags.served ? at : null,
-        servedQuantity: flags.served ? 1000 : 0,
+        servedQuantity: flags.servedQuantity ?? (flags.served ? 1000 : 0),
         sentAt: flags.ticket === false ? null : at,
       })
       .returning();
@@ -100,6 +107,7 @@ async function food(
         workingOrderLineId: line!.id,
         stationId: id,
         state: flags.state ?? "queued",
+        quantity: flags.ticketQuantity ?? null,
         firedAt: flags.held ? null : at,
         stationRetainedAtRelease: flags.retained ?? false,
         madeHere: flags.madeHere ?? false,
@@ -225,10 +233,12 @@ describe("permanent station deletion", () => {
     ["held ready", { held: true, state: "ready" }, true],
     ["made here", { madeHere: true }, false],
     ["fired ready", { state: "ready" }, false],
-    ["away", { away: true }, false],
+    ["legacy away queued", { away: true }, true],
     ["served", { served: true }, false],
     ["collected", { collected: true }, false],
     ["abandoned", { status: "abandoned" }, false],
+    ["fully cancelled queued", { ticketQuantity: 0 }, false],
+    ["cancelled remainder served", { ticketQuantity: 500, servedQuantity: 500 }, false],
   ] as const)("preparation predicate: %s", async (_name, flags, blocked) => {
     const { v, id } = await fixture();
     const { order } = await food(v, id, flags);
@@ -671,5 +681,87 @@ describe("permanent station deletion", () => {
           code: "station.not_found",
           params: { stationId: target },
         });
+  });
+});
+
+describe("A773 no dispatch state", () => {
+  it.each([
+    ["unserved", 0, 1000, 1, "1.000"],
+    ["partly served", 250, 1000, 1, "0.750"],
+    ["partly cancelled and served", 250, 500, 1, "0.250"],
+    ["served without timestamp", 1000, 1000, 0, null],
+    ["cancelled remainder served", 500, 500, 0, null],
+    ["fully cancelled", 0, 0, 0, null],
+  ] as const)(
+    "counts and lists only active remaining food: %s",
+    async (_label, servedQuantity, ticketQuantity, count, quantity) => {
+      const { v, id } = await fixture();
+      const { order } = await food(v, id, {
+        state: "ready",
+        away: true,
+        servedQuantity,
+        ticketQuantity,
+      });
+      const before = await snapshot(v);
+      expect(await inTx(v, (tx) => openDishCount(tx, v.cfg.locationId, id))).toBe(count);
+      const rest = (await inTx(v, (tx) => readRestOfOrder(tx, [order.id]))).get(order.id)!;
+      expect(rest.map((row) => row.quantity)).toEqual(quantity === null ? [] : [quantity]);
+      expect(await snapshot(v)).toEqual(before);
+    },
+  );
+
+  it("requires a closing choice for ready legacy-Away food", async () => {
+    const { v, id } = await fixture();
+    await food(v, id, { state: "ready", away: true });
+    const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Destination" }));
+    const before = await snapshot(v);
+    await expect(
+      inTx(v, (tx) =>
+        withStationDishes(
+          tx,
+          v.cfg,
+          id,
+          destination.id,
+          undefined,
+          (at) => closeStationForToday(tx, v.cfg, id, destination.id, at),
+          { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "openDishes" },
+    });
+    expect(await snapshot(v)).toEqual(before);
+  });
+
+  it("closing sends only queued unserved food and retains started work", async () => {
+    const { v, id } = await fixture();
+    const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Destination" }));
+    const queued = await food(v, id, { away: true });
+    const preparing = await food(v, id, { state: "preparing", away: true });
+    const ready = await food(v, id, { state: "ready", away: true });
+    const served = await food(v, id, { served: true });
+    const made = await food(v, id, { madeHere: true });
+    await inTx(v, (tx) =>
+      withStationDishes(
+        tx,
+        v.cfg,
+        id,
+        destination.id,
+        "send",
+        (at) => closeStationForToday(tx, v.cfg, id, destination.id, at),
+        { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
+      ),
+    );
+    const items = await inTx(v, (tx) => tx.select().from(ticketItems));
+    for (const { line } of [queued, preparing, ready, served, made])
+      expect(items.find((item) => item.workingOrderLineId === line.id)?.stationId).toBe(
+        line.id === queued.line.id ? destination.id : id,
+      );
+    expect(
+      await inTx(v, (tx) =>
+        tx.select({ lineId: ticketItemMoves.workingOrderLineId }).from(ticketItemMoves),
+      ),
+    ).toEqual([{ lineId: queued.line.id }]);
   });
 });

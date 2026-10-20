@@ -271,19 +271,18 @@ describe("stillMovable", () => {
   const line = { servedAt: null, servedQuantity: 0 };
 
   it("offers a queued kitchen item still at its station", () => {
-    expect(stillMovable({ state: "queued", awayAt: null, madeHere: false }, line)).toBe(true);
+    expect(stillMovable({ state: "queued", madeHere: false }, line)).toBe(true);
   });
 
   it.each([
-    [{ state: "preparing", awayAt: null, madeHere: false }, line],
-    [{ state: "ready", awayAt: null, madeHere: false }, line],
-    [{ state: "queued", awayAt: "2026-10-02T12:00:00Z", madeHere: false }, line],
-    [{ state: "queued", awayAt: null, madeHere: true }, line],
+    [{ state: "preparing", madeHere: false }, line],
+    [{ state: "ready", madeHere: false }, line],
+    [{ state: "queued", madeHere: true }, line],
     [
-      { state: "queued", awayAt: null, madeHere: false },
+      { state: "queued", madeHere: false },
       { servedAt: null, servedQuantity: 1000 },
     ],
-  ] as const)("hides an item already started, away, made here, or served %#", (item, served) => {
+  ] as const)("hides an item already started, made here, or served %#", (item, served) => {
     expect(stillMovable(item, served)).toBe(false);
   });
 });
@@ -2036,7 +2035,7 @@ describe("moveDishesToStation", () => {
     expect(await snapshot(tabId, item.id)).toEqual(before);
   });
 
-  it("refuses a record marked away without writing", async () => {
+  it("A773 no dispatch state: moves queued legacy-Away work without changing its billed line", async () => {
     const { tabId, item } = await burger();
     await inTx(venue, (tx) =>
       tx
@@ -2044,7 +2043,9 @@ describe("moveDishesToStation", () => {
         .set({ awayAt: new Date().toISOString() })
         .where(eq(ticketItems.id, item.id)),
     );
-    const before = await snapshot(tabId, item.id);
+    const before = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item.workingOrderLineId)),
+    );
     await expect(
       inTx(venue, (tx) =>
         moveDishesToStation(
@@ -2059,8 +2060,14 @@ describe("moveDishesToStation", () => {
           mover(),
         ),
       ),
-    ).rejects.toMatchObject({ code: "ticket.already_started" });
-    expect(await snapshot(tabId, item.id)).toEqual(before);
+    ).resolves.toMatchObject({
+      moved: [{ workingOrderLineId: item.workingOrderLineId, fromStationId: bar }],
+    });
+    expect((await snapshot(tabId, item.id)).item?.stationId).toBe(grill);
+    const after = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item.workingOrderLineId)),
+    );
+    expect(after).toEqual(before.map((line) => ({ ...line, makeAtStationId: grill })));
   });
 
   it("returns an empty move at the same station without changing the order", async () => {

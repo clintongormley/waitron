@@ -169,7 +169,7 @@ describe("the till's station day", () => {
     },
   );
   it.each(["away", "served", "collected", "abandoned", "made_here"] as const)(
-    "leaves %s work out of the closing count",
+    "counts remaining service work regardless of dispatch: %s",
     async (kind) => {
       const item = await stationDish();
       const at = new Date().toISOString();
@@ -192,7 +192,7 @@ describe("the till's station day", () => {
           .where(eq(workingOrders.id, item.workingOrderId));
       const answer = await call("GET", today());
       expect(answer.status).toBe(200);
-      expect(answer.json.openDishCount).toBe(0);
+      expect(answer.json.openDishCount).toBe(kind === "away" ? 1 : 0);
     },
   );
   it("counts only the source station's unfinished dishes", async () => {
@@ -350,7 +350,7 @@ describe("the till's station day", () => {
     expect(after!.firedAt).not.toBeNull();
   });
   it.each(["away", "served", "collected", "abandoned", "made_here", "partly_served"] as const)(
-    "sending at closure leaves %s records untouched",
+    "sending at closure moves only queued unserved work: %s",
     async (kind) => {
       const excluded = await stationDish();
       const moving = await stationDish();
@@ -382,7 +382,16 @@ describe("the till's station day", () => {
       expect((await call("PUT", today(), { ...close(), openDishes: "send" })).status).toBe(204);
       expect(
         (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, excluded.id)))[0],
-      ).toEqual(before);
+      ).toEqual(
+        kind === "away"
+          ? {
+              ...before,
+              stationId: bar,
+              queuedAt: expect.any(String),
+              stationChosenAt: expect.any(String),
+            }
+          : before,
+      );
       expect(
         (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, moving.id)))[0]!
           .stationId,
