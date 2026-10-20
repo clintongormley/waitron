@@ -8972,9 +8972,13 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
       this.equipmentRereads--;
-      if (this.equipmentRereads === 0 && this.equipmentWaiting === 0)
-        this.payEquipmentSaving = null;
+      this.#endSavingIfSettled();
     }
+  }
+
+  /** Called after any follow-up read has been started, which counts itself before its first await. */
+  #endSavingIfSettled(): void {
+    if (this.equipmentWaiting === 0 && this.equipmentRereads === 0) this.payEquipmentSaving = null;
   }
 
   #holdEquipment(equipment: DeviceEquipment): void {
@@ -9217,6 +9221,7 @@ export class TillApp extends LitElement {
     if (!current()) {
       this.equipmentWaiting--;
       void this.#rereadIfStale();
+      this.#endSavingIfSettled();
       return;
     }
     const reads = this.#equipmentReads;
@@ -9291,6 +9296,7 @@ export class TillApp extends LitElement {
       this.equipmentWaiting--;
       // The device can keep a choice after its operator leaves; refresh without their notice.
       void this.#rereadIfStale();
+      this.#endSavingIfSettled();
     }
   }
 
@@ -9432,7 +9438,7 @@ export class TillApp extends LitElement {
         .equipmentBusy=${this.equipmentWaiting > 0 || this.equipmentRereads > 0}
         .equipmentSaving=${this.payEquipmentSaving}
         @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
-          void this.#onPayEquipmentPick(event.detail)}
+          this.#onPayEquipmentPick(event.detail)}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -9442,16 +9448,13 @@ export class TillApp extends LitElement {
       ${this.#renderBillRefunding()}`;
   }
 
-  async #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): Promise<void> {
-    const saving = { role, id };
-    this.payEquipmentSaving = saving;
-    await this.#onEquipmentChange(
+  #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): void {
+    this.payEquipmentSaving = { role, id };
+    void this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {
         detail: { role, selection: { id }, via: "list", takeOver },
       }),
     );
-    if (this.payEquipmentSaving === saving && this.equipmentRereads === 0)
-      this.payEquipmentSaving = null;
   }
 
   #payingTableName(open: BillPaying): string {

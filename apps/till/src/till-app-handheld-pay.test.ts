@@ -475,6 +475,42 @@ describe("till-app: a pick from the sheet", () => {
     expect(combobox.value).toBe(READER_ID);
   });
 
+  it("the saving hint clears once every change and read has ended, whichever ends last", async () => {
+    installNfc();
+    const changes: Array<{ fail: (error: unknown) => void }> = [];
+    const setDeviceEquipment = vi.fn(
+      () =>
+        new Promise<DeviceEquipment>((_resolve, reject) => {
+          changes.push({ fail: reject });
+        }),
+    );
+    const reads: Array<(equipment: DeviceEquipment) => void> = [];
+    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_2));
+    const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
+    getDeviceEquipment.mockImplementation(
+      () => new Promise<DeviceEquipment>((resolve) => reads.push(resolve)),
+    );
+
+    await pickReader(el, "Lector 3");
+    changes[0]!.fail({ status: 409, code: "device.equipment_held" });
+    await flush(el);
+    expect(reads).toHaveLength(1);
+    (await nfcReader()).read(`waitron-equipment:reader:${LECTOR_4.id}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+    reads[0]!(readers(LECTOR_2));
+    await flush(el);
+    expect(continueButton(el).disabled).toBe(true);
+    changes[1]!.fail({ status: 403, code: "permission.denied" });
+    await flush(el);
+
+    expect(continueButton(el).disabled).toBe(false);
+    expect(await savingNote(el)).toBe("");
+    const combobox = row(el)!.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    expect(combobox.value).toBe("r2");
+  });
+
   it("a read after an overtaken pick that never answers is cut off, and lifts the hold", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const reads: Array<(equipment: DeviceEquipment) => void> = [];
