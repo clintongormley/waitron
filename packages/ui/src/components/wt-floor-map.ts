@@ -290,6 +290,10 @@ export class WtFloorMap extends LitElement {
         box-shadow: inset 0 0 0 1px var(--wt-color-primary);
       }
 
+      [part="table"][data-held] [part="shape"][data-outline="clearing"] {
+        border-color: var(--wt-color-warning);
+      }
+
       /* Outside the edge, so --wt-focus-offset and not --wt-selected-ring-offset: the seated fill
          is the primary colour itself. */
       [part="table"][data-held]:not([data-merge]) [part="shape"],
@@ -365,6 +369,12 @@ export class WtFloorMap extends LitElement {
         max-width: 100%;
         overflow: hidden;
         line-height: 1.2;
+      }
+
+      /* Clear of the thickest outline drawn inside the shape, Overdue's, so no icon sits on it. */
+      [part="table"]:has(> [part="shape"][data-outline]) > [part="name"],
+      [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"] {
+        max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
       }
 
       [part="cue"] {
