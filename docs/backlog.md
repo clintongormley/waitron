@@ -4936,13 +4936,13 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
-  2026-10-20 (revised after review round 1), waiting for the owner's answers to three questions
-  (where the name is set, the certificate authority, the old name during a rename;
+  2026-10-20 (revised after review rounds 1 and 2), waiting for the owner's answers to three
+  questions (where the name is set, the certificate authority, the old name during a rename;
   [design](superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
   [mockups/a917-box-local-name/](backlog/mockups/a917-box-local-name/)); not built. Recommended:
   named once on the server's first page, before its certificate authority is made; a later rename is
-  a planned "re-trust every device" event, the old name only pointing at the new one for 14 days.
-  Five slices; no migration.
+  a planned "re-trust every device" event — devices pair again in place of their old entries, and the
+  old name only points at the new one for 14 days. Five slices; no migration.
 
 - **A backup run that is cut off leaves a plaintext copy of the whole venue database** (owner-only file)
   and its encrypted copy in `<state>/backup-staging`: only the run's own `finally` deletes them
