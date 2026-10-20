@@ -174,10 +174,8 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes`
   with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a
-  second attempt run only when the first failed.** The action retries a fetch that fails but
-  waits on one that stalls with no limit of its own. Cost: run 39446310822's `test-dashboard (2)`
-  fetch printed nothing for 353 s, and run 39440790729's `test-server (4)` sat in checkout until
-  its 10-minute limit. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`, weaker than
+  second attempt run only when the first failed.** Cost: run 39446310822's `test-dashboard (2)`
+  fetch printed nothing for 353 s. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`, weaker than
   their name — they read text and never run a workflow. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-checkout-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
@@ -207,8 +205,7 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes.** `applyMigrations` removes the change feed first for
-  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild
+- **A migration can fail on a box that already has a trigger naming what it changes.** A rebuild
   of a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
   than its name — its rows are synthetic and counted, not compared, and it installs today's
   change-feed list, and today's append-only list less the tables the previous step lacked, at every
@@ -646,8 +643,7 @@ browser test** — most of these rules exist because a test passed while proving
   shard 1 lost its worker to the watchdog. Guard: two cases in
   `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
   folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
-  `setInterval` captured when `@waitron/store` loads, because `vi.useFakeTimers()` fakes both by
-  default. Guard: the cases under "a holder whose test fakes the
+  `setInterval` captured when `@waitron/store` loads. Guard: the cases under "a holder whose test fakes the
   clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options
   only, and only when the store loads before the clock is faked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
@@ -657,13 +653,13 @@ browser test** — most of these rules exist because a test passed while proving
   Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
 - **The stream loop test and the stream pause test need two pinned binaries: without them they are
   SKIPPED locally and FAIL in CI.** Install both with
-  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints `1 skipped` and nothing else, so a local
-  green run of `apps/server` may not have run them. The S3 rehearsal scenarios, send gate and
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. The S3 rehearsal scenarios, send gate and
   interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
   `ci.yml` as TEXT, so install
-  commands left only in a YAML comment, or in a step an `if:` switches off, pass it.
+  commands left only in a YAML comment, or in a step an `if:` switches off, pass it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#the-stream-loop-test-skips-locally-without-its-two-binaries-and-a-skip-reads-as-a-pass).
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's
   `test.browser` block**; the command-line flag and a project's own `browser` block are ignored
   without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:
