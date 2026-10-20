@@ -8,7 +8,6 @@ import { PRECEDENCE } from "./table-precedence.js";
 import {
   MAP_PRECEDENCE,
   TAB_KINDS,
-  kindIcon,
   kindWords,
   mapKinds,
   mapLook,
@@ -847,7 +846,20 @@ describe("zoneTabKind", () => {
   ];
 
   it("lists the kinds above Held, which a tab shows", () => {
-    expect([...TAB_KINDS]).toEqual(MAP_PRECEDENCE.slice(0, MAP_PRECEDENCE.indexOf("held")));
+    expect([...TAB_KINDS]).toEqual([
+      "forgotten",
+      "overdue",
+      "unavailable",
+      "fire",
+      "bill",
+      "ready",
+      "step",
+      "delivery",
+      "not-sent",
+      "waiting",
+      "clearing",
+      "moving",
+    ]);
   });
 
   it.each(ranked.map((tbl, i) => [mapKinds(tbl, now)[0]!, i] as const))(
@@ -863,13 +875,5 @@ describe("zoneTabKind", () => {
     expect(zoneTabKind([heldTable, calm, reserved, freeTable], now)).toBeNull();
     expect(zoneTabKind([freeTable], now)).toBeNull();
     expect(zoneTabKind([], now)).toBeNull();
-  });
-
-  it("names each tab kind's icon, the map cue's", () => {
-    for (const tbl of ranked) {
-      const { top, cue } = mapLook([tbl], now);
-      expect(kindIcon(top!)).toBe(cue!.icon);
-    }
-    expect(kindIcon("free")).toBeNull();
   });
 });

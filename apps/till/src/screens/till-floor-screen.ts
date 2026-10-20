@@ -109,11 +109,11 @@ import type {
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import {
-  kindIcon,
+  kindCue,
   kindWords,
   mapKinds,
   reminderClock,
-  zoneTabKind,
+  topTabKind,
   type MapKind,
 } from "../state/floor-look.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
@@ -387,7 +387,7 @@ export class TillFloorScreen extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
-      /* Each family sets its tint and bar once; a tab, and the toolbar's edge, read them. */
+      /* Each family sets its tint and bar once; a zone's tab reads them. */
       [data-zone-state="forgotten"],
       [data-zone-state="overdue"] {
         --zone-tint: var(--wt-color-tab-danger-tint);
@@ -2119,14 +2119,21 @@ export class TillFloorScreen extends LitElement {
 
   #tabMarks(tabs: readonly ZoneTab[], activeKey: string | undefined): Map<string, ZoneTabMark> {
     const now = this.#drawnAt;
+    const hidden = new Set(tabs.map((tab) => tab.key).filter((key) => key !== activeKey));
+    const byZone = new Map<string, { table: TableState; kinds: MapKind[] }[]>();
+    for (const table of this.tables) {
+      if (table.zoneId === null || !hidden.has(table.zoneId)) continue;
+      const rows = byZone.get(table.zoneId) ?? [];
+      rows.push({ table, kinds: mapKinds(table, now) });
+      byZone.set(table.zoneId, rows);
+    }
     const marks = new Map<string, ZoneTabMark>();
-    for (const tab of tabs) {
-      if (tab.key === activeKey) continue;
-      const zoneTables = this.tables.filter((table) => table.zoneId === tab.key);
-      const kind = zoneTabKind(zoneTables, now);
+    for (const [zoneId, rows] of byZone) {
+      const kind = topTabKind(new Set(rows.flatMap((row) => row.kinds)));
       if (kind === null) continue;
-      const members = zoneTables.filter((table) => mapKinds(table, now).includes(kind));
-      marks.set(tab.key, { kind, icon: kindIcon(kind), words: kindWords(kind, members, now) });
+      const members = rows.filter((row) => row.kinds.includes(kind)).map((row) => row.table);
+      const icon = kindCue(kind, members, now)?.icon ?? null;
+      marks.set(zoneId, { kind, icon, words: kindWords(kind, members, now) });
     }
     return marks;
   }

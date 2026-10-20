@@ -202,6 +202,18 @@ describe("till-floor-screen: zone tabs", () => {
     expect(style.boxShadow).toBe("rgb(4, 5, 6) 0px -4px 0px 0px inset");
   });
 
+  it("keeps the tint and bar while the tab is hovered", async () => {
+    const { el, host } = await mount([seated("t1", "z1"), seated("t2", "z2", { readyToServe: 2 })]);
+    host.style.setProperty("--wt-color-tab-ready-tint", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-success", "rgb(4, 5, 6)");
+    const button = buttonOf(el, "z2");
+    await userEvent.hover(button);
+    expect(button.matches(":hover")).toBe(true);
+    const style = getComputedStyle(button);
+    expect(style.backgroundColor).toBe("rgb(1, 2, 3)");
+    expect(style.boxShadow).toBe("rgb(4, 5, 6) 0px -4px 0px 0px inset");
+  });
+
   it("leaves the zone on screen plain", async () => {
     const { el } = await mount([seated("t1", "z1", { timingBand: "forgotten" }), free("t2", "z2")]);
     expect(stateOf(el, "z1")).toBeNull();

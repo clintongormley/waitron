@@ -172,7 +172,12 @@ export function kindWords(kind: MapKind, members: readonly TableState[], now: nu
   }
 }
 
-function cueOf(kind: MapKind, members: readonly TableState[], now: number): FloorMapCue | null {
+/** A kind's cue on the map, read like `kindWords`; a zone's tab shows its icon. */
+export function kindCue(
+  kind: MapKind,
+  members: readonly TableState[],
+  now: number,
+): FloorMapCue | null {
   const fixed = FIXED_CUE[kind];
   if (fixed !== undefined) return { icon: fixed.icon, text: t(fixed.text) };
   switch (kind) {
@@ -232,7 +237,7 @@ export function mapLook(members: readonly TableState[], now: number): MapLook {
     fill: fillOf(kinds, members),
     outline: outlineOf(kinds),
     pulse: PULSES.find((pulse) => kinds.includes(pulse)) ?? null,
-    cue: top === undefined ? null : cueOf(top, members, now),
+    cue: top === undefined ? null : kindCue(top, members, now),
     top,
     kinds,
     description: describe(kinds, members, now),
@@ -264,17 +269,14 @@ export const TAB_KINDS: ReadonlySet<MapKind> = new Set(
   MAP_PRECEDENCE.slice(0, MAP_PRECEDENCE.indexOf("held")),
 );
 
-/** The most urgent tab kind across the zone's tables, or `null` when none has one. */
-export function zoneTabKind(tables: readonly TableState[], now: number): MapKind | null {
-  const kinds = new Set(tables.flatMap((table) => mapKinds(table, now)));
+/** The most urgent tab kind among `kinds`, or `null` when none is one. */
+export function topTabKind(kinds: ReadonlySet<MapKind>): MapKind | null {
   return MAP_PRECEDENCE.find((kind) => TAB_KINDS.has(kind) && kinds.has(kind)) ?? null;
 }
 
-/** The icon the map's cue shows for a kind, where it has one. */
-export function kindIcon(kind: MapKind): FloorCueIcon | null {
-  if (kind === "ready") return "floor-ready";
-  if (kind === "delivery") return "floor-step";
-  return FIXED_CUE[kind]?.icon ?? null;
+/** The most urgent tab kind across the zone's tables, or `null` when none has one. */
+export function zoneTabKind(tables: readonly TableState[], now: number): MapKind | null {
+  return topTabKind(new Set(tables.flatMap((table) => mapKinds(table, now))));
 }
 
 /** Each table's minutes to fire, or "due": it changes whenever a look can change with time. */
