@@ -758,6 +758,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`catalogue-screen.test.ts:363` asserts it is never called). Delete them together, or give the
   read a screen.
 
+- **The data table's columns button has no tooltip** (found by A655's on-screen check, 2026-10-21).
+  The icon-only button at the end of a list's search box opens **Customise**, but hovering or
+  focusing it shows nothing, while the Filters button beside it shows "Filters"
+  (`packages/ui/src/components/wt-data-table.ts`, the columns button near :2965 against the Filters
+  button's tooltip near :2791). Give it the same tooltip; the Products guide currently calls it "the
+  columns button at the right-hand end of the list's search box".
+
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
   A461 shows existing placements only. This work is not queued.
