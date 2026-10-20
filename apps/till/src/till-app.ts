@@ -3002,8 +3002,6 @@ export class TillApp extends LitElement {
    * describes the page, not the person (design default 18). */
   #hadReader = false;
   #paySheetOpenings = 0;
-  /** The sheet opening the automatic reader pick was sent for. */
-  #autoPickedFor: number | null = null;
   /** The open sheet may pick up a reader by itself; its row stays closed until that is settled. */
   @state() private payAutoPicking = false;
   /** A refusal is shown only in the dialog opening it was picked in. */
@@ -9099,7 +9097,14 @@ export class TillApp extends LitElement {
     const opening = ++this.#paySheetOpenings;
     const picks = this.#payEquipmentPicks.card_terminal;
     this.payAutoPicking = this.#autoPickCandidate() !== null;
-    const answered = await this.#readEquipment();
+    // A read that is cut off counts as failed, so the row cannot stay shut on a server that never answers.
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let answered: boolean;
+    try {
+      answered = await this.#readEquipment(limit.signal);
+    } finally {
+      limit.done();
+    }
     if (opening !== this.#paySheetOpenings) return;
     // A change out or a pick of the reader made since the opening has the waiter's say instead.
     const id =
@@ -9110,10 +9115,9 @@ export class TillApp extends LitElement {
       this.payAutoPicking = false;
       return;
     }
-    this.#autoPickedFor = opening;
     this.payAutoPicking = true;
     await this.#onPayEquipmentPick({ role: "card_terminal", id, takeOver: false });
-    if (this.#autoPickedFor === this.#paySheetOpenings) this.payAutoPicking = false;
+    if (opening === this.#paySheetOpenings) this.payAutoPicking = false;
   }
 
   /** A practice venue charges its demo reader, so it never picks one up. */

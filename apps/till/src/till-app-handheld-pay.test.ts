@@ -5,7 +5,7 @@ import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
@@ -3396,9 +3396,16 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
   }
 
-  async function firstUsePhone(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+  async function firstUsePhone(
+    overrides: Record<string, unknown> = {},
+    theme?: "light" | "dark",
+    tillOver: Record<string, unknown> = {},
+  ) {
     api = stubApi(
-      onPhone({ getDeviceEquipment: vi.fn().mockResolvedValue(firstUse()), ...overrides }),
+      onPhone(
+        { getDeviceEquipment: vi.fn().mockResolvedValue(firstUse()), ...overrides },
+        tillOver,
+      ),
     );
     const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
     const order = await openPhoneTable(el);
@@ -3639,6 +3646,116 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(row(el).open).toBe(true);
   });
 
+  it("an opening read that never answers is cut off, and the row opens with nothing picked", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    getDeviceEquipment.mockImplementation(
+      (options?: { signal?: AbortSignal }) =>
+        new Promise<DeviceEquipment>((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      inOrder(order, "[data-pay-sheet]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      await sheet(el)!.updateComplete;
+      expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+      expect(row(el).open).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+      await el.updateComplete;
+      await sheet(el)!.updateComplete;
+      await row(el).updateComplete;
+      expect(row(el).open).toBe(true);
+      expect(setDeviceEquipment).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an automatic pick refused while a reopened sheet's opening read is out keeps the row closed until that read answers", async () => {
+    const { setDeviceEquipment, answers } = heldPicks();
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    const reads: Array<(equipment: DeviceEquipment) => void> = [];
+    getDeviceEquipment.mockImplementation(
+      () => new Promise<DeviceEquipment>((resolve) => reads.push(resolve)),
+    );
+    await closeSheet(el);
+    await pressPaySheet(el, tableOrder(el));
+    expect(reads).toHaveLength(1);
+
+    answers[0]!.fail({ code: "device.equipment_held", status: 409 });
+    await flush(el);
+    await row(el).updateComplete;
+    expect(row(el).open).toBe(false);
+
+    const held = {
+      ...LECTOR_2,
+      heldBy: { deviceId: "d2", deviceName: "Móvil 2", personName: null },
+    };
+    for (const read of reads) read(firstUse(held));
+    await flush(el);
+    await row(el).updateComplete;
+    expect(row(el).open).toBe(true);
+    expect(setDeviceEquipment).toHaveBeenCalledOnce();
+  });
+
+  it("an earlier opening's read failing after the sheet reopened leaves the row to the newer opening", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    const reads: Array<{ ok: (equipment: DeviceEquipment) => void; fail: (e: unknown) => void }> =
+      [];
+    getDeviceEquipment.mockImplementation(
+      () =>
+        new Promise<DeviceEquipment>((resolve, reject) =>
+          reads.push({ ok: resolve, fail: reject }),
+        ),
+    );
+    await pressPaySheet(el, order);
+    await closeSheet(el);
+    await pressPaySheet(el, tableOrder(el));
+    expect(reads).toHaveLength(2);
+
+    reads[0]!.fail(new TypeError("Failed to fetch"));
+    await flush(el);
+    await row(el).updateComplete;
+    expect(row(el).open).toBe(false);
+    expect(setDeviceEquipment).not.toHaveBeenCalled();
+
+    reads[1]!.ok(firstUse());
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(row(el).open).toBe(false);
+    expect(await summary(el)).toContain("Lector 2");
+  });
+
+  it("when the equipment held offers no reader but the opening read finds one, the pick is sent and the row stays open", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(holding(LECTOR_2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue({
+      roles: [roleOf("receipt", BARRA, [BARRA]), roleOf("card_terminal", null, [])],
+    });
+    const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
+    getDeviceEquipment.mockResolvedValue(firstUse());
+
+    await pressPaySheet(el, order);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
+    await flush(el);
+
+    expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(LECTOR_2.id));
+    expect(row(el).open).toBe(true);
+    expect((await readerField(el)).value).toBe(LECTOR_2.id);
+  });
+
   const lookBackgrounds = new Map<string, string>();
   it.each([
     ["picked", "light", 390],
@@ -3652,17 +3769,20 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await page.viewport(width, 900);
     try {
       expect(window.innerWidth).toBe(width);
-      setLocale("es-ES");
       const setDeviceEquipment =
         state === "picked"
           ? vi.fn().mockResolvedValue(holding(LECTOR_2))
           : vi.fn().mockRejectedValue({ code: "device.equipment_held", status: 409 });
-      const { el, order } = await firstUsePhone({ setDeviceEquipment }, theme);
+      // A person with no language of their own signs in to the venue's (`resolveActiveLocale`).
+      const { el, order } = await firstUsePhone({ setDeviceEquipment }, theme, {
+        locale: "es-ES",
+      });
       await pressPaySheet(el, order);
       await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
       await flush(el);
       await row(el).updateComplete;
       expect(row(el).open).toBe(state === "refused");
+      expect(currentLocale()).toBe("es-ES");
       const panel = dialog(el)!
         .shadowRoot!.querySelector("wt-dialog")!
         .shadowRoot!.querySelector<HTMLElement>("dialog")!;
