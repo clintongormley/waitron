@@ -1,8 +1,8 @@
 # A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
 Status: DESIGNED 2026-10-20 by an unattended campaign run; revised the same day after two fresh
-reviews (round 1: 8 high, 8 medium, 10 low; round 2: 4 high, 9 medium, 12 low — each finding's
-resolution is listed in §16). Waiting for the owner's answers
+reviews and a narrow check (round 1: 8 high, 8 medium, 10 low; round 2: 4 high, 9 medium, 12 low;
+round 3: 1 high, 5 medium, 9 low — each finding's resolution is listed in §16). Waiting for the owner's answers
 to three questions (§12). Not built. Pictures:
 [mockups/a917-box-local-name/](../../backlog/mockups/a917-box-local-name/).
 
@@ -47,6 +47,9 @@ Checked at `main` bf034bc29. ✓ = re-opened by the designer; "sweep" = read by 
   ✓ `deploy/compose.yml:32-33` defaults them; ✓ `deploy/waitron.sh:21` `BOX_URL`, `:379` and `:390`
   print `http://waitron.local/setup/trust` and its QR code. ✓ `scripts/deploy-image-env.test.ts:74-75`
   pins the copies to `boot.ts`, reading text.
+- ✓ `deploy/waitron.sh` (read by round 3): a plain `reset` deletes the state folder's contents
+  **except `tls/`** (`:686-690`), so it keeps the name; `reset --all` (`:644`, `:683-684`) removes
+  the whole state volume (§8).
 - ✓ `apps/server/src/config.ts:482-493` requires the passkey name (`WAITRON_MANAGEMENT_RP_ID`) and
   dashboard origin (`WAITRON_MANAGEMENT_ORIGIN`) in production. Derived from the origin: ✓ the
   Google sign-in return address (`config.ts:544`, `${managementOrigin}/management-api/google/callback`),
@@ -131,8 +134,10 @@ Checked at `main` bf034bc29. ✓ = re-opened by the designer; "sweep" = read by 
   old name answers only on plain HTTP, with a page saying where the server went.
 - **Devices are turned off by the rename and each pairs again in place of its old entry**, keeping
   its profile, printers and cash drawer (§7.4).
-- **No database migration** anywhere in the design (the old name's 14 days live in a state file,
-  §8).
+- **No database migration** anywhere in the design (the old name, its 14 days and the turned-off
+  device ids live in a state file, §8).
+- **Servers whose address or certificate the operator set in `.env` are neither named nor renamed**
+  (§8).
 
 The first draft recommended a 14-day two-name window instead (path W). Round 1 showed what that
 really costs; §6 sets both side by side, and path W is now option B of question 3.
@@ -167,8 +172,8 @@ The person types only the first part; `.local` is fixed beside the field.
   `category.name_taken`, `department.name_taken`, `zone.name_taken` and nine more), while `.in_use`
   means "still referenced, cannot delete" (`device_profile.in_use`). Machine codes are `node.*`
   (`node.not_found`, `node.read_only`, `node.reset` …); `server.*` is reserved for facts about the
-  process (CLAUDE.md §3). Also: **`node.unnamed`** (a certificate asked for before naming, §9),
-  **`node.already_named`** (a naming request that lost, §9), and the alert **`node.name_clash`**.
+  process (CLAUDE.md §3). Also: **`node.rename_operator_managed`** (a rename on a server whose
+  address or certificate the operator set, §8), **`node.already_named`** (a naming request that lost, §9), and the alert **`node.name_clash`**.
 
 ### 4.2 A name already in use on the network
 
@@ -201,7 +206,11 @@ So:
   it, or rename this server"), an **ongoing** alert (true while the clash lasts, not a recorded incident): its code goes in
   `apps/server/src/alert-sources.ts`, one of the files `ONGOING_CODE_SOURCES` lists in
   `scripts/ongoing-alert-codes.test.ts`, with English and Spanish wording in
-  `apps/dashboard/src/i18n/alert-messages.ts`.
+  `apps/dashboard/src/i18n/alert-messages.ts`. Every ongoing source declares an `area` and a
+  `permission` (`packages/module/src/alerts.ts:35-42`): this one is a new area `network`, linking to
+  the Servers screen, with `system.manage` — the permission the backup alerts use — so managers and
+  admins see it, although only an admin can rename (§8); the text says to rename the other device
+  or ask an admin.
   **This displaces the other device** if it follows the standard (M3): it gives up the name and
   picks another. Decided, with the trade-off weighed: the server is what sells (CLAUDE.md §5,
   "Nothing EXTERNAL may block a sale"), and every till is opened at this name; a printer Waitron
@@ -324,34 +333,78 @@ rebuild). The action reads "Change name and restart" — a decision against desi
 form's submit button says Save", because this action restarts the server and every device stops
 reaching it; the label says so.
 
-### 7.2 At the confirm: one chart write, then a crash-safe file swap
+### 7.2 At the confirm: one chart write, then a swap decided from what is on disk
 
-1. **Stage** the new authority and leaf (distinct subject and key identifiers, §5.3) in
-   `<state>/tls.next/`, with a marker file `<state>/rename-pending.json` naming the new name.
-2. **One database write, modelled on `writeChartInRounds`** (✓ `membership-removal.ts:204-229`:
+**Who may.** The rename is offered only on a server whose address and certificate are its own
+(§8, "operator settings"); elsewhere the row action is absent and the route refuses
+`node.rename_operator_managed`.
+
+**Refusals first** (in the request, before anything is written): the name rule and probe (§4);
+and, for every active device, `assertNoPaymentInProgress` (✓ `device.ts:249-258`), so the rename
+refuses with the existing `device.payment_in_progress` while any card payment still waits on its
+provider — the same check `deleteDevice` makes (✓ `device-delete.ts:198-200`). The dialog says so.
+A tender refund a till has saved for a retry lives only in that till's browser
+(`waitron.tender-refund:`, `apps/till/src/state/tender-refund.ts:25`, round 3); the server cannot
+see it, so the dialog asks for open refunds to be finished first, and §7.4 lists it as lost.
+
+1. **Stage.** Write the new authority and leaf (distinct subject and key identifiers, §5.3) into
+   `<state>/tls.next.partial/`, then rename it to `<state>/tls.next/` — so `tls.next/` exists only
+   when complete.
+2. **Marker.** Write `<state>/rename-pending.json`: the new name, the old name, the deadline (14
+   days on), and the ids of the devices active right now.
+3. **One database write, modelled on `writeChartInRounds`** (✓ `membership-removal.ts:204-229`:
    read the held chart, mint the next with `mintNextMembershipDocument`, persist it term-guarded with
    `persistNodeMembershipIfNewerTx` and a `record(tx, term)` in **one transaction**; it reads no
-   bucket). The record step, in the same transaction: turn off every device row (§7.4), delete
-   every passkey, and clear every person's `passkey_offered_at` so the dashboard offers to add a
-   passkey again (round 2's helper: `packages/identity/src/passkey-offer.ts`). Not modelled on
-   `completeRebuild`, which reads the bucket pointer first (`rebuild-first-start.ts:125-134`), so a
-   rename never depends on the bucket answering.
-3. **Restart.** Boot finishes the swap before serving: if `rename-pending.json` exists and the held
-   chart's own `contactUrl` already names the new name, the transaction committed, so boot renames
-   `tls/` to `tls.old/`, `tls.next/` to `tls/`, writes `<state>/previous-name.json`, deletes
-   `tls.old/` and the marker. If the chart does not name the new name, the transaction never
-   committed: boot deletes `tls.next/` and the marker and the server keeps its old name. Each step
-   is repeatable, so a crash between any two is finished by the next boot. A boot that finds
-   `tls.old/` but no `tls/` puts `tls.old/` back first.
+   bucket). The chart's entry for this server gets `contactUrl` `https://<new name>`. The record
+   step, in the same transaction: check that the active devices are exactly the marker's ids (if
+   one was added meanwhile, the transaction aborts and the request fails; the next boot discards
+   the staging), turn each off as `disableDevice` does (✓ `device-delete.ts:175-185`: `active` off,
+   sign-ins ended, holds released — not `deleteDevice`, which removes settings), delete every
+   passkey, and clear every person's `passkey_offered_at` (round 2's helper:
+   `packages/identity/src/passkey-offer.ts`). Not modelled on `completeRebuild`, which reads the
+   bucket pointer first (`rebuild-first-start.ts:125-134`).
+4. **Restart.** Boot settles the folders **before anything else** — before serving and before the
+   sealed-state refresh at `boot.ts:2014` (§7.6) — and decides every step from what it finds:
 
-Tests (slice 4): a crash after each step (staged only; committed but not swapped; half swapped)
-ends with either the old name everywhere or the new name everywhere; the rename succeeds with the
-bucket unreachable; no passkey survives; every `passkey_offered_at` is clear.
+   - Always first: delete `tls.next.partial/` (never complete).
+   - **No marker**: if `tls/` is missing and `tls.old/` exists, rename `tls.old/` to `tls/`; delete
+     any `tls.old/` and `tls.next/` left over. Done.
+   - **Marker, not committed** (the held chart's own `contactUrl` does not name the marker's new
+     name): if `tls/` is missing and `tls.old/` exists, rename it back; delete `tls.next/`,
+     `tls.old/` and the marker. The server keeps its old name.
+   - **Marker, committed**:
+     - if `tls.next/` exists, the swap is unfinished and `tls/` (if present) still holds the old
+       set: delete any stale `tls.old/`, rename `tls/` to `tls.old/` (if present), then rename
+       `tls.next/` to `tls/`;
+     - write `previous-name.json` from the marker (old name, deadline, the turned-off device ids;
+       overwriting is harmless);
+     - delete `tls.old/`;
+     - delete the marker.
 
-A venue has one server today (CLAUDE.md §5). A mirror node picks up the new document at its next
-start from its relay (`<relayUrl>/management-api/membership`, `boot.ts:1336-1360`, read by round 2's
-reviewer). There is no node-to-node database replication today (`docs/backlog.md`, replication
-residuals); a standby is future work there.
+   Every branch is repeatable, so **a crash after any step is finished by the next boot**. This was
+   simulated (M17): a crash after each of the ten points below, then three boots with no crash,
+   ended every time with one complete `tls/` (the old set if the transaction had not committed, the
+   new one if it had), no leftovers and no boot error; the rule as written at 86fd821c6 failed four
+   of the same ten points (three of them as round 3's reviewer found: `ENOTEMPTY` forever, or no
+   `tls/` at all).
+
+**Crash points slice 4's test covers** (each followed by three restarts): during staging (partial
+folder), after staging, after the marker, after the commit, after `tls/`→`tls.old/`, after
+`tls.next/`→`tls/`, after writing `previous-name.json`, after deleting `tls.old/`, after deleting
+the marker; and each of those followed by `waitron.sh reset` (database wiped, the folders kept,
+§8), which must also end with one complete `tls/`. Plus: the rename succeeds with the bucket
+unreachable; no passkey survives; every `passkey_offered_at` is clear; a payment in progress
+refuses the rename.
+
+**Mirrors.** A venue has one server today (CLAUDE.md §5). A mirror node keeps the chart it was
+given when it was paired: the only writers of a node's chart are the mirror-bundle route at
+pairing, retire and the rebuild (`persistNodeMembershipIfNewer` callers `mirror-bundle-api.ts:185`,
+`retire.ts:74`, `rebuild-first-start.ts:137`, round 3), and the block at `boot.ts:1336-1360` runs
+only on a **non**-mirror node, fetching its cloud peer's chart to demote itself. So after a rename a
+mirror keeps the old chart and the old `contactUrl` until it is paired again. No reader that routes
+by a mirror's copy was found (round 3, not exhaustive). Delivering the new chart to a mirror is
+later work: backlog "A mirror keeps a renamed server's old chart (A917)" in _Replication, failover
+and the cloud_.
 
 ### 7.3 What each device actually sees
 
@@ -377,21 +430,30 @@ Measured (M14, Chromium 153 trusting only the old authority):
 
 ### 7.4 Pairing again in place
 
-The device table's names are unique among **active** rows (`devices_location_label_active_key`,
-`packages/db/src/schema/devices.ts:75-79`, read by the round 2 reviewer), and a second active "Bar
+Device names are unique among **active** rows per location (`devices_location_label_active_key` on
+`location_id, label`, `packages/db/src/schema/devices.ts:75-79`, round 3), and a second active "Bar
 till" is refused with `device.name_taken`. The existing way back for a turned-off device needs the
 device's own cookie (`provenDisabledDevice`, ✓ `join-requests.ts:231-242`), which a new origin does
 not have. So:
 
-- The rename turns off every device row (§7.2), freeing the names and keeping every row and id.
-- The Devices screen's accept step gains **"Accept in place of …"**, listing the devices turned off
-  by the rename. Accepting in place gives that row the new browser's token and turns it back on,
-  under its old id, so it keeps everything stored on it: profile, kitchen screens, receipt,
+- The rename turns off exactly the devices that were active (§7.2), freeing the names and keeping
+  every row and id. Their ids are kept in `previous-name.json` (§8).
+- The Devices screen's accept step gains **"Accept in place of …"**, listing **only** the ids in
+  `previous-name.json` that are still turned off. A device a manager had turned off before the
+  rename — a stolen till, say — is never offered, so its settings and drawer choice cannot be
+  handed to a new browser. Accepting in place gives that row the new browser's token and turns it
+  back on, under its old id, keeping everything stored on it: profile, kitchen screens, receipt,
   payment-slip and invoice printers, **cash drawer choice** (which decides which drawer opens,
-  CLAUDE.md §5), "made here" stations and switchable profiles (`device-api.ts:754-859`, round 2),
-  and the zone and card reader the device chose for itself (`device-api.ts:348-398`, stored
-  against the device).
-- Lost, because the browser held them: the last operator, the zone menu and table layouts.
+  CLAUDE.md §5), "made here" stations, switchable profiles and chosen card reader, and its zone
+  selections (`disableDevice` leaves all of these, `device-delete.ts:175-225`, round 3).
+- **After day 14** `previous-name.json` is deleted, the offer disappears, and a device not yet
+  paired again stays turned off; pairing it then makes a new device whose settings are set again
+  (or a manager removes the old row).
+- Lost, because only the old address's browser storage held them (keys found by round 3 in
+  `apps/till/src`): the last operator (`lastOperator`), zone menu (`zoneMenu.`), last menu
+  (`lastMenu`), diet filter (`dietFilter`), find-bill searches (`find-bill.*`), station screen view
+  (`stationScreenView`), "make now" (`makeNow`), a tender refund saved for a retry
+  (`waitron.tender-refund:`), and the server list (`servers`, rebuilt at the first request).
 - This matches CLAUDE.md §3's "A retained hardware registration must remain re-addable" — the row
   comes back under its existing id — through a new path, since the old one needs the cookie.
 
@@ -405,7 +467,10 @@ an authority is held, and there is no timer — the agent fetches at start and a
 error, at most once an hour. The rename restarts the server, not the agent's container.
 
 Decided (slice 4): on a **verification error**, the agent may re-fetch after **one minute** rather
-than one hour; the hourly limit stays for nothing else. Test: switch the authority 10 minutes after
+than one hour. `refresh()` is called only at start (unthrottled: `lastFetchAt` starts at
+`-Infinity`, `server-ca.ts:62,112-123`) and after a verification error (`:132`), so this **removes
+the hourly limit altogether**: an agent facing a server with a broken certificate asks
+`http://<host>/ca.crt` at most once a minute. Test: switch the authority 10 minutes after
 the agent started; the next print succeeds. (M11 showed the error code is one the agent already
 treats as "maybe rotated".)
 
@@ -428,8 +493,11 @@ treats as "maybe rotated".)
 - `mirror_config.box_hostname` and `box_ca_pem` on a mirror node go stale at a rename. Nothing reads
   them today; a future tunnel client that pins them must refresh them from the next mirror bundle.
 - **Backups**: archives and the bucket's sealed state carry `RECOVERY_FILES` (the TLS files
-  included). The sealed state is refreshed at every start (`boot.ts:2014`, round 2) and the next
-  archive carries the new authority, so nothing has to be downloaded. A backup taken before the
+  included). The next archive carries the new authority. The sealed state is refreshed at each start
+  (`boot.ts:2014`) **only when a recovery key is set** — otherwise it reports `no_key` and writes no
+  row (`sealed-state.ts:109-112`, round 3) — and reaches the bucket only through the database
+  stream; because boot settles the folders before that refresh (§7.2 step 4), the start after a
+  rename seals the new authority. Nothing has to be downloaded. A backup taken before the
   rename brings back the old name; the dialog says so. (The product's words are "recovery kit" and
   "recovery pack", which hold keys, not these files; the unused `POST /api/box/recovery-bundle` is
   not offered.)
@@ -443,10 +511,28 @@ treats as "maybe rotated".)
   (`WAITRON_TLS_*`) still makes its own authority (✓ `boot.ts:963-964`) but serves the operator's;
   its addresses come from the operator's `.env` settings, as today.
 - **"Named"** means `<state>/tls/server.key` exists — today's sentinel (`box-secrets.ts:139-140`).
-- **The old name** during the 14 days: `<state>/previous-name.json` (`{ name, until }`), written by
-  the boot that finishes the swap (§7.2). Read by the mDNS responder, the plain-HTTP listener (the
-  pointer page) and the after-rename card. It is a state file, **not carried in backups** (a
+- **The old name** during the 14 days: `<state>/previous-name.json` (`{ name, until, devices }`,
+  `devices` being the ids the rename turned off), written by the boot that finishes the swap
+  (§7.2) from the marker. Read by the mDNS responder, the plain-HTTP listener (the pointer page),
+  the after-rename card and the Devices screen's "Accept in place of …" (§7.4). It is a state file, **not carried in backups** (a
   restore inside the 14 days loses only the pointer page) — so no table and **no migration**.
+- **Operator settings** (round 3, M3). A server where the operator set `WAITRON_MANAGEMENT_ORIGIN`,
+  `WAITRON_ADVERTISED_ORIGIN`, `WAITRON_MANAGEMENT_RP_ID` or `WAITRON_TLS_*` in `.env` is **never
+  unnamed and never renamed**: it makes its authority as today (named `waitron.local`) with no
+  naming page, and the rename is not offered (the route refuses `node.rename_operator_managed`;
+  the Servers row shows "This server's address is set in its settings file"). Reason: its address,
+  passkey name or certificate are the operator's, not the `.local` name — the chart's `contactUrl`
+  would not name the new name (so §7.2's commit test would undo every rename), deleting passkeys
+  would be needless, and with `WAITRON_TLS_*` the setup start serves the operator's certificate
+  (`boot.ts:1235`) and no plain-HTTP page (`boot.ts:666-672`).
+- **`waitron.sh reset`** keeps `tls/` (`deploy/waitron.sh:686-690`: "keeping the CA + leaf so an
+  already-trusting phone needs no new step"), so **a reset keeps the name**. Only `reset --all`
+  (`:644`, `:683-684`), which removes the whole state volume — vault key and fiscal identity
+  included — makes a server unnamed. Slice 4 adds the rename's working files to what a plain reset
+  keeps (`tls.next/`, `tls.old/`, `rename-pending.json`), so a reset in the middle of a swap never
+  deletes the only authority; the next boot settles them (§7.2; with the database wiped the
+  rename reads as not committed or finished, and either way one complete `tls/` remains, M17).
+  `previous-name.json` is deleted by a reset (its devices are gone with the database).
 - **Restore**: a restore brings back the authority and so the name it permits; the leaf re-issued
   after a restore (`rebuild-first-start.ts:112`) is for that name, read from the same authority.
   `reissueServerLeaf` gains a check refusing a name its authority does not permit (a test pins
@@ -483,8 +569,10 @@ New pre-name state (slice 2):
 - The setup start makes the **vault key** as today, and **no** authority or leaf while unnamed.
 - **HTTPS still runs**, with a throwaway self-signed certificate made in memory at each start —
   never written to `tls/`, never offered for download, trusted by nothing. It answers `/health`,
-  and `/setup-api/status` reporting `unnamed`; everything else answers a plain page pointing at
-  `http://<address>/`. This keeps the container health check and the installer working unchanged:
+  and `/setup-api/status` reporting `unnamed`; `/setup-api/ca.crt` keeps today's 404 `no_box_ca`
+  (`discovery-api.test.ts:115-120`, round 3); every other route setup mounts today — discovery, the
+  trust page, the guide pages and the setup app (`boot.ts:940-956`) — answers a plain page pointing
+  at `http://<address>/`. This keeps the container health check and the installer working unchanged:
   - the health check (`deploy/compose.yml:56-66`) runs `node:https` against `127.0.0.1:443` for
     `/health` and `/setup-api/status`, with certificate checks off, and passes if either answers
     200. Measured (M12): the exact command from `compose.yml` exited 0 against such a server, and 1
@@ -492,24 +580,32 @@ New pre-name state (slice 2):
   - `waitron.sh`'s `wait_healthy` (`deploy/waitron.sh:574-588`) waits for Docker's `healthy`
     (36 tries, 5 s apart) and is unchanged.
 - Plain HTTP on port 80 serves the naming page (picture 01); `startLandingListener` no longer needs
-  a leaf. `/ca.crt` answers 404 with `node.unnamed`.
+  a leaf. Its `/ca.crt` answers the same 404 `no_box_ca`; no new code is needed for it, so
+  `node.unnamed` is dropped.
 - **Single winner.** The probe and mint run under one in-process lock (one process owns the state
   folder, CLAUDE.md §3), and the mint writes all four files into `<state>/tls.staging-<random>/`,
   then renames that folder onto `<state>/tls`. Measured (M16): the first rename succeeded; a second
   contender's rename onto the now non-empty `tls` was refused (`ENOTEMPTY`) and its staging folder
   was left for cleanup — on macOS 26.6.2 and on Linux (Node 24, in Docker). The loser is refused
-  with `node.already_named`; boot deletes any leftover staging folder.
+  with `node.already_named`; boot deletes any leftover staging folder. A `tls/` holding some files
+  but no `server.key` — what today's mint leaves if it crashes part-way, since it writes
+  `server.key` last (`box-secrets.ts:150-156`) — would refuse the rename onto it (round 3 measured
+  `ENOTEMPTY`), so boot treats it like a leftover staging folder and deletes it while no rename
+  marker exists; the server is then unnamed, as today's code re-mints over it.
   "Named" (`tls/server.key`) and "has an authority" therefore never disagree.
 - The naming form is an **unauthenticated plain-HTTP write**, acceptable for the same reason setup
   itself is: an unclaimed server can be set up by anyone on its network. It is accepted only while
   unnamed.
 - Accepting a name: probe (§4.2), mint, rename into place, restart the setup server (seconds). The
   page then shows the trust steps (picture 02).
-- A server that already has `tls/server.key` (every server today, and any restored one) skips this.
+- A server that already has `tls/server.key` (every server today, and any restored one), or one
+  with operator settings (§8), skips this.
 - Guards slice 2 must update or add to: `scripts/deploy-image-env.test.ts` (it pins the image's
   environment and `waitron.sh`'s printed setup link as text — the baked passkey name and origin go
   away, and the IP link is added) and `scripts/waitron-sh.test.mjs` (lines 529, 627-628 and 1407
-  assert the printed links and QR code; a new case asserts the IP link). New server tests: an
+  assert the printed setup links and QR code, and 625 and 1162 pin
+  `https://waitron.local/manage/email`; a new case asserts the IP link). Slice 4 adds a
+  `waitron-sh.test.mjs` case for what a plain reset keeps. New server tests: an
   unnamed start passes the health check's requests and serves the naming page; `/ca.crt` refuses
   before naming; two concurrent naming requests produce one authority and one refusal; a staging
   folder left by a crash is deleted at the next start and the server is still unnamed; a start
@@ -544,8 +640,9 @@ New pre-name state (slice 2):
 4. **Rename, server side.** Route checking `mirror.create`; staging, the one chart write with its
    record step, the boot that finishes the swap (§7.2); the old name's handshake refused, its
    plain-HTTP pointer page and 404s (§7.3); `previous-name.json`; "accept in place of" on the
-   server (§7.4); the print agent's one-minute re-fetch after a verification error (§7.5). Tests as
-   listed in §7.
+   server (§7.4); the print agent's one-minute re-fetch after a verification error (§7.5); the
+   payment-in-progress refusal (§7.2); the operator-settings refusal (§8); what `waitron.sh reset`
+   keeps (§8). Tests as listed in §7.2 (every crash point, each also followed by a reset).
 5. **Rename, screens.** Servers row action, the dialog with QR code and steps, the after-rename
    card (pictures 03–05), the Devices screen's "Accept in place of …", the pointer page (06),
    English and Spanish strings, the dialog's unsaved-changes test.
@@ -556,9 +653,10 @@ Ready to paste in `~/waitron-campaign/a917-design/question.md`, in this order, b
 only" makes the other two moot:
 
 1. **Where the name is set** (picture 07): A, at setup and later from the dashboard (recommended);
-   or B, at setup only — **a venue that keeps its data can then never be renamed**: setting up again
-   and restoring a backup brings the old name back, so a new name means starting with an empty
-   server (drops slices 4–5 and questions 2–3).
+   or B, at setup only — **a venue that keeps its data can then never be renamed**: an ordinary
+   reset keeps the name, and so does restoring a backup; a new name means wiping the server
+   completely (`waitron.sh reset --all`) and starting with no data (drops slices 4–5 and questions
+   2–3).
 2. **The certificate authority** (picture 08): A, for the chosen name only, a new one at a rename
    (recommended); or B, one for every `.local` name — which also needs the name in its own file,
    carried in backups, with a backup lacking it restoring as `waitron.local`.
@@ -658,6 +756,19 @@ process id, keys and certificates in `mktemp -d` folders (deleted). Probe script
   first's content; the loser's folder remained. Same on macOS 26.6.2 (Node v26.11.1, APFS) and in
   `mcr.microsoft.com/playwright:v1.63.0-noble` (Node v24.20.0, the container's own filesystem — not a
   Docker volume like the server's state folder; not measured there).
+- **M17** (new, round 3) the rename's folder swap, crash-simulated: `node swap-sim.mjs <dir> new`
+  (kept in `~/waitron-campaign/a917-mockups-src/probes/round3/`). Real folders in a `mktemp -d`;
+  a crash injected after each of ten points (partial staging, staged, marker, commit,
+  `tls/`→`tls.old/`, `tls.next/`→`tls/`, `previous-name.json`, delete `tls.old/`, delete marker,
+  none), then three boots. Pass = no boot throws and one complete `tls/` (old set if uncommitted,
+  new if committed), no `tls.next/`, `tls.old/` or marker. The failing case would print `FAIL` with
+  a boot error or a missing or mixed `tls/`. Printed: **new rule, 0 of 10 failed**. Control,
+  `node swap-sim.mjs <dir> old` (the rule as written at 86fd821c6): **4 of 10 failed** — after
+  `tls.next/`→`tls/` and after `previous-name.json`, every boot threw `ENOTEMPTY`
+  (`tls=NEW old=OLD marker=true`); after deleting `tls.old/`, every boot threw `ENOENT` and no
+  `tls/` remained (`tls=- old=NEW`); after staging, `tls.next/` was left behind. With a reset after
+  each crash (`… new reset`: database wiped, folders and marker kept; pass = one complete `tls/` of
+  either set): **0 of 10 failed**.
 
 ## 15. Found while reading, outside this design
 
@@ -709,3 +820,23 @@ Round 2 (`round2-findings.md`):
 | L-10 passkey offer, forgotten password | Offer reset in the rename transaction (§7.2); the dialog mentions email (§7.1) |
 | L-11 printers by address | "usually" (§4.2) |
 | L-12 restore replaces the name | The naming page says so (picture 01, §8) |
+
+Round 3 (`round3-findings.md`):
+
+| Finding | Resolution |
+| ------- | ---------- |
+| H1 swap not crash-safe | §7.2 step 4 decides each step from what is on disk; crash-simulated (M17: 0 of 10 failed, control 4 of 10); slice 4's crash points listed |
+| M1 mirror sentence reversed | §7.2: a mirror keeps the old chart until paired again; delivery is later work, backlog entry added |
+| M2 which devices the rename turned off | Their ids in `previous-name.json`; only those are offered; after day 14 the offer ends (§7.4, §8); no migration |
+| M3 operator settings | Such servers are neither named nor renamed; `node.rename_operator_managed` (§8) |
+| M4 `waitron.sh reset` | §2.1 and §8: a reset keeps the name, only `reset --all` clears it; reset keeps the rename's working files; question 1 B reworded |
+| M5 payment in progress | The rename refuses with `device.payment_in_progress` via `assertNoPaymentInProgress`; saved tender refunds named and listed as lost (§7.2, §7.4, picture 04) |
+| L1 partial `tls/` | Boot deletes a `tls/` without `server.key` when no rename is pending (§9) |
+| L2 the hourly limit | §7.5 says the one-minute rule removes it altogether |
+| L3 alert area and permission | Area `network`, permission `system.manage` (§4.2) |
+| L4 pre-name routes | §9 names every setup route; `no_box_ca` kept, `node.unnamed` dropped |
+| L5 sealed state | §7.6: only with a recovery key, through the stream; the swap runs before the refresh |
+| L6 question 2 A | Android caveat added to the question |
+| L7 device details | Per-location uniqueness; the browser keys found listed (§7.4) |
+| L8 more pinned test lines | `waitron-sh.test.mjs:625,1162` added (§9) |
+| L9 pictures | 02 marks the "Keep" note and step 4's paragraph unchanged; 06 and 09 say "shows how to remove" |

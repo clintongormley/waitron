@@ -4936,8 +4936,8 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
-  2026-10-20 (revised after review rounds 1 and 2), waiting for the owner's answers to three
-  questions (where the name is set, the certificate authority, the old name during a rename;
+  2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
+  (where the name is set, the certificate authority, the old name during a rename;
   [design](superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
   [mockups/a917-box-local-name/](backlog/mockups/a917-box-local-name/)); not built. Recommended:
   named once on the server's first page, before its certificate authority is made; a later rename is
@@ -5348,6 +5348,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/replication-cloud.md](backlog/replication-cloud.md).
 
 Not in any track until the standalone primary is done.
+
+- **A mirror keeps a renamed server's old chart (A917).** A mirror node is given the venue's chart
+  when it is paired; A917's round-3 review found no path that delivers a later one, so after a
+  rename its copy would name the old address until it is paired again. No reader routing by a
+  mirror's copy was found (not exhaustive). [Design §7.2](superpowers/specs/2026-10-20-a917-box-local-name-design.md#72-at-the-confirm-one-chart-write-then-a-swap-decided-from-what-is-on-disk)
 
 - **A completed provision or adopt operation replayed on a later request still answers 200 without
   restarting and keeps the setup lock set** — found by #657 while pruning comments. After a refused
