@@ -3260,6 +3260,33 @@ describe("the workflows' checkouts", () => {
       [first("second attempt cannot fail the job")],
     ],
     [
+      "a first attempt without the low-speed byte rate",
+      firstAttempt.replace("          GIT_HTTP_LOW_SPEED_LIMIT: 1000\n", "") +
+        stopStep +
+        secondAttempt,
+      [first("no low-speed limit")],
+    ],
+    [
+      "a first attempt with no id",
+      bounded.replace("      - id: checkout\n        name:", "      - name:"),
+      [first("a stall fails the job"), second("a stall fails the job")],
+    ],
+    [
+      "a stop step not limited to the job's own directory",
+      bounded.replace('"$GITHUB_WORKSPACE"', '"$PWD"'),
+      [first("leftover git not stopped")],
+    ],
+    [
+      "a stop step that does not force the kill",
+      bounded.replace("kill -9", "kill"),
+      [first("leftover git not stopped")],
+    ],
+    [
+      "a second attempt using another version of the action",
+      firstAttempt + stopStep + secondAttempt.replace("actions/checkout@v7", "actions/checkout@v6"),
+      [first("no second attempt")],
+    ],
+    [
       "no stop step",
       firstAttempt + secondAttempt,
       [first("leftover git not stopped"), second("a stall fails the job")],
