@@ -115,6 +115,21 @@ function nameConstraintsExtension(): CertExtension {
   };
 }
 
+export function hasBoxCaConstraints(pem: string): boolean {
+  const ca = forge.pki.certificateFromPem(pem);
+  const constraints = ca.getExtension("nameConstraints") as {
+    critical?: boolean;
+    value?: string;
+  } | null;
+  const usage = ca.getExtension("keyUsage") as { keyCertSign?: boolean } | null;
+  return (
+    ca.subject.getField("CN")?.value === CA_COMMON_NAME &&
+    constraints?.critical === true &&
+    constraints.value === nameConstraintsExtension().value &&
+    usage?.keyCertSign === true
+  );
+}
+
 const DAY_MS = 86_400_000;
 /** The box is a long-lived appliance; a short leaf would strand a running venue. */
 const VALIDITY_DAYS = 3650;
