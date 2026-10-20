@@ -411,6 +411,8 @@ kitchen or fires held food (menus design §10.3).
 
 ## 7. Resolve complaints without erasing what happened
 
+_(2026-10-20, A758-1: the rules below for who applies, who approves, limits and the default cancel reason are superseded by the A758 design, `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md`.)_
+
 Provide configurable reasons and permissions for cancelling items, making selected lines
 complimentary, and applying euro or percentage discounts to lines or a bill. Reasons are policies,
 not just free text: they say which actions apply, the amounts or percentages allowed, who can apply

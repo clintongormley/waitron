@@ -693,13 +693,7 @@ observations against that design; the original observations below are not fresh 
 ## Task 11 (#916, cancellations, comps and discounts; B11a–B11g)
 
 - **Task 11 (#916, cancellations, comps and discounts; B11a–B11g).** Left open:
-  - A configuration imported at setup replaces the default "Entry error" cancel reason with the
-    imported venue's reasons, so importing from a venue with none leaves the new venue with none,
-    and the till's dialog then says so (`adjust.no_reasons`); whether setup should add the default
-    after such an import is the owner's to decide. Registering a till
-    (`apps/server/scripts/register-till.ts`) runs the same seed, so it would add the default to
-    such a venue.
-  - **The adjustment history records who approved, but not whether the bill's discount limit,
+  - **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
     rather than the reason, is why.** Recording it would need a column. **Next action:** decide
     whether to record it.
   - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
@@ -1381,7 +1375,7 @@ and its count do), a fired dish removed before preparation started not listed, a
 screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. The
 owner answered the last question on 2026-10-19 (§11, D28): a cash refund only on a device whose
 profile takes cash, as today; no question is open. **A758-1 built the rules** ([plan](../superpowers/plans/2026-10-19-a758-reason-rules.md));
-A758-2 to A758-5 and the §3.8 and "collect it at the counter" slices follow, and A909–A912 are what it
+A758-2 to A758-5 and the §3.8 and "collect it at the counter" slices follow, and A909–A912 and A918 are what it
 left open. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by

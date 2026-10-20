@@ -7,7 +7,5 @@ describeSchemaConformance({
   // No prerequisites: `drizzle/0000_baseline.sql` names no other set's table.
   subject: ADJUSTMENTS_MIGRATIONS,
   declarations,
-  // `apply_role` and `approver_role` carry the `enumText`/`enumCheck` pair, through identity's
-  // `personRole`.
   declaresClosedVocabularies: true,
 });

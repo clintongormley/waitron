@@ -662,12 +662,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   constraints A2's rework left
   behind](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).
 
-- A configuration imported at setup replaces the default "Entry error" cancel reason with the
-  imported venue's reasons, so importing from a venue with none leaves the new venue with none, and
-  the till's dialog then says so (`adjust.no_reasons`); whether setup should add the default after
-  such an import is the owner's to decide. Left open by service Task 11 (#916).
-  [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-
 - **The till's "This device hasn't trusted the till yet" page has never been seen on a real
   device.** **Next action:** during the on-device trust rows above, click past the certificate
   warning on one device and confirm the page appears.
@@ -2865,7 +2859,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 11 (#916, cancellations, comps and discounts; B11a–B11g).**
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-  - **The adjustment history records who approved, but not whether the bill's discount limit,
+  - **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
     rather than the reason, is why.** **Next action:** decide whether to record it.
   - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
     it is paid) cannot be adjusted.** **Next action:** decide whether a placed order can be

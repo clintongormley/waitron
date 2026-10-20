@@ -754,7 +754,7 @@ Google sign-in) and `authorization.not_permitted` (403 from standby connect, pro
 permission, and from the drawer, refund, unpaid-departure and cancel overrides (`authorize`,
 `packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
 person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
-right PIN whose role is too low (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and
+right PIN that the approval does not admit (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and
 `packages/identity/src/login.test.ts`, and route cases in `apps/server/src/management-api.test.ts`
 (the dashboard sign-in), `mirror-bundle-api.test.ts` (standby connect),
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and

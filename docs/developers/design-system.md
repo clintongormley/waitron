@@ -2586,7 +2586,7 @@ and nothing guards it across screens:
   calibration wizard; the Bluetooth printer Pair dialog; the Edit device dialog; the device profile
   editor, new and existing; the card reader's Rename dialog; the bill attestation's Record; the held
   payment's Record;
-- batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
+- batch 4a: adjustment reason create/edit and the bill's comp limit; booking create/edit; image
   upload and names edit;
 - Opening hours: the season painter, the special-day painter, the period dialog and the Seasons window.
   A366 slice 4 retires the separate Station hours page and its draft editors;

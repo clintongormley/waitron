@@ -325,7 +325,6 @@ const es: Record<keyof typeof en, string> = {
 
 export const ADJUSTMENTS_STRINGS = { en, es };
 
-/** Only the `adjustment_reason.*` codes the screen can meet; the rest are the app's. */
 export const ADJUSTMENTS_CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "adjustment_reason.name_taken": {
     en: "Another active reason already has this name",
