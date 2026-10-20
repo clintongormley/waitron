@@ -1,5 +1,9 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
+> **2026-10-20 A802 update:** the [partial paid-invoice correction proposal](2026-10-20-a802-partial-paid-invoice-correction-design.md)
+> is ready for owner review. References below to A802 as still queued describe the earlier state.
+> Its new policies are proposals; they do not amend this approved design before owner approval.
+
 Status: **design, revised 2026-10-19 a second time, for the owner's four answers to A758r3's
 question (D23–D26), then for the answer to A758r4's question (D28).** Settled and buildable, all of
 it: the Spanish words (§3.9), no confirmation switch on a cash refund (§3.8.2), a fired dish

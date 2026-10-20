@@ -97,8 +97,10 @@ Everything not listed here needs more spec work first.
 4. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
 
-**Ready to queue when a lane is free (owner, 2026-10-18), not ranked against the list above:**
-**A802 — correct part of a paid invoice** (_Fiscal records, invoices and the asesor_).
+**A802 — correct part of a paid invoice** (_Fiscal records, invoices and the asesor_) has a
+[proposed design](superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
+for owner review. Plan and build follow full-design approval; this is not ranked against the list
+above.
 
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
 come after the list above:
@@ -489,13 +491,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `apps/till/src/state/working-order.ts`) that no screen shows.
   [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
 
-- **A802 — correct part of a paid invoice: READY TO QUEUE (owner, 2026-10-18).** Nothing in the
+- **A802 — correct part of a paid invoice: proposed design ready for owner review.** Nothing in the
   product can issue a corrective invoice (R5, _factura rectificativa_) for part of an issued
   simplified invoice: the engine exists and only the whole-order cancel uses it. Staff need an easy
   way to correct a paid receipt when a customer spots an error afterwards. Build on today's
   filing-by-differences now; asesor Q31 may switch the filing type later without changing the
-  screens. Needs a spec first; fiscal, so owner sign-off at land. A758 §3.8 (food cancelled on a
-  paid bill, with a Refund tick per dish) refunds the ticked dishes through the ordinary refund; the
+  screens. The [proposed design](superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
+  awaits full owner approval before planning and building; fiscal implementation needs owner
+  sign-off at land. A758 §3.8 (food cancelled on a paid bill, with a Refund tick per dish) refunds the ticked dishes through the ordinary refund; the
   owner decided (Q43 e, 2026-10-18) that once A802 lands, such a refund files their partial
   correction in the same step. Its §3.8.1 has a worked example to check against.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)

@@ -801,8 +801,12 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
   today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
   asesor Q31 (2026-09-30), not decided.
-- **A802, owner 2026-10-18: ready to queue — "what are we waiting for?"** Nothing technical
-  blocks it. Scope for the spec:
+- **A802: proposed design ready for owner review, 2026-10-20.** The
+  [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
+  covers paid-receipt corrections, their money-back workflow and A758's same-step correction.
+  Plan and build await full owner approval. Refund timing, permissions/linkage and source-history
+  admission remain proposed policies. Exact-gross integration needs qualification through the
+  existing writer before implementation can promise it. The owner's 2026-10-18 scope follows:
   - A server route that issues a partial correction through `recordCorrection`
     (`packages/core/src/record-correction.ts`), filing by differences as today.
   - A till action on a paid receipt, where staff already find one (the find-a-bill page, beside
