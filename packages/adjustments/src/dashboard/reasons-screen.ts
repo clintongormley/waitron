@@ -574,8 +574,8 @@ export class AdjustmentReasonsScreen extends LitElement {
           ),
         },
         (reasons) => {
-          // An older order would pull rows back under a drag or a keyboard that has moved on.
-          if (this.#movesOut > 0 || this.#dragFrom !== null) {
+          // Applied now, a list would move rows under a held grip or undo an unanswered move.
+          if (this.#movesOut > 0 || this.#reorder.dragging) {
             this.#readDropped = true;
             return;
           }

@@ -805,6 +805,26 @@ describe("setting the order", () => {
     }
   });
 
+  it("holds a live list while a grip is pressed and not yet moved, then shows it on release", async () => {
+    const liveData = new LiveData();
+    const api = fakeApi({ liveData });
+    const el = await mount(api);
+    try {
+      const drag = pointerDrag(el, "e");
+      const reads = api.listReasons.mock.calls.length;
+      api.listReasons.mockResolvedValue([employee, complaint, entryError, retired]);
+      liveData.invalidate([{ type: "adjustment_reasons" }]);
+      await vi.waitFor(() => expect(api.listReasons.mock.calls.length).toBeGreaterThan(reads));
+      await settle(el);
+      expect(rowKeys(el)).toEqual(["e", "c", "d", "o"]);
+      await drag.release();
+      await vi.waitFor(() => expect(rowKeys(el)).toEqual(["d", "c", "e", "o"]));
+      expect(api.reorderReasons).not.toHaveBeenCalled();
+    } finally {
+      liveData.clear();
+    }
+  });
+
   it("forgets a move answered after the screen has gone", async () => {
     let refuse!: (error: unknown) => void;
     const save = vi.fn(() => new Promise<void>((_, reject) => (refuse = reject)));
