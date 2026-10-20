@@ -2378,21 +2378,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
-- **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** The send
-  routes and till prompts follow one [combined implementation plan](superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
-  and must land together. The unpublished branch includes the server boundary, shared dialog,
-  table send adapters, editor and live allergy view, including release deadlines, dish/draft recovery,
-  final-save dish ids and renewed confirmation when a stale Fire finds different dishes. Signed-in
-  station/pass Fire uses the same prompt; device Fire keeps its existing answer and refusal path.
-  The lower kitchen writer checks table answers; the counter-to-table write can record an answer
-  and assignments before kitchen work. The read-only move preview and paired HTTP/client command
-  are connected, with source/destination zone and current-session checks. The counter move now
-  uses the shared allergy window, immutable retries and renewed confirmation after a destination or
-  source change; EN/ES guides describe the flow. Real HTTP submit and process-restart checks
-  distinguish unticked held dishes from fresh drafts, including no-preparation dishes. The
-  Spanish-copy answer and final branch gates remain before publication. Kitchen copies/notices remain a separate slice. At the first
-  table Send, ask "Any allergies at this table?"; counter sales keep their existing flow.
-  [Detail](backlog/till.md#a669-an-allergy-at-the-table),
+- **A669-4 — allergy information in the kitchen.** Freeze each assigned guest's allergy details
+  with the ticket item; show them on 58/80 mm kitchen paper and station/pass screens. Changes or
+  deletion affecting unserved dishes already with the kitchen must create acknowledged,
+  station-specific change/removal notices. The table answer, guest editor, dish assignments and
+  send guards are implemented together; they do not yet deliver this kitchen information.
+  Kitchen Spanish wording still needs the owner's answer.
+  [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 

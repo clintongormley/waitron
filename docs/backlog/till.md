@@ -2271,31 +2271,11 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 ## A669. An allergy at the table
 
 The [combined send/till plan](../superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
-keeps the server refusal and every till prompt in one working PR. The unpublished branch contains
-the server boundary, shared dialog, table submit/release adapters, editor and live allergy view.
-The table heading and line marks share that view; stale confirmations refresh the party metadata
-without replacing the dish draft. Release requests have a network deadline separate from the
-time spent answering; an open allergy form retains its answer for retry. Sold-out, changed-draft
-and station-routing refusals return to their dish recovery handlers. The send's groups and allergy
-ticks use the dish ids returned by its final save. A stale group Fire shows the refreshed dishes and
-requires another confirmation before sending their assignments. Signed-in station and pass Fire
-uses the common prompt, including cross-bill assignments. Device Fire uses recorded answers and
-shows an unanswered refusal without offering a guest editor. The lower kitchen writer checks table answers, and a missing named line
-keeps the send's existing no-work behavior. The counter-to-table move writer accepts an explicit
-answer and assignments before adopting the destination zone, with bill-scoped replay and rollback.
-The move preview now reads the destination answer and arriving parent dishes without advancing
-party revisions or attaching the bill. The paired move HTTP/client command carries the explicit
-answer, assignments and retry id. The routes check source/destination zones and recheck the current
-session, device action and profile admission after reading the request body. Join-answer combinations,
-copied-guest deletion and assignments through a partial split of recalled dishes have server
-integration checks. The counter move now opens the shared window before adopting a free table or
-assigning arriving dishes to an existing party. A lost reply keeps the command and observations for
-retry with editing disabled; a stale destination or source is reread and needs a separate
-confirmation. EN/ES product guides describe the table flow. Real HTTP requests now exercise both
-submit parsers: the answer reaches the writer before held work is stored. Process-restart cases
-compare a previously submitted unticked dish with a fresh draft, including no-preparation work
-with no ticket row and held work with no HOLD print. The Spanish-copy answer and final branch
-gates remain before publication.
+implements the table answer, guest editor, whole-line assignments, live marks and guarded sends
+in one branch. HTTP and restart checks distinguish submitted unticked held dishes from fresh
+drafts, including no-preparation dishes. Counter-to-table moves preview the destination and
+confirm an answer and arriving assignments before adopting the table. The owner approved the
+31 Spanish dialog/heading phrases on 2026-10-20; that answer does not cover kitchen wording.
 
 **A669-4 handoff.** `applyPartyAllergyPatch` in `apps/server/src/party-allergy.ts` returns
 `AllergyChangeSet` within its caller's transaction. Its `before` snapshot retains the old guest and
@@ -2307,19 +2287,14 @@ there before committing, including deletion of the last guest. `prepareAllergyRe
 line, group, held-line and course Fire callers; the move hook runs after bill attachment and before
 zone adoption. Frozen ticket copies and acknowledged notices have not been implemented here.
 
-Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
-change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
-with the kitchen. New Spanish copy still requires the owner's answer before feature landing.
-
-- **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** At a table's first Send the waiter answers "Any allergies at this table?"; for
-  Allergies, who (free text), what they avoid and a note, then ticks the dishes that guest eats. A
-  clash turns red and can still be sent. Kitchen paper prints an allergy block under the guest's
-  dish and a heading on the ticket; the screens match. The answer belongs to the party, shows as a
-  banner with Change, and is in Actions → Allergies; a change to a dish the kitchen has sends a
-  notice. Every table send path runs it; the counter does not. A
-  table leaving the party copies the allergic guests to both parties, and a guest can be deleted.
-  After A668's data shape. [Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
-  [mockups](mockups/a669-allergy-at-the-table/)
+**Remaining: A669-4.** Freeze the guest details beside each ticket item and render the allergy
+heading, block and clash at both paper widths and on station/pass screens. Enqueue acknowledged
+change/removal notices for affected unserved dishes already with the kitchen, including held
+work with a printed HOLD ticket. Served work receives no notice. Cover all five change-set
+callers above, exact replay, guest deletion and both languages. Obtain the owner's answer for
+kitchen paper and notice wording. Recheck other lanes' reservations before implementation.
+[Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
+[mockups](mockups/a669-allergy-at-the-table/).
 
 ## Legacy bill moves do not check the source location
 
