@@ -4400,6 +4400,54 @@ it.each([390, 1280])(
   },
 );
 
+const routingLine = (el: CatalogueBrowser) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="routing-unavailable"]');
+
+it("says above the list that routing could not be read, when there are categories", async () => {
+  const el = await mountBrowser({ routingFailed: true });
+  const table = await tableOf(el);
+  const line = routingLine(el);
+  expect(line).not.toBeNull();
+  expect(line!.getAttribute("slot")).toBe("toolbar-bottom");
+  expect(line!.parentElement!.localName).toBe("dashboard-product-list");
+  expect(line!.textContent!.trim()).toBe(
+    "Kitchen routing unavailable: categories with no station are not marked. Try again later.",
+  );
+  expect(line!.getAttribute("role")).toBe("status");
+  const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="catalogue-search"]')!;
+  const head = table.shadowRoot!.querySelector("thead")!;
+  expect(line!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    search.getBoundingClientRect().bottom,
+  );
+  expect(line!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    head.getBoundingClientRect().top,
+  );
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-danger)";
+  el.shadowRoot!.append(probe);
+  expect(getComputedStyle(line!).color).toBe(getComputedStyle(probe).color);
+  expect(getComputedStyle(line!).color).not.toBe(getComputedStyle(search).color);
+  probe.remove();
+  await press(el, "select");
+  const bar = el.shadowRoot!.querySelector<HTMLElement>('[data-test="selection-bar"]')!;
+  expect(bar.nextElementSibling).toBe(routingLine(el));
+  expect(routingLine(el)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    bar.getBoundingClientRect().bottom,
+  );
+  expect(routingLine(el)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    head.getBoundingClientRect().top,
+  );
+});
+
+it("shows no routing line while routing is read, or when there are no categories", async () => {
+  const el = await mountBrowser();
+  await tableOf(el);
+  expect(routingLine(el)).toBeNull();
+  const bare = await mountBrowser({ routingFailed: true, categories: [] });
+  await tableOf(bare);
+  expect(routingLine(bare)).toBeNull();
+});
+
 it.each([false, true])(
   "hands stickyHeader (%s) to the Products table, which fills a bounded column only when it is set",
   async (sticky) => {

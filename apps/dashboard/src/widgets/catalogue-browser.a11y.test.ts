@@ -83,6 +83,21 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("renders the line saying routing could not be read accessibly", async () => {
+    const { el, host } = await mountWidget<CatalogueBrowser>(
+      "dashboard-catalogue-browser",
+      {
+        products: PRODUCTS,
+        api: {} as DashboardApi,
+        categories: [{ id: "d", name: "Drinks", parentId: null, color: null }],
+        routingFailed: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="routing-unavailable"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the Filters panel open beside the rows accessibly", async () => {
     const width = innerWidth,
       height = innerHeight;

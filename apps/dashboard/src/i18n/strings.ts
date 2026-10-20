@@ -286,6 +286,8 @@ export const en = {
   "folders.made_at_default": "default station",
   "folders.made_at_some_elsewhere": "some items made elsewhere",
   "folders.made_at_unavailable": "Kitchen routing unavailable",
+  "folders.routing_unavailable":
+    "Kitchen routing unavailable: categories with no station are not marked. Try again later.",
   "folders.summary_error":
     "What these categories hold could not be read, so they cannot be deleted yet.",
   "folders.summary_changed":
@@ -3333,6 +3335,8 @@ export const es: Record<StringKey, string> = {
   "folders.made_at_default": "estación predeterminada",
   "folders.made_at_some_elsewhere": "algunos productos se preparan en otro sitio",
   "folders.made_at_unavailable": "Envío a cocina no disponible",
+  "folders.routing_unavailable":
+    "Envío a cocina no disponible: las categorías sin estación no se marcan. Inténtalo más tarde.",
   "folders.summary_error":
     "No se pudo leer lo que contienen estas categorías, así que aún no se pueden eliminar.",
   "folders.summary_changed":

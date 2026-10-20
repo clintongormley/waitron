@@ -1042,6 +1042,18 @@ export class CatalogueBrowser extends LitElement {
               </div>`
             : nothing
         }
+        ${
+          this.routingFailed && this.categories.length
+            ? html`<p
+                slot="toolbar-bottom"
+                class="error"
+                role="status"
+                data-test="routing-unavailable"
+              >
+                ${t("folders.routing_unavailable")}
+              </p>`
+            : nothing
+        }
       </dashboard-product-list>
       ${this.#operationDialog()}<dashboard-category-color-form
         .open=${this.colorTarget !== null}
