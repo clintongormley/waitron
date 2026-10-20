@@ -43,6 +43,7 @@ const product = (
   image: null,
   color: null,
   variants: [],
+  courseId: null,
 });
 const PRODUCTS = [
   product("cola", "Cola", "d"),
@@ -79,6 +80,21 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
     await userEvent.tab();
     expect(el.shadowRoot!.activeElement).toBe(select);
     expect(getComputedStyle(select.querySelector(".icon-tooltip")!).display).toBe("block");
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the line saying routing could not be read accessibly", async () => {
+    const { el, host } = await mountWidget<CatalogueBrowser>(
+      "dashboard-catalogue-browser",
+      {
+        products: PRODUCTS,
+        api: {} as DashboardApi,
+        categories: [{ id: "d", name: "Drinks", parentId: null, color: null }],
+        routingFailed: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="routing-unavailable"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -236,7 +252,7 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
   it.each([
     ["routed", false],
     ["unreadable", true],
-  ] as const)("renders categories' Made at %s accessibly", async (_state, failed) => {
+  ] as const)("renders the categories' routing marks %s accessibly", async (_state, failed) => {
     const { el, host } = await mountWidget<CatalogueBrowser>(
       "dashboard-catalogue-browser",
       {
@@ -287,7 +303,13 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
       .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
       .click();
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelector('[part~="maker-detail"]')).not.toBeNull();
+    if (failed) {
+      expect(el.shadowRoot!.querySelector('[data-test="routing-unavailable"]')).not.toBeNull();
+    } else {
+      const beer = table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]');
+      expect(beer).not.toBeNull();
+      expect(beer!.querySelector('[part~="unrouted-folder"]')).toBeNull();
+    }
     await expectNoA11yViolations(host);
   });
 });

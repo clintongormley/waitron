@@ -47,14 +47,13 @@ when one was chosen in that box and it differs from the category's current one. 
 drops the chosen colour with the box. The box's square is not a Tab stop, so Tab still leaves the
 box and saves it; from the keyboard a category's colour is set from its row's square.
 
-A red asterisk beside a category means the route the Made at column shows for it reaches no
-active station, so it reads No replacement or Nowhere. That route is the category's baseline:
-Made at reads only the routing grid's Every zone column, on the category's own row or the nearest
+A red asterisk beside a category means the category's baseline route reaches no active station.
+The baseline reads only the routing grid's Every zone column, on the category's own row or the nearest
 parent's, so a cell in one service zone's column, or on a product's row, can still send some of a
 marked category's dishes somewhere else. Deleting a station removes the cells that name it, so
 this baseline follows the surviving category rule or the active default. The baseline ignores
 today's station closures. A category with no Every zone cell on its own row or a parent's is made
-at the active default station, and reads Nowhere when none is set. A route to No preparation
+at the active default station, and is marked when no active default is set. A route to No preparation
 carries no asterisk. The asterisk's tooltip explains the
 warning. To clear it, set the Every zone cell of the category or one of its parents on Prep
 stations' Routes tab; or choose an active station for that cell.
@@ -77,7 +76,7 @@ The routing grid walks a product's category ancestors. After the product's own r
 category row up the chain with a cell for the order's service zone, or for Every zone, decides, and
 All categories comes last (`selectRoutingCell`, `packages/venue-service/src/routing.ts`). In the
 deciding cell, a period choice for the period running in the zone's department replaces the cell's
-own choice; an order with no zone, and Made at above, use the cell's own choice. See
+own choice; an order with no zone, and the baseline above, use the cell's own choice. See
 [the routing grid plan](../superpowers/plans/2026-10-05-routing-grid.md), which replaced the
 claims and ordered exceptions of
 [the earlier design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).

@@ -65,6 +65,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     image: null,
     color: null,
     variants: [],
+    courseId: null,
     ...overrides,
   };
 }

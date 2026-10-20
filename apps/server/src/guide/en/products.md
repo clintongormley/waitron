@@ -18,9 +18,11 @@ open until you have fixed it.
 
 ## Set how a product is sold {#selling}
 
-Open **Selling** to change Available or **Ordered on its own by**: Anyone, Staff only or Nobody.
+Open **Selling** to change Available or **Standalone ordering by**: Anyone, Staff only or Nobody.
 The explanation below the selected choice tells you what it allows. A variant has only Available
-here. Selling starts closed, with the current settings on its summary line.
+here. Selling starts closed, with the current settings on its summary line. The Products list shows
+this setting in its **Standalone** column; the **Standalone ordering by** filter in **Filters** picks
+by it.
 
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
@@ -94,22 +96,30 @@ category's in turn (the **No category** row for a product with no category), the
 categories**. Within a row, a cell for the order's service zone comes before the row's **Every
 zone** cell. When no cell applies, the dish goes to the venue's default station.
 
+The Products list does not show where each dish is made; the **Routes** tab does. A red asterisk
+after a category's name in the list means its **Every zone** route reaches no active station. Other
+routes on the **Routes** tab can still send some of its dishes to a station. When the routing cannot
+be read and the list has categories, one line above the list says so, and no category is marked.
+
 You can create a unit, an extras list or an options list without abandoning a product you are
 editing. Open the nested form and save the new item: when you return, the product already uses it.
 The unsaved product fields remain in place if the nested save fails or you cancel it.
 
 ## Choose the course {#course}
 
-Use the **Default course** field under **Kitchen** to choose the course for new dishes. It saves
+Use the **Course** field under **Kitchen** to choose the course for new dishes. It saves
 with the product. At a table, arrange dishes in **New order**: they can go in **Fire now**, a new
 held group or an existing held group. You can change an unsent dish's course before sending it.
 Use groups to choose which dishes you fire together, rather than treating each course as one
 fixed section for the whole table.
 
-**Edit courses…** at the end of the **Default course** list opens the course list in a window that
+**Edit courses…** at the end of the **Course** list opens the course list in a window that
 saves each change as you make it. When you close it, the last course you added becomes the product's
 course; if you removed the product's course instead, the product is left with none. Your other
 unsaved product fields stay as they were.
+
+The Products list's **Course** column shows each product's course. When the venue has courses, the
+**Course** filter in **Filters** picks one or several of them, or **No course**.
 
 ## Add variants when one product has several sellable forms {#variants}
 
@@ -217,7 +227,10 @@ to eat. The till and kitchen show each item's own list.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows its effective state; italic means it follows
-its parent. The Allergens filter uses that same state for each variant.
+its parent. The Allergens filter uses that same state for each variant. The **Allergens** and
+**Dietary info** columns start hidden. To show them, select the columns button at the right-hand
+end of the list's search box; in **Customise**, select the eye beside each column, then **Done**.
+Their filters work while the columns are hidden.
 
 Before you publish now or schedule a menu, the confirmation lists offered dishes and active
 variants whose allergens are unreviewed. Select a name to open that product's own page. You can

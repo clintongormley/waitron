@@ -49,6 +49,7 @@ function product(id: string, name: string, unitPrice: string): Product {
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   };
 }
 
@@ -232,12 +233,14 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
           unitPrice: null,
           available: true,
           active: true,
+          courseId: null,
           allergensInherited: true,
           effective: {
             allergens: null,
             unitPrice: "3.00",
             vatClass: "general" as const,
             primaryCategoryId: null,
+            courseId: null,
           },
         },
       ],

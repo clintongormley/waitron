@@ -62,6 +62,7 @@ function product(id: string, name: string, unitPrice: string, unit = EACH): Prod
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   };
 }
 

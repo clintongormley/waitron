@@ -58,6 +58,7 @@ const PRODUCT: Product = {
   image: null,
   color: null,
   variants: [],
+  courseId: null,
 };
 
 function baseProps(overrides: Partial<RecipeEditor> = {}): Partial<RecipeEditor> {

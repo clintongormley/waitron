@@ -195,6 +195,7 @@ const PRODUCT_BASE_COLUMNS = {
   description: effective.description,
   kitchenName: products.kitchenName,
   dietaryDeclarations: effective.dietaryDeclarations,
+  courseId: effective.courseId,
 };
 
 const PRODUCT_COLUMNS = {
@@ -248,6 +249,7 @@ interface RawProduct {
   dietDerivation: { origins: string[]; pending: boolean } | null;
   image: string | null;
   unitMeasure: boolean | null;
+  courseId: string | null;
 }
 
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
@@ -1134,6 +1136,8 @@ async function listedVariantsOfProducts(
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
       primaryCategoryId: effective.categoryId,
+      courseId: products.courseId,
+      effectiveCourseId: effective.courseId,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
@@ -1148,6 +1152,7 @@ async function listedVariantsOfProducts(
     unitPrice,
     vatClass,
     primaryCategoryId,
+    effectiveCourseId,
     ...row
   } of rows) {
     const held = grouped.get(parentId!) ?? [];
@@ -1160,6 +1165,7 @@ async function listedVariantsOfProducts(
         unitPrice: centsToDecimal(unitPrice),
         vatClass: vatClass as VatClass,
         primaryCategoryId,
+        courseId: effectiveCourseId,
       },
     });
     grouped.set(parentId!, held);

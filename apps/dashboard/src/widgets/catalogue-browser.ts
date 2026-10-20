@@ -10,11 +10,11 @@ import type {
   ExtraList,
   CategorySummary,
   CatalogueSelection,
+  Course,
   FolderContents,
   FolderSummary,
   DashboardApi,
   Product,
-  MadeAt,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
 import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
@@ -101,7 +101,7 @@ export class CatalogueBrowser extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) products: Product[] = [];
-  @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
+  @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) routing: RoutingModel | null = null;
   /** Whether the routing read failed, as against not having answered yet. */
   @property({ type: Boolean }) routingFailed = false;
@@ -224,10 +224,8 @@ export class CatalogueBrowser extends LitElement {
     if (changed.has("products") || changed.has("categories")) this.#keepSelectionOwned();
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
-    if (changed.has("routing") || changed.has("categories") || changed.has("products"))
-      this.#folderMadeAt = this.routing
-        ? folderMadeAt(this.routing, this.categories, this.products)
-        : new Map();
+    if (changed.has("routing") || changed.has("categories"))
+      this.#folderMadeAt = this.routing ? folderMadeAt(this.routing, this.categories) : new Map();
   }
 
   override updated(changed: PropertyValues): void {
@@ -922,10 +920,8 @@ export class CatalogueBrowser extends LitElement {
         .categories=${this.categories}
         .products=${this.products}
         .search=${this.search}
-        .madeAt=${this.madeAt}
+        .courses=${this.courses}
         .unroutedFolderIds=${this.#unroutedFolderIds()}
-        .folderMadeAt=${this.#folderMadeAt}
-        .routingFailed=${this.routingFailed}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
@@ -1037,6 +1033,18 @@ export class CatalogueBrowser extends LitElement {
                     : nothing
                 }
               </div>`
+            : nothing
+        }
+        ${
+          this.routingFailed && this.categories.length
+            ? html`<p
+                slot="toolbar-bottom"
+                class="error"
+                role="status"
+                data-test="routing-unavailable"
+              >
+                ${t("folders.routing_unavailable")}
+              </p>`
             : nothing
         }
       </dashboard-product-list>

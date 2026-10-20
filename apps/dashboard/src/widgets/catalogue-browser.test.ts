@@ -69,6 +69,7 @@ const product = (
   image: null,
   color: null,
   variants: [],
+  courseId: null,
 });
 export const PRODUCTS = [
   product("cola", "Cola", "d"),
@@ -220,16 +221,15 @@ it("does not mark a folder covered by its own Every zone cell", async () => {
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
   expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
 });
-/** The Made at cell of a row, found by its column heading. */
-async function madeAtText(el: CatalogueBrowser, key: string) {
-  const root = (await tableOf(el)).shadowRoot!;
-  const index = [...root.querySelectorAll("thead th")].findIndex((cell) =>
-    cell.textContent!.trim().startsWith("Made at"),
-  );
-  expect(index).toBeGreaterThanOrEqual(0);
-  const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
-  return [...row.querySelectorAll("td")][index]!.textContent!.replace(/\s+/g, " ").trim();
-}
+it("hands the courses to the products list", async () => {
+  const courses = [
+    { id: "k1", name: "Starters", displayOrder: 0, active: true, heldUntilFired: false },
+  ];
+  const el = await mountBrowser({ courses });
+  await tableOf(el);
+  expect(el.shadowRoot!.querySelector("dashboard-product-list")!.courses).toEqual(courses);
+});
+
 /** The red asterisk on a category's row, or null when the row has none. */
 async function unroutedMarker(el: CatalogueBrowser, key: string) {
   const row = (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${key}"]`);
@@ -262,50 +262,12 @@ const routingWith = (overrides: Partial<RoutingFixture> = {}): RoutingModel => (
   ...overrides,
 });
 
-it("shows each category's route from the routing it holds, and redraws it when routing changes", async () => {
-  const el = await mountBrowser({ routing: routingWith() });
-  expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
-  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
-  await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:b")).toBe("Bar from Drinks");
-  el.routing = routingWith({
-    cells: [
-      {
-        row: { kind: "category", categoryId: "d" },
-        zoneId: null,
-        target: { kind: "no_preparation" },
-      },
-    ],
-  });
-  expect(await madeAtText(el, "folder:d")).toBe("No preparation set on this category");
-  expect(await madeAtText(el, "folder:b")).toBe("No preparation from Drinks");
-});
-
-it("works the route out again when the products or the categories change", async () => {
-  const routing = routingWith();
-  const el = await mountBrowser({
-    routing: routingWith({
-      cells: [
-        ...routing.cells,
-        {
-          row: { kind: "product", productId: "juice" },
-          zoneId: null,
-          target: { kind: "station", stationId: "kitchen" },
-        },
-      ],
-    }),
-  });
-  expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
-  el.products = [
-    ...PRODUCTS,
-    { ...PRODUCTS[0]!, id: "juice", name: "Juice", primaryCategoryId: "d", categoryId: "d" },
-  ];
-  expect(await madeAtText(el, "folder:d")).toBe(
-    "Bar set on this category · some items made elsewhere",
-  );
-  el.categories = [...CATEGORIES, folder("w", "Wine", "d")];
-  await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:w")).toBe("Bar from Drinks");
+it("works the asterisk out again when the categories change", async () => {
+  const el = await mountBrowser({ routing: routingWith({ defaultStationId: null }) });
+  expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
+  el.categories = [...CATEGORIES, folder("s", "Soups", "f")];
+  await toggleCategory(el, "f");
+  expect(await unroutedMarker(el, "folder:s")).not.toBeNull();
 });
 
 it("decides the asterisk from default recovery for a switched-off station", async () => {
@@ -329,11 +291,8 @@ it("decides the asterisk from default recovery for a switched-off station", asyn
     });
   const el = await mountBrowser({ routing: barOff(true) });
   await toggleCategory(el, "d");
-  expect(await madeAtText(el, "folder:d")).toBe("Kitchen set on this category");
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
-  expect(await madeAtText(el, "folder:b")).toBe("Kitchen from Drinks");
   expect(await unroutedMarker(el, "folder:b")).toBeNull();
-  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routing = barOff(false);
   expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
@@ -349,20 +308,24 @@ it("clears the asterisk on a category that falls through to a switched-on defaul
       ],
     });
   const el = await mountBrowser({ routing: kitchenOn(true) });
-  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routing = kitchenOn(false);
-  expect(await madeAtText(el, "folder:f")).toBe("Nowhere");
   expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
 });
 
-it("leaves categories blank while routing loads, and says so when its read failed", async () => {
+it("marks no category while routing loads, and says so above the list when its read failed", async () => {
   const el = await mountBrowser();
-  expect(await madeAtText(el, "folder:d")).toBe("");
+  const line = () => el.shadowRoot!.querySelector('[data-test="routing-unavailable"]');
+  await tableOf(el);
+  expect(line()).toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routingFailed = true;
-  expect(await madeAtText(el, "folder:d")).toBe("Kitchen routing unavailable");
-  expect(await madeAtText(el, ROOT_KEY)).toBe("");
+  await el.updateComplete;
+  expect(line()).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
 });
 
 async function nameCell(el: CatalogueBrowser, key: string) {
@@ -1105,7 +1068,9 @@ it("searches a folder's own name and a product's variant names, never a product'
               unitPrice: "2.00",
               vatClass: "reduced",
               primaryCategoryId: "d",
+              courseId: null,
             },
+            courseId: null,
           },
         ],
       },
@@ -1684,7 +1649,9 @@ it("keeps a variant match on its parent until the manager expands it", async () 
               unitPrice: "2.00",
               vatClass: "reduced",
               primaryCategoryId: "d",
+              courseId: null,
             },
+            courseId: null,
           },
         ],
       },
@@ -1774,7 +1741,9 @@ it("selects folders and products but never variants", async () => {
               unitPrice: "2.00",
               vatClass: "reduced",
               primaryCategoryId: "d",
+              courseId: null,
             },
+            courseId: null,
           },
         ],
       },
@@ -4316,7 +4285,9 @@ it("A462 Products root reopening leaves product variants closed", async () => {
               unitPrice: "2.00",
               vatClass: "reduced",
               primaryCategoryId: "d",
+              courseId: null,
             },
+            courseId: null,
           },
         ],
       },
@@ -4381,6 +4352,54 @@ it.each([390, 1280])(
     expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[data-test="select"]'));
   },
 );
+
+const routingLine = (el: CatalogueBrowser) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="routing-unavailable"]');
+
+it("says above the list that routing could not be read, when there are categories", async () => {
+  const el = await mountBrowser({ routingFailed: true });
+  const table = await tableOf(el);
+  const line = routingLine(el);
+  expect(line).not.toBeNull();
+  expect(line!.getAttribute("slot")).toBe("toolbar-bottom");
+  expect(line!.parentElement!.localName).toBe("dashboard-product-list");
+  expect(line!.textContent!.trim()).toBe(
+    "Kitchen routing unavailable: categories with no station are not marked. Try again later.",
+  );
+  expect(line!.getAttribute("role")).toBe("status");
+  const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="catalogue-search"]')!;
+  const head = table.shadowRoot!.querySelector("thead")!;
+  expect(line!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    search.getBoundingClientRect().bottom,
+  );
+  expect(line!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    head.getBoundingClientRect().top,
+  );
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-danger)";
+  el.shadowRoot!.append(probe);
+  expect(getComputedStyle(line!).color).toBe(getComputedStyle(probe).color);
+  expect(getComputedStyle(line!).color).not.toBe(getComputedStyle(search).color);
+  probe.remove();
+  await press(el, "select");
+  const bar = el.shadowRoot!.querySelector<HTMLElement>('[data-test="selection-bar"]')!;
+  expect(bar.nextElementSibling).toBe(routingLine(el));
+  expect(routingLine(el)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    bar.getBoundingClientRect().bottom,
+  );
+  expect(routingLine(el)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    head.getBoundingClientRect().top,
+  );
+});
+
+it("shows no routing line while routing is read, or when there are no categories", async () => {
+  const el = await mountBrowser();
+  await tableOf(el);
+  expect(routingLine(el)).toBeNull();
+  const bare = await mountBrowser({ routingFailed: true, categories: [] });
+  await tableOf(bare);
+  expect(routingLine(bare)).toBeNull();
+});
 
 it.each([false, true])(
   "hands stickyHeader (%s) to the Products table, which fills a bounded column only when it is set",
@@ -4580,7 +4599,9 @@ it("names active descendant and variant extras only when deleting folder content
         unitPrice: "2.00",
         vatClass: "reduced",
         primaryCategoryId: "b",
+        courseId: null,
       },
+      courseId: null,
     },
     {
       id: "old-size",
@@ -4597,7 +4618,9 @@ it("names active descendant and variant extras only when deleting folder content
         unitPrice: "2.00",
         vatClass: "reduced",
         primaryCategoryId: "b",
+        courseId: null,
       },
+      courseId: null,
     },
   ];
   const lists = [

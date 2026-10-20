@@ -62,6 +62,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
 ];
 

@@ -74,7 +74,7 @@ overflow), so the end of the live version's time scrolls under the pinned Action
 and the row menu stay in view. The existing 600 px case "keeps every menu row's menu on screen and
 uncovered while the other columns scroll sideways" in
 `apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. The contrast of
-that link, and of the product list's maker link, on a highlighted row is fixed (A306, #1336).
+that link on a highlighted row is fixed (A306, #1336).
 
 ## A menu's Structure tab is one tree (W88, #1209): not checked
 
@@ -733,34 +733,6 @@ expiry between pages.
   appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
   Left out of A689-21 as wider than its plan's Decision 8.
 
-## A655 — fewer and slimmer columns on Products
-
-**A655 — fewer and slimmer columns on Products (owner, 2026-10-14; open).** In
-`apps/dashboard/src/widgets/product-list.ts`: (1) "Standalone ordering" (`product.ordering`,
-Spanish "Pedido por separado") gets a shorter heading — the owner suggested "Standalone"; choose it
-beside A647's new values (Anyone / Staff only / Nobody), and the Spanish needs the owner's wording.
-(2) Allergens and Dietary info start hidden (`choosable: "hidden"`) and stay in the column chooser.
-(3) Made at is deleted, or at the very least loses the grey second line under a category's station
-("set on this category", "from {name}", "default station", "some items made elsewhere",
-`folders.made_at_*`), which makes each category row up to three lines tall; which of the two is
-the owner's call at the plan. Either way "Kitchen routing unavailable"
-(`folders.made_at_unavailable`, drawn on category rows when the stations cannot be read) needs a
-new place rather than going with it; and deleting the column also deletes the station link to Prep
-stations' routing view (`/manage/prep-stations/view/routing`). Decided with it: the Availability
-column stays as it is, and the table staying wider than its box at desktop width is accepted
-(there will always be too many columns here; folding the sidebar to a strip gives it more room).
-**Added 2026-10-16 (owner):** the heading is "Standalone", and the editor field and the filter
-both become "Standalone ordering by" (today "Ordered on its own by" and "Standalone ordering");
-a Course column and a Course filter join the list, and "Default course" is renamed "Course"
-everywhere the dashboard shows it. A course change is live on the till without republishing
-(course is left out of the published copy, `packages/catalogue/src/menu-document.ts`); confirm
-that on a till while building.
-
-**Open owner question (2026-10-20, lane A):** Made at deleted, kept one line, or kept one line
-but hidden at first (recommended); and the Spanish for "Standalone". Pictures and the question:
-[mockups/a655-products-columns/](mockups/a655-products-columns/question.txt) — today's list is
-`01-today-light.png`.
-
 ## A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions" shows only when something is scheduled
 
 **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
@@ -883,6 +855,15 @@ control (`apps/till/src/screens/till-table-order-screen.ts`), and the price labe
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
 
 ## Decisions and deliberate limits
+
+- **Products list columns (A655, owner 2026-10-14, 2026-10-16 and 2026-10-20).** Availability stays
+  as it is, and the table may stay wider than its box at desktop width. Made at is deleted with its
+  filter: where dishes are made is shown on Prep stations → Routes, the red asterisk after a
+  category's name stays, and a routing read that fails shows one line above the list. Allergens and
+  Dietary info start hidden. The ordering column is headed Standalone (Spanish «Por separado»), and
+  the editor field and the filter are "Standalone ordering by" (Spanish «Pedir por separado»). A
+  Course column and a Course filter join the list, and "Default course" is "Course".
+  Pictures and the owner's question: [mockups/a655-products-columns/](mockups/a655-products-columns/).
 
 - **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
   translation is optional, including the default. Units have a required staff name and abbreviation;
@@ -1063,7 +1044,7 @@ so this is expected only while the dashboard's category list is behind.
 
 **Products: the Move dialog's destination categories (W82, #1210).** Two sibling categories with the same name are left as they are (owner: "leave it"): they still show as two identical entries, in the tree and in a search.
 
-**Products: a category's Made at (W86, #1203).** The "some items made elsewhere" note does not look at whether the categories involved hold any products, so it can claim items that do not exist yet; the owner chose to keep these words (2026-10-05).
+**Products: a category's Made at (W86, #1203).** The "some items made elsewhere" note does not look at whether the categories involved hold any products, so it can claim items that do not exist yet; the owner chose to keep these words (2026-10-05). (2026-10-20, A655: the Made at column and this note were deleted.)
 
 **Products: Show archived replaces the Status filter, and the Status column becomes Availability (A463, owner
 2026-10-10).** Show archived starts off; on, archived products and variants are listed too, with View in place of Edit and Archive.
@@ -1077,7 +1058,8 @@ every kitchen station, and matches the station the column shows, including a swi
 product has no replacement for; the backlog entry marked that matching "assumed, not asked".
 **2026-10-10 update:** A435 step 5 removes deleted stations from current routing settings and
 choices. The switched-off-station example above records A463's earlier decision; Task 9's
-integrated Made at check follows the surviving rule after deletion.
+integrated Made at check follows the surviving rule after deletion. (2026-10-20, A655: the Made at
+column and filter were deleted.)
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.

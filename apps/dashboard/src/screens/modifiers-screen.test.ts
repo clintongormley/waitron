@@ -82,6 +82,7 @@ function product(overrides: Partial<Product> = {}): Product {
     image: null,
     color: null,
     variants: [],
+    courseId: null,
     ...overrides,
   };
 }

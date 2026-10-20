@@ -62,6 +62,7 @@ function product(overrides: Partial<Product> = {}): Product {
     image: null,
     color: null,
     variants: [],
+    courseId: null,
     ...overrides,
   };
 }
@@ -2335,6 +2336,7 @@ function variant(name: string, flags: { active: boolean; available: boolean }) {
     kitchenName: null,
     image: null,
     unitPrice: null,
+    courseId: null,
     ...flags,
     allergensInherited: true,
     effective: {
@@ -2342,6 +2344,7 @@ function variant(name: string, flags: { active: boolean; available: boolean }) {
       unitPrice: "4.00",
       vatClass: "general" as const,
       primaryCategoryId: null,
+      courseId: null,
     },
   };
 }

@@ -1,4 +1,4 @@
-import { registerIcons, setHelpMode } from "@waitron/ui";
+import { registerIcons, setHelpMode, type WtCombobox } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -51,6 +51,7 @@ const products: Product[] = [
     image: "abc123.webp",
     color: null,
     variants: [],
+    courseId: null,
   },
   {
     id: "p2",
@@ -85,6 +86,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
   {
     id: "p3",
@@ -125,6 +127,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
   {
     id: "p4",
@@ -174,7 +177,9 @@ const products: Product[] = [
           unitPrice: "4.50",
           vatClass: "general",
           primaryCategoryId: "cat-1",
+          courseId: null,
         },
+        courseId: null,
       },
       {
         id: "v2",
@@ -191,9 +196,12 @@ const products: Product[] = [
           unitPrice: "3.00",
           vatClass: "reduced",
           primaryCategoryId: "cat-1",
+          courseId: null,
         },
+        courseId: null,
       },
     ],
+    courseId: null,
   },
 ];
 
@@ -205,8 +213,16 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+function showColumns(...keys: string[]): void {
+  localStorage.setItem(
+    "waitron.products.table:columns",
+    JSON.stringify(Object.fromEntries(keys.map((key) => [key, true]))),
+  );
+}
+
 describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme) => {
   it("shows inherited and own allergen badges accessibly", async () => {
+    showColumns("allergens");
     const parent = products[3]!;
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
@@ -348,6 +364,46 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with the Course column filled and its filter open in the panel", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products: [
+          { ...products[0]!, courseId: "mains" },
+          { ...products[2]!, courseId: "gone" },
+          { ...products[3]!, courseId: null },
+        ],
+        courses: [
+          { id: "mains", name: "Mains", displayOrder: 1, active: true, heldUntilFired: false },
+        ],
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await table.updateComplete;
+    const headings = [...table.shadowRoot!.querySelectorAll("thead th")].map((th) =>
+      th.textContent!.trim(),
+    );
+    const column = headings.findIndex((text) => text.startsWith(t("product.course")));
+    expect(column).toBeGreaterThan(0);
+    expect(
+      [...table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map(
+        (row) => row.querySelectorAll("td")[column]?.textContent!.trim() ?? "",
+      ),
+    ).toEqual(expect.arrayContaining(["Mains", t("editor.missing_choice"), "—"]));
+    expect(table.shadowRoot!.querySelector('wt-combobox[data-filter="course"]')).not.toBeNull();
+    const filter = table.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[data-filter="course"]',
+    )!;
+    const trigger = filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!;
+    await userEvent.click(trigger);
+    await filter.updateComplete;
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with the Filters panel open and Show archived on", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
@@ -361,7 +417,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await showArchived(el);
     const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
     expect(toggle.getBoundingClientRect().height).toBeGreaterThan(0);
-    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(5);
+    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(4);
     await expectNoA11yViolations(host);
   });
 
@@ -577,53 +633,6 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     expect(cells.every((cell) => cell.part.contains("drop-into"))).toBe(true);
     await expectNoA11yViolations(host);
     at(over, "pointercancel");
-  });
-});
-
-describe.each(["light", "dark"] as const)("product made-at link a11y (%s)", (theme) => {
-  async function mountMadeAt() {
-    await page.viewport(1280, 844);
-    const { el, host } = await mountWidget<ProductList>(
-      "dashboard-product-list",
-      {
-        products: [{ ...products[0]!, primaryCategoryId: null, variants: [] }],
-        madeAt: {
-          p1: {
-            stationId: "s1",
-            stationName: "Cocina",
-            noPreparation: false,
-            noReplacement: false,
-            unavailableStationId: null,
-            variesByZone: false,
-          },
-        },
-      },
-      theme,
-    );
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    await table.updateComplete;
-    const row = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p1"]')!;
-    expect(row.classList.contains("clickable")).toBe(true);
-    expect(row.querySelector('[part~="maker-link"]')!.textContent).toContain("Cocina");
-    return { host, table, row };
-  }
-
-  it("reads on a row highlighted by focus inside it", async () => {
-    const { host, row } = await mountMadeAt();
-    const trigger = row.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="actions-p1"]',
-    )!;
-    trigger.focus();
-    expect(row.matches(":focus-within")).toBe(true);
-    await expectNoA11yViolations(host);
-  });
-
-  it("reads on a row highlighted by the pointer", async () => {
-    const { host, row } = await mountMadeAt();
-    const cell = row.querySelector('[part~="maker-link"]')!.closest("td")!;
-    await userEvent.hover(cell);
-    expect(row.matches(":hover")).toBe(true);
-    await expectNoA11yViolations(host);
   });
 });
 

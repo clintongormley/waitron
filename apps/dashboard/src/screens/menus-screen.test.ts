@@ -126,6 +126,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     image: null,
     color: null,
     variants: [],
+    courseId: null,
     ...overrides,
   };
 }
@@ -330,12 +331,14 @@ function variantProducts(): Product[] {
     unitPrice,
     available: true,
     active: true,
+    courseId: null,
     allergensInherited: true,
     effective: {
       allergens: null,
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
       primaryCategoryId: "c-drinks",
+      courseId: null,
     },
   });
   return products.map((each) =>

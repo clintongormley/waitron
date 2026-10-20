@@ -72,17 +72,19 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
 
 /**
  * One variant as the product list nests it under its parent: the variant as the editor reads it
- * (`unitPrice` its OWN, null where it takes its parent's) and, in `effective`, what it actually
- * carries: its allergens, price and VAT class once its blanks read as its parent's, and its parent's
- * main category (`variant-fallback.ts`).
+ * (`unitPrice` and `courseId` its OWN, null where it takes its parent's) and, in `effective`, what
+ * it actually carries: its allergens, price and VAT class once its blanks read as its parent's, its
+ * parent's main category, and the course it is fired in (`variant-fallback.ts`).
  */
 export interface ListedVariant extends ProductVariant {
   allergensInherited: boolean;
+  courseId: string | null;
   effective: {
     allergens: ProductAllergens | null;
     unitPrice: string;
     vatClass: VatClass;
     primaryCategoryId: string | null;
+    courseId: string | null;
   };
 }
 
@@ -141,6 +143,7 @@ export interface Product {
   color: string | null;
   /** Every variant, Inactive ones included, in variant order. */
   variants: ListedVariant[];
+  courseId: string | null;
 }
 
 /**

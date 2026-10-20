@@ -733,11 +733,11 @@ froze (`TabLine.unitPrecision`), since a variant is not one of the till's produc
 
 ### In the product editor
 
-The **Selling** section holds Available and **Ordered on its own by**, with three visible choices:
+The **Selling** section holds Available and **Standalone ordering by**, with three visible choices:
 Anyone, Staff only and Nobody. Their wire values remain `public`, `staff_only` and
 `not_sold_separately` (`products.ordering`). The chosen explanation appears below the choices. A variant's own page does not offer it, because the till and the
 server read the dish's setting and a variant is only ever ordered under its dish. The products list
-shows the same setting as a column with a filter (`apps/dashboard/src/widgets/product-list.ts`).
+shows the same setting as a column headed Standalone, with a filter (`apps/dashboard/src/widgets/product-list.ts`).
 
 The editor allows any number of variants, one included (`apps/dashboard/src/widgets/product-editor.ts`):
 
@@ -819,11 +819,11 @@ fold leaves a blank base price, and a VAT class the form does not offer, off its
 Descriptors rows are cut after one and two lines, which can hide a later language's value, so
 opening the section is what shows every value. Top to bottom: the category path, Name, with the
 photo beside it as a small button that opens the image library (absent when the editor is given no
-`api`), the colour chooser (absent on a variant's page), Available, Standalone ordering (absent on
+`api`), the colour chooser (absent on a variant's page), Available, Standalone ordering by (absent on
 a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
 variant is Active), Variants, Modifiers, then Cancel and Save. An archived product opens a plain-text details panel through View, not this editor. Opened on a
 variant, the same form is the variant's own page: it has no colour chooser and no Standalone
-ordering, Modifiers or Variants section. The course and description show the parent's value as
+ordering by, Modifiers or Variants section. The course and description show the parent's value as
 their placeholder while inherited. The course, description, allergens and dietary preferences
 also show inherited values in italic on their folded section's closed line.
 In Nutritional info you choose “Contains none of the 14” to record a reviewed empty allergen set.

@@ -138,6 +138,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
 ];
 const value: ProductEditorValue = {
@@ -344,18 +345,26 @@ afterEach(() => localStorage.clear());
 
 describe("catalogue-screen", () => {
   it("loads all product editor libraries and de-duplicates products from every menu", async () => {
-    const api = stubApi();
+    const oneCourse = {
+      id: "k1",
+      name: "Starters",
+      displayOrder: 0,
+      active: true,
+      inUse: false,
+      heldUntilFired: true,
+    };
+    const api = stubApi({ listCourses: vi.fn().mockResolvedValue([oneCourse]) });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     expect(api.listUnits).toHaveBeenCalledOnce();
     expect(api.listCategories).toHaveBeenCalledOnce();
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
-    expect(api.listMadeAt).toHaveBeenCalledOnce();
+    expect(api.listMadeAt).not.toHaveBeenCalled();
     expect(api.getFolderRouting).toHaveBeenCalledOnce();
     expect(list(el).routing).toMatchObject({ cells: [], defaultStationId: null });
-    expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(list(el).products).toEqual(products);
+    expect(list(el).courses).toEqual([oneCourse]);
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
@@ -514,7 +523,6 @@ describe("catalogue-screen", () => {
     vi.mocked(api.listCatalogues).mockResolvedValue(catalogues);
     api.liveData.refresh();
     await vi.waitFor(() => expect(list(el).products).toEqual(products));
-    expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(alert()).toBeNull();
   });
 
@@ -2797,7 +2805,9 @@ describe("catalogue-screen", () => {
               unitPrice: "8.50",
               vatClass: "reduced",
               primaryCategoryId: "c1",
+              courseId: null,
             },
+            courseId: null,
           },
         ],
       },

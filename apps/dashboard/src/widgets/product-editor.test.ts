@@ -258,7 +258,7 @@ it("A647 offers three visible ordering choices and only the selected explanation
       );
     expect(choices).not.toBeNull();
     await choices!.updateComplete;
-    expect(choices!.label).toBe("Ordered on its own by");
+    expect(choices!.label).toBe("Standalone ordering by");
     expect(
       [...choices!.shadowRoot!.querySelectorAll('[role="radio"]')].map((button) =>
         button.textContent!.trim(),
@@ -3244,7 +3244,7 @@ it("describes Staff only ordering briefly in English and Spanish", async () => {
   setLocale("en-GB");
   try {
     const { el } = await mount();
-    expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Ordered on its own by");
+    expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Standalone ordering by");
     expect(await orderingTexts(el)).toEqual([
       ["Anyone", "Can be ordered on its own."],
       ["Staff only", ""],
@@ -5061,42 +5061,49 @@ async function shownIn(el: ProductEditor, name: string): Promise<string | undefi
     ?.textContent?.trim();
 }
 
-it("picks the default course from a shared dropdown, with none as a chosen value and a row", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, courseId: "course-2" },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-    courses: [
-      { id: "course-1", name: "Starters" },
-      { id: "course-2", name: "Mains" },
-    ],
-  });
-  await openSection(el, "kitchen");
-  const course = sharedField(el, "wt-combobox", "product-course");
-  expect(course).not.toBeNull();
-  expect(course.label).toBe(t("product.course"));
-  expect(course.search).toBe("auto");
-  expect(course.placeholder).toBe(t("product.no_course"));
-  expect(course.options).toEqual([
-    { value: "", label: t("product.no_course") },
-    { value: "course-1", label: "Starters" },
-    { value: "course-2", label: "Mains" },
-    { value: "edit-courses", label: t("editor.edit_courses"), action: true, primary: true },
-  ]);
-  expect(course.value).toBe("course-2");
-  expect(await shownIn(el, "product-course")).toBe("Mains");
-  await chooseOption(course, "");
-  await el.updateComplete;
-  expect(el.currentValue.courseId).toBeNull();
-  expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
-  const courseText = course.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
-  expect(courseText.classList.contains("placeholder")).toBe(false);
-  expect(getComputedStyle(courseText).fontStyle).toBe("normal");
-  el.fieldErrors = { "product-course": "That one is gone" };
-  await el.updateComplete;
-  expect(course.error).toBe("That one is gone");
+it("picks the course from a shared dropdown, with none as a chosen value and a row", async () => {
+  const before = currentLocale();
+  setLocale("en-GB");
+  try {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, courseId: "course-2" },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      courses: [
+        { id: "course-1", name: "Starters" },
+        { id: "course-2", name: "Mains" },
+      ],
+    });
+    await openSection(el, "kitchen");
+    const course = sharedField(el, "wt-combobox", "product-course");
+    expect(course).not.toBeNull();
+    expect(course.label).toBe(t("product.course"));
+    expect(course.label).toBe("Course");
+    expect(course.search).toBe("auto");
+    expect(course.placeholder).toBe(t("product.no_course"));
+    expect(course.options).toEqual([
+      { value: "", label: t("product.no_course") },
+      { value: "course-1", label: "Starters" },
+      { value: "course-2", label: "Mains" },
+      { value: "edit-courses", label: t("editor.edit_courses"), action: true, primary: true },
+    ]);
+    expect(course.value).toBe("course-2");
+    expect(await shownIn(el, "product-course")).toBe("Mains");
+    await chooseOption(course, "");
+    await el.updateComplete;
+    expect(el.currentValue.courseId).toBeNull();
+    expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+    const courseText = course.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+    expect(courseText.classList.contains("placeholder")).toBe(false);
+    expect(getComputedStyle(courseText).fontStyle).toBe("normal");
+    el.fieldErrors = { "product-course": "That one is gone" };
+    await el.updateComplete;
+    expect(course.error).toBe("That one is gone");
+  } finally {
+    setLocale(before);
+  }
 });
 
 async function mountCourses(value: ProductEditorDraft = { ...product, courseId: "course-2" }) {
