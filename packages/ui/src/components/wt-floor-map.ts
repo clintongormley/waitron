@@ -975,7 +975,12 @@ export class WtFloorMap extends LitElement {
       ?data-drop-target=${this.#markedTarget(this.#drag) === group}
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
-      aria-label=${`${label}, ${first.description}${allergy ? `, ${this.copy.allergy ?? DEFAULT_COPY.allergy}` : ""}`}
+      aria-label=${[
+        label,
+        ...(cue === null || cue.text === "" ? [] : [cue.text]),
+        first.description,
+        ...(allergy ? [this.copy.allergy ?? DEFAULT_COPY.allergy] : []),
+      ].join(", ")}
       style=${styleMap({
         left: px(view.x + (box.x + (drag?.dx ?? 0)) * view.scale),
         top: px(view.y + (box.y + (drag?.dy ?? 0)) * view.scale),
@@ -988,8 +993,8 @@ export class WtFloorMap extends LitElement {
       ${
         cue !== null
           ? html`<span part="caption" data-fill=${merged ? first.fill : nothing}
-              ><span part="name">${label}</span
-              ><span part="cue"
+              ><span part="name">${label}</span>
+              <span part="cue"
                 >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${
                   cue.text === "" ? nothing : html`<span class="cue-text">${cue.text}</span>`
                 }</span

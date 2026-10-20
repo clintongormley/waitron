@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
-import { FLOOR_MAP_FILLS } from "../floor-map-fills.js";
+import { FLOOR_MAP_FILLS, type FloorMapCue, type FloorMapFill } from "../floor-map-fills.js";
 import type { PlanPlacement } from "../floor-plan-geometry.js";
 import type { FloorMapTable, WtFloorMap } from "./wt-floor-map.js";
 import "./wt-floor-map.js";
@@ -94,19 +94,25 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
   });
 
   test("each new fill with its cue", async () => {
-    const fills = ["calm", "ready", "danger", "warning", "plain"] as const;
+    const looks: [FloorMapFill, FloorMapCue, string][] = [
+      ["calm", { icon: "floor-timer", text: "Waiting" }, "Seated, Waiting"],
+      ["ready", { icon: "floor-ready", text: "2" }, "Seated, 2 ready"],
+      ["danger", { icon: "floor-timer", text: "Forgotten" }, "Seated, Forgotten order"],
+      ["warning", { icon: "floor-out", text: "Out" }, "Seated, Unavailable: Paella"],
+      ["plain", { icon: "floor-clear", text: "Clear" }, "Needs clearing"],
+      ["bill", { icon: "floor-bill", text: "Bill" }, "Seated, Bill requested"],
+      ["calm", { icon: "floor-held", text: "12′" }, "Seated, Held, fire in 12 minutes"],
+      ["reserved", { icon: null, text: "21:00" }, "Reserved 21:00"],
+      ["calm", { icon: "floor-check", text: "" }, "Seated, Nothing needed"],
+    ];
     await mountMap(
       theme,
-      fills.map((fill, i) =>
-        t(
-          `T${i + 1}`,
-          { x: i * 8 },
-          { fill, cue: { icon: "floor-timer", text: "Waiting" }, description: "Waiting" },
-        ),
+      looks.map(([fill, cue, description], i) =>
+        t(`T${i + 1}`, { x: i * 8 }, { fill, cue, description }),
       ),
     );
     const root = host.querySelector("wt-floor-map")!.shadowRoot!;
-    expect(root.querySelectorAll('[part="cue"] wt-icon')).toHaveLength(fills.length);
+    expect(root.querySelectorAll('[part="cue"]')).toHaveLength(looks.length);
     await expectNoA11yViolations(host);
   });
 

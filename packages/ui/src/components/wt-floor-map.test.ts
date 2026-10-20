@@ -809,6 +809,26 @@ describe("the whole table shows its state", () => {
     expect(within(el, "name", "b2")).toBeNull();
   });
 
+  it("says a drawn cue's words straight after the name", async () => {
+    const bill = {
+      cue: { icon: "floor-bill", text: "Bill" },
+      description: "Seated, Bill requested",
+    } as const;
+    const label = (el: WtFloorMap) => button(el, "t").getAttribute("aria-label");
+    expect(label(await sized(36, bill))).toBe("T7, Bill, Seated, Bill requested");
+    expect(label(await sized(35, bill))).toBe("T7, Seated, Bill requested");
+    expect(
+      label(
+        await sized(36, {
+          cue: { icon: "floor-check", text: "" },
+          description: "Seated, Nothing needed",
+        }),
+      ),
+    ).toBe("T7, Seated, Nothing needed");
+    const allergic = await sized(36, { ...bill, allergy: true });
+    expect(label(allergic)).toBe("T7, Bill, Seated, Bill requested, Allergy");
+  });
+
   it("paints a merge's caption in its fill when it shows a cue", async () => {
     const el = await map([
       t("ten", "10", { x: 8, y: 0 }, { joinId: "j1", fill: "seated", cue: timerCue }),
