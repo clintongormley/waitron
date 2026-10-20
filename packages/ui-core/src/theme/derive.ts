@@ -1,6 +1,12 @@
 // A port of the A841 slice-1 plan's reference, ~/waitron-campaign/a841-plan1-probes/derive-h2.mjs.
 import { contrastRatio, fromOklch, relativeLuminance, toOklch, withLightness } from "./colour.js";
-import { type RuleResult, THEME_RULES, checkRules } from "./contrast-rules.js";
+import {
+  type ContrastRule,
+  type RuleResult,
+  THEME_RULES,
+  checkRules,
+  passes,
+} from "./contrast-rules.js";
 import type { Mode, WaitronDefaults } from "./defaults.js";
 import type { ThemeChoices } from "./theme.js";
 import { type ThemeColour, THEME_COLOURS, colourToken, cornerRadii } from "./tokens.js";
@@ -49,6 +55,9 @@ const TINT_TARGETS: Readonly<
   },
 };
 
+/** The grounds the button colour sits on; its fix shade is worked out against them. */
+export const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
+
 const minRatio = (colour: string, list: readonly string[]) =>
   Math.min(...list.map((other) => contrastRatio(colour, other)));
 
@@ -71,10 +80,11 @@ function deriveAt(
   choices: ThemeChoices,
   mode: Mode,
   tintStrength: number,
+  fixed: Readonly<Record<string, string>>,
 ): Record<string, string> {
   const d = defaults[mode];
   const chosen = choices.brandColor;
-  const brand = chosen ?? d[PRIMARY]!;
+  const brand = fixed[PRIMARY] ?? chosen ?? d[PRIMARY]!;
   const dark = mode === "dark";
   const { H, C: C0 } = toOklch(brand);
   const out: Record<string, string> = {};
@@ -95,29 +105,35 @@ function deriveAt(
       out[colourToken(key)] = blend(d[colourToken(key)]!, L, C);
     }
   }
-  if (chosen === null) return out;
+  Object.assign(out, fixed);
+  if (chosen === null && !(PRIMARY in fixed)) return out;
 
-  out[colourToken("surface-lifted")] = fromOklch({
-    L: dark ? 0.34 : 0.935,
-    C: Math.min(C0, dark ? 0.04 : 0.035),
-    H,
-  });
-  out[colourToken("stepper-button")] = fromOklch({
-    L: dark ? 0.27 : 0.955,
-    C: Math.min(C0, 0.035),
-    H,
-  });
-  const grounds = ["bg", "surface", "surface-raised", "field-fill"].map((key) =>
-    get(colourToken(key)),
-  );
-  const primary = choices.brandFix[mode] === true ? brandFixShade(brand, mode, grounds) : brand;
+  out[colourToken("surface-lifted")] =
+    fixed[colourToken("surface-lifted")] ??
+    fromOklch({
+      L: dark ? 0.34 : 0.935,
+      C: Math.min(C0, dark ? 0.04 : 0.035),
+      H,
+    });
+  out[colourToken("stepper-button")] =
+    fixed[colourToken("stepper-button")] ??
+    fromOklch({
+      L: dark ? 0.27 : 0.955,
+      C: Math.min(C0, 0.035),
+      H,
+    });
+  const grounds = BRAND_GROUNDS.map(get);
+  const primary =
+    fixed[PRIMARY] ??
+    (choices.brandFix[mode] === true ? brandFixShade(brand, mode, grounds) : brand);
   const ink = dark ? fromOklch({ L: 0.16, C: Math.min(C0, 0.04), H }) : "#ffffff";
   const onPrimary =
-    contrastRatio(ink, primary) >= 4.5
+    fixed[colourToken("on-primary")] ??
+    (contrastRatio(ink, primary) >= 4.5
       ? ink
       : contrastRatio("#000000", primary) >= contrastRatio("#ffffff", primary)
         ? "#000000"
-        : "#ffffff";
+        : "#ffffff");
   const lifted = get(colourToken("surface-lifted"));
   const primaryText = until(brand, dark ? +1 : -1, [...grounds, lifted], 4.5);
   const away = relativeLuminance(onPrimary) > relativeLuminance(primary) ? -1 : +1;
@@ -151,6 +167,7 @@ function deriveAt(
     }),
     [colourToken("on-primary-disabled")]: dark ? fromOklch({ L: 0.72, C: 0.03, H }) : "#ffffff",
   });
+  Object.assign(out, fixed);
   return out;
 }
 
@@ -167,32 +184,101 @@ const failing = (defaults: WaitronDefaults, mode: Mode, tokens: Record<string, s
     (result) => !result.pass,
   );
 
+/** One mode's hand-set values, keyed by full token name. */
+export const handTokens = (
+  values: Readonly<Partial<Record<ThemeColour, string>>>,
+): Record<string, string> =>
+  Object.fromEntries(Object.entries(values).map(([key, value]) => [colourToken(key), value]));
+
+const THEMED = new Set(THEME_COLOURS.map(colourToken));
+
+/** Moves `from` in lightness, away from `against` or toward it for an at-most rule, until the rule passes or 200 steps run out. */
+function push(rule: ContrastRule, from: string, against: string): string {
+  const within = rule.kind === "at-most";
+  const darker = relativeLuminance(against) > relativeLuminance(from);
+  const dir = within === darker ? +1 : -1;
+  const step = within ? 0.002 : 0.005;
+  let { L } = toOklch(from);
+  let out = from;
+  for (let i = 0; i < 200 && !passes(rule, contrastRatio(out, against)); i++) {
+    L = Math.min(1, Math.max(0, L + dir * step));
+    out = withLightness(from, L);
+  }
+  return out;
+}
+
 export function settleMode(
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- hand-set colours are honoured from Task 7
-  _hand: Readonly<Record<string, string>>,
+  hand: Readonly<Record<string, string>>,
 ): ModeResult {
-  const tinted = Object.keys(TINT_TARGETS[mode]).map(colourToken);
-  const brandOwned = choices.brandColor !== null;
-  const tintIn = ({ rule }: RuleResult) =>
-    (tinted.includes(rule.a) || tinted.includes(rule.b)) &&
-    !(brandOwned && (rule.a === PRIMARY || rule.b === PRIMARY));
+  const isHand = (token: string) => token in hand;
+  const tinted = Object.keys(TINT_TARGETS[mode])
+    .map(colourToken)
+    .filter((token) => !isHand(token));
+  const brandOwned = choices.brandColor !== null && !isHand(PRIMARY);
+  const ownRule = ({ rule }: RuleResult) =>
+    brandOwned && (rule.a === PRIMARY || rule.b === PRIMARY);
+  const tintIn = (result: RuleResult) => {
+    const { a, b } = result.rule;
+    return (
+      (tinted.includes(a) || tinted.includes(b)) && !isHand(a) && !isHand(b) && !ownRule(result)
+    );
+  };
   let strength = 1;
   if (choices.background === "tinted") {
     for (; strength >= -1e-9; strength -= 0.1) {
-      const tokens = deriveAt(defaults, choices, mode, Math.max(0, strength));
+      const tokens = deriveAt(defaults, choices, mode, Math.max(0, strength), hand);
       if (!failing(defaults, mode, tokens).some(tintIn)) break;
     }
     strength = Math.max(0, Math.round(strength * 10) / 10);
   }
-  const written = deriveAt(defaults, choices, mode, strength);
+  const colourIn = (tokens: Record<string, string>, token: string) =>
+    (tokens[token] ?? defaults[mode][token])!;
+  const work: Record<string, string> = {};
+  let written: Record<string, string> = {};
+  let fails: RuleResult[] = [];
+  for (let round = 0; round < 60; round++) {
+    written = deriveAt(defaults, choices, mode, strength, { ...work, ...hand });
+    fails = failing(defaults, mode, written);
+    const count = fails.length;
+    const fewer = (token: string, value: string) =>
+      failing(
+        defaults,
+        mode,
+        deriveAt(defaults, choices, mode, strength, {
+          ...work,
+          [token]: value,
+          ...hand,
+        }),
+      ).length < count;
+    let moved = false;
+    for (const result of fails) {
+      if (ownRule(result)) continue;
+      const { rule } = result;
+      for (const [token, other] of [
+        [rule.a, rule.b],
+        [rule.b, rule.a],
+      ] as const) {
+        if (!THEMED.has(token) || isHand(token) || token === PRIMARY) continue;
+        const against = colourIn(written, other);
+        const value = push(rule, colourIn(written, token), against);
+        if (passes(rule, contrastRatio(value, against)) && fewer(token, value)) {
+          work[token] = value;
+          moved = true;
+          break;
+        }
+      }
+      if (moved) break;
+    }
+    if (!moved) break;
+  }
   const tokens: Record<string, string> = {};
   for (const colour of THEME_COLOURS) {
     const token = colourToken(colour);
-    tokens[token] = (written[token] ?? defaults[mode][token])!;
+    tokens[token] = colourIn(written, token);
   }
   Object.assign(tokens, cornerRadii(choices.corners, defaults));
-  return { tokens, failures: failing(defaults, mode, written), tintStrength: strength };
+  return { tokens, failures: fails, tintStrength: strength };
 }

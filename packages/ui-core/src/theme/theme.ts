@@ -1,7 +1,7 @@
-import type { Mode, WaitronDefaults } from "./defaults.js";
-import { type ModeResult, settleMode } from "./derive.js";
+import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
+import { type ModeResult, handTokens, settleMode } from "./derive.js";
 import { warningsFor } from "./warnings.js";
-import type { Corners, ThemeColour } from "./tokens.js";
+import { type Corners, type ThemeColour, THEME_COLOURS } from "./tokens.js";
 
 export type Background = "neutral" | "tinted";
 
@@ -45,17 +45,50 @@ export interface DerivedTheme {
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
+function lowerHex(value: string): string {
+  if (!HEX.test(value)) throw new RangeError(`not a #rrggbb colour: ${value}`);
+  return value.toLowerCase();
+}
+
+function normaliseHand(
+  values: Readonly<Partial<Record<ThemeColour, string>>>,
+): Partial<Record<ThemeColour, string>> {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => {
+      if (!(THEME_COLOURS as readonly string[]).includes(key)) {
+        throw new RangeError(`not a theme colour: ${key}`);
+      }
+      return [key, lowerHex(value)];
+    }),
+  );
+}
+
 export function normaliseChoices(choices: ThemeChoices): ThemeChoices {
+  const handSet = {
+    light: normaliseHand(choices.handSet.light),
+    dark: normaliseHand(choices.handSet.dark),
+  };
   const { brandColor } = choices;
-  if (brandColor === null) return { ...choices, brandFix: {} };
-  if (!HEX.test(brandColor)) throw new RangeError(`not a #rrggbb colour: ${brandColor}`);
-  return { ...choices, brandColor: brandColor.toLowerCase() };
+  if (brandColor === null) return { ...choices, brandFix: {}, handSet };
+  const brandFix = { ...choices.brandFix };
+  for (const mode of MODES) if (handSet[mode].primary !== undefined) delete brandFix[mode];
+  return { ...choices, brandColor: lowerHex(brandColor), brandFix, handSet };
 }
 
 export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices): DerivedTheme {
   const normalised = normaliseChoices(choices);
-  const light: ModeResult = settleMode(defaults, normalised, "light", {});
-  const dark: ModeResult = settleMode(defaults, normalised, "dark", {});
+  const light: ModeResult = settleMode(
+    defaults,
+    normalised,
+    "light",
+    handTokens(normalised.handSet.light),
+  );
+  const dark: ModeResult = settleMode(
+    defaults,
+    normalised,
+    "dark",
+    handTokens(normalised.handSet.dark),
+  );
   return {
     light: light.tokens,
     dark: dark.tokens,

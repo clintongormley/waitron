@@ -77,6 +77,7 @@ for (const brandColor of BRANDS) {
   }
 }
 
+// Reads the totals the tests above collect, so it holds only when every one of them ran first, in order.
 test("the sweep's totals match the reference's", () => {
   expect({
     cases: totals.cases,
