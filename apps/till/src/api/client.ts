@@ -4253,7 +4253,7 @@ export class TillApi {
     );
   }
 
-  /** The active reasons a cancel, a give-away or a discount can be made under →
+  /** The reasons a cancel, a give-away or a discount can be made under →
    * `GET /api/adjustment-reasons`. */
   listAdjustmentReasons(): Promise<AdjustmentReason[]> {
     return this.#request<AdjustmentReason[]>("/api/adjustment-reasons", "GET");

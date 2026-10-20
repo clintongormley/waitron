@@ -382,7 +382,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #movesOut = 0;
   /** Where a pointer drag picked its row up, once it has moved it; null otherwise. */
   #dragFrom: number | null = null;
-  /** A list read arrived while a move was unsaved, so it was not shown. */
+  /** A list read arrived while a grip was held or a move was unsaved, so it was not shown. */
   #readDropped = false;
   /** Order saves run one after another along this chain. */
   #saving: Promise<void> = Promise.resolve();

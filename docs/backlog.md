@@ -1405,6 +1405,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **The kitchen and expo screens still show allergens as text chips.** A668 brings icons to the
   editor, the till's buttons and its order list, not to these screens.
 
+- **A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
+  tested).** `apps/dashboard/src/widgets/course-list.ts` holds an incoming list only while a move
+  is unsaved (`#readDropped = this.#movesOut > 0`), and a pointer drag saves only on drop, so a live
+  list arriving mid-drag looks to be applied under the finger. A758-2 fixed the same shape on the
+  Voids and comps page by holding the list while `ReorderController.dragging` is true. Write the
+  failing test first.
+
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 

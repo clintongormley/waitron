@@ -208,7 +208,7 @@ export class TillAdjustmentDialog extends LitElement {
   @property() kind: AdjustKind = "comp";
   @property({ type: Boolean }) combined = false;
   @property({ attribute: false }) target: AdjustTarget | null = null;
-  /** The venue's active reasons; the form offers those allowing the action. */
+  /** The venue's reasons; the form offers those allowing the action. */
   @property({ attribute: false }) reasons: AdjustmentReason[] = [];
   /** The server's answer to the last `adjust-preview`; set with {@link choice}, the dialog asks for
    * confirmation. */

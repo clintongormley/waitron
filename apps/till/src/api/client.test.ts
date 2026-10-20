@@ -2461,7 +2461,7 @@ describe("TillApi", () => {
       note: null,
     };
 
-    it("listAdjustmentReasons GETs the active reasons", async () => {
+    it("listAdjustmentReasons GETs the reasons", async () => {
       const reasons = [
         {
           id: "reason-1",
