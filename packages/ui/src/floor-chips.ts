@@ -41,6 +41,7 @@ export const floorChipStyles = css`
 
   .chip wt-icon {
     flex: none;
+    color: inherit;
   }
 
   .chip.tone-muted {

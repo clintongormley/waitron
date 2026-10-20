@@ -169,6 +169,13 @@ describe("till-floor-screen: a table holding dishes", () => {
     expect(style.backgroundColor).toBe("rgb(10, 20, 30)");
     expect(style.borderTopColor).toBe("rgb(10, 20, 30)");
     expect(style.color).toBe("rgb(200, 210, 220)");
+    const icon = badge.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-icon",
+    )!;
+    await icon.updateComplete;
+    expect(getComputedStyle(icon.shadowRoot!.querySelector("svg")!).fill).toBe(
+      "rgb(200, 210, 220)",
+    );
   });
 
   it("keeps the held and Time to fire icons at full size when a narrow card wraps their words", async () => {

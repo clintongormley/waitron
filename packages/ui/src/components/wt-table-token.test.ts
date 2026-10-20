@@ -227,6 +227,19 @@ describe("the fire-due chip", () => {
     expect(icon.width).toBe(icon.height);
   });
 
+  test("paints its icon in its words' on-warning colour", async () => {
+    const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
+      fireDue: "Time to fire",
+    });
+    host.style.setProperty("--wt-color-on-warning", "rgb(13, 14, 15)");
+    host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+    const icon = chip(el)!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-icon",
+    )!;
+    await icon.updateComplete;
+    expect(getComputedStyle(icon.shadowRoot!.querySelector("svg")!).fill).toBe("rgb(13, 14, 15)");
+  });
+
   test("spaces the fire icon from its words by the smallest spacing token", async () => {
     const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
       fireDue: "Time to fire",
@@ -335,6 +348,22 @@ describe("the signal chips", () => {
     expect(wordLines(held!)).toBeGreaterThan(1);
     const icon = held!.querySelector("wt-icon")!.getBoundingClientRect();
     expect(icon.width).toBe(icon.height);
+  });
+
+  test("paints a chip's icon in the chip's own colour", async () => {
+    const el = await mountToken(
+      table({
+        state: "open-tab",
+        chips: [{ key: "k", text: "Words", tone: "primary-filled", icon: "held" }],
+      }),
+    );
+    host.style.setProperty("--wt-color-on-primary", "rgb(13, 14, 15)");
+    host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+    const icon = chips(el)[0]!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-icon",
+    )!;
+    await icon.updateComplete;
+    expect(getComputedStyle(icon.shadowRoot!.querySelector("svg")!).fill).toBe("rgb(13, 14, 15)");
   });
 
   test("a primary-filled chip paints on the primary and on-primary tokens", async () => {

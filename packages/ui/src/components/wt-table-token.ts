@@ -208,6 +208,7 @@ export class WtTableToken extends LitElement {
 
       .badge.fire-due wt-icon {
         flex: none;
+        color: inherit;
       }
 
       .badge.fire-due {

@@ -548,6 +548,7 @@ export class TillFloorScreen extends LitElement {
       /* Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
       .badge.fire-due wt-icon {
         flex: none;
+        color: inherit;
       }
 
       .badge.fire-due {
