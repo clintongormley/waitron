@@ -57,7 +57,7 @@ These anchors refer to the plan base. No test, restore, migration, isolation pro
 
 ## Interfaces and file responsibilities
 
-Everything in this section is a **planned interface**, not an existing export. `Environment` is the structural literal union `"preproduction" | "production"`, matching existing `DeploymentEnvironment` without a package-to-app import; `BackupValue`, `BackupRow`, and `BackupQuery` come from the new store file below. All digests are lowercase full SHA-256; revisions are full 40-hex. Copy/freeze admitted inputs so later mutation cannot change a bound request.
+This section specifies the final interfaces. The task checklists and execution checkpoint below distinguish implemented exports from planned ones. `Environment` is the structural literal union `"preproduction" | "production"`, matching existing `DeploymentEnvironment` without a package-to-app import; `BackupValue`, `BackupRow`, and `BackupQuery` come from the new store file below. All digests are lowercase full SHA-256; revisions are full 40-hex. Copy/freeze admitted inputs so later mutation cannot change a bound request.
 
 ### Query and owner semantics
 
@@ -341,30 +341,30 @@ Each task's checklist means: write the named red assertions; run its exact comma
 **Files:** create `packages/module/src/backup-verification.ts`, `packages/module/src/backup-verification.test.ts`; modify `packages/module/src/module.ts`, `packages/module/src/index.ts`, `packages/module/package.json`; create the **type declarations only** from the query contract in `packages/store/src/backup-query.ts` and export them from `packages/store/src/index.ts` (Task 2 adds implementation).
 **Consumes:** existing module/backup interfaces. **Produces:** exact owner interfaces, `BackupVerificationUnsupported`, `BackupCheckUnavailable` and declaration/result validators above; store value/query types. Module gets a direct store type dependency, never db-to-module.
 
-- [ ] RED `requires explicit verification declarations`, `data effects name independent checks`, `activation effects cannot claim executed checks`, `rejects duplicate effects unknown versions and free-form results`. Assert missing semantics refuses; fiscal-none's explicit empty contract is accepted.
-- [ ] Run `pnpm --filter @waitron/module exec vitest run src/backup-verification.test.ts`; expect missing validator, then incorrect acceptance assertions red.
-- [ ] Implement strict declarations/results (aggregate status must agree with check statuses) and optional seat; preserve ordinary descriptors/restore hook semantics. GREEN the same command, then `pnpm --filter @waitron/module typecheck`.
-- [ ] Commit `git commit -s -m "feat(module): declare backup verification semantics"`.
+- [x] RED `requires explicit verification declarations`, `data effects name independent checks`, `activation effects cannot claim executed checks`, `rejects duplicate effects unknown versions and free-form results`. Assert missing semantics refuses; fiscal-none's explicit empty contract is accepted.
+- [x] Run `pnpm --filter @waitron/module exec vitest run src/backup-verification.test.ts`; expect missing validator, then incorrect acceptance assertions red.
+- [x] Implement strict declarations/results (aggregate status must agree with check statuses) and optional seat; preserve ordinary descriptors/restore hook semantics. GREEN the same command, then `pnpm --filter @waitron/module typecheck`.
+- [x] Commit `git commit -s -m "feat(module): declare backup verification semantics"`.
 
 ### Task 2: Enforce read-only access beneath types
 
 **Files:** modify `packages/store/src/backup-query.ts`, `packages/store/src/index.ts`; create `packages/store/src/backup-query.test.ts`.
 **Consumes:** Task 1 query types and a closed SQLite path. **Produces:** `openBackupQuery(databasePath)` above.
 
-- [ ] RED `serves bound SELECT and recursive reads`, `refuses UPDATE DELETE INSERT from a cast callback`, `refuses PRAGMA query_only OFF attachments DDL RETURNING writes and extensions`, `closes on iteration failure`. Assert engine refusal, unchanged whole rows and no new attached file, while legitimate reads pass.
-- [ ] Run `pnpm --filter @waitron/store exec vitest run src/backup-query.test.ts`; expect missing implementation then writable-fixture assertions red.
-- [ ] Implement readOnly/query-only/default-deny authorizer and private close; no ordinary store change. Unsupported authorizer is unavailable, not fallback. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(store): enforce query-only backup reads"`.
+- [x] RED `serves bound SELECT and recursive reads`, `refuses UPDATE DELETE INSERT from a cast callback`, `refuses PRAGMA query_only OFF attachments DDL RETURNING writes and extensions`, `closes on iteration failure`. Assert engine refusal, unchanged whole rows and no new attached file, while legitimate reads pass.
+- [x] Run `pnpm --filter @waitron/store exec vitest run src/backup-query.test.ts`; expect missing implementation then writable-fixture assertions red.
+- [x] Implement readOnly/query-only/default-deny authorizer and private close; no ordinary store change. Unsupported authorizer is unavailable, not fallback. GREEN same command.
+- [x] Commit `git commit -s -m "feat(store): enforce query-only backup reads"`.
 
 ### Task 3: Generate inventory without enabled-module filtering
 
 **Files:** create `packages/composition/src/backup-verification.ts`, `packages/composition/src/backup-verification.test.ts`; modify `packages/composition/src/index.ts`.
 **Consumes:** Task 1 declarations and `ALL_MODULES`. **Produces:** `backupVerificationInventory(modules:readonly WaitronModule[]):readonly {module:WaitronModule;verification:BackupVerificationContribution}[]`.
 
-- [ ] RED `refuses each missing owner independently`, `includes inactive and schema-zero descriptors`, `refuses duplicate names dependency gaps and unknown semantics`, `never substitutes fiscal-none`. Remove each contribution from a complete synthetic descriptor set and require unsupported; inactive fiscal remains required.
-- [ ] Run `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts`; expect missing export then omitted-owner assertion red.
-- [ ] Implement complete dependency/semantics validation. Do not pretend real composition has contributions yet; Task 21 adds its passing real-inventory assertion. GREEN same command.
-- [ ] Commit `git commit -s -m "feat(composition): require complete verification inventory"`.
+- [x] RED `refuses each missing owner independently`, `includes inactive and schema-zero descriptors`, `refuses duplicate names dependency gaps and unknown semantics`, `never substitutes fiscal-none`. Remove each contribution from a complete synthetic descriptor set and require unsupported; inactive fiscal remains required.
+- [x] Run `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts`; expect missing export then omitted-owner assertion red.
+- [x] Implement complete dependency/semantics validation. Do not pretend real composition has contributions yet; Task 21 adds its passing real-inventory assertion. GREEN same command.
+- [x] Commit `git commit -s -m "feat(composition): require complete verification inventory"`.
 
 ### Task 4: Bind strict wire input, result and target descriptors
 
@@ -658,3 +658,38 @@ A fresh-context read of the complete draft found two gaps: differing captured/pl
 ## Author self-review
 
 Coverage: owner/query/inventory Tasks 1–3; strict binding/build identity 4–5; core/reporting/fiscal data 6–10; vault/membership/fiscal/identity/payment secrets 11–14 including 11a; remaining owners 15–18/21; compatibility/strict archive/real placement 19–20 (including 19a); host secrets/cleanup 22–23; authority and installed omissions 24; negotiated v2/restart/pre-placement 25–26; branch/release evidence 27. All acceptance outcomes above are future assertions. No implementation or test was written or run to author this plan.
+
+## Execution checkpoint, 20 October 2026
+
+Tasks 1–3 are implemented. `@waitron/module` exports strict contribution/result validators and
+private bounded error signals. `@waitron/store` supplies the independently restricted query handle.
+`@waitron/composition` requires every supplied descriptor's semantics without selecting an enabled
+subset. The real descriptors gain their checks in the later owner tasks; this foundation does not
+verify an artifact or qualify a backup for recovery.
+
+| Command                                                                                                        | Observed result                                                           |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `pnpm --filter @waitron/module exec vitest run src/backup-verification.test.ts`                                | 77 passed after missing-export and behavioral failures.                   |
+| `pnpm --filter @waitron/store exec vitest run src/backup-query.test.ts`                                        | 23 passed after missing-export and missing-authorizer failures.           |
+| `pnpm --filter @waitron/composition exec vitest run src/backup-verification.test.ts`                           | 29 passed after missing-export, missing-owner and invalid-name failures.  |
+| `pnpm --filter @waitron/module test:coverage`                                                                  | 172 passed; statements 99.60%, branches 99.46%, functions and lines 100%. |
+| `pnpm --filter @waitron/store test:coverage`                                                                   | 256 passed; all four measures 100%.                                       |
+| `pnpm --filter @waitron/composition test:coverage`                                                             | 62 passed; all four measures 100%.                                        |
+| `pnpm --filter @waitron/module typecheck`, and the same for store and composition                              | Each passed. Scoped ESLint also passed.                                   |
+| `pnpm exec vitest run scripts/workspace-cycles.test.ts`                                                        | 15 passed after adding the module-to-store dependency.                    |
+| `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts` | 20 passed with both test files unchanged.                                 |
+
+Mixed check outcomes use `unsupported`, then `needs_authority`, then `invalid`, then `passed` as
+precedence. An unfinished required check cannot certify an integrity verdict. `not_applicable` is
+accepted only as the sole passed check after the host admits that state; it cannot be declared as
+an ordinary data check.
+
+The store tests use minimal real SQLite files because importing the venue helper from db into
+store would close the existing db-to-store dependency loop. They close their handles and remove
+their temporary directories. On Node v26.11.1, a function denied by the authorizer returns code 1
+with `not authorized to use function: <name>`; the other tested authorization denials return 23.
+The function cases assert the exact authorization message as well as the code.
+
+Task 4 is next. Artifact placement, module-owned checks, installed independent guard-removal
+controls, qualified v2 recovery, branch review, current-head CI and joint release acceptance remain
+open. No source-level unit result in this checkpoint establishes a successful archive verification.
