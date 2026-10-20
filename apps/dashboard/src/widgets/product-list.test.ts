@@ -1061,10 +1061,10 @@ describe("product-list", () => {
           (cell) => cell.textContent!.replace(/[▲▼]/g, "").trim() === "Standalone",
         ),
       ).toBe(true);
-      const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      expect(table.columns.find((column) => column.key === "ordering")!.filter!.label).toBe(
-        "Standalone ordering by",
-      );
+      const section = root
+        .querySelector('wt-combobox[data-filter="ordering"]')!
+        .closest(".filter-section")!;
+      expect(section.querySelector("h3")!.textContent!.trim()).toBe("Standalone ordering by");
       cleanupWidgets();
       setLocale("es-ES");
       const { el: spanish } = await mountWidget<ProductList>("dashboard-product-list", {

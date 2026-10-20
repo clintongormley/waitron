@@ -1151,8 +1151,7 @@ export class ProductList extends LitElement {
           if (courseId === null) return variant ? nothing : "—";
           return this.#courseName(courseId);
         },
-        sortValue: ({ product, variant }) =>
-          this.#courseRank(variant ? variant.effective.courseId : product.courseId),
+        sortValue: ({ product }) => this.#courseRank(product.courseId),
         ...(this.courses.length
           ? {
               filter: {
