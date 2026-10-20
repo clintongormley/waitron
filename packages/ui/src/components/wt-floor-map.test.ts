@@ -767,7 +767,10 @@ describe("the whole table shows its state", () => {
     expect([cue.fontSize, cue.whiteSpace, cue.overflow]).toEqual(["11px", "nowrap", "hidden"]);
     const icon = getComputedStyle(within(el, "cue", "t")!.querySelector("wt-icon")!);
     expect([icon.flexShrink, icon.flexGrow]).toEqual(["0", "0"]);
-    expect(icon.color).toBe(cue.color);
+    host.style.setProperty("--wt-color-text", "rgb(1, 1, 1)");
+    host.style.setProperty("--wt-color-on-table-free", "rgb(2, 3, 4)");
+    expect(icon.color).toBe("rgb(2, 3, 4)");
+    expect(within(el, "caption", "t")!.hasAttribute("data-fill")).toBe(false);
   });
 
   it("cuts a long cue with an ellipsis", async () => {
@@ -791,6 +794,24 @@ describe("the whole table shows its state", () => {
     const words = await sized(36, { cue: { icon: null, text: "21:00" } });
     expect(within(words, "cue", "t")!.querySelector("wt-icon")).toBeNull();
     expect(within(words, "cue", "t")!.textContent!.trim()).toBe("21:00");
+  });
+
+  it("rings a table needing clearing outside its dashes", async () => {
+    const el = await map(
+      [t("c", "C", {}, { fill: "danger", outline: "clearing", pulse: "forgotten" })],
+      { reducedMotion: false },
+    );
+    host.style.setProperty("--wt-space-1", "6px");
+    const shape = within(el, "shape", "c")!;
+    expect(shape.clientLeft).toBe(6);
+    const ring = pulseOf(el, "c")!.getBoundingClientRect();
+    const box = shape.getBoundingClientRect();
+    expect([ring.left, ring.top, ring.right, ring.bottom]).toEqual([
+      box.left,
+      box.top,
+      box.right,
+      box.bottom,
+    ]);
   });
 
   it("draws the name alone when there is no cue", async () => {

@@ -282,6 +282,11 @@ export class WtFloorMap extends LitElement {
         border: var(--wt-space-1) dashed var(--wt-color-warning);
       }
 
+      /* Out to the dashes' outer edge, so the ring does not paint over them. */
+      [part="shape"][data-outline="clearing"] .pulse {
+        inset: calc(var(--wt-space-1) * -1);
+      }
+
       [part="table"][data-held] [part="shape"] {
         border-color: var(--wt-color-primary);
         box-shadow: inset 0 0 0 1px var(--wt-color-primary);
@@ -994,6 +999,7 @@ export class WtFloorMap extends LitElement {
         cue !== null
           ? html`<span part="caption" data-fill=${merged ? first.fill : nothing}
               ><span part="name">${label}</span>
+              <!-- The space: axe reads the name and the cue as one word without it. -->
               <span part="cue"
                 >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${
                   cue.text === "" ? nothing : html`<span class="cue-text">${cue.text}</span>`
