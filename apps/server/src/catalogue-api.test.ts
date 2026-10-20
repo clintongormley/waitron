@@ -2814,6 +2814,7 @@ describe("mountCatalogueApi — products", () => {
           unitPrice: "2.40",
           vatClass: "general",
           primaryCategoryId: categoryId,
+          courseId: null,
         },
       }),
       expect.objectContaining({
@@ -2826,6 +2827,7 @@ describe("mountCatalogueApi — products", () => {
           unitPrice: "2.00",
           vatClass: "reduced",
           primaryCategoryId: categoryId,
+          courseId: null,
         },
       }),
     ]);

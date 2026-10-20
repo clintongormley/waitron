@@ -151,6 +151,7 @@ const bunVariant = {
   unitPrice: "1.00",
   available: true,
   active: true,
+  courseId: null,
 };
 
 /** The staff name and the customer-facing name deliberately DIFFER, so a test cannot pass by reading
@@ -194,6 +195,7 @@ function product(
     manualAllergens: null,
     image: null,
     color: null,
+    courseId: null,
     ...rest,
   };
   return {
@@ -206,6 +208,7 @@ function product(
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
         primaryCategoryId: base.primaryCategoryId,
+        courseId: variant.courseId ?? base.courseId,
       },
     })),
   };
@@ -731,6 +734,7 @@ describe("product-list", () => {
             unitPrice: "4.00",
             available: true,
             active: true,
+            courseId: null,
           },
           {
             id: "large",
@@ -741,6 +745,7 @@ describe("product-list", () => {
             unitPrice: "7.50",
             available: true,
             active: true,
+            courseId: null,
           },
         ],
       }),
@@ -1109,6 +1114,7 @@ describe("product-list", () => {
               unitPrice: "2.00",
               available: true,
               active: true,
+              courseId: null,
             },
             {
               id: "large",
@@ -1119,6 +1125,7 @@ describe("product-list", () => {
               unitPrice: "3.00",
               available: true,
               active: true,
+              courseId: null,
             },
           ],
         }),
@@ -1317,6 +1324,7 @@ describe("product-list", () => {
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "food",
+                courseId: null,
               },
             },
           ],
@@ -1360,6 +1368,7 @@ describe("product-list", () => {
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "category-1",
+                courseId: null,
               },
             },
             {
@@ -6734,6 +6743,7 @@ describe("A668 effective allergen cells", () => {
                   vatClass: "reduced",
                   primaryCategoryId: null,
                   allergens: {},
+                  courseId: null,
                 },
               },
             ],
@@ -6771,7 +6781,13 @@ describe("A668 effective allergen cells", () => {
       id,
       name: id,
       allergensInherited: false,
-      effective: { unitPrice: "1.00", vatClass: "reduced", primaryCategoryId: null, allergens },
+      effective: {
+        unitPrice: "1.00",
+        vatClass: "reduced",
+        primaryCategoryId: null,
+        allergens,
+        courseId: null,
+      },
     });
     const { el, table, root } = await mountTree({
       categories: [],

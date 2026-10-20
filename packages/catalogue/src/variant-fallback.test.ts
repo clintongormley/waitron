@@ -229,11 +229,13 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         available: true,
         active: true,
         allergensInherited: true,
+        courseId: null,
         effective: {
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
+          courseId: f.courseId,
         },
       },
       {
@@ -246,11 +248,13 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         available: true,
         active: true,
         allergensInherited: false,
+        courseId: f.ownCourseId,
         effective: {
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
+          courseId: f.ownCourseId,
         },
       },
     ]);
@@ -270,6 +274,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           vatClass: "reduced",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
+          courseId: f.courseId,
         },
       },
       {
@@ -280,8 +285,24 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           vatClass: "general",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
+          courseId: f.ownCourseId,
         },
       },
+    ]);
+  });
+
+  it("names the product's course, and each variant's own course and the course it is fired in", async () => {
+    const [parent] = await run((tx) => listProducts(tx, f.catalogueId));
+    expect(parent!.courseId).toBe(f.courseId);
+    expect(
+      parent!.variants.map(({ id, courseId, effective }) => ({
+        id,
+        courseId,
+        effectiveCourseId: effective.courseId,
+      })),
+    ).toEqual([
+      { id: f.wine125, courseId: null, effectiveCourseId: f.courseId },
+      { id: f.wine175, courseId: f.ownCourseId, effectiveCourseId: f.ownCourseId },
     ]);
   });
 

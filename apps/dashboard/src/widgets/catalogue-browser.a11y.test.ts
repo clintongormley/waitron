@@ -43,6 +43,7 @@ const product = (
   image: null,
   color: null,
   variants: [],
+  courseId: null,
 });
 const PRODUCTS = [
   product("cola", "Cola", "d"),

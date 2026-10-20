@@ -55,6 +55,7 @@ const PRODUCT: Product = {
   image: null,
   color: null,
   variants: [],
+  courseId: null,
 };
 
 // Two of the three ingredients already in the recipe, so both switch states are on screen.

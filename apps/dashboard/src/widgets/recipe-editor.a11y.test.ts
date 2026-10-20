@@ -61,6 +61,7 @@ const PRODUCT: Product = {
   image: null,
   color: null,
   variants: [],
+  courseId: null,
 };
 
 afterEach(cleanupWidgets);

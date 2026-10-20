@@ -138,6 +138,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
 ];
 const value: ProductEditorValue = {
@@ -2797,7 +2798,9 @@ describe("catalogue-screen", () => {
               unitPrice: "8.50",
               vatClass: "reduced",
               primaryCategoryId: "c1",
+              courseId: null,
             },
+            courseId: null,
           },
         ],
       },

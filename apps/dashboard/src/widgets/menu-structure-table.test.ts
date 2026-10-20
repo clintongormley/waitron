@@ -51,6 +51,7 @@ function product(id: string, name: string, image: string | null = null): Product
     image,
     color: null,
     variants: [],
+    courseId: null,
   };
 }
 

@@ -51,6 +51,7 @@ const products: Product[] = [
     image: "abc123.webp",
     color: null,
     variants: [],
+    courseId: null,
   },
   {
     id: "p2",
@@ -85,6 +86,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
   {
     id: "p3",
@@ -125,6 +127,7 @@ const products: Product[] = [
     image: null,
     color: null,
     variants: [],
+    courseId: null,
   },
   {
     id: "p4",
@@ -174,7 +177,9 @@ const products: Product[] = [
           unitPrice: "4.50",
           vatClass: "general",
           primaryCategoryId: "cat-1",
+          courseId: null,
         },
+        courseId: null,
       },
       {
         id: "v2",
@@ -191,9 +196,12 @@ const products: Product[] = [
           unitPrice: "3.00",
           vatClass: "reduced",
           primaryCategoryId: "cat-1",
+          courseId: null,
         },
+        courseId: null,
       },
     ],
+    courseId: null,
   },
 ];
 
