@@ -16559,7 +16559,6 @@ export class TillApp extends LitElement {
       else this.#unansweredPayments.set(key, unanswered);
       release();
     };
-    let mayBeRecorded = keyed === previous;
     let noAnswer = false;
     const card = asked.pay.method === "card";
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
@@ -16571,7 +16570,6 @@ export class TillApp extends LitElement {
             limit.signal,
             () => session === this.#operatorSession,
             () => {
-              mayBeRecorded = true;
               noAnswer = true;
             },
           ),
@@ -16581,7 +16579,7 @@ export class TillApp extends LitElement {
         await this.#onBillPaid(open, result, readerName);
       } catch (error) {
         const notChecked =
-          mayBeRecorded &&
+          (keyed === previous || noAnswer) &&
           READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
         if (card && (noAnswer || previous?.unconfirmed === true)) this.#unknownCardOutcome.add(key);
         settle(error);
