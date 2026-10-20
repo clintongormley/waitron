@@ -551,7 +551,8 @@ a single-frame `flush` and an assertion was fixed in the Printers tests alone. P
 help tooltip, row actions) report their toggle late too, and were not looked at.
 
 **Next action:** search the browser suites for a dialog close followed by `flush` and an assertion
-on a close-driven effect, and decide whether the popovers need the same treatment.
+on a close-driven effect, and for a close followed by a poll of the dialog's `open` and a check on
+what the closed screen refuses (A927), and decide whether the popovers need the same treatment.
 
 ## The browser-purity guard checks only some of venue-service's dashboard files
 
