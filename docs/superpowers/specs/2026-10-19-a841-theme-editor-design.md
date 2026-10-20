@@ -631,7 +631,7 @@ Product text, English (Spanish to be written with the strings):
 | Preview, under its heading | Each screen shows one version, as its own Theme setting says: Light, Dark or Follow device. |
 | Preview panels | Light version · Dark version |
 | Under Brand colour, while the dark version has no own colour | Pick a different colour for dark screens |
-| Under Brand colour, once it has | Buttons on dark screens: {colour}, set by hand · Use the brand colour |
+| Under Brand colour, once it has | Buttons on dark screens: {colour}, set by hand · Use the brand colour (a link that wraps onto its own line drops the "·"; so does Undo) |
 | Name dialog (Save as new theme, Make a copy, Rename, first save of Waitron's) | Name this theme · Name · Use it on every screen now · Back · Save |
 | Name refused | A theme with this name already exists. / "Waitron" is the built-in theme's name. Pick another. |
 | Switch dialog | Use {name} on every screen? · Every dashboard changes now, and every signed-in till within 15 seconds. · Text on the tills changes size too. · Hard to read: {lines} · Back · Use it |
@@ -911,12 +911,15 @@ on its shape):
 - **The editor's Typeface field** draws its choices from the same list, so a new font appears there
   without a new control. **Its preview is not ready for an uploaded font.** The preview panels draw
   the draft from a stylesheet inside the Look card's shadow root (section 10), and a font rule there
-  does nothing. Measured by the round-8 reviewer and re-run (`a841q8-design/font-probe/fontprobe.mjs`
-  in the campaign folder, Playwright's Chromium 156.0.8078.4, a macOS script face served as
-  `/venue.ttf`, a span set in `"VenueFace", monospace` at 40 px): no rule, the control, measured
-  600 px; the `@font-face` rule in a sheet adopted by a shadow root, with the span inside it, 600 px
-  and no request for the font file; the same rule adopted by the document, 327 px both in the page
-  and inside the shadow root, with one request. So the later item must register each font for the
+  does nothing. Measured with the round-9 reviewer's per-case probe, extended and re-run
+  (`a841q8-design/font-probe/phases.mjs` in the campaign folder, output `phases-output.txt`;
+  Playwright's Chromium 156.0.8078.4; a fresh page per case, font requests counted per page; a
+  macOS script face served as `/venue.ttf`; a span inside a shadow root set in `"VenueFace",
+  monospace` at 40 px): no rule, the control, 600 px and 0 requests; the `@font-face` rule in a
+  sheet adopted by the shadow root, 600 px and 0 requests; the same rule in a sheet adopted by the
+  document, 327 px and 1 request; `document.fonts.add(new FontFace(…))`, 327 px and 1 request. (The
+  round-8 probe beside it, `fontprobe.mjs`, gives the same widths but counts requests for the whole
+  page.) So the later item must register each font for the
   whole page — an `@font-face` rule in a page-level sheet, or `document.fonts.add(new FontFace(…))`
   — and let the preview use it from there. WebKit was not measured.
 
@@ -1562,15 +1565,41 @@ nothing and left two holes):
   dots when the department names a logo, otherwise `printedLogo`. A department that names a logo
   whose pictures cannot be read still prints none, as today, rather than the venue's: the fallback
   follows the name, as `resolveReceiptTrim` does.
-- **When the department's receipt settings cannot be read, no logo prints** (ruled for round 8),
-  never a possibly wrong one: the department may have its own logo, and the venue's would then be
-  the wrong picture. That is today's result — a failed read answers `{ receipt: {}, logo: null }`
-  and prints nothing (`packages/venue-service/src/department-receipts.ts:230-240`) — but today it
-  cannot be told apart from a department with no receipt row, which answers the same
-  (`:227`). So the build makes the failure visible to the print paths: `readPrintedDepartmentReceipt`
-  says the read failed (for example `readFailed: true` beside the empty answer), and the receipt,
-  the A4 invoice, the ticket view and the preview take no logo at all in that case, the sale still
-  printing as today.
+- **When the department's receipt settings cannot be trusted, no logo prints** (ruled in rounds 8
+  and 9), never a possibly wrong one: the department may have its own logo, and the venue's would
+  then be the wrong picture. Every one of these cases answers `{ receipt: {}, logo: null }` today
+  (all in `packages/venue-service/src/department-receipts.ts`), exactly what a department that
+  exists with no receipt row answers (`:228-229`, pinned by `department-receipts.test.ts:63-69`),
+  so today they print nothing only because nothing else can print:
+  1. **The read throws**: the `catch` answers the empty receipt (`:230-240`; pinned by the
+     "optional SELECT failure" case, `department-receipts.test.ts:253`).
+  2. **The stored document is not a JSON object**: invalid JSON is read as `{}`
+     (`validDocument`, `:34-38`), and a valid `null`, `[]` or `42` yields no field because every
+     field is read with `json_type`/`json_extract` on it (`stringField`, `:40-45`); pinned by the
+     "contains imported %s" cases (`department-receipts.test.ts:171-176`). The configuration import
+     refuses a non-object document (`packages/venue-service/src/configuration-transfer.ts:676-686`),
+     so this needs some other write — but the read must not assume there is none.
+  3. **A logo name is stored but the read drops it**: not text, or longer than 255 bytes
+     (`stringField("logo", 255)`, `:77`, `:40-45`), or not a library file name
+     (`MEDIA_FILENAME`, `parseReceipt`, `:122`). The import checks only `printAddress` and
+     `operationDescription` inside the document (`configuration-transfer.ts:687-698`), and
+     `grep -n logo` printed nothing for that file or `apps/server/src/configuration-transfer.ts`,
+     so an imported bad name can reach it.
+  4. **The sale names a department the read cannot find in this location** (`if (!row)`, `:227`)
+     (my call, beside the ruling's three: the department's own settings cannot be known either).
+
+  So the build makes "cannot be trusted" visible: `readPrintedDepartmentReceipt` also reads whether
+  the receipt row exists, whether its document is valid JSON whose top level is an object, and
+  whether it has a `logo` key, and answers `unreadable: true` beside the empty receipt in cases 1
+  to 4 — a document with a `logo` key and no kept name is case 3. A department with no receipt row,
+  or with a readable document that has no `logo` key, is not unreadable, and takes the venue's logo.
+  **The two that print** — the receipt (`apps/server/src/receipt-print.ts:199`) and the A4 invoice
+  (`apps/server/src/invoice-document.ts:103`) — then take no logo at all, the sale still printing as
+  today. Of **the four places that read a department's receipt settings** (the only non-test
+  callers of `readPrintedDepartmentReceipt`, `git grep`; the round-9 reviewer's list), the other two
+  are below: the till's ticket view (`receipt-presentation.ts:26`) gives no logo image address, and
+  the department Receipt tab's preview (`receipt-preview-api.ts:368`) keeps drawing the draft's own
+  logo from its library image as today, never the venue's.
 - **A sale with no department** (`receipt-print.ts:193-197`, `invoice-document.ts:98-103`) prints
   the venue's logo too; `resolveReceiptTrim` already renders "venue-only" for a null department
   (`receipt-text.ts:73`).
@@ -2267,8 +2296,13 @@ and administrators change it.
   reading twice with nothing changed gives the same hash). The library lists the use as "Logo of
   theme {name}", linking to the Appearance page. Receipts (Q5 A): a department with no receipt logo, and a sale
   with no department, print `printedLogo`; a department with its own prints its own; a department
-  whose receipt read fails prints no logo at all, on a receipt and on an A4 invoice (the control: the
-  same department with its read working prints its own logo), and the sale still prints; a configuration
+  whose receipt settings cannot be trusted — the read throws, the stored document is `{bad json`,
+  `null`, `[]` or `42`, the stored `logo` is a number, longer than 255 bytes or not a library file
+  name, or the department is not found in this location — gets, in each case: no logo on the
+  receipt, none on the A4 invoice, no logo image address in the till's ticket view, and, in the
+  Receipt tab's preview of a draft that names its logo, that logo drawn from its image, never
+  `printedLogo`; the sale still prints (the control, for every case: the same department with a
+  working read and a readable logo prints its own, and with no receipt row prints `printedLogo`); a configuration
   copy whose look names a logo with no readable pictures is refused; Remove, and Use Waitron's look,
   saved, stop the venue logo printing; reframing the image redraws `printedLogo`; the card says when
   the logo prints blank (a white image on a see-through background must, and a black one must
@@ -2408,8 +2442,9 @@ prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after
    (`guide/en/content-and-images.md:170,214-217`, `guide/es/content-and-images.md:182,229-232`).
 9. **The logo on receipts and A4 invoices** (Q5 A). The receipt and invoice paths' fallback to the
    theme in use's `printedLogo`, for departments with no receipt logo and for sales with no
-   department, the department's own still first (section 8a); the till's ticket view and the
-   department Receipt tab's preview; "How it prints" and the blank-print line on the Look card.
+   department, the department's own still first (section 8a); `readPrintedDepartmentReceipt`'s
+   `unreadable` answer and no logo on it, in all four places that read a department's receipt
+   settings (section 8a); the till's ticket view and the department Receipt tab's preview; "How it prints" and the blank-print line on the Look card.
 10. **Text size.** `textScale` in the document and in `deriveTheme`'s list with the four sizes,
     rounded to whole pixels; the slider on the Look card, its line of sizes and the preview's till
     button and bill line; the saved card's row; the equipment label and the recovery sheet keeping
@@ -2614,7 +2649,8 @@ switch, the name and the menu button, no Bills tab; the signed-out Theme chooser
 icon button it is (`packages/ui/src/components/wt-theme-chooser.ts:117-126`), its "Theme: …" name
 heard only by screen readers; the "·" kept on the same line as Undo or Use the brand colour (02, 03,
 05, 12, 13, 15, 17, 18, 25, 26, 28, 29, 30, 37, 38); and the account menu in 39 widened so "Follow
-device" stays on one line. In the editor pictures only the preview shows the draft;
+device" stays on one line. Round 9 redrew 03, 13, 18, 26, 29, 37 and 38 so a link that wraps onto a
+line of its own (Undo at phone width, Use the brand colour) drops the "·". In the editor pictures only the preview shows the draft;
 the dashboard around the card, the card included, keeps the saved look (section 4, step 4):
 
 | File | Shows |
