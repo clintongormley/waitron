@@ -1127,7 +1127,7 @@ help about anything you want very quickly."
     checked against the code, because A682 rewrites it. A682 updates
     `apps/server/src/guide/en/content-and-images.md` and `es/content-and-images.md`, and the lines
     about translations in `en/modifiers.md` and `es/modifiers.md`.
-- **Slice 4a landed (#NNNN).** The till's bar has the Help switch (on a till first in the session
+- **Slice 4a landed (#1907).** The till's bar has the Help switch (on a till first in the session
   row, before the person's menu; on a handheld after the language chooser), never in More and never
   on the kitchen display, kiosk mode or the lock screen. On a handheld at phone width, when the bar
   does not fit, the language chooser moves to the end of More, after Theme. Help goes off whenever
