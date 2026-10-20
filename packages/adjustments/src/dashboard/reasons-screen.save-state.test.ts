@@ -8,7 +8,7 @@ import "./reasons-screen.js";
 const reason: AdjustmentReason = {
   id: "reason",
   name: "Complaint",
-  names: { en: "Guest complaint", es: "Queja" },
+  names: { en: "Guest complaint", es: "Guest complaint (es)" },
   kind: "comp",
   actions: ["discount_percent"],
   maxPercentBp: 5000,

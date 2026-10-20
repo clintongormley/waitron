@@ -48,7 +48,7 @@ const noopLog: Logger = () => {};
 
 const COMPLAINT = {
   name: "Complaint",
-  names: { en: "Complaint", es: "Queja" },
+  names: { en: "Complaint", es: "Complaint (es)" },
   kind: "comp",
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
@@ -60,7 +60,7 @@ const COMPLAINT = {
 
 const OTHER = {
   name: "Other",
-  names: { en: "Other", es: "Otro" },
+  names: { en: "Other", es: "Other (es)" },
   kind: "void",
   actions: ["cancel"],
   maxPercentBp: null,
@@ -254,7 +254,7 @@ describe("adjustment reason management routes", () => {
   it.each<[string, Record<string, unknown>]>([
     ["name", { name: 7 }],
     ["names", { names: null }],
-    ["names", { names: ["Queja"] }],
+    ["names", { names: ["Complaint (es)"] }],
     ["names", { names: { es: 7 } }],
     ["actions", { actions: "comp" }],
     ["actions", { actions: ["refund"] }],
@@ -292,7 +292,7 @@ describe("adjustment reason management routes", () => {
   it.each<[string, Record<string, unknown>, unknown]>([
     [
       "a name key that is not a language",
-      { names: { en: "Complaint", "not a language": "Queja" } },
+      { names: { en: "Complaint", "not a language": "Complaint (es)" } },
       { code: "adjustment_reason.invalid", params: { field: "names" } },
     ],
     [

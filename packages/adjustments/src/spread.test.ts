@@ -129,7 +129,7 @@ describe("nearestWeighedUnitPrice", () => {
 });
 
 describe("splitDiscreteLine", () => {
-  it("splits Croquetas ×3 at €3.33 less €1.00 into 2 × €3.00 and 1 × €2.99", () => {
+  it("splits Croquettes ×3 at €3.33 less €1.00 into 2 × €3.00 and 1 × €2.99", () => {
     const rows = splitDiscreteLine(d("3.33"), "3", d("8.99"));
     expect(rows).toEqual([
       { quantity: "2.000", unitGross: "3.00" },
@@ -224,7 +224,7 @@ describe("spreadBillDiscount", () => {
       });
     });
 
-    it("takes €1.00 off Croquetas ×3 at €3.33 as 2 × €3.00 and 1 × €2.99 (€8.99)", () => {
+    it("takes €1.00 off Croquettes ×3 at €3.33 as 2 × €3.00 and 1 × €2.99 (€8.99)", () => {
       const croquetas = line("croquetas", 1, "3.33", "3", true);
       const reduction = percentReduction(croquetas.gross, 1000);
       const result = spreadBillDiscount([croquetas], reduction).get("croquetas")!;

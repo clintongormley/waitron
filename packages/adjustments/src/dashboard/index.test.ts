@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
 import { LiveData, codeMessage, createRequest } from "@waitron/dashboard-kit";
 import { ADJUSTMENTS_DASHBOARD } from "./index.js";
+import { ADJUSTMENTS_STRINGS } from "./strings.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import { emptyReport } from "../../test/report-fixtures.js";
@@ -101,7 +102,10 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
     const report = ADJUSTMENTS_DASHBOARD;
     expect(report.screen.navLabelKey).toBe("nav.adjustment_report");
     expect(ADJUSTMENTS_DASHBOARD.strings.en["nav.adjustment_report"]).toBe("Adjustment report");
-    expect(ADJUSTMENTS_DASHBOARD.strings.es["nav.adjustment_report"]).toBe("Informe de ajustes");
+    expect(ADJUSTMENTS_DASHBOARD.strings.es["nav.adjustment_report"]).toBe(
+      ADJUSTMENTS_STRINGS.es["nav.adjustment_report"],
+    );
+    expect(ADJUSTMENTS_DASHBOARD.strings.es["nav.adjustment_report"]).not.toBe("Adjustment report");
     const handle = report.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,

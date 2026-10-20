@@ -24,7 +24,7 @@ const reasons: AdjustmentReason[] = [
   {
     id: "e",
     name: "Entry error",
-    names: { en: "Keyed by mistake", es: "Error al marcar" },
+    names: { en: "Keyed by mistake", es: "Keyed by mistake (es)" },
     kind: "void",
     actions: ["cancel"],
     maxPercentBp: null,
@@ -38,7 +38,7 @@ const reasons: AdjustmentReason[] = [
   {
     id: "c",
     name: "Complaint",
-    names: { en: "Guest complaint", es: "Queja" },
+    names: { en: "Guest complaint", es: "Guest complaint (es)" },
     kind: "comp",
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,

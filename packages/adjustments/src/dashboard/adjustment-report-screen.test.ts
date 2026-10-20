@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { AdjustmentsApi } from "./client.js";
-import { ADJUSTMENTS_STRINGS } from "./strings.js";
+import { ADJUSTMENTS_STRINGS, tf } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
 import {
@@ -321,9 +321,15 @@ describe("the adjustment report", () => {
     setLocale("es-ES");
     const el = await mount(fakeApi());
     await open(el, ALEX);
-    expect(text(part(el, "by-action-heading"))).toBe("Ajustes de Alex por acción");
-    expect(text(part(el, "by-stage-heading"))).toBe("Ajustes de Alex por momento");
-    expect(text(part(el, "by-reason-heading"))).toBe("Ajustes de Alex por motivo");
+    expect(text(part(el, "by-action-heading"))).toBe(
+      tf("adjustment_report.person_by_action", { name: "Alex" }, "es"),
+    );
+    expect(text(part(el, "by-stage-heading"))).toBe(
+      tf("adjustment_report.person_by_stage", { name: "Alex" }, "es"),
+    );
+    expect(text(part(el, "by-reason-heading"))).toBe(
+      tf("adjustment_report.person_by_reason", { name: "Alex" }, "es"),
+    );
     await open(el, "guests");
     expect(text(part(el, "by-action-heading"))).toBe(
       ADJUSTMENTS_STRINGS.es["adjustment_report.guests_by_action"],
@@ -349,9 +355,9 @@ describe("the adjustment report", () => {
     setLocale("es-ES");
     const el = await mount(fakeApi());
     const alex = rows(part(el, "people")!).find((each) => each.key === ALEX)!.cells;
-    expect(alex.Tasa).toBe("4,6 %");
-    expect(alex.Descontado).toBe("37,00 €");
-    expect(text(part(el, "heading"))).toBe("Informe de ajustes");
+    expect(alex[ADJUSTMENTS_STRINGS.es["adjustment_report.column.rate"]]).toBe("4,6 %");
+    expect(alex[ADJUSTMENTS_STRINGS.es["adjustment_report.column.reduction"]]).toBe("37,00 €");
+    expect(text(part(el, "heading"))).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.title"]);
   });
 });
 
@@ -452,8 +458,8 @@ describe("the range", () => {
   it("names the days in Spanish", async () => {
     setLocale("es");
     const el = await mount(fakeApi());
-    expect(day(el, "from").label).toBe("Desde");
-    expect(day(el, "to").label).toBe("Hasta");
+    expect(day(el, "from").label).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.from"]);
+    expect(day(el, "to").label).toBe(ADJUSTMENTS_STRINGS.es["adjustment_report.to"]);
   });
 
   it("keeps the report, and says nothing is wrong, while a day is cleared or not yet whole", async () => {
@@ -1049,9 +1055,12 @@ describe("more of a long list", () => {
     setLocale("es-ES");
     const el = await mount(fakeApi({ listEntries: twoPages(() => Promise.reject({ code: "x" })) }));
     await showAll(el);
-    expect(text(part(el, "show-more"))).toBe("Mostrar más");
+    expect(text(part(el, "show-more"))).toBe(
+      ADJUSTMENTS_STRINGS.es["adjustment_report.entries.show_more"],
+    );
     await showMore(el);
-    expect(text(part(el, "more-error"))).toMatch(/^No se pudieron cargar más ajustes: /);
+    const lead = tf("adjustment_report.entries.more_error", { reason: "" }, "es");
+    expect(text(part(el, "more-error")).slice(0, lead.length)).toBe(lead);
   });
 });
 

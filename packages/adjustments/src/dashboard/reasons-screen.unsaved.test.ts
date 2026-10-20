@@ -9,7 +9,7 @@ import { AdjustmentReasonsScreen } from "./reasons-screen.js";
 const reason: AdjustmentReason = {
   id: "reason-one",
   name: "Complaint",
-  names: { en: "Guest complaint", es: "Queja" },
+  names: { en: "Guest complaint", es: "Guest complaint (es)" },
   kind: "comp",
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
@@ -181,7 +181,7 @@ it("clean and normalized reverted reason values close directly", async () => {
   await field(screen, "name", "Changed");
   await field(screen, "name", "  Complaint  ");
   await field(screen, "names-es", "Different");
-  await field(screen, "names-es", " Queja ");
+  await field(screen, "names-es", " Guest complaint (es) ");
   await field(screen, "maxPercent", "20");
   await field(screen, "maxPercent", " ");
   await field(screen, "maxAmount", "030,0");
@@ -298,7 +298,7 @@ for (const add of [false, true]) {
     const { screen } = await mount(api);
     await open(screen, add);
     await field(screen, "name", "  Discount  ");
-    await field(screen, "names-es", "  Descuento  ");
+    await field(screen, "names-es", "  Discount (es)  ");
     if (add) {
       const box = screen.shadowRoot!.querySelector<HTMLInputElement>('input[value="comp"]')!;
       box.checked = true;
@@ -311,7 +311,7 @@ for (const add of [false, true]) {
     expect(observed).toEqual([false]);
     const input = {
       name: "Discount",
-      names: add ? { es: "Descuento" } : { en: "Guest complaint", es: "Descuento" },
+      names: add ? { es: "Discount (es)" } : { en: "Guest complaint", es: "Discount (es)" },
       kind: "comp",
       actions: add ? ["comp"] : ["comp", "discount_percent"],
       maxPercentBp: null,
@@ -521,7 +521,7 @@ it("acceptance invalidates a pending discard without undoing the saved reason", 
   expect(api.updateReason).toHaveBeenCalledTimes(1);
   expect(api.updateReason).toHaveBeenCalledWith("reason-one", {
     name: "Saved edit",
-    names: { en: "Guest complaint", es: "Queja" },
+    names: { en: "Guest complaint", es: "Guest complaint (es)" },
     kind: "comp",
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,

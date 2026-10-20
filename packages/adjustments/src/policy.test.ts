@@ -15,7 +15,7 @@ import {
 const COMPLAINT: AdjustmentReason = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Complaint",
-  names: { en: "Complaint", es: "Queja" },
+  names: { en: "Complaint", es: "Complaint (es)" },
   kind: "comp",
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
@@ -42,7 +42,7 @@ const MISTAKE: AdjustmentReason = {
   position: 1,
 };
 
-/** One €25 Chuletón free on a bill with no comps yet, under a €40 bill limit for Manager, Admin. */
+/** One €25 Ribeye free on a bill with no comps yet, under a €40 bill limit for Manager, Admin. */
 function comp(overrides: Partial<CompRequest> = {}): CompRequest {
   return {
     action: "comp",
@@ -67,7 +67,7 @@ const BY_REASON = {
 } as const;
 
 describe("evaluateComp", () => {
-  it("Ana, staff, asks for one €25 Chuletón free: someone on Who can approve it", () => {
+  it("Ana, staff, asks for one €25 Ribeye free: someone on Who can approve it", () => {
     expect(evaluateComp(COMPLAINT, comp({ actorRole: "staff" }))).toEqual(BY_REASON);
   });
 

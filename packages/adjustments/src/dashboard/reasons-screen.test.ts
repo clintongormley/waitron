@@ -12,6 +12,9 @@ import {
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
+import { ADJUSTMENTS_STRINGS, actionChoice, kindName, offerName, roleName, tf } from "./strings.js";
+
+const ES = ADJUSTMENTS_STRINGS.es;
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
@@ -31,7 +34,7 @@ afterEach(() => {
 const entryError: AdjustmentReason = {
   id: "e",
   name: "Entry error",
-  names: { en: "Keyed by mistake", es: "Error al marcar" },
+  names: { en: "Keyed by mistake", es: "Keyed by mistake (es)" },
   kind: "void",
   actions: ["cancel"],
   maxPercentBp: null,
@@ -45,7 +48,7 @@ const entryError: AdjustmentReason = {
 const complaint: AdjustmentReason = {
   id: "c",
   name: "Complaint",
-  names: { en: "Guest complaint", es: "Queja" },
+  names: { en: "Guest complaint", es: "Guest complaint (es)" },
   kind: "comp",
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
@@ -91,7 +94,7 @@ it("names the reasons Filters panel in Spanish", async () => {
   const el = await mount(fakeApi());
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   expect(table.shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe(
-    "Filtros 1",
+    `${ES["adjustments.filters"]} 1`,
   );
 });
 
@@ -395,17 +398,26 @@ describe("the reasons list", () => {
     setLocale("es");
     const el = await mount(fakeApi());
     expect(el.shadowRoot!.querySelector("h1")).toBeNull();
-    expect(table(el).getAttribute("aria-label")).toBe("Motivos de ajuste");
+    expect(table(el).getAttribute("aria-label")).toBe(ES["adjustments.title"]);
     const text = rowText(el, "c");
-    expect(text).toContain("Gratis");
-    expect(rowText(el, "d")).toContain("Hasta un 30% de un artículo");
-    expect(text).toContain("Hasta 30,00\u00a0€ de una cuenta");
-    expect(text).toContain("Aprueba: Encargado, Administrador");
-    expect(rowText(el, "e")).toContain("Cancelar");
+    expect(text).toContain(offerName("comp", "es"));
+    expect(rowText(el, "d")).toContain(tf("adjustments.limit_percent", { percent: "30" }, "es"));
+    expect(text).toContain(tf("adjustments.limit_amount", { amount: "30,00\u00a0€" }, "es"));
+    expect(text).toContain(
+      tf(
+        "adjustments.approves",
+        { roles: `${roleName("manager", "es")}, ${roleName("admin", "es")}` },
+        "es",
+      ),
+    );
+    expect(rowText(el, "e")).toContain(kindName("void", "es"));
     const filter = table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       'wt-combobox[data-filter="status"]',
     )!;
-    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
+      ES["adjustments.combobox_search"],
+      ES["adjustments.combobox_no_results"],
+    ]);
   });
 });
 
@@ -452,7 +464,7 @@ describe("the reasons list's column chooser", () => {
   it("names the chooser in Spanish when the dashboard speaks it", async () => {
     setLocale("es");
     const el = await mount(fakeApi());
-    expect(chooser(el)).toBe("Personalizar columnas");
+    expect(chooser(el)).toBe(ES["adjustments.customise_columns"]);
   });
 
   it("words a column that is always shown, and the last one shown, in Spanish", async () => {
@@ -462,13 +474,13 @@ describe("the reasons list's column chooser", () => {
       alwaysShownColumnLabel: string;
       lastShownColumnLabel: string;
     };
-    expect(list.alwaysShownColumnLabel).toBe("Siempre visible");
-    expect(list.lastShownColumnLabel).toBe("Deja al menos una visible");
+    expect(list.alwaysShownColumnLabel).toBe(ES["adjustments.column_always_shown"]);
+    expect(list.lastShownColumnLabel).toBe(ES["adjustments.column_last_shown"]);
   });
 });
 
 describe("at phone width", () => {
-  const longName = "Queja del comensal por el tiempo de espera en la terraza";
+  const longName = "Guest complaint about the long wait for a table on the terrace (es)";
 
   it("puts the row controls in the last column, pinned to the table's edge", async () => {
     const el = await mount(fakeApi());
@@ -616,10 +628,10 @@ describe("the editor", () => {
     ],
     [
       "es",
-      "Quién puede aplicarlo",
-      "Quién puede autorizarlo",
-      "Lo usan directamente, hasta sus límites.",
-      "Introducen su PIN cuando lo pide otra persona o se pasa un límite.",
+      ES["adjustments.field.apply_roles"],
+      ES["adjustments.field.approver_roles"],
+      ES["adjustments.field.apply_roles_hint"],
+      ES["adjustments.field.approver_roles_hint"],
     ],
   ] as const)(
     "draws both role lists as the shared multiple dropdown, labelled, required and hinted, in %s",
@@ -653,14 +665,16 @@ describe("the editor", () => {
     expect(await closedText(el, "approverRoles")).toBe("Admin");
   });
 
-  it("names the chosen roles, and Todos for all four, in Spanish", async () => {
+  it("names the chosen roles, and everyone for all four, in Spanish", async () => {
     setLocale("es");
     const el = await mount(fakeApi());
     await press(el, "edit-c");
     await chooseRoles(el, "approverRoles", ["admin", "manager"]);
-    expect(await closedText(el, "approverRoles")).toBe("Encargado, Administrador");
+    expect(await closedText(el, "approverRoles")).toBe(
+      `${roleName("manager", "es")}, ${roleName("admin", "es")}`,
+    );
     await chooseRoles(el, "approverRoles", ["staff", "supervisor", "manager", "admin"]);
-    expect(await closedText(el, "approverRoles")).toBe("Todos");
+    expect(await closedText(el, "approverRoles")).toBe(ES["adjustments.everyone"]);
   });
 
   it("keeps a role list's change inside the screen", async () => {
@@ -707,7 +721,7 @@ describe("the editor", () => {
     await press(el, "edit-c");
     await chooseRoles(el, "applyRoles", []);
     await press(el, "save-editor");
-    expect(besideField(el, "applyRoles")).toBe("Elige al menos un rol.");
+    expect(besideField(el, "applyRoles")).toBe(ES["adjustments.error.applyRoles"]);
   });
 
   it("refuses Free under a 50% item limit", async () => {
@@ -739,9 +753,7 @@ describe("the editor", () => {
     await press(el, "edit-c");
     await type(el, "maxPercent", "50");
     await press(el, "save-editor");
-    expect(besideField(el, "maxPercent")).toBe(
-      "Gratis quita el 100 %: sube este límite o desmarca Gratis.",
-    );
+    expect(besideField(el, "maxPercent")).toBe(ES["adjustments.error.free_over_limit"]);
   });
 
   it("locks both role lists and the kind while a save is in flight", async () => {
@@ -785,7 +797,7 @@ describe("the editor", () => {
 
   it.each([
     ["en", "Kind", ["Void", "Comp"]],
-    ["es", "Tipo", ["Cancelar", "Descuento"]],
+    ["es", ES["adjustments.field.kind"], [kindName("void", "es"), kindName("comp", "es")]],
   ] as const)(
     "asks for the kind first, as a segmented choice, in %s",
     async (locale, label, words) => {
@@ -813,7 +825,7 @@ describe("the editor", () => {
     await press(el, "edit-e");
     expect(field(el, "kind").value).toBe("void");
     expect(field(el, "name").value).toBe("Entry error");
-    expect(field(el, "names-es").value).toBe("Error al marcar");
+    expect(field(el, "names-es").value).toBe("Keyed by mistake (es)");
     for (const name of ["applyRoles", "approverRoles", "maxPercent", "maxAmount"]) {
       expect(el.shadowRoot!.querySelector(`[name="${name}"]`), name).toBeNull();
     }
@@ -832,10 +844,10 @@ describe("the editor", () => {
     const el = await mount(fakeApi());
     await press(el, "edit-e");
     expect(modal(el)!.querySelector('[data-test="note-hint"]')!.textContent!.trim()).toBe(
-      "La caja pide la nota con «Indica el motivo».",
+      ES["adjustments.field.note_required_void_hint"],
     );
     expect(modal(el)!.querySelector('[data-test="void-rule"]')!.textContent!.trim()).toBe(
-      "Quién puede cancelar lo decide el permiso de devolución, no el motivo.",
+      ES["adjustments.void_rule"],
     );
   });
 
@@ -850,14 +862,18 @@ describe("the editor", () => {
     [
       "es",
       [
-        "Quién puede aplicarlo",
-        "Quién puede autorizarlo",
-        "Máximo por artículo",
-        "Máximo por cuenta",
+        ES["adjustments.field.apply_roles"],
+        ES["adjustments.field.approver_roles"],
+        ES["adjustments.field.max_percent"],
+        ES["adjustments.field.max_amount"],
       ],
-      ["Gratis (100 %)", "Un porcentaje", "Un importe"],
-      "Cómo se descuenta",
-      "Pide una nota",
+      [
+        actionChoice("comp", "es"),
+        actionChoice("discount_percent", "es"),
+        actionChoice("discount_amount", "es"),
+      ],
+      ES["adjustments.field.actions"],
+      ES["adjustments.field.note_required"],
     ],
   ] as const)(
     "shows both lists, the offers and both limits for a Comp reason (%s)",
@@ -908,9 +924,9 @@ describe("the editor", () => {
     ],
     [
       "es",
-      "Sin límite",
-      "Cuenta todo lo que este motivo ha quitado del artículo.",
-      "Lo fija el local. Por encima, se pide a alguien que pueda autorizarlo.",
+      ES["adjustments.no_limit"],
+      ES["adjustments.field.max_percent_hint"],
+      ES["adjustments.field.max_amount_hint"],
     ],
   ] as const)(
     "hints both limits and says an empty one is no limit (%s)",
@@ -934,7 +950,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledWith("c", {
       name: "Complaint",
-      names: { en: "Guest complaint", es: "Queja" },
+      names: { en: "Guest complaint", es: "Guest complaint (es)" },
       kind: "void",
       actions: ["cancel"],
       maxPercentBp: null,
@@ -977,7 +993,7 @@ describe("the editor", () => {
       "e",
       {
         name: "Entry error",
-        names: { en: "Keyed by mistake", es: "Error al marcar" },
+        names: { en: "Keyed by mistake", es: "Keyed by mistake (es)" },
         kind: "comp",
         actions: ["discount_amount"],
         maxPercentBp: null,
@@ -1013,8 +1029,8 @@ describe("the editor", () => {
   );
 
   it.each([
-    [false, "El local necesita al menos un motivo de cancelación."],
-    [true, "El local necesita al menos un motivo de cancelación que pida una nota."],
+    [false, ES["adjustments.error.void_required"]],
+    [true, ES["adjustments.error.void_required_note"]],
   ] as const)("says void_required in Spanish (withNote=%s)", async (withNote, message) => {
     setLocale("es");
     const el = await mount(
@@ -1036,7 +1052,7 @@ describe("the editor", () => {
     expect(modal(el)!.getAttribute("heading")).toBe("Edit reason");
     expect(field(el, "name").value).toBe("Complaint");
     expect(field(el, "names-en").value).toBe("Guest complaint");
-    expect(field(el, "names-es").value).toBe("Queja");
+    expect(field(el, "names-es").value).toBe("Guest complaint (es)");
     expect(actionBox(el, "cancel")).toBeNull();
     expect(actionBox(el, "comp").checked).toBe(true);
     expect(actionBox(el, "discount_percent").checked).toBe(true);
@@ -1058,7 +1074,7 @@ describe("the editor", () => {
     const el = await mount(api);
     await press(el, "edit-c");
     await type(el, "name", "Guest complaint ");
-    await type(el, "names-es", "Queja grave");
+    await type(el, "names-es", "Serious complaint (es)");
     await toggleAction(el, "comp");
     await toggleAction(el, "discount_amount");
     await type(el, "maxPercent", "12,5");
@@ -1070,7 +1086,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledWith("c", {
       name: "Guest complaint",
-      names: { en: "Guest complaint", es: "Queja grave" },
+      names: { en: "Guest complaint", es: "Serious complaint (es)" },
       kind: "comp",
       actions: ["discount_percent", "discount_amount"],
       maxPercentBp: 1250,
@@ -1092,7 +1108,7 @@ describe("the editor", () => {
     actionBox(el, "discount_amount").click();
     for (const [language, text] of [
       ["en", "Complaint about food"],
-      ["es", "Queja grave"],
+      ["es", "Serious complaint (es)"],
     ] as const) {
       const input = field(el, `names-${language}`).shadowRoot!.querySelector("input")!;
       input.value = text;
@@ -1102,7 +1118,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
       actions: ["discount_amount"],
-      names: { en: "Complaint about food", es: "Queja grave" },
+      names: { en: "Complaint about food", es: "Serious complaint (es)" },
     });
   });
 
@@ -1138,7 +1154,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1].names).toEqual({
       en: "Guest complaint",
-      es: "Queja",
+      es: "Guest complaint (es)",
     });
   });
 
@@ -1362,7 +1378,7 @@ describe("the editor", () => {
 
   it.each([
     ["en", "Most off one bill", "30.00", "before"],
-    ["es", "Máximo por cuenta", "30,00", "after"],
+    ["es", ES["adjustments.field.max_amount"], "30,00", "after"],
   ])(
     "shows the %s limit on a bill as a money field, the euro sign in it and not in its label",
     async (locale, label, value, side) => {
@@ -1390,7 +1406,7 @@ describe("the editor", () => {
       expect(described).toContain(
         locale === "en"
           ? "The venue's own amount. Above it, someone who can approve it is asked."
-          : "Lo fija el local. Por encima, se pide a alguien que pueda autorizarlo.",
+          : ES["adjustments.field.max_amount_hint"],
       );
     },
   );
@@ -1524,7 +1540,7 @@ describe("the editor's messages", () => {
     await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(el.shadowRoot!.activeElement).toBe(field(el, "names-en"));
-    await type(el, "names-es", "Queja grave");
+    await type(el, "names-es", "Serious complaint (es)");
     expect(besideField(el, "names")).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
   });
@@ -1580,7 +1596,7 @@ describe("the editor's messages", () => {
     await press(el, "add-reason");
     await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
-    expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
+    expect(await bottom(el)).toBe(ES["adjustments.fix_fields"]);
   });
 });
 
@@ -1598,10 +1614,10 @@ describe("disabling", () => {
     },
     {
       locale: "es",
-      action: "Deshabilitar",
-      heading: "Deshabilitar motivo",
-      body: "El personal dejará de ver Complaint. Seguirá en la lista como deshabilitado.",
-      filter: ["Todos los motivos", "Activo", "Deshabilitado"],
+      action: ES["adjustments.disable"],
+      heading: ES["adjustments.disable_heading"],
+      body: tf("adjustments.disable_explained", { name: "Complaint" }, "es"),
+      filter: [ES["adjustments.filter_all"], ES["adjustments.active"], ES["adjustments.disabled"]],
     },
   ])(
     "in $locale, offers Disable and confirms it",
@@ -1731,7 +1747,7 @@ describe("enabling", () => {
 
   it.each([
     { locale: "en", action: "Enable" },
-    { locale: "es", action: "Habilitar" },
+    { locale: "es", action: ES["adjustments.enable"] },
   ])(
     "in $locale, offers Enable and not Disable on a disabled reason, and Enable on no active one",
     async ({ locale, action }) => {
@@ -1749,7 +1765,7 @@ describe("enabling", () => {
 
   it.each([
     { locale: "en", status: "Active" },
-    { locale: "es", status: "Activo" },
+    { locale: "es", status: ES["adjustments.active"] },
   ])(
     "in $locale, enables at once with no confirmation, then reloads the reason as $status",
     async ({ locale, status }) => {
@@ -1946,15 +1962,15 @@ describe("the bill comp limit", () => {
     },
     {
       locale: "es",
-      heading: "Límite de descuentos por cuenta",
-      label: "Máximo descontado en una cuenta",
-      placeholder: "Sin límite",
-      hint: "Cuenta cada descuento de la cuenta, sea cual sea su motivo. Por encima, alguien de la lista siguiente introduce su PIN.",
-      roles: "Quién puede autorizar más",
+      heading: ES["adjustments.limit.heading"],
+      label: ES["adjustments.limit.field"],
+      placeholder: ES["adjustments.no_limit"],
+      hint: ES["adjustments.limit.hint"],
+      roles: ES["adjustments.limit.approvers"],
       value: "40,00",
-      chosen: "Encargado, Administrador",
-      everyone: "Todos",
-      save: "Guardar límite",
+      chosen: `${roleName("manager", "es")}, ${roleName("admin", "es")}`,
+      everyone: ES["adjustments.everyone"],
+      save: ES["adjustments.limit.save"],
     },
   ])(
     "in $locale, shows the saved amount and who can approve past it, labelled and hinted",

@@ -29,7 +29,7 @@ const MISSING = "00000000-0000-4000-8000-00000000dead";
 function complaint(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentReasonInput {
   return {
     name: "Complaint",
-    names: { en: "Complaint", es: "Queja" },
+    names: { en: "Complaint", es: "Complaint (es)" },
     kind: "comp",
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,
@@ -44,7 +44,7 @@ function complaint(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentRe
 function voidReason(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentReasonInput {
   return {
     name: "Other",
-    names: { en: "Other", es: "Otro" },
+    names: { en: "Other", es: "Other (es)" },
     kind: "void",
     actions: ["cancel"],
     maxPercentBp: null,
@@ -66,7 +66,7 @@ describe("adjustment reason operations", () => {
     expect(created).toEqual({
       id: expect.any(String),
       name: "Complaint",
-      names: { en: "Complaint", es: "Queja" },
+      names: { en: "Complaint", es: "Complaint (es)" },
       kind: "comp",
       actions: ["comp", "discount_percent"],
       maxPercentBp: null,
@@ -302,7 +302,7 @@ describe("adjustment reason operations", () => {
     expect(await inTx((tx) => findAdjustmentReason(tx, other.id))).toEqual({
       id: other.id,
       name: "Other",
-      names: { en: "Other", es: "Otro" },
+      names: { en: "Other", es: "Other (es)" },
       kind: "void",
       actions: ["cancel"],
       maxPercentBp: null,
@@ -443,7 +443,7 @@ describe("adjustment reason operations", () => {
   });
 
   it("refuses a name keyed by something that is not a language, on create and on update", async () => {
-    const names = { en: "Complaint", "not a language": "Queja" };
+    const names = { en: "Complaint", "not a language": "Complaint (es)" };
     await expect(
       inTx((tx) => createAdjustmentReason(tx, complaint({ names }))),
     ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field: "names" } });
@@ -460,9 +460,13 @@ describe("adjustment reason operations", () => {
     );
     expect(created.names).toEqual({ en: "Complaint" });
     const updated = await inTx((tx) =>
-      updateAdjustmentReason(tx, created.id, complaint({ names: { en: " ", es: "Queja" } })),
+      updateAdjustmentReason(
+        tx,
+        created.id,
+        complaint({ names: { en: " ", es: "Complaint (es)" } }),
+      ),
     );
-    expect(updated.names).toEqual({ es: "Queja" });
+    expect(updated.names).toEqual({ es: "Complaint (es)" });
   });
 
   it("reads one reason by its id, an inactive one included, and refuses an id that names none", async () => {

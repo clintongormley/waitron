@@ -17,7 +17,7 @@ function emptyResponse(): Response {
 
 const input: AdjustmentReasonInput = {
   name: "Complaint",
-  names: { en: "Complaint", es: "Queja" },
+  names: { en: "Complaint", es: "Complaint (es)" },
   kind: "comp",
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
