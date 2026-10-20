@@ -130,7 +130,7 @@ describe("AdjustmentsApi", () => {
     expect("reactivateReason" in api(vi.fn())).toBe(false);
   });
 
-  it("sends the whole active order to the reorder route", async () => {
+  it("sends the whole order to the reorder route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     await api(fetchImpl).reorderReasons(["r2", "r1"]);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/reason-order", {

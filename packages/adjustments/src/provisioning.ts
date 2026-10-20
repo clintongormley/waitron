@@ -45,7 +45,7 @@ function compReason(
   };
 }
 
-/** Design §4. "Other" asks for a note: a venue always keeps a switched-on Void reason that does
+/** Design §4. "Other" asks for a note: a venue always keeps a Void reason that does
  * (D27). */
 const STARTERS: readonly Starter[] = [
   voidReason("Entry error"),

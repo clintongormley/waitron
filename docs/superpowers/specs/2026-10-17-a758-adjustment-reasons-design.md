@@ -79,7 +79,8 @@ revision of 2026-10-19 (§3.8.2, §3.9, §9.1's cash checks, §10 item 5, §11) 
 Kept from the first version, which the owner did not object to: the page sits under **Service**
 (A755); a search bar, drag handles and a real **Delete** through `wt-delete-dialog` (no Disable,
 no Status column); a venue always keeps at least one Void reason; the migration deletes
-switched-off reasons; Square's "left without paying", "paid separately / already paid" and
+switched-off reasons (2026-10-20, A758-2: not done, as no data-migration code is written before
+go-live; see `docs/backlog/till.md`, Decisions and deliberate limits); Square's "left without paying", "paid separately / already paid" and
 "training" are not reasons (§5).
 
 ---

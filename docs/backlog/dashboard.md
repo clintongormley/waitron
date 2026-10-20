@@ -168,7 +168,7 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   (4) the form plumbing is hand-written per form: assembling the bottom message, waiting for the
   render and then calling `focusFirstInvalid`, and the state that remembers the first press and
   which refusals the person has since changed, in several different shapes across `apps/dashboard`,
-  the image library, the Stripe and SumUp forms, adjustment reasons in Venue settings,
+  the image library, the Stripe and SumUp forms, the Voids and comps page (`packages/adjustments`),
   Departments and zones, and the till's forms. A dashboard-only helper could live in
   `apps/dashboard/src/widgets/form-fields.ts`, but `packages/media` cannot import from
   `apps/dashboard` (it would be a dependency loop), so a helper meant to cover the module screens

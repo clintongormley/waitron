@@ -902,7 +902,7 @@ export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discoun
 /** A person's role, lowest first. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 
-/** One active reason from `GET /api/adjustment-reasons`, named in the operator's language. */
+/** One reason from `GET /api/adjustment-reasons`, named in the operator's language. */
 export interface AdjustmentReason {
   id: string;
   name: string;

@@ -552,7 +552,7 @@ describe("the reasons list", () => {
     );
     await type(el, "search", "zzz");
     expect(text(el.shadowRoot!.querySelector('[data-test="no-matches"]')!)).toBe(
-      "Nada coincide con tu búsqueda.",
+      ES["adjustments.no_matches"],
     );
   });
 
@@ -646,7 +646,7 @@ describe("setting the order", () => {
     expect(rowKeys(el)).toEqual(["c", "e", "d", "o"]);
     expect(api.reorderReasons.mock.calls).toEqual([[["c", "e", "d", "o"]]]);
     expect(el.shadowRoot!.activeElement).toBe(grip(el, "e"));
-    expect(announced(el)).toBe("Moved.");
+    expect(announced(el)).toBe("Entry error is now 2 of 4.");
     expect(grip(el, "e").getAttribute("aria-label")).toBe("Move reason: Entry error");
   });
 
@@ -658,7 +658,12 @@ describe("setting the order", () => {
     );
     await arrowDown(el, "e");
     await settle(el);
-    expect(announced(el)).toBe(ES["adjustments.reordered"]);
+    expect(announced(el)).toBe(
+      ES["adjustments.reordered"]
+        .replace("{item}", "Entry error")
+        .replace("{index}", "2")
+        .replace("{total}", "4"),
+    );
   });
 
   it("saves a pointer drag once, on drop", async () => {
