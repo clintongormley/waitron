@@ -25,6 +25,7 @@ import {
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { payNotice, payNoticeStyles, payScanView } from "./pay-equipment.js";
+import "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
@@ -500,6 +501,11 @@ export class TillBillPayDialog extends LitElement {
   #tip?: DraftScope<TipDraft>;
   #tipBaseline?: TipDraft;
   #active = true;
+  /** On a handheld, the reader the card payment out was sent to, and when; the phone's reader may
+   * change meanwhile. */
+  #sentReader: { id: string; name: string } | null = null;
+  #sentAt = 0;
+  #sentAmount = "";
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     this.isConnected &&
     this.#active &&
@@ -673,6 +679,7 @@ export class TillBillPayDialog extends LitElement {
     const wanted = this.#rowWantsOpen();
     if (wanted && !this.#rowWanted) this.rowOpen = true;
     this.#rowWanted = wanted;
+    if (changed.has("busy") && !this.busy) this.#sentReader = null;
     if (changed.has("busy") && this.busy) {
       if (this.#entryBaseline) this.#entry?.commit(this.#entryBaseline);
       if (this.#tipBaseline) this.#tip?.commit(this.#tipBaseline);
@@ -975,10 +982,21 @@ export class TillBillPayDialog extends LitElement {
         ${
           this.scanning
             ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
-            : this.#body()
+            : (this.#cardWaiting() ?? this.#body())
         }
       </div>
     </wt-dialog>`;
+  }
+
+  /** On a handheld, while a card it sent is at the reader, the sheet is this panel alone. */
+  #cardWaiting(): TemplateResult | null {
+    const sent = this.#sentReader;
+    if (!this.handheld || !this.busy || this.confirmationLocked || sent === null) return null;
+    return html`<till-card-waiting
+      .amount=${this.#money(this.#sentAmount)}
+      .reader=${sent.name}
+      .since=${this.#sentAt}
+    ></till-card-waiting>`;
   }
 
   #body(): TemplateResult {
@@ -1670,6 +1688,9 @@ export class TillBillPayDialog extends LitElement {
     this.shownRefusal = null;
     const reader =
       this.handheld && onReader && !this.confirmationLocked ? this.#readyReader() : null;
+    this.#sentReader = reader === null ? null : { id: reader.id, name: reader.name };
+    this.#sentAt = Date.now();
+    this.#sentAmount = preview.charged ?? preview.applied;
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
       ...(reader === null ? {} : { readerId: reader.id }),
@@ -1798,9 +1819,11 @@ export class TillBillPayDialog extends LitElement {
               ? t("bill_pay.recheck")
               : reader === null
                 ? t("bill_pay.take")
-                : t("bill_pay.take_on_reader")
-                    .replace("{amount}", () => this.#money(preview.charged!))
-                    .replace("{reader}", () => reader.name)
+                : this.shownRefusal?.code === "declined"
+                  ? t("bill_pay.retry_on_reader").replace("{reader}", () => reader.name)
+                  : t("bill_pay.take_on_reader")
+                      .replace("{amount}", () => this.#money(preview.charged!))
+                      .replace("{reader}", () => reader.name)
           }
         </wt-button>
       </wt-form-actions>`;

@@ -73,6 +73,7 @@ async function pressQr(el: HTMLElement & { updateComplete: Promise<unknown> }): 
 
 const scanBackgrounds = new Map<string, string>();
 const noticeBackgrounds = new Map<string, string>();
+const tableBackgrounds = new Map<string, string>();
 
 describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillPresentedPayDialog> = {}) =>
@@ -316,6 +317,75 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
       );
     } finally {
       stop();
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  /** Cobrar pressed on Lector 2 and the card out at the reader; declined, the reader answered. */
+  async function atTheTable(state: "waiting" | "declined") {
+    const mounted = await mount();
+    const { el } = mounted;
+    await pressed(el, "[data-presented-pay-take]");
+    el.busy = true;
+    await el.updateComplete;
+    if (state === "declined") {
+      el.busy = false;
+      el.refusal = { code: "declined" };
+      await el.updateComplete;
+    }
+    return mounted;
+  }
+
+  it.each(["waiting", "declined"] as const)(
+    "has no violations with the card at the table, %s",
+    async (state) => {
+      const { host, el } = await atTheTable(state);
+      expect(el.shadowRoot!.querySelector("till-card-waiting") !== null).toBe(state === "waiting");
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it.each([
+    ["waiting", 390],
+    ["waiting", 1280],
+    ["declined", 390],
+    ["declined", 1280],
+  ] as const)("looks right with the card at the table, %s, at %i px", async (state, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await atTheTable(state);
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      tableBackgrounds.set(`${theme}-${state}-${width}`, background);
+      if (theme === "dark") {
+        const light = tableBackgrounds.get(`light-${state}-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-presented-card-at-table-${state}-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const shown = (
+        state === "waiting"
+          ? el.shadowRoot!.querySelector<HTMLElement>("till-card-waiting")!
+          : el.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!
+      ).getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          shownLeft: shown.left - box.left,
+          shownRight: box.right - shown.right,
+          shownWidth: shown.width,
+          background,
+        }),
+      );
+    } finally {
       await page.viewport(viewport.width, viewport.height);
     }
   });

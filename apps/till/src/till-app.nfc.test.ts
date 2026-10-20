@@ -14,12 +14,17 @@ import { TillApi } from "./api/client.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { DeviceEquipment } from "./api/client.js";
+import type { BillPaymentRequest, BillPaymentResult, DeviceEquipment } from "./api/client.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import { mountWidget } from "./widgets/test-helpers.js";
 import {
+  balanceOf,
   BARRA,
   billOf,
+  inDialog,
+  money,
+  paymentOf,
+  press,
   equipmentItem,
   flush,
   LECTOR_2,
@@ -869,6 +874,70 @@ describe("the pay sheet's NFC button", () => {
     live[0]!.read(`waitron-equipment:reader:${READER_ID}`);
     await flush(el);
     expect(vi.mocked(api.setDeviceEquipment)).toHaveBeenCalledOnce();
+  });
+
+  it("a tap while a card is at the reader is picked up, and the waiting view keeps naming the reader the payment was sent to", async () => {
+    installNfc("granted");
+    let answer!: (result: BillPaymentResult) => void;
+    const takeBillPayment = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<BillPaymentResult>((done) => (answer = done)))
+      .mockImplementation(() => new Promise<BillPaymentResult>(() => {}));
+    const withLector3: DeviceEquipment = {
+      roles: [
+        roleOf("receipt", BARRA, [BARRA]),
+        roleOf("card_terminal", LECTOR_3, [LECTOR_2, LECTOR_3]),
+      ],
+    };
+    const { el, api } = await phoneApp({
+      previewBillPayment: vi.fn().mockResolvedValue({
+        kind: "allocated",
+        choice: null,
+        applied: "120.00",
+        tip: "0.00",
+        change: null,
+        charged: "120.00",
+      }),
+      takeBillPayment,
+      setDeviceEquipment: vi.fn().mockResolvedValue(withLector3),
+    });
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    const waiting = () =>
+      inDialog(el, "till-card-waiting") as
+        (HTMLElement & { updateComplete: Promise<unknown> }) | null;
+    const waitingOn = (reader: string) =>
+      t("bill_pay.waiting_on")
+        .replace("{amount}", () => money("120.00"))
+        .replace("{reader}", () => reader)
+        .replace(/\s+/g, " ");
+    expect(waiting()).not.toBeNull();
+
+    (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await flush(el);
+    expect(vi.mocked(api.setDeviceEquipment)).toHaveBeenCalledOnce();
+    await waiting()!.updateComplete;
+    expect(text(waiting()!.shadowRoot!.querySelector("[data-pay-waiting-on]"))).toBe(
+      waitingOn("Lector 2"),
+    );
+
+    answer({
+      outcome: "declined",
+      payment: paymentOf({ method: "card", entry: "reader", state: "failed" }),
+      balance: balanceOf(),
+    });
+    await flush(el);
+    expect(waiting()).toBeNull();
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(
+      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    );
+    await press(el, "[data-pay-confirm]");
+    const sent = takeBillPayment.mock.calls.map(([, request]) => request as BillPaymentRequest);
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({ readerId: "r2" });
+    expect(sent[1]).toMatchObject({ readerId: READER_ID });
+    expect(sent[1]!.submissionId).not.toBe(sent[0]!.submissionId);
   });
 
   it("a presented bill's sheet asks for NFC from its row too", async () => {

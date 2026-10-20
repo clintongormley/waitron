@@ -2276,3 +2276,149 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
     },
   );
 });
+
+describe("till-bill-pay-dialog: the card at the table (A796)", () => {
+  const cardPreview: AllocationPreview = {
+    kind: "allocated",
+    choice: null,
+    applied: "20.80",
+    tip: "0.00",
+    change: null,
+    charged: "20.80",
+  };
+  const waiting = (el: TillBillPayDialog) => root(el).querySelector("till-card-waiting");
+  const inWaiting = (el: TillBillPayDialog, selector: string) =>
+    text(waiting(el)?.shadowRoot?.querySelector(selector) ?? null);
+  const waitingOn = (reader: string) =>
+    t("bill_pay.waiting_on")
+      .replace("{amount}", () => money("20.80"))
+      .replace("{reader}", () => reader)
+      .replace(/\s+/g, " ");
+  const since = (time: string) => t("bill_pay.waiting_since").replace("{time}", time);
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A handheld's card confirmation for 20,80 € on Lector 2, Cobrar pressed and the send out. */
+  async function sent(over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
+      equipment: equipmentWith(LECTOR_2),
+      ...over,
+    });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    await previewed(el, cardPreview);
+    vi.useFakeTimers();
+    await click(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+    await waiting(el)?.updateComplete;
+    return { el, confirmed };
+  }
+
+  it("while the card is at the reader, the sheet is one panel: the card, the amount on the reader, and the time waited, with no buttons", async () => {
+    const { el } = await sent();
+
+    expect(waiting(el)).not.toBeNull();
+    expect(inWaiting(el, "[data-pay-collecting]")).toBe(t("card.collecting"));
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(since("0:00"));
+    expect(root(el).querySelector("wt-button")).toBeNull();
+    expect(root(el).querySelector("[data-pay-balance]")).toBeNull();
+    expect(root(el).querySelector("till-pay-equipment")).toBeNull();
+    expect(
+      root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!.dismissible,
+    ).toBe(false);
+  });
+
+  it("counts each second it waits", async () => {
+    const { el } = await sent();
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(since("0:12"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(since("1:12"));
+  });
+
+  it("keeps naming the reader the payment was sent to when the phone's reader changes", async () => {
+    const { el } = await sent();
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
+  });
+
+  it("stops its clock when the send ends, and when the sheet goes", async () => {
+    const { el } = await sent();
+    expect(vi.getTimerCount()).toBe(1);
+
+    el.busy = false;
+    await el.updateComplete;
+    expect(waiting(el)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const again = await sent();
+    expect(vi.getTimerCount()).toBe(1);
+    again.el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("after a decline, keeps today's words and retries on the phone's reader now, as Reintentar en Lector 3", async () => {
+    const { el, confirmed } = await sent();
+    el.equipment = equipmentWith(LECTOR_3);
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(waiting(el)).toBeNull();
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    );
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "r2" }, { readerId: "r3" }]);
+  });
+
+  it("a send that gets no answer leaves the panel for the locked confirmation, as today", async () => {
+    const { el } = await sent();
+    el.confirmationLocked = true;
+    el.refusal = { code: "sending" };
+    await el.updateComplete;
+
+    expect(waiting(el)).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-unanswered-title]"))).toBe(
+      t("bill_pay.sending_title"),
+    );
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+  });
+
+  it("a counter till keeps today's muted line and its buttons while the card is at the reader", async () => {
+    const el = await mount({ way: "contribution", cardReader: "stripe_terminal" });
+    await type(el, "amount", "20.80");
+    await pick(el, "method", "card");
+    await previewed(el, cardPreview);
+    await click(el, "[data-pay-confirm]");
+    el.busy = true;
+    await el.updateComplete;
+
+    expect(waiting(el)).toBeNull();
+    expect(text(root(el).querySelector("[data-pay-collecting]"))).toBe(t("card.collecting"));
+    expect(button(el, "[data-pay-confirm]")).not.toBeNull();
+    expect(button(el, "[data-pay-back]")).not.toBeNull();
+
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
+  });
+});

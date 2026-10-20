@@ -759,3 +759,88 @@ describe("till-presented-pay-dialog: locked on a payment with no answer", () => 
     expect(field(el, "externalRef")!.value).toBe("");
   });
 });
+
+describe("till-presented-pay-dialog: the card at the table (A796)", () => {
+  const waiting = (el: TillPresentedPayDialog) => root(el).querySelector("till-card-waiting");
+  const inWaiting = (el: TillPresentedPayDialog, selector: string) =>
+    text(waiting(el)?.shadowRoot?.querySelector(selector) ?? null);
+  const waitingOn = (reader: string) =>
+    t("bill_pay.waiting_on")
+      .replace("{amount}", () => money("62.40"))
+      .replace("{reader}", () => reader)
+      .replace(/\s+/g, " ");
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function sent() {
+    const el = await mount();
+    const paid = capture<PresentedPayDetail>(el, "presented-pay");
+    vi.useFakeTimers();
+    await take(el);
+    el.busy = true;
+    await el.updateComplete;
+    await waiting(el)?.updateComplete;
+    return { el, paid };
+  }
+
+  it("shows the same panel while the card is at the reader, naming the reader it was sent to", async () => {
+    const { el } = await sent();
+
+    expect(inWaiting(el, "[data-pay-collecting]")).toBe(t("card.collecting"));
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
+    expect(root(el).querySelector("wt-button")).toBeNull();
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    await vi.advanceTimersByTimeAsync(12_000);
+    await waiting(el)!.updateComplete;
+    expect(inWaiting(el, "[data-pay-waiting-on]")).toBe(waitingOn("Lector 2"));
+    expect(inWaiting(el, "[data-pay-waiting-since]")).toBe(
+      t("bill_pay.waiting_since").replace("{time}", "0:12"),
+    );
+  });
+
+  it("stops its clock when the send ends, and when the sheet goes", async () => {
+    const { el } = await sent();
+    expect(vi.getTimerCount()).toBe(1);
+    el.busy = false;
+    await el.updateComplete;
+    expect(waiting(el)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const again = await sent();
+    again.el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("after a decline, retries on the phone's reader now, as Reintentar en Lector 3", async () => {
+    const { el, paid } = await sent();
+    el.equipment = equipmentWith(LECTOR_3);
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+    expect(text(charge(el))).toBe(
+      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    );
+    await take(el);
+    expect(paid).toEqual([
+      { method: "card", readerId: "r2" },
+      { method: "card", readerId: "r3" },
+    ]);
+  });
+
+  it("a cash payment out shows no panel", async () => {
+    const el = await mount();
+    await pick(el, "cash");
+    await type(el, "tendered", "70");
+    await take(el);
+    el.busy = true;
+    await el.updateComplete;
+    expect(waiting(el)).toBeNull();
+    expect(charge(el).loading).toBe(true);
+  });
+});
