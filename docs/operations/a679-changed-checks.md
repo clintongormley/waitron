@@ -3684,6 +3684,11 @@ pair passes 20 cases unedited. All logs are retained under Lane E's `a679-final-
 
 ## Current CI read-back and exact remaining proposals, 2026-10-20
 
+**Status pointer, 20 October 07:07:** the owner rejected the historical retirement scope and
+approved the parser patch. The live-hour replacement request and applied parser receipt are
+recorded in the final section below. The proposal status in this section records the earlier
+02:25 checkpoint.
+
 CI `39344124324` belongs to published `747c9069091214f7e6371920f476c9d3df17202a` and ends in
 failure. Fifty-two jobs pass; server shards 3 and 4 fail, and the aggregate CI check fails.
 Server coverage merge and publishing are skipped. All six provisioning shards and their merge
@@ -3748,3 +3753,51 @@ binding private behind an ordinary exported alias. Earlier no-test and failed-im
 counted as behavior qualification. The first file-only shard listing also returned every file for
 every index; the corrected selector probe checks complete, non-overlapping shard coverage and a
 checkout-root control.
+
+
+## Parser approval applied and live retirement replacement proposed, 2026-10-20
+
+The owner answered the two 02:25 decisions at approximately 06:15 and 06:18: request a live-hour
+retirement replacement, and approve the exact parser patch. Signed
+`175ad50ea7deb13870e2302b034ba952473aff1f` applies only the approved parser bytes,
+SHA-256 `e90d4bfde097cf0598cf1fa3bbc7b003f61bccedc4d216ef465789cc59233fa5`.
+
+Changed test checks: `apps/server/scripts/script-arguments.test.ts:18` removes register-till
+from the source-text arity expansion. At line 91, the real parser accepts one node, or one node
+with both confirmation flags in either order, through the controlled missing-operation-file
+refusal; seven unsupported shapes throw usage. It stops checking register-till's textual
+header/usage/destructure agreement. The other two commands' source-check body is unchanged.
+All 12 cases pass. This does not establish successful activation from the missing-file probe;
+the earlier real command acceptance receipts remain separate.
+
+The rejected historical-contribution patch remains unapplied. Its proposed live replacement
+changes only `apps/server/src/first-setup-retired-assignments.test.ts` and remains outside the
+feature checkout, pending the exact request in Lane E's questions at 07:07 on 20 October.
+The patch's SHA-256 is `e1cb3edc926d413273d211c91ab027327c75ab08758897de8caee8ec5cc260d5`.
+
+All 36 cases move to configured hour contributions. The proposed comparisons retain retired-hour
+reuse refusals, later-hour and independent-scope controls, activation bypass, archived public
+floors, original-document damage, malformed evidence and retained floors after outside-file
+replacement/removal. S/P independence becomes the approved same-taxpayer hour rule across
+software IDs. Register audit values become null rather than invented consultation. The new
+key-only recovery manifest replaces the old chunked public-register document; its selected
+hour/state supplies the floor. Missing archived bytes refuse before replacement claiming;
+manifest syntax, binding and digest damage refuse through the real delivery reader.
+Earlier abandoned live events remain spent; after restart, an exact selected event keeps its
+hour/time, rejects an older event's allocation ID and admits current material without changing
+setup state or journal bytes.
+
+The independently installed proposal passes all 36 cases, then passes 50 together with the
+approved parser and unchanged retired-entry HTTP pair. Types, scoped lint and formatting pass.
+Three independent omissions fail because calls resolve instead of refusing: retired-assignment
+comparison (one failed case), retained public facts (three failed, one allowed control passed),
+and the recovery statement's binding digest (one failed case). Every restored selection passes.
+The final tracked-file comparison differs only in this proposed test file; no production control
+remains modified. The 29-to-41 outer-expectation inventory (58-to-82 expect-rooted call nodes)
+is a syntax receipt, not a proof of equivalent behavior.
+
+The exact proposal, before/after family map, full old/new sources, AST inventory, failed fixture
+iterations, omitted/restored controls and final logs are retained under Lane E's local
+`receipts/a679-live-retirement-20261020-065547/`. No partial push or unchanged CI rerun occurred.
+The published failed head and unqualified next Linux split timings still require final-head CI
+once the owner approves the live replacement. Both completed whole-branch reviews are retained.
