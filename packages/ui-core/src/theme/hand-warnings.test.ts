@@ -285,6 +285,15 @@ describe("the brand colour's fix beside colours set by hand", () => {
 
     const fixed = derive(withHand(lemon, "light", { "text-muted": "#526a5b" }));
     expect(fixed.warnings).toEqual(brandAlone);
+
+    const sage = withHand(lemon, "light", { "text-muted": "#8fa898" });
+    const all = fixAll(WAITRON_DEFAULTS, sage);
+    expect([all.brandFix, all.handSet.light]).toEqual([
+      { light: true },
+      { "text-muted": "#526a5b" },
+    ]);
+    expect(derive(all).warnings).toEqual([]);
+    expect(canFixAll(WAITRON_DEFAULTS, sage)).toBe(true);
   });
 
   test("offers the button colour its fix flag paints, against colours not set by hand", () => {

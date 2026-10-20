@@ -1,9 +1,7 @@
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type ModeResult, handTokens, settleMode } from "./derive.js";
-import { warningsFor } from "./warnings.js";
-import { type Corners, type ThemeColour, THEME_COLOURS, colourToken } from "./tokens.js";
-
-const PRIMARY = colourToken("primary");
+import { nextFix, warningsFor, warns } from "./warnings.js";
+import { type Corners, type ThemeColour, THEME_COLOURS } from "./tokens.js";
 
 export type Background = "neutral" | "tinted";
 
@@ -114,29 +112,16 @@ export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeC
   for (const mode of MODES) {
     for (let round = 0; round < 50; round++) {
       const settled = settleMode(defaults, current, mode, handTokens(current.handSet[mode]));
-      const withFix = new Map(
-        warningsFor(defaults, current, mode, settled, false)
-          .filter((warning) => warning.fix !== null)
-          .map((warning) => [
-            warning.field === "brandColor" ? PRIMARY : colourToken(warning.field.split(".")[2]!),
-            warning,
-          ]),
-      );
-      if (withFix.size === 0) break;
-      let pick: ThemeWarning | undefined;
-      for (const { rule } of settled.failures) {
-        pick = withFix.get(rule.a) ?? withFix.get(rule.b);
-        if (pick) break;
-      }
-      pick ??= [...withFix.values()][0]!;
+      const next = nextFix(defaults, current, mode, settled);
+      if (next === null) break;
       current = normaliseChoices(
-        pick.field === "brandColor"
+        next.kind === "brand"
           ? { ...current, brandFix: { ...current.brandFix, [mode]: true } }
           : {
               ...current,
               handSet: {
                 ...current.handSet,
-                [mode]: { ...current.handSet[mode], [pick.field.split(".")[2]!]: pick.fix },
+                [mode]: { ...current.handSet[mode], [next.colour]: next.fix },
               },
             },
       );
@@ -147,5 +132,9 @@ export function fixAll(defaults: WaitronDefaults, choices: ThemeChoices): ThemeC
 
 /** Whether Fix and save is offered: Fix all leaves no warning. */
 export function canFixAll(defaults: WaitronDefaults, choices: ThemeChoices): boolean {
-  return deriveThemeFrom(defaults, fixAll(defaults, choices)).warnings.length === 0;
+  const fixed = fixAll(defaults, choices);
+  return MODES.every(
+    (mode) =>
+      !warns(fixed, mode, settleMode(defaults, fixed, mode, handTokens(fixed.handSet[mode]))),
+  );
 }

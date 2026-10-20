@@ -784,7 +784,8 @@ others stay as typed — which another hand-set colour can cause.
 **Fix all** — port `fixAll` (`derive-h2.mjs:386-400`), per mode: derive; in rule order, find the
 first failing rule that names a colour whose warning has a fix; take the fix of the rule's `a`
 (drawn on top) if it has one, else of its `b` (a brand fix sets `brandFix[mode]`, a hand-set fix
-replaces that value); derive again; stop when no warning has a fix (at most 50 rounds).
+replaces that value); derive again; stop when no warning has a fix (at most 50 rounds). (Fix round 1:
+each round searches fixes only in rule order up to the one it takes, `nextFix`; same result, measured.)
 
 **`blockedBy`** (lane A ruling 2026-10-20; spec lines 1875-1887) — port `blockersOf`
 (`derive-h2.mjs:406-414`): empty for a warning with a fix and for the brand colour's; for a hand-set
@@ -794,7 +795,7 @@ a rule with it; otherwise empty.
 
 **`canFixAll`** (lane A ruling 2026-10-20; spec lines 1829-1840) — whether Fix and save is offered:
 run `fixAll` and derive again; `true` exactly when no warning is left. The dialog's Fix and save
-applies `fixAll`.
+applies `fixAll`. (Fix round 1: it asks only whether anything warns, `warns`, with no fix or blocker search.)
 
 **`groupAgainst`** — the design's new product-text row (spec line 615; lane A ruling 2026-10-20,
 fills and dots alike): `station-<colour>` keys

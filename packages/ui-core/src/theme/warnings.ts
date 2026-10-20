@@ -48,13 +48,17 @@ function fixFor(
     !(rule.a in trial) &&
     !(rule.b in trial) &&
     !(brandAsPicked && (rule.a === PRIMARY || rule.b === PRIMARY));
+  const quickRules = THEME_RULES[mode].filter(
+    (rule) => (rule.a === token && cannotMove(rule.b)) || (rule.b === token && cannotMove(rule.a)),
+  );
+  // A lightness that rounds to a colour already tried gets the same answer, which was no.
+  const tried = new Set<string>();
   for (const L of order) {
     const candidate = fromOklch({ ...base, L });
-    const quick = checkRules(THEME_RULES[mode], (other) =>
+    if (tried.has(candidate)) continue;
+    tried.add(candidate);
+    const quick = checkRules(quickRules, (other) =>
       other === token ? candidate : (picked.tokens[other] ?? defaults[mode][other])!,
-    ).filter(
-      ({ rule }) =>
-        (rule.a === token && cannotMove(rule.b)) || (rule.b === token && cannotMove(rule.a)),
     );
     if (quick.some((result) => !result.pass)) continue;
     const trial = { ...hand, [token]: candidate };
@@ -93,7 +97,8 @@ function blockersOf(
   };
   const single = others.filter((other) => freedWithout([other]));
   if (single.length > 0) return single.map((other) => other.slice(PREFIX.length));
-  if (others.length === 0 || !freedWithout(others)) return [];
+  // With one other, working out all the others is the single case already tried.
+  if (others.length < 2 || !freedWithout(others)) return [];
   return others
     .filter((other) =>
       THEME_RULES[mode].some(
@@ -103,40 +108,55 @@ function blockersOf(
     .map((other) => other.slice(PREFIX.length));
 }
 
-/** `choices` must be normalised. `blockers` false leaves every `blockedBy` empty, for Fix all. */
+/** The rules failing on the brand colour as the owner picked or fixed it, against colours not set by hand. */
+function brandFailures(
+  choices: ThemeChoices,
+  hand: Readonly<Record<string, string>>,
+  settled: ModeResult,
+): RuleResult[] {
+  if (choices.brandColor === null || PRIMARY in hand) return [];
+  return settled.failures.filter(
+    ({ rule }) =>
+      (rule.a === PRIMARY && !(rule.b in hand)) || (rule.b === PRIMARY && !(rule.a in hand)),
+  );
+}
+
+function brandFixOffer(
+  defaults: WaitronDefaults,
+  choices: ThemeChoices,
+  mode: Mode,
+  hand: Readonly<Record<string, string>>,
+  settled: ModeResult,
+): string | null {
+  const after =
+    choices.brandFix[mode] === true
+      ? settled
+      : settleMode(
+          defaults,
+          { ...choices, brandFix: { ...choices.brandFix, [mode]: true } },
+          mode,
+          hand,
+        );
+  // The offer is what the flag paints: hand-set colours can move the grounds between the two settles.
+  return names(after.failures, PRIMARY).length > 0 ? null : after.tokens[PRIMARY]!;
+}
+
+/** `choices` must be normalised. */
 export function warningsFor(
   defaults: WaitronDefaults,
   choices: ThemeChoices,
   mode: Mode,
   settled: ModeResult,
-  blockers = true,
 ): ThemeWarning[] {
   const hand = handTokens(choices.handSet[mode]);
   const warnings: ThemeWarning[] = [];
-  const brandFails =
-    choices.brandColor === null || PRIMARY in hand
-      ? []
-      : settled.failures.filter(
-          ({ rule }) =>
-            (rule.a === PRIMARY && !(rule.b in hand)) || (rule.b === PRIMARY && !(rule.a in hand)),
-        );
+  const brandFails = brandFailures(choices, hand, settled);
   if (brandFails.length > 0) {
-    const after =
-      choices.brandFix[mode] === true
-        ? settled
-        : settleMode(
-            defaults,
-            { ...choices, brandFix: { ...choices.brandFix, [mode]: true } },
-            mode,
-            hand,
-          );
-    // The offer is what the flag paints: hand-set colours can move the grounds between the two settles.
-    const fix = names(after.failures, PRIMARY).length > 0 ? null : after.tokens[PRIMARY]!;
     warnings.push({
       field: "brandColor",
       mode,
       against: otherSide(brandFails, PRIMARY),
-      fix,
+      fix: brandFixOffer(defaults, choices, mode, hand, settled),
       blockedBy: [],
     });
   }
@@ -149,10 +169,62 @@ export function warningsFor(
       mode,
       against: otherSide(failing, token),
       fix,
-      blockedBy: fix === null && blockers ? blockersOf(defaults, choices, mode, hand, token) : [],
+      blockedBy: fix === null ? blockersOf(defaults, choices, mode, hand, token) : [],
     });
   }
   return warnings;
+}
+
+/** Whether `warningsFor` would warn, without searching for a fix. `choices` must be normalised. */
+export function warns(choices: ThemeChoices, mode: Mode, settled: ModeResult): boolean {
+  const hand = handTokens(choices.handSet[mode]);
+  return (
+    brandFailures(choices, hand, settled).length > 0 ||
+    settled.failures.some(({ rule }) => rule.a in hand || rule.b in hand)
+  );
+}
+
+export type NextFix =
+  | { readonly kind: "brand" }
+  | { readonly kind: "hand"; readonly colour: ThemeColour; readonly fix: string };
+
+/**
+ * Fix all's next step: in rule order, the first failing rule naming a warned colour with a fix; the
+ * fix of the colour drawn on top in it if it has one, else of the other. `null` when no warning has
+ * a fix. Searches only as far as that rule. `choices` must be normalised.
+ */
+export function nextFix(
+  defaults: WaitronDefaults,
+  choices: ThemeChoices,
+  mode: Mode,
+  settled: ModeResult,
+): NextFix | null {
+  const hand = handTokens(choices.handSet[mode]);
+  const brandWarns = brandFailures(choices, hand, settled).length > 0;
+  const fixes = new Map<string, string | null>();
+  const fixOf = (token: string) => {
+    if (!fixes.has(token)) {
+      fixes.set(
+        token,
+        token === PRIMARY && brandWarns
+          ? brandFixOffer(defaults, choices, mode, hand, settled)
+          : token in hand
+            ? fixFor(defaults, choices, mode, hand, token, settled)
+            : null,
+      );
+    }
+    return fixes.get(token)!;
+  };
+  for (const { rule } of settled.failures) {
+    for (const token of [rule.a, rule.b]) {
+      const fix = fixOf(token);
+      if (fix === null) continue;
+      return token === PRIMARY && brandWarns
+        ? { kind: "brand" }
+        : { kind: "hand", colour: token.slice(PREFIX.length) as ThemeColour, fix };
+    }
+  }
+  return null;
 }
 
 export type AgainstItem =

@@ -1,5 +1,12 @@
 // A port of the A841 slice-1 plan's reference, ~/waitron-campaign/a841-plan1-probes/derive-h2.mjs.
-import { contrastRatio, fromOklch, relativeLuminance, toOklch, withLightness } from "./colour.js";
+import {
+  contrastRatio,
+  fromOklch,
+  luminanceRatio,
+  relativeLuminance,
+  toOklch,
+  withLightness,
+} from "./colour.js";
 import {
   type ContrastRule,
   type RuleResult,
@@ -58,14 +65,24 @@ const TINT_TARGETS: Readonly<
 /** The grounds the button colour sits on; its fix shade is worked out against them. */
 const BRAND_GROUNDS = ["bg", "surface", "surface-raised", "field-fill"].map(colourToken);
 
-const minRatio = (colour: string, list: readonly string[]) =>
-  Math.min(...list.map((other) => contrastRatio(colour, other)));
+/** One step of a lightness walk; `null` once the lightness is pinned at 0 or 1 and repeats. */
+function stepped(L: number, delta: number, first: boolean): number | null {
+  const next = Math.min(1, Math.max(0, L + delta));
+  // Every later step would repeat this colour and its ratios, so the walk's answer is already known.
+  return !first && next === L ? null : next;
+}
 
 function until(hex: string, dir: number, list: readonly string[], need: number): string {
-  let { L } = toOklch(hex);
+  const grounds = list.map(relativeLuminance);
+  const minRatio = (colour: string) => {
+    const own = relativeLuminance(colour);
+    return Math.min(...grounds.map((ground) => luminanceRatio(own, ground)));
+  };
+  let L: number | null = toOklch(hex).L;
   let out = hex;
-  for (let i = 0; i < 200 && minRatio(out, list) < need; i++) {
-    L = Math.min(1, Math.max(0, L + dir * 0.005));
+  for (let i = 0; i < 200 && minRatio(out) < need; i++) {
+    L = stepped(L, dir * 0.005, i === 0);
+    if (L === null) break;
     out = withLightness(hex, L);
   }
   return out;
@@ -195,13 +212,15 @@ const THEMED = new Set(THEME_COLOURS.map(colourToken));
 /** Moves `from` in lightness, away from `against` or toward it for an at-most rule, until the rule passes or 200 steps run out. */
 function push(rule: ContrastRule, from: string, against: string): string {
   const within = rule.kind === "at-most";
-  const darker = relativeLuminance(against) > relativeLuminance(from);
+  const ground = relativeLuminance(against);
+  const darker = ground > relativeLuminance(from);
   const dir = within === darker ? +1 : -1;
   const step = within ? 0.002 : 0.005;
-  let { L } = toOklch(from);
+  let L: number | null = toOklch(from).L;
   let out = from;
-  for (let i = 0; i < 200 && !passes(rule, contrastRatio(out, against)); i++) {
-    L = Math.min(1, Math.max(0, L + dir * step));
+  for (let i = 0; i < 200 && !passes(rule, luminanceRatio(relativeLuminance(out), ground)); i++) {
+    L = stepped(L, dir * step, i === 0);
+    if (L === null) break;
     out = withLightness(from, L);
   }
   return out;
@@ -238,32 +257,25 @@ export function settleMode(
   }
   const colourIn = (tokens: Record<string, string>, token: string) =>
     (tokens[token] ?? defaults[mode][token])!;
+  const settled = (fixed: Readonly<Record<string, string>>) => {
+    const written = deriveAt(defaults, choices, mode, strength, fixed);
+    return { written, fails: failing(defaults, mode, written) };
+  };
   const work: Record<string, string> = {};
-  let written: Record<string, string> = {};
-  let fails: RuleResult[] = [];
-  for (let round = 0; round < 60; round++) {
-    written = deriveAt(defaults, choices, mode, strength, { ...work, ...hand });
-    fails = failing(defaults, mode, written);
-    const count = fails.length;
+  let current = settled({ ...hand });
+  for (let round = 0; ; round++) {
+    const { written, fails } = current;
     const failingNow = new Set(fails.map(({ rule }) => rule));
     // Departs from the reference: a move never newly fails a rule naming no colour the owner picked,
     // so every rule left failing names the brand colour or a hand-set value.
-    const fewer = (token: string, value: string) => {
-      const after = failing(
-        defaults,
-        mode,
-        deriveAt(defaults, choices, mode, strength, {
-          ...work,
-          [token]: value,
-          ...hand,
-        }),
-      );
-      return (
-        after.length < count &&
-        after.every((result) => picked(result) || failingNow.has(result.rule))
-      );
+    const tried = (token: string, value: string) => {
+      const next = settled({ ...work, [token]: value, ...hand });
+      return next.fails.length < fails.length &&
+        next.fails.every((result) => picked(result) || failingNow.has(result.rule))
+        ? next
+        : null;
     };
-    let moved = false;
+    let next: ReturnType<typeof settled> | null = null;
     for (const result of fails) {
       if (ownRule(result)) continue;
       const { rule } = result;
@@ -274,16 +286,19 @@ export function settleMode(
         if (!THEMED.has(token) || isHand(token) || token === PRIMARY) continue;
         const against = colourIn(written, other);
         const value = push(rule, colourIn(written, token), against);
-        if (passes(rule, contrastRatio(value, against)) && fewer(token, value)) {
+        next = passes(rule, contrastRatio(value, against)) ? tried(token, value) : null;
+        if (next !== null) {
           work[token] = value;
-          moved = true;
           break;
         }
       }
-      if (moved) break;
+      if (next !== null) break;
     }
-    if (!moved) break;
+    // The 60th round's move is not settled, as in the reference.
+    if (next === null || round === 59) break;
+    current = next;
   }
+  const { written, fails } = current;
   const tokens: Record<string, string> = {};
   for (const colour of THEME_COLOURS) {
     const token = colourToken(colour);

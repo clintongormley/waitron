@@ -69,10 +69,11 @@ export function relativeLuminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** The contrast ratio of two relative luminances, given in either order. */
+export function luminanceRatio(a: number, b: number): number {
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 export function contrastRatio(a: string, b: string): number {
-  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x) as [
-    number,
-    number,
-  ];
-  return (hi + 0.05) / (lo + 0.05);
+  return luminanceRatio(relativeLuminance(a), relativeLuminance(b));
 }
