@@ -24,7 +24,13 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { payNotice, payNoticeStyles, payScanView, readerButtonLabel } from "./pay-equipment.js";
+import {
+  payNotice,
+  payNoticeStyles,
+  payScanView,
+  readerButtonLabel,
+  type SheetView,
+} from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
@@ -1105,6 +1111,9 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override render() {
+    const view = this.scanning
+      ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
+      : (this.#cardWaiting() ?? this.#body());
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.#active}
@@ -1117,24 +1126,20 @@ export class TillBillPayDialog extends LitElement {
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
-      <div class="body">
-        ${
-          this.scanning
-            ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
-            : (this.#cardWaiting() ?? this.#body())
-        }
-      </div>
+      <div class="body">${view.body}</div>
+      ${view.actions}
     </wt-dialog>`;
   }
 
   /** On a handheld, while a card it sent is at the reader, the sheet is this panel alone. */
-  #cardWaiting(): TemplateResult | null {
+  #cardWaiting(): SheetView | null {
     if (!this.handheld || !this.busy || this.confirmationLocked || this.#sent === null) return null;
-    return cardWaitingView(this.#sent, this.notice);
+    return { body: cardWaitingView(this.#sent, this.notice), actions: nothing };
   }
 
-  #body(): TemplateResult {
-    return html`${this.#balance()} ${this.#taken()}
+  #body(): SheetView {
+    const step = this.nextOffered ? this.#nextActions() : this.#step();
+    const body = html`${this.#balance()} ${this.#taken()}
     ${
       this.refunded === null
         ? nothing
@@ -1142,7 +1147,8 @@ export class TillBillPayDialog extends LitElement {
             ${this.#refundedText(this.refunded)}
           </p>`
     }
-    ${this.#payments()} ${this.nextOffered ? this.#nextActions() : this.#step()}`;
+    ${this.#payments()} ${step.body}`;
+    return { body, actions: step.actions };
   }
 
   /** On a handheld, a payment taken shows as a block, naming the reader a card was charged on. */
@@ -1193,32 +1199,33 @@ export class TillBillPayDialog extends LitElement {
     >`;
   }
 
-  #nextActions(): TemplateResult {
+  #nextActions(): SheetView {
     const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
-    return html`${this.#notice()}<wt-form-actions>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-pay-close
-          .disabled=${this.busy}
-          @click=${() => this.#requestClose()}
-        >
-          ${t("bill_pay.close")}
-        </wt-button>
-        <wt-button
-          variant="primary"
-          data-pay-next
-          .disabled=${this.busy}
-          @click=${() => {
-            if (!this.isConnected || !this.#active || this.busy) return;
-            this.nextOffered = false;
-            this.#leftTaken = true;
-          }}
-        >
-          ${label}
-        </wt-button>
-      </wt-form-actions>`;
+    const actions = html`<wt-form-actions slot="footer">
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-pay-close
+        .disabled=${this.busy}
+        @click=${() => this.#requestClose()}
+      >
+        ${t("bill_pay.close")}
+      </wt-button>
+      <wt-button
+        variant="primary"
+        data-pay-next
+        .disabled=${this.busy}
+        @click=${() => {
+          if (!this.isConnected || !this.#active || this.busy) return;
+          this.nextOffered = false;
+          this.#leftTaken = true;
+        }}
+      >
+        ${label}
+      </wt-button>
+    </wt-form-actions>`;
+    return { body: this.#notice(), actions };
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1328,14 +1335,14 @@ export class TillBillPayDialog extends LitElement {
 
   /** The form; the server's two ways to pay for items that cost more than is left; or the
    * confirmation of what the server allocated. */
-  #step(): TemplateResult {
+  #step(): SheetView {
     const step =
       this.asked === null || this.preview === null
         ? this.#form()
         : this.preview.kind === "allocated"
           ? this.#confirmStep(this.asked, this.preview)
           : this.#chooseStep(this.asked, this.preview);
-    return html`${this.#unanswered()}${step}`;
+    return { body: html`${this.#unanswered()}${step.body}`, actions: step.actions };
   }
 
   /** A locked confirmation's title; its message is the step's own, under the form. */
@@ -1486,11 +1493,11 @@ export class TillBillPayDialog extends LitElement {
     ></wt-input>`;
   }
 
-  #form(): TemplateResult {
+  #form(): SheetView {
     const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
     const bottom = this.#bottomMessage(errors);
-    return html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
+    const body = html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
         <legend>${t("bill_pay.way")}</legend>
         <div class="options">
           ${(this.handheld ? HANDHELD_PAY_WAYS : PAY_WAYS).map(({ way, label }) =>
@@ -1511,33 +1518,36 @@ export class TillBillPayDialog extends LitElement {
       <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${this.#wayFields(errors)} ${this.#methodFields(errors)}
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
-      ${this.#methods().length === 0 ? this.#notice() : nothing}
-      <wt-form-actions .error=${bottom}>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-pay-close
-          .disabled=${this.busy}
-          @click=${() => this.#requestClose()}
-        >
-          ${t("bill_pay.close")}
-        </wt-button>
-        <wt-button
-          variant="primary"
-          data-pay-continue
-          .loading=${this.busy}
-          .disabled=${
-            this.busy ||
-            own.size > 0 ||
-            this.askingSecondCard ||
-            !this.#canAsk() ||
-            this.#heldForEquipment(this.method)
-          }
-          @click=${() => void this.#continue()}
-        >
-          ${t("bill_pay.continue")}
-        </wt-button>
-      </wt-form-actions>`;
+      ${this.#methods().length === 0 ? this.#notice() : nothing}`;
+    // Stays in the body: bill-pay-dialog.unsent.test.ts reads this row's own message, which a
+    // footer row leaves to wt-dialog to show.
+    const actions = html`<wt-form-actions .error=${bottom}>
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-pay-close
+        .disabled=${this.busy}
+        @click=${() => this.#requestClose()}
+      >
+        ${t("bill_pay.close")}
+      </wt-button>
+      <wt-button
+        variant="primary"
+        data-pay-continue
+        .loading=${this.busy}
+        .disabled=${
+          this.busy ||
+          own.size > 0 ||
+          this.askingSecondCard ||
+          !this.#canAsk() ||
+          this.#heldForEquipment(this.method)
+        }
+        @click=${() => void this.#continue()}
+      >
+        ${t("bill_pay.continue")}
+      </wt-button>
+    </wt-form-actions>`;
+    return { body: html`${body}${actions}`, actions: nothing };
   }
 
   #wayFields(errors: ReadonlyMap<Field, string>): TemplateResult | typeof nothing {
@@ -1945,7 +1955,7 @@ export class TillBillPayDialog extends LitElement {
     });
   }
 
-  #confirmStep(asked: PayRequest, preview: Allocated): TemplateResult {
+  #confirmStep(asked: PayRequest, preview: Allocated): SheetView {
     // A cash preview always carries its change, and a card's its charge.
     const cash: Cash | null =
       asked.pay.method === "cash"
@@ -1963,7 +1973,7 @@ export class TillBillPayDialog extends LitElement {
     const onReader = asked.card?.entry === "reader";
     const reader = this.handheld && onReader ? this.#readyReader() : null;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
-    return html`<p class="scope" data-pay-scope>${this.#scope()}</p>
+    const body = html`<p class="scope" data-pay-scope>${this.#scope()}</p>
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>
@@ -2011,31 +2021,32 @@ export class TillBillPayDialog extends LitElement {
           ? html`<p class="muted" role="status" data-pay-collecting>${t("card.collecting")}</p>`
           : nothing
       }
-      ${guestsShown ? this.#guests(errors.get("guests")) : nothing}
-      <wt-form-actions .error=${bottom}>
-        ${this.#backButton()}
-        <wt-button
-          variant="primary"
-          data-pay-confirm
-          .loading=${this.busy}
-          .disabled=${
-            this.busy || stepErrors.size > 0 || this.#heldForEquipment(onReader ? "card" : "cash")
-          }
-          @click=${() => void this.#take(asked, preview, cash)}
-        >
-          ${
-            this.confirmationLocked
-              ? t("bill_pay.recheck")
-              : reader === null
-                ? t("bill_pay.take")
-                : readerButtonLabel(
-                    reader.name,
-                    this.#money(preview.charged!),
-                    this.shownRefusal?.code === "declined",
-                  )
-          }
-        </wt-button>
-      </wt-form-actions>`;
+      ${guestsShown ? this.#guests(errors.get("guests")) : nothing}`;
+    const actions = html`<wt-form-actions slot="footer" .error=${bottom}>
+      ${this.#backButton()}
+      <wt-button
+        variant="primary"
+        data-pay-confirm
+        .loading=${this.busy}
+        .disabled=${
+          this.busy || stepErrors.size > 0 || this.#heldForEquipment(onReader ? "card" : "cash")
+        }
+        @click=${() => void this.#take(asked, preview, cash)}
+      >
+        ${
+          this.confirmationLocked
+            ? t("bill_pay.recheck")
+            : reader === null
+              ? t("bill_pay.take")
+              : readerButtonLabel(
+                  reader.name,
+                  this.#money(preview.charged!),
+                  this.shownRefusal?.code === "declined",
+                )
+        }
+      </wt-button>
+    </wt-form-actions>`;
+    return { body, actions };
   }
 
   #backButton(): TemplateResult {
@@ -2056,7 +2067,7 @@ export class TillBillPayDialog extends LitElement {
    * offered the full price with a tip; the server offers only that one while a card is at the
    * reader, so when it is all there is, the card in progress is what holds the items.
    */
-  #chooseStep(asked: PayRequest, preview: Choices): TemplateResult {
+  #chooseStep(asked: PayRequest, preview: Choices): SheetView {
     const options = preview.options.filter(
       (option) => this.tipsEnabled || option.choice !== "full_with_tip",
     );
@@ -2064,7 +2075,7 @@ export class TillBillPayDialog extends LitElement {
       new Map(),
       options.length === 0 ? codeMessage("order.payment_in_flight") : undefined,
     );
-    return html`<p class="scope" data-pay-scope>${this.#scope()}</p>
+    const body = html`<p class="scope" data-pay-scope>${this.#scope()}</p>
       ${
         options.length === 0
           ? nothing
@@ -2084,8 +2095,13 @@ export class TillBillPayDialog extends LitElement {
               </div>
               <p class="muted" data-pay-choose-note>${t("bill_pay.choose_later")}</p>`
       }
-      ${this.#notice()}
-      <wt-form-actions .error=${bottom}>${this.#backButton()}</wt-form-actions>`;
+      ${this.#notice()}`;
+    return {
+      body,
+      actions: html`<wt-form-actions slot="footer" .error=${bottom}
+        >${this.#backButton()}</wt-form-actions
+      >`,
+    };
   }
 
   #choiceLabel(option: Choices["options"][number]): string {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -869,5 +870,75 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
     await el.updateComplete;
     expect(waiting(el)).toBeNull();
     expect(charge(el).loading).toBe(true);
+  });
+});
+
+describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foot", () => {
+  afterEach(() => page.viewport(1280, 900));
+
+  const tall = () => ({
+    asksGuests: true,
+    receiptGuests: 4,
+    readerReason: t("bill_pay.reader_not_held_unknown"),
+    readerHint: t("bill_pay.reader_not_held"),
+    notice: { message: t("bill_pay.reader_not_held"), tone: "info" as const },
+    refusal: { code: "order.payment_in_flight" },
+  });
+
+  /** `selector` sits in a footer row inside the dialog's visible box, with the body scrolling
+   * above it when `scrolls`. */
+  async function expectInView(
+    el: TillPresentedPayDialog,
+    selector: string,
+    scrolls = true,
+  ): Promise<void> {
+    const dialog = root(el).querySelector("wt-dialog")!;
+    await dialog.updateComplete;
+    const native = dialog.shadowRoot!.querySelector("dialog")!;
+    const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(window.innerWidth).toBe(390);
+    if (scrolls) expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    const target = root(el).querySelector<HTMLElement>(selector)!;
+    const box = target.getBoundingClientRect();
+    const frame = native.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+    expect(target.closest("wt-form-actions")!.slot).toBe("footer");
+  }
+
+  it("the form's Cobrar, under the reader's refusal and a refusal in Spanish", async () => {
+    await page.viewport(390, 900);
+    const el = await mount(tall());
+    await row(el)!.updateComplete;
+    row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]")!.click();
+    await el.updateComplete;
+
+    await expectInView(el, "[data-presented-pay-take]");
+  });
+
+  // At 900 the locked sheet's body fits; a phone the height of an iPhone SE's screen scrolls it.
+  it("the locked sheet's Confirm payment, under a refusal in Spanish, on a short phone", async () => {
+    await page.viewport(390, 667);
+    const el = await mount({
+      ...tall(),
+      confirmation: {
+        tender: { method: "card", amount: "62.40", externalRef: "A-1" },
+        outstanding: "62.40",
+        guests: 4,
+      },
+    });
+
+    await expectInView(el, "[data-presented-pay-resend]");
+  });
+
+  it("the camera's Volver", async () => {
+    await page.viewport(390, 900);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+    const el = await mount({ canScan: true });
+    await row(el)!.updateComplete;
+    row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+    await el.updateComplete;
+
+    await expectInView(el, "[data-pay-scan-back]", false);
   });
 });

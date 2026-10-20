@@ -20,7 +20,13 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { payNotice, payNoticeStyles, payScanView, readerButtonLabel } from "./pay-equipment.js";
+import {
+  payNotice,
+  payNoticeStyles,
+  payScanView,
+  readerButtonLabel,
+  type SheetView,
+} from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import type { RetainedTender } from "./tender-pay.js";
@@ -380,6 +386,7 @@ export class TillPresentedPayDialog extends LitElement {
   }
 
   override render() {
+    const view = this.#view();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.open}
@@ -392,66 +399,66 @@ export class TillPresentedPayDialog extends LitElement {
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
-      <div class="body">
-        ${
-          this.confirmation !== undefined
-            ? this.#locked(this.confirmation)
-            : this.scanning
-              ? payScanView(this, () => (this.scanning = false), this.notice)
-              : this.busy && this.#sent !== null
-                ? cardWaitingView(this.#sent, this.notice)
-                : this.#form()
-        }
-      </div>
+      <div class="body">${view.body}</div>
+      ${view.actions}
     </wt-dialog>`;
   }
 
-  #form(): TemplateResult {
+  #view(): SheetView {
+    if (this.confirmation !== undefined) return this.#locked(this.confirmation);
+    if (this.scanning) return payScanView(this, () => (this.scanning = false), this.notice);
+    if (this.busy && this.#sent !== null)
+      return { body: cardWaitingView(this.#sent, this.notice), actions: nothing };
+    return this.#form();
+  }
+
+  #form(): SheetView {
     const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
     const reader = this.method === "card" ? readyPayReader(this.equipment, this.fixedReader) : null;
-    return html`<dl class="balance" data-presented-pay-balance>
+    const body = html`<dl class="balance" data-presented-pay-balance>
         <dt>${t("presented_pay.balance")}</dt>
         <dd>${this.#money(this.amount)}</dd>
       </dl>
       <p class="whole" data-presented-pay-whole>${t("presented_pay.whole_only")}</p>
       ${this.#methodFields(errors)}
       ${this.asksGuests ? this.#guests(errors.get("guests")) : nothing}
-      ${this.#methods().length === 0 ? payNotice(this.notice) : nothing}
-      <wt-form-actions .error=${this.#bottomMessage(errors)}>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-presented-pay-close
-          .disabled=${this.busy}
-          @click=${() => this.#requestClose()}
-        >
-          ${t("bill_pay.close")}
-        </wt-button>
-        <wt-button
-          variant="primary"
-          data-presented-pay-take
-          .loading=${this.busy}
-          .disabled=${this.busy || own.size > 0 || !this.#offered() || this.#held()}
-          @click=${() => void this.#take()}
-        >
-          ${
-            reader === null
-              ? t("bill_pay.take")
-              : readerButtonLabel(
-                  reader.name,
-                  this.#money(this.amount),
-                  this.shownRefusal?.code === "declined",
-                )
-          }
-        </wt-button>
-      </wt-form-actions>`;
+      ${this.#methods().length === 0 ? payNotice(this.notice) : nothing}`;
+    const actions = html`<wt-form-actions slot="footer" .error=${this.#bottomMessage(errors)}>
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-presented-pay-close
+        .disabled=${this.busy}
+        @click=${() => this.#requestClose()}
+      >
+        ${t("bill_pay.close")}
+      </wt-button>
+      <wt-button
+        variant="primary"
+        data-presented-pay-take
+        .loading=${this.busy}
+        .disabled=${this.busy || own.size > 0 || !this.#offered() || this.#held()}
+        @click=${() => void this.#take()}
+      >
+        ${
+          reader === null
+            ? t("bill_pay.take")
+            : readerButtonLabel(
+                reader.name,
+                this.#money(this.amount),
+                this.shownRefusal?.code === "declined",
+              )
+        }
+      </wt-button>
+    </wt-form-actions>`;
+    return { body, actions };
   }
 
   /** The payment sent with no answer, as it was sent; nothing in it can change. */
-  #locked(confirmation: RetainedTender): TemplateResult {
+  #locked(confirmation: RetainedTender): SheetView {
     const { tender, outstanding, guests } = confirmation;
-    return html`<dl class="balance" data-presented-pay-balance>
+    const body = html`<dl class="balance" data-presented-pay-balance>
         <dt>${t("presented_pay.balance")}</dt>
         <dd>${this.#money(outstanding)}</dd>
       </dl>
@@ -494,27 +501,31 @@ export class TillPresentedPayDialog extends LitElement {
             })
       }
       ${this.busy ? nothing : html`<p role="status">${t("sale.unconfirmed")}</p>`}
-      ${payNotice(this.notice)}
-      <wt-form-actions .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal)}>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-presented-pay-close
-          .disabled=${this.busy}
-          @click=${() => this.#requestClose()}
-        >
-          ${t("bill_pay.close")}
-        </wt-button>
-        <wt-button
-          variant="primary"
-          data-presented-pay-resend
-          .loading=${this.busy}
-          .disabled=${this.busy}
-          @click=${() => this.#resend()}
-        >
-          ${t("action.confirm_payment")}
-        </wt-button>
-      </wt-form-actions>`;
+      ${payNotice(this.notice)}`;
+    const actions = html`<wt-form-actions
+      slot="footer"
+      .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal)}
+    >
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-presented-pay-close
+        .disabled=${this.busy}
+        @click=${() => this.#requestClose()}
+      >
+        ${t("bill_pay.close")}
+      </wt-button>
+      <wt-button
+        variant="primary"
+        data-presented-pay-resend
+        .loading=${this.busy}
+        .disabled=${this.busy}
+        @click=${() => this.#resend()}
+      >
+        ${t("action.confirm_payment")}
+      </wt-button>
+    </wt-form-actions>`;
+    return { body, actions };
   }
 
   #methodRadio(method: Method, checked = this.method === method): TemplateResult {

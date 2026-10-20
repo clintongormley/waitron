@@ -72,6 +72,7 @@ async function pressQr(el: HTMLElement & { updateComplete: Promise<unknown> }): 
 }
 
 const scanBackgrounds = new Map<string, string>();
+const footBackgrounds = new Map<string, string>();
 const noticeBackgrounds = new Map<string, string>();
 const tableBackgrounds = new Map<string, string>();
 
@@ -428,4 +429,112 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
       await page.viewport(viewport.width, viewport.height);
     }
   });
+
+  const tall = (): Partial<TillPresentedPayDialog> => ({
+    asksGuests: true,
+    receiptGuests: 4,
+    readerReason: t("bill_pay.reader_not_held_unknown"),
+    readerHint: t("bill_pay.reader_not_held"),
+    refusal: { code: "order.payment_in_flight" },
+  });
+
+  const footViews: Record<
+    string,
+    { setup: () => Promise<{ el: TillPresentedPayDialog }>; button: string | null }
+  > = {
+    "form-reader-unknown": {
+      setup: async () => {
+        const mounted = await mount(tall());
+        const row = mounted.el.shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<unknown> }
+        >("till-pay-equipment")!;
+        await row.updateComplete;
+        row.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]")!.click();
+        await mounted.el.updateComplete;
+        return mounted;
+      },
+      button: "[data-presented-pay-take]",
+    },
+    locked: {
+      setup: () =>
+        mount({
+          ...tall(),
+          notice: { message: t("bill_pay.reader_not_held"), tone: "info" },
+          confirmation: {
+            tender: { method: "card", amount: "62.40", externalRef: "A-1" },
+            outstanding: "62.40",
+            guests: 4,
+          },
+        }),
+      button: "[data-presented-pay-resend]",
+    },
+    "card-waiting": {
+      setup: async () => {
+        const mounted = await mount();
+        await pressed(mounted.el, "[data-presented-pay-take]");
+        mounted.el.busy = true;
+        await mounted.el.updateComplete;
+        expect(mounted.el.shadowRoot!.querySelector("till-card-waiting")).not.toBeNull();
+        return mounted;
+      },
+      button: null,
+    },
+    scan: {
+      setup: async () => {
+        const mounted = await mount({ asksGuests: true, receiptGuests: 4 });
+        await pressQr(mounted.el);
+        return mounted;
+      },
+      button: "[data-pay-scan-back]",
+    },
+  };
+
+  it.each(Object.keys(footViews))(
+    "looks right with the buttons at the sheet's foot: %s at 390 px",
+    async (view) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(390, 900);
+      const stop = blankCamera();
+      try {
+        expect(window.innerWidth).toBe(390);
+        const { el } = await footViews[view]!.setup();
+        const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+        await dialog.updateComplete;
+        const panel = dialog.shadowRoot!.querySelector<HTMLElement>("dialog")!;
+        const background = getComputedStyle(panel).backgroundColor;
+        footBackgrounds.set(`${theme}-${view}`, background);
+        if (theme === "dark") {
+          const light = footBackgrounds.get(`light-${view}`);
+          expect(light, "run the light case first").toBeDefined();
+          expect(background).not.toBe(light);
+        }
+        const box = panel.getBoundingClientRect();
+        const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+        const selector = footViews[view]!.button;
+        const shown =
+          selector === null ? null : el.shadowRoot!.querySelector<HTMLElement>(selector)!;
+        const button = shown?.getBoundingClientRect();
+        const shot = `__screenshots__/look/a796-26f-presented-${view}-${theme}-390`;
+        await page.screenshot({ element: panel, path: `${shot}.png` });
+        await commands.writeFile(
+          `src/widgets/${shot}.json`,
+          JSON.stringify({
+            innerWidth: window.innerWidth,
+            panelWidth: box.width,
+            panelTop: box.top,
+            panelBottom: box.bottom,
+            bodyScrolls: body.scrollHeight > body.clientHeight,
+            buttonInFooter: shown?.closest("wt-form-actions")?.slot === "footer",
+            buttonTop: button?.top ?? null,
+            buttonBottom: button?.bottom ?? null,
+            footerMessages: dialog.shadowRoot!.querySelectorAll(".footer > .form-message").length,
+            background,
+          }),
+        );
+      } finally {
+        stop();
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
 });

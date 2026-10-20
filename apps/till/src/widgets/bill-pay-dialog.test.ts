@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -2954,5 +2955,95 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     expect(field(el, "people")!.value).toBe("");
     expect(root(el).querySelector("[data-pay-taken-reader]")).toBeNull();
     expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+});
+
+describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", () => {
+  afterEach(() => page.viewport(1280, 900));
+
+  const received = (n: number): BillPaymentView => ({
+    ...pendingCard,
+    id: `pay-${n}`,
+    submissionId: `sub-${n}`,
+    method: "cash",
+    entry: null,
+    applied: "5.00",
+    tendered: "5.00",
+    change: "0.00",
+    state: "received",
+    receivedAt: pendingCard.createdAt,
+  });
+  const longBill = () =>
+    balanceOf({
+      received: "60.00",
+      outstanding: "60.00",
+      payments: Array.from({ length: 12 }, (_, n) => received(n + 1)),
+    });
+
+  /** The body scrolls, and `selector` sits in a footer row inside the dialog's visible box. */
+  async function expectInView(el: TillBillPayDialog, selector: string): Promise<void> {
+    const dialog = root(el).querySelector("wt-dialog")!;
+    await dialog.updateComplete;
+    const native = dialog.shadowRoot!.querySelector("dialog")!;
+    const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(window.innerWidth).toBe(390);
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    const target = button(el, selector);
+    const box = target.getBoundingClientRect();
+    const frame = native.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+    expect(target.closest("wt-form-actions")!.slot).toBe("footer");
+  }
+
+  it("the confirmation's Take, under a long bill", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const el = await mount({ balance: longBill(), way: "contribution" });
+    await type(el, "amount", "10");
+    await pick(el, "method", "cash");
+    await type(el, "tendered", "20");
+    await previewed(el, cashPreview("10.00", "10.00"));
+
+    await expectInView(el, "[data-pay-confirm]");
+  });
+
+  it("the choices' Back, under a long bill", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const steak: PayLine = {
+      lineNo: 4,
+      name: "Steak",
+      quantity: "1",
+      total: "25.00",
+      unitTotal: null,
+    };
+    const el = await mount({
+      lines: [...lines, steak],
+      balance: { ...longBill(), outstanding: "15.00" },
+    });
+    await pick(el, "line", "4");
+    await type(el, "tendered", "30");
+    await previewed(el, {
+      kind: "choose",
+      options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }],
+    });
+
+    await expectInView(el, "[data-pay-back]");
+  });
+
+  it("the next guest's Next, under a long bill on a handheld", async () => {
+    setLocale("es");
+    await page.viewport(390, 900);
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      takesCash: true,
+      balance: longBill(),
+    });
+    el.taken = { change: null };
+    await el.updateComplete;
+
+    await expectInView(el, "[data-pay-next]");
   });
 });

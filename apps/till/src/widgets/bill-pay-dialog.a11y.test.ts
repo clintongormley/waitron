@@ -141,6 +141,7 @@ async function pressQr(el: HTMLElement & { updateComplete: Promise<unknown> }): 
 }
 
 const scanBackgrounds = new Map<string, string>();
+const footBackgrounds = new Map<string, string>();
 
 describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillBillPayDialog> = {}) =>
@@ -1081,5 +1082,165 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       },
     });
     await expectNoA11yViolations(host);
+  });
+
+  /** A bill long enough to scroll the sheet's body: twelve cash payments listed. */
+  const longBalance: BillBalance = {
+    ...balance,
+    received: "60.00",
+    reserved: "0.00",
+    outstanding: "60.00",
+    payments: Array.from({ length: 12 }, (_, n) => ({
+      ...pendingCard,
+      id: `pay-${n + 1}`,
+      submissionId: `sub-${n + 1}`,
+      method: "cash" as const,
+      entry: null,
+      applied: "5.00",
+      tendered: "5.00",
+      change: "0.00",
+      state: "received" as const,
+      receivedAt: pendingCard.createdAt,
+    })),
+  };
+  const footViews: Record<
+    string,
+    { setup: () => Promise<{ el: TillBillPayDialog }>; button: string | null }
+  > = {
+    "form-refused": {
+      setup: () =>
+        mount({
+          balance: longBalance,
+          way: "contribution",
+          refusal: {
+            code: "bill.unsent_dishes",
+            unsent: { billId: "wo-4" },
+            billLabel: "Terraza · Cuenta 2",
+          },
+        }),
+      button: "[data-pay-continue]",
+    },
+    "form-reader-unknown": {
+      setup: async () => {
+        const mounted = await withRow();
+        mounted.el.readerReason = t("bill_pay.reader_not_held_unknown");
+        await mounted.el.updateComplete;
+        return mounted;
+      },
+      button: "[data-pay-continue]",
+    },
+    confirm: {
+      setup: async () => {
+        const mounted = await mount({ ...handheldProps, balance: longBalance, way: "share" });
+        await typed(mounted.el, "people", "3");
+        await pressed(mounted.el, 'input[name="method"][value="card"]');
+        await previewed(mounted.el, shareOf3);
+        return mounted;
+      },
+      button: "[data-pay-confirm]",
+    },
+    locked: { setup: () => lockedConfirmation(), button: "[data-pay-confirm]" },
+    choose: {
+      setup: async () => {
+        const mounted = await mount({
+          lines: [
+            ...lines,
+            { lineNo: 4, name: "Chuletón", quantity: "1", total: "25.00", unitTotal: null },
+          ],
+          balance: { ...longBalance, outstanding: "15.00" },
+        });
+        await pressed(mounted.el, 'input[name="line"][value="4"]');
+        await typed(mounted.el, "tendered", "30");
+        await previewed(mounted.el, {
+          kind: "choose",
+          options: [
+            { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
+            { choice: "use_pool", applied: "15.00", tip: "0.00" },
+          ],
+        });
+        return mounted;
+      },
+      button: "[data-pay-back]",
+    },
+    next: { setup: () => nextGuest(), button: "[data-pay-next]" },
+    "card-waiting": {
+      setup: async () => {
+        const mounted = await mount({ ...handheldProps, way: "share" });
+        await typed(mounted.el, "people", "3");
+        await pressed(mounted.el, 'input[name="method"][value="card"]');
+        await previewed(mounted.el, shareOf3);
+        await pressed(mounted.el, "[data-pay-confirm]");
+        mounted.el.busy = true;
+        await mounted.el.updateComplete;
+        expect(mounted.el.shadowRoot!.querySelector("till-card-waiting")).not.toBeNull();
+        return mounted;
+      },
+      button: null,
+    },
+    scan: {
+      setup: async () => {
+        const mounted = await withRow();
+        await pressQr(mounted.el);
+        return mounted;
+      },
+      button: "[data-pay-scan-back]",
+    },
+  };
+  const handheldProps: Partial<TillBillPayDialog> = {
+    handheld: true,
+    tableName: "Mesa 4",
+    cardReader: "stripe_terminal",
+    takesReaderCard: true,
+    takesCash: true,
+    takesManualCard: true,
+    equipment,
+  };
+
+  it.each([
+    ...Object.keys(footViews).map((view) => [view, 390] as const),
+    ["form-refused", 1280] as const,
+  ])("looks right with the buttons at the sheet's foot: %s at %i px", async (view, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    const stop = blankCamera();
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await footViews[view]!.setup();
+      const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+      await dialog.updateComplete;
+      const panel = dialog.shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      footBackgrounds.set(`${theme}-${view}-${width}`, background);
+      if (theme === "dark") {
+        const light = footBackgrounds.get(`light-${view}-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const box = panel.getBoundingClientRect();
+      const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const selector = footViews[view]!.button;
+      const shown = selector === null ? null : el.shadowRoot!.querySelector<HTMLElement>(selector)!;
+      const button = shown?.getBoundingClientRect();
+      const shot = `__screenshots__/look/a796-26f-${view}-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          panelTop: box.top,
+          panelBottom: box.bottom,
+          bodyScrolls: body.scrollHeight > body.clientHeight,
+          buttonInFooter: shown?.closest("wt-form-actions")?.slot === "footer",
+          buttonTop: button?.top ?? null,
+          buttonBottom: button?.bottom ?? null,
+          footerMessages: dialog.shadowRoot!.querySelectorAll(".footer > .form-message").length,
+          background,
+        }),
+      );
+    } finally {
+      stop();
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 });

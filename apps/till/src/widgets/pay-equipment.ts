@@ -86,12 +86,18 @@ export const payNoticeStyles = css`
  * The camera a pay sheet shows in place of its body after the row's QR: either kind of sticker is
  * read, and `pay-equipment-sticker` carries it to the app, which sends it as an NFC tap.
  */
+/** A pay sheet's view: what scrolls in its body, and the buttons kept in view at its foot. */
+export interface SheetView {
+  body: TemplateResult | typeof nothing;
+  actions: TemplateResult | typeof nothing;
+}
+
 export function payScanView(
   host: HTMLElement,
   back: () => void,
   notice: PayNotice | null,
-): TemplateResult {
-  return html`<p data-pay-scan-heading><b>${t("equipment.scan_qr")}</b></p>
+): SheetView {
+  const body = html`<p data-pay-scan-heading><b>${t("equipment.scan_qr")}</b></p>
     <till-equipment-scanner
       kind="any"
       @equipment-scanned=${(event: CustomEvent<EquipmentCode>) => {
@@ -105,12 +111,15 @@ export function payScanView(
         );
       }}
     ></till-equipment-scanner>
-    ${payNotice(notice)}
-    <wt-form-actions>
+    ${payNotice(notice)}`;
+  return {
+    body,
+    actions: html`<wt-form-actions slot="footer">
       <wt-button variant="secondary" data-pay-scan-back @click=${back}>
         ${t("pay_equipment.scan_back")}
       </wt-button>
-    </wt-form-actions>`;
+    </wt-form-actions>`,
+  };
 }
 
 /**
