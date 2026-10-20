@@ -782,7 +782,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       const app = new Hono();
       const { deps, calls } = makeDeps();
       mountSetup(app, deps, noopLog);
-      const body = { ...demoBody(), mode };
+      const body: Record<string, unknown> = { ...demoBody(), mode };
       asRec(body.venue).country = "FR";
 
       const res = await postProvision(app, body);
