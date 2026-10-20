@@ -122,7 +122,18 @@ it("adds order instructions to a populated predecessor without changing its dish
   expect(await suite.db.select().from(locations)).toEqual([location]);
   expect(await suite.db.select().from(workingOrderLines)).toEqual([line]);
   expect(await suite.db.select().from(workingOrders)).toEqual([order]);
-  expect(await suite.db.select().from(kitchenNotices)).toEqual([
+  // Keep this historical projection independent of columns introduced by later migrations.
+  expect(
+    await suite.db
+      .select({
+        id: kitchenNotices.id,
+        kind: kitchenNotices.kind,
+        lineName: kitchenNotices.lineName,
+        note: kitchenNotices.note,
+        orderNoteChange: kitchenNotices.orderNoteChange,
+      })
+      .from(kitchenNotices),
+  ).toEqual([
     expect.objectContaining({
       id: "existing-notice",
       kind: "recalled",

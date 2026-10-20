@@ -4,6 +4,7 @@ import { GUIDE_LANGUAGES, GUIDE_PAGES, guideRoot, readGuide } from "./guide-cata
 import { renderGuide } from "./guide-markdown.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
+import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
 type GuidePage = (typeof GUIDE_PAGES)[number];
@@ -64,6 +65,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       products: "Products",
       modifiers: "Modifiers",
       "content-and-images": "Languages and photos",
+      "kitchen-service": KITCHEN_ALLERGY_WORDS.en.guideTitle,
     },
     notFoundTitle: "Page not found",
     notFound: "There is no guide page at this address.",
@@ -76,6 +78,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       products: "Productos",
       modifiers: "Modificadores",
       "content-and-images": "Idiomas y fotos",
+      "kitchen-service": KITCHEN_ALLERGY_WORDS.es.guideTitle,
     },
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",

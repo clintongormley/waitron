@@ -310,3 +310,7 @@ siendo Alergias hasta que la cambies.
 Al pasar una cuenta del mostrador a una mesa, también se comprueba la respuesta de esa mesa y se
 ofrecen los platos que llegan. Cancelar deja la cuenta donde está. Si la mesa cambia mientras
 respondes, revisa la información actualizada y vuelve a confirmar antes de completar el traslado.
+
+Cocina conserva su primera copia de alergias con cada plato. Un cambio posterior llega en un
+aviso aparte que debe confirmarse. Consulta cómo las
+[copias de alergias y sus correcciones](kitchen-service.md#allergy-copies) acompañan al trabajo.

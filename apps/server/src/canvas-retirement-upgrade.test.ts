@@ -508,6 +508,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       order_draft_recalled_lines: [],
       line_service_cancellations: [],
       bill_edit_states: [],
+      ticket_item_allergies: [],
     };
     delete retained.canvases;
     delete retained.table_service_statuses;

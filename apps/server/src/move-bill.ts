@@ -26,6 +26,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
+import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import {
   applyPartyAllergyPatch,
   normaliseAllergyPatch,
@@ -232,7 +233,7 @@ async function moveBillOnce(
       .where(
         and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
       );
-    await applyPartyAllergyPatch(
+    const changes = await applyPartyAllergyPatch(
       tx,
       partyId,
       options.allergy,
@@ -243,6 +244,7 @@ async function moveBillOnce(
         workingLineId: line.id,
       })),
     );
+    await enqueueKitchenAllergyChanges(tx, cfg, changes);
   };
   if (destination.kind === "counter") {
     if (source === null) throw new AppError("management.request_invalid", { field: "to" });

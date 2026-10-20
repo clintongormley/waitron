@@ -1,13 +1,3 @@
-// Kitchen print jobs for fired items, and HOLD tickets and HOLD corrections for held work, each
-// enqueued on its caller's transaction so it rolls back with it.
-//
-// A printer never blocks a fire (CLAUDE.md §5): `enqueuePrintJob` is an outbox insert that opens no
-// socket. Its one throw, `printer.not_found` for an inactive printer, cannot happen here: the
-// mapping read the enqueue paths use (`printerMappings` without `switchedOffToo`) keeps active
-// printers only, and no other write transaction can run between that read and the enqueue, because
-// one write transaction runs on the venue file at a time (`withTransaction`,
-// `packages/db/src/tenancy.ts`). Receipt: `assertExtraListForWrite` in
-// `packages/catalogue/src/extras.ts`.
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -28,7 +18,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import {
   AppError,
   compareStationNames,
@@ -63,14 +53,13 @@ import { readRestOfOrder } from "./rest-of-order.js";
 import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { readGroupNumberLabels } from "./order-groups.js";
+import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 /**
- * An item to print: its line, its station and the quantity to print. A fire captures its items from
- * its own write's `RETURNING`, never by re-querying `ticket_items`, which would re-select earlier
- * rounds' items and reprint them.
+ * A selected line and station: resolving its copy must not sweep earlier rounds into this output.
  */
 export interface FiredItem {
   workingOrderLineId: string;
@@ -189,11 +178,13 @@ async function buildTicketItems(
   // The customer-facing `descriptions` is deliberately not read: the cook's name falls back to the
   // staff name (`kitchenPresentationName`), as on the station screen.
   const parentLine = alias(workingOrderLines, "ticket_parent_line");
+  const ownRecord = alias(ticketItems, "ticket_own_record");
   const parentRecord = alias(ticketItems, "ticket_parent_record");
   const parentStation = alias(kitchenStations, "ticket_parent_station");
   const storedLineRows = await tx
     .select({
       id: workingOrderLines.id,
+      ticketItemId: ownRecord.id,
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
@@ -215,11 +206,16 @@ async function buildTicketItems(
       parentStationName: parentStation.name,
     })
     .from(workingOrderLines)
+    .leftJoin(ownRecord, eq(ownRecord.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(parentLine, eq(parentLine.id, workingOrderLines.parentLineId))
     .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
     .leftJoin(parentStation, eq(parentStation.id, parentRecord.stationId))
     .where(inArray(workingOrderLines.id, lineIds));
+  const allergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    storedLineRows.flatMap((row) => (row.ticketItemId === null ? [] : [row.ticketItemId])),
+  );
   const numberLabels = await readGroupNumberLabels(
     tx,
     storedLineRows.flatMap((r) => (r.groupPartyId === null ? [] : [r.groupPartyId])),
@@ -309,6 +305,10 @@ async function buildTicketItems(
       group: row.group,
       position: row.position,
       item: {
+        allergy:
+          row.ticketItemId === null
+            ? null
+            : (allergies.get(row.ticketItemId)?.originalBlock ?? null),
         ...(row.groupId === null ? {} : { groupId: row.groupId }),
         ...(row.groupId !== null && numberLabels.has(row.groupId)
           ? { groupLabel: numberLabels.get(row.groupId)! }
@@ -538,6 +538,16 @@ async function planKitchenTickets(
       : known.mappings.filter((mapping) => stationIds.includes(mapping.stationId));
   if (mappingRows.length === 0) return [];
 
+  if (!reprint && mark === "HOLD") {
+    const receiving = new Set(mappingRows.map((mapping) => mapping.stationId));
+    await freezeKitchenAllergyItems(
+      tx,
+      cfg,
+      orderId,
+      firedItems.filter((item) => receiving.has(item.stationId)),
+    );
+  }
+
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
@@ -617,6 +627,7 @@ async function planKitchenTickets(
         ...new Set(rest.map((item) => item.workingOrderLineId)),
       ]);
   const head = {
+    locale: cfg.locale,
     kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
     reprint,
     mark,
@@ -777,6 +788,7 @@ type CorrectionChange =
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
   | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
+  | { kind: "ALLERGY"; blocks: ReadonlyMap<string, KitchenAllergyBlock | null> }
   | HoldCorrection;
 
 export async function enqueueOrderKitchenNoteChange(
@@ -1037,6 +1049,18 @@ function toNoticeItem(item: CorrectionItem) {
   };
 }
 
+export async function enqueueAllergyCorrectionSlips(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: readonly (CorrectionItem & { allergyBlock: KitchenAllergyBlock | null })[],
+): Promise<void> {
+  await printCorrectionSlips(tx, cfg, orderId, [...items], {
+    kind: "ALLERGY",
+    blocks: new Map(items.map((item) => [item.workingOrderLineId, item.allergyBlock])),
+  });
+}
+
 /** One slip per item, to its station's printers, headed with the current table. */
 async function printCorrectionSlips(
   tx: Transaction,
@@ -1048,6 +1072,16 @@ async function printCorrectionSlips(
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await printerMappings(tx, stationIds);
   if (mappingRows.length === 0) return;
+
+  if (change.kind === "HOLD CHANGED" && change.direction === "added") {
+    const receiving = new Set(mappingRows.map((mapping) => mapping.stationId));
+    await freezeKitchenAllergyItems(
+      tx,
+      cfg,
+      orderId,
+      items.filter((item) => receiving.has(item.stationId)),
+    );
+  }
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
@@ -1074,10 +1108,19 @@ async function printCorrectionSlips(
     if (targets === undefined) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
     const item = atFiredQuantity(entry.item, target);
+    const block =
+      change.kind === "ALLERGY" ? (change.blocks.get(target.workingOrderLineId) ?? null) : null;
+    const correction =
+      change.kind !== "ALLERGY"
+        ? change
+        : block === null
+          ? { kind: "ALLERGY REMOVED" as const, allergyBlock: null }
+          : { kind: "ALLERGY CHANGED" as const, allergyBlock: block };
     for (const group of groupByLayout(targets)) {
       const bytes = formatCorrectionSlip(
         {
-          ...change,
+          ...correction,
+          locale: cfg.locale,
           kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
           stationName: stationNames.get(target.stationId)!.name,
           tableLabel: header.tableLabel,

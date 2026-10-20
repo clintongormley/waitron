@@ -12,6 +12,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
 import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kitchen-print.js";
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
+import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printedHeldGroups } from "./order-groups.js";
 import { runServiceCommand } from "./parties.js";
@@ -388,6 +389,11 @@ export async function moveDishesToStation(
             from,
           });
       }
+      await notifyKitchenAllergyDestination(
+        tx,
+        cfg,
+        changed.map((row) => row.id),
+      );
       await bumpRevision(tx, [orderId]);
       await captureKitchenActivity(
         tx,

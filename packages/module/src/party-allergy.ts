@@ -1,5 +1,18 @@
 import type { AllergenMap } from "@waitron/db";
 
+export interface KitchenAllergyBlock {
+  who: string;
+  allergens: AllergenMap;
+  note: string | null;
+  clashes: AllergenMap;
+  labels: Record<"en" | "es", { avoids: string[]; clashes: string[] }>;
+}
+
+export interface TicketAllergyCopy {
+  originalBlock: KitchenAllergyBlock | null;
+  currentBlock: KitchenAllergyBlock | null;
+}
+
 export interface PartyAllergyGuest {
   id: string;
   position: number;

@@ -508,6 +508,7 @@ describe("till-app session activity", () => {
           items: [
             {
               id: "ti-0",
+              allergy: null,
               name: "Pan",
               qty: "1.000",
               stationName: "Barra",

@@ -71,6 +71,7 @@ import {
 import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { assertBillInvariant } from "./bill-payments.js";
+import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import {
   applyPartyAllergyPatch,
   assertPartyAllergyAnswered,
@@ -1106,8 +1107,8 @@ export async function submitDraft(
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
-      if (allergyPatch !== undefined)
-        await applyPartyAllergyPatch(
+      if (allergyPatch !== undefined) {
+        const changes = await applyPartyAllergyPatch(
           tx,
           partyId,
           allergyPatch,
@@ -1122,6 +1123,8 @@ export async function submitDraft(
               workingLineId: isFresh(line) ? null : line.sourceLineId,
             })),
         );
+        await enqueueKitchenAllergyChanges(tx, cfg, changes);
+      }
       await assertPartyAllergyAnswered(tx, partyId);
       const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
       const assigned = new Set(

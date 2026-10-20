@@ -27,6 +27,7 @@ const groups: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-1",
         workingOrderLineId: "wol-1",
         state: "queued",
@@ -45,6 +46,7 @@ const groups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "ti-2",
         workingOrderLineId: "wol-2",
         state: "preparing",
@@ -55,6 +57,7 @@ const groups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "ti-3",
         workingOrderLineId: "wol-3",
         state: "ready",
@@ -76,6 +79,7 @@ const groups: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "ti-4",
         workingOrderLineId: "wol-4",
         state: "queued",
@@ -101,6 +105,7 @@ const coursedGroups: StationQueueGroup[] = [
     thresholds: DEFAULT_THRESHOLDS,
     items: [
       {
+        allergy: null,
         id: "it-bread",
         workingOrderLineId: "wl-bread",
         state: "preparing",
@@ -110,6 +115,7 @@ const coursedGroups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "it-start",
         workingOrderLineId: "wl-start",
         state: "queued",
@@ -119,6 +125,7 @@ const coursedGroups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "it-main",
         workingOrderLineId: "wl-main",
         state: "queued",
@@ -143,6 +150,7 @@ const modifierGroups: StationQueueGroup[] = [
     status: "placed",
     items: [
       {
+        allergy: null,
         id: "ti-mod",
         workingOrderLineId: "wol-mod",
         state: "queued",
@@ -170,6 +178,7 @@ const customisationGroups: StationQueueGroup[] = [
     status: "placed",
     items: [
       {
+        allergy: null,
         id: "ti-cust",
         workingOrderLineId: "wol-cust",
         state: "queued",
@@ -194,6 +203,7 @@ const allergenGroups: StationQueueGroup[] = [
     status: "placed",
     items: [
       {
+        allergy: null,
         id: "ti-al",
         workingOrderLineId: "wol-al",
         state: "queued",
@@ -204,6 +214,7 @@ const allergenGroups: StationQueueGroup[] = [
         asServed: { allergens: { milk: {} }, pending: false },
       },
       {
+        allergy: null,
         id: "ti-al-pending",
         workingOrderLineId: "wol-al-pending",
         state: "queued",
@@ -228,6 +239,7 @@ const dietGroups: StationQueueGroup[] = [
     status: "placed",
     items: [
       {
+        allergy: null,
         id: "ti-di-v",
         workingOrderLineId: "wol-di-v",
         state: "queued",
@@ -238,6 +250,7 @@ const dietGroups: StationQueueGroup[] = [
         asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [], halal: "yes" },
       },
       {
+        allergy: null,
         id: "ti-di-m",
         workingOrderLineId: "wol-di-m",
         state: "queued",
@@ -248,6 +261,7 @@ const dietGroups: StationQueueGroup[] = [
         asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
       },
       {
+        allergy: null,
         id: "ti-di-p",
         workingOrderLineId: "wol-di-p",
         state: "queued",
@@ -326,6 +340,7 @@ const partyGroups: StationQueueGroup[] = [
     printProblem: true,
     items: [
       {
+        allergy: null,
         id: "it-moved",
         workingOrderLineId: "wl-moved",
         state: "queued",
@@ -335,6 +350,7 @@ const partyGroups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "it-salad",
         workingOrderLineId: "wl-salad",
         state: "preparing",
@@ -345,6 +361,7 @@ const partyGroups: StationQueueGroup[] = [
         firedAt: "2026-08-17T10:00:00.000Z",
       },
       {
+        allergy: null,
         id: "it-steak",
         workingOrderLineId: "wl-steak",
         state: "queued",

@@ -201,6 +201,9 @@ const EXPECTED: Record<
     foreignKeys: ["kitchen_notices_station_fk", "kitchen_notices_order_fk"],
     checks: [
       "kitchen_notices_kind_ck",
+      "kitchen_notices_allergy_block_ck",
+      "kitchen_notices_allergy_kind_ck",
+      "kitchen_notices_allergy_options_ck",
       "kitchen_notices_quantity_ck",
       "kitchen_notices_moved_to_ck",
       "kitchen_notices_rerouted_to_ck",

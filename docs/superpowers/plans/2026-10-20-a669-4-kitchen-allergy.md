@@ -10,6 +10,11 @@
 
 **Spec:** Read the full [approved A669 design](../specs/2026-10-14-a669-allergy-at-the-table-design.md), especially What it stores, The kitchen and Testing. Read the [A669 handoff](../../backlog/till.md#a669-an-allergy-at-the-table) and [A773-2 plan](2026-10-19-a773-2-firing-and-pass.md). This implements slice 4 only.
 
+2026-10-20 owner wording update: the kitchen packet below is approved. The Spanish paper and
+screen clash lines use the final wording in `apps/server/src/i18n/kitchen-allergy.ts` and
+`apps/till/src/i18n/strings.ts`; the other proposed lines are approved as written. The original
+planning-time approval notes and proposed table below remain as history.
+
 ## Global constraints
 
 - Research base: `ba517141a526b9af903331a05bfaeb79ac199346`. Every source receipt below is **reading, not runtime verification**. No product tests, printer trials or upgrades ran while authoring this plan.

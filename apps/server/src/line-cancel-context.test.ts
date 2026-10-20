@@ -7,10 +7,11 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell } from "@waitron/venue-service";
+import { setRoutingCell, ticketItemAllergies } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { advanceTicketItem } from "./working-order.js";
 import { readCancellationContext, requireCancellationContext } from "./line-cancel-context.js";
@@ -41,6 +42,28 @@ useVenueDb({
   },
 });
 
+async function renameFixtureTicket(tx: Transaction, lineId: string, ticketId: string) {
+  const [ticket] = await tx
+    .select({ id: ticketItems.id })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, lineId));
+  const copies =
+    ticket === undefined
+      ? []
+      : await tx
+          .delete(ticketItemAllergies)
+          .where(eq(ticketItemAllergies.ticketItemId, ticket.id))
+          .returning();
+  await tx
+    .update(ticketItems)
+    .set({ id: ticketId })
+    .where(eq(ticketItems.workingOrderLineId, lineId));
+  if (copies.length > 0)
+    await tx
+      .insert(ticketItemAllergies)
+      .values(copies.map((copy) => ({ ...copy, ticketItemId: ticketId })));
+}
+
 async function fixture(release: "fire" | "hold" = "fire", coffee = false) {
   const order = await billWith(
     venue,
@@ -57,15 +80,12 @@ async function fixture(release: "fire" | "hold" = "fire", coffee = false) {
     const extra = rows[1];
     const parentTicket = "f" + randomUUID().slice(1);
     const extraTicket = "0" + randomUUID().slice(1);
-    await tx
-      .update(ticketItems)
-      .set({ id: parentTicket })
-      .where(eq(ticketItems.workingOrderLineId, parent.id));
-    if (extra !== undefined)
-      await tx
-        .update(ticketItems)
-        .set({ id: extraTicket })
-        .where(eq(ticketItems.workingOrderLineId, extra.id));
+    for (const rename of [
+      { lineId: parent.id, ticketId: parentTicket },
+      ...(extra === undefined ? [] : [{ lineId: extra.id, ticketId: extraTicket }]),
+    ]) {
+      await renameFixtureTicket(tx, rename.lineId, rename.ticketId);
+    }
     return { ...order, parent, extra, parentTicket, extraTicket };
   });
 }
@@ -319,10 +339,7 @@ describe("cancellation confirmation context", () => {
             .values({ ...order.extra!, id: randomUUID(), lineNo: 3 });
           break;
         case "new_ticket":
-          await tx
-            .update(ticketItems)
-            .set({ id: randomUUID() })
-            .where(eq(ticketItems.id, order.extraTicket));
+          await renameFixtureTicket(tx, order.extra!.id, randomUUID());
           break;
         case "fired":
           await tx

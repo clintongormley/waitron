@@ -34,6 +34,7 @@ const queue: ExpoOrder[] = [
         away: false,
         items: [
           {
+            allergy: null,
             id: "ti-0",
             name: "Pan",
             crossRefs: [
@@ -67,6 +68,7 @@ const queue: ExpoOrder[] = [
         away: false,
         items: [
           {
+            allergy: null,
             id: "ti-1",
             name: "Croquetas",
             crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
@@ -89,6 +91,7 @@ const queue: ExpoOrder[] = [
         away: false,
         items: [
           {
+            allergy: null,
             id: "ti-2",
             name: "Solomillo",
             crossRefs: [{ kind: "for", name: "AGUA", stationName: null }],
@@ -123,6 +126,7 @@ const queue: ExpoOrder[] = [
         away: false,
         items: [
           {
+            allergy: null,
             id: "ti-3",
             name: "Flan",
             qty: "1.000",
@@ -144,6 +148,7 @@ const queue: ExpoOrder[] = [
 
 function passItem(id: string, name: string, over: Partial<ExpoItem> = {}): ExpoItem {
   return {
+    allergy: null,
     id,
     name,
     qty: "1.000",

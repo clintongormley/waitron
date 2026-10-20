@@ -3,6 +3,7 @@ import type {
   AllergyMoveRead,
   AllergyPatch,
   AllergySendTarget,
+  KitchenAllergyBlock,
   PartyAllergyRead,
 } from "@waitron/module";
 import type { FinishTableResolution } from "./finish-table-types.js";
@@ -1518,6 +1519,7 @@ export interface QueueGroup {
 
 /** One ticket item on a station's queue; `id` is the per-line bump target. */
 export interface StationQueueItem {
+  allergy: KitchenAllergyBlock | null;
   lastMove?: {
     fromStationName: string;
     personName: string | null;
@@ -1579,7 +1581,8 @@ export interface ElsewhereItem {
 }
 
 /** What a kitchen notice tells a station about sent work. */
-export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rerouted";
+export type KitchenNoticeKind =
+  "recalled" | "void" | "changed" | "moved" | "rerouted" | "allergy_changed" | "allergy_removed";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
@@ -1587,6 +1590,7 @@ export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rer
  * copied as it stood when the notice was recorded.
  */
 export interface KitchenNotice {
+  allergyBlock?: KitchenAllergyBlock | null;
   orderNoteChange?: { before: string | null; after: string | null };
   id: string;
   stationId: string;
@@ -1829,6 +1833,7 @@ export interface DevDeviceList {
  * `stationName`, so the expediter sees which station is lagging.
  */
 export interface ExpoItem {
+  allergy: KitchenAllergyBlock | null;
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
   optionSnapshots?: OptionSnapshot[];

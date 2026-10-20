@@ -5,7 +5,7 @@ import {
 import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
-import type { AllergyCommand } from "@waitron/module";
+import type { AllergyCommand, KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
 import {
   assertPartyAllergyAnswered,
   normaliseAllergyPatch,
@@ -13,6 +13,14 @@ import {
 } from "./party-allergy.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import {
+  attachKitchenAllergyCopies,
+  copyAllergyWorkingTick,
+  notifyKitchenAllergyDestination,
+  freezeKitchenAllergies,
+  freezeKitchenAllergyItems,
+  refreshKitchenAllergyClashes,
+} from "./kitchen-allergy.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -1754,6 +1762,7 @@ export async function insertSplitExtras(
   zoneId: string | null,
   dishes: readonly DishKitchenPlace[],
   routing: RoutingOnce,
+  keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>,
 ): Promise<
   { workingOrderLineId: string; stationId: string; firedAt: string | null; quantity: number }[]
 > {
@@ -1822,6 +1831,7 @@ export async function insertSplitExtras(
   if (values.length === 0) return [];
   try {
     const inserted = await tx.insert(ticketItems).values(values).returning({
+      id: ticketItems.id,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
@@ -1829,6 +1839,12 @@ export async function insertSplitExtras(
       madeHere: ticketItems.madeHere,
     });
     for (const row of inserted) if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
+    await attachKitchenAllergyCopies(tx, inserted, keepAllergies);
+    await freezeKitchenAllergies(
+      tx,
+      cfg,
+      inserted.filter((row) => !row.madeHere && row.firedAt !== null).map((row) => row.id),
+    );
     return inserted
       .filter((row) => !row.madeHere)
       .map((row) => ({
@@ -1892,6 +1908,7 @@ export async function fireLines(
     unroutable?: "skip";
     keepStations?: ReadonlyMap<string, string>;
     keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
+    keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>;
     routing?: RoutingOnce;
   } = {},
 ): Promise<FireableLine[]> {
@@ -2115,6 +2132,7 @@ export async function fireLines(
     values.length === 0
       ? []
       : await tx.insert(ticketItems).values(values).returning({
+          id: ticketItems.id,
           workingOrderLineId: ticketItems.workingOrderLineId,
           stationId: ticketItems.stationId,
           firedAt: ticketItems.firedAt,
@@ -2124,6 +2142,7 @@ export async function fireLines(
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
   }
+  await attachKitchenAllergyCopies(tx, inserted, options.keepAllergies);
 
   const firingDishes = dishPlaces.filter((dish) => dish.firedAt !== null);
   const releasedExtras =
@@ -2161,6 +2180,7 @@ export async function fireLines(
     serviceContext?.zoneId ?? null,
     dishPlaces,
     routing,
+    options.keepAllergies,
   );
 
   // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
@@ -2174,6 +2194,7 @@ export async function fireLines(
         .filter((row) => row.firedAt !== null)
         .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId })),
     );
+  await freezeKitchenAllergyItems(tx, cfg, orderId, firedItems);
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;
 }
@@ -2512,6 +2533,10 @@ async function finishRelease(
   const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
     (item) => !rerouted.has(item.workingOrderLineId),
   );
+  await freezeKitchenAllergyItems(tx, cfg, orderId, [
+    ...fired,
+    ...extras.filter((item) => item.firedAt !== null),
+  ]);
   await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
   const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
   for (const item of fired) {
@@ -2523,6 +2548,26 @@ async function finishRelease(
   }
   for (const { from, items } of byOldStation.values())
     await enqueueKitchenTickets(tx, cfg, orderId, items, { from });
+  if (fired.length > 0) {
+    const destinations = await tx
+      .select({ id: ticketItems.id, lineId: workingOrderLines.id, groupState: orderGroups.state })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          fired.map((item) => item.workingOrderLineId),
+        ),
+      );
+    await notifyKitchenAllergyDestination(
+      tx,
+      cfg,
+      destinations
+        .filter((row) => row.groupState !== "held" || rerouted.has(row.lineId))
+        .map((row) => row.id),
+    );
+  }
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
@@ -4583,6 +4628,7 @@ async function carveLines(
         .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
+      if (parentLineId === null) await copyAllergyWorkingTick(tx, row.id, splitRowId);
       return splitRowId;
     };
     for (const partial of partials) {
@@ -4749,6 +4795,7 @@ async function splitTicketItem(
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
   });
+  await VENUE_SERVICE.copyTicketAllergy(tx, ticketItemId, id);
   const passMarks = await tx
     .select()
     .from(passItemMarks)
@@ -5934,6 +5981,19 @@ async function applyLineEdits(
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
   const keepSentNumber = new Map<number, string[]>();
+  const replacing = changes
+    .filter(({ action }) => action === "change")
+    .flatMap(({ parent, kept }) => [parent, ...kept.map(({ child }) => child)]);
+  const oldAllergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    replacing.flatMap((line) => (line.ticket === null ? [] : [line.ticket.id])),
+  );
+  const keepAllergies = new Map<string, TicketAllergyCopy>(
+    replacing.flatMap((line) => {
+      const copy = line.ticket === null ? undefined : oldAllergies.get(line.ticket.id);
+      return copy === undefined ? [] : [[line.id, copy]];
+    }),
+  );
   for (const change of changes.filter(({ action }) => action === "free" || action === "change")) {
     const { parent, quantity, note, optionSnapshots, kept } = change;
     await tx
@@ -6146,7 +6206,12 @@ async function applyLineEdits(
     direction: "added",
   });
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
-  await fireLines(tx, cfg, orderId, fireNow, { keepStations, keepMadeHere, routing });
+  await fireLines(tx, cfg, orderId, fireNow, {
+    keepStations,
+    keepMadeHere,
+    keepAllergies,
+    routing,
+  });
   for (const [sent, lineIds] of keepSentNumber)
     await tx
       .update(ticketItems)
@@ -6158,6 +6223,14 @@ async function applyLineEdits(
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
   for (const { groupId, lineId } of joinedHeld) await correctJoin(tx, cfg, groupId, [lineId]);
+  await refreshKitchenAllergyClashes(
+    tx,
+    cfg,
+    orderId,
+    changes
+      .filter((change) => change.addedAt !== null || change.removedChildren.length > 0)
+      .map((change) => change.parent.id),
+  );
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);
     await tx
@@ -7285,6 +7358,7 @@ export interface QueueGroup {
 }
 
 export interface StationQueueItem {
+  allergy: KitchenAllergyBlock | null;
   lastMove?: StationQueueMove;
   id: string;
   workingOrderLineId: string;
@@ -7616,6 +7690,10 @@ export async function listStationQueues(
     // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
+  const allergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    rows.map((row) => row.itemId),
+  );
   const numberLabels = await readGroupNumberLabels(
     tx,
     rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
@@ -7715,6 +7793,7 @@ export async function listStationQueues(
         : undefined;
     group.items.push({
       id: row.itemId,
+      allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       workingOrderLineId: row.workingOrderLineId,
       ...optional("lastMove", lastMove),
       state: row.state,
@@ -7754,6 +7833,7 @@ export async function listStationQueues(
 
 /** One item on the cross-station expo board. */
 export interface ExpoItem {
+  allergy: KitchenAllergyBlock | null;
   optionSnapshots?: OptionSnapshot[];
   id: string;
   /** The same KITCHEN name the stations read. */
@@ -7922,6 +8002,10 @@ export async function readPassBoard(
       ticketItems.id,
     );
 
+  const allergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    rows.map((row) => row.itemId),
+  );
   const numberLabels = await readGroupNumberLabels(
     tx,
     rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
@@ -8027,6 +8111,7 @@ export async function readPassBoard(
     );
     section.items.push({
       id: row.itemId,
+      allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
       qty: thousandthsToDecimal(row.quantity),

@@ -2350,18 +2350,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
-- **A669-4 — allergy information in the kitchen.** Freeze each assigned guest's allergy details
-  with the ticket item; show them on 58/80 mm kitchen paper and station/pass screens. Changes or
-  deletion affecting unserved dishes already with the kitchen must create acknowledged,
-  station-specific change/removal notices. The table answer, guest editor, dish assignments and
-  send guards are implemented together; they do not yet deliver this kitchen information.
-  The [reviewed kitchen plan](superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
-  defines storage, paper, boards and notices. Implementation remains; kitchen Spanish wording
-  still needs the owner's answer.
-  [Handoff](backlog/till.md#a669-an-allergy-at-the-table),
-  [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
-  [mockups](backlog/mockups/a669-allergy-at-the-table/)
-
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
   station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before

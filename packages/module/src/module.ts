@@ -1,4 +1,8 @@
-import type { PartyAllergySnapshot } from "./party-allergy.js";
+import type {
+  KitchenAllergyBlock,
+  PartyAllergySnapshot,
+  TicketAllergyCopy,
+} from "./party-allergy.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
 import semver from "semver";
 import type { Hono } from "hono";
@@ -617,11 +621,13 @@ export interface KitchenNoteChange {
 
 export interface StationNotice {
   orderNoteChange?: KitchenNoteChange;
+  allergyBlock?: KitchenAllergyBlock | null;
   id: string;
   stationId: string;
   workingOrderId: string;
   orderLabel: string;
-  kind: "recalled" | "void" | "changed" | "moved" | "rerouted";
+  kind:
+    "recalled" | "void" | "changed" | "moved" | "rerouted" | "allergy_changed" | "allergy_removed";
   lineName: string;
   unitName: Record<string, string> | null;
   soldInEach: boolean;
@@ -1321,9 +1327,17 @@ export interface VenueServiceContribution {
       quantity: Decimal;
       wasStarted: boolean;
     }[],
-    kind: "recalled" | "void" | "changed" | "moved" | "rerouted",
+    kind:
+      | "recalled"
+      | "void"
+      | "changed"
+      | "moved"
+      | "rerouted"
+      | "allergy_changed"
+      | "allergy_removed",
     options?: {
       orderNoteChange?: KitchenNoteChange;
+      allergyBlock?: KitchenAllergyBlock | null;
       movedTo?: string | null;
       direction?: "added" | "removed" | null;
       cancelledExtra?: string | null;
@@ -1363,6 +1377,24 @@ export interface VenueServiceContribution {
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;
+  copyTicketAllergy(
+    tx: Transaction,
+    fromTicketItemId: string,
+    toTicketItemId: string,
+  ): Promise<void>;
+  recordTicketAllergies(
+    tx: Transaction,
+    rows: readonly ({ ticketItemId: string } & TicketAllergyCopy)[],
+  ): Promise<void>;
+  readTicketAllergies(
+    tx: Transaction,
+    ticketItemIds: readonly string[],
+  ): Promise<ReadonlyMap<string, TicketAllergyCopy>>;
+  setTicketAllergyCurrent(
+    tx: Transaction,
+    ticketItemId: string,
+    block: KitchenAllergyBlock | null,
+  ): Promise<void>;
   partiesWithAllergicGuests(
     tx: Transaction,
     partyIds: readonly string[],

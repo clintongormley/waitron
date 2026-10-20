@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { GUIDE_PAGE_TOKENS, GUIDE_THEME_KEY, mountGuidePages } from "./guide-pages.js";
 import type { Logger } from "./logger.js";
+import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 
 const EN_PRODUCTS = [
   "# Products",
@@ -84,6 +85,18 @@ function between(html: string, open: string, close: string): string {
 }
 
 describe("guide pages", () => {
+  it.each(["en", "es"] as const)("serves the shipped kitchen guide in %s", async (lang) => {
+    const app = new Hono();
+    mountGuidePages(app, {}, vi.fn());
+    const response = await app.request(`/help/${lang}/kitchen-service`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(`<html lang="${lang}">`);
+    expect(html).toContain(`<title>${KITCHEN_ALLERGY_WORDS[lang].guideTitle} · Waitron</title>`);
+    for (const id of ["allergy-copies", "corrections", "held-work", "reprints"])
+      expect(html).toContain(`<section id="${id}"`);
+  });
+
   it("serves a guide page with its title, language, trail and sections", async () => {
     const res = await appFor(root).request("/help/es/products");
     expect(res.status).toBe(200);

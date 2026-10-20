@@ -1,3 +1,8 @@
+import {
+  kitchenAllergyBlock,
+  kitchenAllergyMarker,
+  kitchenAllergyStyles,
+} from "../widgets/kitchen-allergy-block.js";
 import { KitchenAllergySend } from "../state/kitchen-allergy-send.js";
 import { groupName } from "../widgets/group-name.js";
 import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
@@ -89,6 +94,7 @@ export class TillExpoScreen extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    kitchenAllergyStyles,
     unavailableStyles,
     orderNumberStyles,
     css`
@@ -939,10 +945,13 @@ export class TillExpoScreen extends LitElement {
   }
 
   #card(order: ExpoOrder): TemplateResult {
+    const visible =
+      order.party === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
     const band = this.#orderBand(order);
     return html`<article class="order ${this.#accentClasses(band)}" data-order=${order.orderNumber}>
       <div class="order-head">
         <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
+        ${kitchenAllergyMarker(visible.some((part) => part.items.some((item) => item.allergy !== null)))}
         ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}
         <span class="age">${order.openedMinutes} ${t("station.min")}</span>
       </div>
@@ -1116,7 +1125,7 @@ export class TillExpoScreen extends LitElement {
       ${this.#customisation(item)}${this.#modifiers(item)}${queueCrossRefs(item, "item")}${this.#allergens(item)}${dietBadges(
         item.asServedDiet,
         `item-diet-${item.id}`,
-      )}
+      )}${kitchenAllergyBlock(item.allergy)}
     </span>`;
   }
 

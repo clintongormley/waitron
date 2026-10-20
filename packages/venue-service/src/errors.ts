@@ -178,7 +178,13 @@ declare module "@waitron/shared" {
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
     "kitchen_notice.invalid": {
-      field: "direction" | "cancelledExtra" | "reroutedTo" | "fromNumber" | "orderNoteChange";
+      field:
+        | "direction"
+        | "cancelledExtra"
+        | "reroutedTo"
+        | "fromNumber"
+        | "orderNoteChange"
+        | "allergyBlock";
     };
     /** `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`. */
     "hours.invalid": { field: string };

@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const GUIDE_LANGUAGES = ["en", "es"] as const;
-export const GUIDE_PAGES = ["products", "modifiers", "content-and-images"] as const;
+export const GUIDE_PAGES = [
+  "products",
+  "modifiers",
+  "content-and-images",
+  "kitchen-service",
+] as const;
 
 export function guideRoot(): string {
   return fileURLToPath(new URL("./guide/", import.meta.url));

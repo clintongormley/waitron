@@ -10,6 +10,12 @@ import {
   splitPartyAllergies,
 } from "./party-allergy.js";
 import {
+  copyTicketAllergy,
+  recordTicketAllergies,
+  readTicketAllergies,
+  setTicketAllergyCurrent,
+} from "./kitchen-allergy.js";
+import {
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
 } from "./business-day-schedule.js";
@@ -132,6 +138,10 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readServiceDay,
   readFloorPlanSets,
   readPartyAllergy,
+  copyTicketAllergy,
+  recordTicketAllergies,
+  readTicketAllergies,
+  setTicketAllergyCurrent,
   partiesWithAllergicGuests,
   savePartyAllergy,
   writePartyAllergy,

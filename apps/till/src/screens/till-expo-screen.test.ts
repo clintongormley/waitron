@@ -48,6 +48,7 @@ const threeCourseOrder: ExpoOrder = {
       away: false,
       items: [
         {
+          allergy: null,
           id: "ti-0",
           name: "Pan",
           qty: "1.000",
@@ -69,6 +70,7 @@ const threeCourseOrder: ExpoOrder = {
       away: false,
       items: [
         {
+          allergy: null,
           id: "ti-1",
           name: "Croquetas",
           qty: "2.000",
@@ -90,6 +92,7 @@ const threeCourseOrder: ExpoOrder = {
       away: false,
       items: [
         {
+          allergy: null,
           id: "ti-2",
           name: "Solomillo",
           qty: "1.000",
@@ -129,6 +132,7 @@ const firedNotReadyOrder: ExpoOrder = {
       away: false,
       items: [
         {
+          allergy: null,
           id: "ti-3",
           name: "Flan",
           qty: "1.000",
@@ -160,6 +164,7 @@ const withAwayCourse: ExpoOrder = {
       away: true,
       items: [
         {
+          allergy: null,
           id: "ti-4",
           name: "Gazpacho",
           qty: "1.000",
@@ -181,6 +186,7 @@ const withAwayCourse: ExpoOrder = {
       away: false,
       items: [
         {
+          allergy: null,
           id: "ti-5",
           name: "Merluza",
           qty: "1.000",
@@ -1576,6 +1582,7 @@ describe("till-expo-screen", () => {
           away: false,
           items: [
             {
+              allergy: null,
               id: "ti-9",
               name: "Cortado",
               qty: "1.000",
@@ -1629,6 +1636,7 @@ describe("till-expo-screen", () => {
           away: false,
           items: [
             {
+              allergy: null,
               id: "ti-c",
               name: "Chuletón",
               qty: "1.000",
@@ -1706,6 +1714,7 @@ describe("till-expo-screen", () => {
           away: false,
           items: [
             {
+              allergy: null,
               id: "ti-a",
               name: "Hamburguesa",
               qty: "1.000",
@@ -1719,6 +1728,7 @@ describe("till-expo-screen", () => {
               asServed: { allergens: { milk: {} }, pending: false },
             },
             {
+              allergy: null,
               id: "ti-p",
               name: "Especial",
               qty: "1.000",
@@ -1758,6 +1768,7 @@ describe("till-expo-screen", () => {
 
   describe("as-served diet badges (Task 7): vegan/vegetarian/contains chips, neutral not-reviewed note", () => {
     const dietItem = (id: string, asServedDiet: ExpoItem["asServedDiet"]): ExpoItem => ({
+      allergy: null,
       id,
       name: "Ensalada",
       qty: "1.000",
@@ -1972,6 +1983,7 @@ describe("till-expo-screen", () => {
           away: false,
           items: [
             {
+              allergy: null,
               id: itemId,
               name: "Flan",
               qty: "1.000",
@@ -2185,6 +2197,7 @@ it("shows a dish's frozen options answers in the KITCHEN's wording", async () =>
 describe("till-expo-screen — a seated party's groups", () => {
   function passItem(id: string, name: string, over: Partial<ExpoItem> = {}): ExpoItem {
     return {
+      allergy: null,
       id,
       name,
       qty: "1.000",
