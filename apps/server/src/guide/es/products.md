@@ -21,7 +21,8 @@ que lo corriges.
 Abre **Venta** para cambiar Disponible o **Pedir por separado**: Cualquiera, Solo el personal o Nadie.
 La explicación bajo la opción elegida te dice qué permite. Una variante solo tiene aquí Disponible.
 Venta empieza cerrada, con los ajustes actuales en su línea de resumen. La lista de Productos
-muestra este ajuste en su columna **Por separado**, con un filtro.
+muestra este ajuste en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
+elige por él.
 
 Elige la miniatura marcada con un lápiz junto a Nombre para cambiar la imagen o el color. El cuadrado
 muestra el cambio de color antes de guardar. Cierra el panel con Escape para volver a la miniatura.
@@ -237,8 +238,9 @@ plato, no algo más que comer. La caja y la cocina muestran la lista propia de c
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
 comprobado de uno que sí. Una variante muestra su estado efectivo; la cursiva indica que sigue a su
 producto. El filtro de Alérgenos usa ese mismo estado para cada variante. Las columnas
-**Alérgenos** e **Info dietética** empiezan ocultas: muéstralas con el botón **Personalizar columnas**,
-junto a la búsqueda de la lista. Sus filtros funcionan aunque las columnas estén ocultas.
+**Alérgenos** e **Info dietética** empiezan ocultas. Para mostrarlas, pulsa el botón de columnas al
+final de la búsqueda de la lista; en **Personalizar**, pulsa el ojo junto a cada columna y luego
+**Listo**. Sus filtros funcionan aunque las columnas estén ocultas.
 
 Antes de publicar ahora o de programar una carta, la confirmación muestra los platos ofrecidos y las
 variantes activas cuyos alérgenos están sin revisar. Selecciona un nombre para abrir la página propia

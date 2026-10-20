@@ -21,7 +21,8 @@ open until you have fixed it.
 Open **Selling** to change Available or **Standalone ordering by**: Anyone, Staff only or Nobody.
 The explanation below the selected choice tells you what it allows. A variant has only Available
 here. Selling starts closed, with the current settings on its summary line. The Products list shows
-this setting in its **Standalone** column, with a filter.
+this setting in its **Standalone** column; the **Standalone ordering by** filter in **Filters** picks
+by it.
 
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
@@ -227,8 +228,9 @@ to eat. The till and kitchen show each item's own list.
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows its effective state; italic means it follows
 its parent. The Allergens filter uses that same state for each variant. The **Allergens** and
-**Dietary info** columns start hidden: turn them on with the **Customise columns** button beside
-the list's search. Their filters work while the columns are hidden.
+**Dietary info** columns start hidden. To show them, select the columns button at the right-hand
+end of the list's search box; in **Customise**, select the eye beside each column, then **Done**.
+Their filters work while the columns are hidden.
 
 Before you publish now or schedule a menu, the confirmation lists offered dishes and active
 variants whose allergens are unreviewed. Select a name to open that product's own page. You can
