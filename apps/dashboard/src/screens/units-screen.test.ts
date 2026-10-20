@@ -1194,6 +1194,8 @@ describe("units-screen", () => {
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await vi.waitFor(() => expect(form.open).toBe(false));
     expect(api.updateUnit).toHaveBeenCalledWith("u1", {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: units[0]!.name,
       abbreviation: units[0]!.abbreviation,
       precision: units[0]!.precision,

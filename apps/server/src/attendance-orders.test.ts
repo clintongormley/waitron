@@ -165,11 +165,11 @@ describe("accepted order attendance", () => {
         tx,
         {
           name: "Cooked",
-          customerName: { "es-ES": "Cocción" },
+          customerName: { es: "Cocción" },
           kitchenName: "COOK",
           labels: [
-            { name: "Rare", customerName: { "es-ES": "Poco hecho" }, kitchenName: "RARE" },
-            { name: "Well", customerName: { "es-ES": "Hecho" }, kitchenName: "WELL" },
+            { name: "Rare", customerName: { es: "Poco hecho" }, kitchenName: "RARE" },
+            { name: "Well", customerName: { es: "Hecho" }, kitchenName: "WELL" },
           ],
         },
         "es-ES",
@@ -211,7 +211,7 @@ describe("accepted order attendance", () => {
         tx,
         {
           name: "Side",
-          customerName: { "es-ES": "Acompañamiento" },
+          customerName: { es: "Acompañamiento" },
           kitchenName: "SIDE",
           minPicks: 0,
           maxPicks: 1,

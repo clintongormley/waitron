@@ -4012,3 +4012,39 @@ probe uses a valid cell baseline: 4098 raw bytes with surrounding spaces are ref
 writes; the trimmed 4096-byte value succeeds. Raising only the raw gate makes the refusal
 assertion fail. The ordinary map helper accepts the trimmed value. This records two layer
 boundaries, not a larger editor limit.
+
+## Current-head CI follow-up, 2026-10-20
+
+Run `39400077906` on `f69b0e95099f7aeae5a4a967a14cd7b77fe77c2a` failed in
+server setup and one unit-screen assertion. The captured logs identify each repair below.
+No fiscal test, fiscal writer, money/VAT assertion or root guard was edited for these failures.
+
+- `apps/server/src/testing/adjustment-venue.ts`: the wine-glass variant's customer map key
+  changes from `es-ES` to canonical `es`. Its text, prices, locale argument and all other facts
+  stay the same. Five suites reproduced the setup refusal; all 24 fixture consumers then passed
+  (787 cases). This is the ordinary map validation from Task 4.
+- `apps/server/src/till-sale.test.ts`: the double variant's customer map makes the same
+  `es-ES` to `es` key correction. All existing variant sale/receipt assertions stay intact.
+- `apps/server/src/attendance-orders.test.ts`: four list/label customer-map keys make that
+  same correction. The existing credit, time, activity and rollback checks stay intact.
+- `apps/dashboard/src/screens/units-screen.test.ts`: the measure-switch save's exact body
+  gains `staffName: "Staff unit"` and `staffAbbreviation: "su"`, required by unit option A /
+  Tasks 2–3. Every earlier field/value stays the same. Observed one assertion failure before;
+  all 80 unit-screen cases pass after.
+
+CI also exposed redundant staff fallback copies in newly prepared option answers. The frozen
+staff fields already supply the absent-customer fallback through the unchanged customer reader.
+Server/till preparation now retains `null` for an absent customer map; a present map still resolves
+its requested/default/staff value. This retains the historical representation without changing
+customer wording or adding a catalogue lookup. Authority: Task 12's preparation-only scope and
+unchanged fiscal/recorded-reader boundary.
+
+`modifier-selection.test.ts` restores its original main-branch "keeps a missing customer map
+missing" case and both `toBeNull` assertions. A separate new complete-snapshot case also checks
+the actual customer label under another requested language. It failed on the redundant copies
+before the production correction. `held-options.test.ts` retains the original new fallback cases,
+adds an all-null case and checks the same readable labels; absent maps now expect `null`, while
+present-map and staff/display expectations remain. Two cases failed before the till correction.
+The existing `till-api.fiscal-sale-paths.test.ts` stays byte-identical to the pushed candidate,
+including its exact original null maps, receipt/replay facts, all totals and fiscal assertions.
+The protected golden/immutability suites also pass unchanged (20 cases).

@@ -244,7 +244,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         [
           {
             name: "Doble",
-            customerName: { [LOCALE]: "Doble ración" },
+            customerName: { es: "Doble ración" },
             kitchenName: "DBL",
             image: null,
             unitPrice: "3.20",

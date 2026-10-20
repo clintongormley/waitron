@@ -273,6 +273,10 @@ fixture gives the three DIFFERENT text**, or the test passes whether the surface
 name or the wrong one. Cost: a report reading the diner's wording, recorded above the fixtures in
 `packages/reporting/src/top-sellers.test.ts`.
 
+New option answers resolve an existing customer map before freezing it. If that map is absent,
+the snapshot keeps it absent and stores the staff name separately; the customer reader uses
+that frozen staff name. Neither path needs today's catalogue to read the answer later.
+
 ## Unit names on future orders
 
 Give a unit its own staff name and abbreviation. Translated names and abbreviations can both

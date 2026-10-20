@@ -10,14 +10,16 @@ export function optionSnapshotOf(list: Names, label: Names): OptionSnapshot {
   const language = config.defaultLanguage;
   return {
     listName: { [language]: list.name },
-    listCustomerName: {
-      [language]: newCustomerText(list.customerName, list.name, language, config),
-    },
+    listCustomerName:
+      list.customerName === null
+        ? null
+        : { [language]: newCustomerText(list.customerName, list.name, language, config) },
     listKitchenName: list.kitchenName,
     labelName: { [language]: label.name },
-    labelCustomerName: {
-      [language]: newCustomerText(label.customerName, label.name, language, config),
-    },
+    labelCustomerName:
+      label.customerName === null
+        ? null
+        : { [language]: newCustomerText(label.customerName, label.name, language, config) },
     labelKitchenName: label.kitchenName,
   };
 }

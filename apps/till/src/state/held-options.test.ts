@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { customerOptionSnapshotLabels } from "@waitron/catalogue/src/option-snapshot-labels.js";
 import { deriveOptionSelections, optionSnapshotOf, sameOptionSelections } from "./held-options.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import type { OfferedModifier } from "../api/client.js";
@@ -57,6 +58,7 @@ describe("a newly prepared option answer", () => {
   afterEach(() => setContentLanguages(original));
 
   it.each([
+    [null, null, "Staff list", "Staff label"],
     [null, { fr: "French label" }, "Staff list", "Staff label"],
     [{ fr: "French list" }, { en: "English label" }, "Staff list", "English label"],
     [{ en: "English list", es: "Spanish list" }, {}, "English list", "Staff label"],
@@ -75,14 +77,16 @@ describe("a newly prepared option answer", () => {
         kitchenName: "LABEL KITCHEN",
       };
       const before = structuredClone([selectedList, selectedLabel]);
-      expect(optionSnapshotOf(selectedList, selectedLabel)).toEqual({
+      const answer = optionSnapshotOf(selectedList, selectedLabel);
+      expect(answer).toEqual({
         listName: { en: "Staff list" },
-        listCustomerName: { en: wantList },
+        listCustomerName: listText === null ? null : { en: wantList },
         listKitchenName: "LIST KITCHEN",
         labelName: { en: "Staff label" },
-        labelCustomerName: { en: wantLabel },
+        labelCustomerName: labelText === null ? null : { en: wantLabel },
         labelKitchenName: "LABEL KITCHEN",
       });
+      expect(customerOptionSnapshotLabels([answer], "fr")).toEqual([`${wantList}: ${wantLabel}`]);
       expect([selectedList, selectedLabel]).toEqual(before);
     },
   );

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EACH_UNIT,
+  customerOptionSnapshotLabels,
   type OptionLabel,
   type OptionList,
   type ResolvedExtraList,
@@ -144,6 +145,31 @@ const products = new Map<string, ExtraProductFacts>([
 ]);
 
 describe("buildLineExtras", () => {
+  it("keeps absent customer maps absent while freezing readable staff fallback", () => {
+    const list = {
+      ...cooked,
+      customerName: null,
+      labels: [{ ...mediumRare, customerName: null }],
+    };
+    const answer = buildLineExtras(
+      { extras: [], options: [list] },
+      products,
+      { options: [{ listId: list.id, labelId: mediumRare.id }] },
+      "en",
+    ).optionSnapshots;
+    expect(answer).toEqual([
+      {
+        listName: { en: "Cooked staff" },
+        listCustomerName: null,
+        listKitchenName: "Cook kitchen",
+        labelName: { en: "Medium rare staff" },
+        labelCustomerName: null,
+        labelKitchenName: "MR kitchen",
+      },
+    ]);
+    expect(customerOptionSnapshotLabels(answer, "fr")).toEqual(["Cooked staff: Medium rare staff"]);
+  });
+
   it("freezes a new option's list and label from their own default or staff text", () => {
     const list = {
       ...cooked,
@@ -315,7 +341,7 @@ describe("buildLineExtras", () => {
     ]);
   });
 
-  it("prepares each missing customer map from its own staff name", () => {
+  it("keeps a missing customer map missing", () => {
     const unnamed: OptionList = {
       ...cooked,
       customerName: null,
@@ -327,8 +353,8 @@ describe("buildLineExtras", () => {
       { options: [{ listId: "list-cooked", labelId: "label-medium-rare" }] },
       "es",
     );
-    expect(optionSnapshots[0]!.listCustomerName).toEqual({ es: "Cooked staff" });
-    expect(optionSnapshots[0]!.labelCustomerName).toEqual({ es: "Medium rare staff" });
+    expect(optionSnapshots[0]!.listCustomerName).toBeNull();
+    expect(optionSnapshots[0]!.labelCustomerName).toBeNull();
   });
 
   it("turns a pick into a child carrying the product's own three names, VAT class and the resolved price", () => {

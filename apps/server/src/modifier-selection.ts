@@ -69,16 +69,16 @@ function answerFreezers(
     const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
     return (language, mode = "new") => {
       const customer = (text: Record<string, string> | null, staff: string) =>
-        mode === "recorded"
-          ? text === null
-            ? null
-            : { [language]: resolveSnapshotText(text, language, language) }
-          : {
-              [language]: newCustomerText(text, staff, language, {
-                defaultLanguage: language,
-                languages: [language],
-              }),
-            };
+        text === null
+          ? null
+          : mode === "recorded"
+            ? { [language]: resolveSnapshotText(text, language, language) }
+            : {
+                [language]: newCustomerText(text, staff, language, {
+                  defaultLanguage: language,
+                  languages: [language],
+                }),
+              };
       return {
         listName: { [language]: list.name },
         listCustomerName: customer(list.customerName, list.name),
