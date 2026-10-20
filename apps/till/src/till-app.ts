@@ -9524,9 +9524,11 @@ export class TillApp extends LitElement {
       .equipmentErrors=${this.payEquipmentErrors}
       .busy=${this.submitting}
       .refusal=${open.refusal}
+      .confirmation=${this.#unansweredWholePayments.get(open.billId)}
       @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
         this.#onPayEquipmentPick(event.detail)}
       @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
+      @presented-pay-resend=${() => void this.#onPresentedResend()}
       @presented-pay-close=${() => this.#closePresented(open.id)}
     ></till-presented-pay-dialog>`;
   }
@@ -15867,6 +15869,26 @@ export class TillApp extends LitElement {
       this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
       return true;
     });
+    if (paid) this.#closePresented(open.id);
+  }
+
+  /** The locked sheet's one action: {@link #payWholeTab} sends the payment it holds for the bill as
+   * it was first sent. With no answer again the sheet stays, still locked. */
+  async #onPresentedResend(): Promise<void> {
+    const open = this.#presentedNow();
+    if (open === null || this.submitting) return;
+    const held = this.#unansweredWholePayments.get(open.billId);
+    if (held === undefined) return;
+    this.presentedPaying = { ...open, refusal: null };
+    const paid = await this.#payWholeTab(
+      { ...held.tender, ...(held.guests === undefined ? {} : { guests: held.guests }) },
+      (error) => {
+        if (this.#presentedNow(open.id) === null) return false;
+        if (!isNetworkFailure(error))
+          this.#showPresentedRefusal(open.id, this.#counterRefusal(wholeTabErrorOf(error)));
+        return true;
+      },
+    );
     if (paid) this.#closePresented(open.id);
   }
 

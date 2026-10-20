@@ -25,11 +25,14 @@ import {
   BARRA,
   billOf,
   dialog,
+  discardUnsavedLeave,
+  floor,
   emit,
   equipmentItem,
   equipmentWith,
   LECTOR_2,
   lock,
+  money,
   roleOf,
   shell,
   tableOrder,
@@ -506,17 +509,15 @@ describe("a presented bill on a handheld", () => {
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
   });
 
-  it("a cash send with no answer closes the sheet, so the pay card's recovery shows", async () => {
+  it("a cash send with no answer closes the sheet, leaving the bill's one Pay", async () => {
     const { el, order } = await openPresented({
       collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     await payFromSheet(el, { method: "cash", tendered: "150.00", guests: 4 });
 
     expect(presented(el)).toBeNull();
-    const tender = order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
-    expect(tender).not.toBeNull();
-    expect(tender!.confirmation?.tender).toEqual({ method: "cash", amount: "150.00" });
-    expect(inOrder(order, "[data-pay-sheet]")).toBeNull();
+    expect(order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")).toBeNull();
+    expect(inOrder(order, "[data-pay-sheet]")).not.toBeNull();
   });
 
   const lookBackgrounds = new Map<string, string>();
@@ -569,6 +570,174 @@ describe("a presented bill on a handheld", () => {
     expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
     expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
   });
+});
+
+describe("an unanswered presented payment on a handheld", () => {
+  const presented = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
+  const inPresented = (el: TillApp, selector: string) =>
+    presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+  const placedBill = billOf({ status: "placed", receiptAvailable: true });
+  const noAnswer = () => new TypeError("Failed to fetch");
+  const asked = {
+    cash: { method: "cash", tendered: "150.00", guests: 4 },
+    manual: { method: "manual", externalRef: "operation-17", guests: 4 },
+  } as const satisfies Record<string, PresentedPayDetail>;
+  const tenderOf = {
+    cash: { method: "cash", amount: "150.00" },
+    manual: { method: "card", amount: "120.00", externalRef: "operation-17" },
+  } as const;
+
+  /** The bill's sheet opened, `method` sent from it, and the sheet opened again after no answer. */
+  async function sentWithNoAnswer(
+    method: "cash" | "manual",
+    collectOrder: ReturnType<typeof vi.fn>,
+  ) {
+    const { el } = await mountApp(
+      onPhone({ getPartyBills: vi.fn().mockResolvedValue([placedBill]), collectOrder }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    emit(presented(el)!, "presented-pay", asked[method]);
+    await flush(el);
+    expect(presented(el)).toBeNull();
+    await pressPaySheet(el, order);
+    await presented(el)!.updateComplete;
+    return { el, order };
+  }
+
+  async function expectLockedOn(el: TillApp, method: "cash" | "manual"): Promise<void> {
+    const sheet = presented(el)!;
+    await sheet.updateComplete;
+    expect(sheet.open).toBe(true);
+    expect(sheet.confirmation?.tender).toEqual(tenderOf[method]);
+    expect(sheet.confirmation?.guests).toBe(4);
+    expect(inPresented(el, "[data-presented-pay-resend]")).not.toBeNull();
+    expect(inPresented(el, "till-pay-equipment")).toBeNull();
+    expect(text(inPresented(el, '[role="status"]'))).toBe(t("sale.unconfirmed"));
+    if (method === "cash")
+      expect(text(inPresented(el, "[data-presented-pay-tendered]"))).toBe(money("150.00"));
+    else {
+      const ref = inPresented(el, 'wt-input[name="externalRef"]') as HTMLElement & {
+        value: string;
+        disabled: boolean;
+      };
+      expect(ref.value).toBe("operation-17");
+      expect(ref.disabled).toBe(true);
+    }
+  }
+
+  async function resend(el: TillApp): Promise<void> {
+    inPresented(el, "[data-presented-pay-resend]")!.click();
+    await flush(el);
+  }
+
+  it.each(["cash", "manual"] as const)(
+    "a %s payment with no answer reopens the sheet locked on it, and its action sends it again; answered, the ticket shows",
+    async (method) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(noAnswer())
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const { el, order } = await sentWithNoAnswer(method, send);
+
+      expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+      await expectLockedOn(el, method);
+      await resend(el);
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[0]).toEqual([
+        "wo-4",
+        tenderOf[method],
+        undefined,
+        4,
+        expect.objectContaining({ billId: "wo-4" }),
+      ]);
+      expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
+      expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
+      expect(presented(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+
+  it("a resend with no answer keeps the sheet open and locked on the same payment", async () => {
+    const send = vi.fn().mockRejectedValue(noAnswer());
+    const { el } = await sentWithNoAnswer("cash", send);
+    await resend(el);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
+    await expectLockedOn(el, "cash");
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+  });
+
+  it("a resend refused as not recorded frees the bill: the sheet then opens unlocked", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockRejectedValueOnce({ code: "draft.out_of_date" });
+    const { el, order } = await sentWithNoAnswer("cash", send);
+    await resend(el);
+    emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+    await pressPaySheet(el, order);
+    await presented(el)!.updateComplete;
+
+    expect(presented(el)!.confirmation).toBeUndefined();
+    expect(inPresented(el, "[data-presented-pay-resend]")).toBeNull();
+    expect(inPresented(el, "[data-presented-pay-take]")).not.toBeNull();
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("a part payment of the bill is refused as unconfirmed", async () => {
+    const send = vi.fn().mockRejectedValue(noAnswer());
+    const { el, order } = await sentWithNoAnswer("cash", send);
+    emit(presented(el)!, "presented-pay-close");
+    await flush(el);
+    emit(order, "bill-pay", { way: "contribution", lines: [], amount: "30.00" });
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.textContent).toContain(t("sale.unconfirmed"));
+  });
+
+  it.each(["cash", "manual"] as const)(
+    "a %s payment with no answer stays locked after signing out and in as another person",
+    async (method) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(noAnswer())
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const { el } = await sentWithNoAnswer(method, send);
+      emit(presented(el)!, "presented-pay-close");
+      await flush(el);
+
+      emit(shell(el), "logout");
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
+      if (question?.open) await discardUnsavedLeave(el);
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const order = tableOrder(el);
+      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")?.click();
+      await flush(el);
+      await showBillFooter(order);
+      await pressPaySheet(el, order);
+
+      await expectLockedOn(el, method);
+      await resend(el);
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
 });
 
 describe("till-app: a counter till's simulated card outcome", () => {

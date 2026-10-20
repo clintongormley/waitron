@@ -3860,7 +3860,8 @@ export class TillTableOrderScreen extends LitElement {
     if (partlyPaid === undefined)
       return html`<section class="pay">
         <h2>${t("table.pay_title")}</h2>
-        ${this.#paySheetButton(shown)} ${this.#billChoices(shown)}
+        ${this.#paySheetButton(shown)}
+        ${this.paymentConfirmation === undefined ? this.#billChoices(shown) : nothing}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
@@ -3890,14 +3891,15 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** A handheld pays an open bill, and a presented bill not yet paid in part, through a pay sheet;
-   * a payment A773-1 holds keeps the pay card. */
+   * a whole payment A773-1 holds keeps the pay card, except on a presented bill, whose sheet shows
+   * it locked. */
   #paysOnSheet(shown: PartyBill | undefined): boolean {
+    if (!this.handheld) return false;
+    if (this.paymentConfirmation !== undefined) return shown?.status === "placed";
     return (
-      this.handheld &&
-      this.paymentConfirmation === undefined &&
-      (shown === undefined ||
-        shown.status === "open" ||
-        (shown.status === "placed" && !paidInPart(shown)))
+      shown === undefined ||
+      shown.status === "open" ||
+      (shown.status === "placed" && !paidInPart(shown))
     );
   }
 

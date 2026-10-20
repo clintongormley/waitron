@@ -545,3 +545,112 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     );
   });
 });
+
+describe("till-presented-pay-dialog: locked on a payment with no answer", () => {
+  const cash = { tender: { method: "cash" as const, amount: "70.00" }, outstanding: "62.40" };
+  const manual = {
+    tender: { method: "card" as const, amount: "62.40", externalRef: "operation-17" },
+    outstanding: "62.40",
+    guests: 4,
+  };
+  const resend = (el: TillPresentedPayDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean; loading: boolean }>(
+      "[data-presented-pay-resend]",
+    );
+  const radios = (el: TillPresentedPayDialog) => [
+    ...root(el).querySelectorAll<HTMLInputElement>('input[name="method"]'),
+  ];
+  const stepper = (el: TillPresentedPayDialog) =>
+    root(el).querySelector<HTMLElement & { value: string; disabled: boolean }>(
+      'wt-number-stepper[name="guests"]',
+    );
+
+  it("shows the cash payment sent: its method alone, fixed, the bill, the cash and the change", async () => {
+    const el = await mount({ confirmation: cash, amount: "62.40" });
+
+    expect(radios(el).map((radio) => [radio.value, radio.checked])).toEqual([["cash", true]]);
+    expect(root(el).querySelector<HTMLFieldSetElement>("[data-pay-method]")!.disabled).toBe(true);
+    expect(text(root(el).querySelector("[data-presented-pay-balance] dd"))).toBe(money("62.40"));
+    expect(text(root(el).querySelector("[data-presented-pay-tendered]"))).toBe(money("70.00"));
+    expect(text(root(el).querySelector("[data-presented-pay-change]"))).toBe(money("7.60"));
+    expect(field(el, "tendered")).toBeNull();
+    expect(field(el, "externalRef")).toBeNull();
+    expect(stepper(el)).toBeNull();
+  });
+
+  it("shows another machine's operation number and the guests, both disabled", async () => {
+    const el = await mount({ confirmation: manual, asksGuests: true, receiptGuests: 9 });
+
+    expect(radios(el).map((radio) => [radio.value, radio.checked])).toEqual([["manual", true]]);
+    const ref = root(el).querySelector<HTMLElement & { value: string; disabled: boolean }>(
+      '[name="externalRef"]',
+    )!;
+    expect(ref.value).toBe("operation-17");
+    expect(ref.disabled).toBe(true);
+    expect(stepper(el)!.value).toBe("4");
+    expect(stepper(el)!.disabled).toBe(true);
+    expect(root(el).querySelector("[data-presented-pay-tendered]")).toBeNull();
+  });
+
+  it("names the original method even when the profile no longer offers it", async () => {
+    const el = await mount({ confirmation: cash, takesCash: false });
+    expect(radios(el).map((radio) => radio.value)).toEqual(["cash"]);
+  });
+
+  it("draws no reader and printer row, no Cobrar, and says the payment is unconfirmed", async () => {
+    const el = await mount({ confirmation: cash });
+
+    expect(row(el)).toBeNull();
+    expect(root(el).querySelector("[data-presented-pay-take]")).toBeNull();
+    expect(text(root(el).querySelector('[role="status"]'))).toBe(t("sale.unconfirmed"));
+    expect(text(resend(el))).toBe(t("action.confirm_payment"));
+    expect(resend(el)!.disabled).toBe(false);
+  });
+
+  it("its one action asks to send the payment again, and nothing else", async () => {
+    const el = await mount({ confirmation: cash });
+    const again = capture(el, "presented-pay-resend");
+    const paid = capture(el, "presented-pay");
+
+    resend(el)!.click();
+    await el.updateComplete;
+    expect(again).toEqual([{}]);
+    expect(paid).toEqual([]);
+  });
+
+  it("while busy, the action is loading, asks nothing, and the status line steps aside", async () => {
+    const el = await mount({ confirmation: cash, busy: true });
+    const again = capture(el, "presented-pay-resend");
+
+    expect(resend(el)!.loading).toBe(true);
+    expect(resend(el)!.disabled).toBe(true);
+    expect(root(el).querySelector('[role="status"]')).toBeNull();
+    resend(el)!.click();
+    await el.updateComplete;
+    expect(again).toEqual([]);
+  });
+
+  it("a refusal shows above the action, even one naming a field, and never disables it", async () => {
+    const el = await mount({
+      confirmation: cash,
+      refusal: { code: "order.payment_in_flight", field: "tendered" },
+    });
+    expect(actions(el).error).toBe(codeMessage("order.payment_in_flight"));
+    expect(resend(el)!.disabled).toBe(false);
+  });
+
+  it("unlocks on the first method offered, with nothing typed, once the payment is let go", async () => {
+    const el = await mount({ confirmation: manual });
+    el.confirmation = undefined;
+    await el.updateComplete;
+
+    expect(methods(el)).toEqual(["card", "cash", "manual"]);
+    expect(root(el).querySelector<HTMLInputElement>('input[value="card"]')!.checked).toBe(true);
+    expect(root(el).querySelector<HTMLFieldSetElement>("[data-pay-method]")!.disabled).toBe(false);
+    expect(resend(el)).toBeNull();
+    expect(charge(el)).not.toBeNull();
+    expect(row(el)).not.toBeNull();
+    await pick(el, "manual");
+    expect(field(el, "externalRef")!.value).toBe("");
+  });
+});

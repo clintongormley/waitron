@@ -98,6 +98,70 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations locked on cash sent with no answer", async () => {
+    const { host } = await mount({
+      confirmation: { tender: { method: "cash", amount: "70.00" }, outstanding: "62.40" },
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations locked on another machine with the guests and a refusal", async () => {
+    const { host } = await mount({
+      asksGuests: true,
+      confirmation: {
+        tender: { method: "card", amount: "62.40", externalRef: "operation-17" },
+        outstanding: "62.40",
+        guests: 4,
+      },
+      refusal: { code: "order.payment_in_flight" },
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])("looks right locked at %i px", async (width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await mount({
+        asksGuests: true,
+        confirmation: {
+          tender: { method: "cash", amount: "70.00" },
+          outstanding: "62.40",
+          guests: 4,
+        },
+      });
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      backgrounds.set(`locked-${theme}-${width}`, background);
+      if (theme === "dark") {
+        const light = backgrounds.get(`locked-light-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-presented-locked-${theme}-${width}`;
+      await page.screenshot({ element: panel, path: `${shot}.png` });
+      const box = panel.getBoundingClientRect();
+      const action = el.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-resend]")!;
+      const actionBox = action.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          actionRight: box.right - actionBox.right,
+          actionLeft: actionBox.left - box.left,
+          actionText: action.textContent!.replace(/\s+/g, " ").trim(),
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
   it.each([390, 1280])("looks right at %i px", async (width) => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(width, 900);

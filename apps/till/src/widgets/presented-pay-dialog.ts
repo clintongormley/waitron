@@ -1,6 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { MONEY_SCALE, compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  compareDecimal,
+  decimal,
+  formatMoney,
+  subtractDecimal,
+  toScale,
+} from "@waitron/shared";
 import {
   baseStyles,
   focusFirstInvalid,
@@ -15,6 +22,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "./pay-equipment.js";
 import type { PayEquipmentRole } from "./pay-equipment.js";
+import type { RetainedTender } from "./tender-pay.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { refusalText, type PayRefusal } from "./pay-refusal.js";
@@ -155,6 +163,8 @@ export class TillPresentedPayDialog extends LitElement {
   @property({ attribute: false }) fixedReader: FixedReader | null = null;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) refusal: PayRefusal | null = null;
+  /** A whole payment sent with no answer: the sheet shows it, fixed, and only sends it again. */
+  @property({ attribute: false }) confirmation: RetainedTender | undefined = undefined;
 
   @state() private method: Method = "card";
   @state() private tendered = "";
@@ -319,6 +329,12 @@ export class TillPresentedPayDialog extends LitElement {
     void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
   }
 
+  #resend(): void {
+    if (this.busy) return;
+    this.shownRefusal = null;
+    this.#emit("presented-pay-resend");
+  }
+
   async #take(): Promise<void> {
     if (!this.open || this.busy || !this.#offered() || this.#held()) return;
     this.attempted = true;
@@ -358,7 +374,9 @@ export class TillPresentedPayDialog extends LitElement {
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
-      <div class="body">${this.#form()}</div>
+      <div class="body">
+        ${this.confirmation === undefined ? this.#form() : this.#locked(this.confirmation)}
+      </div>
     </wt-dialog>`;
   }
 
@@ -401,7 +419,75 @@ export class TillPresentedPayDialog extends LitElement {
       </wt-form-actions>`;
   }
 
-  #methodRadio(method: Method): TemplateResult {
+  /** The payment sent with no answer, as it was sent; nothing in it can change. */
+  #locked(confirmation: RetainedTender): TemplateResult {
+    const { tender, outstanding, guests } = confirmation;
+    return html`<dl class="balance" data-presented-pay-balance>
+        <dt>${t("presented_pay.balance")}</dt>
+        <dd>${this.#money(outstanding)}</dd>
+      </dl>
+      <p class="whole" data-presented-pay-whole>${t("presented_pay.whole_only")}</p>
+      <fieldset class="choice" data-pay-method disabled>
+        <legend>${t("bill_pay.method")}</legend>
+        <div class="options">
+          ${this.#methodRadio(tender.method === "cash" ? "cash" : "manual", true)}
+        </div>
+      </fieldset>
+      ${
+        tender.method === "cash"
+          ? html`<dl class="balance">
+              <dt>${t("label.tendered")}</dt>
+              <dd data-presented-pay-tendered>${this.#money(tender.amount)}</dd>
+              <dt>${t("label.change")}</dt>
+              <dd data-presented-pay-change>
+                ${formatMoney(
+                  subtractDecimal(decimal(tender.amount), decimal(outstanding)),
+                  currentLocale(),
+                )}
+              </dd>
+            </dl>`
+          : html`<wt-input
+              name="externalRef"
+              autocomplete="off"
+              disabled
+              .label=${t("tender.card_ref")}
+              .value=${tender.externalRef ?? ""}
+            ></wt-input>`
+      }
+      ${
+        guests === undefined
+          ? nothing
+          : guestsStepper({
+              text: guests === null ? "" : String(guests),
+              disabled: true,
+              error: "",
+              onChange: (event) => event.stopPropagation(),
+            })
+      }
+      ${this.busy ? nothing : html`<p role="status">${t("sale.unconfirmed")}</p>`}
+      <wt-form-actions .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal)}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-presented-pay-close
+          .disabled=${this.busy}
+          @click=${() => this.#requestClose()}
+        >
+          ${t("bill_pay.close")}
+        </wt-button>
+        <wt-button
+          variant="primary"
+          data-presented-pay-resend
+          .loading=${this.busy}
+          .disabled=${this.busy}
+          @click=${() => this.#resend()}
+        >
+          ${t("action.confirm_payment")}
+        </wt-button>
+      </wt-form-actions>`;
+  }
+
+  #methodRadio(method: Method, checked = this.method === method): TemplateResult {
     const label = {
       card: "tender.card",
       cash: "tender.cash",
@@ -412,7 +498,7 @@ export class TillPresentedPayDialog extends LitElement {
         type="radio"
         name="method"
         .value=${method}
-        .checked=${this.method === method}
+        .checked=${checked}
         @change=${(event: Event) => {
           event.stopPropagation();
           this.method = method;
