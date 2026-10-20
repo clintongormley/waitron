@@ -726,8 +726,10 @@ browser test** — most of these rules exist because a test passed while proving
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
   first**, or it stalls on its own paused `requestAnimationFrame`.
 - **A browser test that checks something a screen does on a dialog's `wt-close` waits for that event
-  first, never for `vi.waitFor`'s one second alone.** Cost: a devices-screen test failed A441's CI
-  (#1477). Nothing guards it. Receipt:
+  first, or for the close event the screen sends from it, never for `vi.waitFor`'s one second alone,
+  nor for the dialog's `open` to turn false.** Cost: a devices-screen test failed A441's CI (#1477),
+  and a finish-table test failed once in an 18-file till run and in 3 of 42 runs under CPU load
+  (A927). Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-waits-for-a-dialogs-close-event-not-a-timer).
 - **A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`,
   never by counting `history.length`**, which Chromium stops at 50. Cost: A506-12's Times tab check

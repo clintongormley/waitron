@@ -1503,8 +1503,9 @@ owner's decision (2026-10-09, A452: fix the tests, not the dialog). Holding the 
 one passed after 1617 ms. Nothing guards the rule across suites.
 
 The same gap catches a test that waits for the dialog to LOOK closed and then checks what the closed
-screen refuses. `wt-dialog`'s `open` turns false as soon as a close is granted, and the screen around
-it learns of the close only from `wt-close`. A927 measured it on
+screen refuses. `wt-dialog`'s `open` turns false as soon as a close is granted, and a screen that
+acts on `wt-close`, as the finish-table dialog does, learns of the close only when that event
+arrives. Measured 2026-10-20 in A927, on Vitest 4.1.11, on
 `apps/till/src/widgets/finish-table-dialog.ts`: after `requestClose("cancel")` resolved, a scripted
 `.click()` on the confirm button still sent a choice, with no close reported yet; a real
 `userEvent.click` on the same button was refused, "element is not visible". Its test polled
