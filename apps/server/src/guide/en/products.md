@@ -96,10 +96,9 @@ categories**. Within a row, a cell for the order's service zone comes before the
 zone** cell. When no cell applies, the dish goes to the venue's default station.
 
 The Products list does not show where each dish is made; the **Routes** tab does. A red asterisk
-after a category's name in the list means its **Every zone** route reaches no active station, so its
-dishes go nowhere unless a product's own row or a zone's cell sends them somewhere. When the
-routing cannot be read and the list has categories, one line above the list says so, and no
-category is marked.
+after a category's name in the list means its **Every zone** route reaches no active station. Other
+routes on the **Routes** tab can still send some of its dishes to a station. When the routing cannot
+be read and the list has categories, one line above the list says so, and no category is marked.
 
 You can create a unit, an extras list or an options list without abandoning a product you are
 editing. Open the nested form and save the new item: when you return, the product already uses it.
