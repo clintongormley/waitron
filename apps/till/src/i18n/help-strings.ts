@@ -13,7 +13,7 @@ export const helpEn = {
   "help.counter.parked_orders":
     "Orders still open and not fully paid, in the zones this device serves. Retrieve puts one in the basket to finish it or take payment. Discard deletes it at once, but not while it holds money from a payment, or while a payment or refund is going through.",
   "help.counter.waiting_orders":
-    "Counter orders in the zones this device serves that are not finished: sent but not paid, handed over but not paid, or paid but not yet handed over. Pay takes payment; Hand over, where it shows, records that the customer has taken the order.",
+    "Counter orders in the zones this device serves that are not finished: sent but not paid, handed over but not paid, or paid with dishes sent to the kitchen but not yet handed over. Pay takes payment; Hand over, where it shows, records that the customer has taken the order.",
   "help.counter.guests":
     "Leave it empty for no guests line. With a number, the receipt shows the guests and what each person pays.",
   "help.menu.dishes":
@@ -45,7 +45,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.counter.parked_orders":
     "Pedidos todavía abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo. Descartar lo borra en el acto, pero no si tiene dinero de un pago, ni mientras hay un pago o una devolución en curso.",
   "help.counter.waiting_orders":
-    "Pedidos de barra de las zonas que atiende este dispositivo que no están terminados: enviados sin cobrar, entregados sin cobrar, o cobrados sin entregar. Cobrar cobra el pedido; Entregar, donde aparece, anota que el cliente se lo ha llevado.",
+    "Pedidos de barra de las zonas que atiende este dispositivo que no están terminados: enviados sin cobrar, entregados sin cobrar, o cobrados con platos enviados a cocina pero sin entregar. Cobrar cobra el pedido; Entregar, donde aparece, anota que el cliente se lo ha llevado.",
   "help.counter.guests":
     "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
   "help.menu.dishes":
