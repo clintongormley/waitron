@@ -2185,7 +2185,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   refund only on a device whose profile takes cash, as today.** No question is open.
   **A758-1 built the rules** ([plan](superpowers/plans/2026-10-19-a758-reason-rules.md)): Void and Comp
   reasons, Comp role lists, limits that ask for a PIN, the bill's comp limit in euros, nine starter
-  reasons, and the till naming whose PIN it needs. Left: A758-2 (the page), A758-3 (the report),
+  reasons (English only, owner 2026-10-19; their translation at setup is A918), and the till naming
+  whose PIN it needs. Left: A758-2 (the page), A758-3 (the report),
   A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
   "collect it at the counter" slices.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
@@ -2208,6 +2209,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A911. When an amount comp prints "Descuento 100%" (left open by A758-1, for A758-4).** "Full"
   means the comp took the item's whole list price. An amount comp that takes what another comp left
   prints "Descuento" with its amount. Confirm with the owner when A758-4 is built.
+
+- **A918. Starter content in the venue's languages at setup (owner question, left open by A758-1).**
+  Starter content a module writes into a new venue is English, translated when the box is set up
+  (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
+  on every venue. The owner is asked how (lane C's questions, 2026-10-20): (A) each module ships a
+  translation file of its starter names and setup writes every content language the venue has; (B)
+  Cloud's Translate all runs at the end of setup; (C) English until someone translates. The same
+  answer covers the kitchen station, device profiles, service steps and units
+  ([audit](backlog/english-only-audit.md)).
 
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
