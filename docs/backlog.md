@@ -2388,8 +2388,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and assignments before kitchen work. The read-only move preview and paired HTTP/client command
   are connected, with source/destination zone and current-session checks. The counter move now
   uses the shared allergy window, immutable retries and renewed confirmation after a destination or
-  source change; EN/ES guides describe the flow. Actual restart acceptance and the Spanish-copy
-  answer remain before publication. Kitchen copies/notices remain a separate slice. At the first
+  source change; EN/ES guides describe the flow. Real HTTP submit and process-restart checks
+  distinguish unticked held dishes from fresh drafts, including no-preparation dishes. The
+  Spanish-copy answer and final branch gates remain before publication. Kitchen copies/notices remain a separate slice. At the first
   table Send, ask "Any allergies at this table?"; counter sales keep their existing flow.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),

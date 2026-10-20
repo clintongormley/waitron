@@ -2280,8 +2280,7 @@ and station-routing refusals return to their dish recovery handlers. The send's 
 ticks use the dish ids returned by its final save. A stale group Fire shows the refreshed dishes and
 requires another confirmation before sending their assignments. Signed-in station and pass Fire
 uses the common prompt, including cross-bill assignments. Device Fire uses recorded answers and
-shows an unanswered refusal without offering a guest editor. Lifecycle and counter-to-table move
-integration remain. The lower kitchen writer now checks table answers, and a missing named line
+shows an unanswered refusal without offering a guest editor. The lower kitchen writer checks table answers, and a missing named line
 keeps the send's existing no-work behavior. The counter-to-table move writer accepts an explicit
 answer and assignments before adopting the destination zone, with bill-scoped replay and rollback.
 The move preview now reads the destination answer and arriving parent dishes without advancing
@@ -2292,8 +2291,11 @@ copied-guest deletion and assignments through a partial split of recalled dishes
 integration checks. The counter move now opens the shared window before adopting a free table or
 assigning arriving dishes to an existing party. A lost reply keeps the command and observations for
 retry with editing disabled; a stale destination or source is reread and needs a separate
-confirmation. EN/ES product guides describe the table flow. Actual restart acceptance remains;
-this unpublished branch is not a deployable feature yet.
+confirmation. EN/ES product guides describe the table flow. Real HTTP requests now exercise both
+submit parsers: the answer reaches the writer before held work is stored. Process-restart cases
+compare a previously submitted unticked dish with a fresh draft, including no-preparation work
+with no ticket row and held work with no HOLD print. The Spanish-copy answer and final branch
+gates remain before publication.
 
 **A669-4 handoff.** `applyPartyAllergyPatch` in `apps/server/src/party-allergy.ts` returns
 `AllergyChangeSet` within its caller's transaction. Its `before` snapshot retains the old guest and

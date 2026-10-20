@@ -3145,6 +3145,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitGroupsInput = {
         ...groupCommand(personId, body),
+        ...allergyCommand(body),
         expectedEdit: parseBillEditExpected(body.expectedEdit),
         groups: parseSubmittedGroups(body.groups),
         ...joinGroupOf(body),
@@ -3668,6 +3669,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitDraftInput = {
         ...groupCommand(personId, body),
+        ...allergyCommand(body),
         expectedEdit: parseBillEditExpected(body.expectedEdit),
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
         groups: parseDraftGroups(body.groups),
