@@ -210,6 +210,16 @@ describe("till-floor-screen: a table holding dishes", () => {
       expect(reads).toEqual([]);
     });
 
+    it("keeps one reminder timer however often the floor redraws", async () => {
+      const el = await mountAt([held({ groupId: "g2", dueAt: at(300_000) })], "real");
+      expect(vi.getTimerCount()).toBe(1);
+      for (let redraw = 0; redraw < 3; redraw++) {
+        el.requestUpdate();
+        await el.updateComplete;
+      }
+      expect(vi.getTimerCount()).toBe(1);
+    });
+
     it("keeps no timer for a held table with no time or an unreadable one", async () => {
       const el = await mountAt(
         [

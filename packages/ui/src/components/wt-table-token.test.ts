@@ -206,6 +206,14 @@ describe("the fire-due chip", () => {
     }
     expect(chip(labelled)!.textContent!.trim()).toBe("Time to fire");
   });
+
+  test("spaces the fire icon from its words by the smallest spacing token", async () => {
+    const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
+      fireDue: "Time to fire",
+    });
+    host.style.setProperty("--wt-space-1", "7px");
+    expect(getComputedStyle(chip(el)!).columnGap).toBe("7px");
+  });
 });
 
 describe("the signal chips", () => {
