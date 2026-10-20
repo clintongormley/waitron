@@ -19,19 +19,26 @@ export const floorRingStyles = css`
     box-shadow: inset 0 0 0 var(--wt-space-1) currentColor;
   }
 
+  /* --ring-dim is set per ring, not a token: the colour its pulse dims to half-way. */
   .ring-forgotten,
   .ring-overdue {
     color: var(--wt-color-danger);
+    --ring-dim: var(--wt-color-danger-pulse-dim);
   }
 
   .ring-fire,
   .ring-waiting {
     color: var(--wt-color-warning);
+    --ring-dim: var(--wt-color-warning-pulse-dim);
+  }
+
+  .ring-waiting {
+    box-shadow: inset 0 0 0 calc(var(--wt-space-1) / 2) currentColor;
   }
 
   @keyframes wt-pulse {
     50% {
-      opacity: var(--wt-opacity-pulse-dim);
+      color: var(--ring-dim);
     }
   }
 

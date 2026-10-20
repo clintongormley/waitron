@@ -168,6 +168,23 @@ it("A738 Waiting pulses at the slow pulse token, 2 s by default", async () => {
   expect(getComputedStyle(button).animationDuration).toBe("5s");
 });
 
+it("A738 Waiting dims its border to the amber dim colour half-way, never to transparent", async () => {
+  await commands.emulateReducedMotion(false);
+  const { el } = await mountWidget<TillShell>("till-shell", { waitingCount: 2 });
+  el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+  el.style.setProperty("--wt-color-warning-pulse-dim", "rgb(7, 8, 9)");
+  el.style.setProperty("--wt-duration-pulse-slow", "2000ms");
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
+    '[data-counter-orders="waiting"]',
+  )!;
+  const [animation] = button.getAnimations();
+  animation!.pause();
+  animation!.currentTime = 1000;
+  expect(getComputedStyle(button).borderTopColor).toBe("rgb(7, 8, 9)");
+  animation!.currentTime = 0;
+  expect(getComputedStyle(button).borderTopColor).toBe("rgb(4, 5, 6)");
+});
+
 it("A738 Language choices remain reachable inside More and emit one selection", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
     loadLocales: async () => [

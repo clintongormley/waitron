@@ -137,7 +137,7 @@ describe("till-floor-screen: the card's ring", () => {
     const { el, host } = await mountFloor([table({ timingBand: "forgotten" })], {
       reducedMotion: false,
     });
-    host.style.setProperty("--wt-opacity-pulse-dim", "0.4");
+    host.style.setProperty("--wt-color-danger-pulse-dim", "rgb(9, 8, 7)");
     host.style.setProperty("--wt-duration-pulse-fast", "2000ms");
     const ring = card(el).querySelector<HTMLElement>('[data-ring="forgotten"]')!;
     expect(pulses(ring)).toEqual(["wt-pulse-fast"]);
@@ -145,7 +145,8 @@ describe("till-floor-screen: the card's ring", () => {
     const [animation] = ring.getAnimations();
     animation!.pause();
     animation!.currentTime = 1000;
-    expect(getComputedStyle(ring).opacity).toBe("0.4");
+    expect(getComputedStyle(ring).color).toBe("rgb(9, 8, 7)");
+    expect(getComputedStyle(ring).opacity).toBe("1");
   });
 
   it("rings a card whose reminder is due in amber, pulsing slowly", async () => {
@@ -153,6 +154,9 @@ describe("till-floor-screen: the card's ring", () => {
     host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
     const ring = card(el).querySelector<HTMLElement>('[data-ring="fire"]')!;
     expect(pulses(ring)).toEqual(["wt-pulse-slow"]);
+    const [animation] = ring.getAnimations();
+    animation!.pause();
+    animation!.currentTime = 0;
     expect(getComputedStyle(ring).boxShadow).toContain("rgb(4, 5, 6)");
   });
 
