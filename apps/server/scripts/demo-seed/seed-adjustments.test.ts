@@ -69,6 +69,40 @@ describe("seedAdjustmentReasons", () => {
     },
   );
 
+  it("names a starter reason the demo lists in the demo's languages, keeping the starter's rules", async () => {
+    await seedTenant(suite.db);
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Venue", invoiceLocales: ["es-ES"], operationDescription: "Demo" })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
+    const [before, after] = await withTransaction(suite.db, async (tx) => {
+      await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
+      const provisioned = await listAdjustmentReasons(tx, { includeInactive: true });
+      await seedAdjustmentReasons(tx, {
+        locale: "es",
+        dataSet: CASA_DELGADO_ES,
+        languages: ["es", "en"],
+      });
+      return [provisioned, await listAdjustmentReasons(tx, { includeInactive: true })];
+    });
+    const demo = CASA_DELGADO_ES.adjustmentReasons.find(
+      (reason) => reason.names.en === "Entry error",
+    )!;
+    const starter = before.find((reason) => reason.names.en === "Entry error")!;
+    const seeded = after.find((reason) => reason.id === starter.id)!;
+    expect(seeded.name).toBe(demo.names.es);
+    expect(seeded.names).toEqual({ en: demo.names.en, es: demo.names.es });
+    for (const provisioned of before) {
+      const kept = after.find((reason) => reason.id === provisioned.id)!;
+      expect({ ...kept, name: provisioned.name, names: provisioned.names }).toEqual(provisioned);
+    }
+    const onTheHouse = after.find((reason) => reason.names.en === "On the house")!;
+    expect(onTheHouse.names).toEqual({ en: "On the house" });
+    expect(onTheHouse.name).toBe("On the house");
+  });
+
   it("seeds the owner's nine example reasons, in order, named in the seed's language", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
       await seedAdjustmentReasons(tx, {

@@ -5,6 +5,7 @@ import type { Transaction } from "@waitron/db";
 import {
   createAdjustmentReason,
   listAdjustmentReasons,
+  updateAdjustmentReason,
   type AdjustmentReasonInput,
 } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
@@ -174,21 +175,33 @@ export interface SeedAdjustmentReasonsInput {
   languages: readonly string[];
 }
 
-/** Creates each example reason not already present under its name in the seed's language. */
+/** Creates each example reason not already present. One that matches a reason already present by
+ * English name renames that reason into the seed's languages and keeps its rules, because a starter
+ * reason's rules win over the demo's. */
 export async function seedAdjustmentReasons(
   tx: Transaction,
   { locale, dataSet, languages }: SeedAdjustmentReasonsInput,
 ): Promise<void> {
-  const present = new Set(
-    (await listAdjustmentReasons(tx, { includeInactive: true })).map((reason) => reason.name),
-  );
+  const existing = await listAdjustmentReasons(tx, { includeInactive: true });
+  const byEnglish = new Map(existing.map((reason) => [reason.names.en ?? reason.name, reason]));
   for (const reason of dataSet.adjustmentReasons) {
+    const names = inLanguages(reason.names, languages);
     const name = reason.names[locale];
-    if (present.has(name)) continue;
-    await createAdjustmentReason(tx, {
-      ...reason,
-      names: inLanguages(reason.names, languages),
+    const present = byEnglish.get(reason.names.en);
+    if (present === undefined) {
+      await createAdjustmentReason(tx, { ...reason, names, name });
+      continue;
+    }
+    await updateAdjustmentReason(tx, present.id, {
       name,
+      names,
+      kind: present.kind,
+      actions: present.actions,
+      maxPercentBp: present.maxPercentBp,
+      maxAmount: present.maxAmount,
+      applyRoles: present.applyRoles,
+      approverRoles: present.approverRoles,
+      noteRequired: present.noteRequired,
     });
   }
 }
