@@ -323,12 +323,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   attached, before any build.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
-- **A679. Finish first Live setup integration.** The owner-approved live retirement and
-  parser replacements are applied; the focused pair passes 48 cases. Retain both completed
-  reviews, then qualify the normal push hook, final-head CI coverage and the recovery-host
-  split's Linux timings before landing PR #1752.
-  [Detail](backlog/fiscal.md#finish-first-live-setup-integration).
-
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal
   and its legitimate-order positive without changing clock policy.
@@ -5662,6 +5656,15 @@ the tree. What remains, largest first:
   successful main run `39318408371` took about 295 s and 298 s. Profile the slow files and
   shard balance before choosing a change; retain all checks and coverage bars. The cause of
   the excess duration has not been established.
+  A679 run `39380412391` again passes both shards, with Vitest steps at 332 s and 444 s
+  (whole jobs 376 s and 479 s). Completed logs are retained; no stalled browser or resource
+  cause was established.
+
+- **Profile provisioning's busiest shard after the A679 split.** All six shards and merged
+  coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
+  Find the slow files or setup cost before changing its distribution; keep every check and
+  coverage threshold. This exceeds the approximate four-minute target without reproducing
+  the former shared light-job timeout.
 
 - **Check the older capture suites' viewport cleanup (A669-5 review).**
   `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its

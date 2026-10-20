@@ -3839,3 +3839,37 @@ HTTP files; the module's initial-setup suite passes six cases; the protected gol
 pair passes all 20 cases and remains byte-identical to current main. Frozen install passes.
 Receipts are in Lane E's `resume-approved-20261020-081253` directory. These focused results
 do not substitute for final-head package coverage or Linux split timings.
+
+
+## Final qualification and landing, 2026-10-20
+
+PR [#1752](https://github.com/clintongormley/waitron/pull/1752) merged as
+`4e318802f6e62a050aa754c5a343a527cd45ae3c`. Published head
+`0e1034ad6bb13dc564aed76f0bdcc2bf8cbd4337` passes the normal 613-second hook:
+88 repository files, 7,578 tests, coverage thresholds, frozen install, formatting, lint, sign-offs
+and every workspace type check. Its [CI run 39380412391](https://github.com/clintongormley/waitron/actions/runs/39380412391)
+completes with 56 successful jobs and the PR publication job skipped. Licence/sign-off
+run 39380412382 also succeeds. Both completed installed Claude reviews and the owner's
+generated-PDF viewing approval remain retained. No exact test permission remains pending.
+
+Current-head merged coverage passes without changing thresholds:
+
+| Package | Cases | Statements | Branches | Functions | Lines |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Server | 20,448 | 98.59% | 96.62% | 99.14% | 99.08% |
+| Provisioning | 1,471 | 98.02% | 96.70% | 98.71% | 98.99% |
+| Fiscal VeriFactu | 3,793 | 98.14% | 96.72% | 99.23% | 99.05% |
+| Till | 12,230 | 98.02% | 95.38% | 99.03% | 99.32% |
+| Dashboard | 13,105 | 98.38% | 95.26% | 98.91% | 99.39% |
+| Venue service | 6,607 | 98.50% | 95.78% | 99.42% | 99.27% |
+
+The recovery-host split passes its 129 cases in Linux CI. File-progress end times are
+27.5 seconds for the host and 168.2, 120.7 and 138.6 seconds for placement files 1–3.
+The earlier combined file took 471.9 seconds. These are file measurements, not a claim that
+every package job meets the approximate four-minute target. The till duration follow-up
+remains open, and provisioning shard 1's 297-second test step is recorded separately.
+
+The finished integration entry is removed from the backlog. Its three internal test gaps,
+root-summary housekeeping, A696, A731–A733 and later W41s work remain separate. Main's
+exact merge has its own CI run, `39381991396`; it is pending at this documentation checkpoint.
+That run's result is tracked by Lane E rather than inferred from the PR's green checks.

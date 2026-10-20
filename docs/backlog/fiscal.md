@@ -239,20 +239,6 @@ owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement tha
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
-## Finish first Live setup integration
-
-The owner approved the exact parser replacement on 20 October at approximately 06:18 and
-the exact live-hour retirement bundle at approximately 07:45. Both are applied. The focused
-pair passes all 48 cases. Historical-contribution selection was rejected and remains unapplied.
-The before/after behavior and exact permission hashes are in
-[the changed-check inventory](../operations/a679-changed-checks.md#live-retirement-approval-applied-2026-10-20).
-
-PR #1752's earlier published head failed two server shards; no unchanged rerun is a repair.
-Keep both completed installed Claude reviews and the earlier acceptance receipts. The branch
-rebased onto main's `8cf43cfba` to retain its table-label contract. Finish the normal push hook
-and literal final-head CI, including server coverage merge and Linux timings for the 129-case
-recovery-host split, before landing. Preserve the independent fiscal follow-ups below.
-
 ## Pin the clock's future-finished sample refusal
 
 A679's first final installed review replaced
