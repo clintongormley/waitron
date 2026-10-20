@@ -472,8 +472,9 @@ it and its label's line height), `--wt-shadow-1|2`,
 `--wt-help-badge-target` (24px) and `--wt-help-badge-size` (20px) (a help-mode badge's target and
 the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
 `--wt-price-range-field-width` (168px),
-`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`, `--wt-duration-move`,
-`--wt-duration-disclosure`,
+`--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-opacity-pulse-dim`, `--wt-duration-fade`,
+`--wt-duration-move`, `--wt-duration-disclosure`, `--wt-duration-pulse-slow`,
+`--wt-duration-pulse-fast`,
 `--wt-field-height`, `--wt-field-line-width`, `--wt-field-line-width-active`,
 `--wt-dropdown-row-height`
 
@@ -499,6 +500,10 @@ and till app suites: one for the app's own text, one for text on the page outsid
 `--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
 dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
+`--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one cycle of a floor
+ring's pulse, which dims it to `--wt-opacity-pulse-dim` (0.3) half-way;
+`packages/ui/src/floor-ring.ts` holds the one keyframe set. The kitchen screen's and the pass's
+forgotten flash read the fast one.
 
 Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
 their default border reads `--wt-color-primary-text`. If your screen paints the border through
@@ -840,7 +845,7 @@ set. The consuming app registers the `chevron-down` icon.
 On the till's floor screen, the map box follows the cropped zone's aspect ratio, capped in height
 so the surrounding controls and Unplaced tray have room; the cap stays at least six tap heights
 on short windows, where the page can scroll (owner, 2026-10-10, A472). Bill requested
-chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. A table placed on the map shows no held chip yet. `@waitron/ui`'s `floor-chips.ts` registers both icons. The order pin's swatch follows its displayed signal: ready
+chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. A table placed on the map shows no held chip yet. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`). On the list card the most urgent decides the one outline — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly; Waiting steady amber; no other state draws one — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge; the first also says “✓ Nothing needed”, unless its party has paid. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the held, fire and check icons. The order pin's swatch follows its displayed signal: ready
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as {saved name}" /
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after

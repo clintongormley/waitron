@@ -1,6 +1,6 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slice 3 built 2026-10-20; slices 4–6 and 8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1, 2 and 7 built 2026-10-19, slices 3 and 4 built 2026-10-20; slices 5, 6 and 8 left (§11).**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
@@ -280,6 +280,13 @@ today (`combinedStatus`, `apps/till/src/state/floor-map.ts:32-40`).
 `docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md:172`) is a fact about the
 guests that stays shown whatever the table's state, and it does not colour a zone tab.
 
+**2026-10-20:** built by slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`)
+for the list card: the till ranks a table's states with `tableStates`
+(`apps/till/src/state/table-precedence.ts`), and the card's outline and the order of its marks
+follow it. Waiter called (row 5) is not built and has no place in the ranking yet. The unplaced
+token rings from its own timing band and due reminder only. The map, the zone tabs and the order
+screen's status pin are slice 5's.
+
 ## 5. How each state is shown on the card
 
 ### 5.1 Held dishes and the countdown (Q17)
@@ -363,6 +370,13 @@ The values are chosen so the two read as clearly different without being frantic
 breath, 1 s is twice as urgent, and both are far below three flashes a second, the WCAG 2.3.1 limit
 for flashing.
 
+**2026-10-20:** built by slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`):
+`--wt-duration-pulse-slow`, `--wt-duration-pulse-fast` and `--wt-opacity-pulse-dim` in
+`structure.css`, one keyframe set in `packages/ui/src/floor-ring.ts`; the list card and the
+unplaced token ring Overdue and Time to fire slowly, Forgotten fast and Waiting in steady amber;
+the kitchen screen and the pass read the fast token. The map, its dot and the zone tabs are slice
+5's.
+
 ### 5.3 Item counts in the order lists (Q19)
 
 Decided as proposed. Held orders' rows read "4 · €24.50" today, where 4 counts **lines**, extras'
@@ -387,6 +401,10 @@ now a service step and looks like every step (section 8). The first version also
 camino" as look-alikes, after the backlog; on the list card they no longer are: Bill requested has
 been filled purple since A472 (`apps/till/src/widgets/signal-chips.ts:65-69`) and "N en camino" is
 filled blue (`till-floor-screen.ts:467-470`). A773 removes En route anyway.
+
+**2026-10-20:** slice 4 built the Reserved half: Reserved is pale amber on the list card and the
+unplaced token (`--wt-color-table-reserved`, text `--wt-color-on-table-reserved`). Take order keeps
+its blue-bordered chip until slice 8 gives service steps their look; it already ranks as a step.
 
 ## 6. The floor map: the whole table shows its state
 
@@ -528,6 +546,11 @@ solid blue for every seated table and marking a step only by its icon, is Q32.
 
 Free stays pale green. Nothing needed and Free differ by colour (pale blue and pale green) and by the
 cue: a calm table shows "✓", a free one nothing.
+
+**2026-10-20:** built by slice 4 on the list card: a seated table whose most urgent state is a held
+course still counting down, or nothing at all, has a soft left edge, `--wt-color-primary-disabled`
+until slice 5 adds the map's pale blue; the second also says "✓ Nothing needed" ("✓ Nada
+pendiente"), unless its party has paid, which keeps "Paid". The map's pale tint is slice 5's.
 
 ## 10. The Tables tab goes
 
