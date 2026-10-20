@@ -283,10 +283,10 @@ an optional kitchen note. You can add several guests. The answer belongs to the 
 table and is shared by their bills.
 
 For an allergic guest, tick the dishes they will eat. A tick covers the whole order line: a line
-with two portions is assigned as one, and a dish can belong to only one guest. A clash shows the
-dish's declared allergen and lets you choose **Send anyway**. Check an unreviewed dish yourself;
-missing nutrition information does not establish that it is suitable. Extras show their own
-allergens separately.
+with two portions is assigned as one, and a dish can belong to only one guest. A clash shows each
+allergen the guest avoids that the dish or one of its extras declares, and lets you choose **Send
+anyway**. Check an unreviewed dish or extra yourself; missing nutrition information does not
+establish that it is suitable.
 
 Later sends offer new dishes for ticking. A dish you already submitted on hold is not offered
 again just because you fire it later. **Change** beside the table's answer, or **Actions →

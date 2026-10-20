@@ -25,7 +25,7 @@ import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { allergyClashes } from "../state/party-allergy.js";
+import { allergyClashes, allergensWithExtras } from "../state/party-allergy.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
 import { trackDialog } from "./track-dialog.js";
 
@@ -681,7 +681,8 @@ export class TillPartyAllergyDialog extends LitElement {
   #dish(dish: AllergyDish, index: number) {
     const assigned = this.draft.ticks[lineKey(dish.line)] ?? null;
     const guest = assigned === null ? undefined : this.draft.guests[assigned];
-    const codes = guest ? allergyClashes(dish.allergens, guest.allergens) : [];
+    const served = allergensWithExtras(dish.allergens, dish.extras);
+    const codes = guest ? allergyClashes(served, guest.allergens) : [];
     return html`<section data-dish=${index} class=${codes.length ? "dish clash" : "dish"}>
       <p>
         <strong>${dish.quantity} × ${dish.name}</strong>
@@ -708,7 +709,7 @@ export class TillPartyAllergyDialog extends LitElement {
             />${t("allergy.eats").replace("{who}", () => g.who)}</label
           >`,
       )}
-      ${codes.length ? html`<p data-clash>${t("allergy.contains").replace(/\{allergens\}|\{who\}/g, (key) => (key === "{who}" ? guest!.who : codes.map((code) => allergenLabel(code, dish.allergens![code]!, currentLocale())).join(", ")))}</p>` : nothing}
+      ${codes.length ? html`<p data-clash>${t("allergy.contains").replace(/\{allergens\}|\{who\}/g, (key) => (key === "{who}" ? guest!.who : codes.map((code) => allergenLabel(code, served[code]!, currentLocale())).join(", ")))}</p>` : nothing}
     </section>`;
   }
   override render() {
@@ -717,7 +718,10 @@ export class TillPartyAllergyDialog extends LitElement {
     const fieldError = (this.attempted && this.#invalid()) || this.fieldRefusal !== null;
     const clash = this.#dishes().some((d) => {
       const guest = this.draft.guests[this.draft.ticks[lineKey(d.line)] ?? -1];
-      return guest && allergyClashes(d.allergens, guest.allergens).length > 0;
+      return (
+        guest &&
+        allergyClashes(allergensWithExtras(d.allergens, d.extras), guest.allergens).length > 0
+      );
     });
     const disabled = this.busy || this.retryOnly || this.confirmation !== null;
     return html`<wt-dialog

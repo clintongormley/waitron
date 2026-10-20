@@ -297,9 +297,9 @@ pertenece a los comensales de la mesa y se comparte entre sus cuentas.
 
 Marca los platos que comerá cada persona con alergias. La marca abarca toda la línea del pedido:
 una línea con dos raciones se asigna entera, y un plato solo puede corresponder a una persona. Si
-hay un conflicto, verás el alérgeno declarado del plato y podrás elegir **Enviar de todos modos**.
-Comprueba por tu cuenta un plato sin revisar; la falta de información nutricional no establece que
-sea apto. Los extras muestran sus propios alérgenos por separado.
+hay un conflicto, verás cada alérgeno que la persona evita y que declaran el plato o alguno de sus
+extras, y podrás elegir **Enviar de todos modos**. Comprueba por tu cuenta un plato o un extra sin
+revisar; la falta de información nutricional no establece que sea apto.
 
 Los siguientes envíos ofrecen los platos nuevos para asignarlos. Un plato que ya has enviado en
 espera no vuelve a ofrecerse solo porque lo envíes a preparar más tarde. **Cambiar** junto a la
