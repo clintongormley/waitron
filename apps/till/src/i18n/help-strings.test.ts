@@ -51,6 +51,11 @@ describe("the till's help strings", () => {
     );
     expect(saysTique).toEqual([]);
   });
+
+  it("no Spanish help text says retenido", () => {
+    const saysRetenido = Object.entries(helpEs).filter(([, text]) => /retenid/i.test(text));
+    expect(saysRetenido).toEqual([]);
+  });
 });
 
 describe("the order screen's help", () => {

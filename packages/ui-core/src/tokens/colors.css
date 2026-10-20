@@ -118,7 +118,8 @@
   --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
-  /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
+  /* The list card's calm left edge, and the colours a pulsing floor ring and the till bar's
+     Waiting tab dim to half-way. */
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
@@ -239,7 +240,6 @@
     --wt-color-on-table-clearing: #241500;
     --wt-color-table-reserved: #4a3a1c;
     --wt-color-on-table-reserved: #eceef2;
-    /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
     --wt-color-table-calm-edge: #4d6aa6;
     --wt-color-danger-pulse-dim: #bd9ba0;
     --wt-color-warning-pulse-dim: #b9aa94;
@@ -360,7 +360,6 @@
   --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #fde7c8;
   --wt-color-on-table-reserved: #16181d;
-  /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
   --wt-color-table-calm-edge: #8fb7f5;
   --wt-color-danger-pulse-dim: #e8bebc;
   --wt-color-warning-pulse-dim: #dccbb3;
@@ -480,7 +479,6 @@
   --wt-color-on-table-clearing: #241500;
   --wt-color-table-reserved: #4a3a1c;
   --wt-color-on-table-reserved: #eceef2;
-  /* The list card's calm left edge, and the colour a pulsing floor ring dims to half-way. */
   --wt-color-table-calm-edge: #4d6aa6;
   --wt-color-danger-pulse-dim: #bd9ba0;
   --wt-color-warning-pulse-dim: #b9aa94;

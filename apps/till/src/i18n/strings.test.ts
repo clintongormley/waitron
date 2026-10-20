@@ -110,7 +110,16 @@ it.each([
   expect(catalogues[locale]?.["menu.search"]).toBe(label);
 });
 
-describe("the floor's held chip", () => {
+describe("the floor's held chip, and no retenido in the catalogue", () => {
+  // Owner decision (2026-10-20): held dishes are «en espera» everywhere. Weaker than its name:
+  // only the catalogue in strings.ts is read, not codes.ts or the dashboard.
+  it("has no Spanish catalogue string that says retenido", () => {
+    const retenido = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
+      /retenid/i.test(text),
+    );
+    expect(retenido).toEqual([]);
+  });
+
   it("the floor's held chip says held with the order screen's word", () => {
     const held = es["table.group_held"].toLowerCase();
     expect(es["floor.held"].replace("{n}", "2")).toBe(`2 ${held}`);

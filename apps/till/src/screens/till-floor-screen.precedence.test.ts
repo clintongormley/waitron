@@ -173,7 +173,7 @@ describe("till-floor-screen: the card's ring", () => {
     expect(shadow).not.toContain("rgb(1, 2, 3)");
   });
 
-  it("draws only the most urgent state's ring", async () => {
+  it("draws only the ring of the most urgent state that has one", async () => {
     const { el } = await mountFloor(
       [
         table({ timingBand: "forgotten", party: due }),

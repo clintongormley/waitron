@@ -191,6 +191,10 @@ describe("tableStates", () => {
     expect(tableStates(t4, now)).toEqual(["bill", "ready", "step"]);
     expect(tableStates(t4, now)[0]).toBe("bill");
   });
+
+  it("is empty for a table in no state", () => {
+    expect(tableStates(table({ ...free, state: "delivery-pending" }), now)).toEqual([]);
+  });
 });
 
 describe("lateBand", () => {
@@ -205,12 +209,6 @@ describe("lateBand", () => {
     expect(tableStates(table({ signals: [{ kind: "long_wait", band: "overdue" }] }), now)).toEqual([
       "overdue",
     ]);
-  });
-});
-
-describe("a table in no state", () => {
-  it("has an empty state list", () => {
-    expect(tableStates(table({ ...free, state: "delivery-pending" }), now)).toEqual([]);
   });
 });
 
