@@ -95,7 +95,6 @@ async function mountHandheld(
     {
       products: [],
       lines,
-      statuses: [],
       orderId: "wo-4",
       party,
       bills: [shownBill],
