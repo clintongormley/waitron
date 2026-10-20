@@ -47,7 +47,7 @@ async function fixture(tx: Transaction) {
     categoryId: null,
     unitId: null,
     name: "STAFF Bread",
-    customerName: { es: "CLIENT Pan", ca: "CLIENT Pa" },
+    customerName: { es: "CLIENT ES bread", ca: "CLIENT CA bread" },
     kitchenName: "KITCHEN Bread",
     unitPrice: "3.00",
     vatClass: "reduced",
@@ -59,7 +59,7 @@ async function fixture(tx: Transaction) {
     [
       {
         name: "STAFF Small",
-        customerName: { es: "CLIENT Pequeño", ca: "CLIENT Petit" },
+        customerName: { es: "CLIENT ES small", ca: "CLIENT CA small" },
         kitchenName: "KITCHEN Small",
         image: null,
         unitPrice: "2.00",
@@ -67,7 +67,7 @@ async function fixture(tx: Transaction) {
       },
       {
         name: "STAFF Large",
-        customerName: { es: "CLIENT Grande" },
+        customerName: { es: "CLIENT ES large" },
         kitchenName: "KITCHEN Large",
         image: null,
         unitPrice: "4.00",
@@ -80,14 +80,14 @@ async function fixture(tx: Transaction) {
     tx,
     {
       name: "STAFF Cooked",
-      customerName: { es: "CLIENT Punto", ca: "CLIENT Punt" },
+      customerName: { es: "CLIENT Cooking", ca: "CLIENT CA cooking" },
       kitchenName: "KITCHEN Cooked",
       defaultLabelId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       labels: [
         {
           id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           name: "STAFF Rare",
-          customerName: { es: "CLIENT Poco", ca: "CLIENT Poc" },
+          customerName: { es: "CLIENT Rare", ca: "CLIENT CA rare" },
           kitchenName: "KITCHEN Rare",
           available: false,
         },
@@ -108,7 +108,7 @@ async function fixture(tx: Transaction) {
     tx,
     {
       name: "STAFF Sides",
-      customerName: { es: "CLIENT Guarnición", ca: "CLIENT Guarnició" },
+      customerName: { es: "CLIENT ES side", ca: "CLIENT CA side" },
       kitchenName: "KITCHEN Sides",
       minPicks: 1,
       maxPicks: 2,
@@ -125,7 +125,7 @@ async function fixture(tx: Transaction) {
     {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      name: { es: "CLIENT Kilogramo", ca: "CLIENT Quilogram" },
+      name: { es: "CLIENT Kilogram", ca: "CLIENT Quilogram" },
       abbreviation: { es: "kg", ca: "kg" },
       precision: 3,
     },
@@ -299,8 +299,8 @@ describe("shared translation writes", () => {
         expect(await snapshot(tx)).toEqual(before);
         const customerName =
           kind === "product"
-            ? { es: "CLIENT Pan", ca: "CLIENT Pa", en: "CLIENT English" }
-            : { es: "CLIENT Pequeño", ca: "CLIENT Petit", en: "CLIENT English" };
+            ? { es: "CLIENT ES bread", ca: "CLIENT CA bread", en: "CLIENT English" }
+            : { es: "CLIENT ES small", ca: "CLIENT CA small", en: "CLIENT English" };
         await writeTranslationMaps(tx, item, { name: customerName });
         expect(await snapshot(tx)).toEqual({
           ...before,
@@ -325,16 +325,16 @@ describe("shared translation writes", () => {
         for (const item of items) {
           const names =
             item.kind === "product"
-              ? { es: "CLIENT Pan", ca: "CLIENT Pa" }
+              ? { es: "CLIENT ES bread", ca: "CLIENT CA bread" }
               : item.kind === "variant"
-                ? { es: "CLIENT Pequeño", ca: "CLIENT Petit" }
+                ? { es: "CLIENT ES small", ca: "CLIENT CA small" }
                 : item.kind === "option_list"
-                  ? { es: "CLIENT Punto", ca: "CLIENT Punt" }
+                  ? { es: "CLIENT Cooking", ca: "CLIENT CA cooking" }
                   : item.kind === "option_label"
-                    ? { es: "CLIENT Poco", ca: "CLIENT Poc" }
+                    ? { es: "CLIENT Rare", ca: "CLIENT CA rare" }
                     : item.kind === "extra_list"
-                      ? { es: "CLIENT Guarnición", ca: "CLIENT Guarnició" }
-                      : { es: "CLIENT Kilogramo", ca: "CLIENT Quilogram" };
+                      ? { es: "CLIENT ES side", ca: "CLIENT CA side" }
+                      : { es: "CLIENT Kilogram", ca: "CLIENT Quilogram" };
           await writeTranslationMaps(tx, item, {
             name: { ...names, en: `CLIENT English ${item.kind}` },
           });
@@ -413,7 +413,7 @@ describe("shared translation writes", () => {
       await withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
         await writeTranslationMaps(tx, await resolveItem(tx, kind, ids[kind]), {
-          name: { en: "New English", es: "Nuevo castellano" },
+          name: { en: "New English", es: "New castellano" },
         });
         const { targets } = await resolveTranslationTargets(
           tx,
@@ -421,7 +421,7 @@ describe("shared translation writes", () => {
           [{ kind, id: ids[kind] }],
           context,
         );
-        expect(targets[0]).toMatchObject({ names: { en: "New English", es: "Nuevo castellano" } });
+        expect(targets[0]).toMatchObject({ names: { en: "New English", es: "New castellano" } });
         await writeTranslationMaps(tx, await resolveItem(tx, kind, ids[kind]), { name: {} });
         const { targets: cleared } = await resolveTranslationTargets(
           tx,
@@ -455,7 +455,7 @@ describe("menu translation writes", () => {
           .update(sectionMembers)
           .set({
             showAsFolder: false,
-            folderOverrides: { color: "#123456", image: null, names: { ca: "CLIENT Begudes" } },
+            folderOverrides: { color: "#123456", image: null, names: { ca: "CLIENT CA drinks" } },
           })
           .where(eq(sectionMembers.id, member.id));
         return { menu: root, section: section!.id, included_menu: member.id };
@@ -469,7 +469,7 @@ describe("menu translation writes", () => {
           await writeTranslationMaps(tx, item, {
             name:
               kind === "included_menu"
-                ? { ca: "CLIENT Begudes", en: "English" }
+                ? { ca: "CLIENT CA drinks", en: "English" }
                 : { en: "English" },
           });
           expect(readSpy).not.toHaveBeenCalled();
@@ -483,7 +483,7 @@ describe("menu translation writes", () => {
           expect(row).toMatchObject({
             showAsFolder: false,
             folderOverrides: {
-              names: { ca: "CLIENT Begudes", en: "English" },
+              names: { ca: "CLIENT CA drinks", en: "English" },
               color: "#123456",
               image: null,
             },

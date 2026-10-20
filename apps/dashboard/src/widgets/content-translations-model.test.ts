@@ -69,34 +69,34 @@ describe("translation drafts", () => {
       english = cell("one", { language: "en" });
     const drafts = new TranslationDrafts(config, [one, english]);
     expect(drafts.submission()).toEqual({ edits: [] });
-    drafts.edit(one, "  Croqueta de jamón  ");
+    drafts.edit(one, "  Ham croquette  ");
     expect(drafts.value(english)).toBe("");
     expect(drafts.validate()).toEqual([]);
-    expect(drafts.submission()).toEqual({ edits: [edit(one, "Croqueta de jamón")] });
+    expect(drafts.submission()).toEqual({ edits: [edit(one, "Ham croquette")] });
     drafts.edit(english, " Ham  croquette ");
     expect(drafts.validate()).toEqual([]);
     expect(drafts.submission()).toEqual({
-      edits: [edit(one, "Croqueta de jamón"), edit(english, "Ham  croquette")],
+      edits: [edit(one, "Ham croquette"), edit(english, "Ham  croquette")],
     });
-    expect(drafts.value(one)).toBe("  Croqueta de jamón  ");
+    expect(drafts.value(one)).toBe("  Ham croquette  ");
   });
   it("keeps edits for hidden targets and distinguishes identical ids in different kinds", () => {
     const product = cell(),
       unit = cell("one", { kind: "unit", owners: { kind: "unit" } });
     const drafts = new TranslationDrafts(config, [product, unit]);
-    drafts.edit(product, "Croqueta");
-    drafts.edit(unit, "Ración");
+    drafts.edit(product, "Croquette");
+    drafts.edit(unit, "Portion");
     drafts.receive(page([cell("other")]));
     expect(drafts.staged()).toEqual([ref(product), ref(unit)]);
     expect(drafts.submission()).toEqual({
-      edits: [edit(product, "Croqueta"), edit(unit, "Ración")],
+      edits: [edit(product, "Croquette"), edit(unit, "Portion")],
     });
   });
   it("omits untouched cells and cancels edits returned to their blank baselines", () => {
     const one = cell(),
       english = cell("one", { language: "en" });
     const drafts = new TranslationDrafts(config, [one, english, cell("two")]);
-    drafts.edit(one, "Croqueta");
+    drafts.edit(one, "Croquette");
     drafts.edit(english, "Ham");
     drafts.edit(one, " \n ");
     expect(drafts.validate()).toEqual([]);
@@ -114,12 +114,12 @@ describe("translation drafts", () => {
       effectiveText: "Inherited",
     });
     const drafts = new TranslationDrafts(config, [one, english]);
-    drafts.edit(one, "Croqueta");
-    expect(drafts.submission()).toEqual({ edits: [edit(one, "Croqueta")] });
+    drafts.edit(one, "Croquette");
+    expect(drafts.submission()).toEqual({ edits: [edit(one, "Croquette")] });
     expect(drafts.value(english)).toBe("");
     drafts.edit(english, "Overwrite");
     expect(drafts.submission()).toEqual({
-      edits: [edit(one, "Croqueta"), edit(english, "Overwrite")],
+      edits: [edit(one, "Croquette"), edit(english, "Overwrite")],
     });
     expect(drafts.submission().edits[0]).not.toHaveProperty("defaultText");
   });
@@ -131,9 +131,9 @@ describe("translation drafts", () => {
     expect(drafts.value(rows[100]!)).toBe("Nombre");
     expect(drafts.validate()).toEqual([{ cell: ref(rows[100]!), message: "capacity" }]);
     drafts.edit(rows[0]!, "");
-    drafts.edit(rows[100]!, "Última");
+    drafts.edit(rows[100]!, "Last");
     expect(drafts.staged()).toHaveLength(100);
-    expect(drafts.value(rows[100]!)).toBe("Última");
+    expect(drafts.value(rows[100]!)).toBe("Last");
     expect(drafts.validate()).toEqual([]);
   });
   it("checks actual UTF-8 bytes for both language fields and the serialized batch", () => {
@@ -264,7 +264,7 @@ describe("translation snapshot review", () => {
       english = cell("one", { language: "en" }),
       french = cell("one", { language: "fr" });
     const drafts = new TranslationDrafts(config, [one, english, french]);
-    drafts.edit(one, "Croqueta");
+    drafts.edit(one, "Croquette");
     drafts.edit(english, "English companion");
     const settings = { ...config, defaultLanguage: "fr" };
     const latest = { ...one, expected: "new-default-es" },
@@ -281,16 +281,16 @@ describe("translation snapshot review", () => {
         [translationCellKey(english), "keep"],
       ]),
     );
-    expect(drafts.value(one)).toBe("Croqueta");
+    expect(drafts.value(one)).toBe("Croquette");
     expect(drafts.value(english)).toBe("English companion");
     expect(drafts.value(french)).toBe("");
     expect(drafts.validate()).toEqual([]);
-    drafts.edit(french, "Compagnon français");
+    drafts.edit(french, "French companion");
     expect(drafts.submission()).toEqual({
       edits: [
-        edit(latest, "Croqueta"),
+        edit(latest, "Croquette"),
         edit(latestEnglish, "English companion"),
-        edit(french, "Compagnon français"),
+        edit(french, "French companion"),
       ],
     });
   });
@@ -321,9 +321,14 @@ describe("translation snapshot review", () => {
     const one = cell(),
       english = cell("one", { language: "en" });
     const drafts = new TranslationDrafts(config, [one, english]);
-    drafts.edit(one, "Croqueta");
+    drafts.edit(one, "Croquette");
     drafts.edit(english, "Old English draft");
-    const current = { ...one, text: "Croqueta", effectiveText: "Croqueta", expected: "current-es" };
+    const current = {
+      ...one,
+      text: "Croquette",
+      effectiveText: "Croquette",
+      expected: "current-es",
+    };
     const currentEnglish = {
       ...english,
       text: "Current English",
@@ -415,9 +420,9 @@ describe("suggested drafts", () => {
     const one = cell(),
       drafts = new TranslationDrafts(config, [one]);
     drafts.suggest([view(one)]);
-    drafts.edit(one, "Croqueta casera");
+    drafts.edit(one, "Croquette casera");
     expect(drafts.origin(one)).toBe("personal");
-    expect(drafts.personalSubmission()).toEqual({ edits: [edit(one, "Croqueta casera")] });
+    expect(drafts.personalSubmission()).toEqual({ edits: [edit(one, "Croquette casera")] });
     drafts.edit(one, "CLIENT-es one");
     expect(drafts.origin(one)).toBe("personal");
     expect(drafts.personalSubmission()).toEqual({ edits: [edit(one, "CLIENT-es one")] });
@@ -554,15 +559,15 @@ describe("suggested drafts", () => {
     expect(drafts.value(one)).toBe("CLIENT-es one");
   });
   it("Discard leaves no dirty edit when personal input returned to saved text", () => {
-    const one = cell("one", { text: "Croqueta", effectiveText: "Croqueta" });
+    const one = cell("one", { text: "Croquette", effectiveText: "Croquette" });
     const drafts = new TranslationDrafts(config, [one]);
     drafts.suggest([view(one)]);
     drafts.edit(one, "Other");
     expect(drafts.staged()).toHaveLength(1);
-    drafts.edit(one, "Croqueta");
+    drafts.edit(one, "Croquette");
     drafts.discardSuggestion(view(one).id);
     expect(drafts.staged()).toHaveLength(0);
-    expect(drafts.value(one)).toBe("Croqueta");
+    expect(drafts.value(one)).toBe("Croquette");
     expect(drafts.submission()).toEqual({ edits: [] });
   });
   it("new suggestion text cannot silently replace an edited cell even when it matches old or new suggestions", () => {

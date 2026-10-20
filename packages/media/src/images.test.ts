@@ -1249,8 +1249,8 @@ describe("free default choice with incomplete catalogue and image text", () => {
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
-        name: "Patatas",
-        kitchenName: "PAPAS",
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
         customerName: { en: "Potatoes" },
         unitId: unit.id,
         unitPrice: "2.00",

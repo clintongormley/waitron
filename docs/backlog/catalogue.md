@@ -177,10 +177,6 @@ Left open:
 - A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
 - A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
   else the copy indexed last.
-- Renaming or clearing the included menu's own customer names is not checked against the folders
-  that fix some languages, so a folder can end up with no name in the default language. The
-  missing-translations report lists it, and changing the default language is refused while it
-  lasts, but the write that caused it is allowed.
 - A fixed value that happens to equal the included menu's value when the dialog opens is saved
   back as "follow" the next time the dialog is saved: the dialog compares with the included
   menu's value and cannot tell the two apart.
@@ -819,71 +815,11 @@ focus to the "Scheduled versions" heading, which may no longer be there.
 - **Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
   A Discard whose delete request never answers keeps Save disabled, across closing and reopening the
   dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
-  do, `packages/dashboard-kit/src/request.ts`). And on the default language's page, an item a read
-  by reference showed should not be listed is skipped for the rest of that opening, so an item that
-  becomes listable again while the dialog is open shows only from the next opening
-  (`#dropped`, `apps/dashboard/src/widgets/content-translations-dialog.ts`). And after a Discard
-  that deleted some of a row's suggestions before one was refused, that language's row takes no
-  suggestion including any of them, and shows no Discard, for the rest of the opening the refusal
-  lands in (or, if the dialog was closed then, the very next opening, when that is on the same language);
-  the refused suggestion is still stored and fills the row again at that language's opening after
-  that.
+  do, `packages/dashboard-kit/src/request.ts`).
 
-## A682. Translations: nothing required, every missing name reported, all languages side by side (owner, 2026-10-14)
-
-**Current checkpoint, 2026-10-17, after 16:40:** the owner approved unit A at 16:25: required staff
-name and abbreviation, all translations optional, no automatic copying. Spanish A was approved at
-16:40: Save succeeds with Spanish customer text blank; Spanish stays enabled everywhere in Spain,
-including unknown province, Basque Country and Navarre, and its gaps remain. Other regional rules
-stay. The [dated design closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
-closes both decisions and authorizes planning/build. The [executable plan](../superpowers/plans/2026-10-17-a682-translations.md)
-covers all five points and Use fix in one complete future production PR. **A682 and Use fix remain
-OPEN** for implementation and validation. Fresh-context plan review is complete, with field-specific
-staff fallback and the additive-upgrade check made explicit. Implement in one production PR after
-the relevant G/C/E handoffs. The owner also approved the populated-unit upgrade reset declaration
-for the new required staff fields. Existing venue folders must be reset/reseeded before using the
-completed change; that approval does not authorise executing a venue reset or the A760 squash.
-The original points and earlier checkpoint below remain historical.
-
-**Historical checkpoint; see the [2026-10-17 closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a).**
-**Current checkpoint, 2026-10-17, after the unit answer:** unit option A is approved: required staff
-name and abbreviation, with every translated value optional. The [design addendum](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-reconciliation-spanish-and-approved-unit-option-a)
-records the remaining Spanish-text conflict. Keeping Spanish enabled and refusing a save for blank
-Spanish customer text are different rules; one worked example asks which the owner intends.
-Implementation and its detailed plan wait for that answer. The original points and earlier design
-checkpoint below remain as history; their pending unit A/B question is closed.
-
-- **A682. Translations: nothing required, every missing name reported, all languages side by side
-  (owner, 2026-10-14).**
-  1. No customer-facing name is required. A blank one falls back to the default-language name,
-     then to the staff name. A unit has no staff name to fall back to and stays required today
-     ([products.md](../developers/products.md#the-translation-gap-report)), so settle units first.
-  2. The Missing translations report lists every missing value in every enabled language, the
-     default included.
-  3. Changing the default content language is no longer refused over missing text
-     (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`).
-  4. The translations dialog shows one field per enabled language on each row, so a name can be
-     compared and filled in every language at once. Its "Why" filter becomes a "Missing in…"
-     language filter; "Kind" stays.
-  5. On Content languages, the note under a language's count is cut off mid-sentence (the Spanish
-     row: "Spanish stays enabled for venues in this region, and…"). Wrap it.
-
-  This settles the two questions C122 and A172 left for the owner: whether a name blank in every
-  language counts under the default language, and whether "Spanish filled, English blank" is still
-  a gap. Translate all fills the same dialog; its "Use fix" button waits for this change
-  (its own entry in `docs/backlog.md`).
-
-  **The user guides moved (A582 slice 3).** They are in `apps/server/src/guide/en/`, with Spanish
-  twins in `apps/server/src/guide/es/`. A682's guide changes go to both
-  `en/content-and-images.md` and `es/content-and-images.md`, and to the lines about translations in
-  `en/modifiers.md` and `es/modifiers.md`; the first half of Languages and photos, before "Add a
-  photograph once", was left for A682 to correct.
-
-  **Historical checkpoint; see the [2026-10-17 closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a).**
-  **Design checkpoint, 2026-10-17:** the [proposal](../superpowers/specs/2026-10-17-a682-translations-design.md)
-  covers all five points and Use fix in one future PR. Its unit choice is still open: add a required
-  staff name and abbreviation with optional translations (recommended), or retain at least one
-  translated name and abbreviation. Product implementation and the detailed plan await that choice.
+  **2026-10-20, A682:** the multilingual editor replaces the former default-page dropped-row
+  and language-scoped partial-Discard behavior. The old three-limit receipt is historical; the
+  unanswered delete-request limit remains open above.
 
 ## Open test gap from A201b (#1091)
 
@@ -942,6 +878,15 @@ control (`apps/till/src/screens/till-table-order-screen.ts`), and the price labe
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
 
 ## Decisions and deliberate limits
+
+- **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
+  translation is optional, including the default. Units have a required staff name and abbreviation;
+  neither is copied into translation maps. Report every missing enabled-language value. Default
+  changes do not require complete text. Review all languages, Translate all and Use fix in the
+  same editor. [Design and decisions](../superpowers/specs/2026-10-17-a682-translations-design.md),
+  [implementation plan](../superpowers/plans/2026-10-17-a682-translations.md). Existing populated
+  venue folders require reset/reseed for the required unit staff columns; the owner approved
+  declaring this reset, not executing one or squashing migrations under A760.
 
 ### A651 — drop photos to upload them, and tidy the image library and its picker
 
@@ -1225,10 +1170,10 @@ From A335 (#1457, the menu editor's heading):
 
 From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
-- **Spanish is required everywhere** (owner, 2026-10-17): in a Spanish venue, Spanish names are
-  required whatever the province, including a venue with no known province. Relayed to A682, which
-  must reconcile its "nothing required" with this. Whether receipts outside Catalonia stay free to
-  choose was not answered and stays open.
+- **Spanish stays enabled everywhere** (owner, 2026-10-17, Spanish A closure): in a Spanish
+  venue, keep Spanish enabled whatever the province, including an unknown province. Entered
+  customer text remains optional and missing text is reported. Whether receipts outside Catalonia
+  stay free to choose was not answered and stays open.
 - **Clearing the Extras editor's Minimum choices box saves 0, and that is right** (owner,
   2026-10-17): an empty box means no minimum, so a cleared minimum is not refused.
 - **A product literally named `Gin (Double)` and `Gin`'s `Double` variant may show the same label**

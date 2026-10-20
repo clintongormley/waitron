@@ -188,7 +188,7 @@ describe("preview live snapshot", () => {
         .values({
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { en: "each", fr: "unité" },
+          name: { en: "each", fr: "FR each" },
           abbreviation: { en: "ea", fr: "u" },
           precision: 0,
         })
@@ -257,7 +257,7 @@ describe("preview live snapshot", () => {
     });
     expect(offer.variants[0]!.customerName).toEqual({ en: "A big glass", es: "Vaso grande" });
     expect(offer.unit).toMatchObject({
-      name: { en: "each", fr: "unité", es: "unidad" },
+      name: { en: "each", fr: "FR each", es: "unidad" },
       abbreviation: { en: "ea", fr: "u" },
       precision: 0,
       hardwareUnit: null,
@@ -343,7 +343,7 @@ describe("preview live snapshot", () => {
         "es-ES",
       ),
     ).toEqual(["Ice?: Neat"]);
-    expect(recorded.unit.name).toEqual({ en: "each", fr: "unité" });
+    expect(recorded.unit.name).toEqual({ en: "each", fr: "FR each" });
     await publish(f.lunch);
     expect((await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document).toEqual(
       preview.document,

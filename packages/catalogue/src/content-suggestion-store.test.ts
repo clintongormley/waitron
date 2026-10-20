@@ -54,19 +54,19 @@ const text = (itemId: string, language: string, value: string) => ({
 });
 
 it("stores each name with the token of the item it was made from", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(
     job.id,
     done([
-      result(ref(venue.bread), { es: "  CLIENT-ES Pan  ", en: "CLIENT-EN Bread" }),
+      result(ref(venue.bread), { es: "  CLIENT-ES Bread  ", en: "CLIENT-EN Bread" }),
       result(ref(venue.wine), { ca: "CLIENT-CA Vi", es: "CLIENT-ES Vino", en: "CLIENT-EN Wine" }),
       result(ref(venue.cheese), { en: "CLIENT-EN Cheese" }),
     ]),
   );
   expect(await app(suggestionRows)).toEqual(
     inOrder([
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.bread, "en", "CLIENT-EN Bread"),
       text(venue.wine, "ca", "CLIENT-CA Vi"),
       text(venue.wine, "es", "CLIENT-ES Vino"),
@@ -113,13 +113,13 @@ it("stores each name with the token of the item it was made from", async () => {
 });
 
 it("drops a result for an item it did not send and a name for a language that was not missing", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(
     job.id,
     done([
       result("product:unknown", { es: "CLIENT-ES Nada" }),
-      result(ref(venue.bread), { ca: "CLIENT-CA Pa nou", es: "CLIENT-ES Pan" }),
+      result(ref(venue.bread), { ca: "CLIENT-CA Bread nou", es: "CLIENT-ES Bread" }),
       result(ref(venue.bread), { en: "CLIENT-EN Bread again" }),
       result(ref(venue.wine), { ca: "CLIENT-CA Vi", es: "   ", en: "x".repeat(4097) }),
       result(ref(venue.cheese), { en: "CLIENT-EN Cheese" }),
@@ -127,18 +127,18 @@ it("drops a result for an item it did not send and a name for a language that wa
   );
   expect(await app(suggestionRows)).toEqual(
     inOrder([
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.wine, "ca", "CLIENT-CA Vi"),
       text(venue.cheese, "en", "CLIENT-EN Cheese"),
     ]),
   );
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 5, failed: 0, done: 3 });
   const [bread] = await app((tx) => tx.select().from(products).where(eq(products.id, venue.bread)));
-  expect(bread!.customerName).toEqual({ ca: "CLIENT-CA Pa" });
+  expect(bread!.customerName).toEqual({ ca: "CLIENT-CA Bread" });
 });
 
 it("a name entered during the job is not overwritten or suggested", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app(async (tx) => {
     const { cells } = await resolveTranslationCells(
@@ -156,7 +156,7 @@ it("a name entered during the job is not overwritten or suggested", async () => 
             language: "es",
             field: "name",
             expected: cells[0]!.expected,
-            text: "CLIENT-ES Pan de la casa",
+            text: "CLIENT-ES Bread de la casa",
           },
         ],
       },
@@ -166,7 +166,7 @@ it("a name entered during the job is not overwritten or suggested", async () => 
   await store(
     job.id,
     done(
-      [result(ref(venue.bread), { es: "CLIENT-ES Pan sugerido", en: "CLIENT-EN Bread" })],
+      [result(ref(venue.bread), { es: "CLIENT-ES Bread sugerido", en: "CLIENT-EN Bread" })],
       [ref(venue.wine), ref(venue.cheese)],
     ),
   );
@@ -174,17 +174,17 @@ it("a name entered during the job is not overwritten or suggested", async () => 
     text(venue.bread, "en", "CLIENT-EN Bread"),
   ]);
   const [bread] = await app((tx) => tx.select().from(products).where(eq(products.id, venue.bread)));
-  expect(bread!.customerName).toEqual({ ca: "CLIENT-CA Pa", es: "CLIENT-ES Pan de la casa" });
+  expect(bread!.customerName).toEqual({ ca: "CLIENT-CA Bread", es: "CLIENT-ES Bread de la casa" });
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 1, done: 1, failed: 2 });
 });
 
 it("accepts a suggestion over tabs saved during the job because whitespace remains a gap", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app(async (tx) => {
     await tx
       .update(products)
-      .set({ customerName: { ca: "CLIENT-CA Pa", es: "\t" } })
+      .set({ customerName: { ca: "CLIENT-CA Bread", es: "\t" } })
       .where(eq(products.id, venue.bread));
     await tx
       .update(products)
@@ -195,7 +195,7 @@ it("accepts a suggestion over tabs saved during the job because whitespace remai
     job.id,
     done(
       [
-        result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" }),
+        result(ref(venue.bread), { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" }),
         result(
           ref(venue.cheese),
           { en: "CLIENT-EN Cheese" },
@@ -207,7 +207,7 @@ it("accepts a suggestion over tabs saved during the job because whitespace remai
   );
   expect(await app(suggestionRows)).toEqual(
     inOrder([
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.bread, "en", "CLIENT-EN Bread"),
       text(venue.cheese, "en", "CLIENT-EN Cheese"),
     ]),
@@ -216,20 +216,20 @@ it("accepts a suggestion over tabs saved during the job because whitespace remai
 });
 
 it("drops names in a language the venue disabled during the job, and counts the items done", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app((tx) => writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es"] }));
   await store(
     job.id,
     done([
-      result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" }),
+      result(ref(venue.bread), { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" }),
       result(ref(venue.wine), { ca: "CLIENT-CA Vi", es: "CLIENT-ES Vino", en: "CLIENT-EN Wine" }),
       result(ref(venue.cheese), { en: "CLIENT-EN Cheese" }),
     ]),
   );
   expect(await app(suggestionRows)).toEqual(
     inOrder([
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.wine, "ca", "CLIENT-CA Vi"),
       text(venue.wine, "es", "CLIENT-ES Vino"),
     ]),
@@ -238,13 +238,13 @@ it("drops names in a language the venue disabled during the job, and counts the 
 });
 
 it("drops everything for a product deleted during the job, and counts it done", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app((tx) => deactivateProduct(tx, venue.wine));
   await store(
     job.id,
     done([
-      result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" }),
+      result(ref(venue.bread), { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" }),
       result(
         ref(venue.wine),
         { ca: "CLIENT-CA Vi", es: "CLIENT-ES Vino", en: "CLIENT-EN Wine" },
@@ -259,18 +259,18 @@ it("drops everything for a product deleted during the job, and counts it done", 
 });
 
 it("keeps a placeholder and an internal spelling fix on the item's own row, and a fix to an entered name on that language's row", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(
     job.id,
     done([
       result(
         ref(venue.bread),
-        { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" },
+        { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" },
         {
           corrections: [
             { field: "internal", wrong: "Bread", right: "Bred" },
-            { field: "ca", wrong: "Pa", right: "Pà" },
+            { field: "ca", wrong: "CA bread", right: "Pà" },
           ],
         },
       ),
@@ -292,9 +292,9 @@ it("keeps a placeholder and an internal spelling fix on the item's own row, and 
         language: "ca",
         text: null,
         placeholder: false,
-        fix: { field: "ca", wrong: "Pa", right: "Pà" },
+        fix: { field: "ca", wrong: "CA bread", right: "Pà" },
       },
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.bread, "en", "CLIENT-EN Bread"),
       { itemId: venue.wine, language: null, text: null, placeholder: true, fix: null },
       text(venue.cheese, "en", "CLIENT-EN Cheese"),
@@ -305,7 +305,7 @@ it("keeps a placeholder and an internal spelling fix on the item's own row, and 
 });
 
 it("drops a fix to a missing or unentered language, a fix that changes nothing, and a second fix for one row", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   await app((tx) =>
     tx.insert(contentSuggestions).values({
       kind: "product",
@@ -322,10 +322,10 @@ it("drops a fix to a missing or unentered language, a fix that changes nothing, 
     done([
       result(
         ref(venue.bread),
-        { es: "CLIENT-ES Pan" },
+        { es: "CLIENT-ES Bread" },
         {
           corrections: [
-            { field: "es", wrong: "Pan", right: "Pa" },
+            { field: "es", wrong: "Bread", right: "CA bread" },
             { field: "fr", wrong: "Pain", right: "Pains" },
             { field: "internal", wrong: "Bread", right: "Bread" },
             { field: "internal", wrong: "Bread", right: "Bred" },
@@ -350,7 +350,7 @@ it("drops a fix to a missing or unentered language, a fix that changes nothing, 
         placeholder: false,
         fix: { field: "internal", wrong: "Bread", right: "Bred" },
       },
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.wine, "ca", "CLIENT-CA Vi"),
       text(venue.wine, "es", "CLIENT-ES Vino esperando"),
       text(venue.wine, "en", "CLIENT-EN Wine"),
@@ -361,7 +361,7 @@ it("drops a fix to a missing or unentered language, a fix that changes nothing, 
 });
 
 it("counts sent items with nothing usable as failed", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, {
     state: "partly_done",
@@ -392,7 +392,7 @@ it("counts sent items with nothing usable as failed", async () => {
 });
 
 it("drops a name returned for a context head and does not count the head as failed", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const { beer, pint } = await app(async (tx) => {
     const beer = await addProduct(tx, venue.menuId, "Beer", {
       ca: "CLIENT-CA Cervesa",
@@ -441,14 +441,14 @@ it("drops a name returned for a context head and does not count the head as fail
 });
 
 it("records a cap-stopped partly done job's failure as limit", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, {
     state: "partly_done",
     cursor: 0,
     nextCursor: null,
     reason: "limit_reached",
-    results: [result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" })],
+    results: [result(ref(venue.bread), { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" })],
     failed: [ref(venue.wine), ref(venue.cheese)],
   });
   expect((await app(allJobs))[0]).toMatchObject({
@@ -466,7 +466,7 @@ it("records a cap-stopped partly done job's failure as limit", async () => {
 });
 
 it("chains the next job of the run, never including an item the run already sent", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   const olives = await app((tx) =>
     addProduct(tx, venue.menuId, "Olives", { ca: "CLIENT-CA Olives" }),
@@ -477,7 +477,7 @@ it("chains the next job of the run, never including an item the run already sent
     nextCursor: null,
     reason: "provider_failed",
     results: [
-      result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" }),
+      result(ref(venue.bread), { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" }),
       result(ref(venue.cheese), { en: "CLIENT-EN Cheese" }),
     ],
     failed: [ref(venue.wine)],
@@ -505,7 +505,7 @@ it("chains the next job of the run, never including an item the run already sent
 });
 
 it("ends the run with what it sent when the next job would hold no item", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app(async (tx) => {
     // Under 200 languages water has gaps too, and as a product it would come before the variant.
@@ -521,7 +521,7 @@ it("ends the run with what it sent when the next job would hold no item", async 
 });
 
 it("brings progress to the run's total across a menu over 1,000 items", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   await app((tx) => addPlainProducts(tx, venue.menuId, 1000));
   const first = await runningJob(suite.db);
   expect(Object.keys(first.sent)).toHaveLength(1000);
@@ -549,12 +549,12 @@ it("brings progress to the run's total across a menu over 1,000 items", async ()
 }, 120_000);
 
 it("a retried store after a crash, or a store for an unknown job, changes nothing", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(
     job.id,
     done(
-      [result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" })],
+      [result(ref(venue.bread), { es: "CLIENT-ES Bread", en: "CLIENT-EN Bread" })],
       [ref(venue.wine), ref(venue.cheese)],
     ),
   );
@@ -565,7 +565,7 @@ it("a retried store after a crash, or a store for an unknown job, changes nothin
 });
 
 it("starts no next job after the month's limit stopped one, and the run finishes with what was sent", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   await app((tx) => addPlainProducts(tx, venue.menuId, 1000));
   const first = await runningJob(suite.db);
   expect(first.runTotal).toBe(1003);
@@ -599,7 +599,7 @@ it("starts no next job after the month's limit stopped one, and the run finishes
 }, 120_000);
 
 it("puts a placeholder and an internal fix on one row, and drops a placeholder for a deleted product", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app((tx) => deactivateProduct(tx, venue.wine));
   await store(
@@ -633,7 +633,7 @@ type Answer = (bread: string) => SuggestionPage["results"][number];
 
 /** Stores `first` for bread in one run, releases it, then stores `second` in a fresh run. */
 async function storeInTwoRuns(first: Answer, second: Answer) {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const unanswered = [ref(venue.wine), ref(venue.cheese)];
   const one = await runningJob(suite.db);
   await store(one.id, done([first(venue.bread)], unanswered));
@@ -676,7 +676,8 @@ it("a later run replaces the item's own row rather than adding a second one", as
 
 it("a later run replaces a fix to an entered name rather than adding a second one", async () => {
   const { two, rows } = await storeInTwoRuns(
-    (bread) => result(ref(bread), {}, { corrections: [{ field: "ca", wrong: "Pa", right: "Pà" }] }),
+    (bread) =>
+      result(ref(bread), {}, { corrections: [{ field: "ca", wrong: "CA bread", right: "Pà" }] }),
     (bread) =>
       result(ref(bread), {}, { corrections: [{ field: "ca", wrong: "CLIENT", right: "Client" }] }),
   );
@@ -693,7 +694,7 @@ it("a later run replaces a fix to an entered name rather than adding a second on
 });
 
 it("a later run replaces more than one batch of an item's rows in one store", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const ids = await app(async (tx) => {
     const inserted = await tx
       .insert(products)
@@ -760,11 +761,11 @@ const page = (
   results,
   failed,
 });
-const breadNames = (en: string) => ({ es: "CLIENT-ES Pan", en });
+const breadNames = (en: string) => ({ es: "CLIENT-ES Bread", en });
 const jobRow = async (id: string) => (await app(allJobs)).find((row) => row.id === id)!;
 
 it("a page before the last stores its suggestions and keeps the job running at the next cursor", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   expect(
     await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))])),
@@ -777,13 +778,16 @@ it("a page before the last stores its suggestions and keeps the job running at t
     finishedAt: null,
   });
   expect(await app(suggestionRows)).toEqual(
-    inOrder([text(venue.bread, "es", "CLIENT-ES Pan"), text(venue.bread, "en", "CLIENT-EN Bread")]),
+    inOrder([
+      text(venue.bread, "es", "CLIENT-ES Bread"),
+      text(venue.bread, "en", "CLIENT-EN Bread"),
+    ]),
   );
   expect((await app(readActiveSuggestionJob))?.id).toBe(job.id);
 });
 
 it("only the last page finishes the job, counts it and chains the next", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   const olives = await app((tx) =>
     addProduct(tx, venue.menuId, "Olives", { ca: "CLIENT-CA Olives" }),
@@ -808,7 +812,7 @@ it("only the last page finishes the job, counts it and chains the next", async (
 });
 
 it("a page stored again after its transaction committed changes nothing", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   const first = page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]);
   await store(job.id, first);
@@ -822,7 +826,7 @@ it("a page stored again after its transaction committed changes nothing", async 
 });
 
 it("a page whose transaction rolled back is stored once when fetched again", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   const first = page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]);
   await expect(
@@ -835,12 +839,15 @@ it("a page whose transaction rolled back is stored once when fetched again", asy
   const after = await jobRow(job.id);
   expect(after).toMatchObject({ collectCursor: 1, dropped: 0 });
   expect(await app(suggestionRows)).toEqual(
-    inOrder([text(venue.bread, "es", "CLIENT-ES Pan"), text(venue.bread, "en", "CLIENT-EN Bread")]),
+    inOrder([
+      text(venue.bread, "es", "CLIENT-ES Bread"),
+      text(venue.bread, "en", "CLIENT-EN Bread"),
+    ]),
   );
 });
 
 it("a ref repeated on a later page is stored once and counted dropped", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("EN Bread"))]));
   await store(
@@ -852,7 +859,7 @@ it("a ref repeated on a later page is stored once and counted dropped", async ()
   );
   expect(await app(suggestionRows)).toEqual(
     inOrder([
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.bread, "en", "EN Bread"),
       text(venue.wine, "ca", "CLIENT-CA Vi"),
     ]),
@@ -863,7 +870,7 @@ it("a ref repeated on a later page is stored once and counted dropped", async ()
 });
 
 it("a failed ref already accounted for on an earlier page is ignored and not counted", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
   await store(
@@ -885,7 +892,7 @@ it("a failed ref already accounted for on an earlier page is ignored and not cou
 });
 
 it("a suggestion discarded between pages stays discarded and the next page is stored", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
   await app(async (tx) => {
@@ -909,7 +916,7 @@ it("a suggestion discarded between pages stays discarded and the next page is st
 });
 
 it("a page for a job that is not running, or at another cursor, is stale", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   const before = await jobRow(job.id);
   expect(
@@ -928,7 +935,7 @@ it("a page for a job that is not running, or at another cursor, is stale", async
 });
 
 it("a last page that leaves a sent item unaccounted ends the job without a release", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
   expect(
@@ -946,7 +953,7 @@ it("a last page that leaves a sent item unaccounted ends the job without a relea
   });
   expect(await app(suggestionRows)).toEqual(
     inOrder([
-      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "es", "CLIENT-ES Bread"),
       text(venue.bread, "en", "CLIENT-EN Bread"),
       text(venue.wine, "ca", "CLIENT-CA Vi"),
     ]),
@@ -958,7 +965,7 @@ it("a last page that leaves a sent item unaccounted ends the job without a relea
 });
 
 it("a last page whose accounted items fall short of Cloud's total ends the job", async () => {
-  await seedSuggestionVenue(suite.db);
+  await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app((tx) =>
     tx.update(contentSuggestionJobs).set({ total: 4 }).where(eq(contentSuggestionJobs.id, job.id)),
@@ -970,7 +977,7 @@ it("a last page whose accounted items fall short of Cloud's total ends the job",
 });
 
 it("a last page that accounts for Cloud's total but not every sent item ends the job", async () => {
-  const venue = await seedSuggestionVenue(suite.db);
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await app((tx) =>
     tx.update(contentSuggestionJobs).set({ total: 2 }).where(eq(contentSuggestionJobs.id, job.id)),
@@ -989,7 +996,7 @@ it("a last page that accounts for Cloud's total but not every sent item ends the
 });
 
 it("a result for an item the box did not send does not by itself fail the walk", async () => {
-  await seedSuggestionVenue(suite.db);
+  await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   expect(
     await store(

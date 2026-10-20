@@ -219,7 +219,7 @@ describe("the missing-translations report", () => {
         .values({
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { ca: "racció", es: "ración" },
+          name: { ca: "CA portion", es: "portion" },
           abbreviation: { es: "rac" },
           precision: 0,
         })
@@ -297,7 +297,7 @@ describe("the missing-translations report", () => {
         .values({
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { es: "ración" },
+          name: { es: "portion" },
           abbreviation: { es: "rac" },
           precision: 0,
         })
@@ -370,7 +370,7 @@ describe("the missing-translations report", () => {
         .values({
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { ca: "racció" },
+          name: { ca: "CA portion" },
           abbreviation: { ca: "rac" },
           precision: 0,
         })
@@ -465,7 +465,7 @@ describe("the missing-translations report", () => {
           [
             {
               name: "STAFF Small",
-              customerName: { es: "CLIENT-ES Pequeño" },
+              customerName: { es: "CLIENT-ES ES small" },
               kitchenName: "KITCHEN Small",
               image: null,
               unitPrice: "2.00",
@@ -494,7 +494,7 @@ describe("the missing-translations report", () => {
           [
             {
               name: "STAFF Small",
-              customerName: { es: "CLIENT-ES Pequeño" },
+              customerName: { es: "CLIENT-ES ES small" },
               kitchenName: "KITCHEN Small",
               image: null,
               unitPrice: "2.00",

@@ -45,7 +45,7 @@ beforeEach(async () => {
   catalogueId = setup.catalogue.id;
   input = {
     name: "Coffee",
-    customerName: { en: "Coffee", es: "Café" },
+    customerName: { en: "Coffee", es: "ES coffee" },
     // A non-default value so the canonical save/read round-trip proves ordering is actually persisted.
     ordering: "not_sold_separately",
     description: { en: "Freshly roasted" },
@@ -344,7 +344,7 @@ describe("a removed variant in the parent's editor", () => {
   });
 
   it("saves incomplete names on active variants while retaining archived variant refusals", async () => {
-    const spanishOnly = { customerName: { es: "Grande" } };
+    const spanishOnly = { customerName: { es: "ES large" } };
     const saved = await save(null, input);
     const [small, large] = saved.variants;
     const inactive = await save(saved.id, {
@@ -356,14 +356,14 @@ describe("a removed variant in the parent's editor", () => {
       ...saved,
       variants: [{ ...small!, ...spanishOnly }, inactive.variants[1]!],
     });
-    expect(updated.variants[0]!.customerName).toEqual({ es: "Grande" });
+    expect(updated.variants[0]!.customerName).toEqual({ es: "ES large" });
     expect(updated.variants[1]).toEqual(inactive.variants[1]);
     await expect(
       save(saved.id, {
         ...saved,
         variants: [
           small!,
-          { ...large!, customerName: { en: "Large", es: "Grande" }, active: true },
+          { ...large!, customerName: { en: "Large", es: "ES large" }, active: true },
         ],
       }),
     ).rejects.toMatchObject({
@@ -374,7 +374,7 @@ describe("a removed variant in the parent's editor", () => {
   });
 
   it("refuses either active state on an archived variant's own page, retaining its untranslated name", async () => {
-    const spanishOnly = { customerName: { es: "Grande" } };
+    const spanishOnly = { customerName: { es: "ES large" } };
     const saved = await save(null, input);
     const [small, large] = saved.variants;
     await save(saved.id, {
@@ -586,12 +586,12 @@ async function refusal(value: unknown): Promise<{ code: string; params: unknown 
 
 it("saves and rereads product and variant names without default-language text", async () => {
   const product = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, null, catalogueId, { ...input, customerName: { es: "Café" } }, "en"),
+    saveProductEditor(tx, null, catalogueId, { ...input, customerName: { es: "ES coffee" } }, "en"),
   );
-  expect(product.customerName).toEqual({ es: "Café" });
+  expect(product.customerName).toEqual({ es: "ES coffee" });
   expect(
     (await withTransaction(fx.db, (tx) => readProductEditor(tx, product.id))).customerName,
-  ).toEqual({ es: "Café" });
+  ).toEqual({ es: "ES coffee" });
   const variants = await withTransaction(fx.db, (tx) =>
     saveProductEditor(
       tx,
@@ -601,17 +601,17 @@ it("saves and rereads product and variant names without default-language text", 
         ...input,
         name: "Tea",
         variants: input.variants.map((variant, index) =>
-          index === 1 ? { ...variant, customerName: { es: "Grande" } } : variant,
+          index === 1 ? { ...variant, customerName: { es: "ES large" } } : variant,
         ),
       },
       "en",
     ),
   );
-  expect(variants.variants[1]!.customerName).toEqual({ es: "Grande" });
+  expect(variants.variants[1]!.customerName).toEqual({ es: "ES large" });
   expect(
     (await withTransaction(fx.db, (tx) => readProductEditor(tx, variants.id))).variants[1]!
       .customerName,
-  ).toEqual({ es: "Grande" });
+  ).toEqual({ es: "ES large" });
 });
 
 it.each([
@@ -1130,15 +1130,15 @@ describe("optional product customer translations", () => {
     async (customerName) => {
       const saved = await save(null, {
         ...input,
-        name: "Patatas",
-        kitchenName: "PAPAS",
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
         customerName,
         variants: [],
       });
       const expected = customerName?.en ? { en: "Potatoes" } : null;
       expect(saved).toMatchObject({
-        name: "Patatas",
-        kitchenName: "PAPAS",
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
         customerName: expected,
       });
       expect((await read(saved.id)).customerName).toEqual(expected);
@@ -1148,11 +1148,11 @@ describe("optional product customer translations", () => {
   it("keeps canonical disabled translations supplied when creating a product and a variant", async () => {
     const saved = await save(null, {
       ...input,
-      customerName: { fr: "Café français" },
-      variants: [{ ...input.variants[0]!, customerName: { fr: "Petit café" } }],
+      customerName: { fr: "FR coffee" },
+      variants: [{ ...input.variants[0]!, customerName: { fr: "FR small coffee" } }],
     });
-    expect(saved.customerName).toEqual({ fr: "Café français" });
-    expect(saved.variants[0]!.customerName).toEqual({ fr: "Petit café" });
+    expect(saved.customerName).toEqual({ fr: "FR coffee" });
+    expect(saved.variants[0]!.customerName).toEqual({ fr: "FR small coffee" });
   });
 
   it.each([null, {}, { en: "Coffee changed" }])(
@@ -1160,9 +1160,9 @@ describe("optional product customer translations", () => {
     async (customerName) => {
       const saved = await save(null, {
         ...input,
-        customerName: { es: "Café", en: "Coffee", fr: "Café français" },
+        customerName: { es: "ES coffee", en: "Coffee", fr: "FR coffee" },
         variants: [
-          { ...input.variants[0]!, customerName: { es: "Pequeño", en: "Small", fr: "Petit" } },
+          { ...input.variants[0]!, customerName: { es: "ES small", en: "Small", fr: "FR small" } },
         ],
       });
       const changed = await save(saved.id, {
@@ -1170,8 +1170,8 @@ describe("optional product customer translations", () => {
         customerName,
         variants: [{ ...saved.variants[0]!, customerName }],
       });
-      const productName = { ...customerName, fr: "Café français" };
-      const variantName = { ...customerName, fr: "Petit" };
+      const productName = { ...customerName, fr: "FR coffee" };
+      const variantName = { ...customerName, fr: "FR small" };
       expect(changed.customerName).toEqual(productName);
       expect(changed.variants[0]!.customerName).toEqual(variantName);
       const reread = await read(saved.id);
@@ -1183,7 +1183,7 @@ describe("optional product customer translations", () => {
   it("preserves omitted product and nested variant maps", async () => {
     const saved = await save(null, {
       ...input,
-      variants: [{ ...input.variants[0]!, customerName: { es: "Pequeño", fr: "Petit" } }],
+      variants: [{ ...input.variants[0]!, customerName: { es: "ES small", fr: "FR small" } }],
     });
     const omitted: Record<string, unknown> = { ...saved };
     const variant: Record<string, unknown> = { ...saved.variants[0]! };
@@ -1192,7 +1192,7 @@ describe("optional product customer translations", () => {
     omitted.variants = [variant];
     const changed = await save(saved.id, omitted);
     expect(changed.customerName).toEqual(saved.customerName);
-    expect(changed.variants[0]!.customerName).toEqual({ es: "Pequeño", fr: "Petit" });
+    expect(changed.variants[0]!.customerName).toEqual({ es: "ES small", fr: "FR small" });
   });
 
   it.each([{ fr: "Changed" }, { fr: " " }, { de: "Neu" }])(
@@ -1200,7 +1200,7 @@ describe("optional product customer translations", () => {
     async (customerName) => {
       const saved = await save(null, {
         ...input,
-        customerName: { es: "Café", fr: "Café français" },
+        customerName: { es: "ES coffee", fr: "FR coffee" },
         variants: [],
       });
       await expect(save(saved.id, { ...saved, customerName })).rejects.toMatchObject({
@@ -1216,10 +1216,10 @@ describe("optional product customer translations", () => {
     const changed = await save(variant.id, { ...variant, customerName: {} });
     expect(changed.customerName).toBeNull();
     expect(changed.name).toBe("Small");
-    expect((await read(saved.id)).customerName).toEqual({ en: "Coffee", es: "Café" });
+    expect((await read(saved.id)).customerName).toEqual({ en: "Coffee", es: "ES coffee" });
   });
 
-  it.each([{ ES: "Café" }, { "es-ES": "Café" }, { en: "é".repeat(2048) + "a" }])(
+  it.each([{ ES: "ES coffee" }, { "es-ES": "ES coffee" }, { en: "é".repeat(2048) + "a" }])(
     "refuses noncanonical or oversized customer text: %j",
     async (customerName) => {
       await expect(save(null, { ...input, customerName, variants: [] })).rejects.toMatchObject({

@@ -17,14 +17,14 @@ const context = { fallbackLanguage: "es", required: ["es"] };
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
   const menu = await createCatalogue(tx, {
-    name: "STAFF Menú",
-    names: { es: "CLIENT Menú", en: "CLIENT Menu", ca: "CLIENT Carta" },
+    name: "STAFF Menu",
+    names: { es: "CLIENT ES Menu", en: "CLIENT Menu", ca: "CLIENT Carta" },
   });
   const product = await createProduct(tx, {
     catalogueId: menu.id,
     categoryId: null,
     name: "STAFF Bread",
-    customerName: { es: "CLIENT Pan", en: "CLIENT Bread", ca: "UNPROJECTED Pa" },
+    customerName: { es: "CLIENT ES bread", en: "CLIENT Bread", ca: "UNPROJECTED Bread" },
     kitchenName: "KITCHEN Bread",
     unitPrice: "3.00",
     pricingUnit: "each",
@@ -45,7 +45,7 @@ describe("multilingual item pages", () => {
       const ids = await fixture(tx);
       await tx
         .update(products)
-        .set({ customerName: { es: "CLIENT Pan", en: "CLIENT Bread" } })
+        .set({ customerName: { es: "CLIENT ES bread", en: "CLIENT Bread" } })
         .where(eq(products.id, ids.product));
       const any = await listTranslationItems(tx, query(), context);
       const ca = await listTranslationItems(
@@ -128,7 +128,7 @@ describe("multilingual item pages", () => {
       await writeContentLanguages(tx, { defaultLanguage: languages[0]!, languages });
       await tx.insert(units).values({
         id: "u",
-        staffName: "Kilogramo",
+        staffName: "Kilogram",
         staffAbbreviation: "kg",
         name: Object.fromEntries(languages.map((l, i) => [l, `name-${i}`])),
         abbreviation: Object.fromEntries(languages.map((l, i) => [l, `abbr-${i}`])),
@@ -146,11 +146,11 @@ describe("multilingual item pages", () => {
           { fallbackLanguage: languages[0]!, required: [] },
         );
         expect(page.rows[0]!.cells.map((c) => [c.language, c.field, c.text, c.staffText])).toEqual([
-          [languages[0]!, "name", "name-0", "Kilogramo"],
+          [languages[0]!, "name", "name-0", "Kilogram"],
           [languages[0]!, "abbreviation", "abbr-0", "kg"],
-          [languages[99]!, "name", "name-99", "Kilogramo"],
+          [languages[99]!, "name", "name-99", "Kilogram"],
           [languages[99]!, "abbreviation", "abbr-99", "kg"],
-          [languages[199]!, "name", "name-199", "Kilogramo"],
+          [languages[199]!, "name", "name-199", "Kilogram"],
           [languages[199]!, "abbreviation", "abbr-199", "kg"],
         ]);
         expect(execute).toHaveBeenCalledTimes(4);
@@ -200,7 +200,7 @@ describe("multilingual item pages", () => {
         (
           await listTranslationItems(
             tx,
-            query({ missing: { mode: "all" }, search: "MENÚ", kind: "menu" }),
+            query({ missing: { mode: "all" }, search: "MENU", kind: "menu" }),
             context,
           )
         ).rows.map((r) => r.kind),
@@ -225,7 +225,7 @@ describe("multilingual item pages", () => {
       await tx.insert(units).values([
         {
           id: "search-1",
-          staffName: "Croquetas de jamón ibérico",
+          staffName: "Senior résumé paper",
           staffAbbreviation: "cr",
           name: {},
           abbreviation: {},
@@ -233,7 +233,7 @@ describe("multilingual item pages", () => {
         },
         {
           id: "search-2",
-          staffName: "Jamón serrano",
+          staffName: "Junior résumé paper",
           staffAbbreviation: "js",
           name: {},
           abbreviation: {},
@@ -241,7 +241,7 @@ describe("multilingual item pages", () => {
         },
         {
           id: "search-3",
-          staffName: "Pan",
+          staffName: "Bread",
           staffAbbreviation: "p",
           name: {},
           abbreviation: {},
@@ -249,9 +249,9 @@ describe("multilingual item pages", () => {
         },
       ]);
       for (const [search, expected] of [
-        ["IBERICO jamon", ["search-1"]],
-        ["jam", ["search-1", "search-2"]],
-        ["jam ", ["search-1", "search-2"]],
+        ["SENIOR resume", ["search-1"]],
+        ["resume", ["search-1", "search-2"]],
+        ["resume ", ["search-1", "search-2"]],
         ["&", []],
         ["   ", ["search-1", "search-2", "search-3"]],
       ] as const) {

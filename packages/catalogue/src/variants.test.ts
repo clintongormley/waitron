@@ -79,7 +79,7 @@ describe("product variants", () => {
         tx,
         productId,
         [
-          { ...variant("Small", "2.00"), customerName: { en: "Small", es: "Pequeño" } },
+          { ...variant("Small", "2.00"), customerName: { en: "Small", es: "ES small" } },
           variant("Large", "3.00"),
         ],
         "en",
@@ -95,7 +95,7 @@ describe("product variants", () => {
     ).toEqual([
       {
         name: "Small",
-        customerName: { en: "Small", es: "Pequeño" },
+        customerName: { en: "Small", es: "ES small" },
         unitPrice: "2.00",
         available: true,
       },
@@ -154,18 +154,18 @@ describe("product variants", () => {
       setProductVariants(
         tx,
         productId,
-        [{ ...variant("Small", "2.00"), customerName: { es: "Pequeño" } }],
+        [{ ...variant("Small", "2.00"), customerName: { es: "ES small" } }],
         "en",
       ),
     );
-    expect(saved[0]!.customerName).toEqual({ es: "Pequeño" });
+    expect(saved[0]!.customerName).toEqual({ es: "ES small" });
     expect((await run((tx) => listProductVariants(tx, productId)))[0]!.customerName).toEqual({
-      es: "Pequeño",
+      es: "ES small",
     });
   });
 
   it("refuses a later malformed name while allowing an earlier variant to omit the default language", async () => {
-    const missingDefault = { ...variant("Small", "2.00"), customerName: { es: "Pequeño" } };
+    const missingDefault = { ...variant("Small", "2.00"), customerName: { es: "ES small" } };
     const laterNames: Record<string, string>[] = [
       { "!!": "Large" },
       { en: 3 as unknown as string },
@@ -321,9 +321,9 @@ describe("product variants", () => {
         tx,
         productId,
         [
-          variant("Ración 2", "2.00"),
+          variant("Portion 2", "2.00"),
           variant("0,5 kg", "5.00"),
-          variant("Ración 10", "10.00"),
+          variant("Portion 10", "10.00"),
           variant("0,25 kg", "2.50"),
         ],
         "en",

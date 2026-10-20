@@ -26,8 +26,12 @@ describe("optional translation maps", () => {
   it("accepts empty and partial maps without adding a default or staff value", () => {
     expect(validateOptionalTranslations({})).toEqual({});
     expect(
-      validateOptionalTranslations({ en: " Potatoes ", es: "  ", "ca-ES-valencia": "Creïlles" }),
-    ).toEqual({ en: "Potatoes", "ca-ES-valencia": "Creïlles" });
+      validateOptionalTranslations({
+        en: " Potatoes ",
+        es: "  ",
+        "ca-ES-valencia": "Valencian potatoes",
+      }),
+    ).toEqual({ en: "Potatoes", "ca-ES-valencia": "Valencian potatoes" });
   });
 
   it("bounds each nonblank value by UTF-8 bytes after trimming", () => {
@@ -42,28 +46,29 @@ describe("optional translation maps", () => {
 
 describe("full-field replacement", () => {
   const config = { defaultLanguage: "es", languages: ["es", "en"] };
-  const stored = { es: "Patatas", en: "Potatoes", fr: "Pommes de terre" };
+  const stored = { es: "ES potatoes", en: "Potatoes", fr: "FR potatoes" };
 
   it("replaces enabled values and preserves disabled entries without mutating its inputs", () => {
     const supplied = { en: " Spuds " };
     expect(mergeOptionalTranslations(stored, supplied, config)).toEqual({
       en: "Spuds",
-      fr: "Pommes de terre",
+      fr: "FR potatoes",
     });
-    expect(stored).toEqual({ es: "Patatas", en: "Potatoes", fr: "Pommes de terre" });
+    expect(stored).toEqual({ es: "ES potatoes", en: "Potatoes", fr: "FR potatoes" });
     expect(supplied).toEqual({ en: " Spuds " });
   });
 
   it.each([null, {}])("clears enabled entries while retaining disabled text: %j", (supplied) => {
-    expect(mergeOptionalTranslations(stored, supplied, config)).toEqual({ fr: "Pommes de terre" });
-    expect(mergeOptionalTranslations({ es: "Patatas" }, supplied, config)).toBeNull();
+    expect(mergeOptionalTranslations(stored, supplied, config)).toEqual({ fr: "FR potatoes" });
+    expect(mergeOptionalTranslations({ es: "ES potatoes" }, supplied, config)).toBeNull();
     expect(mergeOptionalTranslations(null, supplied, config)).toBeNull();
   });
 
   it("accepts unchanged disabled text but refuses replacing, adding or clearing it", () => {
-    expect(
-      mergeOptionalTranslations(stored, { en: "Chips", fr: "Pommes de terre" }, config),
-    ).toEqual({ en: "Chips", fr: "Pommes de terre" });
+    expect(mergeOptionalTranslations(stored, { en: "Chips", fr: "FR potatoes" }, config)).toEqual({
+      en: "Chips",
+      fr: "FR potatoes",
+    });
     const changes: Record<string, string>[] = [{ fr: "Frites" }, { de: "Kartoffeln" }, { fr: " " }];
     for (const supplied of changes) {
       expect(() => mergeOptionalTranslations(stored, supplied, config)).toThrowError(

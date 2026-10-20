@@ -1226,7 +1226,7 @@ it("a real translation PUT closes once before a failing report refresh", async (
   };
   const client = api({
     saveContentTranslations: vi.fn(async () => ({
-      saved: [{ ...cell, text: "Sopa", effectiveText: "Sopa", expected: "saved" }],
+      saved: [{ ...cell, text: "Soup", effectiveText: "Soup", expected: "saved" }],
     })),
     getContentSuggestions: vi.fn(async () => ({
       config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
@@ -1257,7 +1257,7 @@ it("a real translation PUT closes once before a failing report refresh", async (
   table
     .shadowRoot!.querySelector("[name=translation-product-dish-ca-name]")!
     .dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Sopa" }, bubbles: true, composed: true }),
+      new CustomEvent("wt-change", { detail: { value: "Soup" }, bubbles: true, composed: true }),
     );
   await form.updateComplete;
   vi.mocked(client.getContentTranslationGaps).mockRejectedValue(new Error("offline"));
@@ -1276,7 +1276,7 @@ it("a real translation PUT closes once before a failing report refresh", async (
         language: "ca",
         field: "name",
         expected: "baseline",
-        text: "Sopa",
+        text: "Soup",
       },
     ],
   });

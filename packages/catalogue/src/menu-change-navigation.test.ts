@@ -457,7 +457,7 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
       {
         presentation: {
           name: "Staff lemon",
-          customerName: { en: "Guest lemon", es: "Limón" },
+          customerName: { en: "Guest lemon", es: "ES lemon" },
           kitchenName: "LEMON",
           variantName: null,
           variantCustomerName: null,
@@ -465,7 +465,7 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
         },
         productId: "lemon",
         name: "Staff lemon",
-        customerName: { en: "Guest lemon", es: "Limón" },
+        customerName: { en: "Guest lemon", es: "ES lemon" },
         kitchenName: "LEMON",
         image: null,
         portion: "1.000",

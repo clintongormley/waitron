@@ -34,14 +34,14 @@ describe("multilingual translation transport", () => {
         languages: ["es", "ca-ES-valencia"],
         missing: { mode: "language", language: "en" },
         kind: "included_menu",
-        search: "Pa & oli / €",
+        search: "Bread & oil / €",
         after: '{"id":"a&b"}',
         waitingFixes: true,
       }),
     ).toEqual(response);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.path).toBe(
-      "/management-api/content-translations?language=es&language=ca-ES-valencia&missing=language&missingLanguage=en&kind=included_menu&search=Pa+%26+oli+%2F+%E2%82%AC&after=%7B%22id%22%3A%22a%26b%22%7D&waitingFixes=1",
+      "/management-api/content-translations?language=es&language=ca-ES-valencia&missing=language&missingLanguage=en&kind=included_menu&search=Bread+%26+oil+%2F+%E2%82%AC&after=%7B%22id%22%3A%22a%26b%22%7D&waitingFixes=1",
     );
     expect(calls[0]!.init.method).toBe("GET");
     expect(calls[0]!.init.body).toBeUndefined();

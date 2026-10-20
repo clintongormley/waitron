@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
+import { languageDisplayName } from "@waitron/shared";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import type {
@@ -228,9 +229,9 @@ describe("staged translation dialog", () => {
     },
   );
   it("puts a name and a language tag holding a replacement pattern in as written", async () => {
-    const { el } = await mount([target("one", { name: "Pan $&" })]);
+    const { el } = await mount([target("one", { name: "Bread $&" })]);
     expect(q<HTMLAnchorElement>(el, "a")!.getAttribute("aria-label")).toBe(
-      t("content_gaps.open_named").split("{name}").join("Pan $&"),
+      t("content_gaps.open_named").split("{name}").join("Bread $&"),
     );
     cleanupWidgets();
     const language = "x-$&",
@@ -284,7 +285,7 @@ describe("staged translation dialog", () => {
     });
     expect(passive.getContentSuggestions).toHaveBeenCalledExactlyOnceWith({});
     expect(api.getContentSuggestions).not.toHaveBeenCalled();
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
     expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
@@ -295,7 +296,7 @@ describe("staged translation dialog", () => {
           language: "es",
           field: "name",
           expected: "baseline-one-es",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     });
@@ -311,16 +312,15 @@ describe("staged translation dialog", () => {
       await page.viewport(width, 900);
       const { el, host } = await mount([target()], {}, theme);
       const held = field(el, "one");
-      await edit(el, "one", "Croqueta");
+      await edit(el, "one", "Croquette");
       await held.updateComplete;
       const native = held.shadowRoot!.querySelector("input")!;
       await userEvent.click(native);
       native.setSelectionRange(3, 5);
-      for (const [locale, language, kind] of [
-        ["en-GB", "Spanish", "Product"],
-        ["es-ES", "Español", "Producto"],
-      ] as const) {
+      for (const locale of ["en-GB", "es-ES"] as const) {
         setLocale(locale);
+        const language = languageDisplayName("es", locale);
+        const kind = t("content_gaps.kind_product");
         await settled(el);
         const bar = el.shadowRoot!.querySelector("dashboard-content-suggestions-bar")!;
         expect(bar.shadowRoot!.textContent).toContain(t("suggestions.about"));
@@ -336,7 +336,7 @@ describe("staged translation dialog", () => {
         expect(held.shadowRoot!.querySelector("input")).toBe(native);
         expect(held.shadowRoot!.activeElement).toBe(native);
         expect([native.value, native.selectionStart, native.selectionEnd]).toEqual([
-          "Croqueta",
+          "Croquette",
           3,
           5,
         ]);
@@ -377,13 +377,13 @@ describe("staged translation dialog", () => {
     await click(el, "next");
     await vi.waitFor(() => expect(field(el, "100")).not.toBeNull());
     expect(field(el, "100").disabled).toBe(false);
-    await edit(el, "100", "Último");
+    await edit(el, "100", "Last");
     const saveButton = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!;
     await saveButton.updateComplete;
     expect(saveButton.shadowRoot!.querySelector("button")!.disabled).toBe(true);
     saveButton.shadowRoot!.querySelector("button")!.click();
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
-    expect(field(el, "100").value).toBe("Último");
+    expect(field(el, "100").value).toBe("Last");
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.disabled).toBe(true);
     expect(q(el, "[data-test=edited-count]")!.textContent).toContain("101");
     await click(el, "previous");
@@ -392,7 +392,7 @@ describe("staged translation dialog", () => {
     await click(el, "next");
     await vi.waitFor(() => expect(field(el, "100")).not.toBeNull());
     expect(field(el, "100").disabled).toBe(false);
-    await edit(el, "100", "Último");
+    await edit(el, "100", "Last");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
     const batch = vi.mocked(api.saveContentTranslations).mock.calls[0]![0] as unknown as {
@@ -405,7 +405,7 @@ describe("staged translation dialog", () => {
       language: "es",
       field: "name",
       expected: "baseline-100-es",
-      text: "Último",
+      text: "Last",
     });
     expect(batch.edits.some((row) => row.id === "099")).toBe(false);
   });
@@ -431,7 +431,7 @@ describe("staged translation dialog", () => {
         }),
     );
     const { el } = await mount([target()], { saveContentTranslations: save });
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     const input = field(el, "one").shadowRoot!.querySelector("input")!;
     await userEvent.click(input);
     await userEvent.keyboard("{Enter}");
@@ -441,18 +441,18 @@ describe("staged translation dialog", () => {
     expect(field(el, "one").disabled).toBe(true);
     finish({
       saved: [
-        cell("one", "es", { text: "Croqueta", effectiveText: "Croqueta", expected: "saved" }),
+        cell("one", "es", { text: "Croquette", effectiveText: "Croquette", expected: "saved" }),
       ],
     });
     await vi.waitFor(() => expect(el.open).toBe(false));
   });
   it("retains every editor address, context label and localized kind option", async () => {
     const rows = [
-      target("prod-1", { name: "STAFF Pan" }),
+      target("prod-1", { name: "STAFF Bread" }),
       target("var-1", {
         kind: "variant",
         name: "STAFF Small",
-        parent: { id: "prod-1", name: "STAFF Pan" },
+        parent: { id: "prod-1", name: "STAFF Bread" },
       }),
       target("list-1", { kind: "option_list", name: "STAFF Doneness" }),
       target("label-1", {
@@ -472,7 +472,7 @@ describe("staged translation dialog", () => {
         name: "STAFF Coffee",
         parent: { id: "menu-1", name: "Lunch" },
       }),
-      target("unit-1", { kind: "unit", name: "ración" }),
+      target("unit-1", { kind: "unit", name: "portion" }),
     ];
     for (const row of rows) row.cells = row.cells.map((c) => ({ ...c, kind: row.kind }));
     const { el } = await mount(rows);
@@ -480,15 +480,15 @@ describe("staged translation dialog", () => {
     expect(
       links.map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]),
     ).toEqual([
-      ["Abrir STAFF Pan", "/manage/catalogue/product/prod-1"],
-      ["Abrir STAFF Pan › STAFF Small", "/manage/catalogue/product/var-1"],
+      ["Abrir STAFF Bread", "/manage/catalogue/product/prod-1"],
+      ["Abrir STAFF Bread › STAFF Small", "/manage/catalogue/product/var-1"],
       ["Abrir STAFF Doneness", "/manage/modifiers/view/options/list/list-1"],
       ["Abrir STAFF Doneness › STAFF Rare", "/manage/modifiers/view/options/list/list-1"],
       ["Abrir STAFF Sides", "/manage/modifiers/view/extras/list/extras-1"],
       ["Abrir Lunch", "/manage/menus/menu/menu-1/view/structure"],
       ["Abrir Lunch › STAFF Drinks", "/manage/menus/menu/menu-1/view/structure"],
       ["Abrir Lunch › STAFF Coffee", "/manage/menus/menu/menu-1/view/structure"],
-      ["Abrir ración", "/manage/units"],
+      ["Abrir portion", "/manage/units"],
     ]);
     const kinds = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="kind"]')!;
     expect(kinds.options.map(({ value }) => value)).toEqual([
@@ -570,18 +570,18 @@ describe("staged translation dialog", () => {
   });
   it("sends search words, accents, order and trailing spaces to the bounded reader and renders its returned order", async () => {
     let rows = [
-      target("croqueta", { name: "Croquetas de jamón ibérico" }),
-      target("serrano", { name: "Jamón serrano" }),
-      target("pan", { name: "Pan" }),
+      target("croquette", { name: "Senior résumé paper" }),
+      target("serrano", { name: "Junior résumé paper" }),
+      target("pan", { name: "Bread" }),
     ];
     const read = vi.fn(async () => result(rows));
     const { el } = await mount([], { getContentTranslationTargets: read });
     for (const [value, ids] of [
-      ["IBERICO jamon", ["croqueta"]],
-      ["jam", ["serrano", "croqueta"]],
-      ["jam ", []],
+      ["SENIOR resume", ["croquette"]],
+      ["resume", ["serrano", "croquette"]],
+      ["resume ", []],
       ["&", []],
-      ["   ", ["croqueta", "serrano", "pan"]],
+      ["   ", ["croquette", "serrano", "pan"]],
     ] as const) {
       rows = ids.map((id) => target(id));
       await searchFor(el, value);
@@ -598,19 +598,19 @@ describe("staged translation dialog", () => {
     const liveData = new LiveData(),
       read = vi.fn(async () => result(current));
     const { el } = await mount([], { liveData, getContentTranslationTargets: read });
-    await searchFor(el, "jamon");
+    await searchFor(el, "resume");
     expect(windowFor(el)!.rows).toEqual([]);
-    current = [target("pan", { name: "Pan con jamón" })];
+    current = [target("pan", { name: "Ham sandwich" })];
     liveData.invalidate([{ type: "products" }]);
     await vi.waitFor(() => expect(field(el, "pan")).not.toBeNull());
-    await edit(el, "pan", "Mi pan");
+    await edit(el, "pan", "My bread");
     expect(read).toHaveBeenLastCalledWith({
       languages: ["en", "es"],
       missing: { mode: "language", language: "es" },
-      search: "jamon",
+      search: "resume",
     });
-    expect(windowFor(el)!.rows[0]!.name).toBe("Pan con jamón");
-    expect(field(el, "pan").value).toBe("Mi pan");
+    expect(windowFor(el)!.rows[0]!.name).toBe("Ham sandwich");
+    expect(field(el, "pan").value).toBe("My bread");
   });
   it("initializes Missing in and Jump to the selected language, keeps Save quiet and never requires or copies a default companion", async () => {
     const { el, api } = await mount();
@@ -629,7 +629,7 @@ describe("staged translation dialog", () => {
     );
     await click(el, "save");
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     expect(field(el, "one").getAttribute("lang")).toBe("es");
     expect(field(el, "one", "en").getAttribute("lang")).toBe("en");
     await click(el, "save");
@@ -642,14 +642,14 @@ describe("staged translation dialog", () => {
           language: "es",
           field: "name",
           expected: "baseline-one-es",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     });
   });
   it("saves independently entered optional Spanish and English cells without copying either value", async () => {
     const { el, api } = await mount();
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     await edit(el, "one", " Ham croquette ", "en");
     expect(field(el, "one", "en").required).toBe(false);
     await click(el, "save");
@@ -662,7 +662,7 @@ describe("staged translation dialog", () => {
           language: "es",
           field: "name",
           expected: "baseline-one-es",
-          text: "Croqueta",
+          text: "Croquette",
         },
         {
           kind: "product",
@@ -741,7 +741,7 @@ describe("staged translation dialog", () => {
       result("kind" in query && query.kind ? [label] : [target(), label]),
     );
     const { el, api } = await mount([target(), label], { getContentTranslationTargets: read });
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     await select(el, "kind", "option_label");
     await select(el, "missing", "any");
     await searchFor(el, "Sauces");
@@ -756,7 +756,7 @@ describe("staged translation dialog", () => {
     expect(q(el, "[data-test=hidden-count]")!.textContent).toContain("1");
     await click(el, "show-edited");
     await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
-    expect(field(el, "one").value).toBe("Croqueta");
+    expect(field(el, "one").value).toBe("Croquette");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
     expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
@@ -767,7 +767,7 @@ describe("staged translation dialog", () => {
           language: "es",
           field: "name",
           expected: "baseline-one-es",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     });
@@ -806,15 +806,15 @@ describe("staged translation dialog", () => {
       })
       .mockImplementation(accepted);
     const { el } = await mount([target()], { saveContentTranslations: save });
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     await click(el, "save");
     await vi.waitFor(() => expect(field(el, "one").error).toBe(codeMessage("product.invalid")));
     expect(el.open).toBe(true);
-    expect(field(el, "one").value).toBe("Croqueta");
+    expect(field(el, "one").value).toBe("Croquette");
     await vi.waitFor(() =>
       expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.disabled).toBe(false),
     );
-    await edit(el, "one", "Croqueta buena");
+    await edit(el, "one", "Good croquette");
     expect(field(el, "one").error).toBe("");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
@@ -846,7 +846,7 @@ describe("staged translation dialog", () => {
   });
   it("empty reversion makes Save quiet and prevents an accidental request", async () => {
     const { el, api } = await mount();
-    await edit(el, "one", "Croqueta");
+    await edit(el, "one", "Croquette");
     await edit(el, "one", "English", "en");
     await edit(el, "one", " ");
     await edit(el, "one", "  ", "en");
@@ -859,11 +859,11 @@ describe("staged translation dialog", () => {
     const control = field(el, "one");
     await control.updateComplete;
     const native = control.shadowRoot!.querySelector("input")!;
-    await userEvent.fill(native, "  Croqueta  ");
+    await userEvent.fill(native, "  Croquette  ");
     native.setSelectionRange(4, 4);
     await userEvent.type(native, "X");
     await settled(el);
-    expect(native.value).toBe("  CrXoqueta  ");
+    expect(native.value).toBe("  CrXoquette  ");
     expect(native.selectionStart).toBe(5);
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
@@ -875,7 +875,7 @@ describe("staged translation dialog", () => {
           language: "es",
           field: "name",
           expected: "baseline-one-es",
-          text: "CrXoqueta",
+          text: "CrXoquette",
         },
       ],
     });

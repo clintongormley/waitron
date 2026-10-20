@@ -159,14 +159,14 @@ describe("section details", () => {
     const drinks = await app((tx) =>
       createOwned(tx, {
         internalName: "  Drinks  ",
-        names: { en: "Something to drink", es: "Bebidas" },
+        names: { en: "Something to drink", es: "ES drinks" },
         color: "#aabbcc",
       }),
     );
     expect(drinks).toEqual({
       id: drinks.id,
       internalName: "Drinks",
-      names: { en: "Something to drink", es: "Bebidas" },
+      names: { en: "Something to drink", es: "ES drinks" },
       image: null,
       color: "#aabbcc",
       members: [],
@@ -213,8 +213,8 @@ describe("section details", () => {
     await fixture();
     const drinks = await owned("Drinks");
     const refused: [Parameters<typeof updateSection>[2], object][] = [
-      [{ names: "Bebidas" as unknown as Record<string, string> }, { field: "names" }],
-      [{ names: ["Bebidas"] as unknown as Record<string, string> }, { field: "names" }],
+      [{ names: "ES drinks" as unknown as Record<string, string> }, { field: "names" }],
+      [{ names: ["ES drinks"] as unknown as Record<string, string> }, { field: "names" }],
       [{ names: null as unknown as Record<string, string> }, { field: "names" }],
       [{ color: "#ABCDEF" }, { field: "color" }],
       [{ color: "red" }, { field: "color" }],
@@ -247,17 +247,20 @@ describe("section details", () => {
     );
     const drinks = await owned("Drinks");
     const created = await app((tx) =>
-      createOwned(tx, { internalName: "Bebidas", names: { es: "Bebidas" } }),
+      createOwned(tx, { internalName: "ES drinks", names: { es: "ES drinks" } }),
     );
-    expect(created.names).toEqual({ es: "Bebidas" });
-    expect((await app((tx) => readSection(tx, created.id))).names).toEqual({ es: "Bebidas" });
+    expect(created.names).toEqual({ es: "ES drinks" });
+    expect((await app((tx) => readSection(tx, created.id))).names).toEqual({ es: "ES drinks" });
     expect(
-      (await app((tx) => updateSection(tx, drinks.id, { names: { es: "Bebidas" } }))).names,
-    ).toEqual({ es: "Bebidas" });
+      (await app((tx) => updateSection(tx, drinks.id, { names: { es: "ES drinks" } }))).names,
+    ).toEqual({ es: "ES drinks" });
     expect(
-      (await app((tx) => updateSection(tx, drinks.id, { names: { en: "Drinks", es: "Bebidas" } })))
-        .names,
-    ).toEqual({ en: "Drinks", es: "Bebidas" });
+      (
+        await app((tx) =>
+          updateSection(tx, drinks.id, { names: { en: "Drinks", es: "ES drinks" } }),
+        )
+      ).names,
+    ).toEqual({ en: "Drinks", es: "ES drinks" });
     expect((await app((tx) => updateSection(tx, drinks.id, { names: {} }))).names).toEqual({});
   });
 

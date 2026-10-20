@@ -217,7 +217,7 @@ describe("what counts as still there", () => {
       await tx.insert(units).values({
         staffName: "Staff unit",
         staffAbbreviation: "su",
-        name: { ca: "CLIENT-CA Ració" },
+        name: { ca: "CLIENT-CA CA portion" },
         abbreviation: { ca: "r." },
         precision: 0,
       });
@@ -355,7 +355,7 @@ describe("the gaps a run starts from", () => {
         .values({
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
+          name: { ca: "CLIENT-CA CA portion", es: "CLIENT-ES Portion" },
           abbreviation: { ca: "r." },
           precision: 0,
         })
@@ -519,7 +519,7 @@ describe("collecting what is missing", () => {
         .values({
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
+          name: { ca: "CLIENT-CA CA portion", es: "CLIENT-ES Portion" },
           abbreviation: { ca: "r." },
           precision: 0,
         })
@@ -604,7 +604,7 @@ describe("collecting what is missing", () => {
           family: `unit:${racio!.id}`,
           category: null,
           staffName: "Staff unit",
-          existing: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
+          existing: { ca: "CLIENT-CA CA portion", es: "CLIENT-ES Portion" },
           missing: ["en"],
         },
       ]);

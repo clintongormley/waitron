@@ -132,7 +132,7 @@ interface SeededVenue {
   cfg: DeviceRequestConfig;
   /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
   catalogueId: string;
-  /** The `each`-priced "Café" product (VAT general/21%, category "Bebidas"). */
+  /** The `each`-priced "Café" product (VAT general/21%, category "ES drinks"). */
   cafeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
   aguaId: string;
@@ -189,7 +189,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
+      const bebidas = await createCategory(tx, { name: "ES drinks" });
       const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
@@ -832,7 +832,7 @@ describe("parkOrder", () => {
       unitPriceGross: 150,
       vatClass: "general",
       lineTotal: 300,
-      category: "Bebidas",
+      category: "ES drinks",
     });
   });
 
@@ -888,7 +888,7 @@ describe("parkOrder", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatchObject({ lineNo: 1, productId: cafeId, category: "Bebidas" });
+    expect(lines[0]).toMatchObject({ lineNo: 1, productId: cafeId, category: "ES drinks" });
     // `quantity` is read straight off the column, so 3000 is three units as a count of thousandths.
     expect(lines[1]).toMatchObject({ lineNo: 2, productId: aguaId, quantity: 3000 });
     // The category-less product's line snapshots NULL, the other branch of `?? null`.
@@ -1438,7 +1438,7 @@ describe("getHeldOrder", () => {
       const product = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Jamón",
+        name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -1491,9 +1491,9 @@ describe("getHeldOrder", () => {
       const product = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Jamón staff",
-        customerName: { [CONTENT_LANGUAGE]: "Jamón customer" },
-        kitchenName: "Jamón kitchen",
+        name: "Ham staff",
+        customerName: { [CONTENT_LANGUAGE]: "Ham customer" },
+        kitchenName: "Ham kitchen",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -1583,7 +1583,7 @@ describe("getHeldOrder", () => {
       const product = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Jamón",
+        name: "Ham",
         unitId,
         unitPrice: "12.00",
         vatClass: "general",
@@ -1604,7 +1604,7 @@ describe("getHeldOrder", () => {
       lines: [{ menuItemId, quantity: "0.375" }],
     });
     await db.execute(sql`
-      update units set name = ${JSON.stringify({ [LOCALE]: "kilogramo" })}
+      update units set name = ${JSON.stringify({ [LOCALE]: "kilogram" })}
       where id = ${unitId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
@@ -1759,7 +1759,7 @@ describe("getHeldOrder", () => {
           },
           unitPrice: "3.25",
           vatClass: "general",
-          category: "Bebidas",
+          category: "ES drinks",
           allergens: null,
           catalogueName: "Carta premium",
         }),
@@ -2112,16 +2112,16 @@ describe("updateHeldOrder", () => {
       const list = await catalogue.createOptionList(
         tx,
         {
-          name: "Punto list staff",
-          customerName: { [CONTENT_LANGUAGE]: "Punto cliente", ca: "Punt client" },
-          kitchenName: "Punto list kitchen",
+          name: "Cooking list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Cooking cliente", ca: "CA cooking client" },
+          kitchenName: "Cooking list kitchen",
           defaultLabelId: null,
           active: true,
           labels: [
             {
-              name: "Poco staff",
-              customerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente", ca: "Poc fet client" },
-              kitchenName: "Poco kitchen",
+              name: "Rare staff",
+              customerName: { [CONTENT_LANGUAGE]: "Rare hecho cliente", ca: "CA rare fet client" },
+              kitchenName: "Rare kitchen",
               available: true,
             },
           ],
@@ -2152,12 +2152,12 @@ describe("updateHeldOrder", () => {
     expect(firedBefore[0]!.firedAt).not.toBeNull();
     expect(before[0]!.optionSnapshots).toEqual([
       {
-        listName: { [CONTENT_LANGUAGE]: "Punto list staff" },
-        listCustomerName: { [CONTENT_LANGUAGE]: "Punto cliente" },
-        listKitchenName: "Punto list kitchen",
-        labelName: { [CONTENT_LANGUAGE]: "Poco staff" },
-        labelCustomerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente" },
-        labelKitchenName: "Poco kitchen",
+        listName: { [CONTENT_LANGUAGE]: "Cooking list staff" },
+        listCustomerName: { [CONTENT_LANGUAGE]: "Cooking cliente" },
+        listKitchenName: "Cooking list kitchen",
+        labelName: { [CONTENT_LANGUAGE]: "Rare staff" },
+        labelCustomerName: { [CONTENT_LANGUAGE]: "Rare hecho cliente" },
+        labelKitchenName: "Rare kitchen",
       },
     ]);
 
@@ -2192,16 +2192,19 @@ describe("updateHeldOrder", () => {
         const list = await catalogue.createOptionList(
           tx,
           {
-            name: "Punto list staff",
-            customerName: { [CONTENT_LANGUAGE]: "Punto cliente", ca: "Punt client" },
-            kitchenName: "Punto list kitchen",
+            name: "Cooking list staff",
+            customerName: { [CONTENT_LANGUAGE]: "Cooking cliente", ca: "CA cooking client" },
+            kitchenName: "Cooking list kitchen",
             defaultLabelId: null,
             active: true,
             labels: [
               {
-                name: "Poco staff",
-                customerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente", ca: "Poc fet client" },
-                kitchenName: "Poco kitchen",
+                name: "Rare staff",
+                customerName: {
+                  [CONTENT_LANGUAGE]: "Rare hecho cliente",
+                  ca: "CA rare fet client",
+                },
+                kitchenName: "Rare kitchen",
                 available: true,
               },
             ],
@@ -2241,12 +2244,12 @@ describe("updateHeldOrder", () => {
       expect(firedBefore[0]!.firedAt).not.toBeNull();
       expect(before[0]!.optionSnapshots).toEqual([
         {
-          listName: { [CONTENT_LANGUAGE]: "Punto list staff" },
-          listCustomerName: { [CONTENT_LANGUAGE]: "Punto cliente" },
-          listKitchenName: "Punto list kitchen",
-          labelName: { [CONTENT_LANGUAGE]: "Poco staff" },
-          labelCustomerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente" },
-          labelKitchenName: "Poco kitchen",
+          listName: { [CONTENT_LANGUAGE]: "Cooking list staff" },
+          listCustomerName: { [CONTENT_LANGUAGE]: "Cooking cliente" },
+          listKitchenName: "Cooking list kitchen",
+          labelName: { [CONTENT_LANGUAGE]: "Rare staff" },
+          labelCustomerName: { [CONTENT_LANGUAGE]: "Rare hecho cliente" },
+          labelKitchenName: "Rare kitchen",
         },
       ]);
 
@@ -3122,7 +3125,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
-      const cafe = await addOptionList(tx, cafeId, "Punto");
+      const cafe = await addOptionList(tx, cafeId, "Cooking");
       await addExtraList(tx, catalogueId, aguaId, "Hielo");
       const agua = await addOptionList(tx, aguaId, "Tamano");
       return { cafe, agua };
@@ -3159,7 +3162,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
-      return addOptionList(tx, cafeId, "Punto");
+      return addOptionList(tx, cafeId, "Cooking");
     });
     const answer = { listId: seeded.listId, labelId: seeded.labelIds[0]! };
     const id = randomUUID();
@@ -3198,7 +3201,7 @@ describe("basket-wide modifier resolution (perf)", () => {
 
   it("reads the zone's offers once for an edit that re-checks a stored answer and prices a new line", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
-    const punto = await withTransaction(db, (tx) => addOptionList(tx, cafeId, "Punto"));
+    const punto = await withTransaction(db, (tx) => addOptionList(tx, cafeId, "Cooking"));
     const answer = { listId: punto.listId, labelId: punto.labelIds[0]! };
     const id = randomUUID();
     await parkProducts(cfg, {
@@ -3239,7 +3242,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       });
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
 
-      const cafe = await addOptionList(tx, cafeId, "Punto");
+      const cafe = await addOptionList(tx, cafeId, "Cooking");
       const agua = await addOptionList(tx, aguaId, "Tamano");
       await republishMenus(tx);
       return { aguaOfferId: aguaOffer.id, cafe, agua };
@@ -4556,7 +4559,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const grande = await addExtra(tx, catalogueId, cafeId, "Grande");
+      const grande = await addExtra(tx, catalogueId, cafeId, "ES large");
       const avena = await addExtra(tx, catalogueId, cafeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
@@ -4577,14 +4580,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Each option declared no allergens/diet, so its own list is empty (`addAllergens: null`,
       // `suitableFor: []`) — the shape the KDS renders per extra beside the dish's own.
       expect(group!.items[0]!.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "Grande" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "ES large" }, addAllergens: null, suitableFor: [] },
         { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
       ]);
 
       const expo = await listExpoQueue(tx, cfg);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "Grande" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "ES large" }, addAllergens: null, suitableFor: [] },
         { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
       ]);
     });
@@ -4662,7 +4665,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
-      const gfBun = await addExtra(tx, catalogueId, burger.id, "Pan sin gluten");
+      const gfBun = await addExtra(tx, catalogueId, burger.id, "Bread sin gluten");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: burger.id,
@@ -6331,7 +6334,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: extrasCategory.id,
-        name: "Jamón",
+        name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -6339,7 +6342,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const list = await catalogue.createExtraList(
         tx,
         {
-          name: "Jamón list",
+          name: "Ham list",
           customerName: null,
           kitchenName: null,
           minPicks: 0,
@@ -6388,7 +6391,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       )
         .filter((job) => !beforeJobs.some((before) => before.id === job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(changedJobs.join("\n")).toContain("+0.150 su x Jamón");
+      expect(changedJobs.join("\n")).toContain("+0.150 su x Ham");
       const rows = await tx.execute<{
         quantity: number;
         price_quantity: number;
@@ -6413,7 +6416,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       )
         .filter((job) => !beforeNoteJobs.some((before) => before.id === job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(noteJobs.join("\n")).toContain("+0.450 su x Jamón");
+      expect(noteJobs.join("\n")).toContain("+0.450 su x Ham");
     });
   });
 
@@ -6430,7 +6433,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: extrasCategory.id,
-        name: "Jamón",
+        name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -6438,7 +6441,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const list = await catalogue.createExtraList(
         tx,
         {
-          name: "Jamón list",
+          name: "Ham list",
           customerName: null,
           kitchenName: null,
           minPicks: 0,
@@ -6514,7 +6517,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Jamón",
+        name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -6522,7 +6525,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const list = await catalogue.createExtraList(
         tx,
         {
-          name: "Jamón list",
+          name: "Ham list",
           customerName: null,
           kitchenName: null,
           minPicks: 0,
@@ -6581,7 +6584,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Jamón",
+        name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -6589,7 +6592,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const list = await catalogue.createExtraList(
         tx,
         {
-          name: "Jamón list",
+          name: "Ham list",
           customerName: null,
           kitchenName: null,
           minPicks: 0,
@@ -7264,7 +7267,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: null,
-        name: "Jamón",
+        name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
         vatClass: "general",
@@ -7272,7 +7275,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       const list = await catalogue.createExtraList(
         tx,
         {
-          name: "Jamón list",
+          name: "Ham list",
           customerName: null,
           kitchenName: null,
           minPicks: 0,
@@ -7360,7 +7363,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       // test below this one.
       const taza = await withTransaction(db, async (tx) => {
         await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
-        const list = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
+        const list = await addOptionList(tx, cafeId, "Taza", ["ES large"]);
         await republishMenus(tx);
         return list;
       });
@@ -7380,9 +7383,9 @@ describe("frozen answers through a fractional quantity edit", () => {
           listName: { [CONTENT_LANGUAGE]: "Taza list staff" },
           listCustomerName: { [CONTENT_LANGUAGE]: "Taza list customer" },
           listKitchenName: "Taza list kitchen",
-          labelName: { [CONTENT_LANGUAGE]: "Grande staff" },
-          labelCustomerName: { [CONTENT_LANGUAGE]: "Grande customer" },
-          labelKitchenName: "Grande kitchen",
+          labelName: { [CONTENT_LANGUAGE]: "ES large staff" },
+          labelCustomerName: { [CONTENT_LANGUAGE]: "ES large customer" },
+          labelKitchenName: "ES large kitchen",
         },
       ];
       expect(held.lines[0]).toMatchObject({ optionSnapshots: frozen });
@@ -7896,8 +7899,8 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line's id and locked price when two options lists change places", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      const punto = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
-      const taza = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
+      const punto = await addOptionList(tx, cafeId, "Cooking", ["Solo"]);
+      const taza = await addOptionList(tx, cafeId, "Taza", ["ES large"]);
       await republishMenus(tx);
       return { punto, taza };
     });
@@ -8224,7 +8227,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line and its price when the answer itself changed: an answer carries no price", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      const list = await addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
+      const list = await addOptionList(tx, cafeId, "Cooking", ["Solo", "Cortado"]);
       await republishMenus(tx);
       return list;
     });
@@ -8331,7 +8334,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the price of a held line whose options list was renamed between the two sends, freezing the new name", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      const list = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      const list = await addOptionList(tx, cafeId, "Cooking", ["Solo"]);
       await republishMenus(tx);
       return list;
     });
@@ -8393,7 +8396,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("refuses a quantity-only edit that names no answer for an active options list", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      const list = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      const list = await addOptionList(tx, cafeId, "Cooking", ["Solo"]);
       await republishMenus(tx);
       return list;
     });
@@ -8642,7 +8645,7 @@ describe("editing a saved order prices only what the edit adds", () => {
   it("changes one line's options answer through the one-line edit, at its stored price, leaving what the patch omits", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      const list = await addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
+      const list = await addOptionList(tx, cafeId, "Cooking", ["Solo", "Cortado"]);
       await republishMenus(tx);
       return list;
     });
@@ -9389,7 +9392,7 @@ describe("a variant is sold as the product it is", () => {
     },
     {
       staffName: "125 ml",
-      customerName: { [LOCALE]: "  ", "fr-FR": "Petit verre" },
+      customerName: { [LOCALE]: "  ", "fr-FR": "FR small verre" },
       frozen: "125 ml",
       printed: "125 ml",
     },
@@ -9421,7 +9424,7 @@ describe("a variant is sold as the product it is", () => {
         );
         await tx
           .update(products)
-          .set({ name: "Renamed", customerName: { [LOCALE]: "Nuevo nombre" } })
+          .set({ name: "Renamed", customerName: { [LOCALE]: "New nombre" } })
           .where(eq(products.id, wine.wine125));
         const [stored] = await tx
           .select({ variantDescriptions: workingOrderLines.variantDescriptions })

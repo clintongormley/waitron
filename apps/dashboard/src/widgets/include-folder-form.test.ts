@@ -18,7 +18,7 @@ afterEach(cleanupWidgets);
 
 type Form = HTMLElementTagNameMap["dashboard-include-folder-form"];
 const own: Presentation = {
-  names: { en: "Drinks", es: "Bebidas" },
+  names: { en: "Drinks", es: "ES drinks" },
   image: "own-photo",
   color: "#112233",
 };
@@ -90,7 +90,7 @@ it("opens with the switch on and every field filled with the folder's current va
   expect(switchOf(el).label).toBe(t("menus.include_show_as_folder"));
   expect(switchOf(el).description).toBe(t("menus.include_direct_hint"));
   expect(field(el, "names-en")!.value).toBe("Bar");
-  expect(field(el, "names-es")!.value).toBe("Bebidas");
+  expect(field(el, "names-es")!.value).toBe("ES drinks");
   expect(colorInput(el)!.value).toBe("#112233");
   expect(uploadOf(el)!.image).toBe("folder-photo");
 });
@@ -182,16 +182,16 @@ function customerSees(el: Form, language: string): string {
 it("hints a cleared override with its inherited language before the default", async () => {
   const el = await includeForm();
   await type(el, "names-es", "");
-  expect(placeholders(el).es).toBe("Bebidas");
-  expect(customerSees(el, "es")).toBe("Bebidas");
+  expect(placeholders(el).es).toBe("ES drinks");
+  expect(customerSees(el, "es")).toBe("ES drinks");
 });
 it("hints every cleared override with the included menu's inherited names", async () => {
   const el = await includeForm();
   await type(el, "names-en", "");
   await type(el, "names-es", "");
-  expect(placeholders(el)).toEqual({ en: "Drinks", es: "Bebidas" });
+  expect(placeholders(el)).toEqual({ en: "Drinks", es: "ES drinks" });
   expect(customerSees(el, "en")).toBe("Drinks");
-  expect(customerSees(el, "es")).toBe("Bebidas");
+  expect(customerSees(el, "es")).toBe("ES drinks");
 });
 it("hints inherited default text while another language keeps its name", async () => {
   const el = await includeForm();
@@ -208,14 +208,14 @@ it("keeps inherited enabled-language hints when the menu also has disabled-langu
   });
   await type(el, "names-en", "");
   await type(el, "names-es", "");
-  expect(placeholders(el)).toEqual({ en: "Drinks", es: "Bebidas" });
+  expect(placeholders(el)).toEqual({ en: "Drinks", es: "ES drinks" });
 });
 it("prefers inherited language text over a live default override", async () => {
   const el = await includeForm();
   await type(el, "names-en", "");
   await type(el, "names-es", "");
   await type(el, "names-en", "Bar counter");
-  expect(placeholders(el).es).toBe("Bebidas");
+  expect(placeholders(el).es).toBe("ES drinks");
 });
 const errorText = (el: Form, id: string) =>
   el.shadowRoot!.querySelector(`#${id}`)!.textContent!.trim();
@@ -247,7 +247,7 @@ it.each(Object.keys(besideField))(
 it("decides what follows the included menu against its values as the dialog loaded them", async () => {
   const el = await includeForm({ value: null });
   el.own = {
-    names: { en: "Beverages", es: "Bebidas nuevas" },
+    names: { en: "Beverages", es: "ES drinks nuevas" },
     image: "renamed-photo",
     color: null,
   };
@@ -340,7 +340,7 @@ it("hints inherited names while a cleared default override and an optional Spani
   expect(native.required).toBe(false);
   expect(native.value).toBe("");
   expect(native.placeholder).toBe("Drinks");
-  expect(field(el, "names-es")!.placeholder).toBe("Bebidas");
+  expect(field(el, "names-es")!.placeholder).toBe("ES drinks");
   expect(submitted(el)).toEqual({
     showAsFolder: true,
     overrides: { names: { en: "" }, image: "folder-photo" },

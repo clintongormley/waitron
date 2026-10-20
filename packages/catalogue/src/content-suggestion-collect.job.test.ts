@@ -366,7 +366,7 @@ describe("the house style", () => {
       await tx.insert(units).values({
         staffName: "Staff unit",
         staffAbbreviation: "su",
-        name: { ca: "CLIENT-CA Ració" },
+        name: { ca: "CLIENT-CA CA portion" },
         abbreviation: { ca: "r." },
         precision: 0,
       });

@@ -9,7 +9,7 @@ import { createUnit, getUnit, updateUnit, EACH_UNIT } from "./units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const input = () => ({
-  staffName: "Kilogramo",
+  staffName: "Kilogram",
   staffAbbreviation: "kg",
   name: {},
   abbreviation: {},
@@ -154,7 +154,7 @@ describe("explicit unit staff identity", () => {
     await expect(
       run((tx) =>
         tx.execute(
-          sql`insert into units (id, name, abbreviation, precision) values ('missing-staff', '{"es":"Kilogramo"}', '{"es":"kg"}', 3)`,
+          sql`insert into units (id, name, abbreviation, precision) values ('missing-staff', '{"es":"Kilogram"}', '{"es":"kg"}', 3)`,
         ),
       ),
     ).rejects.toMatchObject({
@@ -164,7 +164,7 @@ describe("explicit unit staff identity", () => {
     await expect(
       run((tx) =>
         tx.execute(
-          sql`insert into units (id, staff_name, name, abbreviation, precision) values ('missing-abbr', 'Kilogramo', '{}', '{}', 3)`,
+          sql`insert into units (id, staff_name, name, abbreviation, precision) values ('missing-abbr', 'Kilogram', '{}', '{}', 3)`,
         ),
       ),
     ).rejects.toMatchObject({

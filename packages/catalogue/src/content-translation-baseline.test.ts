@@ -37,11 +37,11 @@ function baseline() {
       childActive: true,
     },
     selectedText: "Bread",
-    defaultText: "Pan",
+    defaultText: "Bread",
     inheritedSelectedText: null,
     inheritedDefaultText: null,
     effectiveSelectedText: "Bread",
-    effectiveDefaultText: "Pan",
+    effectiveDefaultText: "Bread",
     config: { defaultLanguage: "es", languages: ["es", "en", "ca"] },
     required: ["es", "ca"],
   };
@@ -239,7 +239,7 @@ describe("translation peer baseline projection", () => {
   it("projects both languages and a cleared default without mutating submitted baselines", () => {
     const en = edit();
     const es = edit(
-      { ...baseline(), language: "es", selectedText: "Pan", effectiveSelectedText: "Pan" },
+      { ...baseline(), language: "es", selectedText: "Bread", effectiveSelectedText: "Bread" },
       { language: "es" },
     );
     es.text = null;
@@ -335,7 +335,7 @@ describe("translation peer baseline projection", () => {
         await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
         const parent = await createCatalogue(tx, {
           name: "STAFF Parent",
-          names: { es: "CLIENT Padre" },
+          names: { es: "CLIENT CA breaddre" },
         });
         const child = await createCatalogue(tx, {
           name: "STAFF Child",
@@ -354,7 +354,7 @@ describe("translation peer baseline projection", () => {
           .values({
             staffName: "STAFF Kilogram",
             staffAbbreviation: "STAFF kg",
-            name: { es: "CLIENT Kilogramo", en: "CLIENT Kilogram" },
+            name: { es: "CLIENT Kilogram", en: "CLIENT Kilogram" },
             abbreviation: { es: "kg", en: "kg" },
             precision: 3,
           })
@@ -364,14 +364,14 @@ describe("translation peer baseline projection", () => {
           categoryId: null,
           name: "STAFF Bread",
           kitchenName: "KITCHEN Bread",
-          customerName: { es: "CLIENT Pan", en: "CLIENT Bread" },
+          customerName: { es: "CLIENT ES bread", en: "CLIENT Bread" },
           unitPrice: "3.00",
           pricingUnit: "each",
           vatClass: "reduced",
         });
         const entries: (TranslationCellRef & { text: string | null })[] = [
           { kind: "included_menu", id: member.id, language: "en", field: "name", text: null },
-          { kind: "menu", id: childRoot, language: "es", field: "name", text: "CLIENT Nuevo" },
+          { kind: "menu", id: childRoot, language: "es", field: "name", text: "CLIENT New" },
           { kind: "menu", id: childRoot, language: "en", field: "name", text: "CLIENT New" },
           {
             kind: "included_menu",
@@ -404,7 +404,7 @@ describe("translation peer baseline projection", () => {
         const projected = projectTranslationBaselines(bases, edits);
         await tx
           .update(sections)
-          .set({ names: { es: "CLIENT Nuevo", en: "CLIENT New", ca: "CLIENT Abans" } })
+          .set({ names: { es: "CLIENT New", en: "CLIENT New", ca: "CLIENT Abans" } })
           .where(eq(sections.id, childRoot));
         await tx
           .update(sectionMembers)
@@ -413,13 +413,13 @@ describe("translation peer baseline projection", () => {
         await tx
           .update(units)
           .set({
-            name: { es: "CLIENT Kilogramo", en: "CLIENT New unit" },
+            name: { es: "CLIENT Kilogram", en: "CLIENT New unit" },
             abbreviation: { en: "CLIENT kg" },
           })
           .where(eq(units.id, unit!.id));
         await tx
           .update(products)
-          .set({ customerName: { es: "CLIENT Pan", en: "CLIENT New bread" } })
+          .set({ customerName: { es: "CLIENT ES bread", en: "CLIENT New bread" } })
           .where(eq(products.id, product.id));
         const after = await resolveTranslationCells(tx, refs, context);
         expect(projected).toEqual(
@@ -433,8 +433,8 @@ describe("translation peer baseline projection", () => {
           inheritedText: "CLIENT New",
           effectiveText: "CLIENT New",
           defaultText: null,
-          inheritedDefaultText: "CLIENT Nuevo",
-          effectiveDefaultText: "CLIENT Nuevo",
+          inheritedDefaultText: "CLIENT New",
+          effectiveDefaultText: "CLIENT New",
         });
         const includeCa = projected.find(
           (b) => b.ref.kind === "included_menu" && b.language === "ca",
@@ -442,11 +442,11 @@ describe("translation peer baseline projection", () => {
         expect(includeCa).toMatchObject({
           selectedText: "CLIENT Carpeta",
           inheritedSelectedText: "CLIENT Abans",
-          inheritedDefaultText: "CLIENT Nuevo",
-          effectiveDefaultText: "CLIENT Nuevo",
+          inheritedDefaultText: "CLIENT New",
+          effectiveDefaultText: "CLIENT New",
         });
         expect(projected.find((b) => b.ref.kind === "unit" && b.field === "name")).toMatchObject({
-          defaultText: "CLIENT Kilogramo",
+          defaultText: "CLIENT Kilogram",
         });
         expect(
           projected.find(
@@ -454,7 +454,7 @@ describe("translation peer baseline projection", () => {
           ),
         ).toMatchObject({ defaultText: null, effectiveDefaultText: null });
         expect(projected.find((b) => b.ref.kind === "product")).toMatchObject({
-          defaultText: "CLIENT Pan",
+          defaultText: "CLIENT ES bread",
         });
         expect(projected.some((b, i) => sameTranslationBaseline(b, bases[i]!))).toBe(false);
       });

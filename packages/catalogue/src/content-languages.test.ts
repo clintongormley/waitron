@@ -47,7 +47,7 @@ describe("site content languages", () => {
         {
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { en: "each", fr: "unité" },
+          name: { en: "each", fr: "FR each" },
           precision: 0,
           abbreviation: { en: "u", fr: "u" },
         },
@@ -57,7 +57,7 @@ describe("site content languages", () => {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
-        customerName: { en: "CLIENT Coffee", fr: "CLIENT Café" },
+        customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
         description: { en: "Freshly roasted" },
         unitPrice: "9.00",
         unitId: unit.id,
@@ -86,7 +86,7 @@ describe("site content languages", () => {
       await setProductVariants(
         tx,
         product.id,
-        [{ ...variant!, customerName: { en: "Small cup", fr: "Petit" } }],
+        [{ ...variant!, customerName: { en: "Small cup", fr: "FR small" } }],
         "en",
       );
       expect(await listContentTranslationGaps(tx, "fr")).toEqual([]);
@@ -106,7 +106,7 @@ describe("site content languages", () => {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
-        customerName: { en: "CLIENT Coffee", fr: "CLIENT Café" },
+        customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
         unitPrice: "9.00",
         pricingUnit: "each",
         vatClass: "reduced",
@@ -145,7 +145,7 @@ describe("site content languages", () => {
       await setProductVariants(
         tx,
         productId,
-        [{ ...kept, customerName: { en: "Small cup", fr: "Petit" } }],
+        [{ ...kept, customerName: { en: "Small cup", fr: "FR small" } }],
         "en",
       );
       expect(await listContentTranslationGaps(tx, "fr")).toEqual([]);
@@ -304,9 +304,9 @@ describe("site content languages", () => {
             })
             .returning({ id: sections.id })
         )[0]!.id;
-      const spanishOnly = await section({ es: "Bebidas" });
+      const spanishOnly = await section({ es: "ES drinks" });
       const none = await section({});
-      const both = await section({ en: "Drinks", es: "Bebidas" });
+      const both = await section({ en: "Drinks", es: "ES drinks" });
       const root = await section({ es: "Carta" }, "menu_root");
 
       const gaps = await listContentTranslationGaps(tx, "en");
@@ -330,7 +330,7 @@ describe("site content languages", () => {
       });
       expect(
         (await tx.select().from(sections).where(eq(sections.id, spanishOnly)))[0]!.names,
-      ).toEqual({ es: "Bebidas" });
+      ).toEqual({ es: "ES drinks" });
     });
   });
 
@@ -424,7 +424,7 @@ describe("site content languages", () => {
     it("takes the included menu's own name in a language it does not fix", async () => {
       await withTransaction(suite.db, async (tx) => {
         const { lunchRoot, member } = await lunchIncludingDrinks(tx, {
-          es: "CLIENT-ES Bebidas",
+          es: "CLIENT-ES ES drinks",
         });
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
@@ -439,7 +439,7 @@ describe("site content languages", () => {
       await withTransaction(suite.db, async (tx) => {
         const { lunchRoot, member } = await lunchIncludingDrinks(tx, {
           en: "CLIENT-EN Drinks",
-          es: "CLIENT-ES Bebidas",
+          es: "CLIENT-ES ES drinks",
         });
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,

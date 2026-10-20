@@ -35,10 +35,10 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
     const row = await createOptionList(
       tx,
       {
-        name: "Patatas",
-        kitchenName: "PAPAS",
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
         customerName: label ? null : names,
-        labels: [{ name: "Pequeña", kitchenName: "PEQ", customerName: label ? names : null }],
+        labels: [{ name: "Small", kitchenName: "PEQ", customerName: label ? names : null }],
       },
       "es",
     );
@@ -74,8 +74,8 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
     const row = await createExtraList(
       tx,
       {
-        name: "Patatas",
-        kitchenName: "PAPAS",
+        name: "ES potatoes",
+        kitchenName: "KITCHEN POTATOES",
         customerName: names,
         active: false,
         items: [],
@@ -98,13 +98,13 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
     };
   }
   const menu = await createCatalogue(tx, {
-    name: "Patatas",
+    name: "ES potatoes",
     ...(kind === "menu" ? { names: names ?? {} } : {}),
   });
   const root = await requireMenuRoot(tx, menu.id);
   if (kind === "included menu") {
     const child = await createCatalogue(tx, {
-      name: "Bebidas",
+      name: "ES drinks",
       names: { es: "Para beber", en: "Drinks" },
     });
     const childRoot = await requireMenuRoot(tx, child.id);
@@ -153,7 +153,7 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
           await createSectionIn(
             tx,
             root,
-            { internalName: "Patatas", names: names ?? {} },
+            { internalName: "ES potatoes", names: names ?? {} },
             undefined,
             "es",
           )
@@ -211,8 +211,8 @@ describe.each(["option list", "option label", "extras list", "menu", "section", 
     it("accepts unchanged disabled text without trimming or rewriting it", async () => {
       const target = await run((tx) => makeTarget(tx, kind, { es: "Original" }));
       await run((tx) => target.plant(tx, { es: "Original", fr: " Ancien " }));
-      await run((tx) => target.save(tx, { es: " Nuevo ", fr: " Ancien " }));
-      expect(await run((tx) => target.read(tx))).toEqual({ es: "Nuevo", fr: " Ancien " });
+      await run((tx) => target.save(tx, { es: " New ", fr: " Ancien " }));
+      expect(await run((tx) => target.read(tx))).toEqual({ es: "New", fr: " Ancien " });
     });
 
     it.each(["Changed", " "])(

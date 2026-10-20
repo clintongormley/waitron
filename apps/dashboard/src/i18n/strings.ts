@@ -568,7 +568,6 @@ export const en = {
     "{language} stays enabled for venues in this region, and 1 name is not translated into it yet.",
   "content_gaps.required_warning":
     "{language} stays enabled for venues in this region, and {count} names are not translated into it yet.",
-  "content_gaps.table": "Missing in {language}",
   "content_gaps.search": "Search names",
   "content_gaps.name": "Name",
   "content_gaps.kind": "Kind",
@@ -615,17 +614,12 @@ export const en = {
   "translations.unstage_named": "Unstage field · {name} · {language} · {field}",
   "translations.uncertain":
     "The save could not be confirmed. Retry these exact changes, or review every field before editing them again.",
-  "translations.reasons":
-    "Partly translated: fill the missing name for this language. No customer-facing name: start one here. Blank rows are not saved.",
-  "translations.default_needed":
-    "Also enter the default name in {language}; it will not be copied from the staff name.",
   "translations.scope_shared":
     "Changes the shared customer-facing name wherever this definition is used.",
   "translations.scope_menu": "Changes this menu or section's customer-facing name.",
   "translations.scope_include": "Changes only this included folder's name in this menu.",
   "translations.unavailable":
     "This item is no longer available for translation. Open its editor to review it.",
-  "translations.required": "Enter a name.",
   "translations.name_bytes": "Keep each name within 4 KiB of UTF-8 text.",
   "translations.batch_bytes":
     "These edits exceed 256 KiB. Shorten or undo some names before saving.",
@@ -1184,9 +1178,7 @@ export const en = {
   "units.staff_name_required": "Enter the staff name.",
   "units.staff_abbreviation": "Staff abbreviation",
   "units.staff_abbreviation_required": "Enter the staff abbreviation.",
-  "units.name_required": "Enter the unit name in the default language.",
   "units.abbreviation": "Abbreviation",
-  "units.abbreviation_required": "Enter the unit abbreviation in the default language.",
   "units.precision": "Precision",
   "units.precision_help": "Choose 0, 1, 2 or 3 decimal places.",
   "units.precision_help_label": "About decimal places",
@@ -3624,7 +3616,6 @@ export const es: Record<StringKey, string> = {
     "El {language} se mantiene activado en los locales de esta región y falta 1 nombre por traducir a este idioma.",
   "content_gaps.required_warning":
     "El {language} se mantiene activado en los locales de esta región y faltan {count} nombres por traducir a este idioma.",
-  "content_gaps.table": "Sin traducir al {language}",
   "content_gaps.search": "Buscar nombres",
   "content_gaps.name": "Nombre",
   "content_gaps.kind": "Tipo",
@@ -3671,17 +3662,12 @@ export const es: Record<StringKey, string> = {
   "translations.unstage_named": "Retirar campo del lote · {name} · {language} · {field}",
   "translations.uncertain":
     "No se ha podido confirmar el guardado. Reintenta estos mismos cambios o revisa cada campo antes de volver a editarlos.",
-  "translations.reasons":
-    "Traducido a medias: rellena el nombre que falta en este idioma. Sin nombre para el cliente: empieza aquí. Las filas vacías no se guardan.",
-  "translations.default_needed":
-    "Introduce también el nombre predeterminado en {language}; no se copiará del nombre interno.",
   "translations.scope_shared":
     "Cambia el nombre para el cliente en todos los lugares que usan esta definición.",
   "translations.scope_menu": "Cambia el nombre para el cliente de esta carta o sección.",
   "translations.scope_include": "Cambia solo el nombre de esta carpeta incluida en esta carta.",
   "translations.unavailable":
     "Este elemento ya no está disponible para traducir. Abre su editor para revisarlo.",
-  "translations.required": "Introduce un nombre.",
   "translations.name_bytes": "Cada nombre debe ocupar como máximo 4 KiB de texto UTF-8.",
   "translations.batch_bytes":
     "Estos cambios superan 256 KiB. Acorta o deshaz algunos nombres antes de guardar.",
@@ -4249,10 +4235,7 @@ export const es: Record<StringKey, string> = {
   "units.staff_name_required": "Introduce el nombre interno.",
   "units.staff_abbreviation": "Abreviatura interna",
   "units.staff_abbreviation_required": "Introduce la abreviatura interna.",
-  "units.name_required": "Introduce el nombre de la unidad en el idioma predeterminado.",
   "units.abbreviation": "Abreviatura",
-  "units.abbreviation_required":
-    "Introduce la abreviatura de la unidad en el idioma predeterminado.",
   "units.precision": "Precisión",
   "units.precision_help": "Elige 0, 1, 2 o 3 decimales.",
   "units.precision_help_label": "Acerca de los decimales",

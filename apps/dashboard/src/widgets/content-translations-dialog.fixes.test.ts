@@ -26,9 +26,9 @@ const cell = (overrides: Partial<TranslationCell> = {}): TranslationCell => ({
   language: "es",
   field: "name",
   owners: { kind: "product", parentId: null },
-  text: "Croqeta",
+  text: "Croqette",
   inheritedText: null,
-  effectiveText: "Croqeta",
+  effectiveText: "Croqette",
   defaultText: "Customer croquette",
   inheritedDefaultText: null,
   effectiveDefaultText: "Customer croquette",
@@ -47,7 +47,7 @@ const suggestion = (overrides: Partial<ContentSuggestionView> = {}): ContentSugg
   text: null,
   placeholder: false,
   stale: false,
-  fix: { field: "es", wrong: "Croqeta", right: "Croqueta" },
+  fix: { field: "es", wrong: "Croqette", right: "Croquette" },
   cell: { kind: "product", id: "one", language: "es", field: "name" },
   expected: "old-token",
   ...overrides,
@@ -187,7 +187,7 @@ afterEach(async () => {
 describe("deliberate spelling fixes", () => {
   it("rechecks the exact Spanish cell and stages exactly the fresh correction without writing", async () => {
     const { el, api, setCurrent, setViews } = await mount();
-    expect(field(el).value).toBe("Croqeta");
+    expect(field(el).value).toBe("Croqette");
     setCurrent(cell({ expected: "fresh-token" }));
     setViews([suggestion({ expected: "fresh-token" })]);
     await clickFix(el);
@@ -195,7 +195,7 @@ describe("deliberate spelling fixes", () => {
       { kind: "product", id: "one", language: "es", field: "name" },
     ]);
     expect(api.getContentSuggestions).toHaveBeenCalledTimes(2);
-    expect(field(el).value).toBe("Croqueta");
+    expect(field(el).value).toBe("Croquette");
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
     button(el, "save").click();
     await vi.waitFor(() => expect(el.open).toBe(false));
@@ -207,7 +207,7 @@ describe("deliberate spelling fixes", () => {
           language: "es",
           field: "name",
           expected: "fresh-token",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     });
@@ -229,7 +229,7 @@ describe("deliberate spelling fixes", () => {
       if (mode === "deleted") setViews([]);
       if (mode === "replacement") setViews([suggestion({ id: "s2" })]);
       await clickFix(el);
-      expect(field(el).value).not.toBe("Croqueta");
+      expect(field(el).value).not.toBe("Croquette");
       expect(panel(el)?.textContent).toContain(t("suggestions.stale"));
       expect(button(el, "save").disabled).toBe(true);
       expect(api.saveContentTranslations).not.toHaveBeenCalled();
@@ -285,28 +285,28 @@ describe("deliberate spelling fixes", () => {
       await vi.waitFor(() => expect(action(el, "s1", "use-fix")?.loading).toBe(false));
       expect(el.shadowRoot!.querySelector("dashboard-content-suggestions-bar")!.error).toBe("");
       expect(api.getContentSuggestions).toHaveBeenCalledTimes(2);
-      expect(field(el).value).toBe("Croqeta");
+      expect(field(el).value).toBe("Croqette");
       expect(api.saveContentTranslations).not.toHaveBeenCalled();
     },
   );
 });
 
 describe("suggestion notes and discard", () => {
-  const borrowed = () => suggestion({ text: "Croqueta sugerida", fix: null });
+  const borrowed = () => suggestion({ text: "Croquette sugerida", fix: null });
   const empty = () => cell({ text: null, effectiveText: null });
   it("shows borrowed text, placeholder, internal fix and stale notes without turning them into staff edits", async () => {
     const { el, api } = await mount([
       suggestion({ id: "placeholder", placeholder: true, fix: null, cell: null, language: null }),
       suggestion({
         id: "internal",
-        fix: { field: "internal", wrong: "STAFF croqeta", right: "STAFF croqueta" },
+        fix: { field: "internal", wrong: "STAFF croqette", right: "STAFF croquette" },
         cell: null,
         language: null,
       }),
       suggestion({ id: "stale", stale: true }),
     ]);
     expect(panel(el, "placeholder")?.textContent).toContain(t("suggestions.placeholder"));
-    expect(panel(el, "internal")?.textContent).toContain("STAFF croqeta");
+    expect(panel(el, "internal")?.textContent).toContain("STAFF croqette");
     expect(panel(el, "internal")?.querySelector("a")?.getAttribute("href")).toBe(
       "/manage/catalogue/product/one",
     );
@@ -335,7 +335,7 @@ describe("suggestion notes and discard", () => {
           ],
         })),
       });
-      expect(field(el).value).toBe("Croqueta sugerida");
+      expect(field(el).value).toBe("Croquette sugerida");
       expect(panel(el)?.textContent).toContain(t("suggestions.suggested"));
       if (personal) await edit(el, "Mine");
       expect(action(el, "s1", "discard-suggestion")).toBeTruthy();
@@ -422,7 +422,7 @@ it("discovers waiting fixes on complete rows by explicitly switching Missing in 
   expect(el.shadowRoot!.querySelector("[data-test=fixes-filter-notice]")?.textContent).toContain(
     t("suggestions.fixes_filter"),
   );
-  expect(field(el).value).toBe("Croqeta");
+  expect(field(el).value).toBe("Croqette");
   expect(api.saveContentTranslations).not.toHaveBeenCalled();
   el.shadowRoot!.querySelector('[name="missing"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "all" }, bubbles: true, composed: true }),
@@ -450,7 +450,7 @@ it("uses passive reads for Use fix and the active client only for saving and dis
   expect(api.getContentTranslationTargets).not.toHaveBeenCalled();
   expect(api.getContentTranslationCells).not.toHaveBeenCalled();
   expect(api.getContentSuggestions).not.toHaveBeenCalled();
-  expect(field(el).value).toBe("Croqueta");
+  expect(field(el).value).toBe("Croquette");
   action(el, "s1", "discard-suggestion")!.click();
   await vi.waitFor(() =>
     expect(api.discardContentSuggestion).toHaveBeenCalledExactlyOnceWith("s1"),
@@ -458,7 +458,7 @@ it("uses passive reads for Use fix and the active client only for saving and dis
   await api.discardContentSuggestion.mock.results[0]!.value;
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
-  expect(field(el).value).toBe("Croqueta");
+  expect(field(el).value).toBe("Croquette");
   button(el, "save").click();
   await vi.waitFor(() => expect(api.saveContentTranslations).toHaveBeenCalledOnce());
 });
@@ -541,7 +541,7 @@ it("stages a still-fresh fix with the latest token after an unrelated language i
   });
   changed = true;
   await clickFix(el);
-  await vi.waitFor(() => expect(field(el).value).toBe("Croqueta"));
+  await vi.waitFor(() => expect(field(el).value).toBe("Croquette"));
   button(el, "save").click();
   await vi.waitFor(() =>
     expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
@@ -552,7 +552,7 @@ it("stages a still-fresh fix with the latest token after an unrelated language i
           language: "es",
           field: "name",
           expected: "latest-config-token",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     }),
@@ -564,7 +564,7 @@ it("stages an inherited spelling fix only on its inclusion", async () => {
     kind: "included_menu",
     id: "membership",
     text: null,
-    inheritedText: "Croqeta",
+    inheritedText: "Croqette",
     owners: {
       kind: "included_menu",
       menuId: "parent-menu",
@@ -610,7 +610,7 @@ it("stages an inherited spelling fix only on its inclusion", async () => {
     .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
       '[name="translation-included_menu-membership-es-name"]',
     )!;
-  expect(input.value).toBe("Croqueta");
+  expect(input.value).toBe("Croquette");
   expect(api.saveContentTranslations).not.toHaveBeenCalled();
   button(el, "save").click();
   await vi.waitFor(() =>
@@ -622,7 +622,7 @@ it("stages an inherited spelling fix only on its inclusion", async () => {
           language: "es",
           field: "name",
           expected: "old-token",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     }),
@@ -639,7 +639,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
         const { el, host } = await mount(
           [
             suggestion({
-              fix: { field: "es", wrong: "Croqeta", right: `Croqueta${"x".repeat(160)}` },
+              fix: { field: "es", wrong: "Croqette", right: `Croquette${"x".repeat(160)}` },
             }),
           ],
           {},
@@ -651,7 +651,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
         await modal.updateComplete;
         const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
         const notes = panel(el)!;
-        expect(notes.textContent).toContain("Croqeta");
+        expect(notes.textContent).toContain("Croqette");
         expect(notes.scrollWidth).toBeLessThanOrEqual(notes.clientWidth + 1);
         expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
         notes.scrollIntoView({ block: "center" });
@@ -668,7 +668,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
         const fix = action(el, "s1", "use-fix")!;
         await fix.updateComplete;
         await userEvent.click(fix.shadowRoot!.querySelector("button")!);
-        await vi.waitFor(() => expect(field(el).value).toBe(`Croqueta${"x".repeat(160)}`));
+        await vi.waitFor(() => expect(field(el).value).toBe(`Croquette${"x".repeat(160)}`));
         await expectNoA11yViolations(host);
         expect(button(el, "save").disabled).toBe(false);
       },
@@ -679,7 +679,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
 it("opens a suggestion's product in the existing editor event while retaining modified browser links", async () => {
   const { el } = await mount([
     suggestion({
-      fix: { field: "internal", wrong: "Croqeta", right: "Croqueta" },
+      fix: { field: "internal", wrong: "Croqette", right: "Croquette" },
       cell: null,
       language: null,
     }),
@@ -792,7 +792,7 @@ it("rechecks the displayed suggestion page without returning to the first page",
     configuration: "config-one",
   });
   expect(api.getContentSuggestions).toHaveBeenCalledTimes(3);
-  expect(field(el).value).toBe("Croqueta");
+  expect(field(el).value).toBe("Croquette");
   expect(api.saveContentTranslations).not.toHaveBeenCalled();
 });
 

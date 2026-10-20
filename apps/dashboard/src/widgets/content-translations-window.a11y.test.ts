@@ -16,7 +16,7 @@ function row(kind: "product" | "unit", unavailable: boolean): TranslationItem {
   return {
     kind,
     id: kind,
-    name: kind === "unit" ? "STAFF kilogram / kilogramo" : "STAFF croquette / croqueta",
+    name: kind === "unit" ? "STAFF kilogram / kilogram" : "STAFF croquette / croquette",
     owners,
     cells: languages.flatMap((language) =>
       (kind === "unit" ? (["name", "abbreviation"] as const) : (["name"] as const)).map(

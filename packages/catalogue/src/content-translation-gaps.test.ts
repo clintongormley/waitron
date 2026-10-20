@@ -92,7 +92,7 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
   const [unit] = await tx
     .insert(units)
     .values({
-      staffName: "Kilogramo",
+      staffName: "Kilogram",
       staffAbbreviation: "kg",
       name: names ?? {},
       abbreviation: names ?? {},
@@ -119,7 +119,7 @@ describe("complete translation gap predicates", () => {
   it.each([
     ["null", null],
     ["empty", {}],
-    ["disabled only", { fr: "CLIENT Français" }],
+    ["disabled only", { fr: "CLIENT FR text" }],
     ["spaces", { es: "   ", en: "  " }],
     ["tabs", { es: "\t\n", en: "\r\t" }],
     ["nonbreaking spaces", { es: "\u00a0", en: "\ufeff\u00a0" }],
@@ -153,7 +153,7 @@ describe("complete translation gap predicates", () => {
           { language: "es", count: expected.length },
           { language: "en", count: expected.length },
         ]);
-        expect(report[0]!.gaps.find(({ kind }) => kind === "unit")!.name).toBe("Kilogramo");
+        expect(report[0]!.gaps.find(({ kind }) => kind === "unit")!.name).toBe("Kilogram");
         for (const language of config.languages) {
           const page = await listTranslationTargets(tx, language, {}, context);
           expect(page.total).toBe(expected.length);
@@ -244,14 +244,14 @@ describe("complete translation gap predicates", () => {
       const [unit] = await tx
         .insert(units)
         .values({
-          staffName: "Kilogramo",
+          staffName: "Kilogram",
           staffAbbreviation: "kg",
           name,
           abbreviation,
           precision: 3,
         })
         .returning();
-      const expected = [{ kind: "unit", id: unit!.id, name: "Kilogramo", reason: "partial" }];
+      const expected = [{ kind: "unit", id: unit!.id, name: "Kilogram", reason: "partial" }];
       expect(await listTranslationGapReport(tx, config)).toEqual([
         { language: "es", gaps: expected },
         { language: "en", gaps: expected },
@@ -324,7 +324,7 @@ describe("complete translation gap predicates", () => {
       ]);
       for (const { gaps } of await listTranslationGapReport(tx, config))
         expect(gaps).toEqual([
-          { kind: "unit", id: f.unit.id, name: "Kilogramo", reason: "partial" },
+          { kind: "unit", id: f.unit.id, name: "Kilogram", reason: "partial" },
         ]);
       const direct = await listTranslationTargets(
         tx,
@@ -361,9 +361,9 @@ describe("complete translation gap predicates", () => {
       const large = { defaultLanguage: "es", languages };
       await writeContentLanguages(tx, large);
       await tx.insert(units).values({
-        staffName: "Kilogramo",
+        staffName: "Kilogram",
         staffAbbreviation: "kg",
-        name: { es: "CLIENT Kilogramo" },
+        name: { es: "CLIENT Kilogram" },
         abbreviation: { es: "kg" },
         precision: 3,
       });

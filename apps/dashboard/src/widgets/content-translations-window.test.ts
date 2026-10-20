@@ -513,7 +513,7 @@ describe("bounded translation field view", () => {
   it("keeps the focused native field and caret when the window jumps and rows reorder", async () => {
     const rows = [item(), item("two")];
     const { el, drafts } = await mount(rows);
-    await userEvent.fill(field(el).shadowRoot!.querySelector("input")!, "Croqueta personal");
+    await userEvent.fill(field(el).shadowRoot!.querySelector("input")!, "Croquette personal");
     const native = field(el).shadowRoot!.querySelector("input")!;
     native.setSelectionRange(3, 8, "backward");
     el.anchor = languages[99]!;
@@ -529,7 +529,7 @@ describe("bounded translation field view", () => {
       8,
       "backward",
     ]);
-    expect(native.value).toBe("Croqueta personal");
+    expect(native.value).toBe("Croquette personal");
     expect(fields(el)).toHaveLength(14);
     expect(drafts.submission()).toEqual({
       edits: [
@@ -539,7 +539,7 @@ describe("bounded translation field view", () => {
           language: "es",
           field: "name",
           expected: "original",
-          text: "Croqueta personal",
+          text: "Croquette personal",
         },
       ],
     });
@@ -547,7 +547,7 @@ describe("bounded translation field view", () => {
     await fieldsReady(el);
     expect(field(el)).toBeNull();
     expect(fields(el)).toHaveLength(12);
-    expect(drafts.value(cell())).toBe("Croqueta personal");
+    expect(drafts.value(cell())).toBe("Croquette personal");
   });
   it("restores the cursor when the focused row itself moves to the end", async () => {
     const rows = [item(), item("two"), item("three")];

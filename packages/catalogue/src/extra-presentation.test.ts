@@ -24,7 +24,7 @@ async function sourceFixture(variant: boolean) {
       categoryId: null,
       unitId: null,
       name: "Staff topping",
-      customerName: { en: "Guest topping", fr: "Garniture" },
+      customerName: { en: "Guest topping", fr: "FR side" },
       kitchenName: "PREP TOP",
       unitPrice: "0.50",
       vatClass: "reduced",
@@ -36,7 +36,7 @@ async function sourceFixture(variant: boolean) {
           [
             {
               name: "Staff portion",
-              customerName: { es: "Ración", fr: "Petite" },
+              customerName: { es: "Portion", fr: "FR portion" },
               kitchenName: "PREP PORTION",
               image: null,
               unitPrice: null,
@@ -88,10 +88,10 @@ describe("extras presentation sources", () => {
       expect(list.items[0]!.productId).toBe(f.extraId);
       expect(list.items[0]!.presentation).toEqual({
         name: "Staff topping",
-        customerName: { en: "Guest topping", fr: "Garniture" },
+        customerName: { en: "Guest topping", fr: "FR side" },
         kitchenName: "PREP TOP",
         variantName: variant ? "Staff portion" : null,
-        variantCustomerName: variant ? { es: "Ración", fr: "Petite" } : null,
+        variantCustomerName: variant ? { es: "Portion", fr: "FR portion" } : null,
         variantKitchenName: variant ? "PREP PORTION" : null,
       });
     },
@@ -129,7 +129,7 @@ describe("extras presentation sources", () => {
       await writeContentLanguages(tx, { languages: ["en", "es", "fr"], defaultLanguage: "es" });
       await updateProduct(tx, f.extraId, {
         name: "Renamed portion",
-        customerName: { es: "Nueva ración" },
+        customerName: { es: "New portion" },
       });
     });
     const extra = await liveExtra(f.lunch, f.extraId);
@@ -139,13 +139,13 @@ describe("extras presentation sources", () => {
         languages: ["en", "es", "fr"],
         defaultLanguage: "es",
       }),
-    ).toBe("Staff topping (Ración)");
+    ).toBe("Staff topping (Portion)");
     expect(
       newCustomerPresentation(extra.presentation, "fr", {
         languages: ["en", "es", "fr"],
         defaultLanguage: "es",
       }),
-    ).toBe("Garniture (Petite)");
+    ).toBe("FR side (FR portion)");
     expect(
       await fx.db
         .select()

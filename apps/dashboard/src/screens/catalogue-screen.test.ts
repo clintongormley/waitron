@@ -47,7 +47,7 @@ customElements.define("placement-leave-test-host", PlacementLeaveHost);
 
 const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },
-  { id: "cat-b", name: "Bebidas", active: true, version: 1 },
+  { id: "cat-b", name: "ES drinks", active: true, version: 1 },
 ];
 const categories: CategorySummary[] = [
   { id: "c1", name: "Entrantes", parentId: null, color: null },
@@ -79,8 +79,8 @@ const extraLists: ExtraList[] = [
 const optionLists: OptionList[] = [
   {
     id: "opt-list-1",
-    name: "Punto",
-    customerName: { es: "Punto de la carne" },
+    name: "Cooking",
+    customerName: { es: "Cooking de la carne" },
     kitchenName: "PUNTO",
     defaultLabelId: null,
     active: true,
@@ -88,7 +88,7 @@ const optionLists: OptionList[] = [
   },
 ];
 const extraInput: ExtraListInput = {
-  name: "Panes",
+  name: "Breades",
   customerName: null,
   kitchenName: null,
   minPicks: 0,
@@ -111,8 +111,8 @@ const products: Product[] = [
     catalogueId: "cat-a",
     categoryId: "c1",
     primaryCategoryId: "c1",
-    name: "Croquetas",
-    customerName: { es: "Croquetas caseras de jamón" },
+    name: "Croquettes",
+    customerName: { es: "Homemade ham croquettes" },
     unitId: "u1",
     unit: {
       staffName: "Staff unit",
@@ -144,8 +144,8 @@ const value: ProductEditorValue = {
   id: "p1",
   parentId: null,
   inherited: null,
-  name: "Croquetas",
-  customerName: { es: "Croquetas caseras de jamón" },
+  name: "Croquettes",
+  customerName: { es: "Homemade ham croquettes" },
   description: { es: "Cremosas" },
   kitchenName: "CROQUETAS",
   image: null,
@@ -223,7 +223,7 @@ const sections: SectionDetails[] = [
   {
     id: "s-drinks",
     internalName: "Drinks list",
-    names: { es: "Bebidas frías" },
+    names: { es: "Cold ES drinks" },
     image: null,
     color: null,
     members: [],
@@ -249,7 +249,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listUnits: vi.fn().mockResolvedValue(units),
     listExtraLists: vi.fn().mockResolvedValue(extraLists),
     listOptionLists: vi.fn().mockResolvedValue(optionLists),
-    createExtraList: vi.fn().mockResolvedValue({ ...extraLists[0], id: "ex-new", name: "Panes" }),
+    createExtraList: vi.fn().mockResolvedValue({ ...extraLists[0], id: "ex-new", name: "Breades" }),
     createOptionList: vi
       .fn()
       .mockResolvedValue({ ...optionLists[0], id: "opt-new", name: "Corte" }),
@@ -294,7 +294,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       staffName: "Staff unit",
       staffAbbreviation: "su",
       id: "u2",
-      name: { es: "ración" },
+      name: { es: "portion" },
       abbreviation: { es: "ra" },
       precision: 2,
     }),
@@ -551,13 +551,13 @@ describe("catalogue-screen", () => {
   it.each([
     [
       "en-GB",
-      "Archive Croquetas",
+      "Archive Croquettes",
       "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.",
       "Archive",
     ],
     [
       "es",
-      "Archivar Croquetas",
+      "Archivar Croquettes",
       "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
       "Archivar",
     ],
@@ -582,7 +582,7 @@ describe("catalogue-screen", () => {
 
   it("puts a product name holding a replacement pattern into the Archive heading as written", async () => {
     const api = stubApi({
-      listProducts: vi.fn().mockResolvedValue([{ ...products[0]!, name: "Croquetas $&" }]),
+      listProducts: vi.fn().mockResolvedValue([{ ...products[0]!, name: "Croquettes $&" }]),
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -592,7 +592,7 @@ describe("catalogue-screen", () => {
       el
         .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!
         .getAttribute("heading"),
-    ).toBe(t("product.archive_named").split("{name}").join("Croquetas $&"));
+    ).toBe(t("product.archive_named").split("{name}").join("Croquettes $&"));
   });
 
   it("names affected extras lists in the product Archive warning", async () => {
@@ -781,7 +781,7 @@ describe("catalogue-screen", () => {
     });
 
     it("forgets the last dialog's count while the next product's is still being read", async () => {
-      const both = [...products, { ...products[0]!, id: "p2", name: "Patatas" }];
+      const both = [...products, { ...products[0]!, id: "p2", name: "ES potatoes" }];
       const api = stubApi({
         listProducts: vi
           .fn()
@@ -1099,7 +1099,7 @@ describe("catalogue-screen", () => {
     const product = editor(el);
     await userEvent.fill(
       product.shadowRoot!.querySelector('[name="name"]')!.shadowRoot!.querySelector("input")!,
-      "Croquetas fritas",
+      "Croquettes fritas",
     );
     await userEvent.fill(
       product.shadowRoot!.querySelector('[name="unit-price"]')!.shadowRoot!.querySelector("input")!,
@@ -1111,7 +1111,7 @@ describe("catalogue-screen", () => {
       return { name, unitPrice, modifiers };
     };
     const expected = {
-      name: "Croquetas fritas",
+      name: "Croquettes fritas",
       unitPrice: "9.75",
       modifiers: [{ kind: "options", id: "opt-list-1" }],
     };
@@ -1479,7 +1479,7 @@ describe("catalogue-screen", () => {
     await submitNested(el, form, {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      name: { es: "ración" },
+      name: { es: "portion" },
       abbreviation: { es: "ra" },
       precision: 2,
     });
@@ -1493,7 +1493,7 @@ describe("catalogue-screen", () => {
     await submitNested(el, form, {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      name: { es: "ración" },
+      name: { es: "portion" },
       abbreviation: {},
       precision: 2,
     });
@@ -1520,7 +1520,7 @@ describe("catalogue-screen", () => {
     emit(form.shadowRoot!.querySelector("[data-test=staffAbbreviation]")!, "wt-change", {
       value: "su",
     });
-    emit(form.shadowRoot!.querySelector("[data-test=name-es]")!, "wt-change", { value: "ración" });
+    emit(form.shadowRoot!.querySelector("[data-test=name-es]")!, "wt-change", { value: "portion" });
     emit(form.shadowRoot!.querySelector("[data-test=abbreviation-es]")!, "wt-change", {
       value: "ra",
     });
@@ -1534,7 +1534,7 @@ describe("catalogue-screen", () => {
     expect(api.createUnit).toHaveBeenCalledWith({
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      name: { es: "ración" },
+      name: { es: "portion" },
       abbreviation: { es: "ra" },
       precision: 2,
       measure: false,
@@ -1561,7 +1561,7 @@ describe("catalogue-screen", () => {
     await submitNested(el, unitForm, {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      name: { es: "ración" },
+      name: { es: "portion" },
       abbreviation: { es: "ra" },
       precision: 2,
     });
@@ -1743,7 +1743,7 @@ describe("catalogue-screen", () => {
         value: {
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          name: { es: "ración" },
+          name: { es: "portion" },
           abbreviation: { es: "ra" },
           precision: 2,
         },
@@ -1957,7 +1957,7 @@ describe("catalogue-screen", () => {
     };
     const sent = {
       ...value,
-      name: "Croquetas",
+      name: "Croquettes",
       variants: [
         { ...variantRow, id: "v1", name: "Media" },
         { ...variantRow, id: "v2", name: "Entera" },
@@ -1990,7 +1990,7 @@ describe("catalogue-screen", () => {
         error: string;
         value: string;
       };
-      expect(name).toMatchObject({ error: MESSAGE, value: "Croquetas" });
+      expect(name).toMatchObject({ error: MESSAGE, value: "Croquettes" });
       expect(await bottomOf(editor(el))).toBe(t("form.fix_fields"));
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     });
@@ -2019,7 +2019,7 @@ describe("catalogue-screen", () => {
         stubApi({
           updateProductEditor: vi.fn().mockRejectedValue({
             code: "product.name_taken",
-            params: { field: "name", name: "Croquetas" },
+            params: { field: "name", name: "Croquettes" },
             status: 409,
           }),
         }),
@@ -2040,7 +2040,7 @@ describe("catalogue-screen", () => {
       },
       {
         name: "Entera",
-        customerName: { es: "Ración entera" },
+        customerName: { es: "Portion entera" },
         kitchenName: null,
         image: null,
         unitPrice: "8.50",
@@ -2050,7 +2050,7 @@ describe("catalogue-screen", () => {
     ];
     // The product's own customer name is complete, so the only value missing English is the second
     // variant's — the editor must not point at a field that is fine.
-    const product = { ...value, customerName: { en: "Croquettes", es: "Croquetas" }, variants };
+    const product = { ...value, customerName: { en: "Croquettes", es: "Croquettes" }, variants };
     const api = stubApi({
       getContentLanguages: vi
         .fn()
@@ -2157,7 +2157,7 @@ describe("catalogue-screen", () => {
     await el.updateComplete;
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     expect(form.open).toBe(true);
-    emit(form, "wt-submit", { value: { name: { es: "ración" }, precision: 2 } });
+    emit(form, "wt-submit", { value: { name: { es: "portion" }, precision: 2 } });
     await flush(el);
     expect(editor(el).currentValue.name).toBe("Borrador");
     expect(editor(el).currentValue.unitId).toBe("u2");
@@ -2259,7 +2259,7 @@ describe("catalogue-screen", () => {
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
       emit(editor(el).shadowRoot!.querySelector('[name="name"]')!, "wt-change", {
-        value: "Croquetas sin guardar",
+        value: "Croquettes sin guardar",
       });
       await editor(el).updateComplete;
       const kitchen = editor(el).shadowRoot!.querySelector<LitElement & { open: boolean }>(
@@ -2332,7 +2332,7 @@ describe("catalogue-screen", () => {
       expect(coursesWindow(el).open).toBe(false);
       expect(editor(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k-new");
-      expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(editor(el).currentValue.name).toBe("Croquettes sin guardar");
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
       expect(await shownCourse(el)).toBe("Postres");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
@@ -2576,7 +2576,7 @@ describe("catalogue-screen", () => {
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k2"]')).toBeNull());
       await done(el);
       expect(editor(el).currentValue.courseId).toBeNull();
-      expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(editor(el).currentValue.name).toBe("Croquettes sin guardar");
       expect(await shownCourse(el)).toBe(t("product.no_course"));
     });
 
@@ -2617,7 +2617,7 @@ describe("catalogue-screen", () => {
       expect(coursesWindow(el).open).toBe(false);
       expect(editor(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k-new");
-      expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(editor(el).currentValue.name).toBe("Croquettes sin guardar");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
@@ -2784,8 +2784,8 @@ describe("catalogue-screen", () => {
         variants: [
           {
             id: "v1",
-            name: "Media ración",
-            customerName: { es: "Media ración de croquetas" },
+            name: "Media portion",
+            customerName: { es: "Half portion of croquettes" },
             kitchenName: "1/2 CROQ",
             image: null,
             unitPrice: null,
@@ -2806,8 +2806,8 @@ describe("catalogue-screen", () => {
       ...value,
       id: "v1",
       parentId: "p1",
-      name: "Media ración",
-      customerName: { es: "Media ración de croquetas" },
+      name: "Media portion",
+      customerName: { es: "Half portion of croquettes" },
       kitchenName: "1/2 CROQ",
       description: null,
       unitId: null,
@@ -2818,7 +2818,7 @@ describe("catalogue-screen", () => {
       allergens: null,
       dietaryDeclarations: null,
       inherited: {
-        name: "Croquetas",
+        name: "Croquettes",
         description: { es: "Cremosas" },
         image: null,
         unitPrice: "8.50",
@@ -2841,8 +2841,8 @@ describe("catalogue-screen", () => {
       });
 
     it.each([
-      ["en", "Edit variant of: Croquetas", "Edit variant of: Croquetas renamed"],
-      ["es", "Editar variante de: Croquetas", "Editar variante de: Croquetas renamed"],
+      ["en", "Edit variant of: Croquettes", "Edit variant of: Croquettes renamed"],
+      ["es", "Editar variante de: Croquettes", "Editar variante de: Croquettes renamed"],
     ] as const)(
       "names the variant's parent in %s and re-reads its name on reload",
       async (locale, heading, renamedHeading) => {
@@ -2859,7 +2859,7 @@ describe("catalogue-screen", () => {
         first.host.remove();
         vi.mocked(api.getProductEditor).mockResolvedValue({
           ...variantValue,
-          inherited: { ...variantValue.inherited!, name: "Croquetas renamed" },
+          inherited: { ...variantValue.inherited!, name: "Croquettes renamed" },
         });
         const second = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
         await flush(second.el);
@@ -3037,7 +3037,7 @@ describe("catalogue-screen", () => {
       el.requestUpdate();
       await el.updateComplete;
       try {
-        expect(dialog.getAttribute("heading")).toBe("Archive Media ración");
+        expect(dialog.getAttribute("heading")).toBe("Archive Media portion");
         expect(dialog.textContent).toContain(
           "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
         );
@@ -3049,7 +3049,7 @@ describe("catalogue-screen", () => {
         setLocale("es");
         el.requestUpdate();
         await el.updateComplete;
-        expect(dialog.getAttribute("heading")).toBe("Archivar Media ración");
+        expect(dialog.getAttribute("heading")).toBe("Archivar Media portion");
         expect(dialog.textContent).toContain(
           "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
         );
@@ -3262,15 +3262,15 @@ describe("catalogue-screen", () => {
       expect(api.getMenuStructure).toHaveBeenCalledWith("cat-a");
       expect(api.getMenuStructure).toHaveBeenCalledWith("cat-b");
       const text = step(el).shadowRoot!.textContent!;
-      expect(step(el).productName).toBe("Croquetas");
+      expect(step(el).productName).toBe("Croquettes");
       expect(step(el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).not.toMatch(
         /caseras|CROQUETAS/,
       );
       expect(text).toContain("Comida");
-      expect(text).toContain("Bebidas");
+      expect(text).toContain("ES drinks");
       expect(text).toContain("Drinks list");
       expect(text).toContain("Beer list");
-      expect(text).not.toContain("Bebidas frías");
+      expect(text).not.toContain("Cold ES drinks");
       expect(text).not.toContain("Cervezas de barril");
       expect(place(el, "cat-a", "root-a")).not.toBeNull();
     });
@@ -3325,7 +3325,7 @@ describe("catalogue-screen", () => {
       expect(api.updateProductEditor).not.toHaveBeenCalled();
       expect(step(el).open).toBe(true);
       const alert = control(el, "placement-error");
-      expect(alert.textContent).toContain(t("add_to_menus.failed").replace("{name}", "Croquetas"));
+      expect(alert.textContent).toContain(t("add_to_menus.failed").replace("{name}", "Croquettes"));
       expect(alert.textContent).toContain("Drinks list");
       expect(alert.textContent).not.toContain("Beer list");
       expect(alert.textContent).toContain(codeMessage("server.internal"));

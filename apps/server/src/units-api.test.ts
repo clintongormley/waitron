@@ -132,6 +132,8 @@ describe("unit management routes", () => {
 
   it("reads and writes a unit's measure switch", async () => {
     const created = await send("POST", "/management-api/units", {
+      staffName: "Millilitre",
+      staffAbbreviation: "ml",
       name: { en: "millilitre" },
       precision: 0,
       abbreviation: { en: "ml" },
@@ -156,6 +158,8 @@ describe("unit management routes", () => {
     ["null", null],
   ])("rejects a measure switch given as %s", async (_label, measure) => {
     const response = await send("POST", "/management-api/units", {
+      staffName: "Millilitre",
+      staffAbbreviation: "ml",
       name: { en: "millilitre" },
       precision: 0,
       abbreviation: { en: "ml" },
@@ -174,6 +178,8 @@ describe("unit management routes", () => {
   ])("rejects a measure switch change given as %s", async (_label, measure) => {
     const created = (await (
       await send("POST", "/management-api/units", {
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
         name: { en: "millilitre" },
         precision: 0,
         abbreviation: { en: "ml" },
@@ -386,7 +392,7 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
     const { productId, listId } = await withTransaction(suite.db, async (tx) => {
-      const productId = await seedProduct(tx, await seedCatalogue(tx), "Jamón", unit.id);
+      const productId = await seedProduct(tx, await seedCatalogue(tx), "Ham", unit.id);
       const list = await createExtraList(
         tx,
         { name: "Toppings", items: [{ productId, portion: "0.055", price: "0.01" }] },
@@ -400,7 +406,7 @@ describe("unit management routes", () => {
     expect(await usage.json()).toEqual([
       {
         productId,
-        productName: "Jamón",
+        productName: "Ham",
         lists: [{ id: listId, name: "Toppings", menus: [] }],
       },
     ]);
@@ -609,7 +615,7 @@ it.each(["target", "each"])(
 
 describe("explicit staff identity at the unit API", () => {
   const input = {
-    staffName: "Kilogramo",
+    staffName: "Kilogram",
     staffAbbreviation: "kg",
     name: {},
     abbreviation: {},

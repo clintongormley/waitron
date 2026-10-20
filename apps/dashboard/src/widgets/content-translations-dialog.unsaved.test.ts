@@ -375,9 +375,9 @@ async function closeUnasked(
 }
 it("closes with only untouched suggestions without asking or warning on unload", async () => {
   const { app, form } = await mountWith(
-    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]),
+    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Soup of the day")]),
   );
-  expect(field(form).value).toBe("CLIENT-es Sopa del día");
+  expect(field(form).value).toBe("CLIENT-es Soup of the day");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
@@ -386,7 +386,7 @@ it("closes with only untouched suggestions without asking or warning on unload",
 });
 it("a person's edit of a suggested name still asks, and discarding the edit brings the suggestion back", async () => {
   const { app, form } = await mountWith(
-    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]),
+    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Soup of the day")]),
   );
   await edit(form, "Sopa de la casa");
   expect(app.leave.coordinator.isDirty()).toBe(true);
@@ -397,11 +397,11 @@ it("a person's edit of a suggested name still asks, and discarding the edit brin
   expect(await discarded).toBe("proceeded");
   await form.updateComplete;
   await form.shadowRoot!.querySelector("dashboard-content-translation-window")!.updateComplete;
-  expect(field(form).value).toBe("CLIENT-es Sopa del día");
+  expect(field(form).value).toBe("CLIENT-es Soup of the day");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("saving untouched suggestions leaves nothing unsaved when the saved event arrives", async () => {
-  const api = suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]);
+  const api = suggestionApi(result, [soup("s1", "dish", "CLIENT-es Soup of the day")]);
   const { app, form } = await mountWith(api);
   const outcomes: boolean[] = [];
   form.addEventListener("translations-saved", () => outcomes.push(app.leave.coordinator.isDirty()));
@@ -415,7 +415,7 @@ it("saving untouched suggestions leaves nothing unsaved when the saved event arr
         language: "es",
         field: "name",
         expected: "baseline",
-        text: "CLIENT-es Sopa del día",
+        text: "CLIENT-es Soup of the day",
       },
     ],
   });
@@ -431,7 +431,7 @@ it("fills at most 100 of 150 suggestions and closes without asking", async () =>
   const { app, form } = await mountWith(
     suggestionApi(
       { ...result, rows },
-      rows.map((row, n) => soup(`s${n}`, row.id, `CLIENT-es Sopa ${n}`)),
+      rows.map((row, n) => soup(`s${n}`, row.id, `CLIENT-es Soup ${n}`)),
     ),
   );
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=next-suggestions]")!.click();

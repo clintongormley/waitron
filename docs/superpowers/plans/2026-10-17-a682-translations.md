@@ -548,11 +548,11 @@ Extend `defaultLanguageDescriptions(text: Readonly<Record<string,string>>, keys:
 
 **Interfaces:** No new runtime contract. Explain optional/disabled text, unit staff pair, gaps, free default choice, one bounded Save, waiting fixes, personal drafts, future publication and recorded names in second person. Keep Cloud's 20-language limitation open and avoid a product completion claim until branch gates pass.
 
-- [ ] Extend real Chromium acceptance for EN/ES × light/dark × **390/1280 px** using existing dialog/screen browser suites. Cover empty/filled/suggested/fix/stale/review/error/100-cell/byte-cap states, 200-language jump and focus, unit pair, full regional notes and pinned Actions. Assert rendered native field state and layout, not only host properties. Run the named suites and inspect all eight visual combinations.
-- [ ] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.test.ts src/widgets/content-translations-dialog.window.test.ts src/widgets/content-translations-dialog.fixes.test.ts src/widgets/content-translations-dialog.a11y.test.ts src/screens/content-languages-screen.test.ts src/screens/content-languages-screen.a11y.test.ts src/widgets/unit-form.a11y.test.ts`. Restore global locale/theme after each case; use actual dispatched/user clicks and await operation completion.
-- [ ] Use only declared `--wt-*` tokens and `part`/`::part` for table content. If implementation actually adds a shared primitive instead of the planned app-owned window helper, add its token-painting test and sibling axe test across distinct states in both themes; do not waive those checks. Keep shared form/save/leave contract assertions.
-- [ ] Audit prose over the whole base-to-tip path set with `git diff --name-only 8ddcab3b22525a825474a3a0c35c95800409b231...HEAD` and `rg` for old required-default/Why/companion/unit/Spanish/fallback claims in docs and READMEs. Check current explanations against the complete new call chain. Keep historical checkpoints with dated closure pointers. Remove A682/Use fix entries only when this complete production change is delivered; retain decisions in the area's Decisions section and keep unrelated open points.
-- [ ] Stage explanations and any acceptance corrections; `git commit -s -m "docs: explain optional translations review and future fallback"`.
+- [x] Extend real Chromium acceptance for EN/ES × light/dark × **390/1280 px** using existing dialog/screen browser suites. Cover empty/filled/suggested/fix/stale/review/error/100-cell/byte-cap states, 200-language jump and focus, unit pair, full regional notes and pinned Actions. Assert rendered native field state and layout, not only host properties. Run the named suites and inspect all eight visual combinations.
+- [x] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.test.ts src/widgets/content-translations-dialog.window.test.ts src/widgets/content-translations-dialog.fixes.test.ts src/widgets/content-translations-dialog.a11y.test.ts src/screens/content-languages-screen.test.ts src/screens/content-languages-screen.a11y.test.ts src/widgets/unit-form.a11y.test.ts`. Restore global locale/theme after each case; use actual dispatched/user clicks and await operation completion.
+- [x] Use only declared `--wt-*` tokens and `part`/`::part` for table content. If implementation actually adds a shared primitive instead of the planned app-owned window helper, add its token-painting test and sibling axe test across distinct states in both themes; do not waive those checks. Keep shared form/save/leave contract assertions.
+- [x] Audit prose over the whole base-to-tip path set with `git diff --name-only 8ddcab3b22525a825474a3a0c35c95800409b231...HEAD` and `rg` for old required-default/Why/companion/unit/Spanish/fallback claims in docs and READMEs. Check current explanations against the complete new call chain. Keep historical checkpoints with dated closure pointers. Remove A682/Use fix entries only when this complete production change is delivered; retain decisions in the area's Decisions section and keep unrelated open points.
+- [x] Stage explanations and any acceptance corrections; `git commit -s -m "docs: explain optional translations review and future fallback"`.
 
 ### Task 14: Validate and finish the one production branch, then serialize landing
 
@@ -574,3 +574,18 @@ No product test, service, schema generation, A760 execution, commit or push was 
 ## Driver review corrections, 2026-10-17
 
 A fresh-context plan-versus-spec read found two omissions, now incorporated: field-specific staff fallback in both bounded page and retained-cell DTOs, with empty-map/off-page assertions; and the unchanged populated upgrade guard for additive migrations as well as rebuilds. An actual guard conflict retains its SQL/error/fixture receipts and parks unless an existing authorization covers a fixture-only correction. The driver also read the author's later explicit baseline/query/Unicode-blank/live-dependency and future-snapshot contract refinements; these retain the closed decisions and unchanged historical/fiscal boundary. Required new-code registry wording and guards are explicit. This is plan verification only; product acceptance remains unrun.
+
+## 2026-10-20 implementation audit
+
+Task 13 is locally complete. The multilingual acceptance suites cover the planned states and
+the eight English/Spanish, light/dark, phone/desktop views were inspected. Current documentation
+now distinguishes optional text, enabled-language rules, future preparation and recorded reads.
+The historical Translate all and inline-translation documents retain their bodies with dated
+pointers. Completed A682 and Use fix backlog entries are removed; decisions and the independent
+Cloud language and release limitations remain.
+
+The English-only audit renames scenario data without changing numeric, VAT, permission or
+fiscal expectations; Spanish UI checks read their translation catalogue. A canonical variant
+fixture key and required staff-field setup are corrected without changing existing assertions.
+The complete receipts and changed-check inventory are retained by Lane F. Task 14 still requires
+the final Claude review, normal hook, current-head CI and serialized landing.

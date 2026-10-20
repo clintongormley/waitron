@@ -9,9 +9,9 @@ describe("new customer text", () => {
     [{}, "es", "Staff coffee"],
     [{ fr: "French coffee" }, "es", "Staff coffee"],
     [{ en: "English coffee", fr: "French coffee" }, "es", "English coffee"],
-    [{ en: "English coffee", es: "Café español" }, "es", "Café español"],
-    [{ "es-ES": "Café de España" }, "es", "Café de España"],
-    [{ es: "Café español" }, "es-MX", "Café español"],
+    [{ en: "English coffee", es: "ES coffee" }, "es", "ES coffee"],
+    [{ "es-ES": "Spanish coffee" }, "es", "Spanish coffee"],
+    [{ es: "ES coffee" }, "es-MX", "ES coffee"],
     [{ en: "English coffee", fr: "French coffee" }, "fr", "English coffee"],
     [{ fr: "French coffee" }, "invalid_!", "Staff coffee"],
     [{ en: " ", es: " " }, "es", "Staff coffee"],
@@ -26,12 +26,12 @@ describe("new extra presentation", () => {
     customerName: { fr: "French coffee" },
     kitchenName: "KITCHEN COFFEE",
     variantName: "Staff double",
-    variantCustomerName: { es: "Doble español" },
+    variantCustomerName: { es: "ES double" },
     variantKitchenName: "KITCHEN DOUBLE",
   };
 
   it("resolves parent and variant independently in the requested language", () => {
-    expect(newCustomerPresentation(source, "es", config)).toBe("Staff coffee (Doble español)");
+    expect(newCustomerPresentation(source, "es", config)).toBe("Staff coffee (ES double)");
     expect(newCustomerPresentation(source, "en", config)).toBe("Staff coffee (Staff double)");
   });
 

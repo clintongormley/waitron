@@ -218,13 +218,13 @@ describe("bounded multilingual translation reads", () => {
       .mockResolvedValueOnce(items([row("001")], cursor("001")))
       .mockResolvedValueOnce(items([row("051")], null));
     await reader.open();
-    reader.drafts.edit(cell("001"), "  Mi croqueta  ");
+    reader.drafts.edit(cell("001"), "  My croquette  ");
     api.cells.mockResolvedValue(cells([{ ...cell("001", "es", "Otra"), expected: "v2" }]));
     await reader.next();
     expect(api.cells).toHaveBeenCalledExactlyOnceWith([
       { kind: "product", id: "001", language: "es", field: "name" },
     ]);
-    expect(reader.drafts.value(cell("001"))).toBe("  Mi croqueta  ");
+    expect(reader.drafts.value(cell("001"))).toBe("  My croquette  ");
     expect(reader.drafts.validate()).toContainEqual({
       cell: { kind: "product", id: "001", language: "es", field: "name" },
       message: "review",
@@ -900,7 +900,7 @@ describe("bounded multilingual translation reads", () => {
           itemId: "001",
           item: { name: "001" },
           language: "es",
-          text: "Nueva",
+          text: "New",
           placeholder: false,
           fix: null,
           stale: false,
@@ -916,7 +916,7 @@ describe("bounded multilingual translation reads", () => {
         id: "001",
         language: "es",
         field: "name",
-        text: "Nueva",
+        text: "New",
         expected: "v2",
       },
     ]);
@@ -1092,7 +1092,7 @@ describe("bounded multilingual translation reads", () => {
           itemId: "001",
           item: { name: "001" },
           language: "es",
-          text: "Nueva",
+          text: "New",
           placeholder: false,
           fix: null,
           stale: false,
@@ -1104,7 +1104,7 @@ describe("bounded multilingual translation reads", () => {
     await reader.open();
     expect(reader.page?.rows[0]?.cells[0]?.staffText).toBe("New staff placeholder");
     expect(reader.page?.rows[0]?.cells[0]?.expected).toBe("v2");
-    expect(reader.drafts.value(cell("001"))).toBe("Nueva");
+    expect(reader.drafts.value(cell("001"))).toBe("New");
   });
 
   it("shows the same current facts that were used to review a retained visible draft", async () => {

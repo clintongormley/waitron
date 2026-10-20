@@ -90,13 +90,11 @@ Everything not listed here needs more spec work first.
    kitchen and pass work, following A773-1's Sent and New order panel.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
-2. **A682 — translations: nothing required, every missing name reported, all languages side by
-   side, with automatic translation** (_Menus and the catalogue_).
-3. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
+2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
    (_Modules, data and code health_). Its revised design awaits agreement.
-4. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
+3. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
    protection and legal compliance_). Adviser agreement, build and verification remain open.
-5. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
+4. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
 
 **Ready to queue when a lane is free (owner, 2026-10-18), not ranked against the list above:**
@@ -855,8 +853,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   says otherwise** (plan, "Open points"): receipts outside Catalonia stay free, Spanish by default.
   Left by W109 (#1320, #1322); the decisions are in
   [products.md](developers/products.md#content-languages-per-region). The other open case, a
-  Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish is required
-  everywhere; relayed to A682).
+  Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
+  everywhere; entered customer text is optional).
 
 - **Loose ends left by W87 (#1191).**
   - Between 30rem and 50rem a long menu name can still make the Menus table wider than its box, so
@@ -964,10 +962,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   - A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
   - A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
     else the copy indexed last.
-  - Renaming or clearing the included menu's own customer names is not checked against the folders
-    that fix some languages, so a folder can end up with no name in the default language. The
-    missing-translations report lists it, and changing the default language is refused while it
-    lasts, but the write that caused it is allowed.
   - A fixed value that happens to equal the included menu's value when the dialog opens is saved
     back as "follow" the next time the dialog is saved: the dialog compares with the included
     menu's value and cannot tell the two apart.
@@ -1036,13 +1030,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   first Refresh status is a lease renewal, and only a configuration request asks for services
   version 2 (`apps/server/src/cloud-installation.ts`). Seen in the Santet run (A689-21).
 
-- **Content languages says the default language has nothing missing while Translate all sends a
-  default-language name for every item.** On Santet (default Catalan, no customer-facing names
-  set) the list read "Catalan · Nothing missing" and the job asked for Catalan for all 613 items;
-  each dialog row said the default name "will not be copied from the staff name". The two counts
-  use different rules for the default language; which one is meant was not traced. Seen in the
-  Santet run (A689-21).
-
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and
   both sides check would catch drift in CI. A contract change for Cloud's side.
@@ -1055,9 +1042,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-item-is-accounted-for-does-not-count-its-items-as-lost)
 
 - **Loose ends left by A689's fifth PR.**
-  - Translate all: a "Use fix" button for a spelling fix to a name someone entered; it waits for
-    the side-by-side translations dialog (plan Decision 6). Today the dialog shows such a fix only
-    as a note on the item's row.
   - Alert wording writes numbers without a thousands separator (`formatParam`,
     `packages/dashboard-kit/src/alert-messages.ts`); the Translate all notice reads "1050
     suggestions".
@@ -1092,13 +1076,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   do, `packages/dashboard-kit/src/request.ts`).
   [Detail](backlog/catalogue.md#translate-all-three-limits-the-translations-dialog-accepts-for-now-a689s-fourth-pr-2026-10-15)
 
-- **The translations dialog capitalises a language name mid-sentence in Spanish in two older
-  places** — `translations.default_needed` ("…predeterminado en Inglés…") and the table's
-  accessible label `content_gaps.table` ("Sin traducir al Inglés"): both go through the dialog's
-  `#name`, which passes `standalone=true` by default
-  (`apps/dashboard/src/widgets/content-translations-dialog.ts`). Fixing
-  them changes existing test assertions.
-
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
   default content language, under every receipt-language key, before it gets there
@@ -1121,104 +1098,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **Sales classification and the menus plan — what they left open.** `Product.categoryId` and
   `primaryCategoryId` always hold the same value.
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
-
-- **A682. Translations: every missing name reported, all languages side by side
-  (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
-  field per enabled language on each row. Translate all and its "Use fix" action use the same editor.
-  At 16:25 the owner approved unit A: required staff name and abbreviation, all translations optional,
-  with no automatic copying. At 16:40 the owner approved Spanish A: Save succeeds with blank Spanish
-  customer text, Spanish stays enabled everywhere in Spain whatever the province, and gaps remain.
-  The [dated design closure](superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
-  authorizes planning and build. The [executable plan](superpowers/plans/2026-10-17-a682-translations.md)
-  covers all five points and Use fix in one future PR. A fresh-context plan read is complete;
-  field-specific fallback and additive-upgrade checks are explicit. **OPEN:** implementation and
-  validation, respecting the plan's G/C/E reservations. The owner approved the
-  populated-unit upgrade reset declaration for required staff fields. Existing venue folders must
-  be reset/reseeded before using the completed change; no reset is authorised by that declaration.
-  The feature branch has checkpointed unit foundations, optional ordinary catalogue writers,
-  free default choice and customer-form fallback. The shared missing-value queries now include
-  default-language blanks, unnamed extras lists and unit abbreviations, with a count-only read.
-  Catalogue reads now project individual fields and pages of at most fifty rows across the viewed
-  languages, with configuration-bound cursors. Cell-baseline parsing and root/default peer
-  projection are checked against real rereads. The multilingual HTTP read/save routes use grouped
-  map replacements, explicit clears, whole-batch retries and exact saved-name suggestion cleanup.
-  The language screen consumes count-only summaries; retained-cell reads and live dependencies
-  are wired. The legacy single-language map writers and default-companion cleanup are retired.
-  Spelling fixes now retain evidence only for an exact saved name match; listing rechecks that
-  evidence, and pruning keeps fixes and notes on complete live items. Suggestion pages now examine
-  at most one hundred stored candidates across languages, advance past filtered rows, reject a
-  changed configuration and return current name-cell tokens. A separate count includes waiting
-  fixes and notes on complete live items. The dashboard suggestion reader uses that query. The
-  multilingual page/save contract and editor are implemented on the feature branch. A cell draft model
-  retains personal text, explicit clears and fixes by item, language and field, blocks over-capacity
-  saves and commits the exact submitted snapshot while preserving newer input. The field view projects
-  bounded language windows, keeps a focused native field and cursor through row moves, exposes
-  separate optional unit fields and retains rejected input until that field is resolved. The
-  editor now composes that view with the multilingual draft model and page coordinator. It reads
-  one item page and one suggestion page per opening,
-  refreshes retained cells in requests of at most one hundred, retains hidden edits and focused
-  fields, and rejects closed, superseded or configuration-mismatched answers. Show staged pages
-  distinct items, and refreshed field placeholders share the model's current facts. Filters,
-  explicit page navigation, optional unit fields, deliberate field unstaging and uncertain-batch
-  retry are wired through the editor. Its migrated leave, Translate all and standard dialog checks
-  use the multilingual page/cell contract. Field labels refresh with the UI language while retaining
-  the native input and selection; editor links retain parent context, and unavailable fields explain
-  why editing is blocked. A newer completed live read releases a delayed review's lock without
-  letting the delayed response release a newer review.
-  Empty filtered reads show the shared no-matches message. A current refresh that empties a later
-  page reads the first bounded page once; an older refresh cannot reset a newer page.
-  Changed retained fields now have separate original/current/draft review,
-  with Keep restricted to an enabled language and an eligible target under the same owner.
-  Replace and Discard remove only the chosen field. Local validation and exact field refusals
-  reveal the staged page and language, then focus that native field. Suggestion panels
-  now show borrowed values, spelling fixes, placeholder notes and stale evidence. Use fix rereads
-  the selected cell and its suggestion page before staging the correction with the current token;
-  personal text and deliberate clears win, and a full batch leaves the fix waiting. Per-suggestion
-  Discard waits before Save, removes only its borrowed draft and suppresses the deleted id across
-  reopening. Waiting-fix review explicitly selects All names; choosing Missing in again clears
-  that narrower filter. Suggestion pages carry current staff names and parent editor identities, so
-  off-page notes retain their editor links without fetching other item pages; product links use
-  the guarded editor event. An uncertain Save retains its exact Retry request. Explicit batch review
-  restores every submitted field and its original evidence, reads current values, and requires
-  Keep, Replace or Discard for each field before editing resumes. A failed review read keeps Retry
-  available. Submitted fields take priority over newly arrived untouched suggestions at capacity.
-  The original accessibility suite now exercises the multilingual editor and its retry/review
-  states in both languages and themes at phone and desktop widths, with one deadline per staged
-  state. The original draft suite now checks independent optional-language drafts, per-suggestion
-  Discard, off-page staged cells and explicit suggestion paging. Already-deleted suggestions clear
-  their borrowed drafts; unrelated refusals retain them. A full 100-cell batch shows its own status,
-  while an over-limit batch keeps its refusal. Reopening and reconnect checks retain pending action
-  gates, personal text and deleted-id suppression, including deletion between two readers.
-  The client now accepts only projected multilingual queries and one whole cell batch on the
-  language-free routes. The old draft model and single-language transport signatures are retired;
-  their model, transport, live-refresh and accessibility checks use the current cell contract.
-  Receipt-preservation acceptance uses that same route while retaining its recorded-row and
-  reprint assertions. Discard also removes an overflow suggestion from the waiting count. Regional
-  completeness notes wrap in full, with the row actions reachable at phone and desktop widths.
-  Future customer-text preparation now resolves product and variant maps independently and
-  prepares new option answers on the server and till from default or staff text. New extras
-  prepare the receipt abbreviation separately from the full unit name used by line contexts.
-  Recorded option comparisons retain unchanged answers under their original language maps.
-  Unit changes also appear in publication review for extras-only products, while previously
-  published rows remain unchanged. No intermediate feature is ready to publish. After the
-  A679 handoff, boot now forwards the configured dashboard origin to translation saves and no
-  longer registers the obsolete default-switch gap callback. Real startup accepts that origin
-  and refuses a foreign one without changing the saved name. The branch is rebased over the
-  measure-unit and paged Cloud-result changes; the staff-unit migration is regenerated as
-  `0035_unit_staff_identity`. New offers and
-  publications now retain the raw parent and relative-variant names separately, and publication
-  review includes source changes even when their composed display text is unchanged. The stored
-  publication remains unchanged until explicit publish. The server and till now prepare new parent
-  snapshots with the full enabled-language projection and the published unit's default or staff
-  abbreviation. Full unit context names are prepared separately. Added extras resolve the published
-  parent and variant independently under the current default; retained picks and recalled-dish
-  carriers keep their recorded maps. A real-sale check compares complete order, sale, fiscal,
-  numbering and publication rows across translation Save, a default change and reprint, then checks
-  that new wording reaches new lines only after publication. The operator
-  guide and current editor/option-answer explanations now describe optional fields, deliberate
-  batches and waiting fixes. Whole-feature validation and the final snapshot/prose audit after
-  those handoffs remain open.
-  [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](../apps/server/src/guide/en/content-and-images.md). **A new picture consumer has to add a real database

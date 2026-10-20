@@ -1,5 +1,7 @@
 # A420 part 2: fill missing translations in place
 
+> **2026-10-20, A682:** The multilingual editor replaces the language-in-the-path translation routes and default-companion rules described below. See [the current translation contract](../../developers/products.md#the-translation-gap-report). This document retains its historical design.
+
 **2026-10-09 follow-up:** [A435's archive design](2026-10-08-delete-and-archive-design.md)
 keeps names-only fixes available for explicitly selected archived product and variant targets.
 The automatic missing-translations list still excludes archived families. Role, ownership,

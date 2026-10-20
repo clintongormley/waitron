@@ -875,7 +875,7 @@ export const MENU_DEL_DIA: Catalogue = {
           kitchenName: "MIXED SALAD",
           dietaryDeclarations: ["vegan"],
           unit: {
-            staffName: "Ración",
+            staffName: "Portion",
             staffAbbreviation: "rac",
             name: {
               en: "serving",

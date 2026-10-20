@@ -27,7 +27,7 @@ const cell = (id = "one", language = "es"): TranslationCell => ({
   defaultText: null,
   inheritedDefaultText: null,
   effectiveDefaultText: null,
-  staffText: "STAFF Croquetas de jamón y queso curado con una descripción larga",
+  staffText: "STAFF Ham and mature cheese croquettes with a long description",
   expected: `baseline-${id}-${language}`,
   eligible: true,
   unavailableReason: null,
@@ -155,7 +155,7 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
       await input.updateComplete;
       await userEvent.fill(
         input.shadowRoot!.querySelector("input")!,
-        state === "invalid" ? "é".repeat(2049) : "Croquetas de jamón",
+        state === "invalid" ? "é".repeat(2049) : "Ham croquettes",
       );
       await el.updateComplete;
       await view.updateComplete;
@@ -236,11 +236,11 @@ const note = (overrides: Partial<ContentSuggestionView>): ContentSuggestionView 
   item: {
     name:
       (
-        { fixed: "STAFF ZURRITO", placeholder: "STAFF ?? nuevo", stale: "STAFF Pan" } as Record<
+        { fixed: "STAFF BURGER", placeholder: "STAFF ?? new", stale: "STAFF Bread" } as Record<
           string,
           string
         >
-      )[overrides.itemId ?? ""] ?? "STAFF Croquetas de la casa",
+      )[overrides.itemId ?? ""] ?? "STAFF House croquettes",
   },
   language: null,
   text: null,
@@ -263,24 +263,24 @@ describe.each(["light", "dark"] as const)(
           setLocale(locale);
           cleanupWidgets();
           const rows = [
-            { ...row("suggested"), name: "STAFF Croquetas de la casa" },
+            { ...row("suggested"), name: "STAFF House croquettes" },
             {
               ...row("fixed"),
-              name: "STAFF ZURRITO",
+              name: "STAFF BURGER",
               cells: row("fixed").cells.map((value) =>
                 value.language === "en"
                   ? { ...value, text: "CLIENT-en Croquetes", effectiveText: "CLIENT-en Croquetes" }
                   : value,
               ),
             },
-            { ...row("placeholder"), name: "STAFF ?? nuevo" },
-            { ...row("stale"), name: "STAFF Pan" },
+            { ...row("placeholder"), name: "STAFF ?? new" },
+            { ...row("stale"), name: "STAFF Bread" },
           ];
           const views = [
             note({
               id: "s1",
               language: "es",
-              text: "CLIENT-es Croquetas caseras",
+              text: "CLIENT-es Homemade croquettes",
               cell: { kind: "product", id: "suggested", language: "es", field: "name" },
               expected: "baseline-suggested-es",
             }),
@@ -309,7 +309,7 @@ describe.each(["light", "dark"] as const)(
               id: "s6",
               itemId: "stale",
               language: "es",
-              text: "CLIENT-es Pan",
+              text: "CLIENT-es Bread",
               stale: true,
               cell: { kind: "product", id: "stale", language: "es", field: "name" },
               expected: "baseline-stale-es",

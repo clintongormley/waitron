@@ -61,20 +61,20 @@ function offeredItem(
   };
 }
 
-/** "Punto": one options list, two labels, "Al punto" preselected by the offer. */
+/** "Cooking": one options list, two labels, "Al punto" preselected by the offer. */
 const cookedList: OfferedModifier = {
   kind: "options",
   id: "list-cooked",
-  name: "Punto",
-  customerName: { es: "Punto carta" },
-  kitchenName: "Punto KDS",
+  name: "Cooking",
+  customerName: { es: "Cooking carta" },
+  kitchenName: "Cooking KDS",
   defaultLabelId: "label-medium",
   labels: [
     {
       id: "label-rare",
-      name: "Poco hecha",
-      customerName: { es: "Poco hecha carta" },
-      kitchenName: "Poco hecha KDS",
+      name: "Rare hecha",
+      customerName: { es: "Rare hecha carta" },
+      kitchenName: "Rare hecha KDS",
       available: true,
     },
     {
@@ -99,13 +99,13 @@ const extrasList: OfferedModifier = {
   items: [offeredItem("p-bacon", "Bacon", "1.50"), offeredItem("p-cheese", "Queso", "1.00", 3)],
 };
 
-/** "Pan": exactly one pick required — the "choose your bread" case. */
+/** "Bread": exactly one pick required — the "choose your bread" case. */
 const breadList: OfferedModifier = {
   kind: "extras",
   id: "list-bread",
-  name: "Pan",
-  customerName: { es: "Pan carta" },
-  kitchenName: "Pan KDS",
+  name: "Bread",
+  customerName: { es: "Bread carta" },
+  kitchenName: "Bread KDS",
   minPicks: 1,
   maxPicks: 1,
   items: [offeredItem("p-white", "Blanco", "0.00"), offeredItem("p-rye", "Centeno", "0.50")],
@@ -131,11 +131,11 @@ const cafe: TillProduct = {
 };
 
 // A weight product — the kg-keypad path, which the picker must never intercept.
-const jamon: TillProduct = {
+const resume: TillProduct = {
   ...base,
-  id: "jamon",
-  name: "Jamón",
-  customerName: { es: "Jamón carta" },
+  id: "resume",
+  name: "Ham",
+  customerName: { es: "Ham carta" },
   pricingUnit: "weight",
   vatClass: "reduced",
   unitPrice: "10.00",
@@ -270,7 +270,7 @@ describe("till-modifier-picker", () => {
       maxPicks: null,
       items: [
         {
-          ...offeredItem("p-ham", "Jamón", "5.00", 3),
+          ...offeredItem("p-ham", "Ham", "5.00", 3),
           portion: "0.050",
           unit: {
             id: "unit-kg",
@@ -290,7 +290,7 @@ describe("till-modifier-picker", () => {
       new WorkingOrderStore(),
     );
     expect(picker.shadowRoot!.querySelector(".option-name")!.textContent!.trim()).toBe(
-      "Jamón · 0.050 staff-kg",
+      "Ham · 0.050 staff-kg",
     );
     expect(picker.shadowRoot!.querySelector(".option-delta")!.textContent!.trim()).toBe(
       formatMoney("5.00", currentLocale()),
@@ -303,7 +303,7 @@ describe("till-modifier-picker", () => {
       maxPicks: null,
       items: [
         {
-          ...offeredItem("p-ham", "Jamón", "5.00", 3),
+          ...offeredItem("p-ham", "Ham", "5.00", 3),
           portion: "0.050",
           unit: {
             staffName: "Staff unit",
@@ -324,7 +324,7 @@ describe("till-modifier-picker", () => {
     );
 
     expect(picker.shadowRoot!.querySelector(".option-name")!.textContent!.trim()).toBe(
-      "Jamón · 0.050 kg",
+      "Ham · 0.050 kg",
     );
     expect(picker.shadowRoot!.querySelector(".option-delta")!.textContent!.trim()).toBe(
       formatMoney("5.00", currentLocale()),
@@ -348,8 +348,8 @@ describe("till-modifier-picker", () => {
     const store = new WorkingOrderStore();
     const seen: TillProduct[] = [];
     store.on("product-selected", (p) => seen.push(p as TillProduct));
-    const { el } = await mountBrowser({ ...jamon, offeredModifiers: [extrasList] }, store);
-    tapTile(el, "Jamón");
+    const { el } = await mountBrowser({ ...resume, offeredModifiers: [extrasList] }, store);
+    tapTile(el, "Ham");
     await el.updateComplete;
     expect(seen).toHaveLength(1);
     expect(store.lines).toHaveLength(0);
@@ -371,12 +371,12 @@ describe("till-modifier-picker", () => {
     const legends = [...picker.shadowRoot!.querySelectorAll("legend")].map((l) =>
       l.textContent!.trim(),
     );
-    expect(legends).toEqual(["Extras", "Punto *"]);
+    expect(legends).toEqual(["Extras", "Cooking *"]);
     // The staff wording, never the diner's or the cook's.
     expect(picker.shadowRoot!.textContent).toContain("Bacon");
     expect(picker.shadowRoot!.textContent).not.toContain("Bacon carta");
     expect(picker.shadowRoot!.textContent).not.toContain("Bacon KDS");
-    expect(picker.shadowRoot!.textContent).not.toContain("Punto carta");
+    expect(picker.shadowRoot!.textContent).not.toContain("Cooking carta");
   });
 
   it("prices each offered item at the price the offer resolved", async () => {
@@ -397,7 +397,7 @@ describe("till-modifier-picker", () => {
 
   it("blocks Add until a list with minPicks 1 has a pick, and marks it required", async () => {
     const { picker } = await openPicker(sandwich, "Bocadillo", new WorkingOrderStore());
-    expect(picker.shadowRoot!.querySelector("legend")!.textContent!.trim()).toBe("Pan *");
+    expect(picker.shadowRoot!.querySelector("legend")!.textContent!.trim()).toBe("Bread *");
     expect(addButton(picker).disabled).toBe(true);
     pickBox(picker, "list-bread", "p-white")!.click();
     await picker.updateComplete;
@@ -495,7 +495,7 @@ describe("till-modifier-picker", () => {
     };
     const { picker } = await openPicker(empty, "Burger", new WorkingOrderStore());
     expect(addButton(picker).disabled).toBe(true);
-    expect(picker.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain("Punto");
+    expect(picker.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain("Cooking");
   });
 
   it("sums the dish and every pick into the running price", async () => {
@@ -542,12 +542,12 @@ describe("till-modifier-picker", () => {
     // The answer freezes six names and no ids, exactly as the server freezes it.
     expect(line.optionSnapshots).toEqual([
       {
-        listName: { es: "Punto" },
-        listCustomerName: { es: "Punto carta" },
-        listKitchenName: "Punto KDS",
-        labelName: { es: "Poco hecha" },
-        labelCustomerName: { es: "Poco hecha carta" },
-        labelKitchenName: "Poco hecha KDS",
+        listName: { es: "Cooking" },
+        listCustomerName: { es: "Cooking carta" },
+        listKitchenName: "Cooking KDS",
+        labelName: { es: "Rare hecha" },
+        labelCustomerName: { es: "Rare hecha carta" },
+        labelKitchenName: "Rare hecha KDS",
       },
     ]);
     expect(pickerOf(el)).toBeNull();
@@ -1097,7 +1097,7 @@ describe("till-modifier-picker", () => {
         hardwareUnit: null,
       },
     };
-    for (const product of [litre, { ...jamon, offeredModifiers: burger.offeredModifiers }]) {
+    for (const product of [litre, { ...resume, offeredModifiers: burger.offeredModifiers }]) {
       const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", { product });
       expect(labelRadio(el, "list-cooked", "label-rare")).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[name="extras-list-extras"]')).toBeNull();

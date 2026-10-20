@@ -26,8 +26,8 @@ import {
 } from "../test/suggestion-fixture.js";
 
 const { suite, app } = suggestionSuite();
-async function corrected(wrong = "CLIENT-CA Pa", field = "ca", label = false) {
-  const venue = await seedSuggestionVenue(suite.db);
+async function corrected(wrong = "CLIENT-CA Bread", field = "ca", label = false) {
+  const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   let otherListId = "";
   const cell: TranslationCellRef = {
     kind: "product",
@@ -44,7 +44,7 @@ async function corrected(wrong = "CLIENT-CA Pa", field = "ca", label = false) {
       otherListId = second!.id;
       const [created] = await tx
         .insert(optionLabels)
-        .values({ listId: first!.id, name: "STAFF label", customerName: { ca: "CLIENT-CA Pa" } })
+        .values({ listId: first!.id, name: "STAFF label", customerName: { ca: "CLIENT-CA Bread" } })
         .returning();
       cell.kind = "option_label";
       cell.id = created!.id;
@@ -65,7 +65,7 @@ async function corrected(wrong = "CLIENT-CA Pa", field = "ca", label = false) {
             `${cell.kind}:${cell.id}`,
             {},
             {
-              corrections: [{ field, wrong, right: "CLIENT-CA Pà" }],
+              corrections: [{ field, wrong, right: "CLIENT-CA Corrected bread" }],
             },
           ),
         ],
@@ -99,20 +99,20 @@ describe("language correction evidence", () => {
     expect(stored).toMatchObject({
       text: null,
       fixField: "ca",
-      fixWrong: "CLIENT-CA Pa",
-      fixRight: "CLIENT-CA Pà",
+      fixWrong: "CLIENT-CA Bread",
+      fixRight: "CLIENT-CA Corrected bread",
       expected: (await latest(cell)).expected,
     });
     expect(JSON.parse(stored.expected!)).toMatchObject({
       field: "name",
       ref: { kind: "product", id: cell.id },
       language: "ca",
-      selectedText: "CLIENT-CA Pa",
+      selectedText: "CLIENT-CA Bread",
     });
     expect(await listed(cell.id)).toMatchObject({ stale: false });
   });
 
-  it.each(["Pa", "client-ca pa", " CLIENT-CA Pa "])(
+  it.each(["CA bread", "client-ca bread", " CLIENT-CA Bread "])(
     "keeps mismatching correction %j note-only",
     async (wrong) => {
       const { cell } = await corrected(wrong);
@@ -176,7 +176,7 @@ describe("language correction evidence", () => {
       });
       await tx
         .update(products)
-        .set({ customerName: { ca: "CLIENT-CA Pa", es: "Different default" } })
+        .set({ customerName: { ca: "CLIENT-CA Bread", es: "Different default" } })
         .where(eq(products.id, cell.id));
     });
     expect(await listed(cell.id)).toMatchObject({ stale: false });
@@ -199,7 +199,7 @@ describe("language correction evidence", () => {
       ]);
       await tx
         .update(products)
-        .set({ customerName: { ca: "CLIENT-CA Pa", es: "Pan", en: "Bread" } })
+        .set({ customerName: { ca: "CLIENT-CA Bread", es: "Bread", en: "Bread" } })
         .where(eq(products.id, cell.id));
       await pruneSuggestions(tx, context);
     });
@@ -220,7 +220,7 @@ describe("language correction evidence", () => {
   });
 
   it("captures a unit name rather than its abbreviation and preserves unit facts", async () => {
-    await seedSuggestionVenue(suite.db);
+    await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
     const [unit] = await app((tx) =>
       tx
         .insert(units)
@@ -264,7 +264,7 @@ describe("language correction evidence", () => {
   });
 
   it("captures inherited correction evidence and invalidates it when the root changes", async () => {
-    const venue = await seedSuggestionVenue(suite.db);
+    const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
     const member = await app(async (tx) => {
       const child = await createCatalogue(tx, {
         name: "STAFF child",

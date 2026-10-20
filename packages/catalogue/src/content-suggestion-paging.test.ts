@@ -185,7 +185,7 @@ it("counts complete-row fixes and notes independently of run text, cursor and fi
         language: "ca",
         fixField: "ca",
         fixWrong: "CLIENT-CA Aigua",
-        fixRight: "CLIENT-CA Aigües",
+        fixRight: "CLIENT-CA Water",
         expected: cell.expected,
       },
       {
@@ -269,7 +269,7 @@ it("keeps independently fresh corrections for two entered languages on one item"
   await app((tx) =>
     tx
       .update(products)
-      .set({ customerName: { ca: "CLIENT-CA Pa", es: "CLIENT-ES Pan" } })
+      .set({ customerName: { ca: "CLIENT-CA Bread", es: "CLIENT-ES Bread" } })
       .where(eq(products.id, venue.bread)),
   );
   const before = await suite.db.select().from(products).where(eq(products.id, venue.bread));
@@ -289,8 +289,8 @@ it("keeps independently fresh corrections for two entered languages on one item"
             {},
             {
               corrections: [
-                { field: "ca", wrong: "CLIENT-CA Pa", right: "CLIENT-CA Pà" },
-                { field: "es", wrong: "CLIENT-ES Pan", right: "CLIENT-ES Panes" },
+                { field: "ca", wrong: "CLIENT-CA Bread", right: "CLIENT-CA Corrected bread" },
+                { field: "es", wrong: "CLIENT-ES Bread", right: "CLIENT-ES Loaves" },
               ],
             },
           ),
@@ -323,8 +323,8 @@ it("keeps independently fresh corrections for two entered languages on one item"
       expected,
       fix:
         language === "ca"
-          ? { field: "ca", wrong: "CLIENT-CA Pa", right: "CLIENT-CA Pà" }
-          : { field: "es", wrong: "CLIENT-ES Pan", right: "CLIENT-ES Panes" },
+          ? { field: "ca", wrong: "CLIENT-CA Bread", right: "CLIENT-CA Corrected bread" }
+          : { field: "es", wrong: "CLIENT-ES Bread", right: "CLIENT-ES Loaves" },
       stale: false,
       text: null,
     })),

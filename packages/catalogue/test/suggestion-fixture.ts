@@ -68,7 +68,10 @@ export interface SuggestionVenue {
 }
 
 /** A venue in ca (the default), es and en, whose menu is named in all three. */
-export async function seedSuggestionVenue(db: Database): Promise<SuggestionVenue> {
+export async function seedSuggestionVenue(
+  db: Database,
+  breadCustomerName: Record<string, string> = { ca: "CLIENT-CA Pa" },
+): Promise<SuggestionVenue> {
   await seedTenant(db);
   return withTransaction(db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] });
@@ -76,7 +79,7 @@ export async function seedSuggestionVenue(db: Database): Promise<SuggestionVenue
       name: "STAFF Carta",
       names: { ca: "CLIENT-CA Carta", es: "CLIENT-ES Carta", en: "CLIENT-EN Menu" },
     });
-    const bread = await addProduct(tx, menu.id, "Bread", { ca: "CLIENT-CA Pa" });
+    const bread = await addProduct(tx, menu.id, "Bread", breadCustomerName);
     const wine = await addProduct(tx, menu.id, "Wine", null);
     const cheese = await addProduct(tx, menu.id, "Cheese", {
       ca: "CLIENT-CA Formatge",

@@ -273,6 +273,20 @@ fixture gives the three DIFFERENT text**, or the test passes whether the surface
 name or the wrong one. Cost: a report reading the diner's wording, recorded above the fixtures in
 `packages/reporting/src/top-sellers.test.ts`.
 
+## Unit names on future orders
+
+Give a unit its own staff name and abbreviation. Translated names and abbreviations can both
+be empty. `unitPresentation` resolves each field from the requested enabled language, then the
+default, then its staff value. The two fields resolve independently.
+
+A newly priced line uses the published unit facts: its receipt map holds the default abbreviation
+or staff abbreviation under the default key, while its line context holds the full unit name.
+The server prepares these through `prepareUnitSnapshot` and `newCustomerText`; the till uses
+the same preparation for previews. Changing a unit requires publication before new orders use
+it. Retained lines and reprints keep their recorded maps. The parent, added-extra, retained-pick
+and recalled-carrier cases in `apps/server/src/working-order.test.ts`, and the complete stored-row
+comparison in `apps/server/src/till-api.receipt.test.ts`, exercise these boundaries.
+
 ## The translation gap report
 
 When you leave a translation blank, it remains a gap even if a staff name makes the item
@@ -337,6 +351,12 @@ does not change the 20-language Cloud contract documented in the open Translate 
 
 ## Content languages per region
 
+**2026-10-17, A682:** Spanish stays enabled throughout Spain, including the Basque Country,
+Navarre and an unknown province. This is an enabled-language rule: you can save blank Spanish
+customer text and it remains a gap. Other regional defaults, additional enabled languages,
+notices and receipt choices keep their separate rules. This supersedes the Spanish exceptions
+in the historical decisions below.
+
 **2026-10-08, A419:** Valencian is a separate content language, `ca-ES-valencia`.
 Spain offers it alongside Catalan. New venues in the Valencian Community start with Valencian
 as the default, Spanish and English; Valencian and Spanish are required there. Existing Catalan
@@ -365,7 +385,7 @@ ANSWERS"):
   Catalonia, the Valencian Community and the Balearic Islands; Galician in Galicia), Spanish
   elsewhere; the venue can still change it.
 
-As built (W109-6): Spain's pack requires Spanish in every area it
+Historical implementation (W109-6), before A682: Spain's pack requires Spanish in every area it
 does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to the regional
 language in the Valencian Community, the Balearic Islands and Galicia, and a new venue starts with
 `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`): its default,
@@ -373,7 +393,7 @@ its area's required languages, then English. The dashboard's required-language m
 Waitron keeps the language enabled for the region, not that the region requires it. The new rules reach existing venues
 at their next start; only their stored language list waits for a reset.
 
-As built for the demo (W109-4): a demo keeps the languages setup gives
+Historical demo implementation (W109-4): a demo keeps the languages setup gives
 its area (except a pack with no data set of its own: English is its default, its languages are
 English plus the area's required ones, and a required language the set has no text in is listed
 as missing, W109-2), writes every customer-facing text in each of them

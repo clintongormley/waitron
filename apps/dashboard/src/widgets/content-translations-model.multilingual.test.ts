@@ -43,7 +43,7 @@ const suggestion = (
   itemId: target.id,
   item: { name: target.staffText ?? target.id },
   language: target.language,
-  text: "Croqueta sugerida",
+  text: "Croquette sugerida",
   placeholder: false,
   fix: null,
   stale: false,
@@ -67,12 +67,12 @@ describe("multilingual translation drafts", () => {
     const unit = cell({ kind: "unit", owners: { kind: "unit" } });
     const abbreviation = cell({ ...unit, field: "abbreviation", staffText: "kg" });
     const drafts = new TranslationDrafts(config, [one, french, unit, abbreviation]);
-    drafts.edit(one, "  Croqueta  ");
+    drafts.edit(one, "  Croquette  ");
     drafts.edit(french, "Croquette");
-    drafts.edit(unit, "Kilogramo");
+    drafts.edit(unit, "Kilogram");
     drafts.edit(abbreviation, "kg");
     drafts.receive(page([cell({ id: "other" })]));
-    expect(drafts.value(one)).toBe("  Croqueta  ");
+    expect(drafts.value(one)).toBe("  Croquette  ");
     expect(drafts.value(french)).toBe("Croquette");
     expect(drafts.value(abbreviation)).toBe("kg");
     expect(drafts.staged()).toEqual([ref(one), ref(french), ref(unit), ref(abbreviation)]);
@@ -84,7 +84,7 @@ describe("multilingual translation drafts", () => {
           language: "es",
           field: "name",
           expected: "original",
-          text: "Croqueta",
+          text: "Croquette",
         },
         {
           kind: "product",
@@ -100,7 +100,7 @@ describe("multilingual translation drafts", () => {
           language: "es",
           field: "name",
           expected: "original",
-          text: "Kilogramo",
+          text: "Kilogram",
         },
         {
           kind: "unit",
@@ -114,7 +114,7 @@ describe("multilingual translation drafts", () => {
     });
   });
   it("submits an intentional clear as null and retains it across refresh and suggestions", () => {
-    const one = cell({ text: "Croqueta", effectiveText: "Croqueta" });
+    const one = cell({ text: "Croquette", effectiveText: "Croquette" });
     const drafts = new TranslationDrafts(config, [one]);
     drafts.edit(one, " \n ");
     drafts.receive(page([one]));
@@ -177,7 +177,7 @@ describe("multilingual translation drafts", () => {
     expect(drafts.validate()).toEqual([]);
     drafts.unstage(one);
     drafts.suggest([suggestion(one)]);
-    expect(drafts.value(one)).toBe("Croqueta sugerida");
+    expect(drafts.value(one)).toBe("Croquette sugerida");
   });
   it("fills only eligible empty saved and empty personal cells in their exact languages", () => {
     const empty = cell(),
@@ -195,8 +195,8 @@ describe("multilingual translation drafts", () => {
     drafts.suggest(
       [empty, named, inherited, personal, off, french].map((target) => suggestion(target)),
     );
-    expect(drafts.value(empty)).toBe("Croqueta sugerida");
-    expect(drafts.value(french)).toBe("Croqueta sugerida");
+    expect(drafts.value(empty)).toBe("Croquette sugerida");
+    expect(drafts.value(french)).toBe("Croquette sugerida");
     expect(drafts.value(named)).toBe("Saved");
     expect(drafts.value(inherited)).toBe("");
     expect(drafts.value(personal)).toBe("My words");
@@ -211,14 +211,14 @@ describe("multilingual translation drafts", () => {
     expect(drafts.personalSubmission()).toEqual({ edits: [] });
     expect(drafts.origin(one)).toBe("suggested");
     drafts.edit(one, "Other");
-    drafts.edit(one, "Croqueta sugerida");
+    drafts.edit(one, "Croquette sugerida");
     drafts.suggest([suggestion(one, { text: "New arrival" })]);
-    expect(drafts.value(one)).toBe("Croqueta sugerida");
+    expect(drafts.value(one)).toBe("Croquette sugerida");
     expect(drafts.origin(one)).toBe("personal");
     expect(drafts.suggestedCount).toBe(0);
-    expect(drafts.personalSubmission().edits[0]?.text).toBe("Croqueta sugerida");
+    expect(drafts.personalSubmission().edits[0]?.text).toBe("Croquette sugerida");
     drafts.discardSuggestion(suggestion(one).id);
-    expect(drafts.value(one)).toBe("Croqueta sugerida");
+    expect(drafts.value(one)).toBe("Croquette sugerida");
   });
   it.each([
     { label: "stale", overrides: { stale: true } },
@@ -408,7 +408,7 @@ describe("multilingual translation drafts", () => {
     expect(drafts.origin(one)).toBeNull();
     expect(drafts.personalSubmission()).toEqual({ edits: [] });
     drafts.suggest([suggestion(two)]);
-    expect(drafts.value(two)).toBe("Croqueta sugerida");
+    expect(drafts.value(two)).toBe("Croquette sugerida");
   });
   it("Use fix stages exactly right on the inclusion with its latest Save token", () => {
     const one = cell({
@@ -420,14 +420,14 @@ describe("multilingual translation drafts", () => {
         includedMenuId: "child",
         includedRootId: "root",
       },
-      inheritedText: "Croqeta",
-      effectiveText: "Croqeta",
+      inheritedText: "Croqette",
+      effectiveText: "Croqette",
       expected: "current-token",
     });
     const drafts = new TranslationDrafts(config, [one]);
     const fix = suggestion(one, {
       text: null,
-      fix: { field: "es", wrong: "Croqeta", right: "Croqueta" },
+      fix: { field: "es", wrong: "Croqette", right: "Croquette" },
     });
     expect(drafts.useFix(fix, one)).toBe("staged");
     drafts.suggest([suggestion(one, { text: "Later translation" })]);
@@ -440,7 +440,7 @@ describe("multilingual translation drafts", () => {
           language: "es",
           field: "name",
           expected: "current-token",
-          text: "Croqueta",
+          text: "Croquette",
         },
       ],
     });
@@ -541,9 +541,9 @@ describe("multilingual translation drafts", () => {
     const submitted = drafts.submission();
     drafts.edit(two, "Unsent");
     drafts.commit(submitted, [
-      cell({ text: "Croqueta sugerida", effectiveText: "Croqueta sugerida", expected: "saved" }),
+      cell({ text: "Croquette sugerida", effectiveText: "Croquette sugerida", expected: "saved" }),
     ]);
-    expect(drafts.value(one)).toBe("Croqueta sugerida");
+    expect(drafts.value(one)).toBe("Croquette sugerida");
     expect(drafts.origin(one)).toBeNull();
     expect(drafts.suggestedCount).toBe(0);
     expect(drafts.personalSubmission().edits.map((edit) => edit.text)).toEqual(["Unsent"]);
@@ -869,7 +869,11 @@ it("retains every submitted draft and its original evidence for explicit review 
   const original = JSON.stringify(submitted);
   drafts.receive(
     page([
-      cell({ text: "Croqueta sugerida", effectiveText: "Croqueta sugerida", expected: "saved-es" }),
+      cell({
+        text: "Croquette sugerida",
+        effectiveText: "Croquette sugerida",
+        expected: "saved-es",
+      }),
       cell({ language: "fr", text: "Autre", effectiveText: "Autre", expected: "latest-fr" }),
     ]),
   );
@@ -879,7 +883,7 @@ it("retains every submitted draft and its original evidence for explicit review 
   expect(drafts.staged()).toEqual([ref(clear), ref(one)]);
   expect(drafts.baseline(one)?.expected).toBe("original");
   expect(drafts.baseline(clear)?.text).toBe("Avant");
-  expect(drafts.value(one)).toBe("Croqueta sugerida");
+  expect(drafts.value(one)).toBe("Croquette sugerida");
   expect(drafts.value(clear)).toBe("");
   expect(drafts.origin(one)).toBe("personal");
   expect(drafts.validate().map((fault) => fault.cell.language)).toEqual(["fr", "es"]);

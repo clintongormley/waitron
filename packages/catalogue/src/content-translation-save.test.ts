@@ -45,7 +45,7 @@ async function fixture() {
     const menu = await createCatalogue(tx, { name: "STAFF menu", names: { es: "CLIENT menu" } });
     const child = await createCatalogue(tx, {
       name: "STAFF child",
-      names: { es: "CLIENT raíz", en: "CLIENT root" },
+      names: { es: "CLIENT root", en: "CLIENT root" },
     });
     const product = await createProduct(tx, {
       catalogueId: menu.id,
@@ -53,7 +53,7 @@ async function fixture() {
       unitId: null,
       name: "STAFF bread",
       kitchenName: "KITCHEN bread",
-      customerName: { es: "CLIENT pan", en: "CLIENT bread", fr: "CLIENT pain" },
+      customerName: { es: "CLIENT ES bread", en: "CLIENT bread", fr: "CLIENT pain" },
       unitPrice: "3.00",
       vatClass: "reduced",
     });
@@ -64,12 +64,12 @@ async function fixture() {
         parentId: product.id,
         name: "STAFF small",
         kitchenName: "KITCHEN small",
-        customerName: { es: "CLIENT pequeño" },
+        customerName: { es: "CLIENT small" },
       })
       .returning();
     const [list] = await tx
       .insert(optionLists)
-      .values({ name: "STAFF option", customerName: { es: "CLIENT opción" } })
+      .values({ name: "STAFF option", customerName: { es: "CLIENT option" } })
       .returning();
     const [label] = await tx
       .insert(optionLabels)
@@ -87,7 +87,7 @@ async function fixture() {
       .values({
         internalName: "STAFF section",
         ownerMenuId: menu.id,
-        names: { es: "CLIENT sección" },
+        names: { es: "CLIENT section" },
       })
       .returning();
     const member = await addMember(tx, root, { kind: "section", sectionId: childRoot });
@@ -107,7 +107,7 @@ async function fixture() {
       .values({
         staffName: "STAFF kilogram",
         staffAbbreviation: "kg-staff",
-        name: { es: "CLIENT kilogramo", fr: "CLIENT kilo" },
+        name: { es: "CLIENT kilogram", fr: "CLIENT kilo" },
         abbreviation: { es: "kg", fr: "kilo" },
         precision: 3,
         seedKey: "kilogram",
@@ -260,7 +260,7 @@ describe("atomic multilingual cell saves", () => {
           ref("included_menu", ids.included_menu, "en"),
         ]),
       };
-      batch.edits[0]!.text = "Nueva raíz";
+      batch.edits[0]!.text = "New root";
       batch.edits[1]!.text = null;
       if (reverse) batch.edits.reverse();
       const reply = await save(batch);
@@ -269,13 +269,13 @@ describe("atomic multilingual cell saves", () => {
         text: null,
         effectiveText: "CLIENT root",
         defaultText: null,
-        inheritedDefaultText: "Nueva raíz",
-        effectiveDefaultText: "Nueva raíz",
+        inheritedDefaultText: "New root",
+        effectiveDefaultText: "New root",
       });
       expect(JSON.parse(cell.expected)).toMatchObject({
         selectedText: null,
-        inheritedDefaultText: "Nueva raíz",
-        effectiveDefaultText: "Nueva raíz",
+        inheritedDefaultText: "New root",
+        effectiveDefaultText: "New root",
       });
       expect(await save(batch)).toEqual(reply);
       const [row] = await suite.db
@@ -291,7 +291,7 @@ describe("atomic multilingual cell saves", () => {
     const batch = { edits: await edits([ref("product", ids.product), ref("unit", ids.unit)]) };
     await suite.db
       .update(products)
-      .set({ customerName: { es: "CLIENT pan", en: "New text", fr: "CLIENT pain" } })
+      .set({ customerName: { es: "CLIENT ES bread", en: "New text", fr: "CLIENT pain" } })
       .where(eq(products.id, ids.product));
     const before = await snapshot();
     await expect(save(batch)).rejects.toMatchObject({
@@ -301,7 +301,7 @@ describe("atomic multilingual cell saves", () => {
     expect(await snapshot()).toEqual(before);
     await suite.db
       .update(units)
-      .set({ name: { es: "CLIENT kilogramo", en: "New text", fr: "CLIENT kilo" } })
+      .set({ name: { es: "CLIENT kilogram", en: "New text", fr: "CLIENT kilo" } })
       .where(eq(units.id, ids.unit));
     expect((await save(batch)).saved.map((c) => c.text)).toEqual(["New text", "New text"]);
   });
@@ -555,7 +555,7 @@ describe("translation cell batch boundaries", () => {
     const batch = { edits: await edits([ref("product", ids.product), ref("unit", ids.unit)]) };
     await suite.db
       .update(units)
-      .set({ name: { es: "CLIENT kilogramo", fr: "x".repeat(4097) } })
+      .set({ name: { es: "CLIENT kilogram", fr: "x".repeat(4097) } })
       .where(eq(units.id, ids.unit));
     await suite.db
       .insert(contentSuggestions)
@@ -592,10 +592,10 @@ describe("translation cell batch boundaries", () => {
         ref("option_list", ids.option_list, "es"),
       ]),
     };
-    batch.edits[2]!.text = "CLIENT opción";
+    batch.edits[2]!.text = "CLIENT option";
     await suite.db
       .update(products)
-      .set({ customerName: { es: "CLIENT pan", en: "New text", fr: "CLIENT pain" } })
+      .set({ customerName: { es: "CLIENT ES bread", en: "New text", fr: "CLIENT pain" } })
       .where(eq(products.id, ids.product));
     const before = await snapshot();
     await expect(save(batch)).rejects.toMatchObject({ code: "content.translation_stale" });
@@ -608,7 +608,7 @@ describe("translation cell batch boundaries", () => {
       .update(products)
       .set({
         name: "STAFF renamed",
-        customerName: { es: "CLIENT pan", en: "CLIENT bread", fr: "CLIENT changé" },
+        customerName: { es: "CLIENT ES bread", en: "CLIENT bread", fr: "CLIENT changed" },
       })
       .where(eq(products.id, ids.product));
     const reply = await save(batch);
@@ -616,7 +616,7 @@ describe("translation cell batch boundaries", () => {
     const [row] = await suite.db.select().from(products).where(eq(products.id, ids.product));
     expect(row).toMatchObject({
       name: "STAFF renamed",
-      customerName: { es: "CLIENT pan", en: "New text", fr: "CLIENT changé" },
+      customerName: { es: "CLIENT ES bread", en: "New text", fr: "CLIENT changed" },
     });
   });
   it("does not rewrite maps on a fully final retry while still cleaning saved suggestions", async () => {
@@ -717,7 +717,7 @@ describe("translation cell batch boundaries", () => {
     const ids = await fixture();
     await suite.db
       .update(units)
-      .set({ name: { es: "CLIENT kilogramo" }, abbreviation: { es: "kg" } })
+      .set({ name: { es: "CLIENT kilogram" }, abbreviation: { es: "kg" } })
       .where(eq(units.id, ids.unit));
     await suite.db
       .insert(contentSuggestions)

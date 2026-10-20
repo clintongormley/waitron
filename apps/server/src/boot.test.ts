@@ -2167,7 +2167,7 @@ describe("startServer, against a migrated venue directory", () => {
         tx,
         {
           image: prepared,
-          names: { en: "Bread", es: "Pan" },
+          names: { en: "Bread", es: "Bread" },
         },
         { fallbackLanguage: "es" },
       );
@@ -2421,7 +2421,7 @@ describe("startServer, against a migrated venue directory", () => {
         const soup = await createProduct(tx, {
           catalogueId: menu.id,
           categoryId: food.id,
-          name: "Sopa",
+          name: "Soup",
           pricingUnit: "each",
           unitPrice: "5.00",
           vatClass: "reduced",
@@ -3015,7 +3015,7 @@ describe("startServer — what a trading boot wires behind its management routes
         tx,
         {
           image,
-          names: { [current.defaultLanguage]: "Pan" },
+          names: { [current.defaultLanguage]: "Bread" },
         },
         { fallbackLanguage: current.defaultLanguage },
       ),
@@ -3041,7 +3041,7 @@ describe("startServer — what a trading boot wires behind its management routes
       );
       expect(stored.status).toBe(200);
       expect(((await stored.json()) as { image: { names: unknown } }).image.names).toEqual({
-        [current.defaultLanguage]: "Pan",
+        [current.defaultLanguage]: "Bread",
       });
     } finally {
       const restored = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
@@ -3093,7 +3093,7 @@ describe("startServer — what a trading boot wires behind its management routes
         kind: "product",
         itemId: "boot-notice",
         language: "en",
-        text: "CLIENT-en Pan",
+        text: "CLIENT-en Bread",
         expected: "token",
       });
     });

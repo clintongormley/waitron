@@ -29,9 +29,9 @@ async function fixture(tx: Transaction) {
     categoryId: null,
     name: "STAFF Bread",
     customerName: {
-      es: "CLIENT Pan",
+      es: "CLIENT ES bread",
       en: "CLIENT Bread",
-      ca: "UNREQUESTED Pa",
+      ca: "UNREQUESTED Bread",
       fr: "DISABLED Pain",
     },
     kitchenName: "KITCHEN Bread",
@@ -42,7 +42,7 @@ async function fixture(tx: Transaction) {
   const [unit] = await tx
     .insert(units)
     .values({
-      staffName: "Kilogramo",
+      staffName: "Kilogram",
       staffAbbreviation: "kg",
       name: {},
       abbreviation: {},
@@ -113,7 +113,7 @@ describe("bounded translation field reads", () => {
           id: ids.unit,
           language: "en",
           field: "name",
-          staffText: "Kilogramo",
+          staffText: "Kilogram",
           text: null,
           inheritedText: null,
           effectiveText: null,
@@ -198,7 +198,7 @@ describe("bounded translation field reads", () => {
             field: "name",
             language: "en",
             text: "CLIENT Bread",
-            defaultText: "CLIENT Pan",
+            defaultText: "CLIENT ES bread",
             eligible: true,
             unavailableReason: null,
           },
@@ -214,15 +214,15 @@ describe("bounded translation field reads", () => {
             field: "name",
             language: "fr",
             text: "DISABLED Pain",
-            defaultText: "CLIENT Pan",
+            defaultText: "CLIENT ES bread",
             eligible: false,
             unavailableReason: "language_disabled",
           },
         ]);
         expect(execute).toHaveBeenCalledTimes(2);
         const rows = await Promise.all(execute.mock.results.map((r) => r.value));
-        expect(JSON.stringify(rows)).not.toContain("UNREQUESTED Pa");
-        expect(JSON.stringify(result)).not.toContain("UNREQUESTED Pa");
+        expect(JSON.stringify(rows)).not.toContain("UNREQUESTED Bread");
+        expect(JSON.stringify(result)).not.toContain("UNREQUESTED Bread");
       } finally {
         execute.mockRestore();
       }
@@ -282,7 +282,7 @@ describe("bounded translation field reads", () => {
         .returning();
       const child = await createCatalogue(tx, {
         name: "STAFF Drinks",
-        names: { es: "CLIENT Bebidas", en: "CLIENT Drinks", ca: "CLIENT Begudes" },
+        names: { es: "CLIENT ES drinks", en: "CLIENT Drinks", ca: "CLIENT CA drinks" },
       });
       const [childDetails] = await tx
         .select()
@@ -320,15 +320,15 @@ describe("bounded translation field reads", () => {
         ["menu", null, "STAFF Menu", true],
         ["section", null, "STAFF Mains", true],
         ["included_menu", "CLIENT Folder", "STAFF Drinks", true],
-        ["unit", null, "Kilogramo", true],
+        ["unit", null, "Kilogram", true],
       ]);
       const include = direct.cells[7]!;
       expect(include).toMatchObject({
         inheritedText: "CLIENT Drinks",
         effectiveText: "CLIENT Folder",
         defaultText: null,
-        inheritedDefaultText: "CLIENT Bebidas",
-        effectiveDefaultText: "CLIENT Bebidas",
+        inheritedDefaultText: "CLIENT ES drinks",
+        effectiveDefaultText: "CLIENT ES drinks",
         owners: {
           kind: "included_menu",
           menuId: root.menuId,
@@ -340,7 +340,7 @@ describe("bounded translation field reads", () => {
       expect(JSON.parse(include.expected)).toMatchObject({
         field: "name",
         inheritedSelectedText: "CLIENT Drinks",
-        inheritedDefaultText: "CLIENT Bebidas",
+        inheritedDefaultText: "CLIENT ES drinks",
         structure: {
           role: "menu_root",
           active: true,

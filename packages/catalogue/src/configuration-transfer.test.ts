@@ -10,12 +10,12 @@ describe("validateCatalogueConfiguration: category names", () => {
     expect(() =>
       validateCatalogueConfiguration({
         categories: [
-          { id: "c1", name: "Bebidas" },
-          { id: "c2", name: " bebidas " },
+          { id: "c1", name: "ES drinks" },
+          { id: "c2", name: " es drinks " },
         ],
         category_details: [{ category_id: "c2", parent_id: null }],
       }),
-    ).toThrowError(refusal("category.name_taken", "bebidas"));
+    ).toThrowError(refusal("category.name_taken", "es drinks"));
   });
 
   it("refuses two categories with one parent sharing a name", () => {
@@ -459,7 +459,7 @@ describe("validateCatalogueConfiguration: Inactive products stay off menus", () 
 describe("explicit unit staff identity on configuration import", () => {
   const unit = {
     id: "weight",
-    staff_name: "Kilogramo",
+    staff_name: "Kilogram",
     staff_abbreviation: "kg",
     name: {},
     abbreviation: {},

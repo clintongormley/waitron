@@ -1,7 +1,13 @@
 import { allergensFromChoices } from "./allergen-choices.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { registerIcons, setContentLanguages, setHelpMode, type ComboboxOption, type WtHelpTooltip } from "@waitron/ui";
+import {
+  registerIcons,
+  setContentLanguages,
+  setHelpMode,
+  type ComboboxOption,
+  type WtHelpTooltip,
+} from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import {
@@ -22,6 +28,7 @@ import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { formatMoney } from "@waitron/shared";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 import { EACH_CHOICE } from "./variant-table.js";
@@ -76,7 +83,10 @@ it("keeps a variant's explicit empty diet when only its allergens change", async
 
 it.each([
   { locale: "en-GB", labels: ["Each", "Apple (a)", "Litre (su)", "Zucchini (z)"] },
-  { locale: "es-ES", labels: ["Unidad", "Calabacín (z)", "Litre (su)", "Manzana (a)"] },
+  {
+    locale: "es-ES",
+    labels: [es["editor.unit_each"], "Aubergine (z)", "Litre (su)", "Zed apple (a)"],
+  },
 ])(
   "sorts pricing units in the dashboard language $locale in a Catalan venue",
   async ({ locale, labels }) => {
@@ -89,7 +99,7 @@ it.each([
           staffName: "Staff unit",
           staffAbbreviation: "su",
           id: "random-first",
-          name: { ca: "Albergínia", en: "Zucchini", es: "Calabacín" },
+          name: { ca: "CA aubergine", en: "Zucchini", es: "Aubergine" },
           abbreviation: { ca: "ca-z", en: "z", es: "z" },
         },
         {
@@ -103,7 +113,7 @@ it.each([
           staffName: "Staff unit",
           staffAbbreviation: "su",
           id: "random-last",
-          name: { ca: "Poma", en: "Apple", es: "Manzana" },
+          name: { ca: "CA apple", en: "Apple", es: "Zed apple" },
           abbreviation: { ca: "ca-a", en: "a", es: "a" },
         },
       ];

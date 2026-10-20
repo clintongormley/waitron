@@ -347,7 +347,7 @@ describe("revealing the exact invalid cell", () => {
       languages: ["en", "es", "fr"],
       targets: [{ kind: "product", id: "001" }],
     });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     expect(input(el)!.error).toBe("");
     expect(button(el, "save").disabled).toBe(false);
   });
@@ -449,7 +449,7 @@ it("a moved option label cannot Keep its old owner's draft", async () => {
 });
 it("routes an abbreviation refusal to that unit field without marking its name", async () => {
   const fields: TranslationCell[] = [
-    { ...cell("kg"), kind: "unit", owners: { kind: "unit" }, staffText: "Kilogramo" },
+    { ...cell("kg"), kind: "unit", owners: { kind: "unit" }, staffText: "Kilogram" },
     {
       ...cell("kg"),
       kind: "unit",
@@ -476,7 +476,7 @@ it("routes an abbreviation refusal to that unit field without marking its name",
   const { el } = await mount({
     getContentTranslationTargets: vi.fn(async () =>
       result([
-        { kind: "unit", id: "kg", name: "Kilogramo", owners: { kind: "unit" }, cells: fields },
+        { kind: "unit", id: "kg", name: "Kilogram", owners: { kind: "unit" }, cells: fields },
       ]),
     ),
     getContentTranslationCells: vi.fn(async () => ({
@@ -493,7 +493,7 @@ it("routes an abbreviation refusal to that unit field without marking its name",
     )!;
   await control("abbreviation").updateComplete;
   await control("name").updateComplete;
-  await userEvent.fill(control("name").shadowRoot!.querySelector("input")!, "Kilogramo cliente");
+  await userEvent.fill(control("name").shadowRoot!.querySelector("input")!, "Customer kilogram");
   await userEvent.fill(control("abbreviation").shadowRoot!.querySelector("input")!, "K");
   button(el, "save").click();
   await vi.waitFor(() => expect(control("abbreviation").error).toBe(codeMessage("unit.invalid")));
@@ -501,7 +501,7 @@ it("routes an abbreviation refusal to that unit field without marking its name",
     expect(control("abbreviation").shadowRoot!.activeElement?.tagName).toBe("INPUT"),
   );
   expect(control("name").error).toBe("");
-  expect(control("name").value).toBe("Kilogramo cliente");
+  expect(control("name").value).toBe("Customer kilogram");
   expect(button(el, "save").disabled).toBe(false);
   await userEvent.fill(control("abbreviation").shadowRoot!.querySelector("input")!, "kg");
   button(el, "save").click();
@@ -513,7 +513,7 @@ it("routes an abbreviation refusal to that unit field without marking its name",
         id: "kg",
         language: "es",
         field: "name",
-        text: "Kilogramo cliente",
+        text: "Customer kilogram",
         expected: "v1-kg-es",
       },
       {
@@ -530,8 +530,8 @@ it("routes an abbreviation refusal to that unit field without marking its name",
     saved: [
       {
         ...fields[0]!,
-        text: "Kilogramo cliente",
-        effectiveText: "Kilogramo cliente",
+        text: "Customer kilogram",
+        effectiveText: "Customer kilogram",
         expected: "saved-name",
       },
       { ...fields[1]!, text: "kg", effectiveText: "kg", expected: "saved" },
@@ -705,7 +705,7 @@ describe("explicit review of an uncertain batch", () => {
     const save = vi
       .fn()
       .mockRejectedValueOnce({ code: "connection.failed" })
-      .mockResolvedValue({ saved: [cell("001", "es", "Sopa")] });
+      .mockResolvedValue({ saved: [cell("001", "es", "Soup")] });
     const { el, api } = await mount({
       saveContentTranslations: save,
       getContentTranslationCells: vi.fn(async () => {
@@ -713,7 +713,7 @@ describe("explicit review of an uncertain batch", () => {
         return { ...result(), cells: [cell("001")] };
       }),
     });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     button(el, "save").click();
     await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
     const submitted = save.mock.calls[0]![0];

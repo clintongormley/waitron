@@ -368,7 +368,7 @@ describe("Translate all suggestions as drafts", () => {
         suggestions: [suggestion("s1", "one"), suggestion("s2", "two")],
       }),
     );
-    await edit(el, "two", "Croqueta casera");
+    await edit(el, "two", "Croquette casera");
     expect(note(el, "s2")!.textContent).not.toContain(t("suggestions.suggested"));
     await edit(el, "three", "Pan");
     await click(el, "save");
@@ -376,7 +376,7 @@ describe("Translate all suggestions as drafts", () => {
     expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
       edits: [
         submitted("one", "CLIENT-es one"),
-        submitted("two", "Croqueta casera"),
+        submitted("two", "Croquette casera"),
         submitted("three", "Pan"),
       ],
     });
@@ -1670,11 +1670,7 @@ describe.each(["light", "dark"] as const)("capacity status accessibility (%s)", 
         for (const language of ["en", "es"])
           await edit(el, row.id, `Personal ${language} ${row.id}`, language);
       const message = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[role=status]")].find(
-        (node) =>
-          node.textContent!.trim() ===
-          (locale === "en-GB"
-            ? "This batch has reached its 100-field limit."
-            : "Este lote ha llegado al límite de 100 campos."),
+        (node) => node.textContent!.trim() === t("translations.batch_full"),
       );
       expect(message).toBeDefined();
       expect(save(el).disabled).toBe(false);

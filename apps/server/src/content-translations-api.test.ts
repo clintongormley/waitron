@@ -162,7 +162,7 @@ async function fixture() {
     });
     const child = await createCatalogue(tx, {
       name: "STAFF Drinks",
-      names: { es: "CLIENT Bebidas" },
+      names: { es: "CLIENT ES drinks" },
     });
     const roots = await tx.select().from(menuDetails);
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
@@ -173,7 +173,7 @@ async function fixture() {
       unitId: null,
       name: "STAFF Bread",
       kitchenName: "KITCHEN Bread",
-      customerName: { es: "CLIENT Pan" },
+      customerName: { es: "CLIENT ES bread" },
       unitPrice: "3.00",
       vatClass: "reduced",
     });
@@ -184,7 +184,7 @@ async function fixture() {
         {
           name: "STAFF Small",
           kitchenName: "KITCHEN Small",
-          customerName: { es: "CLIENT Pequeño" },
+          customerName: { es: "CLIENT ES small" },
           unitPrice: "2.00",
           image: null,
           available: true,
@@ -197,7 +197,7 @@ async function fixture() {
       .values({
         name: "STAFF Doneness",
         kitchenName: "KITCHEN Doneness",
-        customerName: { es: "CLIENT Punto" },
+        customerName: { es: "CLIENT Cooking" },
       })
       .returning();
     const [label] = await tx
@@ -206,7 +206,7 @@ async function fixture() {
         listId: list!.id,
         name: "STAFF Rare",
         kitchenName: "KITCHEN Rare",
-        customerName: { es: "CLIENT Poco" },
+        customerName: { es: "CLIENT Rare" },
         available: false,
       })
       .returning();
@@ -215,7 +215,7 @@ async function fixture() {
       .values({
         name: "STAFF Sides",
         kitchenName: "KITCHEN Sides",
-        customerName: { es: "CLIENT Guarnición" },
+        customerName: { es: "CLIENT ES side" },
       })
       .returning();
     const [section] = await tx
@@ -229,7 +229,7 @@ async function fixture() {
       member.id,
       {
         showAsFolder: false,
-        overrides: { names: { ca: "CLIENT Begudes" }, color: "#123456", image: null },
+        overrides: { names: { ca: "CLIENT CA drinks" }, color: "#123456", image: null },
       },
       "es",
     );
@@ -238,7 +238,7 @@ async function fixture() {
       .values({
         staffName: "Staff unit",
         staffAbbreviation: "su",
-        name: { es: "CLIENT Ración" },
+        name: { es: "CLIENT Portion" },
         abbreviation: { es: "rac" },
         precision: 2,
       })
@@ -304,7 +304,7 @@ describe("inline translation routes", () => {
     const input = await batch(kinds.map((kind) => ({ kind, id: ids[kind] })));
     await suite.db
       .update(products)
-      .set({ customerName: { es: "CLIENT Pan", en: "Other person's name" } })
+      .set({ customerName: { es: "CLIENT ES bread", en: "Other person's name" } })
       .where(eq(products.id, ids.product));
     const response = await send("PUT", input);
     expect(response.status).toBe(409);
@@ -323,7 +323,7 @@ describe("inline translation routes", () => {
     const ids = await fixture();
     await suite.db
       .update(products)
-      .set({ customerName: { es: "CLIENT Pan", "!!": "Invalid key" } })
+      .set({ customerName: { es: "CLIENT ES bread", "!!": "Invalid key" } })
       .where(eq(products.id, ids.product));
     const input = await batch([{ kind: "product", id: ids.product }]);
     const response = await send("PUT", input);
@@ -343,7 +343,7 @@ describe("inline translation routes", () => {
     });
     await suite.db
       .update(products)
-      .set({ customerName: { es: "CLIENT Pan" } })
+      .set({ customerName: { es: "CLIENT ES bread" } })
       .where(eq(products.id, ids.product));
     expect((await send("PUT", input)).status).toBe(200);
   });

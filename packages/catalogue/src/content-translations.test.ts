@@ -54,7 +54,7 @@ async function fixture() {
     });
     const child = await createCatalogue(tx, {
       name: "STAFF Drinks",
-      names: { es: "CLIENT Bebidas" },
+      names: { es: "CLIENT ES drinks" },
     });
     const roots = await tx.select().from(menuDetails);
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
@@ -65,7 +65,7 @@ async function fixture() {
       unitId: null,
       name: "STAFF Bread",
       kitchenName: "KITCHEN Bread",
-      customerName: { es: "CLIENT Pan" },
+      customerName: { es: "CLIENT ES bread" },
       unitPrice: "3.00",
       vatClass: "reduced",
     });
@@ -76,7 +76,7 @@ async function fixture() {
         {
           name: "STAFF Small",
           kitchenName: "KITCHEN Small",
-          customerName: { es: "CLIENT Pequeño" },
+          customerName: { es: "CLIENT ES small" },
           unitPrice: "2.00",
           image: null,
           available: true,
@@ -89,7 +89,7 @@ async function fixture() {
       .values({
         name: "STAFF Doneness",
         kitchenName: "KITCHEN Doneness",
-        customerName: { es: "CLIENT Punto" },
+        customerName: { es: "CLIENT Cooking" },
       })
       .returning();
     const [label] = await tx
@@ -98,7 +98,7 @@ async function fixture() {
         listId: list!.id,
         name: "STAFF Rare",
         kitchenName: "KITCHEN Rare",
-        customerName: { es: "CLIENT Poco" },
+        customerName: { es: "CLIENT Rare" },
         available: false,
       })
       .returning();
@@ -107,7 +107,7 @@ async function fixture() {
       .values({
         name: "STAFF Sides",
         kitchenName: "KITCHEN Sides",
-        customerName: { es: "CLIENT Guarnición" },
+        customerName: { es: "CLIENT ES side" },
       })
       .returning();
     const [section] = await tx
@@ -121,7 +121,7 @@ async function fixture() {
       member.id,
       {
         showAsFolder: false,
-        overrides: { names: { ca: "CLIENT Begudes" }, color: "#123456", image: null },
+        overrides: { names: { ca: "CLIENT CA drinks" }, color: "#123456", image: null },
       },
       "es",
     );
@@ -130,7 +130,7 @@ async function fixture() {
       .values({
         staffName: "Staff unit",
         staffAbbreviation: "su",
-        name: { es: "CLIENT Ración" },
+        name: { es: "CLIENT Portion" },
         abbreviation: { es: "rac" },
         precision: 2,
       })
@@ -297,7 +297,7 @@ describe("atomic content translations", () => {
     await app((tx) =>
       tx
         .update(products)
-        .set({ customerName: { es: "CLIENT Pequeño", en: "Another writer" } })
+        .set({ customerName: { es: "CLIENT ES small", en: "Another writer" } })
         .where(eq(products.id, ids.variant)),
     );
     const before = await app(snapshot);
@@ -313,7 +313,7 @@ describe("atomic content translations", () => {
     await app(async (tx) => {
       await tx
         .update(products)
-        .set({ unitPrice: 475, customerName: { ca: "CLIENT Pa", es: "CLIENT Pan" } })
+        .set({ unitPrice: 475, customerName: { ca: "CLIENT CA bread", es: "CLIENT ES bread" } })
         .where(eq(products.id, ids.product));
       await tx.update(contentLanguages).set({ languages: ["en", "es", "ca"] });
     });
@@ -336,7 +336,7 @@ describe("atomic content translations", () => {
     const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.product));
     expect(stored).toMatchObject({
       unitPrice: 475,
-      customerName: { ca: "CLIENT Pa", es: "CLIENT Pan", en: "CLIENT English product" },
+      customerName: { ca: "CLIENT CA bread", es: "CLIENT ES bread", en: "CLIENT English product" },
     });
   });
   it("equivalent retry returns canonical names without issuing updates", async () => {
@@ -485,20 +485,20 @@ describe("atomic content translations", () => {
     );
     const request = await batch(ids, ["product"]);
     const defaultBatch = await batch(ids, ["product"], "es");
-    defaultBatch.edits[0]!.text = "  CLIENT Pan nuevo  ";
+    defaultBatch.edits[0]!.text = "  CLIENT ES bread new  ";
     request.edits.push(...defaultBatch.edits);
     const first = await app((tx) => saveContentTranslations(tx, request, context));
     expect(first.saved[0]).toMatchObject({
       language: "en",
       field: "name",
       text: "CLIENT English product",
-      defaultText: "CLIENT Pan nuevo",
+      defaultText: "CLIENT ES bread new",
     });
     expect(first.saved[1]).toMatchObject({
       language: "es",
       field: "name",
-      text: "CLIENT Pan nuevo",
-      defaultText: "CLIENT Pan nuevo",
+      text: "CLIENT ES bread new",
+      defaultText: "CLIENT ES bread new",
     });
     const second = await app(async (tx) => {
       const spy = vi.spyOn(tx, "update");
@@ -559,19 +559,14 @@ describe("atomic content translations", () => {
           language,
           field,
           expected,
-          text:
-            language === "es"
-              ? "Root Español"
-              : kind === "menu"
-                ? "Root English"
-                : "Folder English",
+          text: language === "es" ? "ES root" : kind === "menu" ? "Root English" : "Folder English",
         })),
       }));
       const first = await app((tx) => saveContentTranslations(tx, request, context));
       expect(first.saved.find((row) => row.kind === "included_menu")).toMatchObject({
         text: "Folder English",
         defaultText: null,
-        effectiveDefaultText: "Root Español",
+        effectiveDefaultText: "ES root",
       });
       const before = await app(snapshot);
       expect(await app((tx) => saveContentTranslations(tx, request, context))).toEqual(first);
@@ -598,8 +593,8 @@ describe("atomic content translations", () => {
       const ids = await fixture();
       if (mode === "unset") await app((tx) => tx.delete(contentLanguages));
       for (const writer of [
-        () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "Only català" } })),
-        () => app((tx) => updateSection(tx, ids.section, { names: { ca: "Only català" } }, "es")),
+        () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "CA only" } })),
+        () => app((tx) => updateSection(tx, ids.section, { names: { ca: "CA only" } }, "es")),
         () =>
           app((tx) =>
             setIncludeFolder(
@@ -608,7 +603,7 @@ describe("atomic content translations", () => {
               ids.included_menu,
               {
                 showAsFolder: false,
-                overrides: { names: { ca: "Only català", es: "", en: "" } },
+                overrides: { names: { ca: "CA only", es: "", en: "" } },
               },
               "es",
             ),
@@ -624,13 +619,13 @@ describe("atomic content translations", () => {
         const rows = await suite.db
           .select({ id: sections.id, names: sections.names })
           .from(sections);
-        expect(rows.find((row) => row.id === ids.menu)!.names).toEqual({ ca: "Only català" });
-        expect(rows.find((row) => row.id === ids.section)!.names).toEqual({ ca: "Only català" });
+        expect(rows.find((row) => row.id === ids.menu)!.names).toEqual({ ca: "CA only" });
+        expect(rows.find((row) => row.id === ids.section)!.names).toEqual({ ca: "CA only" });
         const [member] = await suite.db
           .select()
           .from(sectionMembers)
           .where(eq(sectionMembers.id, ids.included_menu));
-        expect(member!.folderOverrides).toEqual({ names: { ca: "Only català" } });
+        expect(member!.folderOverrides).toEqual({ names: { ca: "CA only" } });
       }
       if (mode === "unset") {
         await expect(
@@ -791,14 +786,14 @@ describe("atomic content translations", () => {
         language,
         field,
         expected,
-        text: kind === "menu" ? "Root español" : "Folder español",
+        text: kind === "menu" ? "ES root" : "ES folder",
       })),
     }));
     const first = await app((tx) => saveContentTranslations(tx, request, context));
     expect(first.saved[0]).toMatchObject({
-      text: "Folder español",
-      defaultText: "Folder español",
-      effectiveDefaultText: "Folder español",
+      text: "ES folder",
+      defaultText: "ES folder",
+      effectiveDefaultText: "ES folder",
     });
     expect(await app((tx) => saveContentTranslations(tx, request, context))).toEqual(first);
   });
@@ -883,7 +878,7 @@ describe("atomic content translations", () => {
     await app((tx) =>
       tx
         .update(units)
-        .set({ name: { es: "CLIENT Ración", "!!": "Invalid language" } })
+        .set({ name: { es: "CLIENT Portion", "!!": "Invalid language" } })
         .where(eq(units.id, ids.unit)),
     );
     const request = await batch(ids, ["product", "unit"]);
@@ -974,7 +969,7 @@ it("saves only customer names on an explicitly selected archived product", async
   const request = await batch(ids, ["product"]);
   await app((tx) => saveContentTranslations(tx, request, context));
   const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.product));
-  expect(stored!.customerName).toEqual({ es: "CLIENT Pan", en: "CLIENT English product" });
+  expect(stored!.customerName).toEqual({ es: "CLIENT ES bread", en: "CLIENT English product" });
   const after = await app(snapshot);
   expect(after).toEqual({
     ...before,
@@ -997,7 +992,7 @@ it.each(["variant", "parent"] as const)(
     const request = await batch(ids, ["variant"]);
     await app((tx) => saveContentTranslations(tx, request, context));
     const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.variant));
-    expect(stored!.customerName).toEqual({ es: "CLIENT Pequeño", en: "CLIENT English variant" });
+    expect(stored!.customerName).toEqual({ es: "CLIENT ES small", en: "CLIENT English variant" });
   },
 );
 

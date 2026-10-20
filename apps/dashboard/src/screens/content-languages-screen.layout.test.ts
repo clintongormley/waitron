@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { languageDisplayName } from "@waitron/shared";
 import { registerIcons } from "@waitron/ui";
 import type { DashboardApi } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -63,7 +64,7 @@ describe.each(["light", "dark"] as const)("regional translation warnings (%s)", 
         expect(note.textContent!.trim()).toBe(
           t("content_gaps.required_warning")
             .replace("{count}", "12345")
-            .replace("{language}", locale === "en-GB" ? "Catalan" : "catalán"),
+            .replace("{language}", languageDisplayName("ca", locale, false)),
         );
         const style = getComputedStyle(note);
         expect(style.whiteSpace).toBe("normal");

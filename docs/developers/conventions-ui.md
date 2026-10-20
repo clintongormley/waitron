@@ -280,6 +280,11 @@ because a till runs full screen and has no tab bar to come back by (the design,
 
 ## A refusal reaches a field by what the error carries, not by one parameter name
 
+**2026-10-20, A682:** customer-name writes no longer require default-language text. The account
+below records the former translation refusal and its retained UI mapping tests. Image writes
+still use the strict translated-name validator. Current multilingual translation-save refusals
+identify the item, language and field, as described in [products.md](products.md#the-translation-gap-report).
+
 The product editor binds a refused save to an editor field. `product.invalid` carries the `field` it
 is about, but `content.translation_required` — the refusal the editor's own translated inputs
 produce — carries only the missing `language`, and one product save can have several translated

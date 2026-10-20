@@ -158,10 +158,10 @@ describe("bounded multilingual translation editor", () => {
         cells: refs.map((ref) => cell(ref.id, ref.language)),
       })),
       getContentSuggestions: vi.fn(async () => suggestions()),
-      saveContentTranslations: vi.fn(async () => ({ saved: [cell("001", "es", "Sopa")] })),
+      saveContentTranslations: vi.fn(async () => ({ saved: [cell("001", "es", "Soup")] })),
     };
     const { el, api } = await mount({ background });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     button(el, "save").click();
     await vi.waitFor(() => expect(el.open).toBe(false));
     expect(background.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith({
@@ -180,7 +180,7 @@ describe("bounded multilingual translation editor", () => {
           language: "es",
           field: "name",
           expected: "v1-001-es",
-          text: "Sopa",
+          text: "Soup",
         },
       ],
     });
@@ -265,13 +265,13 @@ describe("bounded multilingual translation editor", () => {
       return query.after ? result([row("051")]) : result([row("001")], cursor("001"));
     });
     const { el } = await mount({ getContentTranslationTargets: items });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     button(el, "next").click();
     await vi.waitFor(() => expect(input(el, "051")).toBeTruthy());
     expect(items).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=hidden-count]")!.textContent).toContain("1");
     button(el, "previous").click();
-    await vi.waitFor(() => expect(input(el)?.value).toBe("Sopa"));
+    await vi.waitFor(() => expect(input(el)?.value).toBe("Soup"));
     expect(items).toHaveBeenCalledTimes(3);
     button(el, "show-edited").click();
     await vi.waitFor(() => expect(items).toHaveBeenCalledTimes(4));
@@ -279,11 +279,11 @@ describe("bounded multilingual translation editor", () => {
       languages: ["en", "es", "fr"],
       targets: [{ kind: "product", id: "001" }],
     });
-    expect(input(el)?.value).toBe("Sopa");
+    expect(input(el)?.value).toBe("Soup");
   });
   it("sends independent Missing in, kind and search filters while retaining personal text", async () => {
     const { el, api } = await mount();
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     await select(el, "missing", "any");
     await vi.waitFor(() =>
       expect(api.getContentTranslationTargets).toHaveBeenLastCalledWith({
@@ -308,7 +308,7 @@ describe("bounded multilingual translation editor", () => {
         search: "soup",
       }),
     );
-    expect(input(el)?.value).toBe("Sopa");
+    expect(input(el)?.value).toBe("Soup");
   });
   it("saves separate languages and a deliberate clear as one exact batch, then closes", async () => {
     const one = row("001");
@@ -346,7 +346,7 @@ describe("bounded multilingual translation editor", () => {
   });
   it("unstages one chosen field while keeping the other language ready to save", async () => {
     const { el, api } = await mount();
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     await edit(el, "Soupe", "001", "fr");
     const unstage = windowFor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
       `[data-unstage='["product","001","es","name"]']`,
@@ -416,9 +416,9 @@ describe("bounded multilingual translation editor", () => {
     const save = vi
       .fn()
       .mockRejectedValueOnce(error)
-      .mockResolvedValueOnce({ saved: [cell("001", "es", "Sopa")] });
+      .mockResolvedValueOnce({ saved: [cell("001", "es", "Soup")] });
     const { el } = await mount({ saveContentTranslations: save });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     button(el, "save").click();
     await vi.waitFor(() => expect(button(el, "save").disabled).toBe(false));
     await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
@@ -457,7 +457,7 @@ describe("bounded multilingual translation editor", () => {
       .fn()
       .mockRejectedValue({ code: "content.translation_stale", params: { scope: "configuration" } });
     const { el } = await mount({ saveContentTranslations: save });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     button(el, "save").click();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBeTruthy(),
@@ -471,7 +471,7 @@ describe("bounded multilingual translation editor", () => {
   it("resumes passive live reads after reconnecting while retaining the personal draft", async () => {
     const liveData = new LiveData();
     const { el, api } = await mount({ liveData });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     const host = el.parentElement!;
     el.remove();
     host.append(el);
@@ -480,7 +480,7 @@ describe("bounded multilingual translation editor", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     liveData.invalidate([{ type: "products" }]);
     await vi.waitFor(() => expect(api.getContentTranslationTargets).toHaveBeenCalledTimes(3));
-    expect(input(el)?.value).toBe("Sopa");
+    expect(input(el)?.value).toBe("Soup");
     expect(button(el, "save").disabled).toBe(false);
   });
   it("keeps Save waiting for the newest filter even when an older read finishes first", async () => {
@@ -492,7 +492,7 @@ describe("bounded multilingual translation editor", () => {
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise);
     const { el } = await mount({ getContentTranslationTargets: items });
-    await edit(el, "Sopa");
+    await edit(el, "Soup");
     await select(el, "search", "first");
     await select(el, "search", "second");
     first.resolve(result());
@@ -504,7 +504,7 @@ describe("bounded multilingual translation editor", () => {
     second.resolve(result());
     await second.promise;
     await vi.waitFor(() => expect(button(el, "save").disabled).toBe(false));
-    expect(input(el)?.value).toBe("Sopa");
+    expect(input(el)?.value).toBe("Soup");
   });
   it("keeps the mounted native input and caret while a language projection is pending and applies", async () => {
     const expanded = {
@@ -520,7 +520,7 @@ describe("bounded multilingual translation editor", () => {
       })
       .mockImplementationOnce(() => pending.promise);
     const { el } = await mount({ getContentTranslationTargets: items });
-    await edit(el, "Sopa original");
+    await edit(el, "Soup original");
     const field = input(el)!;
     const native = field.shadowRoot!.querySelector("input")!;
     native.focus();
@@ -535,7 +535,7 @@ describe("bounded multilingual translation editor", () => {
     await pending.promise;
     await vi.waitFor(() => expect(input(el, "001", "nl")).toBeTruthy());
     expect(input(el)!.shadowRoot!.querySelector("input")).toBe(native);
-    expect(native.value).toBe("Sopa original");
+    expect(native.value).toBe("Soup original");
     expect([native.selectionStart, native.selectionEnd]).toEqual([2, 5]);
   });
 });
@@ -577,7 +577,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         expect(kind.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
           t("content_gaps.kind_all"),
         );
-        await edit(el, "Sopa");
+        await edit(el, "Soup");
         const view = windowFor(el);
         const units = [
           ...view.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
