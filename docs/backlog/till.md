@@ -1777,6 +1777,31 @@ The implementation choices and acceptance cases are in the
   the next Send asks again; keep No allergies only when both parties answered No allergies.
 
 
+### A669. An allergy at the table
+
+Owner-approved [design](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
+2026-10-15: allergy answers belong to a table's party, and a dish belongs to at most one guest.
+The [kitchen plan](../superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md) records the storage
+and presentation choices; the [kitchen guide](../../apps/server/src/guide/en/kitchen-service.md)
+explains the operator behavior.
+
+Cards and reprints retain the original sent instructions. Changed or removed instructions travel
+as separate notices; acknowledging one does not replace the original card. Allergy notices stay
+available until acknowledged, outside the ordinary day and fifty-notice limits. HOLD exposure is
+station-specific: a queued paper job establishes the copy for that station. A new station receives
+an outstanding current-versus-original correction even if the old station acknowledged its copy.
+
+The release requires no outstanding pre-live kitchen work. The migrations retain predecessor rows
+but do not invent historical originals; reset a development venue with outstanding work before
+using this release. No real venue was reset during implementation.
+
+**A773-2 integration:** preserve the `ticket_item_allergies` child before rebuilding `ticket_items`.
+Keep original/current blocks across ticket replacement and financial splits. Freeze at the first
+kitchen exposure, including advance HOLD or future Requested visibility; a later pass release must
+not recapture. Carry the original block through station/pass projections and include allergy
+identity in paper grouping. Keep service-quantity and exact-station correction checks when replacing
+Away/Done. The kitchen capture, lifecycle, reads and atomic suites give the integration controls.
+
 ### An order's number is never reset (owner, 2026-10-16)
 
 A working order's number comes from one counter per node that starts at 1 and only climbs
@@ -2316,58 +2341,6 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
   plan (`buildZoneTabs` takes every zone, `till-floor-screen.ts`); only table zones belong there.
   List and the ⋮ menu sit on their own row above the pills; they move onto the pills' row.
 
-## A669. An allergy at the table
-
-The [combined send/till plan](../superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
-implements the table answer, guest editor, whole-line assignments, live marks and guarded sends
-in one branch. HTTP and restart checks distinguish submitted unticked held dishes from fresh
-drafts, including no-preparation dishes. Counter-to-table moves preview the destination and
-confirm an answer and arriving assignments before adopting the table. The owner approved the
-31 Spanish dialog/heading phrases on 2026-10-20; that answer does not cover kitchen wording.
-
-**A669-4 handoff.** `applyPartyAllergyPatch` in `apps/server/src/party-allergy.ts` returns
-`AllergyChangeSet` within its caller's transaction. Its `before` snapshot retains the old guest and
-ticks after guest deletion; `workingLineIds` includes removed as well as changed assignments.
-On the kitchen branch, all five callers consume that return before committing: the PUT in
-`party-allergy-api.ts`, `submitDraft` in `order-drafts.ts`, `submitGroups` in `order-groups.ts`,
-`prepareAllergyRelease` in `party-allergy.ts`, and `recordAllergy` in `move-bill.ts`.
-`prepareAllergyRelease` serves line, group, held-line and course Fire callers; the move hook runs
-after bill attachment and before zone adoption. Corrections include removal of a deleted guest's
-assignment and follow the surviving party when a paid bill stays on a merged party.
-
-The [reviewed kitchen implementation plan](../superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md)
-defines nine tasks. It captures localized allergen names with kinds alongside their codes, keeps
-original cards separate from corrections and covers all five change-set callers. The storage
-choice adds venue-service migrations. The kitchen branch's
-`kitchen-allergy.upgrade.test.ts` applies them through `applyMigrations` to populated predecessor
-work, compares the retained rows and print payloads, reinstalls change feeds and checks foreign
-keys. New ticket copies start empty; the release still requires no outstanding pre-live kitchen
-work rather than inventing historical originals. First exposure now captures the assigned guest,
-known parent/active-extra clashes and English/Spanish names by value. Fired work freezes without a
-printer; HOLD and added-HOLD corrections freeze only where paper is queued. Paper formatting
-prints the captured blocks, and replacement tickets retain both original and current copies.
-Station and pass reads return the original copy, with explicit null for unticked or unexposed
-work; signed-in and device HTTP checks cover these reads. Station and pass screens show those
-originals; station notices show the corrected block or removal, through the existing
-acknowledgement path. All five change-set callers now enqueue corrections with the remaining
-service quantity, including proportional extras. A HOLD correction goes only to the exact station
-with a frozen paper copy. Allergy notices remain available across business days and outside the
-ordinary fifty-notice limit until acknowledged. Partial and unit splits copy both kitchen blocks
-and the parent assignment, including routed extras. A recall to a draft starts a new kitchen copy
-on resend; a retained-id recall and a station reroute deliver the current correction beside the
-original. Ordinary reprints and firing HOLD work at its existing station add no new correction.
-
-The kitchen atomic tests exercise exact HTTP retries, changed-body refusals and rollback after a
-notice insert for all five callers. Controlled transaction-order cases cover two edits, serving and
-rerouting. Three new server processes per caller retain originals, corrections, print jobs, command
-records and acknowledgement. Eleven installed faults failed their intended assertions and each
-restored run passed.
-
-**Remaining: A669-4.** Update the guides and complete the branch
-review, push hook and current-head CI. Obtain the owner's answer for kitchen paper and notice
-wording before landing. Recheck other lanes' reservations before implementation.
-[Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
-[mockups](mockups/a669-allergy-at-the-table/).
 
 ## Legacy bill moves do not check the source location
 

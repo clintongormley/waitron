@@ -296,3 +296,7 @@ guest there; deleting the last guest leaves the Allergies answer until you chang
 Moving a counter bill to a table also checks that table's answer and offers the arriving dishes.
 Cancel leaves the bill where it is. If the table changes while you answer, review the refreshed
 information and confirm again before the move proceeds.
+
+The kitchen keeps its first allergy copy with each dish. A later change reaches it as a separate
+notice to acknowledge. Read how [kitchen allergy copies and corrections](kitchen-service.md#allergy-copies)
+stay with the work.
