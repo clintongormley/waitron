@@ -16,6 +16,7 @@ import type {
 } from "./api/client.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import { FakeNdefReader, installNfc, READER_ID } from "../test/equipment-nfc.js";
+import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   balanceOf,
   BARRA,
@@ -292,6 +293,11 @@ describe("till-app: a pick from the sheet", () => {
   const row = (el: TillApp) =>
     inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
   const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
+  async function savingNote(el: TillApp): Promise<string> {
+    await dialog(el)!.updateComplete;
+    await row(el)!.updateComplete;
+    return text(row(el)!.shadowRoot!.querySelector('[data-pay-note="card_terminal"]'));
+  }
 
   async function openRow(el: TillApp): Promise<void> {
     await row(el)!.updateComplete;
@@ -447,6 +453,7 @@ describe("till-app: a pick from the sheet", () => {
     emit(dialog(el)!, "bill-pay-close");
     await flush(el);
     await pressPaySheet(el, tableOrder(el));
+    await openRow(el);
     expect(reads).toHaveLength(1);
 
     reads[0]!(readers(LECTOR_2));
@@ -456,11 +463,57 @@ describe("till-app: a pick from the sheet", () => {
 
     expect(reads).toHaveLength(2);
     expect(continueButton(el).disabled).toBe(true);
+    expect(await savingNote(el)).toBe(t("pay_equipment.saving"));
     reads[1]!(readers(LECTOR_3));
     await flush(el);
 
     expect(continueButton(el).disabled).toBe(false);
-    expect(await rowSummary(el)).toContain("Lector 3");
+    expect(await savingNote(el)).toBe("");
+    const combobox = row(el)!.shadowRoot!.querySelector<WtCombobox>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    expect(combobox.value).toBe(READER_ID);
+  });
+
+  it("a read after an overtaken pick that never answers is cut off, and lifts the hold", async () => {
+    const { setDeviceEquipment, answers } = heldPicks();
+    const reads: Array<(equipment: DeviceEquipment) => void> = [];
+    const getDeviceEquipment = vi.fn().mockResolvedValue(readers(LECTOR_2));
+    const el = await phoneSheet({ setDeviceEquipment, getDeviceEquipment });
+    await pickReader(el, "Lector 3");
+    getDeviceEquipment.mockImplementation(
+      (options?: { signal?: AbortSignal }) =>
+        new Promise<DeviceEquipment>((resolve, reject) => {
+          reads.push(resolve);
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    await pressPaySheet(el, tableOrder(el));
+    await openRow(el);
+    reads[0]!(readers(LECTOR_2));
+    await flush(el);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      answers[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(reads).toHaveLength(2);
+      expect(continueButton(el).disabled).toBe(true);
+      expect(await savingNote(el)).toBe(t("pay_equipment.saving"));
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+      await el.updateComplete;
+      await dialog(el)!.updateComplete;
+      expect(continueButton(el).disabled).toBe(false);
+      expect(await savingNote(el)).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("picking the stored reader again while another pick is saving sends it and ends on it", async () => {

@@ -8939,11 +8939,13 @@ export class TillApp extends LitElement {
   }
 
   /** Whether the device answered; either way the equipment held is shown. */
-  async #readEquipment(): Promise<boolean> {
+  async #readEquipment(signal?: AbortSignal): Promise<boolean> {
     const changed = this.#equipmentChanged;
     let answered = true;
     try {
-      const read = await this.api.getDeviceEquipment();
+      const read = await (signal === undefined
+        ? this.api.getDeviceEquipment()
+        : this.api.getDeviceEquipment({ signal }));
       if (changed === this.#equipmentChanged) {
         this.#holdEquipment(read);
       } else {
@@ -8963,10 +8965,15 @@ export class TillApp extends LitElement {
     if (this.equipmentWaiting > 0 || !this.#equipmentStale) return;
     this.#equipmentStale = false;
     this.equipmentRereads++;
+    // A read that is cut off counts as failed, so a server that never answers cannot hold payments.
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      if (!(await this.#readEquipment())) this.#equipmentStale = true;
+      if (!(await this.#readEquipment(limit.signal))) this.#equipmentStale = true;
     } finally {
+      limit.done();
       this.equipmentRereads--;
+      if (this.equipmentRereads === 0 && this.equipmentWaiting === 0)
+        this.payEquipmentSaving = null;
     }
   }
 
@@ -9443,7 +9450,8 @@ export class TillApp extends LitElement {
         detail: { role, selection: { id }, via: "list", takeOver },
       }),
     );
-    if (this.payEquipmentSaving === saving) this.payEquipmentSaving = null;
+    if (this.payEquipmentSaving === saving && this.equipmentRereads === 0)
+      this.payEquipmentSaving = null;
   }
 
   #payingTableName(open: BillPaying): string {
