@@ -2218,6 +2218,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   means the comp took the item's whole list price. An amount comp that takes what another comp left
   prints "Descuento" with its amount. Confirm with the owner when A758-4 is built.
 
+- **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left
+  open by A758-1).** The voids-and-comps form's limit fields use `adjustments.no_limit` as the
+  placeholder beside a hint (`packages/adjustments/src/dashboard/reasons-screen.ts`). By
+  [design-system.md](developers/design-system.md) → Forms a field's hint is its placeholder, so the
+  hint may only reach screen readers. Nobody has looked at the screen to confirm; look, then pick one.
+
+- **A920. The till's approval prompt: the Spanish no longer matches the English (left open by
+  A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
+  responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
+
 - **A918. Starter content in the venue's languages at setup (owner question, left open by A758-1).**
   Starter content a module writes into a new venue is English, translated when the box is set up
   (owner, 2026-10-19), but nothing translates it yet: A758-1's nine void and comp reasons are English
