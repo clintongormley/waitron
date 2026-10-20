@@ -1,7 +1,9 @@
 # A798 — Degraded but trading: what the box does, and tells staff, when a part fails
 
-Status: **design revision 5, after its review round; questions 1 to 3 answered, question 4 open (§9).
-Nothing is built; the build is planned as its own item, A798-B, in the slices of §8.**
+Status: **design revision 6; all four questions answered (question 4: (a), 2026-10-20); the build is
+planned as its own item, A798-B, in the slices of §8. Nothing is built.**
+
+Revision 6, 2026-10-20: the owner's answer to question 4 recorded — (a), as §4.8 b already described.
 
 Revision 5, 2026-10-20: the owner's answer to question 3 applied — (b), stop taking payments while
 the box's clock reads earlier than its last recorded sale. For that case only, this reverses the
@@ -103,8 +105,8 @@ The proposal (§4):
 4. **Clock:** a named refusal for a clock the fiscal rules cannot accept (picture 6), and — the
    owner's answer to question 3 — a stop on taking payment while the box's clock reads earlier than
    its last recorded sale, noticed with no internet (§4.8; pictures 8 and 9). Orders and the kitchen
-   carry on. Whether a manager may restart payments with fresh proof that the clock is right is
-   question 4, open.
+   carry on. A manager may restart payments only with fresh proof that the clock is right — the
+   owner chose (a) for question 4, 2026-10-20 (§4.8 b).
 5. Everything for a box that is still trading lives in the dashboard. The recovery page keeps its one
    job, a box that will not start.
 
@@ -648,7 +650,7 @@ Two examples run through this section:
   ahead, so the last sale was stamped Monday 19 October 23:40. On Monday morning the clock is put
   right and reads Monday 09:12 — fourteen and a half hours before that stamp. Waiting for real time
   to pass it would stop the venue until 23:40 that night. What a manager may do here is question 4
-  (§9), which is open.
+  (§9); the owner chose (a), 2026-10-20 (part b).
 
 **This is an internal check.** It compares the box's own clock with records in its own database,
 with no network involved, so it does not break CLAUDE.md §5's "nothing EXTERNAL may block a sale".
@@ -726,9 +728,8 @@ What does fix it:
    - **A box whose clock is wrong after every power cut** needs hardware that keeps time without
      power; that is added to B3's constraints (`docs/backlog/box.md`).
 2. **When the clock is right and the last sale's time was not (second example)**, nothing done to
-   the clock can clear the stop. This design's default — **question 4 asks the owner to confirm or
-   change it** (§9) — lets a manager restart payments, but only with fresh proof that the box's clock
-   is right:
+   the clock can clear the stop. **The owner chose (a) for question 4, 2026-10-20** (§9): a manager
+   may restart payments, but only with fresh proof that the box's clock is right:
    - **Proof, gathered after the stop began.** Either AEAT's time within a minute of the box's, or at
      least two devices that reported in the last five minutes, each within a minute of the box's
      clock. Any evidence the other way — AEAT, or two devices agreeing with each other — and the
@@ -799,8 +800,7 @@ What does fix it:
      The `incidents` table was the revision-5 draft's choice; it is dropped, because its rows can be
      marked handled and the core's reads skip handled rows (`packages/core/src/incidents.ts:82`,
      `:109`), and nothing in the database stops a row being rewritten
-     (`packages/db/src/schema/incidents.ts:14-16`). The table joins the build's one migration (§7)
-     only if question 4 keeps a restart.
+     (`packages/db/src/schema/incidents.ts:14-16`). The table joins the build's one migration (§7).
    - **The dialog** (picture 9) states only what the box knows: "¿Reanudar los cobros?", then the
      box's clock, the last sale's time, and the proof ("Hacienda: coincide (comprobado 09:13)";
      "Dispositivos: 2 marcan 19/10/2026 09:14"); then "Si reanudas, las ventas siguientes
@@ -1114,8 +1114,9 @@ decisions section and in any CLAUDE.md / backlog text that states the old rule."
 
 ### Decisions revision 5 makes
 
-The owner's answer did not settle these; each is a default the owner may override. Decision 7 is
-also question 4 (§9), because it departs from "until the clock is fixed".
+The owner's answer did not settle these; each is a default the owner may override. Decision 7 was
+asked as question 4 (§9), because it departs from "until the clock is fixed"; the owner chose (a),
+2026-10-20.
 
 1. **"Last recorded sale" means the latest record time in this database**, across every chain it
    holds, of any kind (§4.8 d) — so a restored box, whose new chain starts empty, still compares with
@@ -1139,7 +1140,7 @@ also question 4 (§9), because it departs from "until the clock is fixed".
 7. **A manager may restart payments only with fresh proof the clock is right** — AEAT's time, or two
    devices, within a minute of the box, gathered after the stop began — and only when the box is no
    more than 24 hours behind. No proof, no restart. Holders of `system.manage`, on the dashboard only.
-   **Open as question 4.**
+   **The owner chose (a) for question 4, 2026-10-20.**
 8. **A card charged before the stop is recorded after it, not refunded**: the record is refused, the
    order stays locked, and Pay files it without a second charge once fixed; on a bill the box files
    it by itself. Likewise staff are told to record a card taken on another machine later.
@@ -1148,8 +1149,7 @@ also question 4 (§9), because it departs from "until the clock is fixed".
     at will. Fixing a wrong clock means the internet (once `waitron.sh install` turns on the host's
     time synchronisation) or whoever installed the box.
 11. **Restarts are kept in a new append-only `ledger` table**, one row per restarted record, which
-    the stop reads directly — part of the one migration in the Veri*Factu module's set, if question
-    4 keeps a restart (§7).
+    the stop reads directly — part of the one migration in the Veri*Factu module's set (§7).
 12. **The stop's alert is an error in the "Equipo" area for `system.manage`, and the restart and
     "disproved" alerts show beside it**; `fiscal.clock_drift`, whose words say selling continues, is
     left out of the bell while the stop is on.
@@ -1177,13 +1177,12 @@ asked or held outside the database:
   (`time-health.ts:48-58`); the stop reads the latest record time, which is already stored, so it
   survives a restart without a new table.
 - **The migration** (§4.8 b, d), built in slice 8: an index on
-  `registros_facturacion.fecha_hora_huso_gen_registro`, and, if question 4 keeps a restart, a new
+  `registros_facturacion.fecha_hora_huso_gen_registro`, and a new
   table `clock_stop_restarts`, declared with `appendOnly()` in class `ledger` in the Veri*Factu
   module's classification, so `applyMigrations` refuses its updates and deletes; it
   travels in both the module's migration descriptor and `packages/migrations/migrations.manifest.json`
   (CLAUDE.md §3), with a unique index on the restarted record's id. The index makes the latest
-  record time one index lookup and is wanted whatever question 4's answer, so there is one
-  migration either way.
+  record time one index lookup.
 
 ---
 
@@ -1212,8 +1211,7 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    invariants (nudging the drain)._
 8. **The clock-behind stop** (§4.8 a, d, e): `refuseWhileClockBehind` at the top of every money route
    listed in §4.8 e, the chain check inside the append, the comparison with the latest record time
-   across every chain, the build's one migration (§7: the index, plus the restarts table if
-   question 4 keeps a restart), the `clock.behind_chain` refusal and its till wording, the red notice, the
+   across every chain, the build's one migration (§7: the index and the restarts table), the `clock.behind_chain` refusal and its till wording, the red notice, the
    alert and email, and leaving `fiscal.clock_drift` out while it is open. Tests, each with the
    clock a day behind the latest record:
    - a card payment on `POST /api/pay` for an order whose invoice was already filed, refused with
@@ -1237,10 +1235,9 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    - orders, kitchen sends and clock-ins accepted; and a control a minute inside the margin that
      sells.
    _Risk: fiscal invariants (every path that writes a record or moves money), cross-package contract
-   (the seat and a refusal's parameters), migrations (an index, and possibly a new append-only
+   (the seat and a refusal's parameters), migrations (an index and a new append-only
    table)._
-9. **Devices report their clock, `clock.disagrees`, the minimum-date checks, and — if question 4
-   keeps it — the restart** (§4.5 item 3, §4.8 b): the device reading; AEAT's time from a read-only
+9. **Devices report their clock, `clock.disagrees`, the minimum-date checks, and the restart** (§4.5 item 3, §4.8 b): the device reading; AEAT's time from a read-only
    query's `Date` header, measured in pre-production first; the restart route behind
    `system.manage`, offered only with fresh proof and within 24 hours, writing to the
    `clock_stop_restarts` table slice 8's migration created; the `clock.behind_chain_restarted` and `clock.behind_chain_disproved` alerts; and the
@@ -1257,8 +1254,8 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
 
 ## 9. Questions for the owner
 
-Four, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. Questions 1
-to 3 are answered; question 4, which the review round of revision 5 raised, is open.
+Four, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. All four are
+answered; question 4 was raised by the review round of revision 5.
 
 ### Question 1 of 3 — When the disk fills, should the box free its reserve by itself?
 
@@ -1330,6 +1327,9 @@ known; it becomes a question for the asesor, and if the answer is no, (a) comes 
 
 
 ### Question 4 of 4 — When the box's clock is right but the last sale's time was ahead, may a manager restart payments?
+
+Owner's answer (2026-10-20): (a) — a manager may restart payments only with fresh proof that the
+box's clock is right, as §4.8 b describes. The build is planned as its own item, A798-B.
 
 _Example._ On Sunday night someone sets the box's clock a day ahead by mistake, so the last sale,
 really at 23:40 on Sunday 18 October, is recorded as 23:40 on Monday 19 October. On Monday morning
