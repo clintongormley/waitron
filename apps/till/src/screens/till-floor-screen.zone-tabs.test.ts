@@ -123,12 +123,21 @@ function tapProbe(host: HTMLElement, value: string): number {
   return width;
 }
 
-/** The element's padding box on the page. */
+/** The element's padding box on the page, to the fraction of a pixel (`clientWidth` is whole). */
 function paddingBox(el: HTMLElement) {
   const box = el.getBoundingClientRect();
-  const left = box.left + el.clientLeft;
-  const top = box.top + el.clientTop;
-  return { left, top, right: left + el.clientWidth, bottom: top + el.clientHeight };
+  const style = getComputedStyle(el);
+  const [top, right, bottom, left] = ["Top", "Right", "Bottom", "Left"].map((side) =>
+    parseFloat(style.getPropertyValue(`border-${side.toLowerCase()}-width`)),
+  ) as [number, number, number, number];
+  const barX = Math.max(0, el.offsetWidth - el.clientWidth - el.clientLeft - right);
+  const barY = Math.max(0, el.offsetHeight - el.clientHeight - el.clientTop - bottom);
+  return {
+    left: box.left + left,
+    top: box.top + top,
+    right: box.right - right - barX,
+    bottom: box.bottom - bottom - barY,
+  };
 }
 
 /** Two frames, so an intersection observer has delivered what the first one saw. */
@@ -592,42 +601,97 @@ describe("till-floor-screen: the zone strip's edge", () => {
     );
   });
 
-  it("marks a tab a slow swipe cuts by a fraction of a pixel, then more", async () => {
-    await onPhone(
-      [seated("t1", "z1"), seated("t4", "z4", { readyToServe: 2 })],
-      async (el, host) => {
-        await expect
-          .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
-          .toBe("Show Garden terrace");
+  // Eight zones, so the strip overflows at a tablet's width too; only Patio, the last, has a state.
+  const eight = [
+    "Inside",
+    "Upstairs lounge",
+    "Garden terrace",
+    "Private room",
+    "Rooftop bar",
+    "Wine cellar",
+    "Courtyard",
+    "Patio",
+  ].map((name, i) => zone(`z${i + 1}`, name, i));
+
+  it.each<[number, "out" | "in"]>([
+    [390, "out"],
+    [390, "in"],
+    [768, "out"],
+    [768, "in"],
+  ])(
+    "at %i px, a tab a slow swipe moves %s of the strip gets its edge right",
+    async (width, way) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 844);
+      try {
+        const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+          zones: eight,
+          tables: [seated("t1", "z1"), seated("t8", "z8", { readyToServe: 2 })],
+          now,
+          reducedMotion: false,
+        });
         const strip = stripOf(el);
-        const cut = () =>
-          tabOf(el, "z4").closest(".zone-tab")!.getBoundingClientRect().right -
-          paddingBox(strip).right;
-        strip.scrollLeft += Math.ceil(cut());
+        const patio = tabOf(el, "z8").closest<HTMLElement>(".zone-tab")!;
+        const cut = () => patio.getBoundingClientRect().right - paddingBox(strip).right;
+        const label = () => edgeOf(el, "end")?.getAttribute("aria-label");
+        await expect.poll(label).toBe("Show Patio");
+        strip.scrollLeft = strip.scrollWidth;
         await expect.poll(() => edgeOf(el, "end")).toBeNull();
-        // With no edge drawn, narrow the screen by under a pixel so that at whole-pixel scroll
-        // positions the tab goes from shown to cut by under half a pixel.
-        const shownBy = cut();
-        const target = Math.ceil(shownBy) - 0.75;
-        host.style.width = `${host.getBoundingClientRect().width - (target - shownBy)}px`;
-        const from = strip.scrollLeft - Math.floor(-cut());
-        for (let step = 0; step <= 11; step++) {
-          strip.scrollLeft = from - step;
-          // Read before the frame, which may draw the edge and narrow the strip.
-          if (step === 0) expect(cut()).toBeLessThanOrEqual(0);
-          if (step === 1) {
-            expect(cut()).toBeGreaterThan(0);
-            expect(cut()).toBeLessThanOrEqual(0.5);
-          }
+        if (way === "in") {
+          strip.scrollLeft -= 30;
+          await expect.poll(label).toBe("Show Patio");
+          // The edge narrows the strip; jump to a few pixels short of shown before the slow steps.
+          strip.scrollLeft += Math.floor(cut()) - 3;
           await nextFrames();
         }
-        expect(cut()).toBeGreaterThan(10);
-        await expect
-          .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
-          .toBe("Show Garden terrace");
-      },
-    );
-  });
+
+        // The whole-number clientWidth misplaces the strip's end by `gap`. Pick a screen width,
+        // to the sixteenth of a pixel, where it says "further out" for "out" and "further in" for
+        // "in": the side on which a tab near the end reads wrongly.
+        const want = way === "out" ? 0.4 : -0.4;
+        const base = Math.floor(host.getBoundingClientRect().width) - 1;
+        const gap = () => strip.clientWidth - (paddingBox(strip).right - paddingBox(strip).left);
+        let best = 0;
+        let bestGap = Infinity;
+        for (let k = 0; k < 16; k++) {
+          host.style.width = `${base - k / 16}px`;
+          const g = gap();
+          if (Math.abs(g - want) < Math.abs(bestGap - want)) [best, bestGap] = [k, g];
+        }
+        host.style.width = `${base - best / 16}px`;
+        const miss = gap();
+        expect(Math.abs(miss)).toBeGreaterThanOrEqual(0.25);
+        expect(Math.sign(miss)).toBe(Math.sign(want));
+
+        // Widen Patio's tab by under a pixel so the whole-pixel step that crosses the end lands
+        // half-way into that misplaced band.
+        const mod = (x: number) => ((x % 1) + 1) % 1;
+        patio.style.paddingRight = `${mod(miss / 2 - cut())}px`;
+        const step = way === "out" ? -1 : 1;
+        let crossing = cut();
+        for (let i = 0; i < 40 && (way === "out" ? crossing <= 0 : crossing > 0); i++) {
+          strip.scrollLeft += step;
+          crossing = cut();
+          await nextFrames();
+        }
+        if (way === "out") {
+          expect(crossing).toBeGreaterThan(0);
+          expect(crossing).toBeLessThan(miss);
+        } else {
+          expect(crossing).toBeLessThanOrEqual(0);
+          expect(crossing).toBeGreaterThan(miss);
+        }
+        for (let i = 0; i < 10; i++) {
+          strip.scrollLeft += step;
+          await nextFrames();
+        }
+        if (way === "out") await expect.poll(label).toBe("Show Patio");
+        else await expect.poll(() => edgeOf(el, "end")).toBeNull();
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
 
   it("brings a tab wider than the strip, cut at both ends, to its start", async () => {
     const wide = [zone("z1", "Inside", 0), zone("z2", "Upstairs private dining room", 1)];
@@ -653,6 +717,11 @@ describe("till-floor-screen: the zone strip's edge", () => {
       const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
       await expect.poll(() => tab().left - reach).toBeGreaterThanOrEqual(box().left - 1);
       expect(tab().left - reach).toBeLessThanOrEqual(box().left + 1);
+      // Its start is in view now and only its end is cut, so the mark moves to the end edge.
+      await expect.poll(() => edgeOf(el, "start")).toBeNull();
+      expect(edgeOf(el, "end")?.getAttribute("aria-label")).toBe(
+        "Show Upstairs private dining room",
+      );
     } finally {
       await page.viewport(viewport.width, viewport.height);
     }

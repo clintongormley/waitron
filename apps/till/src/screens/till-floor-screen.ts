@@ -275,6 +275,17 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
 
 type TabsEdge = "start" | "end";
 
+/** The strip's padding box across, to the fraction of a pixel as the browser places tabs and as
+ * its intersection observer measures; `clientWidth` is rounded to a whole pixel. */
+function stripSpan(strip: HTMLElement): { left: number; right: number } {
+  const box = strip.getBoundingClientRect();
+  const style = getComputedStyle(strip);
+  const borderLeft = parseFloat(style.borderLeftWidth);
+  const borderRight = parseFloat(style.borderRightWidth);
+  const scrollbar = Math.max(0, strip.offsetWidth - strip.clientWidth - borderLeft - borderRight);
+  return { left: box.left + borderLeft, right: box.right - borderRight - scrollbar };
+}
+
 const tabKey = (zoneTab: Element): string =>
   zoneTab.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
 
@@ -2387,12 +2398,16 @@ export class TillFloorScreen extends LitElement {
       .find((button) => button.dataset.zone === key)!
       .closest(".zone-tab")!;
     const style = getComputedStyle(strip);
+    const { left, right } = stripSpan(strip);
     const room =
-      strip.clientWidth -
+      right -
+      left -
       parseFloat(style.scrollPaddingInlineStart) -
       parseFloat(style.scrollPaddingInlineEnd);
     const inline = tab.getBoundingClientRect().width > room ? "start" : "nearest";
     tab.scrollIntoView({ inline, block: "nearest" });
+    // A tab wider than the strip can go from cut at both ends to cut at one with no callback.
+    this.#placeTabs();
   }
 
   /** Re-reads which tabs the strip cuts off whenever the strip or its tabs are redrawn anew. */
@@ -2423,8 +2438,7 @@ export class TillFloorScreen extends LitElement {
    * callback of its own. */
   #placeTabs(): void {
     const strip = this.#tabsStrip!;
-    const left = strip.getBoundingClientRect().left + strip.clientLeft;
-    const right = left + strip.clientWidth;
+    const { left, right } = stripSpan(strip);
     const sides = new Map<string, TabsEdge>();
     for (const tab of strip.querySelectorAll(".zone-tab")) {
       const box = tab.getBoundingClientRect();
