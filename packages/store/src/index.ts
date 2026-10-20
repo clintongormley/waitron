@@ -9,6 +9,7 @@ import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./ve
 import { watchdogStopped } from "./venue-liveness.js";
 
 export type { BackupValue, BackupRow, BackupQuery } from "./backup-query.js";
+export { openBackupQuery } from "./backup-query.js";
 
 export {
   appendOnlyTriggerFaults,
