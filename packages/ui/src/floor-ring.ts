@@ -9,8 +9,7 @@ const PULSE: Record<FloorRing, "slow" | "fast" | null> = {
   waiting: null,
 };
 
-/** The ring lies over its box, so the element holding it must be `position: relative`. The pulse
- * classes sit on the element that moves, never a pseudo-element, so an SVG ring can take them too. */
+/** The ring lies over its box, so the element holding it must be `position: relative`. */
 export const floorRingStyles = css`
   .ring {
     position: absolute;

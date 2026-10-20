@@ -37,7 +37,7 @@ export class WtTableToken extends LitElement {
       }
 
       /* Mirrors till-floor-screen's .card body: the occupancy accent is the left edge, coloured by
-         state via the tokens below — identical to FP-1 so the map token and the list card match. */
+         state via the tokens below. */
       .card {
         position: relative;
         display: flex;
@@ -73,8 +73,8 @@ export class WtTableToken extends LitElement {
 
       /* The forgotten MARKER (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
          table (not just under reduced motion, exactly like till-floor-screen's .badge.forgotten text
-         chip: it never animates itself, so an operator who cannot distinguish the accent's colour or
-         perceive its flash still sees the escalation). A small CSS-only TRIANGLE — never text, since
+         chip: it never animates itself, so an operator who cannot distinguish the accent's colour still
+         sees the escalation). A small CSS-only TRIANGLE — never text, since
          this package carries no inline copy and a spatial token has no room for a text chip like the
          list card's — and deliberately a DIFFERENT silhouette from the round .dot/.badge.status
          swatch, so it cannot be mistaken for a status marker. Positioned over the card's
@@ -184,7 +184,7 @@ export class WtTableToken extends LitElement {
 
       /* The status chip: text in the theme colour on a neutral chip, with the DATA-driven status
          colour as a border + a small swatch — never as a text background, so contrast stays token-fixed
-         and the arbitrary colour cannot fail a11y. Verbatim from FP-1's .badge.status. */
+         and the arbitrary colour cannot fail a11y. */
       .badge.status {
         border: 1px solid var(--wt-color-border);
         background: var(--wt-color-surface);
@@ -214,7 +214,6 @@ export class WtTableToken extends LitElement {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** The token knows only these two fields of the order, so it ranks them alone. */
   #ring(t: FloorTable): FloorRing | null {
     if (t.timingBand === "forgotten") return "forgotten";
     if (t.timingBand === "overdue") return "overdue";

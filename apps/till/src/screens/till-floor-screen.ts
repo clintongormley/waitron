@@ -484,7 +484,6 @@ export class TillFloorScreen extends LitElement {
       }
 
       .badges {
-        max-width: 100%;
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
@@ -2432,7 +2431,7 @@ export class TillFloorScreen extends LitElement {
       });
     }
     for (const chip of tableChips(table, this.#drawnAt)) {
-      marks.push({ kind: chipState(chip, table.signals), mark: html`${renderFloorChips([chip])}` });
+      marks.push({ kind: chipState(chip, table.signals), mark: renderFloorChips([chip])[0]! });
     }
     return marks;
   }

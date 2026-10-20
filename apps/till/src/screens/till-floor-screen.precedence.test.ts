@@ -341,6 +341,13 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
     expect(marks(el)).toEqual(['[data-chip="held"]', "[data-to-serve]"]);
   });
 
+  it("puts N to serve after Reserved", async () => {
+    const { el } = await mountFloor([
+      table({ pendingToServe: 2, nextReservation: { time: "21:30" } }),
+    ]);
+    expect(marks(el)).toEqual(["[data-nothing-needed]", "[data-reserved]", "[data-to-serve]"]);
+  });
+
   it("puts the overdue chip before the bill and the waiting chip after the unsent order", async () => {
     const { el } = await mountFloor([
       table({
