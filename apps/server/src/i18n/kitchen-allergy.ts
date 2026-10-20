@@ -1,5 +1,22 @@
 import type { AllergenCode } from "@waitron/catalogue";
 
+export const KITCHEN_ALLERGY_WORDS = {
+  en: {
+    ticketHeading: "!!! ALLERGY ON THIS TICKET !!!",
+    guestHeading: "*** ALLERGY: {who} ***",
+    clash: "!! CONTAINS {allergens} — SENT ANYWAY",
+    changed: "ALLERGY CHANGED",
+    removed: "ALLERGY REMOVED",
+  },
+  es: {
+    ticketHeading: "!!! ALERGIA EN ESTE TICKET !!!",
+    guestHeading: "*** ALERGIA: {who} ***",
+    clash: "!! CONTIENE {allergens} — ENVIADO DE TODOS MODOS",
+    changed: "ALERGIA CAMBIADA",
+    removed: "ALERGIA ELIMINADA",
+  },
+} as const;
+
 export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = {
   gluten: { en: "Cereals containing gluten", es: "Cereales con gluten" },
   crustaceans: { en: "Crustaceans", es: "Crustáceos" },

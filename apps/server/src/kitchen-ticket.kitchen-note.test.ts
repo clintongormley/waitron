@@ -9,6 +9,7 @@ describe.each([
 ] satisfies EscSetting[])("whole-order kitchen instructions on $paperWidth paper", (layout) => {
   const item = { qty: 1, name: "Burger", note: "No onions" };
   const head = {
+    locale: "en-GB",
     tableLabel: "Table 2",
     orderNumber: "17",
     firedAt: new Date("2026-10-16T10:00:00Z"),
@@ -27,8 +28,9 @@ describe.each([
         { reprint: true },
       ]) {
         for (const body of [
-          { scope: "station" as const, stationName: "Grill", items: [item] },
+          { locale: "en-GB", scope: "station" as const, stationName: "Grill", items: [item] },
           {
+            locale: "en-GB",
             scope: "stations" as const,
             stations: [
               { stationName: "Grill", items: [item] },
@@ -88,6 +90,7 @@ describe.each([
     const corrected = printedLines(
       formatCorrectionSlip(
         {
+          locale: "en-GB",
           kind: "VOID",
           stationName: "Grill",
           tableLabel: "Table 2",

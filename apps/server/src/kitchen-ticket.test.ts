@@ -51,6 +51,7 @@ describe("formatKitchenTicket", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "station",
           stationName: "Grill",
           tableLabel: "Mesa 4",
@@ -79,6 +80,7 @@ describe("formatKitchenTicket", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "stations",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
@@ -105,6 +107,7 @@ describe("formatKitchenTicket", () => {
       const paper = decodeTicket(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "station",
             stationName: "Grill",
             tableLabel: "Mesa 1",
@@ -127,6 +130,7 @@ describe("formatKitchenTicket", () => {
         printedLines(
           formatKitchenTicket(
             {
+              locale: "en-GB",
               scope: "station",
               stationName: "Grill",
               tableLabel: "Mesa 1",
@@ -154,6 +158,7 @@ describe("formatKitchenTicket", () => {
     it("prints the station name, table/order/time, each qty x name line, and ends in a cut", () => {
       const bytes = formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "station",
           stationName: "Cocina",
           tableLabel: "Mesa 4",
@@ -183,6 +188,7 @@ describe("formatKitchenTicket", () => {
       const text = decodeTicket(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "station",
             stationName: "Cocina",
             tableLabel: "Mesa 1",
@@ -200,6 +206,7 @@ describe("formatKitchenTicket", () => {
       const text = decodeTicket(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "station",
             stationName: "Cocina",
             tableLabel: "Mesa 1",
@@ -217,6 +224,7 @@ describe("formatKitchenTicket", () => {
       const text = decodeTicket(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "station",
             stationName: "Cocina",
             tableLabel: "Mesa 4",
@@ -247,6 +255,7 @@ describe("formatKitchenTicket", () => {
       const text = decodeTicket(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "station",
             stationName: "Cocina",
             tableLabel: "Mesa 4",
@@ -265,6 +274,7 @@ describe("formatKitchenTicket", () => {
     it("prints a plain dish (no note) byte-for-byte as before", () => {
       const withExtras = formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "station",
           stationName: "Cocina",
           tableLabel: "Mesa 4",
@@ -276,6 +286,7 @@ describe("formatKitchenTicket", () => {
       );
       const plain = formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "station",
           stationName: "Cocina",
           tableLabel: "Mesa 4",
@@ -291,6 +302,7 @@ describe("formatKitchenTicket", () => {
     it("does not crash on a zero-item station ticket, and still ends in a cut", () => {
       const bytes = formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "station",
           stationName: "Cocina",
           tableLabel: "Mesa 4",
@@ -309,6 +321,7 @@ describe("formatKitchenTicket", () => {
     it("prints a header naming the stations, table/order/time, and groups items under each station sub-header in order", () => {
       const bytes = formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "stations",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
@@ -349,6 +362,7 @@ describe("one ticket for several stations sharing a printer", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "stations",
           stations: [
             { stationName: "Grill", items: [{ qty: 2, name: "Steak" }] },
@@ -385,6 +399,7 @@ describe("joinKitchenTickets", () => {
   const ticket = (mark: "HOLD" | undefined, name: string): Uint8Array =>
     formatKitchenTicket(
       {
+        locale: "en-GB",
         reprint: true,
         mark,
         scope: "station",
@@ -431,6 +446,7 @@ describe("joinKitchenTickets", () => {
 
 describe("the rest of the order on a station's ticket", () => {
   const stationTicket = {
+    locale: "en-GB",
     scope: "station" as const,
     stationName: "Pantry",
     tableLabel: "Table 4",
@@ -561,6 +577,7 @@ describe("formatCorrectionSlip", () => {
   it("prints a VOID header, station, table, order, time, and the item via emitItem, ending in a cut", () => {
     const bytes = formatCorrectionSlip(
       {
+        locale: "en-GB",
         kind: "VOID",
         stationName: "Cocina",
         tableLabel: "Mesa 6",
@@ -587,6 +604,7 @@ describe("formatCorrectionSlip", () => {
     const text = decodeTicket(
       formatCorrectionSlip(
         {
+          locale: "en-GB",
           kind: "RECALLED",
           stationName: "Parrilla",
           tableLabel: "Mesa 2",
@@ -606,6 +624,7 @@ describe("formatCorrectionSlip", () => {
     const text = decodeTicket(
       formatCorrectionSlip(
         {
+          locale: "en-GB",
           kind: "VOID",
           stationName: "Cocina",
           tableLabel: null,
@@ -815,6 +834,7 @@ describe("movedPlaceText", () => {
 
 describe("kitchen paper layout", () => {
   const ticket: KitchenTicket = {
+    locale: "en-GB",
     scope: "station",
     stationName: "Cocina",
     tableLabel: "Mesa 4",
@@ -869,7 +889,7 @@ describe("kitchen paper layout", () => {
         formatKitchenTicket({ ...ticket, items: [{ qty: 1, name: "Café" }] }, layout),
       );
       const names = commands.map((command) => command.name);
-      expect(names.slice(0, 2)).toEqual(["ESC @", "GS v 0"]);
+      expect(names.slice(0, 4)).toEqual(["ESC @", "GS L", "GS W", "GS v 0"]);
       expect(names).not.toContain("ESC t");
       expect(names).not.toContain("FS .");
       expect(names).not.toContain("text");
@@ -883,6 +903,7 @@ describe("kitchen paper layout", () => {
     const lines = printedLines(
       formatCorrectionSlip(
         {
+          locale: "en-GB",
           kind: "VOID",
           stationName: "Cocina",
           tableLabel: null,
@@ -903,6 +924,7 @@ describe("a note made only of control characters", () => {
     const ticket = (note?: string) =>
       formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "station",
           stationName: "Cocina",
           tableLabel: "Mesa 4",
@@ -920,6 +942,7 @@ describe("the reprint mark and a party's group numbers", () => {
   const at = new Date(2026, 7, 17, 14, 30);
   const station = (items: KitchenTicketItem[]) =>
     ({
+      locale: "en-GB",
       scope: "station",
       stationName: "Cocina",
       tableLabel: "Mesa 4",
@@ -1003,6 +1026,7 @@ describe("the reprint mark and a party's group numbers", () => {
       printedLines(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "stations",
             tableLabel: "Mesa 4",
             orderNumber: "A-17",
@@ -1175,6 +1199,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
   const at = new Date(2026, 7, 17, 14, 30);
   const station = (items: KitchenTicketItem[]) =>
     ({
+      locale: "en-GB",
       scope: "station",
       stationName: "Cocina",
       tableLabel: "Mesa 4",
@@ -1183,6 +1208,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
       items,
     }) as const;
   const slip = {
+    locale: "en-GB",
     stationName: "Cocina",
     tableLabel: "Mesa 4",
     orderNumber: "A-17",
@@ -1208,6 +1234,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
+          locale: "en-GB",
           scope: "stations",
           mark: "HOLD",
           tableLabel: "Mesa 4",
@@ -1442,6 +1469,7 @@ it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth"
   const lines = printedLines(
     formatKitchenTicket(
       {
+        locale: "en-GB",
         scope: "station",
         stationName: "BAR",
         tableLabel: "Mesa 4",
@@ -1461,6 +1489,7 @@ it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth"
 
 describe("a kitchen ticket for a named party", () => {
   const unnamed: KitchenTicket = {
+    locale: "en-GB",
     scope: "station",
     stationName: "Grill",
     tableLabel: "Mesa 4",
@@ -1519,6 +1548,7 @@ describe("a kitchen ticket for a named party", () => {
       printedLines(
         formatKitchenTicket(
           {
+            locale: "en-GB",
             scope: "stations",
             reprint: true,
             mark: "HOLD",

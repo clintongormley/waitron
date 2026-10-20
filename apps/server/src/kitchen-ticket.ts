@@ -8,7 +8,8 @@
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
-import type { KitchenNoteChange } from "@waitron/module";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
+import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 
 interface KitchenNoteHeading {
   text: string;
@@ -17,6 +18,7 @@ interface KitchenNoteHeading {
 
 /** One fired line. Modifiers and cross-references print beneath the item. */
 export interface KitchenTicketItem {
+  allergy?: KitchenAllergyBlock | null;
   qty: number | string;
   unit?: string;
   name: string;
@@ -53,6 +55,7 @@ export interface OtherStationItem {
  * `party`, the order number prints as a MOVED slip's order line does; without, it prints alone.
  */
 export type KitchenTicket = {
+  locale: string;
   kitchenNote?: KitchenNoteHeading;
   reprint?: boolean;
   mark?: "HOLD" | "FIRE";
@@ -92,6 +95,14 @@ function entryKey(item: KitchenTicketItem): string {
     item.groupLabel ?? null,
     item.modifiers ?? [],
     item.crossRefs ?? [],
+    item.allergy == null
+      ? null
+      : [
+          cleanOrderNote(item.allergy.who),
+          item.allergy.note === null ? "" : cleanOrderNote(item.allergy.note),
+          [item.allergy.labels.en.avoids, item.allergy.labels.en.clashes],
+          [item.allergy.labels.es.avoids, item.allergy.labels.es.clashes],
+        ],
   ]);
 }
 
@@ -168,6 +179,42 @@ function emitKitchenNote(
     b.line(line);
 }
 
+function emitAllergy(
+  b: ReturnType<typeof esc>,
+  block: KitchenAllergyBlock | null | undefined,
+  columns: number,
+  locale: string,
+): void {
+  if (block == null) return;
+  const language = ticketLanguage(locale);
+  const packet = KITCHEN_ALLERGY_WORDS[language];
+  const labels = block.labels[language];
+  const text = (value: string): void => {
+    for (const line of wrapText(prepareText(`  ${cleanOrderNote(value)}`), columns, 2))
+      b.line(line);
+  };
+  text(packet.guestHeading.replace("{who}", () => block.who));
+  text(labels.avoids.join(", ").toLocaleUpperCase(language));
+  if (block.note !== null && cleanOrderNote(block.note) !== "") text(block.note);
+  if (labels.clashes.length > 0)
+    text(
+      packet.clash.replace("{allergens}", () =>
+        labels.clashes.join(", ").toLocaleUpperCase(language),
+      ),
+    );
+}
+
+function emitAllergyHeading(
+  b: ReturnType<typeof esc>,
+  items: readonly KitchenTicketItem[],
+  columns: number,
+  locale: string,
+): void {
+  if (!items.some((item) => item.allergy != null)) return;
+  for (const line of wrapText(KITCHEN_ALLERGY_WORDS[ticketLanguage(locale)].ticketHeading, columns))
+    b.line(line);
+}
+
 /**
  * Emit one item's `qty x name` line, `sign` before the quantity, then each modifier as `+ <name>` and
  * the note as `* <note>`.
@@ -176,6 +223,7 @@ function emitItem(
   b: ReturnType<typeof esc>,
   item: KitchenTicketItem,
   columns: number,
+  locale: string,
   sign: "+" | "-" | "" = "",
 ): void {
   // Each line wraps to the paper; a continuation starts under the text after its marker.
@@ -191,6 +239,7 @@ function emitItem(
     const note = sanitizeNote(item.note);
     if (note !== "") text(`  * ${note}`, 4);
   }
+  emitAllergy(b, item.allergy, columns, locale);
 }
 
 /** The group every item in `items` shares, else undefined. */
@@ -219,12 +268,13 @@ function emitGrouped(
   items: readonly KitchenTicketItem[],
   columns: number,
   current: KitchenTicketItem | undefined,
+  locale: string,
 ): void {
   for (const item of items) {
     if (item.group !== undefined && (current === undefined || groupKey(item) !== groupKey(current)))
       emitGroup(b, item, columns);
     current = item;
-    emitItem(b, item, columns);
+    emitItem(b, item, columns, locale);
   }
 }
 
@@ -254,6 +304,7 @@ function hhmm(at: Date): string {
  */
 export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): Uint8Array {
   const b = esc(layout).init();
+  b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s), columns)) b.line(line);
@@ -262,8 +313,9 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
   const onlyGroup = onlyGroupOf(lists.flat());
   const emitList = (items: readonly KitchenTicketItem[]): void =>
-    emitGrouped(b, items, columns, onlyGroup);
+    emitGrouped(b, items, columns, onlyGroup, ticket.locale);
 
+  emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprint === true) b.line("*** REPRINT ***");
   if (ticket.mark !== undefined) b.line(`*** ${ticket.mark} ***`);
   text(
@@ -329,6 +381,7 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
 }
 
 export type CorrectionSlip = {
+  locale: string;
   kitchenNote?: KitchenNoteHeading;
   stationName: string;
   tableLabel: string | null;
@@ -342,6 +395,8 @@ export type CorrectionSlip = {
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
   | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
+  | { kind: "ALLERGY CHANGED"; allergyBlock: KitchenAllergyBlock }
+  | { kind: "ALLERGY REMOVED"; allergyBlock: null }
 );
 
 const KITCHEN_WORDS = {
@@ -381,6 +436,10 @@ function kitchenWords(locale: string) {
 }
 
 function slipHeader(slip: CorrectionSlip): string {
+  if (slip.kind === "ALLERGY CHANGED" || slip.kind === "ALLERGY REMOVED")
+    return KITCHEN_ALLERGY_WORDS[ticketLanguage(slip.locale)][
+      slip.kind === "ALLERGY CHANGED" ? "changed" : "removed"
+    ];
   if (slip.kind === "ORDER NOTE CHANGED") {
     const removed = slip.orderNoteChange.after === null;
     return ticketLanguage(slip.locale) === "es"
@@ -404,6 +463,7 @@ function slipHeader(slip: CorrectionSlip): string {
  */
 export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): Uint8Array {
   const b = esc(layout).init();
+  b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s), columns)) b.line(line);
@@ -424,7 +484,11 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   } else emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) emitGroup(b, slip.item, columns);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
-  emitItem(b, slip.item, columns, sign);
+  const item =
+    slip.kind === "ALLERGY CHANGED" || slip.kind === "ALLERGY REMOVED"
+      ? { ...slip.item, allergy: slip.allergyBlock }
+      : slip.item;
+  emitItem(b, item, columns, slip.locale, sign);
   if (slip.kind === "EXTRA CANCELLED") {
     const prefix = `  ${kitchenWords(slip.locale).cancel} `;
     for (const line of wrapText(
@@ -476,6 +540,7 @@ export function movedPlaceText(
 
 export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array {
   const b = esc(layout).init();
+  b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
   const words = MOVED_WORDS[ticketLanguage(slip.locale)];
   const text = (s: string, indent = 0): void => {
@@ -484,6 +549,12 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   const labelled = (label: string, value: string): void =>
     text(`${label}${value}`, prepareText(label).length);
 
+  emitAllergyHeading(
+    b,
+    [...slip.items, ...slip.held.flatMap((group) => group.items)],
+    columns,
+    slip.locale,
+  );
   text(`*** ${words.header} ***`);
   text(slip.stationName);
   const numbers =
@@ -493,11 +564,11 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
   emitKitchenNote(b, slip.kitchenNote, columns);
-  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items));
+  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale);
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {
     emitGroup(b, { ...items[0]!, group }, columns);
-    for (const item of items) emitItem(b, item, columns);
+    for (const item of items) emitItem(b, item, columns, slip.locale);
   }
 
   return b.feedAndCut().bytes();

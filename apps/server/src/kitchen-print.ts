@@ -178,11 +178,13 @@ async function buildTicketItems(
   // The customer-facing `descriptions` is deliberately not read: the cook's name falls back to the
   // staff name (`kitchenPresentationName`), as on the station screen.
   const parentLine = alias(workingOrderLines, "ticket_parent_line");
+  const ownRecord = alias(ticketItems, "ticket_own_record");
   const parentRecord = alias(ticketItems, "ticket_parent_record");
   const parentStation = alias(kitchenStations, "ticket_parent_station");
   const storedLineRows = await tx
     .select({
       id: workingOrderLines.id,
+      ticketItemId: ownRecord.id,
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
@@ -204,11 +206,16 @@ async function buildTicketItems(
       parentStationName: parentStation.name,
     })
     .from(workingOrderLines)
+    .leftJoin(ownRecord, eq(ownRecord.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(parentLine, eq(parentLine.id, workingOrderLines.parentLineId))
     .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
     .leftJoin(parentStation, eq(parentStation.id, parentRecord.stationId))
     .where(inArray(workingOrderLines.id, lineIds));
+  const allergies = await VENUE_SERVICE.readTicketAllergies(
+    tx,
+    storedLineRows.flatMap((row) => (row.ticketItemId === null ? [] : [row.ticketItemId])),
+  );
   const numberLabels = await readGroupNumberLabels(
     tx,
     storedLineRows.flatMap((r) => (r.groupPartyId === null ? [] : [r.groupPartyId])),
@@ -298,6 +305,10 @@ async function buildTicketItems(
       group: row.group,
       position: row.position,
       item: {
+        allergy:
+          row.ticketItemId === null
+            ? null
+            : (allergies.get(row.ticketItemId)?.originalBlock ?? null),
         ...(row.groupId === null ? {} : { groupId: row.groupId }),
         ...(row.groupId !== null && numberLabels.has(row.groupId)
           ? { groupLabel: numberLabels.get(row.groupId)! }
@@ -616,6 +627,7 @@ async function planKitchenTickets(
         ...new Set(rest.map((item) => item.workingOrderLineId)),
       ]);
   const head = {
+    locale: cfg.locale,
     kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
     reprint,
     mark,
@@ -1087,6 +1099,7 @@ async function printCorrectionSlips(
       const bytes = formatCorrectionSlip(
         {
           ...change,
+          locale: cfg.locale,
           kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
           stationName: stationNames.get(target.stationId)!.name,
           tableLabel: header.tableLabel,
