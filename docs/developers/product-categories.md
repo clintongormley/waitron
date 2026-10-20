@@ -53,7 +53,7 @@ parent's, so a cell in one service zone's column, or on a product's row, can sti
 marked category's dishes somewhere else. Deleting a station removes the cells that name it, so
 this baseline follows the surviving category rule or the active default. The baseline ignores
 today's station closures. A category with no Every zone cell on its own row or a parent's is made
-at the active default station, and reads Nowhere when none is set. A route to No preparation
+at the active default station, and is marked when no active default is set. A route to No preparation
 carries no asterisk. The asterisk's tooltip explains the
 warning. To clear it, set the Every zone cell of the category or one of its parents on Prep
 stations' Routes tab; or choose an active station for that cell.

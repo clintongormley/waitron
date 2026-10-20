@@ -863,6 +863,7 @@ control (`apps/till/src/screens/till-table-order-screen.ts`), and the price labe
   Dietary info start hidden. The ordering column is headed Standalone (Spanish «Por separado»), and
   the editor field and the filter are "Standalone ordering by" (Spanish «Pedir por separado»). A
   Course column and a Course filter join the list, and "Default course" is "Course".
+  Pictures and the owner's question: [mockups/a655-products-columns/](mockups/a655-products-columns/).
 
 - **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
   translation is optional, including the default. Units have a required staff name and abbreviation;

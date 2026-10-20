@@ -100,9 +100,10 @@ la celda **Todas las zonas** de la fila. Cuando no se aplica ninguna celda, el p
 predeterminada del local.
 
 La lista de Productos no muestra dónde se prepara cada plato; eso lo muestra la pestaña **Rutas**. Un
-asterisco rojo tras el nombre de una categoría en la lista indica que sus platos no llegan a ninguna
-estación activa. Cuando no se puede leer el envío a cocina, una línea sobre la lista lo dice y no se
-marca ninguna categoría.
+asterisco rojo tras el nombre de una categoría en la lista indica que su ruta de **Todas las zonas** no
+llega a ninguna estación activa, así que sus platos no van a ninguna parte salvo que la fila del propio
+producto o la celda de una zona los envíe a otra. Cuando no se puede leer el envío a cocina y la lista
+tiene categorías, una línea sobre la lista lo dice y no se marca ninguna categoría.
 
 Puedes crear una unidad, una lista de extras o una lista de opciones sin abandonar el producto que estás
 editando. Abre el formulario anidado y guarda el elemento nuevo: cuando vuelves, el producto ya lo usa.
