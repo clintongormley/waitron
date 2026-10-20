@@ -730,6 +730,43 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       await expectNoA11yViolations(host);
     });
   }
+
+  it("has no violations with an edge mark at 390 px", async () => {
+    const [owing] = partyTables as [TableState];
+    const names = ["Bar", "Upstairs lounge", "Garden terrace", "Patio", "Private room"];
+    const manyZones: FloorZone[] = [
+      zones[0]!,
+      ...names.map((name, i): FloorZone => ({
+        ...zones[1]!,
+        id: `e${i}`,
+        name,
+        displayOrder: i + 1,
+      })),
+    ];
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el, host } = await mountWidget<TillFloorScreen>(
+        "till-floor-screen",
+        {
+          zones: manyZones,
+          tables: [
+            { ...owing, zoneId: "z1" },
+            { ...owing, id: "te3", label: "E3", zoneId: "e3", timingBand: "forgotten" },
+          ],
+          now: Date.parse("2026-09-29T20:00:00.000Z"),
+          reducedMotion: false,
+        },
+        theme,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector('[data-tabs-edge="end"]'))
+        .not.toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
 });
 
 for (const locale of ["en-GB", "es-ES"]) {

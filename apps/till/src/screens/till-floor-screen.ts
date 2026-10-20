@@ -113,6 +113,7 @@ import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release
 import {
   kindCue,
   kindWords,
+  MAP_PRECEDENCE,
   mapKinds,
   reminderClock,
   topTabKind,
@@ -273,6 +274,8 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
 }
 
 /** What a hidden zone's tab shows: its tables' most urgent state. */
+type TabsEdge = "start" | "end";
+
 interface ZoneTabMark {
   kind: MapKind;
   icon: FloorCueIcon | null;
@@ -380,6 +383,7 @@ export class TillFloorScreen extends LitElement {
         flex-wrap: nowrap;
         gap: var(--wt-space-2);
         padding: calc(var(--wt-space-1) * 1.5);
+        scroll-padding-inline: calc(var(--wt-space-1) * 1.5);
       }
       .tabs > * {
         flex: none;
@@ -430,7 +434,36 @@ export class TillFloorScreen extends LitElement {
         box-shadow: inset 0 calc(var(--wt-space-1) * -1) 0 var(--zone-bar);
       }
 
-      .zone-tab.filled-forgotten wt-button::part(button) {
+      [data-tabs-edge] {
+        position: relative;
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        gap: var(--wt-space-1);
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: 0 var(--wt-space-2);
+        border: none;
+        border-radius: var(--wt-radius-md);
+        background: var(--zone-tint);
+        box-shadow: inset 0 calc(var(--wt-space-1) * -1) 0 var(--zone-bar);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      [data-tabs-edge]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      [data-tabs-edge] wt-icon {
+        color: inherit;
+      }
+
+      .zone-tab.filled-forgotten wt-button::part(button),
+      [data-tabs-edge].filled-forgotten {
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);
       }
@@ -770,6 +803,12 @@ export class TillFloorScreen extends LitElement {
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
+  /** Zone keys of the tabs the strip does not show whole, by the end they are beyond. */
+  readonly #hiddenTabs = new Map<string, TabsEdge>();
+  #tabsObserver?: IntersectionObserver;
+  /** The strip being watched: `null` while there is none, `undefined` while not watching. */
+  #tabsStrip?: HTMLElement | null;
+  #tabsKeys?: string;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
   readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
@@ -781,6 +820,7 @@ export class TillFloorScreen extends LitElement {
     if (this.hasUpdated) {
       this.#watchReminders();
       this.#watchFloor();
+      this.#watchTabs();
     }
   }
 
@@ -791,6 +831,7 @@ export class TillFloorScreen extends LitElement {
     clearTimeout(this.#reminderTimer);
     clearInterval(this.#rereadTimer);
     this.#rereadTimer = undefined;
+    this.#stopWatchingTabs();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -845,6 +886,7 @@ export class TillFloorScreen extends LitElement {
   override updated(): void {
     this.#watchReminders();
     this.#watchFloor();
+    this.#watchTabs();
   }
 
   #watchFloor(): void {
@@ -2181,9 +2223,11 @@ export class TillFloorScreen extends LitElement {
         <div class="zone-toolbar">
           ${
             tabs.length > 1
-              ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
-                  ${tabs.map((tab) => this.#tab(tab, activeKey, marks.get(tab.key)))}
-                </nav>`
+              ? html`${this.#tabsEdge("start", tabs, marks)}
+                  <nav class="tabs" aria-label=${t("floor.zones")}>
+                    ${tabs.map((tab) => this.#tab(tab, activeKey, marks.get(tab.key)))}
+                  </nav>
+                  ${this.#tabsEdge("end", tabs, marks)}`
               : nothing
           }
           <div class="actions help-anchor">
@@ -2305,11 +2349,94 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  #tab(tab: ZoneTab, activeKey: string | undefined, mark: ZoneTabMark | undefined): TemplateResult {
-    const active = tab.key === activeKey;
+  /** Decision 14: the most urgent tab with a state beyond `side` of the strip, or nothing. */
+  #tabsEdge(
+    side: TabsEdge,
+    tabs: readonly ZoneTab[],
+    marks: Map<string, ZoneTabMark>,
+  ): TemplateResult | typeof nothing {
+    const rank = (mark: ZoneTabMark) => MAP_PRECEDENCE.indexOf(mark.kind);
+    const [top] = tabs
+      .flatMap((tab) => {
+        const mark = marks.get(tab.key);
+        return mark !== undefined && this.#hiddenTabs.get(tab.key) === side ? [{ tab, mark }] : [];
+      })
+      .sort((a, b) => rank(a.mark) - rank(b.mark));
+    if (top === undefined) return nothing;
+    const { tab, mark } = top;
+    const { pulse, moving, filled } = this.#tabLook(mark);
+    return html`<button
+      class="tabs-edge${filled}"
+      data-tabs-edge=${side}
+      data-zone-state=${mark.kind}
+      aria-label=${t("floor.show_zone").replace("{zone}", () => tab.name)}
+      @click=${() => this.#showTab(tab.key)}
+    >
+      ${renderFloorPulse(pulse, moving)}${side === "start" ? "‹" : nothing}${this.#markIcon(mark)}${side === "end" ? "›" : nothing}
+    </button>`;
+  }
+
+  #showTab(key: string): void {
+    [...this.shadowRoot!.querySelectorAll<HTMLElement>("wt-button.tab")]
+      .find((button) => button.dataset.zone === key)
+      ?.closest(".zone-tab")
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }
+
+  /** Re-reads which tabs the strip cuts off whenever the strip or its tabs are redrawn anew. */
+  #watchTabs(): void {
+    const strip = this.shadowRoot!.querySelector<HTMLElement>("nav.tabs");
+    const keys = this.#zone.tabs.map((tab) => tab.key).join("\n");
+    if (strip === this.#tabsStrip && keys === this.#tabsKeys) return;
+    this.#stopWatchingTabs();
+    this.#tabsStrip = strip;
+    this.#tabsKeys = keys;
+    if (strip === null) return;
+    this.#tabsObserver = new IntersectionObserver((entries) => this.#onTabsSeen(entries), {
+      root: strip,
+      threshold: 1,
+    });
+    for (const tab of strip.querySelectorAll(".zone-tab")) this.#tabsObserver.observe(tab);
+  }
+
+  #stopWatchingTabs(): void {
+    this.#tabsObserver?.disconnect();
+    this.#tabsObserver = undefined;
+    this.#tabsStrip = undefined;
+    this.#hiddenTabs.clear();
+  }
+
+  #onTabsSeen(entries: IntersectionObserverEntry[]): void {
+    for (const entry of entries) {
+      const key = entry.target.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
+      if (entry.intersectionRatio >= 1) this.#hiddenTabs.delete(key);
+      else
+        this.#hiddenTabs.set(
+          key,
+          entry.boundingClientRect.left < entry.rootBounds!.left ? "start" : "end",
+        );
+    }
+    this.requestUpdate();
+  }
+
+  #tabLook(mark: ZoneTabMark | undefined): {
+    pulse: FloorPulse | null;
+    moving: boolean;
+    filled: string;
+  } {
     const moving = !this.#prefersReducedMotion();
     const pulse = TAB_PULSES.find((kind) => kind === mark?.kind) ?? null;
     const filled = mark?.kind === "forgotten" && !moving ? " filled-forgotten" : "";
+    return { pulse, moving, filled };
+  }
+
+  #markIcon(mark: ZoneTabMark | undefined): TemplateResult | typeof nothing {
+    return mark?.icon ? html`<wt-icon name=${mark.icon} size="sm"></wt-icon>` : nothing;
+  }
+
+  #tab(tab: ZoneTab, activeKey: string | undefined, mark: ZoneTabMark | undefined): TemplateResult {
+    const active = tab.key === activeKey;
+    const { pulse, moving, filled } = this.#tabLook(mark);
     return html`<span class="zone-tab${filled}" data-zone-state=${mark?.kind ?? nothing}
       >${renderFloorPulse(pulse, moving)}<wt-button
         class="tab"
@@ -2318,7 +2445,7 @@ export class TillFloorScreen extends LitElement {
         aria-label=${mark === undefined ? nothing : `${tab.name}, ${mark.words}`}
         @click=${() => this.#selectZone(tab.key)}
       >
-        ${tab.name} ${mark?.icon ? html`<wt-icon name=${mark.icon} size="sm"></wt-icon>` : nothing}
+        ${tab.name} ${this.#markIcon(mark)}
       </wt-button></span
     >`;
   }

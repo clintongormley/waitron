@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { TableSignal } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -112,6 +112,24 @@ const buttonOf = (el: TillFloorScreen, zoneId: string) =>
 
 const pulseOf = (el: TillFloorScreen, zoneId: string) =>
   tabOf(el, zoneId).closest(".zone-tab")!.querySelector<HTMLElement>(".pulse");
+
+/** The width `value` resolves to on the page. */
+function tapProbe(host: HTMLElement, value: string): number {
+  const probe = document.createElement("div");
+  probe.style.width = value;
+  host.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width;
+}
+
+/** The element's padding box on the page. */
+function paddingBox(el: HTMLElement) {
+  const box = el.getBoundingClientRect();
+  const left = box.left + el.clientLeft;
+  const top = box.top + el.clientTop;
+  return { left, top, right: left + el.clientWidth, bottom: top + el.clientHeight };
+}
 
 const originalUrl = location.href;
 afterEach(() => {
@@ -267,6 +285,22 @@ describe("till-floor-screen: zone tabs", () => {
     expect(ring.bottom + reach).toBeLessThanOrEqual(top + nav.clientHeight);
   });
 
+  it("the strip leaves room for the first tab's ring", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones,
+      tables: [seated("t1", "z1", { timingBand: "forgotten" }), seated("t2", "z2")],
+      now,
+      reducedMotion: false,
+      selectedZoneId: "z2",
+    });
+    const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+    expect(reach).toBeGreaterThan(0);
+    const ring = pulseOf(el, "z1")!.getBoundingClientRect();
+    const box = paddingBox(el.shadowRoot!.querySelector<HTMLElement>(".tabs")!);
+    expect(ring.left - reach).toBeGreaterThanOrEqual(box.left);
+    expect(ring.top - reach).toBeGreaterThanOrEqual(box.top);
+  });
+
   it("under reduced motion nothing moves and a forgotten tab is filled red", async () => {
     const zonesThree = [...zones, zone("z3", "Bar", 2)];
     const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
@@ -345,5 +379,192 @@ describe("till-floor-screen: zone tabs", () => {
     } finally {
       setLocale(previous);
     }
+  });
+});
+
+describe("till-floor-screen: the zone strip's edge", () => {
+  // Six zones whose names overflow a phone's strip; Inside, the first, is on screen.
+  const many = [
+    zone("z1", "Inside", 0),
+    zone("z2", "Bar", 1),
+    zone("z3", "Upstairs lounge", 2),
+    zone("z4", "Garden terrace", 3),
+    zone("z5", "Patio", 4),
+    zone("z6", "Private room", 5),
+  ];
+
+  const onPhone = async (
+    tables: TableState[],
+    check: (el: TillFloorScreen, host: HTMLElement) => Promise<void>,
+    reducedMotion = false,
+  ) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+        zones: many,
+        tables,
+        now,
+        reducedMotion,
+      });
+      await check(el, host);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  };
+
+  const edgeOf = (el: TillFloorScreen, side: "start" | "end") =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-tabs-edge="${side}"]`);
+
+  const stripOf = (el: TillFloorScreen) => el.shadowRoot!.querySelector<HTMLElement>("nav.tabs")!;
+
+  const urgentRight = () => [
+    seated("t1", "z1"),
+    seated("t5", "z5", { timingBand: "forgotten" }),
+    seated("t6", "z6", { signals: [{ kind: "take_order" }] }),
+  ];
+
+  it("shows the most urgent hidden tab's icon at the end it is beyond", async () => {
+    await onPhone(urgentRight(), async (el, host) => {
+      host.style.setProperty("--wt-color-tab-danger-tint", "rgb(1, 2, 3)");
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+      const edge = edgeOf(el, "end")!;
+      expect(edge.getAttribute("data-zone-state")).toBe("forgotten");
+      expect(edge.querySelector('wt-icon[name="floor-timer"]')).not.toBeNull();
+      expect(edge.textContent).toContain("›");
+      const style = getComputedStyle(edge);
+      expect(style.backgroundColor).toBe("rgb(1, 2, 3)");
+      expect(style.boxShadow).toBe("rgb(4, 5, 6) 0px -4px 0px 0px inset");
+      const pulse = edge.querySelector(".pulse");
+      expect(pulse?.classList.contains("wt-pulse-fast")).toBe(true);
+      expect(edgeOf(el, "start")).toBeNull();
+      // The edge sits beside the strip, never inside it.
+      expect(edge.parentElement).toBe(stripOf(el).parentElement);
+      expect(stripOf(el).nextElementSibling).toBe(edge);
+    });
+  });
+
+  it("tapping it scrolls that tab fully into view, and the edge then shows the next one", async () => {
+    await onPhone(urgentRight(), async (el, host) => {
+      await expect.poll(() => edgeOf(el, "end")?.getAttribute("data-zone-state")).toBe("forgotten");
+      await userEvent.click(edgeOf(el, "end")!);
+      await expect.poll(() => edgeOf(el, "end")?.getAttribute("data-zone-state")).toBe("step");
+      expect(edgeOf(el, "end")!.querySelector('wt-icon[name="floor-step"]')).not.toBeNull();
+      expect(edgeOf(el, "end")!.getAttribute("aria-label")).toBe("Show Private room");
+
+      const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+      expect(reach).toBeGreaterThan(0);
+      const tab = tabOf(el, "z5").closest(".zone-tab")!.getBoundingClientRect();
+      const box = paddingBox(stripOf(el));
+      expect(tab.left - reach).toBeGreaterThanOrEqual(box.left);
+      expect(tab.right + reach).toBeLessThanOrEqual(box.right);
+    });
+  });
+
+  it("shows nothing when every tab with a state is in view", async () => {
+    await onPhone([seated("t1", "z1"), seated("t2", "z2", { readyToServe: 2 })], async (el) => {
+      const strip = stripOf(el);
+      // Hide Bar's tab first, so the empty answer below follows the observer's own reading.
+      strip.scrollLeft = strip.scrollWidth;
+      await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+      strip.scrollLeft = 0;
+      await expect.poll(() => edgeOf(el, "start")).toBeNull();
+      // Upstairs lounge and the tabs after it are off the end, and plain.
+      expect(edgeOf(el, "end")).toBeNull();
+    });
+  });
+
+  it("shows the start edge after scrolling right", async () => {
+    await onPhone([seated("t1", "z1"), seated("t2", "z2", { readyToServe: 2 })], async (el) => {
+      const strip = stripOf(el);
+      strip.scrollLeft = strip.scrollWidth;
+      await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+      const edge = edgeOf(el, "start")!;
+      expect(edge.getAttribute("data-zone-state")).toBe("ready");
+      expect(edge.querySelector('wt-icon[name="floor-ready"]')).not.toBeNull();
+      expect(edge.textContent).toContain("‹");
+      expect(edge.getAttribute("aria-label")).toBe("Show Bar");
+      expect(strip.previousElementSibling).toBe(edge);
+      expect(edgeOf(el, "end")).toBeNull();
+    });
+  });
+
+  it("is a tap tall and named Show <zone>", async () => {
+    await onPhone(urgentRight(), async (el, host) => {
+      await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+      const tap = tapProbe(host, "var(--wt-tap-min)");
+      expect(tap).toBeGreaterThan(0);
+      const box = edgeOf(el, "end")!.getBoundingClientRect();
+      expect(box.height).toBeGreaterThanOrEqual(tap);
+      expect(box.width).toBeGreaterThanOrEqual(tap);
+      expect(edgeOf(el, "end")!.getAttribute("aria-label")).toBe("Show Patio");
+    });
+  });
+
+  it("is named in Spanish", async () => {
+    const previous = currentLocale();
+    setLocale("es");
+    try {
+      await onPhone(urgentRight(), async (el) => {
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        expect(edgeOf(el, "end")!.getAttribute("aria-label")).toBe(
+          es["floor.show_zone"].replace("{zone}", "Patio"),
+        );
+      });
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("stays still under reduced motion", async () => {
+    await onPhone(
+      urgentRight(),
+      async (el, host) => {
+        host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+        await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+        const edge = edgeOf(el, "end")!;
+        expect(edge.querySelector(".pulse")).toBeNull();
+        // As its tab is: a forgotten zone fills red when nothing may move.
+        expect(getComputedStyle(edge).backgroundColor).toBe("rgb(4, 5, 6)");
+      },
+      true,
+    );
+  });
+
+  it("the page does not scroll sideways", async () => {
+    await onPhone(urgentRight(), async (el) => {
+      await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    });
+  });
+
+  it("stops watching when the screen leaves the page, and watches again when it returns", async () => {
+    await onPhone(
+      [seated("t1", "z1"), seated("t2", "z2", { readyToServe: 2 })],
+      async (el, host) => {
+        const strip = stripOf(el);
+        strip.scrollLeft = strip.scrollWidth;
+        await expect.poll(() => edgeOf(el, "start")).not.toBeNull();
+        host.removeChild(el);
+        host.appendChild(el);
+        stripOf(el).scrollLeft = 0;
+        await expect.poll(() => edgeOf(el, "start")).toBeNull();
+      },
+    );
+  });
+
+  it("follows a change of zones", async () => {
+    await onPhone(urgentRight(), async (el) => {
+      await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
+      el.zones = many.slice(0, 2);
+      await expect.poll(() => edgeOf(el, "end")).toBeNull();
+      expect(el.shadowRoot!.querySelector("nav.tabs")).not.toBeNull();
+      el.zones = many.slice(0, 1);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("nav.tabs")).toBeNull();
+      expect(edgeOf(el, "start")).toBeNull();
+      expect(edgeOf(el, "end")).toBeNull();
+    });
   });
 });
