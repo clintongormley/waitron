@@ -3188,14 +3188,25 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A841. A theme editor (owner, 2026-10-17).** Lets the owner change how Waitron looks by setting
   the `--wt-*` CSS variables it already reads, and upload the venue's own logo (owner, 2026-10-20),
-  which takes Waitron's place in the dashboard banner and the till's top bar; a text-size slider and
-  text set by hand under Advanced, which is folded into sections (owner, Q4, 2026-10-20); and saved
-  custom themes, one in use everywhere at a time (owner, 2026-10-20). Design:
+  which takes Waitron's place in the dashboard banner and the till's top bar, with "Powered by
+  Waitron" under both sign-in forms, and prints on receipts and A4 invoices where no department
+  receipt logo applies; a text-size slider and text set by hand under Advanced, which is folded into
+  sections (owner, Q4, 2026-10-20); and saved custom themes, one in use everywhere at a time, each
+  with a light and a dark version that the Theme setting (Light / Dark / Follow device, keeping its
+  name) switches between (owner, 2026-10-20). Design, **final**:
   [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
-  Answered: Q1, Q2, Q3 (one look for the whole business), Q4 (a slider; its range, 100% to 130%, is the designer's call; long names hyphenate in Spanish, and Chromium does not hyphenate English) and the extra
-  question (colours set by hand are kept). Next: the owner's answers to Q5 (does the logo also print
-  on receipts), Q6 (what happens to Waitron's own logo), Q7 (system typefaces only, or uploaded
-  fonts too) and Q8 (a new name for the account menu's "Theme"), then a plan.
+  All eight questions and the extra one are answered (Q8 revised the same morning; section 19). Next:
+  the build plan, 14 slices, only slice 2 adding a migration (design section 16).
+
+- **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's
+  Typeface may also be a font file the venue uploads, so every screen draws the bar's own face. The
+  owner asked for it "designed and built after this as their own item". To settle in its own design:
+  the licence (the venue must be allowed to serve the font to its own screens; Waitron cannot check
+  that), which formats and what size limit, where the files are stored and served (the image library
+  takes images only), how a till caches them for a restart without the box, `font-display: swap` so
+  no screen waits for a file, and re-running A841's 130% layout cases and hyphenation check in the
+  uploaded face. It plugs into A841's seam: the typeface list, `typefaceStack()` and `@font-face`
+  ahead of `/api/theme`'s blocks (A841 design, section 5a). Needs A841's slice 11 first.
 
 - **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
   `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file
