@@ -2467,6 +2467,8 @@ from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-grou
 Lane G's first build branch has service lifetime, backend retirement of the old kitchen Fire,
 Away and Done routes, and counter release of every course on Send or payment. Existing table
 holding checks use seated parties; counter retries retain their existing sale and print counts.
+The Done helper and split-copy operation are removed; dark-pass alerts use remaining service
+quantity and ignore legacy Done/Away stamps. Historical mark rows remain until schema retirement.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's
 settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan

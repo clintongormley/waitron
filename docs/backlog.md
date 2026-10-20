@@ -2038,10 +2038,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
 
-- **Keep pass screen Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
-  product folders work. `pass_item_marks` cascades from `ticket_items`, so a rebuild empties those
-  marks.
-
 - **Three follow-ups 3c-1 left:** — left open by the product folders work. the kitchen screen's
   column view has no per-order card, so it does not show the rest of the order…
   [Detail](backlog/kitchen.md#three-follow-ups-3c-1-left)
@@ -2422,7 +2418,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   is being built in Lane G (PR A): service lifetime and backend retirement of course Fire, device
   Fire, Away, Done/Undo and Fire-control management/setup are implemented. Counter Send and
   payment now release every recorded course; table holding remains separate. Client and helper
-  retirement remains. Add Requested and pass release,
+  retirement remains, apart from the removed Done helper and split-copy operation. Dark-pass alerts
+  now follow remaining service quantity, ignoring legacy Done/Away stamps. Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
   each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain
   a UI prerequisite. A803's pass/station tail follows this build.

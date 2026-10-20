@@ -4,7 +4,6 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
-  passItemMarks,
   printJobs,
   printers,
   stationPrinters,
@@ -242,33 +241,8 @@ export async function passScreensDark(
     passes.some((pass) => pass.scope.zoneIds !== null),
   );
   if (dishes.length === 0) return [];
-  const screenIds = passes.flatMap((pass) => (pass.kind === "pass" ? [pass.id] : []));
-  const marks =
-    screenIds.length === 0
-      ? []
-      : await tx
-          .select({ deviceId: passItemMarks.deviceId, itemId: passItemMarks.ticketItemId })
-          .from(passItemMarks)
-          .where(
-            and(
-              inArray(passItemMarks.deviceId, screenIds),
-              inArray(
-                passItemMarks.ticketItemId,
-                dishes.map((dish) => dish.id),
-              ),
-            ),
-          );
-  const done = new Set(marks.map((mark) => `${mark.deviceId} ${mark.itemId}`));
   return passes
-    .filter((pass) =>
-      dishes.some(
-        (dish) =>
-          passSees(pass.scope, dish) &&
-          (pass.kind === "pass"
-            ? dish.servedAt === null && !done.has(`${pass.id} ${dish.id}`)
-            : dish.awayAt === null),
-      ),
-    )
+    .filter((pass) => dishes.some((dish) => passSees(pass.scope, dish)))
     .map((pass) => ({
       deviceId: pass.id,
       deviceName: pass.label,

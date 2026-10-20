@@ -154,7 +154,6 @@ import {
   ticketItems,
   partyTables,
   parties,
-  passItemMarks,
   ticketItemMoves,
   partyTableLabels,
   withTransaction,
@@ -4798,13 +4797,6 @@ async function splitTicketItem(
     quantity: movedThousandths,
   });
   await VENUE_SERVICE.copyTicketAllergy(tx, ticketItemId, id);
-  const passMarks = await tx
-    .select()
-    .from(passItemMarks)
-    .where(eq(passItemMarks.ticketItemId, ticketItemId));
-  if (passMarks.length) {
-    await tx.insert(passItemMarks).values(passMarks.map((mark) => ({ ...mark, ticketItemId: id })));
-  }
   const moves = await tx
     .select()
     .from(ticketItemMoves)

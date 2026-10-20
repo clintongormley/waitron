@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { parties, passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listPassMonitor, listPassScreen, markPassItems, type PassScope } from "./pass-board.js";
+import { listPassMonitor, listPassScreen, type PassScope } from "./pass-board.js";
 import {
   advanceTicketItem,
   handOverOrder,
@@ -80,15 +80,12 @@ describe("A773 lifetime", () => {
     const expected = [{ id: item.id, qty: "1.000" }];
     expect(await boards(v)).toEqual({ screen: expected, monitor: expected });
     await inTx(v, async (tx) => {
-      await markPassItems(
-        tx,
-        v.cfg,
-        { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
-        EVERY,
-        [item.id],
-        true,
-        new Date(),
-      );
+      await tx.insert(passItemMarks).values({
+        deviceId: v.cfg.origin.deviceId,
+        ticketItemId: item.id,
+        doneAt: new Date().toISOString(),
+        doneByPersonId: OPERATOR,
+      });
       await tx
         .update(ticketItems)
         .set({ awayAt: new Date().toISOString() })

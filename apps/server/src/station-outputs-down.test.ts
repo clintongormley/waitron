@@ -11,6 +11,7 @@ import {
   printers,
   stationPrinters,
   ticketItems,
+  workingOrderLines,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -670,22 +671,24 @@ describe("passScreensDark", () => {
     expect(await read(f)).toEqual([]);
   });
 
-  it("does not count, on a monitor, a dish already away", async () => {
+  it("A773 no dispatch state: a legacy Away stamp does not silence a dark monitor", async () => {
     const f = await passFixture();
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await suite.db
       .update(ticketItems)
       .set({ awayAt: "2026-10-02T18:00:00.000Z" })
       .where(eq(ticketItems.workingOrderId, orderId));
-    await passDevice(f, "pass_monitor");
-    expect(await read(f)).toEqual([]);
+    const monitor = await passDevice(f, "pass_monitor");
+    expect(await read(f)).toEqual([
+      { deviceId: monitor, deviceName: "pass_monitor", kind: "pass_monitor", lastSeenAt: dark },
+    ]);
   });
 
-  it("does not count, on a pass screen, a served dish or one this device marked Done", async () => {
+  it("A773 no dispatch state: legacy Done marks do not silence a dark pass, but full serving does", async () => {
     const f = await passFixture();
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    const pass = await passDevice(f, "pass", { label: "Pase" });
-    const other = await passDevice(f, "pass", { label: "Otro", lastSeenAt: at.toISOString() });
+    const pass = await passDevice(f, "pass", { label: "Pass" });
+    const other = await passDevice(f, "pass", { label: "Other", lastSeenAt: at.toISOString() });
     const [item] = await suite.db
       .select({ id: ticketItems.id })
       .from(ticketItems)
@@ -701,13 +704,36 @@ describe("passScreensDark", () => {
       ticketItemId: item!.id,
       doneAt: "2026-10-02T18:00:00.000Z",
     });
-    expect(await read(f)).toEqual([]);
+    expect((await read(f)).map((row) => row.deviceId)).toEqual([pass]);
     await suite.db.delete(passItemMarks);
     await suite.db.execute(
-      sql`update working_order_lines set served_at = '2026-10-02T18:00:00.000Z' where working_order_id = ${orderId}`,
+      sql`update working_order_lines set served_quantity = 1000, served_at = '2026-10-02T18:00:00.000Z' where working_order_id = ${orderId}`,
     );
     expect(await read(f)).toEqual([]);
   });
+
+  it.each(["pass", "pass_monitor"] as const)(
+    "A773 no dispatch state: a dark %s still has work after partial serving, until the last portion is served",
+    async (kind) => {
+      const f = await passFixture();
+      const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+      const deviceId = await passDevice(f, kind);
+      await suite.db
+        .update(ticketItems)
+        .set({ state: "ready", awayAt: "2026-10-02T18:00:00.000Z" })
+        .where(eq(ticketItems.workingOrderId, orderId));
+      await suite.db
+        .update(workingOrderLines)
+        .set({ servedQuantity: 500, servedAt: "2026-10-02T18:00:00.000Z" })
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      expect(await read(f)).toEqual([{ deviceId, deviceName: kind, kind, lastSeenAt: dark }]);
+      await suite.db
+        .update(workingOrderLines)
+        .set({ servedQuantity: 1000 })
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      expect(await read(f)).toEqual([]);
+    },
+  );
 
   it("never lists a till with a pass screen", async () => {
     const f = await passFixture();
