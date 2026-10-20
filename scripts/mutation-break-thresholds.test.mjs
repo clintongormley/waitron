@@ -1,10 +1,12 @@
-// Every package that can be mutation-tested declares the score it FAILS at. `packages/db` and
-// `packages/ui` carry their bars in the `mutation-db-aggregate` and `mutation-ui-aggregate` jobs
-// rather than their own `stryker.config.json`, because CI splits each run across shards and a
-// `thresholds.break` there would gate each shard's slice.
+// Every package that can be mutation-tested declares the score it FAILS at. `packages/db`,
+// `packages/ui` and `packages/ui-core` carry their bars in the `mutation-db-aggregate`,
+// `mutation-ui-aggregate` and `mutation-ui-core-aggregate` jobs rather than their own
+// `stryker.config.json`, because CI splits each run across shards and a `thresholds.break` there
+// would gate each shard's slice.
 //
-// Weaker than its name in one way worth stating: it reads the workflow as TEXT for db's and ui's
-// bars, so a step that reached the same command through a variable would be invisible to it.
+// Weaker than its name in one way worth stating: it reads the workflow as TEXT for the sharded
+// packages' bars and their shards' upload paths, so a step that reached the same command or path
+// through a variable would be invisible to it. It never runs Stryker to see a report written.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +15,7 @@ import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const BAR = 90;
-const SHARDED = new Set(["packages/db", "packages/ui"]);
+const SHARDED = new Set(["packages/db", "packages/ui", "packages/ui-core"]);
 
 /**
  * Members come from `pnpm ls` rather than a listing of `packages/`, so a `mutation` script added
@@ -45,7 +47,7 @@ describe("every mutation-tested package declares the bar it fails at", () => {
   );
 
   it(
-    "every package but db and ui breaks at 90 in its own stryker config",
+    "every package but db, ui and ui-core breaks at 90 in its own stryker config",
     { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
     () => {
       // One case over the whole list rather than `it.each`, which would have to build the list
@@ -92,6 +94,47 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     expect(config.thresholds?.break).toBeUndefined();
     expect(runLines()).toContain(
       `run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 30 --break ${BAR}`,
+    );
+  });
+
+  /** The `path:` under the upload step that names `mutation-report-<name>-shard-…`, or undefined. */
+  function uploadedPath(name) {
+    const lines = readFileSync(join(root, ".github", "workflows", "mutation.yml"), "utf8")
+      .split("\n")
+      .map((line) => line.trim());
+    const at = lines.findIndex((line) => line.startsWith(`name: mutation-report-${name}-shard-`));
+    if (at === -1) return undefined;
+    const path = lines.slice(at + 1, at + 4).find((line) => line.startsWith("path: "));
+    return path?.slice("path: ".length).replace(/\/$/, "");
+  }
+
+  // The aggregate job reads only the json reports in the shards' uploads; a shard that writes html
+  // alone leaves it nothing to score, and it fails every night.
+  it("every sharded package writes a json report inside the directory its shards upload", () => {
+    const problems = [...SHARDED].sort().flatMap((dir) => {
+      const config = JSON.parse(readFileSync(join(root, dir, "stryker.config.json"), "utf8"));
+      const uploaded = uploadedPath(dir.split("/").pop());
+      const written = config.jsonReporter?.fileName
+        ? join(dir, config.jsonReporter.fileName)
+        : undefined;
+      const found = [];
+      if (!config.reporters?.includes("json")) found.push(`${dir}: no "json" reporter`);
+      if (uploaded === undefined) found.push(`${dir}: no shard upload step in mutation.yml`);
+      else if (!written?.startsWith(`${uploaded}/`)) {
+        found.push(`${dir}: jsonReporter.fileName ${written} is not under ${uploaded}/`);
+      }
+      return found;
+    });
+    expect(problems).toEqual([]);
+  });
+
+  it("packages/ui-core breaks at 90 on the merged score of its shards", () => {
+    const config = JSON.parse(
+      readFileSync(join(root, "packages", "ui-core", "stryker.config.json"), "utf8"),
+    );
+    expect(config.thresholds?.break).toBeUndefined();
+    expect(runLines()).toContain(
+      `run: node scripts/mutation-aggregate.mjs mutation-reports --package ui-core --shards 4 --break ${BAR}`,
     );
   });
 });

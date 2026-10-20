@@ -2,6 +2,7 @@ import * as core from "@waitron/ui-core";
 import { WtInput } from "@waitron/ui-core/components/wt-input";
 import { applyTokens } from "@waitron/ui-core/tokens";
 import { submitOnEnter } from "@waitron/ui-core/submit-on-enter";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { createLeaveCoordinator, type DraftScope } from "@waitron/ui-core/unsaved-changes";
 
 if (createLeaveCoordinator !== core.createLeaveCoordinator) {
@@ -101,4 +102,5 @@ shadow.append(nested);
 applyTokens(nested);
 applyTokens(nested);
 if (shadow.adoptedStyleSheets.length !== 1) throw new Error("Duplicate shadow sheet");
+document.body.dataset.themePrimary = WAITRON_DEFAULTS.light["--wt-color-primary"];
 document.body.dataset.ready = "true";

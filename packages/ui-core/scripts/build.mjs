@@ -22,8 +22,8 @@ await build({
     {
       name: "inline-theme-css",
       setup(build) {
-        build.onResolve({ filter: /\.css\?inline$/ }, ({ path, resolveDir }) => ({
-          path: resolve(resolveDir, path.slice(0, -"?inline".length)),
+        build.onResolve({ filter: /\.css\?(inline|raw)$/ }, ({ path, resolveDir }) => ({
+          path: resolve(resolveDir, path.replace(/\?(inline|raw)$/, "")),
           namespace: "theme-css",
         }));
         build.onLoad({ filter: /\.css$/, namespace: "theme-css" }, async ({ path }) => ({

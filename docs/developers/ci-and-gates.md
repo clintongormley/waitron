@@ -306,22 +306,23 @@ file into a package where its coverage would count.
 
 A mutation run makes one small change to a source file at a time and reruns the tests; a change
 nothing notices is behaviour no test is checking. `thresholds.break` turns that score into a gate.
-Three packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
-`packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that the
-target is 90 everywhere, and `packages/ui-core` since its extraction (#519, 2026-09-23).
-`packages/db` and `packages/ui` carry no `break` in their own configs, deliberately: CI splits each
-run into shards (ten for db, thirty for ui), each passed its own `--mutate` list, so a
-`thresholds.break` there would gate one slice rather than the package. Their bars live in the
-`mutation-db-aggregate` and `mutation-ui-aggregate` jobs instead, each of which merges its package's
-shard reports and scores them once. ui held its bar in its own config from 2026-09-19 until A539
-moved it to the merged score, when one job stopped fitting its 185-minute limit.
+Two packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
+`packages/shared` since July 2026 and `packages/fiscal` under the owner's 2026-09-19 decision that
+the target is 90 everywhere. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
+their own configs, deliberately: CI splits each run into shards (ten for db, thirty for ui, four for
+ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
+rather than the package. Their bars live in the `mutation-db-aggregate`, `mutation-ui-aggregate`
+and `mutation-ui-core-aggregate` jobs instead, each of which merges its package's shard reports and
+scores them once. ui held its bar in its own config from 2026-09-19 until A539 moved it to the
+merged score, when one job stopped fitting its 185-minute limit; ui-core held its own from its
+extraction (#519, 2026-09-23) until A841 slice 1 added the theme derivation's mutants.
 
 Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
 | `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
-| `ui-core` | the `mutation` matrix in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand — a branch that thins a UI test goes green and reddens the next night |
+| `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
@@ -337,8 +338,9 @@ file db's selection leaves out. Nor do ui's and db's merged scores count every m
 span crosses a `HEAVY_FILES` range boundary is mutated by no shard — 2 in db and 26 in ui at the
 2026-10-12 splits, as counted by that day's Codex review by instrumenting each split file whole and
 by range. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
-package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's and ui's
-bars, so a step that reached the same command through a variable would be invisible to it.
+package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for the sharded
+packages' bars and their shards' upload paths, so a step that reached the same command or path
+through a variable would be invisible to it, and it never runs Stryker to see a report written.
 
 `packages/shared`'s score is taken without `src/conventions.test.ts`: its `vitest.config.ts`
 excludes that file whenever `STRYKER_MUTATOR_WORKER` is set, which Stryker 10 sets on the worker
@@ -353,12 +355,15 @@ unchanged, it was not run at all (that run counted 396 tests, the package's 449 
 53), and neither was a probe suite whose only input was `?raw` source. Any mutation-tested package
 with a suite that imports a mutated file and reads its package's `src` as text could read Stryker's
 instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.test.ts` imports `./clock.js`, which fiscal's
-`mutate` list names, and reads `./*.ts` as raw text. Only `packages/shared` was checked.
+`mutate` list names, and reads `./*.ts` as raw text. `packages/ui-core` leaves out
+`src/theme/sources.test.ts` the same way, and `src/theme/*.sweep.test.ts` so a theme mutant does
+not rerun the sweeps. Only `packages/shared` was checked.
 
 ### Mutation testing runs nightly at 05:00 UTC
 
-Nightly rather than Mondays only (owner, 2026-10-12). A run is 43 jobs (ui's 30 shards, db's 10,
-ui-core, and the two aggregates), and the account never ran more than 20 jobs at once from 6 to 12
+Nightly rather than Mondays only (owner, 2026-10-12). A run is 47 jobs (ui's 30 shards, db's 10,
+ui-core's 4, and the three aggregates; 43 before ui-core was sharded on 2026-10-20, with ui-core one
+job and two aggregates), and the account never ran more than 20 jobs at once from 6 to 12
 October except for one instant that read 21 (every job that held a runner, from
 `gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
 `gh api repos/clintongormley/waitron/actions/runs/<id>/jobs?per_page=100&filter=all --paginate`, a
@@ -1114,7 +1119,8 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
 | licence.yml        | dco                               | 0.3                            | 5     |
-| mutation.yml       | mutation (matrix ui-core)         | 5.3 (2026-10-05)               | 15    |
+| mutation.yml       | mutation-ui-core (matrix shards)  | not yet measured in CI; 10.7 locally (shard 1; shards 2 and 3 not timed) | 25    |
+| mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
@@ -1131,8 +1137,20 @@ to fifteen minutes, with twelve minutes for its jobs API step, to accommodate a 
 window. The observed API status lag and chosen margins are recorded under "How the second step
 reads the API" above; the table's 0.7-minute measurement predates this change.
 
-ui-core's figure is run `37267389722` (5m18s; its other two scheduled runs, `36380351019` and
-`38206876422`, took 2m06s and 4m56s).
+Until A841 slice 1, ui-core ran as one job, the `mutation` matrix, at a 15-minute limit: its longest
+measured run was `39373226000` (2026-10-20), 6m44s for 612 mutants at 4 test runners; the
+scheduled runs `37267389722`, `36380351019` and `38206876422` took 5m18s, 2m06s and 4m56s. The theme derivation added about 1,180 mutants, so the job became four
+`mutation-ui-core` shards with no file cut into ranges. Their 25-minute limit is the doubling rule
+applied to a LOCAL measurement, because no CI run of them existed yet: on 2026-10-20 on the owner's
+Mac, `pnpm exec stryker run --mutate "$(node ../../scripts/mutation-shard.mjs ui-core <n> 4)"
+--concurrency 2 --force` in `packages/ui-core` took 643 s for shard 1 (544 mutants, `derive.ts` and
+`colour.ts` among them) and 468 s for shard 4 (448 mutants, `contrast-rules.ts` among them); shards
+2 and 3 were not timed and hold about 800 mutants between them (run `39373226000`'s 612 plus the
+theme's 1,180, less the two timed shards). Those times are the Stryker command's own wall time,
+and leave out a CI job's setup steps, which took about 38 s on run `39373226000` (job start to the
+mutation step). 10.7 minutes doubled is 21.4, rounded up to 25. A CI runner gives Stryker 4
+test runners (`Creating 4 test runner process(es)` in run `39373226000`'s log) on slower cores, so
+replace this with the first CI run's slowest shard.
 `mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38256003987`, with 30 ui
 shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 23.7
 minutes and the aggregate under 1, so its limit is 50 by the doubling rule. The same shard took 17

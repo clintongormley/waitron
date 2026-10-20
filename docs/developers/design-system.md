@@ -129,6 +129,12 @@ overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-dan
 
 ### Colour
 
+The contrast rules the palette is held to are listed once, in
+`packages/ui-core/src/theme/contrast-rules.ts`: `packages/ui-core/src/tokens/colors.test.ts` runs all of them against the browser's
+resolved tokens, and the theme derivation runs the ones that read a colour a theme writes against a
+venue's colours. A rule of another kind, such as the CIEDE2000 and CIELAB lightness checks of the calm card
+edge and the pulse dim colours, is in `colors.test.ts` alone, and the derivation does not run it.
+
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
 `--wt-color-surface-sunken`, `--wt-color-track`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
 `--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-danger`,

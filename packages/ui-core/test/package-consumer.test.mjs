@@ -135,6 +135,7 @@ test("a packed release works in an independent browser consumer", { timeout: 170
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(origin);
     await page.waitForSelector('body[data-ready="true"]');
+    assert.equal(await page.getAttribute("body", "data-theme-primary"), "#1f6feb");
     assert.equal(await page.getAttribute("body", "data-leave-outcomes"), "kept/proceeded/1");
     const email = page.locator("#email input");
     const password = page.locator("#password input");

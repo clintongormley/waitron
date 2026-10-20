@@ -5,6 +5,9 @@ It contains the button, input, textarea, card, icon, spinner, form actions and e
 summary, plus theme tokens, the shared field styles (`fieldStyles`) and keyboard helpers. Application authentication and validation
 stay in your application.
 
+`@waitron/ui-core/theme` is the theme derivation; it takes Waitron's values as an argument.
+`@waitron/ui-core/theme/waitron` exports those values, read from the token files.
+
 The package is private. Registry publication is a separate release step; this
 checkout builds and tests a local tarball without publishing it.
 
