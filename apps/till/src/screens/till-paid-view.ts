@@ -8,8 +8,8 @@ import { PAYMENT_STATES } from "../state/bill-payment.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "@waitron/ui/src/components/wt-button.js";
 
-/** The bill paid in full: what was paid, whether a ticket went out, and Cerrar mesa. It only shows
- * and asks; the app owns every request. */
+/** The bill paid in full: what was paid, whether a ticket went out, and the Finish table button
+ * (`table.finish`). It only shows and asks; the app owns every request. */
 @customElement("till-paid-view")
 export class TillPaidView extends LitElement {
   constructor() {
@@ -132,7 +132,8 @@ export class TillPaidView extends LitElement {
   @property({ type: Boolean }) canPrint = false;
   /** Whether this device may open the cash drawer by hand (the profile's `open-cash-drawer`). */
   @property({ type: Boolean }) canOpenDrawer = false;
-  /** A ticket request is out: it holds the ticket's actions, never Cerrar mesa or Volver. */
+  /** A ticket request is out: it holds the ticket's actions, never Finish table (`table.finish`)
+   * or Back to the table (`paid.back`). */
   @property({ type: Boolean }) busy = false;
 
   #emit(name: string): void {

@@ -138,7 +138,7 @@ describe("till-presented-pay-dialog: what it shows", () => {
     expect(root(el).querySelector<HTMLElement & { open: boolean }>("wt-dialog")!.open).toBe(false);
   });
 
-  it("titles itself Cobrar alone without a table name", async () => {
+  it("titles itself with the pay title alone without a table name", async () => {
     const el = await mount({ tableName: "" });
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
       t("bill_pay.title"),
@@ -162,7 +162,7 @@ describe("till-presented-pay-dialog: what it shows", () => {
     },
   );
 
-  it("with no method offered, says so and Cobrar stays disabled", async () => {
+  it("with no method offered, says so and Take payment stays disabled", async () => {
     const el = await mount({ takesReaderCard: false, takesCash: false, takesManualCard: false });
     const paid = capture(el, "presented-pay");
 
@@ -182,7 +182,7 @@ describe("till-presented-pay-dialog: what it shows", () => {
 });
 
 describe("till-presented-pay-dialog: by card on the reader", () => {
-  it("names Lector 2 and Barra in the closed row, and Cobrar charges the reader it names", async () => {
+  it("names Lector 2 and Barra in the closed row, and Take payment charges the reader it names", async () => {
     const el = await mount();
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
 
@@ -207,7 +207,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(paid).toEqual([{ method: "card", readerId: "r3" }]);
   });
 
-  it("with no reader, opens the row and disables Cobrar on Tarjeta; cash needs no reader", async () => {
+  it("with no reader, opens the row and disables Take payment on Card; cash needs no reader", async () => {
     const el = await mount({ equipment: equipmentWith(null) });
     const paid = capture(el, "presented-pay");
 
@@ -221,7 +221,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(charge(el).disabled).toBe(false);
   });
 
-  it("before the equipment is read, disables Cobrar on Tarjeta without opening the row", async () => {
+  it("before the equipment is read, disables Take payment on Card without opening the row", async () => {
     const el = await mount({ equipment: null });
     expect(charge(el).disabled).toBe(true);
     expect(row(el)!.open).toBe(false);
@@ -294,7 +294,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(paid).toEqual([{ method: "card", readerId: "sim-1" }]);
   });
 
-  it("disables Cobrar while an equipment change is out, whatever the method", async () => {
+  it("disables Take payment while an equipment change is out, whatever the method", async () => {
     const el = await mount({ equipmentBusy: true });
     const paid = capture(el, "presented-pay");
     expect(charge(el).disabled).toBe(true);
@@ -359,7 +359,7 @@ describe("till-presented-pay-dialog: the row's QR", () => {
     expect(methods(el)).toEqual([]);
   });
 
-  it("Volver brings back the method, the cash handed over and the guests", async () => {
+  it("Back brings back the method, the cash handed over and the guests", async () => {
     const el = await scanning();
     await pick(el, "cash");
     await type(el, "tendered", "70");
@@ -377,7 +377,7 @@ describe("till-presented-pay-dialog: the row's QR", () => {
     expect(stepper(el)!.value).toBe("6");
   });
 
-  it("Volver keeps another machine's operation number", async () => {
+  it("Back keeps another machine's operation number", async () => {
     const el = await scanning();
     await pick(el, "manual");
     await type(el, "externalRef", "operation-17");
@@ -473,7 +473,7 @@ describe("till-presented-pay-dialog: in cash and on another machine", () => {
     expect(paid).toEqual([{ method: "cash", tendered: "62.40" }]);
   });
 
-  it("Otro datáfono sends manual, with the operation number only when typed", async () => {
+  it("Other card machine sends manual, with the operation number only when typed", async () => {
     const el = await mount();
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
     await pick(el, "manual");
@@ -486,7 +486,7 @@ describe("till-presented-pay-dialog: in cash and on another machine", () => {
     expect(paid).toEqual([{ method: "manual" }, { method: "manual", externalRef: "4821" }]);
   });
 
-  it("Otro datáfono needs no reader", async () => {
+  it("Other card machine needs no reader", async () => {
     const el = await mount({ equipment: null });
     await pick(el, "manual");
     expect(charge(el).disabled).toBe(false);
@@ -576,7 +576,7 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     expect(actions(el).error).toBe(t("form.fix_fields"));
   });
 
-  it("a refusal naming the operation number shows under it on Otro datáfono", async () => {
+  it("a refusal naming the operation number shows under it on Other card machine", async () => {
     const el = await mount({
       refusal: { code: "management.request_invalid", field: "externalRef" },
     });
@@ -623,7 +623,7 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     expect(actions(el).error).toBe("");
   });
 
-  it("while busy, Cobrar is loading and nothing more is asked", async () => {
+  it("while busy, Take payment is loading and nothing more is asked", async () => {
     const el = await mount({ busy: true });
     const paid = capture(el, "presented-pay");
     expect(charge(el).loading).toBe(true);
@@ -632,7 +632,7 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     expect(paid).toEqual([]);
   });
 
-  it("Cerrar asks the app to close the sheet", async () => {
+  it("Close asks the app to close the sheet", async () => {
     const el = await mount();
     const closed = capture(el, "presented-pay-close");
     const shut = new Promise<void>((resolve) =>
@@ -719,7 +719,7 @@ describe("till-presented-pay-dialog: locked on a payment with no answer", () => 
     expect(radios(el).map((radio) => radio.value)).toEqual(["cash"]);
   });
 
-  it("draws no reader and printer row, no Cobrar, and says the payment is unconfirmed", async () => {
+  it("draws no reader and printer row, no Take payment, and says the payment is unconfirmed", async () => {
     const el = await mount({ confirmation: cash });
 
     expect(row(el)).toBeNull();
@@ -832,7 +832,7 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("after a decline, retries on the phone's reader now, as Reintentar en Lector 3", async () => {
+  it("after a decline, retries on the phone's reader now, as Try again on Lector 3", async () => {
     const { el, paid } = await sent();
     el.equipment = equipmentWith(LECTOR_3);
     el.busy = false;
@@ -910,7 +910,7 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     expect(target.closest("wt-form-actions")!.assignedSlot?.name).toBe("footer");
   }
 
-  it("the form's Cobrar, under the reader's refusal and a refusal in Spanish", async () => {
+  it("the form's Take payment, under the reader's refusal and a refusal in Spanish", async () => {
     await page.viewport(390, 900);
     const el = await mount(tall());
     await row(el)!.updateComplete;
@@ -936,7 +936,7 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     await expectInView(el, "[data-presented-pay-resend]");
   });
 
-  it("the camera's Volver", async () => {
+  it("the camera's Back", async () => {
     await page.viewport(390, 900);
     vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
     const el = await mount({ canScan: true });

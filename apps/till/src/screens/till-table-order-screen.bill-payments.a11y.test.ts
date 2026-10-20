@@ -107,12 +107,12 @@ async function mountHandheld(
   mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
   await mounted.el.updateComplete;
   if (mounted.el.shadowRoot!.querySelector("[data-pay-sheet]") === null)
-    throw new Error("the scan must include the handheld's Cobrar");
+    throw new Error("the scan must include the handheld's Pay button");
   return mounted;
 }
 
 describe.each(["light", "dark"] as const)(
-  "till-table-order-screen handheld Cobrar a11y (%s theme)",
+  "till-table-order-screen handheld Pay button a11y (%s theme)",
   (theme) => {
     it.each([
       ["an untouched bill", { ...bill, hasPayments: false }, null],
@@ -124,7 +124,7 @@ describe.each(["light", "dark"] as const)(
   },
 );
 
-describe("till-table-order-screen handheld Cobrar look", () => {
+describe("till-table-order-screen handheld Pay button look", () => {
   it("is captured in both themes at 390 and 1280, and the themes paint differently", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const backgrounds: Record<string, string> = {};
@@ -148,10 +148,10 @@ describe("till-table-order-screen handheld Cobrar look", () => {
           // The pay section sits below the fold at phone width; the viewport capture shows it.
           pay.scrollIntoView({ block: "end" });
           await page.screenshot({
-            path: `__screenshots__/look/a796-handheld-cobrar-${theme}-${width}.png`,
+            path: `__screenshots__/look/a796-handheld-pay-${theme}-${width}.png`,
           });
           console.info(
-            `look ${theme} ${width}: pay section ${pay.getBoundingClientRect().width}px, Cobrar ${el.shadowRoot!.querySelector("[data-pay-sheet]")!.getBoundingClientRect().width}px`,
+            `look ${theme} ${width}: pay section ${pay.getBoundingClientRect().width}px, Pay ${el.shadowRoot!.querySelector("[data-pay-sheet]")!.getBoundingClientRect().width}px`,
           );
           cleanupWidgets();
         }

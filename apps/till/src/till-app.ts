@@ -15932,7 +15932,8 @@ export class TillApp extends LitElement {
       : null;
   }
 
-  /** Cobrar on a presented bill: its sheet opens, and the phone's equipment is read again. */
+  /** The order screen's Pay (`action.pay`) on a presented bill: its sheet opens, and the phone's
+   * equipment is read again. */
   #onPayPresented(event: Event): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     if (workingOrderId !== this.activeTabId) return;
@@ -17001,7 +17002,7 @@ export class TillApp extends LitElement {
 
   /**
    * `settled` is the bill's payments when this payment settled it: on a handheld a simplified
-   * invoice then shows the paid screen, whose Cerrar mesa frees the table.
+   * invoice then shows the paid screen, whose Finish table (`table.finish`) frees the table.
    */
   #showTicket(
     workingOrderId: string,
@@ -17036,7 +17037,7 @@ export class TillApp extends LitElement {
     void this.#loadPartyBills();
   }
 
-  /** A refused Cerrar mesa is acted on from the order screen beneath. */
+  /** A refused Finish table (`table.finish`) is acted on from the order screen beneath. */
   #leavePaidScreen(): void {
     if (this.drill?.kind === "paid") this.#popDrill();
   }

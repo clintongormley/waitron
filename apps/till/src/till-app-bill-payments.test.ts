@@ -2458,7 +2458,7 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
   });
 
-  it("keeps the locked confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket", async () => {
+  it("keeps the locked confirmation when the payment settled the bill, and Check again shows the ticket", async () => {
     const { el, original } = await mountUnanswered();
     shows = { state: "received" };
     showsBill = { status: "settled", received: "120.00", outstanding: "0.00" };
@@ -4834,7 +4834,8 @@ describe("till-app: a bill payment on the card reader", () => {
   });
 
   describe("till-app: the charge names the reader the handheld's row shows (A796 Task 10b)", () => {
-    /** A handheld at the confirmation of a 40.00 payment by `method`, before Cobrar is pressed. */
+    /** A handheld at the confirmation of a 40.00 payment by `method`, before Take payment is
+     * pressed. */
     async function handheldConfirming(
       takeBillPayment: unknown,
       method: "card" | "cash",

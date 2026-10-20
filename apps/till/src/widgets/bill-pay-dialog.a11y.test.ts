@@ -910,7 +910,8 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     },
   );
 
-  /** Cobrar pressed on Lector 2 and the card out at the reader; declined, the reader answered. */
+  /** Take payment pressed on Lector 2 and the card out at the reader; declined, the reader
+   * answered. */
   async function atTheTable(state: "waiting" | "declined") {
     const mounted = await withRow();
     const { el } = mounted;

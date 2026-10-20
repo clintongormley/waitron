@@ -207,7 +207,7 @@ describe("till-paid-view", () => {
     expect(seen[0]!.detail).toEqual({});
   });
 
-  it("Cerrar mesa is the primary action and Volver a la mesa the secondary one", async () => {
+  it("Finish table is the primary action and Back to the table the secondary one", async () => {
     const el = await mount({});
     const finish = button(el, "finish-table") as HTMLElement & { variant: string };
     const back = button(el, "back-to-table") as HTMLElement & { variant: string };
@@ -217,7 +217,7 @@ describe("till-paid-view", () => {
     expect(back.variant).toBe("secondary");
   });
 
-  it("busy disables the ticket's actions, never Cerrar mesa or Volver a la mesa", async () => {
+  it("busy disables the ticket's actions, never Finish table or Back to the table", async () => {
     const disabled = async (el: TillPaidView, test: string) => {
       const host = button(el, test) as HTMLElement & { updateComplete: Promise<unknown> };
       await host.updateComplete;

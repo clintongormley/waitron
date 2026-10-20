@@ -150,7 +150,7 @@ beforeEach(() => {
 afterEach(cleanupWidgets);
 
 describe("till-app: paying a table from a handheld", () => {
-  it("Cobrar opens the sheet on the whole bill, naming the phone's reader, and reads the equipment again", async () => {
+  it("Pay opens the sheet on the whole bill, naming the phone's reader, and reads the equipment again", async () => {
     const overrides = onPhone();
     const { el } = await mountApp(overrides);
     const order = await openPhoneTable(el);
@@ -166,7 +166,7 @@ describe("till-app: paying a table from a handheld", () => {
     expect(overrides.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
   });
 
-  it("a whole-bill card payment, from the dialog's own Cobrar, charges the row's reader", async () => {
+  it("a whole-bill card payment, from the dialog's own Take payment, charges the row's reader", async () => {
     const { el } = await mountApp(onPhone());
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
@@ -178,7 +178,7 @@ describe("till-app: paying a table from a handheld", () => {
     expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: "r2" });
   });
 
-  it("Toda la cuenta on a partly paid bill sends what the bill still owes", async () => {
+  it("Whole bill on a partly paid bill sends what the bill still owes", async () => {
     const owed: AllocationPreview = { ...wholeCard, applied: "70.00", charged: "70.00" };
     const { el } = await mountApp(
       onPhone({
@@ -224,7 +224,7 @@ describe("till-app: paying a table from a handheld", () => {
     expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: "demo-1" });
   });
 
-  it("a partly paid bill keeps its amount lines and bill choices beside one Cobrar", async () => {
+  it("a partly paid bill keeps its amount lines and bill choices beside one Pay button", async () => {
     const partly = billOf({ outstanding: "70.00", hasPayments: true });
     const { el } = await mountApp(
       onPhone(
@@ -246,7 +246,7 @@ describe("till-app: paying a table from a handheld", () => {
     expect(inOrder(order, "[data-open-bill-pay]")).toBeNull();
   });
 
-  it("a presented bill draws one Cobrar in place of today's pay card", async () => {
+  it("a presented bill draws one Pay button in place of today's pay card", async () => {
     const { el } = await mountApp(
       onPhone({ getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]) }),
     );
@@ -298,7 +298,7 @@ describe("a presented bill on a handheld", () => {
     await flush(el);
   }
 
-  it("Cobrar opens the presented bill's sheet on its whole amount and reads the equipment again", async () => {
+  it("Pay opens the presented bill's sheet on its whole amount and reads the equipment again", async () => {
     const { el, stubs, readsBefore } = await openPresented();
 
     const sheet = presented(el);
@@ -948,7 +948,7 @@ describe("till-app: a pick from the sheet", () => {
     vi.unstubAllGlobals();
   });
 
-  it("a reader pick saves through Equipment and holds Continuar until it is answered", async () => {
+  it("a reader pick saves through Equipment and holds Continue until it is answered", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const el = await phoneSheet({ setDeviceEquipment });
 
@@ -979,7 +979,7 @@ describe("till-app: a pick from the sheet", () => {
     expect(row(el)!.shadowRoot!.querySelector('[data-pay-note="card_terminal"]')).toBeNull();
   });
 
-  it("two picks out at once hold Continuar until the second is answered", async () => {
+  it("two picks out at once hold Continue until the second is answered", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const el = await phoneSheet({ setDeviceEquipment });
 
@@ -995,7 +995,7 @@ describe("till-app: a pick from the sheet", () => {
     expect(continueButton(el).disabled).toBe(false);
   });
 
-  it("an NFC tap still out holds Continuar too", async () => {
+  it("an NFC tap still out holds Continue too", async () => {
     installNfc();
     const { setDeviceEquipment, answers } = heldPicks();
     const el = await phoneSheet({ setDeviceEquipment });
@@ -1010,7 +1010,7 @@ describe("till-app: a pick from the sheet", () => {
     expect(continueButton(el).disabled).toBe(false);
   });
 
-  it("a tap queued, then a logout and a sign-in again, leaves Continuar enabled", async () => {
+  it("a tap queued, then a logout and a sign-in again, leaves Continue enabled", async () => {
     installNfc();
     const { setDeviceEquipment, answers } = heldPicks();
     const el = await phoneSheet({ setDeviceEquipment });
@@ -1030,7 +1030,7 @@ describe("till-app: a pick from the sheet", () => {
     expect(continueButton(el).disabled).toBe(false);
   });
 
-  it("a locked confirmation's Comprobar de nuevo is not held while an NFC tap is out", async () => {
+  it("a locked confirmation's Check again is not held while an NFC tap is out", async () => {
     installNfc();
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { setDeviceEquipment } = heldPicks();
@@ -1184,23 +1184,23 @@ describe("till-app: a pick from the sheet", () => {
     expect(combobox.value).toBe("r2");
   });
 
-  it("a card's Cobrar is held while an equipment change is out, and enabled after", async () => {
+  it("a card's Take payment is held while an equipment change is out, and enabled after", async () => {
     installNfc();
     const { setDeviceEquipment, answers } = heldPicks();
     const el = await phoneSheet({ setDeviceEquipment });
     await press(el, 'input[name="method"][value="card"]');
     await press(el, "[data-pay-continue]");
-    const cobrar = () => inDialog(el, "[data-pay-confirm]")!;
-    expect(cobrar().disabled).toBe(false);
+    const take = () => inDialog(el, "[data-pay-confirm]")!;
+    expect(take().disabled).toBe(false);
 
     (await nfcReader()).read(`waitron-equipment:reader:${READER_ID}`);
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce());
     await flush(el);
-    expect(cobrar().disabled).toBe(true);
+    expect(take().disabled).toBe(true);
 
     answers[0]!();
     await flush(el);
-    expect(cobrar().disabled).toBe(false);
+    expect(take().disabled).toBe(false);
   });
 });
 
@@ -1683,7 +1683,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
     ).toBe(false);
   });
 
-  it("a reader's sticker still out holds Continuar", async () => {
+  it("a reader's sticker still out holds Continue", async () => {
     film(formatEquipmentCode("reader", READER_ID));
     let answer!: () => void;
     const setDeviceEquipment = vi.fn(
@@ -1838,7 +1838,7 @@ describe("till-app: a sticker's notice inside the sheet", () => {
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
   });
 
-  it("a tap on the confirmation step makes Cobrar send the tapped reader", async () => {
+  it("a tap on the confirmation step makes Take payment send the tapped reader", async () => {
     const { el } = await phoneSheet();
     await press(el, 'input[name="method"][value="card"]');
     await press(el, "[data-pay-continue]");
@@ -2836,9 +2836,9 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       const readsBefore = overrides.getDeviceEquipment.mock.calls.length;
       vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
 
-      const cobrar = inOrder(order, "[data-pay-sheet]")!;
-      emit(cobrar, "pointerdown");
-      cobrar.click();
+      const payButton = inOrder(order, "[data-pay-sheet]")!;
+      emit(payButton, "pointerdown");
+      payButton.click();
       await settle(el);
       expect(overrides.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
       await vi.advanceTimersByTimeAsync(10_000);
@@ -3089,7 +3089,7 @@ describe("the paid screen on a handheld", () => {
     expect(vi.mocked(api.reprint).mock.calls[0]![0]).toBe("wo-4");
   });
 
-  it("Cerrar mesa finishes the table once", async () => {
+  it("Finish table finishes the table once", async () => {
     const { el } = await threeShares(simplified());
     await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
 
@@ -3100,7 +3100,7 @@ describe("the paid screen on a handheld", () => {
     expect(vi.mocked(api.finishTable).mock.calls[0]![0]).toBe("v1");
   });
 
-  it("Volver a la mesa returns to the table's order without a new history entry", async () => {
+  it("Back to the table returns to the table's order without a new history entry", async () => {
     const { el } = await threeShares(simplified());
     await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
@@ -3123,7 +3123,7 @@ describe("the paid screen on a handheld", () => {
     }
   });
 
-  it("Cerrar mesa refused because another bill still owes leaves the paid screen for the table's refusal", async () => {
+  it("Finish table refused because another bill still owes leaves the paid screen for the table's refusal", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
@@ -3150,7 +3150,7 @@ describe("the paid screen on a handheld", () => {
     ["not permitted", { code: "authorization.not_permitted" }],
     ["unanswered", new TypeError("Failed to fetch")],
   ] as const)(
-    "Cerrar mesa refused (%s) on the paid screen says so where it can be seen",
+    "Finish table refused (%s) on the paid screen says so where it can be seen",
     async (_, refusal) => {
       const { el } = await threeShares(simplified(), {
         finishTable: vi.fn().mockRejectedValue(refusal),
@@ -3191,7 +3191,7 @@ describe("the paid screen on a handheld", () => {
     },
   };
 
-  /** The paid screen's Cerrar mesa answered that a paid dish is not served yet, then the
+  /** The paid screen's Finish table answered that a paid dish is not served yet, then the
    * confirmation's send answered `refusal`. */
   async function refusedAfterUnserved(refusal: { code: string }) {
     const { el } = await threeShares(simplified(), {
@@ -3241,7 +3241,7 @@ describe("the paid screen on a handheld", () => {
     expect(text(alert)).toBe(t("table.finish_bill_holds_money"));
   }
 
-  it("Cerrar mesa with paid dishes not yet served opens the confirmation over the paid screen; refused there because a bill owes, it leaves for the table's refusal", async () => {
+  it("Finish table with paid dishes not yet served opens the confirmation over the paid screen; refused there because a bill owes, it leaves for the table's refusal", async () => {
     const el = await refusedAfterUnserved({ code: "party.bill_outstanding" });
 
     expect(paidView(el)).toBeNull();
@@ -3250,7 +3250,7 @@ describe("the paid screen on a handheld", () => {
     expect(refusal!.checkVisibility()).toBe(true);
   });
 
-  it("Cerrar mesa refused because a bill holds money leaves the paid screen, and the order screen keeps the instruction", async () => {
+  it("Finish table refused because a bill holds money leaves the paid screen, and the order screen keeps the instruction", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     });
@@ -3269,7 +3269,7 @@ describe("the paid screen on a handheld", () => {
     holdsMoneyOnOrder(el);
   });
 
-  it("a ticket read that never answers leaves Cerrar mesa and Volver a la mesa pressable; Cerrar mesa sends once", async () => {
+  it("a ticket read that never answers leaves Finish table and Back to the table pressable; Finish table sends once", async () => {
     const { el } = await threeShares(simplified(), {
       getReceiptPrintStatus: vi.fn(() => new Promise(() => {})),
       finishTable: vi.fn(() => new Promise(() => {})),
@@ -4261,7 +4261,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
   });
 });
 
-describe("till-app: a reader refused at Cobrar, and a printer that has gone (default 19)", () => {
+describe("till-app: a reader refused at Take payment, and a printer that has gone (default 19)", () => {
   const LECTOR_3 = equipmentItem(READER_ID, "Lector 3", { portable: true, provider: "sumup" });
   const MARC = { deviceId: "d2", deviceName: "Móvil 2", personName: "Marc" };
   const TERRAZA = equipmentItem("p2", "Terraza");
@@ -4812,7 +4812,7 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
     },
   );
 
-  it("on the bill path, a fresh Cobrar refused reader.not_held after an unanswered card on the bill never says nothing was charged", async () => {
+  it("on the bill path, a fresh Take payment refused reader.not_held after an unanswered card on the bill never says nothing was charged", async () => {
     const { el, getDeviceEquipment } = await billUnanswered();
     await checkAgainRefused(el);
     await press(el, 'input[name="method"][value="card"]');
@@ -4826,7 +4826,7 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
     expect(sent()[4]!.submissionId).not.toBe(sent()[0]!.submissionId);
   });
 
-  it("on the bill path, a fresh Cobrar refused reader.not_held after an automatic retry answered not_checked never says nothing was charged", async () => {
+  it("on the bill path, a fresh Take payment refused reader.not_held after an automatic retry answered not_checked never says nothing was charged", async () => {
     const takeBillPayment = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
@@ -4975,7 +4975,7 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
     expect(pay).toHaveBeenCalledOnce();
   });
 
-  it("on the bill path, a fresh Cobrar refused reader.not_held after every send of an earlier card was answered says nothing was charged", async () => {
+  it("on the bill path, a fresh Take payment refused reader.not_held after every send of an earlier card was answered says nothing was charged", async () => {
     const takeBillPayment = vi
       .fn()
       .mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 })
@@ -5044,7 +5044,7 @@ describe("till-app: a reader refused at Cobrar, and a printer that has gone (def
         () => t("pay_equipment.printer_none"),
       ],
     ] as const)(
-      "a printer %s opens the row with the printer empty and a warning; Continuar stays enabled and the card is sent",
+      "a printer %s opens the row with the printer empty and a warning; Continue stays enabled and the card is sent",
       async (_how, receipt, warning) => {
         const el = await onForm(receipt);
 

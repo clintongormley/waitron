@@ -317,7 +317,7 @@ describe("till-pay-equipment", () => {
       );
     });
 
-    it("Cerrar in the question takes nothing", async () => {
+    it("Close in the question takes nothing", async () => {
       const el = await mount({ open: true });
       const picks = events(el, "pay-equipment-pick");
       await pick(box(el, "cardReaderId")!, "Lector 4");

@@ -115,7 +115,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on Otro datáfono with the guests field and a refusal above the action", async () => {
+  it("has no violations on Other card machine with the guests field and a refusal above the action", async () => {
     const { el, host } = await mount({
       asksGuests: true,
       receiptGuests: 4,
@@ -322,7 +322,8 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
     }
   });
 
-  /** Cobrar pressed on Lector 2 and the card out at the reader; declined, the reader answered. */
+  /** Take payment pressed on Lector 2 and the card out at the reader; declined, the reader
+   * answered. */
   async function atTheTable(state: "waiting" | "declined") {
     const mounted = await mount();
     const { el } = mounted;

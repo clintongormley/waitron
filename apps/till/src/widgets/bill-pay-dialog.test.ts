@@ -1887,7 +1887,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     charged: "20.80",
   };
 
-  it("names Lector 2 and Barra in the closed row, and Cobrar names the reader it charges", async () => {
+  it("names Lector 2 and Barra in the closed row, and Take payment names the reader it charges", async () => {
     setLocale("es");
     const el = await handheld();
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
@@ -1919,7 +1919,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(confirmed).toEqual([{ readerId: "r3" }]);
   });
 
-  it("opens the row and holds Continue while Tarjeta has no reader; cash needs none", async () => {
+  it("opens the row and holds Continue while Card has no reader; cash needs none", async () => {
     const el = await handheld({ equipment: equipmentWith(null) });
     const asked = capture<PayRequest>(el, "bill-pay-preview");
 
@@ -1935,7 +1935,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
   });
 
-  it("holds Continue on Tarjeta until the equipment has been read, without opening the row", async () => {
+  it("holds Continue on Card until the equipment has been read, without opening the row", async () => {
     const el = await handheld({ equipment: null });
     expect(row(el)!.open).toBe(false);
     expect(button(el, "[data-pay-continue]").disabled).toBe(true);
@@ -1945,7 +1945,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
   });
 
-  it("holds Continue and Cobrar while an equipment change is out, whatever the method", async () => {
+  it("holds Continue and Take payment while an equipment change is out, whatever the method", async () => {
     const el = await handheld({ equipmentBusy: true });
     const confirmed = capture<unknown>(el, "bill-pay-confirm");
     expect(button(el, "[data-pay-continue]").disabled).toBe(true);
@@ -2087,7 +2087,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
       expect(root(el).querySelector("[data-pay-continue]")).toBeNull();
     });
 
-    it("Volver brings the form back as it was: way, amount and method kept", async () => {
+    it("Back brings the form back as it was: way, amount and method kept", async () => {
       const el = await scanning();
 
       await click(el, "[data-pay-scan-back]");
@@ -2099,7 +2099,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
       expect(field(el, "tendered")!.value).toBe("20");
     });
 
-    it("from the confirmation, Volver brings the confirmation back", async () => {
+    it("from the confirmation, Back brings the confirmation back", async () => {
       vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
       const el = await handheld({ canScan: true });
       await previewed(el, cardPreview);
@@ -2198,7 +2198,7 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
   });
 
   for (const locale of ["es", "en"] as const) {
-    it(`labels the locked resend Comprobar de nuevo, and keeps Atrás disabled (${locale})`, async () => {
+    it(`labels the locked resend Check again, and keeps Back disabled (${locale})`, async () => {
       setLocale(locale);
       const el = await locked();
 
@@ -2333,7 +2333,8 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
     vi.useRealTimers();
   });
 
-  /** A handheld's card confirmation for 20,80 € on Lector 2, Cobrar pressed and the send out. */
+  /** A handheld's card confirmation for 20,80 € on Lector 2, Take payment pressed and the send
+   * out. */
   async function sent(over: Partial<TillBillPayDialog> = {}) {
     const el = await mount({
       handheld: true,
@@ -2406,7 +2407,7 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("after a decline, keeps today's words and retries on the phone's reader now, as Reintentar en Lector 3", async () => {
+  it("after a decline, keeps today's words and retries on the phone's reader now, as Try again on Lector 3", async () => {
     const { el, confirmed } = await sent();
     el.equipment = equipmentWith(LECTOR_3);
     el.busy = false;
@@ -3084,7 +3085,7 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await expectInView(el, "[data-pay-next]");
   });
 
-  it("the camera's Volver", async () => {
+  it("the camera's Back", async () => {
     await page.viewport(390, 900);
     vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
     const el = await mount({

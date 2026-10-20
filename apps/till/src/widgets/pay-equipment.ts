@@ -55,8 +55,8 @@ export function payNotice(notice: PayNotice | null): TemplateResult | typeof not
       >`;
 }
 
-/** A pay sheet's charge button on a reader: "Cobrar {amount} en {reader}", or after a decline
- * "Reintentar en {reader}", naming the reader it would charge now. */
+/** A pay sheet's charge button on a reader: `bill_pay.take_on_reader`, or after a decline
+ * `bill_pay.retry_on_reader`, naming the reader it would charge now. */
 export function readerButtonLabel(reader: string, amount: string, declined: boolean): string {
   return declined
     ? t("bill_pay.retry_on_reader").replace("{reader}", () => reader)
@@ -92,7 +92,6 @@ export interface SheetView {
  * The camera a pay sheet shows in place of its body after the row's QR: either kind of sticker is
  * read, and `pay-equipment-sticker` carries it to the app, which sends it as an NFC tap.
  */
-
 export function payScanView(
   host: HTMLElement,
   back: () => void,

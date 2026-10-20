@@ -63,7 +63,8 @@ export function payPrinterOf(equipment: DeviceEquipment | null): PayPrinter {
         }
       : { kind: "switched_off", id: resolved.id, name: resolved.name };
   }
-  // "Sin ticket" only when the profile names no receipt printer at all (design default 19).
+  // The no-ticket label (`pay_equipment.no_ticket`) only when the profile names no receipt printer
+  // at all (design default 19).
   const named =
     role !== undefined &&
     (role.choices.length > 0 || role.default !== null || role.chosen !== null);
