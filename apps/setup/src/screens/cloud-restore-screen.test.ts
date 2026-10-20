@@ -527,3 +527,43 @@ describe("Cloud restore screen in Spanish", () => {
     expect((q(el, "[data-test=acknowledge]") as HTMLInputElement).checked).toBe(true);
   });
 });
+
+describe("Cloud restore retry confirmations", () => {
+  it.each(["request", "snapshot", "venue", "capture", "modules", "unapproved"])(
+    "does not reuse a confirmation after the approved %s changes",
+    async (change) => {
+      const view = approvedView();
+      const { el: original } = await mountWidget<SetupCloudRestoreScreen>(
+        "setup-cloud-restore-screen",
+        { view, liveUnknown: true },
+      );
+      await tick(original, "[data-test=acknowledge]");
+      await tick(original, "[data-test=old-box-gone]");
+      const retryConfirmation = original.readConfirmation();
+      const changed = structuredClone(view);
+      if (change === "request") changed.requestId = "09ad3854-971e-4f82-8fd5-aa9ff60d5265";
+      if (change === "snapshot") changed.point.id = "26d71468-e561-41d0-af8d-31da802fda4e";
+      if (change === "venue") changed.point.venueId = "e6c97482-8e17-4cda-b676-e4a897d11a7b";
+      if (change === "capture") changed.point.capturedAt = "2026-09-24T11:00:00.000Z";
+      if (change === "modules") changed.point.modules.core = 2;
+      const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+        view:
+          change === "unapproved"
+            ? { ...changed, state: "awaiting_owner", point: undefined }
+            : changed,
+        liveUnknown: true,
+        retryConfirmation,
+      });
+      if (change === "unapproved") {
+        el.view = view;
+        await el.updateComplete;
+      }
+      expect(q(el, "[data-test=acknowledge]")).not.toBeNull();
+      expect((q(el, "[data-test=acknowledge]") as HTMLInputElement).checked).toBe(false);
+      expect((q(el, "[data-test=old-box-gone]") as HTMLInputElement).checked).toBe(false);
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM, oldBoxProblem()]);
+    },
+  );
+});

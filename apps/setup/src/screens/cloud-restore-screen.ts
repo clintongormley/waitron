@@ -16,6 +16,12 @@ import { oldBoxQuestion } from "./old-box-question.js";
 /** The one field the screen shows that a refusal of the Cloud restore can name. */
 export type CloudField = "oldBoxGone" | RecoveryEntryField;
 
+export interface CloudRestoreConfirmation {
+  approvalBinding: string | undefined;
+  acknowledged: boolean;
+  oldBoxGone: boolean;
+}
+
 @customElement("setup-cloud-restore-screen")
 export class SetupCloudRestoreScreen extends LitElement {
   static override styles = [
@@ -39,6 +45,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   ];
   @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property({ attribute: false }) view?: CloudRecoveryView;
+  @property({ attribute: false }) retryConfirmation?: CloudRestoreConfirmation;
   @property() errorMessage?: string;
   /** The field `errorMessage` is about. */
   @property() invalidField?: CloudField;
@@ -67,13 +74,27 @@ export class SetupCloudRestoreScreen extends LitElement {
       : undefined;
   }
 
+  readConfirmation(): CloudRestoreConfirmation {
+    return {
+      approvalBinding: this.#approvalBinding,
+      acknowledged: this.acknowledged,
+      oldBoxGone: this.oldBoxGone,
+    };
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {
-      this.acknowledged = false;
-      this.oldBoxGone = false;
+      const confirmation =
+        changed.has("retryConfirmation") &&
+        binding !== undefined &&
+        this.retryConfirmation?.approvalBinding === binding
+          ? this.retryConfirmation
+          : undefined;
+      this.acknowledged = confirmation?.acknowledged ?? false;
+      this.oldBoxGone = confirmation?.oldBoxGone ?? false;
       this.attempted = false;
       this.refusalDismissed = false;
       this.fieldRefusalDismissed = false;

@@ -223,6 +223,9 @@ the old server's bucket. If the old server wrote to it in the last ten minutes, 
 be checked, the restore stops and the page asks you to tick **The old server is switched off for
 good.** Tick it only when that is true, then choose **Restore this snapshot** again.
 
+If the restore is refused, your safety confirmations stay ticked for that approval so you can
+retry. Leaving the page or changing the approved snapshot clears them.
+
 This path supports preparation and demo venues. It restores a retained snapshot through the
 same local cold restore and module hooks as a backup file. It does not recover changes after the
 snapshot, activate a Cloud route, or fence a running server. Reconnecting the replacement to its

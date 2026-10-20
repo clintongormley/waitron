@@ -57,7 +57,7 @@ import type {
   ConfigurationRequestDetail,
   RestoreRequestDetail,
 } from "./events.js";
-import type { CloudField } from "./screens/cloud-restore-screen.js";
+import type { CloudField, CloudRestoreConfirmation } from "./screens/cloud-restore-screen.js";
 import type { ConnectField } from "./screens/connect-screen.js";
 import type { BucketField, RestoredVenue } from "./screens/restore-bucket-screen.js";
 import type { RestoreField } from "./screens/restore-screen.js";
@@ -643,6 +643,7 @@ export class SetupApp extends LitElement {
   @state() private cloudRecoveryError?: Message;
   @state() private cloudInvalidField?: CloudField;
   @state() private cloudRecoveryBusy = false;
+  @state() private cloudRetryConfirmation?: CloudRestoreConfirmation;
   #cloudRecoveryAttempt = 0;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
@@ -978,6 +979,7 @@ export class SetupApp extends LitElement {
     this.cloudInvalidField = undefined;
     this.cloudLiveSince = undefined;
     this.cloudLiveUnknown = false;
+    this.cloudRetryConfirmation = undefined;
     this.configurationError = undefined;
     this.fiscalTestError = undefined;
     this.emailError = undefined;
@@ -1698,6 +1700,7 @@ export class SetupApp extends LitElement {
     const attempt = ++this.#cloudRecoveryAttempt;
     const generation = this.#rootGeneration;
     const owner = this.shadowRoot?.querySelector("setup-cloud-restore-screen");
+    const confirmation = owner?.readConfirmation();
     let phase: Screen = "cloud-restore";
     const ownsBusy = () => attempt === this.#cloudRecoveryAttempt;
     const current = () =>
@@ -1709,6 +1712,7 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
     this.cloudInvalidField = undefined;
+    this.cloudRetryConfirmation = undefined;
     try {
       const {
         action,
@@ -1754,6 +1758,7 @@ export class SetupApp extends LitElement {
       }
     } catch (error) {
       if (current()) {
+        if (phase === "provisioning") this.cloudRetryConfirmation = confirmation;
         const { code, params } = (error ?? {}) as {
           code?: unknown;
           params?: { lastChangeAt?: unknown };
@@ -2298,6 +2303,7 @@ export class SetupApp extends LitElement {
           data-test="screen-cloud-restore"
           .api=${this.api}
           .view=${this.cloudRecoveryView}
+          .retryConfirmation=${this.cloudRetryConfirmation}
           .errorMessage=${this.cloudRecoveryError?.()}
           .invalidField=${this.cloudInvalidField}
           .busy=${this.cloudRecoveryBusy}
