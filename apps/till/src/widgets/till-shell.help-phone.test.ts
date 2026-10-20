@@ -61,7 +61,10 @@ async function openMore(el: TillShell): Promise<void> {
 
 async function closeMore(el: TillShell): Promise<void> {
   await userEvent.keyboard("{Escape}");
-  await vi.waitFor(() => expect(popupOf(el).matches(":popover-open")).toBe(false));
+  // Above phone width a closed More with nothing to hold leaves the bar.
+  await vi.waitFor(() =>
+    expect(moreOf(el) === null || !popupOf(el).matches(":popover-open")).toBe(true),
+  );
 }
 
 async function expectTappable(host: HTMLElement & LitElement): Promise<void> {
@@ -98,7 +101,7 @@ const till: Partial<TillShell> = {
 const zones: Partial<TillShell> = {
   counterZones: [
     { id: "z1", name: "Downstairs bar" },
-    { id: "z2", name: "Terraza" },
+    { id: "z2", name: "Terrace" },
   ],
   selectedCounterZoneId: "z1",
 };
@@ -216,6 +219,25 @@ describe("till-shell's language chooser at phone width, beside the Help switch",
     await closeMore(el);
     await settle(el);
     expect(chooserInMore(el)).toBe(true);
+  });
+
+  it("widening past phone width with More open keeps the chooser in More until it closes", async () => {
+    setLocale("en-GB");
+    await page.viewport(320, 844);
+    const { el } = await mountWidget<TillShell>("till-shell", handheld);
+    await settle(el);
+    expect(chooserInMore(el)).toBe(true);
+    await openMore(el);
+    const chooser = moreChooser(el)!;
+    await page.viewport(700, 844);
+    await settle(el);
+    expect(popupOf(el).matches(":popover-open")).toBe(true);
+    expect(moreChooser(el)).toBe(chooser);
+    expect(chooserInMore(el)).toBe(true);
+    await closeMore(el);
+    await settle(el);
+    expect(chooserInMore(el)).toBe(false);
+    expect(barChooser(el)).not.toBeNull();
   });
 
   it("above phone width the chooser never leaves the bar", async () => {

@@ -417,7 +417,8 @@ export class TillShell extends LitElement {
    * name hidden and the first n − 1 present items of `LEAVE_ORDER` in More. */
   @state() private steps = 0;
   /** A handheld at phone width whose bar does not fit with the language chooser: it moves to the
-   * end of More. */
+   * end of More. It stays there while More is open, even once the screen widens past phone width;
+   * above phone width it returns to the bar when More closes. */
   @state() private chooserInMore = false;
   #run = 0;
   #stepBackOwed = false;
@@ -430,7 +431,10 @@ export class TillShell extends LitElement {
   #held?: ReadonlySet<BarItem>;
   readonly #onPopupToggle = () => {
     this.#release();
-    if ((this.#stepBackOwed || this.phone) && !this.#menuOpen()) void this.#fit();
+    if (this.#menuOpen()) return;
+    const chooserBack = !this.phone && this.chooserInMore;
+    if (chooserBack) this.chooserInMore = false;
+    if (this.#stepBackOwed || this.phone || chooserBack) void this.#fit();
   };
 
   /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
@@ -480,7 +484,7 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
-    if (!this.phone) this.chooserInMore = false;
+    if (!this.phone && !this.#menuOpen()) this.chooserInMore = false;
     if (this.formFactor !== "till") this.#release();
   }
 
