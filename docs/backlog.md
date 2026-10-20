@@ -5704,6 +5704,17 @@ the tree. What remains, largest first:
   coverage threshold. This exceeds the approximate four-minute target without reproducing
   the former shared light-job timeout.
 
+- **Investigate two full-run till browser failures seen during A669 validation.** On
+  2026-10-20, `pnpm --filter @waitron/till test:coverage` reached a missing `Filters 1`
+  control in `till-find-bill-screen.a11y.test.ts:89`; its failure capture showed three active
+  filters. The unchanged file then passed all four cases alone and in the next full run.
+  After rebasing onto A582 help, the full run passed 12,599 cases but Playwright could not
+  click the split control in `till-app-drafts.test.ts:8160`: the button detached during
+  scrolling. That case passed alone without edits. Retain both captures and reproduce
+  the saved-view and detached-control paths before changing code or tests; neither cause
+  is established, and a passing retry is not a repair. Lane G retains the logs and captures
+  under `resume-a669-land-20261020-090825`.
+
 - **Check the older capture suites' viewport cleanup (A669-5 review).**
   `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
   incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
