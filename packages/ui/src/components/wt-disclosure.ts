@@ -34,6 +34,8 @@ export class WtDisclosure extends LitElement {
 
       .section {
         padding-block: var(--wt-space-3);
+        /* At least half a help badge's target, so the heading's badge stays inside the section. */
+        padding-block-start: max(var(--wt-space-3), calc(var(--wt-help-badge-target) / 2));
       }
 
       .head {

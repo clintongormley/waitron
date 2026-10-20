@@ -121,6 +121,8 @@ test.each([
       host.style.setProperty("--wt-modal-max-width", "300px");
       host.style.setProperty("--wt-modal-inline-margin", "40px");
       host.style.setProperty("--wt-modal-inline-padding", "7px");
+      // The padding is never under half a help badge's target; with none, the token alone decides it.
+      host.style.setProperty("--wt-help-badge-target", "0px");
       const rect = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
       expect(rect.width).toBeCloseTo(expectedWidth, 0);
       expect(rect.left).toBeCloseTo(expectedLeft, 0);

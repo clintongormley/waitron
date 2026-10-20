@@ -49,7 +49,8 @@ export class WtModal extends WtDialog {
 
       .body {
         --wt-field-max-width: var(--wt-form-max-width);
-        padding-inline: var(--wt-modal-inline-padding);
+        /* At least half a help badge's target, so a badge hanging off a full-width field stays inside. */
+        padding-inline: max(var(--wt-modal-inline-padding), calc(var(--wt-help-badge-target) / 2));
         /* Not the flex shorthand, which would also put back the shrink factor wt-dialog gives the
            body. */
         flex-grow: 1;
@@ -60,7 +61,7 @@ export class WtModal extends WtDialog {
       }
 
       .footer.has-content {
-        padding-inline: var(--wt-modal-inline-padding);
+        padding-inline: max(var(--wt-modal-inline-padding), calc(var(--wt-help-badge-target) / 2));
       }
     `,
   ];
