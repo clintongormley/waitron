@@ -748,12 +748,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   till no longer offers a separate Allergens screen.
 
 
-- **A655 — fewer and slimmer columns on Products (owner, 2026-10-14; open).** In
-  `apps/dashboard/src/widgets/product-list.ts`: "Standalone ordering" gets a shorter heading,
-  Allergens and Dietary info start hidden (`choosable: "hidden"`), and Made at is deleted, or at
-  the very least loses the grey second line under a category's station. **Added 2026-10-16
-  (owner):** a Course column and a Course filter join the list.
-  [Detail](backlog/catalogue.md#a655--fewer-and-slimmer-columns-on-products)
+- **The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
+  the dashboard's `listMadeAt` and its live query are read only by tests:
+  `apps/server/src/catalogue-api.test.ts:1731` pins the route itself and
+  `apps/server/src/kitchen-delete.integration.test.ts:271` checks station deletion through it.
+  Delete them, or give the read a screen.
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
@@ -988,8 +987,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   not renamed: a venue that already holds duplicates keeps them until someone renames one.
   [Detail](backlog/catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
 
-- **A person who may not read routing sees "Kitchen routing unavailable" on every category**,
-  because a refused read counts as a failed one. Left open by W86 (#1203, a category's Made at).
+- **A person who may not read routing sees the "Kitchen routing unavailable" line above the
+  Products list, which tells them to try again later**, because a refused read counts as a failed
+  one, and trying again changes nothing for them. Left open by W86 (#1203) and A655.
 
 - **One writer still skips the required-language check (`content.language_required`) — OPEN.**
   The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
@@ -1977,10 +1977,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **The server accepts a routing period line naming the cell's own plain station**; it routes
   nothing differently (`validatePeriodLines`, `packages/venue-service/src/routing-store.ts`). Left
-  open by A366 slice 4 Part A.
-
-- **The Products folder note ("some items made elsewhere") counts a period line for a department
-  no active zone serves** (`folderMadeAt`, `apps/dashboard/src/widgets/folder-made-at.ts`). Left
   open by A366 slice 4 Part A.
 
 - **The period delete warning orders its rows on the server** (`routingRowPlaces`,
@@ -4624,7 +4620,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **On a hovered Products row in the dark theme, status and allergen badge borders appear to
   disappear into the row** — the earlier screenshot-only observation remains open. Contrast for those
-  borders, a category row's maker link and the prep stations screen remains unmeasured. Left open by
+  borders and the prep stations screen remains unmeasured. Left open by
   A319 (hover contrast after A306, #1347).
 
 - **Text size after A179 (#988).** Open: page headings follow the Typography roles table in
