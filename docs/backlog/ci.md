@@ -665,3 +665,15 @@ The earlier A674 change, `d7e8654c4` (#1792), allows twenty 30-second waits betw
 is unverified. Keep the gate intact, inspect the job and check states again after they
 settle, and decide how to recover the failed cross-check from that evidence. An unchanged
 rerun does not establish a repair. No test or workflow guard changed for this finding.
+
+
+### Status read-back, 21 October 2026 at 15:41 UTC
+
+The exact-attempt jobs API now reports both delayed jobs completed successfully:
+`test-dashboard (1)` (119285664001) and `test-server-merge` (119292111753).
+All 67 jobs have settled: 65 succeeded, one was skipped and the final `ci` job failed.
+That final failure remains a required-check failure; the later job statuses do not
+change its earlier result. This read-back establishes that the status mismatch ended,
+without establishing its internal cause. Keep the incident open for recovery guidance
+and qualify the next published branch head through the normal hook and CI. No workflow,
+package code or test changed in response to the status mismatch.
