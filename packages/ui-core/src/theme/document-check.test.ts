@@ -73,10 +73,10 @@ describe("readThemeDocument", () => {
     [null, "theme", "not_object"],
     [[], "theme", "not_object"],
     ["theme", "theme", "not_object"],
-    [{ ...WAITRON_CHOICES, logo: { light: "a.webp" } }, "logo", "unknown_key"],
-    [{ ...WAITRON_CHOICES, textScale: 110 }, "textScale", "unknown_key"],
-    [{ ...WAITRON_CHOICES, text: {} }, "text", "unknown_key"],
-    [{ ...WAITRON_CHOICES, printedLogo: null }, "printedLogo", "unknown_key"],
+    [{ ...WAITRON_CHOICES, logo: { light: "a.webp" } }, "theme", "unknown_key"],
+    [{ ...WAITRON_CHOICES, textScale: 110 }, "theme", "unknown_key"],
+    [{ ...WAITRON_CHOICES, text: {} }, "theme", "unknown_key"],
+    [{ ...WAITRON_CHOICES, printedLogo: null }, "theme", "unknown_key"],
     [withoutBrand, "brandColor", "missing"],
     [{ ...WAITRON_CHOICES, brandColor: "#abc" }, "brandColor", "bad_value"],
     [{ ...WAITRON_CHOICES, brandColor: "1e5b3a" }, "brandColor", "bad_value"],
@@ -91,7 +91,7 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, brandFix: [] }, "brandFix", "bad_value"],
     [{ ...WAITRON_CHOICES, brandFix: null }, "brandFix", "bad_value"],
     [{ ...WAITRON_CHOICES, brandFix: true }, "brandFix", "bad_value"],
-    [{ ...WAITRON_CHOICES, brandFix: { sepia: true } }, "brandFix.sepia", "unknown_key"],
+    [{ ...WAITRON_CHOICES, brandFix: { sepia: true } }, "brandFix", "unknown_key"],
     [{ ...WAITRON_CHOICES, brandFix: { light: false } }, "brandFix.light", "bad_value"],
     [{ ...WAITRON_CHOICES, brandFix: { dark: "true" } }, "brandFix.dark", "bad_value"],
     [{ ...WAITRON_CHOICES, background: undefined }, "background", "missing"],
@@ -105,19 +105,19 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, handSet: { dark: {} } }, "handSet.light", "missing"],
     [
       { ...WAITRON_CHOICES, handSet: { light: {}, dark: {}, sepia: {} } },
-      "handSet.sepia",
+      "handSet",
       "unknown_key",
     ],
     [{ ...WAITRON_CHOICES, handSet: { light: [], dark: {} } }, "handSet.light", "bad_value"],
     [{ ...WAITRON_CHOICES, handSet: { light: {}, dark: null } }, "handSet.dark", "bad_value"],
     [
       { ...WAITRON_CHOICES, handSet: { light: { scrim: "#000000" }, dark: {} } },
-      "handSet.light.scrim",
+      "handSet.light",
       "unknown_colour",
     ],
     [
       { ...WAITRON_CHOICES, handSet: { light: { danger: "#ff0000" }, dark: {} } },
-      "handSet.light.danger",
+      "handSet.light",
       "unknown_colour",
     ],
     [
@@ -167,7 +167,7 @@ describe("readThemeDocument", () => {
   it("answers the first refusal in its fixed order", () => {
     expect(readThemeDocument({ ...WAITRON_CHOICES, logo: "a.webp", brandColor: "red" })).toEqual({
       ok: false,
-      field: "logo",
+      field: "theme",
       reason: "unknown_key",
     });
     expect(readThemeDocument({ ...WAITRON_CHOICES, brandColor: "red", corners: "pill" })).toEqual({
@@ -177,7 +177,7 @@ describe("readThemeDocument", () => {
     });
     expect(readThemeDocument({ ...WAITRON_CHOICES, a: 1, b: 2 })).toEqual({
       ok: false,
-      field: "a",
+      field: "theme",
       reason: "unknown_key",
     });
     expect(
@@ -217,7 +217,7 @@ describe("readThemeDocument", () => {
         ...WAITRON_CHOICES,
         handSet: { light: { scrim: "#000000", bg: "#fff" }, dark: { scrim: "#000000" } },
       }),
-    ).toEqual({ ok: false, field: "handSet.light.scrim", reason: "unknown_colour" });
+    ).toEqual({ ok: false, field: "handSet.light", reason: "unknown_colour" });
   });
 
   it("accepts a fix beside a hand-set colour other than Main buttons", () => {

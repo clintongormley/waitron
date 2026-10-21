@@ -195,7 +195,7 @@ describe("Management API — custom themes", () => {
     expect(await res.json()).toEqual({
       error: {
         code: "theme.invalid",
-        params: { field: "handSet.light.evil", reason: "unknown_colour" },
+        params: { field: "handSet.light", reason: "unknown_colour" },
       },
     });
   });

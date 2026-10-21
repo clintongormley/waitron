@@ -43,15 +43,22 @@ const refuse = (field: string, reason: ThemeRefusalReason): Refusal => ({
   reason,
 });
 
-function unknownKey(fields: Fields, allowed: readonly string[], prefix: string): Refusal | null {
-  const key = Object.keys(fields).find((name) => !allowed.includes(name));
-  return key === undefined ? null : refuse(prefix + key, "unknown_key");
+/** Names the known field holding an unknown key, never the key itself: the caller typed that. */
+function unknownKey(
+  fields: Fields,
+  allowed: readonly string[],
+  holder: string,
+  reason: ThemeRefusalReason = "unknown_key",
+): Refusal | null {
+  return Object.keys(fields).every((name) => allowed.includes(name))
+    ? null
+    : refuse(holder, reason);
 }
 
 function checkBrandFix(value: unknown): Refusal | null {
   if (value === undefined) return refuse("brandFix", "missing");
   if (!isObject(value)) return refuse("brandFix", "bad_value");
-  const unknown = unknownKey(value, MODES, "brandFix.");
+  const unknown = unknownKey(value, MODES, "brandFix");
   if (unknown) return unknown;
   const bad = MODES.find((mode) => value[mode] !== undefined && value[mode] !== true);
   return bad === undefined ? null : refuse(`brandFix.${bad}`, "bad_value");
@@ -60,15 +67,20 @@ function checkBrandFix(value: unknown): Refusal | null {
 function checkHandSet(value: unknown): Refusal | null {
   if (value === undefined) return refuse("handSet", "missing");
   if (!isObject(value)) return refuse("handSet", "bad_value");
-  const unknown = unknownKey(value, MODES, "handSet.");
+  const unknown = unknownKey(value, MODES, "handSet");
   if (unknown) return unknown;
   const absent = MODES.find((mode) => value[mode] === undefined);
   if (absent !== undefined) return refuse(`handSet.${absent}`, "missing");
   const notObject = MODES.find((mode) => !isObject(value[mode]));
   if (notObject !== undefined) return refuse(`handSet.${notObject}`, "bad_value");
   for (const mode of MODES) {
-    const colours = unknownKey(value[mode] as Fields, THEME_COLOURS, `handSet.${mode}.`);
-    if (colours) return { ...colours, reason: "unknown_colour" };
+    const colours = unknownKey(
+      value[mode] as Fields,
+      THEME_COLOURS,
+      `handSet.${mode}`,
+      "unknown_colour",
+    );
+    if (colours) return colours;
   }
   for (const mode of MODES) {
     const entry = Object.entries(value[mode] as Fields).find(([, hex]) => !isHex(hex));
@@ -92,7 +104,7 @@ function checkFixes(input: Fields): Refusal | null {
 export function readThemeDocument(input: unknown): ThemeDocumentResult {
   if (!isObject(input)) return refuse("theme", "not_object");
   const refusal =
-    unknownKey(input, THEME_DOCUMENT_KEYS, "") ??
+    unknownKey(input, THEME_DOCUMENT_KEYS, "theme") ??
     (input.brandColor === undefined
       ? refuse("brandColor", "missing")
       : input.brandColor !== null && !isHex(input.brandColor)

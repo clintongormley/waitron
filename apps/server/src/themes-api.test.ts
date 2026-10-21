@@ -138,8 +138,8 @@ describe("the custom theme routes", () => {
         "brandFix.light",
         "fix_with_hand_set",
       ],
-      [{ ...LEMON, logo: "x" }, "logo", "unknown_key"],
-      [{ ...LEMON, textScale: 1 }, "textScale", "unknown_key"],
+      [{ ...LEMON, logo: "x" }, "theme", "unknown_key"],
+      [{ ...LEMON, textScale: 1 }, "theme", "unknown_key"],
     ] as const) {
       const res = await save(managerCookie, id, { theme });
       expect(res.status).toBe(400);
