@@ -543,17 +543,19 @@ describe("till-expo-screen", () => {
     ])("a course lever refused %s asks at once to switch", (_code, error) =>
       switching(async (switched) => {
         const api = stubApi([], {
-          getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
-          fireDeviceCourse: vi.fn().mockRejectedValue(error),
+          getDevicePassScreen: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), orders: [asPassOrder(firedNotReadyOrder)] }),
+          bumpDeviceCourseReady: vi.fn().mockRejectedValue(error),
         });
         const el = await mount({
           api,
           deviceMode: true,
           fireControl: "expo",
           runsPass: true,
-          initialDevicePass: deviceBoard(),
+          initialDevicePass: { ...deviceBoard(), orders: [asPassOrder(firedNotReadyOrder)] },
         });
-        el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+        el.shadowRoot!.querySelector<HTMLElement>('[data-ready="co-3"]')!.click();
         await flush(el);
         expect(switched).toHaveBeenCalledTimes(1);
         expect(fromOf(switched)).toBe("pass");
@@ -564,17 +566,21 @@ describe("till-expo-screen", () => {
     it("a lever refused kitchen_screen.zone_not_allowed does not switch, and says why", () =>
       switching(async (switched) => {
         const api = stubApi([], {
-          getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
-          fireDeviceCourse: vi.fn().mockRejectedValue({ code: "kitchen_screen.zone_not_allowed" }),
+          getDevicePassScreen: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), orders: [asPassOrder(firedNotReadyOrder)] }),
+          bumpDeviceCourseReady: vi
+            .fn()
+            .mockRejectedValue({ code: "kitchen_screen.zone_not_allowed" }),
         });
         const el = await mount({
           api,
           deviceMode: true,
           fireControl: "expo",
           runsPass: true,
-          initialDevicePass: deviceBoard(),
+          initialDevicePass: { ...deviceBoard(), orders: [asPassOrder(firedNotReadyOrder)] },
         });
-        el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+        el.shadowRoot!.querySelector<HTMLElement>('[data-ready="co-3"]')!.click();
         await flush(el);
         expect(switched).not.toHaveBeenCalled();
         expect(el.shadowRoot!.querySelector("[data-lever-error]")).not.toBeNull();
@@ -600,11 +606,11 @@ describe("till-expo-screen", () => {
     it("at a till, Done is absent and a refused lever re-reads without switching", () =>
       switching(async (switched) => {
         const api = passApi(
-          [threeCourseOrder],
+          [firedNotReadyOrder],
           {},
           {
             markDevicePassDone: vi.fn().mockRejectedValue(refused()),
-            fireCourse: vi.fn().mockRejectedValue({
+            bumpCourseReady: vi.fn().mockRejectedValue({
               code: "kitchen_screen.not_allowed",
               params: { screen: "pass" },
             }),
@@ -616,15 +622,15 @@ describe("till-expo-screen", () => {
         ).toBeNull();
         expect(api.markDevicePassDone).not.toHaveBeenCalled();
         vi.mocked(api.getDevicePassScreen).mockClear();
-        el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+        el.shadowRoot!.querySelector<HTMLElement>('[data-ready="co-3"]')!.click();
         await flush(el);
-        expect(api.fireCourse).toHaveBeenCalledWith("wo-1", "co-2");
+        expect(api.bumpCourseReady).toHaveBeenCalledWith("wo-2", "co-3");
         expect(api.getDevicePassScreen).toHaveBeenCalledTimes(1);
         expect(switched).not.toHaveBeenCalled();
       }));
   });
 
-  it("offers Fire without Away on a kitchen display with Run the pass, through the device's routes", async () => {
+  it("offers no Fire or Away on a kitchen display, even with Run the pass", async () => {
     const api = stubApi([], {
       getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
     });
@@ -636,9 +642,9 @@ describe("till-expo-screen", () => {
       initialDevicePass: { ...deviceBoard(), orders: [asPassOrder(threeCourseOrder)] },
     });
     const root = el.shadowRoot!;
-    root.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+    expect(root.querySelector('[data-fire="co-2"]')).toBeNull();
     await flush(el);
-    expect(api.fireDeviceCourse).toHaveBeenCalledWith("wo-1", "co-2");
+    expect(api.fireDeviceCourse).not.toHaveBeenCalled();
     expect(root.querySelector("[data-away]")).toBeNull();
     expect(api.markDeviceCourseAway).not.toHaveBeenCalled();
     expect(api.fireCourse).not.toHaveBeenCalled();
@@ -663,18 +669,25 @@ describe("till-expo-screen", () => {
   it.each(["device.forbidden_action", "kitchen_screen.zone_not_allowed"])(
     "shows a kitchen display's lever refused %s as its sentence",
     async (code) => {
+      const readyOrder = {
+        ...firedNotReadyOrder,
+        orderNumber: threeCourseOrder.orderNumber,
+        tableLabel: threeCourseOrder.tableLabel,
+      };
       const api = stubApi([], {
-        getDevicePassScreen: vi.fn().mockResolvedValue(deviceBoard()),
-        fireDeviceCourse: vi.fn().mockRejectedValue({ code }),
+        getDevicePassScreen: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), orders: [asPassOrder(readyOrder)] }),
+        bumpDeviceCourseReady: vi.fn().mockRejectedValue({ code }),
       });
       const el = await mount({
         api,
         deviceMode: true,
         fireControl: "expo",
         runsPass: true,
-        initialDevicePass: deviceBoard(),
+        initialDevicePass: { ...deviceBoard(), orders: [asPassOrder(readyOrder)] },
       });
-      el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+      el.shadowRoot!.querySelector<HTMLElement>('[data-ready="co-3"]')!.click();
       await flush(el);
       expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
         `#5 Mesa 4: ${codeMessage(code)}`,
@@ -1149,13 +1162,13 @@ describe("till-expo-screen", () => {
     }
   });
 
-  it("shows no cooking controls without Run the pass, and Fire and Ready with it", async () => {
+  it("shows no cooking controls without Run the pass, and only released Ready with it", async () => {
     const api = stubApi([threeCourseOrder]);
     const el = await mount({ api, fireControl: "expo", runsPass: false });
     expect(el.shadowRoot!.querySelector(".lever")).toBeNull();
     el.runsPass = true;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
     const notReady = await mount({
       api: stubApi([firedNotReadyOrder]),
@@ -1227,9 +1240,9 @@ describe("till-expo-screen", () => {
     expect(el.shadowRoot!.querySelector(".lever")).toBeNull();
     el.runsPass = true;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
-    el.fireControl = "kitchen";
+    Object.assign(el, { fireControl: "kitchen" });
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-away="co-1"]')).toBeNull();
@@ -1487,8 +1500,7 @@ describe("till-expo-screen", () => {
     expect(courses).toEqual(["none", "co-unordered", "co-late"]);
     const unnamed = orderCard(el, 5)!.querySelector('[data-course="co-unordered"]')!;
     expect(unnamed.querySelector(".course-head")).toBeNull();
-    const fire = unnamed.querySelector<HTMLElement>('[data-fire="co-unordered"]')!;
-    expect(fire.getAttribute("aria-label")!.trim()).toBe(t("expo.fire"));
+    expect(unnamed.querySelector('[data-fire="co-unordered"]')).toBeNull();
   });
 
   it("renders per item its name, quantity, station and state", async () => {
@@ -1818,12 +1830,10 @@ describe("till-expo-screen", () => {
     });
   });
 
-  it("a HELD course under fire_control='expo' shows the Fire lever", async () => {
+  it("a HELD course under fire_control='expo' shows no Fire lever", async () => {
     const el = await mount({ api: stubApi(), fireControl: "expo" });
     const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]');
-    expect(fire).not.toBeNull();
-    expect(fire!.textContent).toContain(t("expo.fire"));
-    // The fired course offers no fire lever.
+    expect(fire).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-fire="co-1"]')).toBeNull();
   });
 
@@ -1863,13 +1873,13 @@ describe("till-expo-screen", () => {
     expect(card.querySelector('[data-course="co-5"]')).not.toBeNull();
   });
 
-  it("clicking Fire calls fireCourse(orderId, courseId) then reloads the queue", async () => {
+  it("held courses cannot request cooking or an action refresh", async () => {
     const api = stubApi();
     const el = await mount({ api, fireControl: "expo" });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]')!.click();
+    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).toBeNull();
     await flush(el);
-    expect(api.fireCourse).toHaveBeenCalledWith("wo-1", "co-2");
-    expect(api.getExpoQueue).toHaveBeenCalledTimes(2); // connect + after fire
+    expect(api.fireCourse).not.toHaveBeenCalled();
+    expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
   });
 
   it("clicking Curso listo calls bumpCourseReady(orderId, courseId) then reloads", async () => {
@@ -2325,11 +2335,13 @@ describe("till-expo-screen — a seated party's groups", () => {
     expect(plated!.querySelector("[data-group-ready]")).toBeNull();
   });
 
-  it("under fire control expo, offers Fire on each held group", async () => {
+  it("under fire control expo, offers no Fire on held groups", async () => {
     const el = await mount({ api: partyApi(), fireControl: "expo" });
     const fires = [...orderCard(el, 9)!.querySelectorAll<HTMLElement>("[data-group-fire]")];
-    expect(fires.map((f) => f.dataset.groupFire)).toEqual(["g-4", "g-5"]);
-    expect(fires[0]!.textContent).toContain(t("expo.fire"));
+    expect(fires).toHaveLength(0);
+    expect(
+      sections(el).filter((section) => section.querySelector("[data-group-held]") !== null),
+    ).toHaveLength(2);
   });
 
   it.each(["waiter", "kitchen"] as const)(
@@ -2351,9 +2363,11 @@ describe("till-expo-screen — a seated party's groups", () => {
     async (_name, attribute, groupId, verb) => {
       const api = partyApi();
       const el = await mount({ api, fireControl: "expo" });
-      if (_name === "Away") {
+      if (_name !== "Ready") {
         expect(el.shadowRoot!.querySelector(`[${attribute}="${groupId}"]`)).toBeNull();
-        expect(api.markGroupAway).not.toHaveBeenCalled();
+        expect(
+          (api as unknown as Record<string, ReturnType<typeof vi.fn>>)[verb]!,
+        ).not.toHaveBeenCalled();
         expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
         return;
       }
@@ -2553,10 +2567,11 @@ describe("till-expo-screen — a seated party's groups", () => {
         runsPass: true,
         initialDevicePass: board,
       });
-      if (_name === "Away") {
+      if (_name !== "Ready") {
         expect(el.shadowRoot!.querySelector(`[${attribute}="${groupId}"]`)).toBeNull();
-        expect(api.markDeviceGroupAway).not.toHaveBeenCalled();
-        expect(api.markGroupAway).not.toHaveBeenCalled();
+        const stubs = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
+        expect(stubs[verb]!).not.toHaveBeenCalled();
+        expect(stubs[sessionVerb]!).not.toHaveBeenCalled();
         expect(api.getDevicePassScreen).not.toHaveBeenCalled();
         return;
       }
@@ -3069,8 +3084,16 @@ describe("till-expo-screen — a till whose device chose a pass monitor", () => 
   });
 
   it("a till with a pass choice keeps its preparation levers without Done", async () => {
-    const el = await mount({ api: passApi([threeCourseOrder]), fireControl: "expo" });
+    const el = await mount({ api: passApi([firedNotReadyOrder]), fireControl: "expo" });
     expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-fire="co-2"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-ready="co-3"]')).not.toBeNull();
+  });
+});
+
+describe("A773 waiter authority — expo contract", () => {
+  it("exposes no Fire-control property on an ordinary pass opening", async () => {
+    const el = await mount({ api: stubApi() });
+    expect("fireControl" in el).toBe(false);
   });
 });

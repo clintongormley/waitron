@@ -93,9 +93,10 @@ los avisos de retraso predeterminados. Ya no se elige allí un modo de marcha pa
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
-Pide los platos en espera desde el pedido de la mesa. La cola de una estación muestra los pases
+Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
 y grupos en espera sin botón Marchar. Esos platos se muestran atenuados y no avanzan al tocarlos.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación.
 
 Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes de pedir la
-preparación. En la estación, lee la copia que acompaña a cada plato y confirma las correcciones.
+preparación. En una estación o en el pase, lee la copia que acompaña a cada plato. Las pantallas de cocina
+no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.

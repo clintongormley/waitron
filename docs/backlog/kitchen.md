@@ -61,8 +61,7 @@ user-definable kitchen-status list does not exist.
   - The pass's Ready and Away record no `order_group_events` row, so who pressed them is
     recorded nowhere readable; a new kind changes that append-only table's check, which is a
     core migration.
-  - The table screen's second request for printing problems is A809; which held groups the
-    kitchen and pass screens offer Fire on is A773's (owner, 2026-10-17).
+  - The table screen's second request for printing problems is A809.
 
 ## Task 6 (#761, HOLD tickets in advance)
 

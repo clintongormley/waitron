@@ -2454,8 +2454,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   cooking requests. Its public Fire-control property and the station widget property are retired;
   boot and setup refresh retain preparation mode without passing that control. Legacy-mode
   regression inputs remain test-only. The table screen also omits Fire control and both app
-  bindings; its waiter Fire actions remain independent of that retired setting. Expo still uses
-  the shared allergy controller until its own retirement.
+  bindings; its waiter Fire actions remain independent of that retired setting. The pass no longer
+  offers held-course/group Fire or owns an allergy editor. The shared kitchen allergy controller,
+  pass Fire-control property and unused action label are retired. Legacy application setup
+  state/type, its pass bindings and client contracts still need cleanup, preserving A841's
+  setup-refresh integration. Retained Ready operations still handle device refusals and table revisions.
   The newly landed floor map counts ready food without a legacy dispatch fallback.
   The pass no longer offers Done, All done or their Undo, including automatic Done after legacy Away.
   Ready still drives device-refusal screen switching; table serving retains its own Undo.

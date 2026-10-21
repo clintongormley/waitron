@@ -222,7 +222,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     const board = {
       orders: queue.map((order) => ({
         ...order,
-        courses: order.courses.map((course) => ({ ...course, allReady: true })),
+        courses: order.courses.map((course) => ({ ...course, allReady: false })),
         groups: [],
       })),
       stations: [
@@ -238,8 +238,8 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
       ...stubApi(),
       getDevicePassScreen: vi.fn().mockResolvedValue(board),
       markDevicePassDone: vi.fn().mockResolvedValue(undefined),
-      fireDeviceCourse: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
-      bumpDeviceCourseReady: vi.fn().mockResolvedValue(undefined),
+      fireDeviceCourse: vi.fn().mockResolvedValue(undefined),
+      bumpDeviceCourseReady: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
       markDeviceCourseAway: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
@@ -249,7 +249,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
         deviceMode: true,
         deviceName: "Pantalla Pase",
         runsPass: true,
-        fireControl: "expo",
+        ...{ fireControl: "expo" },
         initialDevicePass: board,
       },
       theme,
@@ -257,7 +257,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     await flush(el);
     expect(el.shadowRoot!.querySelector(".lever")).not.toBeNull();
     await expectNoA11yViolations(host);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-fire]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-ready]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-done], [data-all-done], [data-undo]")).toBeNull();
@@ -296,7 +296,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api, fireControl: "expo", runsPass: true },
+      { api, ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
@@ -328,7 +328,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
   it("has no violations on a populated pass board (Fire and Ready, both age extremes)", async () => {
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api: stubApi(), fireControl: "expo", runsPass: true },
+      { api: stubApi(), ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
@@ -339,7 +339,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     const moved = queue.map((order) => ({ ...order, formerNumbers: [28, 30] }));
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api: stubApi(moved), fireControl: "expo", runsPass: true },
+      { api: stubApi(moved), ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
@@ -355,7 +355,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>(
       "till-expo-screen",
-      { api, fireControl: "expo", runsPass: true },
+      { api, ...{ fireControl: "expo" }, runsPass: true },
       theme,
     );
     await flush(el);
@@ -391,7 +391,7 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
           monitor: true,
           deviceName: "Pared del pase",
           runsPass: true,
-          fireControl: "expo",
+          ...{ fireControl: "expo" },
           initialDevicePassMonitor: board,
         },
         theme,

@@ -3,7 +3,6 @@ import {
   kitchenAllergyMarker,
   kitchenAllergyStyles,
 } from "../widgets/kitchen-allergy-block.js";
-import { KitchenAllergySend } from "../state/kitchen-allergy-send.js";
 import { groupName } from "../widgets/group-name.js";
 import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
@@ -38,7 +37,6 @@ import type {
   WatcherGroup,
 } from "../api/client.js";
 import { orderNumber, orderNumberStyles } from "../widgets/order-number.js";
-import type { FireControlMode } from "../widgets/station-queue.js";
 
 function courseOrder(course: ExpoCourse): number {
   return course.courseId === null ? Number.NEGATIVE_INFINITY : (course.displayOrder ?? 0);
@@ -410,9 +408,6 @@ export class TillExpoScreen extends LitElement {
         white-space: nowrap;
       }
 
-      /* The per-course lever — a full-width primary button at the foot of a course section. The
-         wt-color-primary on wt-color-on-primary pairing is the SAME a11y-correct one wt-button's primary
-         variant uses, so contrast holds in both themes (the station display's fire/collect shape). */
       .lever {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -465,16 +460,6 @@ export class TillExpoScreen extends LitElement {
 
   @property({ attribute: false }) api!: TillApi;
   @property({ attribute: false }) operatorSession = 0;
-  readonly #allergy = new KitchenAllergySend(this, () =>
-    JSON.stringify([
-      this.operatorSession,
-      this.deviceMode,
-      this.monitor,
-      this.#boardId(),
-      this.fireControl,
-    ]),
-  );
-  @property() fireControl: FireControlMode = "waiter";
   /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
   @property({ attribute: false }) now?: number;
   /** `undefined` checks the live `prefers-reduced-motion` query on every render; a test injects a value. */
@@ -668,8 +653,6 @@ export class TillExpoScreen extends LitElement {
     if (boardId !== null && this.#isCurrent(boardId)) await this.#reload();
   }
 
-  /** Refused `party.out_of_date`, the board is read again and the expediter decides; nothing is
-   * resent. Any other refusal is swallowed like a course lever's. */
   async #groupAct(
     order: ExpoOrder,
     party: QueueParty,
@@ -712,69 +695,6 @@ export class TillExpoScreen extends LitElement {
       }),
     );
     return true;
-  }
-
-  async #fireGroup(order: ExpoOrder, party: QueueParty, groupId: string): Promise<void> {
-    if (this.deviceMode) {
-      await this.#groupAct(order, party, (command) =>
-        this.api.fireDeviceGroup(party.id, groupId, command),
-      );
-      return;
-    }
-    const api = this.api;
-    const board = this.#boardId();
-    this.leverError = undefined;
-    this.tableChanged = null;
-    this.#tableChangedNext = null;
-    try {
-      if (
-        !(await this.#allergy.run({ kind: "group", groupId }, party.id, party.revision, (command) =>
-          api.fireGroup(party.id, groupId, command!),
-        ))
-      )
-        return;
-    } catch (error) {
-      if (api !== this.api || board === null || !this.#isCurrent(board)) return;
-      if ((error as { code?: string }).code === "party.out_of_date")
-        this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
-      else
-        this.leverError = {
-          code: (error as { code?: string }).code ?? "table.error",
-          card: order.tableLabel ?? `#${order.orderNumber}`,
-        };
-    }
-    if (api === this.api && board !== null && this.#isCurrent(board)) await this.#reload();
-  }
-
-  async #fireCourse(order: ExpoOrder, courseId: string): Promise<void> {
-    if (this.deviceMode) {
-      await this.#act(order, () => this.api.fireDeviceCourse(order.orderId, courseId));
-      return;
-    }
-    const api = this.api;
-    const board = this.#boardId();
-    this.leverError = undefined;
-    try {
-      if (
-        !(await this.#allergy.run(
-          { kind: "course", orderId: order.orderId, courseId },
-          null,
-          undefined,
-          (command) =>
-            command
-              ? api.fireCourse(order.orderId, courseId, command)
-              : api.fireCourse(order.orderId, courseId),
-        ))
-      )
-        return;
-    } catch (error) {
-      if (api !== this.api || board === null || !this.#isCurrent(board)) return;
-      this.leverError = {
-        code: (error as { code?: string }).code ?? "table.error",
-        card: order.tableLabel ?? `#${order.orderNumber}`,
-      };
-    }
-    if (api === this.api && board !== null && this.#isCurrent(board)) await this.#reload();
   }
 
   #leverRefused(order: ExpoOrder, error: unknown): void {
@@ -849,7 +769,6 @@ export class TillExpoScreen extends LitElement {
         }
         ${!this.#shows() ? nothing : this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
-      ${this.#allergy.render()}
     `;
   }
 
@@ -954,17 +873,7 @@ export class TillExpoScreen extends LitElement {
     name: string,
   ): TemplateResult | typeof nothing {
     if (!this.#drawsLevers()) return nothing;
-    if (group.state === "held") {
-      if (this.fireControl !== "expo") return nothing;
-      return html`<button
-        class="lever fire"
-        data-group-fire=${groupId}
-        aria-label=${`${t("expo.fire")} ${name}`}
-        @click=${() => void this.#fireGroup(order, party, groupId)}
-      >
-        ${t("expo.fire")}
-      </button>`;
-    }
+    if (group.state === "held") return nothing;
     if (
       this.#isPass()
         ? (group as WatcherGroup).allReady
@@ -1075,17 +984,7 @@ export class TillExpoScreen extends LitElement {
     if (course.courseId === null) return nothing;
     const courseId = course.courseId;
     const name = course.courseName ?? "";
-    if (!course.fired) {
-      if (this.fireControl !== "expo") return nothing;
-      return html`<button
-        class="lever fire"
-        data-fire=${courseId}
-        aria-label=${`${t("expo.fire")} ${name}`}
-        @click=${() => void this.#fireCourse(order, courseId)}
-      >
-        ${t("expo.fire")}
-      </button>`;
-    }
+    if (!course.fired) return nothing;
     if (
       this.#isPass()
         ? (course as WatcherCourse).allReady
