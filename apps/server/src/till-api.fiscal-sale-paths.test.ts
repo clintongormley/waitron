@@ -81,6 +81,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { createDiskFullState } from "./disk-full-state.js";
 
 // `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
@@ -1426,6 +1427,44 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     });
     expect((await paying.json()).outcome).toBe("declined");
     expect(provider.pendingDemoReaderPayments()).toEqual([]);
+  });
+
+  it("cancels a pretend reader attempt while a save refused for a full disk stands", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
+    const disk = createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: noopLog,
+      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
+    });
+    disk.noteRefused();
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        backend,
+        clock,
+        cfg,
+        secureCookies: false,
+        venueLocale: cfg.locale,
+        cardProvider: provider,
+        disk,
+      },
+      noopLog,
+    );
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+
+    const cancelled = await app.request("/api/demo-reader/cancel", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({ workingOrderId: randomUUID(), attemptId: randomUUID() }),
+    });
+    expect(cancelled.status).toBe(200);
+    expect(await cancelled.json()).toEqual({ cancelled: true });
+    expect(disk.noted()).toBe(true);
   });
 
   it("lets a manager approve the pending amount on the reader page, but not staff", async () => {

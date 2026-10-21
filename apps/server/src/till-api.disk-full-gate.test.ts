@@ -226,6 +226,22 @@ describe("the full-disk gate on the till's routes", () => {
     expect((await ticketOf()).state).toBe("preparing");
   });
 
+  it("logs each refusal it gives, naming the route", async () => {
+    const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+    const app = venue.appWith({
+      disk: notedState(),
+      log: (level, event, fields) => lines.push({ level, event, fields }),
+    });
+    expect((await park(app)).status).toBe(507);
+    expect(lines.filter((line) => line.event === "storage.disk_full_stop_refused")).toEqual([
+      {
+        level: "warn",
+        event: "storage.disk_full_stop_refused",
+        fields: expect.objectContaining({ route: "POST /api/working-orders" }),
+      },
+    ]);
+  });
+
   it("still answers a read", async () => {
     const id = randomUUID();
     expect((await park(venue.app, id)).status).toBe(200);
