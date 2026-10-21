@@ -215,7 +215,9 @@ result.
 - A tmpfs mount on a GitHub runner, the runner's kernel, a Docker volume on a box's ext4 disk, and
   the image's own user (uid 10001, `deploy/Dockerfile:183`, `:278`) were not tried.
 - The connection-bootstrap path (`needsConnectionBootstrap`, `node-entry.ts:300-303`) on a full
-  disk was not run; F9 ran `serveRecovery` with freshly minted certificates only.
+  disk was not run; F9 ran `serveRecovery` with freshly minted certificates only. (2026-10-21: the
+  pre-merge review ran it; see the backlog entry "On a full disk, a box whose kept certificates
+  cannot be used...".)
 - A real box's Docker images, Litestream folder and backup folder filling the disk (design §2.6)
   were not reproduced; every fill here was one filler file.
 
@@ -280,6 +282,10 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
      with room on the state disk makes the start delete (it acts on the lower of the two, decision
      4) while the heartbeat goes stale, so a running server's backup whose own disk had room loses
      its staging and that run fails — the same cost as above.
+     (2026-10-21, after the pre-merge review: only `waitron-<stamp>.dump`, its `.partial` and
+     `backup-encrypt-*` folders; a symbolic-link `logs`, `crash-reports` or `backup-staging` is
+     skipped; and the forced clean-up ignores the holder file while admission holds the folder,
+     `venueHeld`.)
    Nothing else: never `venue.lock`, `recovery.lock`, `recovery.json`, the databases,
    `restore-staging` (`restore.ts:85`; a staged restore runs after this step and reads it), a
    configured backup folder, or any file whose name is not listed above. `<logDir>` is
@@ -359,7 +365,8 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     first step reads the folders the process was given, so a `backup-staging` inside the
     workspace's state folder is not deleted. DEFAULT: accepted for this slice; a backlog line
     (Task 7). The count check of decision 2 uses the resolved roots (`admission.roots`), so it
-    holds for such a box too.
+    holds for such a box too. (2026-10-21: it did not: the decision read only the given folders'
+    free space; `323f0b2cf` also reads the chosen workspace's.)
 16. **The cut-off backup's plaintext dump** (backlog, "A backup run that is cut off leaves a
     plaintext copy…"). The start now deletes it, but only below the floor, as the design scopes it.
     DEFAULT: keep the design's scope; the backlog entry says so. Owner question below.
@@ -384,7 +391,8 @@ the disk has under 256 MiB free** (design §4.7 item 1).
   F5, F14), when under 16 MiB is free.
 - The full-disk page's action without the sentence slice 1 left out (build plan decision 12).
 - (Added 2026-10-21, after the pre-merge review.) A start sent to first-setup resolution never
-  touched the recovery count before; below 256 MiB free it now writes the count back first
+  touched the recovery count before; below 256 MiB free in the folders it was given, or in the
+  workspace first-setup chose, it now writes the count back first
   (`countWritable`, `apps/server/src/node-entry.ts:353`, before the resolution branch at `:373`).
   That write always writes (`updateRecoveryState`, `apps/server/src/recovery-state.ts:231`), and a
   missing `recovery.json` reads as `FRESH` (`:87`), so it creates `recovery.json`, and the lock it
@@ -764,7 +772,8 @@ action with `toContain`, and the new action contains it whole, so it keeps passi
      reads `freeBytes = await lowestFreeBytes([stateDir, venueDir], deps.statfs)` again, and
      returns `{ written: false, freeBytes }` only when `fullDiskFailure(error, freeBytes)`
      (decision 6); otherwise it rethrows the error, so the start fails as it does today when its
-     count cannot be written. The condition reads `if (space.belowFloor && !(check = await countWritable(rooted)).written)`.
+     count cannot be written. The condition reads `if (space.belowFloor && !(check = await countWritable(rooted)).written)`
+     (since `323f0b2cf`, `belowFloor`, which also counts the chosen workspace).
      `stateDir`, `venueDir` and `logDir` here are `admission.roots`' (decision 15);
   5. the resolution branch and `runAdmittedEntry` (unchanged here; Task 4b changes its catch).
   The recovery-level page (`:350-370`) also passes `freeSpace` (decision 8).

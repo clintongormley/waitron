@@ -51,7 +51,7 @@ export interface StartSpaceDeps {
  * Below `floor` (or when forced), deletes what a start can make again: rotated logs but the newest,
  * crash reports older than {@link CRASH_REPORT_KEEP_MS}, and the dumps and `backup-encrypt-*`
  * folders a backup run leaves in backup staging, unless the venue folder's holder heartbeat is
- * fresh. Never throws.
+ * fresh and `venueHeld` is not set. A folder that is a symbolic link is skipped. Never throws.
  */
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,

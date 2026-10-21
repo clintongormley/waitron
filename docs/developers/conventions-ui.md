@@ -1076,8 +1076,8 @@ disco del equipo: 1,2 MB.»). It is read again on every `GET /`, from the lower 
 venue folders, in decimal megabytes with at most one decimal, formatted for the page's language,
 and reads "unknown" («desconocido») when the filesystem cannot say; each such read logs
 `recovery.free_space_unreadable` to the process's standard output (`docker logs`; `bootThisProcess`,
-`apps/server/src/node-entry.ts`), with the error's `errno` when the reader threw and null when it
-found nothing. `/recovery-api/status` does not carry it. Anyone on the venue's network can now read the box's free space, as they can the log tail.
+`apps/server/src/node-entry.ts`), with `errno` null: `freeBytes` (`apps/server/src/free-bytes.ts`)
+turns every failed read into null, so the line says the reading failed, not why. `/recovery-api/status` does not carry it. Anyone on the venue's network can now read the box's free space, as they can the log tail.
 
 Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL,
 the last failure's detail and the recorded trigger names, all HTML-escaped; the trigger names also
