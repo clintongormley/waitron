@@ -222,6 +222,27 @@ describe("AdjustmentsApi", () => {
     ]);
   });
 
+  it("asks for one reason's rows, after the requester and before the page", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [], next: null }));
+    const client = api(fetchImpl);
+    const reasonId = "7c2d9e40-1a3b-4c5d-8e6f-0a1b2c3d4e5f";
+    await client.listEntries(
+      "2026-09-01",
+      "2026-09-02",
+      { personId: "5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b" },
+      { reasonId },
+    );
+    await client.listEntries("2026-09-01", "2026-09-01", "guests", {
+      reasonId,
+      after: "2026-09-01T20:00:00.000Z_a1",
+      limit: 50,
+    });
+    expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+      `/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&personId=5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b&reasonId=${reasonId}`,
+      `/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-01&guests=true&reasonId=${reasonId}&after=2026-09-01T20%3A00%3A00.000Z_a1&limit=50`,
+    ]);
+  });
+
   it("marks each report read passive on the background client", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [], next: null }));
     const client = api(fetchImpl, true);

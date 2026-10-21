@@ -204,13 +204,14 @@ export class AdjustmentsApi {
     from: string,
     to: string,
     of: EntriesOf,
-    page: { after?: string; limit?: number } = {},
+    options: { after?: string; limit?: number; reasonId?: string } = {},
   ): Promise<AdjustmentEntryPage> {
     const query = new URLSearchParams({ from, to });
     if (of === "guests") query.set("guests", "true");
     else if (of !== "everyone") query.set("personId", of.personId);
-    if (page.after !== undefined) query.set("after", page.after);
-    if (page.limit !== undefined) query.set("limit", String(page.limit));
+    if (options.reasonId !== undefined) query.set("reasonId", options.reasonId);
+    if (options.after !== undefined) query.set("after", options.after);
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
     return this.request<AdjustmentEntryPage>(
       `/management-api/adjustments/report/entries?${query}`,
       "GET",
