@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  BACKGROUNDS,
-  CORNER_CHOICES,
-  readThemeDocument,
-  THEME_DOCUMENT_KEYS,
-} from "./document-check.js";
-import { WAITRON_CHOICES } from "./theme.js";
+import { readThemeDocument, THEME_DOCUMENT_KEYS } from "./document-check.js";
+import { BACKGROUNDS, WAITRON_CHOICES } from "./theme.js";
+import { CORNER_CHOICES } from "./tokens.js";
 
 const withoutBrand: Record<string, unknown> = { ...WAITRON_CHOICES };
 delete withoutBrand.brandColor;
@@ -103,11 +99,7 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, handSet: null }, "handSet", "bad_value"],
     [{ ...WAITRON_CHOICES, handSet: { light: {} } }, "handSet.dark", "missing"],
     [{ ...WAITRON_CHOICES, handSet: { dark: {} } }, "handSet.light", "missing"],
-    [
-      { ...WAITRON_CHOICES, handSet: { light: {}, dark: {}, sepia: {} } },
-      "handSet",
-      "unknown_key",
-    ],
+    [{ ...WAITRON_CHOICES, handSet: { light: {}, dark: {}, sepia: {} } }, "handSet", "unknown_key"],
     [{ ...WAITRON_CHOICES, handSet: { light: [], dark: {} } }, "handSet.light", "bad_value"],
     [{ ...WAITRON_CHOICES, handSet: { light: {}, dark: null } }, "handSet.dark", "bad_value"],
     [

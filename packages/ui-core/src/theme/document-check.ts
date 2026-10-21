@@ -1,6 +1,6 @@
 import { MODES, type Mode } from "./defaults.js";
-import { normaliseChoices, type Background, type ThemeChoices } from "./theme.js";
-import { THEME_COLOURS, type Corners } from "./tokens.js";
+import { BACKGROUNDS, normaliseChoices, type ThemeChoices } from "./theme.js";
+import { CORNER_CHOICES, THEME_COLOURS } from "./tokens.js";
 
 export const THEME_DOCUMENT_KEYS = [
   "brandColor",
@@ -8,11 +8,7 @@ export const THEME_DOCUMENT_KEYS = [
   "background",
   "corners",
   "handSet",
-] as const;
-
-export const BACKGROUNDS: readonly Background[] = ["neutral", "tinted"];
-
-export const CORNER_CHOICES: readonly Corners[] = ["square", "standard", "round"];
+] as const satisfies readonly (keyof ThemeChoices)[];
 
 export type ThemeRefusalReason =
   | "not_object"
@@ -36,6 +32,8 @@ const isObject = (value: unknown): value is Fields =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isHex = (value: unknown): boolean => typeof value === "string" && HEX.test(value);
+
+const isOneOf = (list: readonly unknown[], value: unknown): boolean => list.includes(value);
 
 const refuse = (field: string, reason: ThemeRefusalReason): Refusal => ({
   ok: false,
@@ -113,12 +111,12 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
     checkBrandFix(input.brandFix) ??
     (input.background === undefined
       ? refuse("background", "missing")
-      : !(BACKGROUNDS as readonly unknown[]).includes(input.background)
+      : !isOneOf(BACKGROUNDS, input.background)
         ? refuse("background", "bad_value")
         : null) ??
     (input.corners === undefined
       ? refuse("corners", "missing")
-      : !(CORNER_CHOICES as readonly unknown[]).includes(input.corners)
+      : !isOneOf(CORNER_CHOICES, input.corners)
         ? refuse("corners", "bad_value")
         : null) ??
     checkHandSet(input.handSet) ??

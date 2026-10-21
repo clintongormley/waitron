@@ -58,7 +58,9 @@ export const BRAND_FAMILY: readonly ThemeColour[] = [
   "stepper-button",
 ];
 
-export type Corners = "square" | "standard" | "round";
+export const CORNER_CHOICES = ["square", "standard", "round"] as const;
+
+export type Corners = (typeof CORNER_CHOICES)[number];
 
 const FIXED_CORNERS = {
   square: ["0px", "2px", "4px"],
