@@ -1,0 +1,391 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { setRoutingCell } from "@waitron/venue-service";
+import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
+import { eq, sql } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { floorZones, nowIso, workingOrderLines } from "@waitron/db";
+import { assignProductUnit, createUnit, units } from "@waitron/catalogue";
+import { markCollected, parkOrder } from "./working-order.js";
+import { inTx, provisionBillVenue } from "./testing/bill-venue.js";
+import type { BillVenue } from "./testing/bill-venue.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import { republishMenus } from "./testing/publish-menu.js";
+import { dishCounts, readOrderStateCounts } from "./order-state-counts.js";
+import type { CountedLine } from "./order-state-counts.js";
+import "./errors.js";
+
+let venue: BillVenue;
+const zones = {} as Record<"prepay" | "ticket_then_pay", string>;
+
+/** Each test parks its own orders; the units are given to dishes no other test orders. */
+useVenueDb({
+  resetPerTest: false,
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+  setup: async (db) => {
+    venue = await provisionBillVenue(db);
+    for (const mode of ["prepay", "ticket_then_pay"] as const) {
+      zones[mode] = await inTx(venue, async (tx) => {
+        const [zone] = await tx
+          .insert(floorZones)
+          .values({ locationId: venue.cfg.locationId, name: `Barra ${mode}` })
+          .returning({ id: floorZones.id });
+        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
+        if (mode === "ticket_then_pay") {
+          await tx.execute(sql`
+            update zone_sale_policies set paid_when = 'ticket_then_pay'
+            where zone_id = ${zone!.id}`);
+        }
+        return zone!.id;
+      });
+    }
+    await inTx(venue, async (tx) => {
+      const cana = await productOf(tx, "Caña");
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "product", productId: cana }, zoneId: null },
+        { kind: "no_preparation" },
+      );
+      const text = (word: string) => ({ en: word });
+      const [gram] = await tx
+        .insert(units)
+        .values({
+          staffName: "Gram",
+          staffAbbreviation: "g",
+          name: text("g"),
+          abbreviation: text("g"),
+          precision: 0,
+          hardwareUnit: "g",
+        })
+        .returning({ id: units.id });
+      const [kilo] = await tx
+        .insert(units)
+        .values({
+          staffName: "Kilo",
+          staffAbbreviation: "kg",
+          name: text("kg"),
+          abbreviation: text("kg"),
+          precision: 3,
+          hardwareUnit: "kg",
+        })
+        .returning({ id: units.id });
+      const ml = await createUnit(
+        tx,
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: text("ml"),
+          abbreviation: text("ml"),
+          precision: 0,
+          measure: true,
+        },
+        "en",
+      );
+      const tenth = await createUnit(
+        tx,
+        {
+          staffName: "Tenth",
+          staffAbbreviation: "t",
+          name: text("t"),
+          abbreviation: text("t"),
+          precision: 1,
+        },
+        "en",
+      );
+      await assignProductUnit(tx, await productOf(tx, "Paella"), gram!.id);
+      await assignProductUnit(tx, await productOf(tx, "Chuletón"), ml.id);
+      await assignProductUnit(tx, await productOf(tx, "Ensalada"), kilo!.id);
+      await assignProductUnit(tx, await productOf(tx, "Croquetas"), tenth.id);
+      await republishMenus(tx);
+    });
+  },
+});
+
+async function productOf(tx: Parameters<Parameters<typeof inTx>[1]>[0], name: string) {
+  const [item] = (
+    await tx.execute<{ product_id: string }>(
+      sql`select product_id from menu_items where id = ${venue.offerFor(name)}`,
+    )
+  ).rows;
+  return item!.product_id;
+}
+
+const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock });
+
+async function parked(
+  lines: [name: string, quantity: string][],
+  mode: "prepay" | "ticket_then_pay" = "prepay",
+): Promise<string> {
+  const id = randomUUID();
+  await parkOrder(deps(), venue.cfg, {
+    id,
+    zoneId: zones[mode],
+    lines: lines.map(([name, quantity]) => ({ menuItemId: venue.offerFor(name), quantity })),
+    operatorId: venue.operatorId,
+  });
+  return id;
+}
+
+function countsOf(ids: string[]) {
+  return inTx(venue, (tx) => readOrderStateCounts(tx, ids));
+}
+
+const zero = { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 };
+
+/** A dish of Each, ordered 1, sent to a station and queued there, nothing served. */
+function dish(overrides: Partial<CountedLine> = {}): CountedLine {
+  return {
+    quantity: 1000,
+    cancelled: 0,
+    servedQuantity: 0,
+    servedAt: null,
+    unitPrecision: 0,
+    unit: null,
+    recalled: false,
+    sentAt: nowIso(),
+    groupState: null,
+    ticket: { madeHere: false, firedAt: nowIso(), state: "queued" },
+    ...overrides,
+  };
+}
+
+const unfired = { madeHere: false, firedAt: null, state: "queued" } as const;
+const readyHere = { madeHere: true, firedAt: nowIso(), state: "ready" } as const;
+
+// The rules this mirrors: `unsentDishLines`, `isReleased` and `takesExtras` in working-order.ts,
+// and `heldExtras` in order-groups.ts.
+describe("dishCounts", () => {
+  it("counts a dish with no kitchen item, group or send as unsent", () => {
+    expect(dishCounts(dish({ sentAt: null, ticket: null }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      unsent: 1,
+    });
+  });
+
+  it("counts a recalled dish as unsent though it was sent", () => {
+    expect(dishCounts(dish({ recalled: true }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      unsent: 1,
+    });
+  });
+
+  it("counts a dish in a held group as held", () => {
+    expect(dishCounts(dish({ groupState: "held", ticket: unfired }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      held: 1,
+    });
+  });
+
+  it("counts a dish with no kitchen item in a held group as held", () => {
+    expect(dishCounts(dish({ sentAt: null, groupState: "held", ticket: null }), [], false)).toEqual(
+      { ...zero, ordered: 1, held: 1 },
+    );
+  });
+
+  it("counts a dish whose own item is unfired as held, though queued", () => {
+    expect(dishCounts(dish({ ticket: unfired }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      held: 1,
+    });
+  });
+
+  it("counts a made-here dish with an unfired extra as held", () => {
+    expect(dishCounts(dish({ ticket: readyHere }), [{ ticket: unfired }], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      held: 1,
+    });
+  });
+
+  it("counts a made-here dish in a held group as ready", () => {
+    expect(dishCounts(dish({ groupState: "held", ticket: readyHere }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      ready: 1,
+    });
+  });
+
+  it("counts a fired, queued or preparing dish as waiting", () => {
+    expect(dishCounts(dish(), [], false)).toEqual({ ...zero, ordered: 1, waiting: 1 });
+    const preparing = { madeHere: false, firedAt: nowIso(), state: "preparing" } as const;
+    expect(dishCounts(dish({ ticket: preparing }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      waiting: 1,
+    });
+  });
+
+  it("counts a ready dish with a fired extra still queued as waiting", () => {
+    const ready = { madeHere: false, firedAt: nowIso(), state: "ready" } as const;
+    const queued = { madeHere: false, firedAt: nowIso(), state: "queued" } as const;
+    expect(dishCounts(dish({ ticket: ready }), [{ ticket: queued }], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      waiting: 1,
+    });
+  });
+
+  it("counts a dish whose every kitchen part is ready as ready", () => {
+    const ready = { madeHere: false, firedAt: nowIso(), state: "ready" } as const;
+    expect(
+      dishCounts(dish({ ticket: ready }), [{ ticket: ready }, { ticket: null }], false),
+    ).toEqual({ ...zero, ordered: 1, ready: 1 });
+  });
+
+  it("counts a sent dish with no kitchen work as ready", () => {
+    expect(dishCounts(dish({ ticket: null }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      ready: 1,
+    });
+  });
+
+  it("counts a handed-over order's dish as ordered only", () => {
+    expect(dishCounts(dish({ quantity: 3000 }), [], true)).toEqual({ ...zero, ordered: 3 });
+  });
+
+  it("counts a served dish as ordered only", () => {
+    expect(dishCounts(dish({ servedAt: nowIso(), servedQuantity: 0 }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+    });
+  });
+
+  it("counts a part-served dish by the whole units still to serve, rounded up", () => {
+    expect(dishCounts(dish({ quantity: 3000, servedQuantity: 1500 }), [], false)).toEqual({
+      ...zero,
+      ordered: 3,
+      waiting: 2,
+    });
+  });
+
+  it("counts cancellations out, and no more left than ordered", () => {
+    expect(
+      dishCounts(dish({ quantity: 3000, cancelled: 1000, servedQuantity: 500 }), [], false),
+    ).toEqual({ ...zero, ordered: 2, waiting: 2 });
+    expect(dishCounts(dish({ quantity: 2000, cancelled: 2000 }), [], false)).toEqual(zero);
+  });
+
+  it("counts a dish not sold by the unit as one", () => {
+    const grams = { hardwareUnit: "g", precision: 0, measure: false };
+    expect(dishCounts(dish({ quantity: 150_000, unit: grams }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      waiting: 1,
+    });
+    const tenths = { hardwareUnit: null, precision: 1, measure: false };
+    expect(
+      dishCounts(dish({ quantity: 2000, unitPrecision: null, unit: tenths }), [], false),
+    ).toEqual({ ...zero, ordered: 1, waiting: 1 });
+    expect(dishCounts(dish({ quantity: 2000, unitPrecision: 1 }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      waiting: 1,
+    });
+  });
+
+  it("counts a fractional quantity of a dish sold by the unit as one", () => {
+    expect(dishCounts(dish({ quantity: 1500, unitPrecision: null }), [], false)).toEqual({
+      ...zero,
+      ordered: 1,
+      waiting: 1,
+    });
+  });
+});
+
+describe("readOrderStateCounts", () => {
+  it("counts a parked order's dishes by quantity, all unsent", async () => {
+    const id = await parked([
+      ["Tarta", "2"],
+      ["Caña", "3"],
+    ]);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 5, unsent: 5 }]]));
+  });
+
+  it("counts a 150 g dish as one", async () => {
+    const id = await parked([["Paella", "150"]]);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts a 330 ml dish as one", async () => {
+    const id = await parked([["Chuletón", "330"]]);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts a 0.450 kg dish as one", async () => {
+    const id = await parked([["Ensalada", "0.450"]]);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts 1.5 of a dish in a unit with one decimal place as one", async () => {
+    const id = await parked([["Croquetas", "1.5"]]);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts a line of 1.5 with no frozen places as one", async () => {
+    const id = await parked([["Tarta", "1"]]);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ quantity: 1500, unitPrecision: null })
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
+  });
+
+  it("counts whole units only, because 1.5 of a dish with no decimal places is refused", async () => {
+    await expect(parked([["Tarta", "1.5"]])).rejects.toMatchObject({ code: "quantity.invalid" });
+  });
+
+  it("counts a sent order's dish as waiting, and a handed-over one as ordered only", async () => {
+    const id = await parked([["Tarta", "1"]], "ticket_then_pay");
+    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, waiting: 1 }]]));
+
+    await markCollected({ db: venue.db }, venue.cfg, id);
+    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1 }]]));
+  });
+
+  it("counts all zeros for an order with no lines", async () => {
+    const id = randomUUID();
+    venue.db.run(sql`
+      insert into working_orders (id, source, device_id, location_id, node_id, order_number, status, opened_at)
+      values (${id}, 'device', ${venue.cfg.origin.deviceId}, ${venue.cfg.locationId}, ${venue.cfg.nodeId}, 90001, 'open', ${nowIso()})`);
+    expect(await countsOf([id])).toEqual(new Map([[id, zero]]));
+  });
+
+  it("counts any number of orders in the same statements, and none for an empty list", async () => {
+    const ids = [
+      await parked([["Tarta", "1"]]),
+      await parked([["Caña", "2"]]),
+      await parked([["Tarta", "1"]]),
+    ];
+    const statementsFor = (orderIds: string[]) =>
+      inTx(venue, async (tx) => {
+        const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+        try {
+          const counts = await readOrderStateCounts(tx, orderIds);
+          return { counts, statements: prepare.mock.calls.length };
+        } finally {
+          prepare.mockRestore();
+        }
+      });
+
+    const one = await statementsFor(ids.slice(0, 1));
+    const three = await statementsFor(ids);
+    const none = await statementsFor([]);
+
+    expect(one.statements).toBeGreaterThan(0);
+    expect(three.statements).toBe(one.statements);
+    expect([...three.counts.keys()]).toEqual(ids);
+    expect(none).toEqual({ counts: new Map(), statements: 0 });
+  });
+});
