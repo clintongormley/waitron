@@ -69,7 +69,7 @@ function run(binary: string, args: string[] = [], env: Record<string, string> = 
       ),
       WAITRON_ENV: "preproduction",
       WAITRON_VENUE_DIR: venueDir(),
-      TZ: "UTC",
+      TZ: process.env.ZONE_PROCESS_MATRIX_TZ || "UTC",
       ...env,
     },
     encoding: "utf8",
@@ -84,7 +84,7 @@ describe("saved-zone script callers", () => {
   it.each(["2026-03-30T22:00:00Z", "2026-10-26T22:00:00Z"])(
     "backdates each historical sale across DST at %s",
     async (at) => {
-      vi.stubEnv("TZ", "UTC");
+      vi.stubEnv("TZ", process.env.ZONE_PROCESS_MATRIX_TZ || "UTC");
       vi.useFakeTimers({ toFake: ["Date"], now: new Date(at) });
       const venue = await provision();
       const result = await seedSales(suite.db, {
