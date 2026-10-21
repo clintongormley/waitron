@@ -2,6 +2,7 @@ import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -27,6 +28,7 @@ import {
   createDepartment,
   departmentReceipts,
   createServiceZone,
+  configureZone,
   recordOrderServiceContext,
   retargetOrderServiceContext,
   getOrderServiceContext,
@@ -1930,5 +1932,167 @@ describe("human transfer identities", () => {
         .set({ name: station!.name, active: station!.active })
         .where(eq(kitchenStations.id, ticket!.stationId));
     }
+  });
+
+  const HELD_AND_READY = { ordered: 2, unsent: 0, held: 1, waiting: 0, ready: 1 };
+  /** Points `f.tab` at a new placed tab in the source zone: a held Burger and a ready Paella. */
+  async function heldAndReady(f: Awaited<ReturnType<typeof ready>>) {
+    f.tab = await counterOrder(v, "Burger", "Paella");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await placeOrder(
+      { db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const items = await suite.db
+      .select({ id: ticketItems.id, name: workingOrderLines.name })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(ticketItems.workingOrderId, f.tab));
+    expect(items.map((item) => item.name).sort()).toEqual(["Burger", "Paella"]);
+    for (const item of items)
+      await suite.db
+        .update(ticketItems)
+        .set(item.name === "Burger" ? { firedAt: null } : { state: "ready" })
+        .where(eq(ticketItems.id, item.id));
+  }
+  const rowOf = (body: { requests: { id: string }[] }, id: string) =>
+    body.requests.find((row) => row.id === id);
+
+  it("carries counts for the tab's dishes on the receiving desk's incoming row", async () => {
+    const f = await ready();
+    await heldAndReady(f);
+    const id = await pending(f);
+    const incoming = await get(f.desk.cookie, "/api/department-transfers/incoming");
+    expect(incoming.status).toBe(200);
+    expect(rowOf(incoming.body, id)).toMatchObject({ counts: HELD_AND_READY });
+  });
+
+  it("carries counts on the source's sent and per-tab rows while pending and after a decline", async () => {
+    const f = await ready();
+    await heldAndReady(f);
+    const id = await pending(f);
+    for (const path of [requestPath(f.tab), "/api/department-transfers/sent"]) {
+      const history = await get(f.source.cookie, path);
+      expect(history.status).toBe(200);
+      expect(rowOf(history.body, id)).toMatchObject({ status: "pending", counts: HELD_AND_READY });
+    }
+    expect(
+      await post(f.desk.cookie, resolutionPath(id, "decline"), { reason: "Desk closing" }),
+    ).toMatchObject({ status: 200 });
+    for (const path of [requestPath(f.tab), "/api/department-transfers/sent"]) {
+      const history = await get(f.source.cookie, path);
+      expect(rowOf(history.body, id)).toMatchObject({ status: "declined", counts: HELD_AND_READY });
+    }
+  });
+
+  it("drops counts from the source's rows once another department accepts the tab", async () => {
+    const f = await ready();
+    await heldAndReady(f);
+    const id = await pending(f);
+    expect(
+      await post(f.desk.cookie, resolutionPath(id, "accept"), { revision: 0, zoneId: f.bz }),
+    ).toMatchObject({ status: 200 });
+    for (const path of [requestPath(f.tab), "/api/department-transfers/sent"]) {
+      const history = await get(f.source.cookie, path);
+      expect(history.status).toBe(200);
+      const row = rowOf(history.body, id);
+      expect(row).toMatchObject({ status: "accepted" });
+      expect(row).not.toHaveProperty("counts");
+      expect(row).not.toHaveProperty("lines");
+    }
+    for (const path of [
+      "/api/department-transfers/incoming",
+      requestPath(f.tab),
+      "/api/department-transfers/sent",
+    ]) {
+      const listed = await get(f.desk.cookie, path);
+      expect(listed.status).toBe(200);
+      expect(rowOf(listed.body, id)).toBeUndefined();
+    }
+  });
+
+  it("drops counts from the source's rows once accepted, though the tab's zone moves into the source's zones", async () => {
+    const f = await ready();
+    await heldAndReady(f);
+    const id = await pending(f);
+    expect(
+      await post(f.desk.cookie, resolutionPath(id, "accept"), { revision: 0, zoneId: f.bz }),
+    ).toMatchObject({ status: 200 });
+    await withTransaction(suite.db, async (tx) => {
+      await configureZone(tx, v.cfg, { zoneId: f.bz, departmentId: f.a });
+      await setProfileServiceScope(tx, v.cfg, f.sourceProfile, {
+        departmentId: f.a,
+        allowedZoneIds: [f.az, f.bz],
+        startingZoneId: f.az,
+      });
+    });
+    expect((await state(f.tab)).context).toMatchObject({ zoneId: f.bz, departmentId: f.b });
+    for (const path of [requestPath(f.tab), "/api/department-transfers/sent"]) {
+      const history = await get(f.source.cookie, path);
+      expect(history.status).toBe(200);
+      const row = rowOf(history.body, id);
+      expect(row).toMatchObject({ status: "accepted" });
+      expect(row).not.toHaveProperty("counts");
+    }
+  });
+
+  it("drops counts from a sent row whose tab left the viewer's zones", async () => {
+    const f = await ready();
+    await heldAndReady(f);
+    const id = await pending(f);
+    const before = await get(f.source.cookie, "/api/department-transfers/sent");
+    expect(rowOf(before.body, id)).toMatchObject({ counts: HELD_AND_READY });
+    await withTransaction(suite.db, (tx) =>
+      retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden),
+    );
+    const after = await get(f.source.cookie, "/api/department-transfers/sent");
+    expect(after.status).toBe(200);
+    const row = rowOf(after.body, id);
+    expect(row).toMatchObject({ status: "pending" });
+    expect(row).not.toHaveProperty("counts");
+  });
+
+  it("reads counts in the same statements for two rows as for one on each route", async () => {
+    const f = await ready();
+    await heldAndReady(f);
+    const first = await pending(f);
+    const firstTab = f.tab;
+    const routes = [
+      { cookie: f.desk.cookie, path: "/api/department-transfers/incoming" },
+      { cookie: f.source.cookie, path: requestPath(firstTab) },
+      { cookie: f.source.cookie, path: "/api/department-transfers/sent" },
+    ];
+    const statements = async () => {
+      const counted = [];
+      for (const route of routes) {
+        await get(route.cookie, route.path);
+        const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+        try {
+          const listed = await get(route.cookie, route.path);
+          expect(listed.status).toBe(200);
+          const rows = listed.body.requests as { counts?: unknown }[];
+          expect(rows.every((row) => row.counts !== undefined)).toBe(true);
+          counted.push({ rows: rows.length, statements: prepare.mock.calls.length });
+        } finally {
+          prepare.mockRestore();
+        }
+      }
+      return counted;
+    };
+    const one = await statements();
+    expect(
+      await post(f.desk.cookie, resolutionPath(first, "decline"), { reason: "Desk closing" }),
+    ).toMatchObject({ status: 200 });
+    f.tab = firstTab;
+    await pending(f);
+    await heldAndReady(f);
+    await pending(f);
+    const two = await statements();
+
+    expect(one.map((route) => route.rows)).toEqual([1, 1, 1]);
+    expect(two.map((route) => route.rows)).toEqual([2, 2, 3]);
+    expect(two.map((route) => route.statements)).toEqual(one.map((route) => route.statements));
   });
 });
