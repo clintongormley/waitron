@@ -5264,7 +5264,7 @@ describe("venue detail edits and configuration boundaries", () => {
         changes: {
           name: "Corrected source",
           city: "Alcalá de Henares",
-          timeZone: "UTC",
+          timeZone: "Atlantic/Canary",
         },
       }),
     );

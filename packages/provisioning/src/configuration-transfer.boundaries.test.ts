@@ -347,3 +347,125 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
     expect((await tx.execute(sql`pragma foreign_key_check`)).rows).toEqual([]);
   });
 });
+
+it.each([
+  [undefined, "missing"],
+  [null, "missing"],
+  ["", "missing"],
+  ["  ", "missing"],
+  [120, "invalid"],
+  ["+02:00", "invalid"],
+  ["Invalid/Zone", "invalid"],
+  ["Europe/Madrid", "country"],
+])("refuses bundle zone %j before module callbacks", (timeZone, reason) => {
+  let callbacks = 0;
+  const bundle = configurationBundle();
+  bundle.venue.location.timeZone = timeZone as string;
+  bundle.modules = { "synthetic-transfer": 1 };
+  const module = {
+    ...moduleWith([]),
+    configurationTransfer: {
+      kind: "tables" as const,
+      tables: [],
+      validate: () => {
+        callbacks++;
+      },
+    },
+  };
+  let refusal: unknown;
+  try {
+    validateConfigurationBundle(bundle, [module], bundle.modules);
+  } catch (error) {
+    refusal = error;
+  }
+  expect(callbacks).toBe(0);
+  expect(refusal).toMatchObject({ code: "venue.time_zone_invalid", params: { reason } });
+});
+
+it("direct import refuses bad zone metadata before replacing retained rows", async () => {
+  const input = {
+    ...request,
+    country: "GB",
+    taxId: "123456789",
+    location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+    admin: {
+      displayName: "Owner",
+      email: "owner@example.test",
+      pinHash: "synthetic-pin",
+      passwordHash: "synthetic-password",
+    },
+  };
+  const target = await applyVenue(planVenue(input, []), { db: suite.db, modules: [] });
+  const beforeLocations = (await suite.db.execute(sql`select * from locations`)).rows;
+  await withTransaction(suite.db, async (tx) => {
+    await tx.execute(sql`create table zz_parents (id text primary key)`);
+    await tx.execute(sql`insert into zz_parents values ('retained')`);
+  });
+  try {
+    const bundle = configurationBundle();
+    bundle.venue.location.timeZone = "Europe/Madrid";
+    bundle.modules = { "synthetic-transfer": 1 };
+    bundle.tables = { zz_parents: [{ id: "replacement" }] };
+    const refusal = await withTransaction(suite.db, (tx) =>
+      importConfigurationTables(
+        tx,
+        bundle,
+        target,
+        [moduleWith([{ name: "zz_parents" }])],
+        bundle.modules,
+      ),
+    ).catch((error: unknown) => error);
+    expect((await suite.db.execute(sql`select * from zz_parents`)).rows).toEqual([
+      { id: "retained" },
+    ]);
+    expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(beforeLocations);
+    expect(refusal).toMatchObject({
+      code: "venue.time_zone_invalid",
+      params: { reason: "country" },
+    });
+  } finally {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`drop table zz_parents`);
+    });
+  }
+});
+
+it.each([
+  [undefined, "missing"],
+  [null, "missing"],
+  ["", "missing"],
+  ["  ", "missing"],
+  [120, "invalid"],
+  ["+02:00", "invalid"],
+  ["Invalid/Zone", "invalid"],
+  ["Europe/Madrid", "country"],
+])("decoding refuses artifact zone %j before caller validation", (timeZone, reason) => {
+  const bundle = configurationBundle();
+  bundle.venue.location.timeZone = timeZone as string;
+  expect(() =>
+    decodeConfigurationBundle(encodeConfigurationBundle(bundle, passphrase), passphrase),
+  ).toThrow(expect.objectContaining({ code: "venue.time_zone_invalid", params: { reason } }));
+});
+
+it.each([" Europe/London ", "GB"])(
+  "passes normalized zone %j to transfer checks while retaining the artifact metadata",
+  (timeZone) => {
+    const bundle = configurationBundle();
+    bundle.venue.location.timeZone = timeZone;
+    bundle.modules = { "synthetic-transfer": 1 };
+    let checkedZone: string | undefined;
+    const module: WaitronModule = {
+      ...moduleWith([]),
+      configurationTransfer: {
+        kind: "tables" as const,
+        tables: [],
+        validate: (_tables, exported) => {
+          checkedZone = exported?.timeZone;
+        },
+      },
+    };
+    validateConfigurationBundle(bundle, [module], bundle.modules);
+    expect(checkedZone).toBe("Europe/London");
+    expect(bundle.venue.location.timeZone).toBe(timeZone);
+  },
+);

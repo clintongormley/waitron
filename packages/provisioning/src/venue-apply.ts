@@ -1,3 +1,4 @@
+import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import {
@@ -16,6 +17,7 @@ import { foldForUniqueness, persons, startManagementSession } from "@waitron/ide
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import {
   AppError,
+  classifyTimeZone,
   businessDayAt,
   cutoverForBusinessDay,
   locationId as brandLocationId,
@@ -117,6 +119,21 @@ export async function applyVenue(
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
+  for (const action of actions) {
+    if (action.kind === "create-location") {
+      action.timeZone = requireCountryTimeZone(ensure.country, action.timeZone);
+    }
+  }
+  const requireSavedZones = async (db: Database | Transaction): Promise<void> => {
+    const saved = await db.select({ timeZone: locations.timeZone }).from(locations);
+    for (const row of saved) {
+      const zone = classifyTimeZone(row.timeZone);
+      if (zone.kind !== "valid") {
+        throw new AppError("venue.time_zone_invalid", { reason: zone.kind });
+      }
+    }
+  };
+  await requireSavedZones(deps.db);
   const inputs = new Map(
     [...(deps.moduleInputs ?? [])].map(([name, input]) => [name, { ...input }]),
   );
@@ -155,6 +172,7 @@ export async function applyVenue(
     .map(({ code, purpose }) => ({ code, purpose }));
 
   const run = async (tx: Transaction, prepared: ModuleOperations): Promise<VenueResult> => {
+    await requireSavedZones(tx);
     let locationId = "";
     let nodeId = "";
     let reusingVenue = false;

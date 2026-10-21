@@ -264,7 +264,8 @@ it.each([
   [
     "country",
     (bundle: ConfigurationBundle) => {
-      bundle.venue.country = "PT";
+      bundle.venue.country = "GB";
+      bundle.venue.location.timeZone = "Europe/London";
     },
     "configurationImport",
   ],

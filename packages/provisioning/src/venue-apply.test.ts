@@ -870,7 +870,7 @@ it.each([
   ["postalCode", "28014"],
   ["city", "Alcalá de Henares"],
   ["province", "Barcelona"],
-  ["timeZone", "UTC"],
+  ["timeZone", "Atlantic/Canary"],
   ["dayCutover", "04:30"],
 ] as const)(
   "creation refuses to overwrite an existing venue's %s and retains its identity and series",
