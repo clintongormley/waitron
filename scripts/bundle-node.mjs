@@ -3,6 +3,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { writeBundledNpmNotices } from "./npm-bundle-notices.mjs";
 import { readBuildHourRelease } from "./generate-hour-release.mjs";
+import { readBuildBackupVerificationRuntime } from "./backup-verification-runtime.mjs";
 
 /** sharp is a native addon: esbuild bundles it without complaint and the bundle then cannot load
  * (docs/developers/ci-and-gates.md, "sharp and the server bundle"). */
@@ -35,7 +36,7 @@ export function parsePairs(argv) {
 
 export function bundle(
   pairs,
-  { run = execFileSync, writeNotices = noticeForBundle, release } = {},
+  { run = execFileSync, writeNotices = noticeForBundle, release, backupVerificationRuntime } = {},
 ) {
   for (const { entry, outfile } of pairs) {
     const args = esbuildArgs(entry, outfile);
@@ -44,6 +45,14 @@ export function bundle(
       args.push("--define:__WAITRON_HOUR_RELEASE__=__waitronHourReleaseProvenance");
       const banner = args.findIndex((arg) => arg.startsWith("--banner:js="));
       args[banner] += `\nconst __waitronHourReleaseProvenance = Object.freeze(${literal});`;
+    }
+    if (backupVerificationRuntime !== undefined) {
+      args.push(
+        "--define:__WAITRON_BACKUP_VERIFICATION_RUNTIME__=__waitronBackupVerificationRuntime",
+      );
+      const banner = args.findIndex((arg) => arg.startsWith("--banner:js="));
+      args[banner] +=
+        `\nconst __waitronBackupVerificationRuntime = Object.freeze(${JSON.stringify(backupVerificationRuntime)});`;
     }
     // Found on PATH: each caller keeps esbuild in its devDependencies and runs this via `pnpm run`.
     run("esbuild", args, { stdio: "inherit" });
@@ -65,7 +74,12 @@ function noticeForBundle(outfile) {
 /* v8 ignore start */
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    bundle(parsePairs(process.argv.slice(2)), { release: readBuildHourRelease() });
+    const pairs = parsePairs(process.argv.slice(2));
+    const release = readBuildHourRelease();
+    bundle(pairs, {
+      release,
+      backupVerificationRuntime: readBuildBackupVerificationRuntime({ release }),
+    });
   } catch (error) {
     console.error(error.message);
     process.exitCode = typeof error.status === "number" ? error.status : 1;

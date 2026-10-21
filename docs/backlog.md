@@ -5212,8 +5212,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   Host state checks now validate TLS key pairs, captured optional settings and selected-node sealed
   material; scratch-layout checks compare effective vault/account keys with the real boot loader.
   Signed paper needs release-reviewed public roots; stored Cloud receipt references remain unsupported.
-  Embedded build identity, the complete artifact verifier and authority-boundary qualification,
-  and target-bound recovery remain open. Cloud integration
+  Embedded build identity and an importable verification bundle now have local build checks.
+  The complete artifact verifier, authority-boundary qualification and target-bound recovery
+  remain open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.
 

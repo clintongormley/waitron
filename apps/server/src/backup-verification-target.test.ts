@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { expectedSchemaVersion } from "@waitron/migrations";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@waitron/module";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
 import { readBackupVerificationRequest } from "./backup-verification-protocol.js";
+import * as targetExports from "./backup-verification-target.js";
 
 const runtime = { release: "2026.10.20", revision: "e".repeat(40), fingerprint: "f".repeat(64) };
 function policy(): BackupVerificationContribution {
@@ -369,4 +370,39 @@ it("preserves legitimate semver ranges containing spaces in the bound target", (
   expect(actual.modules[1]!.requires).toEqual({ core: ">=1.0.0 <2.0.0" });
   const other = target([module(), { ...module("extra"), requires: { core: "^1.0.0" } }]);
   expect(actual.compositionDigest).not.toBe(other.compositionDigest);
+});
+
+describe("current binary backup target", () => {
+  it("uses the embedded source stamp with actual installed modules and migrations", () => {
+    vi.stubGlobal("__WAITRON_BACKUP_VERIFICATION_RUNTIME__", runtime);
+    try {
+      const current = targetExports.currentBackupVerificationTarget();
+      expect(current.runtime).toEqual(runtime);
+      expect(current.modules.map((m) => m.name)).toEqual(ALL_MODULES.map((m) => m.name).sort());
+      expect(current.modules.find((m) => m.name === "core")!.schema).toBe(
+        expectedSchemaVersion(ALL_MODULES.find((m) => m.name === "core")!.migrations, null),
+      );
+      expect(Object.isFrozen(current)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("refuses an explicitly unstamped development build", () => {
+    vi.stubGlobal("__WAITRON_BACKUP_VERIFICATION_RUNTIME__", null);
+    try {
+      unsupported(() => targetExports.currentBackupVerificationTarget());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("refuses absent embedded provenance even with ambient build claims", () => {
+    vi.stubEnv("WAITRON_BUILD_ID", "a".repeat(40));
+    try {
+      unsupported(() => targetExports.currentBackupVerificationTarget());
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

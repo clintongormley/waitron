@@ -205,7 +205,12 @@ describe("release metadata is a build product of a pinned source commit", () => 
   it("the actual bundle command replaces a stale stamp for every declared Node entry", () => {
     const { cwd, hashes } = fixture();
     mkdirSync(join(cwd, "scripts"));
-    for (const file of ["bundle-node.mjs", "generate-hour-release.mjs", "npm-bundle-notices.mjs"])
+    for (const file of [
+      "bundle-node.mjs",
+      "generate-hour-release.mjs",
+      "npm-bundle-notices.mjs",
+      "backup-verification-runtime.mjs",
+    ])
       copyFileSync(join(ROOT, "scripts", file), join(cwd, "scripts", file));
     const manifests = ["apps/server/package.json", "packages/provisioning/package.json"];
     const entries = manifests

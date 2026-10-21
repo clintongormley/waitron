@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, lstatSync } from "node:fs";
+import { readFileSync, readdirSync, lstatSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { backupVerificationInventory } from "@waitron/composition";
+import { fileURLToPath } from "node:url";
+import { ALL_MODULES, backupVerificationInventory } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import {
@@ -15,6 +16,8 @@ import {
   validateBackupVerificationTarget,
   type BackupVerificationTarget,
 } from "./backup-verification-protocol.js";
+
+declare const __WAITRON_BACKUP_VERIFICATION_RUNTIME__: BackupVerificationTarget["runtime"] | null;
 
 function unsupported(): never {
   throw new BackupVerificationUnsupported("target_incompatible");
@@ -141,4 +144,18 @@ export function buildBackupVerificationTarget(input: {
       unsupported();
     throw error;
   }
+}
+
+export function currentBackupVerificationTarget(): BackupVerificationTarget {
+  if (
+    typeof __WAITRON_BACKUP_VERIFICATION_RUNTIME__ === "undefined" ||
+    __WAITRON_BACKUP_VERIFICATION_RUNTIME__ === null
+  )
+    unsupported();
+  const bundledMigrations = fileURLToPath(new URL("./drizzle", import.meta.url));
+  return buildBackupVerificationTarget({
+    modules: ALL_MODULES,
+    migrationsRoot: existsSync(bundledMigrations) ? bundledMigrations : null,
+    runtime: __WAITRON_BACKUP_VERIFICATION_RUNTIME__,
+  });
 }

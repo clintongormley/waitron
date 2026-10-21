@@ -999,3 +999,32 @@ inventory suites passed 56 and 22. All 8,682 candidate paths matched before and 
 and the owned temporary candidate was removed. No existing test assertion, guard or shipped SQL
 changed in this step. These are local module and inventory receipts, not CI or complete artifact
 qualification. Tasks 5 and 23–27 remain open before branch finishing and release handoff.
+
+### Task 5 build identity qualification — 21 October 2026
+
+The shared bundler embeds separate backup verification provenance beside the existing hour stamp.
+Its fingerprint binds the source revision, release, lockfile bytes and canonical module,
+migration and policy descriptor before the runtime fields are added. The current-target reader
+uses that embedded provenance and the shipped migration assets; absent provenance refuses
+qualification. This is version binding, not remote attestation.
+
+`pnpm --filter @waitron/server build` produced `dist/backup-verification.js` alongside the ordinary
+entries. The new entry exports the strict readers and target helpers; the artifact verifier is
+still Task 23. The real import test blocked listeners, socket connections, fetch, timers, workers
+and child processes, then read the complete target from copied migration assets. Its module
+versions were compared with the package manifests. Changing copied SQL changed the migration digest.
+
+The three build suites passed 57 cases, including the existing hour-stamp checks, and were run
+with `GIT_DIR` set. A focused coverage run measured both changed build helpers at 100% in each
+category. The protocol and target suites passed 179 cases; the affected composition suites
+passed 61, root boundary checks 3,710 and the unchanged fiscal golden/immutability pair 20.
+Server typechecking and focused lint passed. One new acceptance assertion initially omitted the
+migration helper's arguments; the corrected call passed without a product change.
+
+Eight independent installed-copy faults each failed the intended assertion beside a passing
+control: omit source, lockfile or descriptor binding; omit bundle provenance; omit absent-stamp
+refusal; substitute the running stamp; start a timer during import; omit SQL-byte binding.
+The restored copy passed the same 57 build and 179 protocol/target cases. The existing hour test's
+fixture gained the newly imported build helper; no existing assertion changed. These receipts
+cover local builds and target binding, not full artifact verification or the joint Cloud release.
+Tasks 23–27 remain before whole-branch finishing and release handoff.
