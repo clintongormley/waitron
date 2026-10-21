@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Hono } from "hono";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { escapeHtml } from "./recovery-surface.js";
 import { runEntry } from "./node-entry.js";
@@ -13,6 +13,13 @@ type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<vo
 type Lock = <T>(stateDir: string, body: () => Promise<T>) => Promise<T>;
 
 const SHARED_LOG_DIR = mkdtempSync(join(tmpdir(), "wt-entry-full-log-"));
+// Real folders: below the floor the start deletes under the state folder's backup staging.
+const STATE_DIR = realpathSync(mkdtempSync(join(tmpdir(), "wt-entry-full-state-")));
+const VENUE_DIR = realpathSync(mkdtempSync(join(tmpdir(), "wt-entry-full-venue-")));
+afterAll(async () => {
+  for (const path of [SHARED_LOG_DIR, STATE_DIR, VENUE_DIR])
+    await rm(path, { recursive: true, force: true });
+});
 
 function deps(
   over: Partial<Parameters<typeof runEntry>[0]> = {},
@@ -21,8 +28,8 @@ function deps(
   return {
     args: [] as readonly string[],
     baseEnv: {},
-    stateDir: "/state",
-    venueDir: "/venue",
+    stateDir: STATE_DIR,
+    venueDir: VENUE_DIR,
     assertNotAhead: vi.fn(() => Promise.resolve()),
     clearReplacedDatabases: vi.fn(() => Promise.resolve()),
     lockVenue: vi.fn(() => Promise.resolve({ release: () => {} })),
@@ -268,7 +275,7 @@ describe("a start below the free-space floor", () => {
     await runEntry(d);
     await servedApp(d).request("/recovery-api/retry", { method: "POST" });
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
-    expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", { ...FRESH, clears: 1 });
+    expect(d.writeRecoveryState).toHaveBeenCalledWith(STATE_DIR, { ...FRESH, clears: 1 });
 
     const failingExit = vi.fn();
     const failing = deps(

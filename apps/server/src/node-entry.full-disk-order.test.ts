@@ -31,12 +31,15 @@ it("deletes the leftovers before first-setup resolution runs", async () => {
   dirs.push(logDir);
   watch.leftover = join(logDir, "waitron.log.2");
   await writeFile(watch.leftover, "old lines");
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-order-state-"));
+  const venueDir = await mkdtemp(join(tmpdir(), "wt-entry-order-venue-"));
+  dirs.push(stateDir, venueDir);
 
   await runEntry({
     args: [],
     baseEnv: {},
-    stateDir: "/state",
-    venueDir: "/venue",
+    stateDir,
+    venueDir,
     assertNotAhead: vi.fn(() => Promise.resolve()),
     clearReplacedDatabases: vi.fn(() => Promise.resolve()),
     lockVenue: vi.fn(() => Promise.resolve({ release: () => {} })),
