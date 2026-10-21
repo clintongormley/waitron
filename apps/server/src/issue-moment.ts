@@ -1,6 +1,6 @@
 import { localCalendarDate, rateLines } from "@waitron/catalogue";
 import type { GrossLines, PricedLines } from "@waitron/catalogue";
-import type { TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 
 /** An invoice's lines at the rates of the day it is issued, and the clock that issues it. */
 export interface IssueMoment {
@@ -14,8 +14,13 @@ export interface IssueMoment {
  * Take ONE clock reading and rate `gross` at its local calendar date. Every till path that issues an
  * invoice from an order's lines rates them here and hands `recordSale` the returned clock.
  */
-export function issueMoment(clock: TrustedClock, gross: GrossLines): IssueMoment {
+export function issueMoment(
+  clock: TrustedClock,
+  gross: GrossLines,
+  fiscal: Pick<FiscalBackend, "assertRecordableAt">,
+): IssueMoment {
   const reading = clock.now();
+  fiscal.assertRecordableAt(reading);
   return {
     priced: rateLines(gross, localCalendarDate(reading.instant, reading.offsetMinutes)),
     clock: {

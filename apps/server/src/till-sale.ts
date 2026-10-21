@@ -936,6 +936,7 @@ async function fileImmediateSale(
   const { priced, clock } = issueMoment(
     deps.clock,
     await issuancePass(tx, cfg, workingOrderId, order),
+    deps.backend,
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
   const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
@@ -1551,7 +1552,7 @@ async function finalizeCapture(
         .from(workingOrders)
         .where(eq(workingOrders.id, req.id));
       if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
-      const { priced, clock } = issueMoment(deps.clock, grossInP1);
+      const { priced, clock } = issueMoment(deps.clock, grossInP1, deps.backend);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
         log: deps.log,
@@ -1691,7 +1692,11 @@ async function finalizeRecovery(
     }
 
     const order = await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false });
-    const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, req.id, order));
+    const { priced, clock } = issueMoment(
+      deps.clock,
+      await issuancePass(tx, cfg, req.id, order),
+      deps.backend,
+    );
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, priced.total) < 0) {

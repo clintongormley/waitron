@@ -685,6 +685,7 @@ async function issueWhenFullyPaid(
   const { priced, clock } = issueMoment(
     deps.clock,
     await issuancePass(tx, cfg, workingOrderId, stored),
+    deps.backend,
   );
   const tendersOfBill: SettleSaleTender[] = held
     .filter(({ row }) => row.state === "received")

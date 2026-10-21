@@ -439,6 +439,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // The fiscal filing refuses the record: not a malformed request, and permanent for the same
   // basket, so 409 rather than 400 or 500.
   "fiscal.record_invalid": 409,
+  "clock.unusable": 409,
   "fiscal.foreign_recipient_unsupported": 409,
   // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
   // permanent until the catalogue is fixed, and not the till's fault.
