@@ -2222,8 +2222,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   ([plan](superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
   amount that took the whole list price — prints «Descuento 100%» in each language's own discount
   word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
-  A911 and A960 are what it left open. Left: A758-5 (the till's Comp words), and the §3.8 and
-  "collect it at the counter" slices. The §3.8 slice also makes the report's entries read
+  A911, A960 and A961 are what it left open. Left: A758-5 (the till's Comp words), and the §3.8
+  and "collect it at the counter" slices. The §3.8 slice also makes the report's entries read
   "Void, charged" («Cancelado, cobrado», design §3.6) for a cancel that kept the charge, deferred from
   A758-3; most such rows are already told apart without a migration, because A773-1 writes a
   still-charge cancel with before = after = the dish's charge and nothing off
@@ -2318,7 +2318,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
   what was left, as a 100% percentage already does. An amount counts only when it took the item's
   whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
-  the report reads "Comp €6.00". One rule decides both (`packages/adjustments/src/full-comp.ts`).
+  the report reads "Comp €6.00". One rule (`packages/adjustments/src/full-comp.ts`) decides the
+  ticket, the till's ticket and the report; a full invoice names a dish's row by its one own comp,
+  unless a bill comp also stands and the dish's discounts fall at more than one VAT rate, and
+  otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
+  (`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
   Owner to confirm both halves.
 
 - **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left
@@ -3866,7 +3870,18 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
   for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
   there. Decide whether a short label should be kept whole. The wrapped text is pinned in
-  `apps/server/src/receipt-ticket.test.ts` (the 80 mm Basque case of the comped-extra check).
+  `apps/server/src/receipt-ticket.test.ts`, in the case "prints F1 reductions before VAT, at their
+  rate, on '80mm' in 'eu-ES'".
+
+- **A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento
+  100%» whenever every line at its rate was filed at zero (left open by A758-4).** `named` is null
+  when no one adjustment names the row, for instance a dish with two or more comps of its own
+  (`GroupDiscount`, `apps/server/src/receipt-figures.ts`), and the row then falls back to the
+  zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
+  dish to zero as one «Descuento 100%» row, though neither amount counts as full by A911's rule.
+  And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
+  only its own part (the A758-4 plan's owner point 3). Owner to confirm.
+
 
 - **Loose ends left by A331 batch 3b (#1415).**
   - A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of

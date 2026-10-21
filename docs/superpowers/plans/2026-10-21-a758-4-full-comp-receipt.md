@@ -511,7 +511,7 @@ and the adjustments come from the adjustment harness as `adjustments-apply.test.
 - [ ] **The look script.** Add two samples to `SAMPLES` in `apps/server/scripts/receipt-look.ts`
   (`:439-480`): `"simplified-full-comps"` — a Free Burger and a whole-price amount on a Bottle
   (each `{ kind: "comp" }`), and Bread with `{ kind: "discount", percentBp: 5000 }` then
-  `{ kind: "discount" }` for what was left; and `"full-comp-eu"` — `FULL` as F1 with one
+  `{ kind: "discount" }` for what was left; and `"full-invoice-comp-eu"` — `FULL` as F1 with one
   full-comp line and `invoiceLocale: "eu-ES"`. The
   script is typechecked (`apps/server/tsconfig.json:7` includes `scripts`), never run by CI.
 - [ ] **Run** the six files again (read each count), the receipt and invoice neighbours that pin
@@ -594,7 +594,7 @@ Tests read text; nobody has seen the new words on paper or on the till. Look at 
 
 - [ ] **Printed.** `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts
   /Users/clintongormley/waitron-campaign-c/a758-4-shots/receipts`. Open the 58 mm and 80 mm PNGs of
-  `simplified-full-comps`, `full-comp-eu` and the existing `full-comped-weighed` (thermal and A4,
+  `simplified-full-comps`, `full-invoice-comp-eu` and the existing `full-comped-weighed` (thermal and A4,
   and its PDF). Check: «Descuento 100%» sits under the comped item, indented like «Descuento 20%»;
   its amount is right-aligned with the others; on 58 mm a wrapped «(BEZa barne)» keeps the amount
   on the line it belongs to; the full invoice's row prints «Descuento 100%» in the item column.
@@ -635,7 +635,7 @@ Each changes only because design D11 / §3.4 makes a full comp print the discoun
 | # | Task | Where | Old → new |
 |---|---|---|---|
 | 1 | 2 | `packages/adjustments/src/record.test.ts:672-705` ("reads this bill's comps and discounts oldest first…", `:637`) | each entry gains `full`: `true`, `true`, `false`, `false` |
-| 2 | 3 | `apps/server/src/receipt-ticket.test.ts:241-256`, `:317` ("prints F1 reductions before VAT…") | the table's fourth column (the comp word) goes; `` `${comp} -${figure("1.00")} 10%` `` → `` `${discount} 100% -${figure("1.00")} 10%` `` |
+| 2 | 3 | `apps/server/src/receipt-ticket.test.ts:241-256`, `:317` ("prints F1 reductions before VAT…") | the table's fourth column (the comp word) goes; `` `${comp} -${figure("1.00")} 10%` `` → `` `${discount} 100% -${figure("1.00")} 10%` ``; except eu-ES at 80 mm, where the item column is 14 wide and the check expects the wrapped `"Deskontua -1,00 10% 100%"` (A960) |
 | 3 | 3 | `receipt-ticket.test.ts:2231` | `at80("  Invitación", "-12,00")` → `at80("  Descuento 100%", "-12,00")` |
 | 4 | 3 | `receipt-ticket.test.ts:2238` | `at80("  Invitación", "-10,50")` → `at80("  Descuento 100%", "-10,50")` |
 | 5 | 3 | `receipt-ticket.test.ts:2276`, `:2287` | name "prints the comp's label as Invitación" → "prints a full comp as Descuento 100%"; `"  Invitación "` → `"  Descuento 100% "` (still 2) |
@@ -650,7 +650,7 @@ Each changes only because design D11 / §3.4 makes a full comp print the discoun
 
 **Names only, no check changes:** `apps/server/src/receipt-figures.test.ts:469` ("calls a comped
 dish's own row an invitation…") and `:686` ("calls a comped dish an invitation") become "marks …
-as a comp"; their `comp: true` checks stand, because `GroupDiscount.comp` does not change.
+as a comp", and `:725` ("does not call a row an invitation…") becomes "…a full comp…"; their `comp: true` checks stand, because `GroupDiscount.comp` does not change.
 
 **Unchanged, checked:** every `kind: "comp"` wire pin and fixture input (Decision 1); the
 adjustment report's suites (Task 2 runs them unedited); `spain.test.ts` and `registry.test.ts`;
