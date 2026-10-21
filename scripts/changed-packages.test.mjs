@@ -244,6 +244,16 @@ describe("scopeForPaths", () => {
       },
     );
 
+    it("selects the server, whose Vitest config loads scripts/vitest-duration-sequencer.mjs", () => {
+      expect(
+        scopeForPaths(["scripts/vitest-duration-sequencer.mjs"], workspace(consumers)),
+      ).toMatchObject({
+        kind: "packages",
+        packages: ["@waitron/server"],
+        root: true,
+      });
+    });
+
     it("selects the three browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
       expect(
         scopeForPaths(["scripts/vitest-shard-coverage-merge.mjs"], workspace(consumers)),

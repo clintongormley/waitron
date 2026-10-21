@@ -102,6 +102,10 @@ describe("startOrder", () => {
   it("falls back to path order on equal seconds", () => {
     expect(startOrder(["b", "c", "a"], { a: 5, b: 5, c: 9 })).toEqual(["c", "a", "b"]);
   });
+
+  it("keeps a path that arrives twice", () => {
+    expect(startOrder(["a", "a"], {})).toEqual(["a", "a"]);
+  });
 });
 
 describe("durationSequencer", () => {
@@ -221,8 +225,8 @@ describe("apps/server's wiring", () => {
     const table = JSON.parse(readFileSync(join(serverRoot, "test-durations.json"), "utf8"));
     const wired = serverConfig.test.sequence.sequencer.table;
     expect(wired).toEqual(table);
-    for (const value of Object.values(wired)) {
-      expect(Number.isFinite(value) && value > 0).toBe(true);
+    for (const [file, value] of Object.entries(wired)) {
+      expect(Number.isFinite(value) && value > 0, file).toBe(true);
     }
 
     const paths = serverTestFiles();

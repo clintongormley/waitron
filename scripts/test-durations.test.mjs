@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { fileSecondsFromLog, main, medianTable } from "./test-durations.mjs";
 
 const prefix = "test-server (1)\tUNKNOWN STEP\t2026-10-20T12:52:41.3301631Z ";
@@ -108,5 +112,51 @@ describe("main", () => {
     expect(written).toEqual([]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/^usage: /);
+  });
+
+  it("writes nothing and fails when no log holds a measurement", () => {
+    const { written, errors, deps } = io({
+      "empty.log": `${prefix}[file-progress] start src/a.test.ts\n`,
+      "blank.log": "",
+    });
+    expect(main(["out.json", "empty.log", "blank.log"], deps)).toBe(1);
+    expect(written).toEqual([]);
+    expect(errors).toEqual(["no file measurements found in the logs; out.json left unchanged"]);
+  });
+});
+
+describe("the command line", () => {
+  const script = join(import.meta.dirname, "test-durations.mjs");
+  let dir;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  function run(log) {
+    dir = mkdtempSync(join(tmpdir(), "test-durations-"));
+    const out = join(dir, "out.json");
+    writeFileSync(join(dir, "one.log"), log);
+    const result = spawnSync(process.execPath, [script, out, join(dir, "one.log")], {
+      encoding: "utf8",
+    });
+    return { result, out };
+  }
+
+  it("writes the table to the named file and exits 0", () => {
+    const { result, out } = run(secondLog);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(readFileSync(out, "utf8")).toBe(
+      '{\n  "src/a.test.ts": 10,\n  "src/d.test.ts": 0.4\n}\n',
+    );
+  });
+
+  it("exits 1 and writes no file when the log holds no measurement", () => {
+    const { result, out } = run(`${prefix}some other output\n`);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/^no file measurements found in the logs/);
+    expect(existsSync(out)).toBe(false);
   });
 });

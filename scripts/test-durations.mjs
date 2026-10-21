@@ -45,11 +45,16 @@ export function main(argv, { readFile, writeFile, stderr }) {
   }
   const [out, ...logs] = argv;
   const table = medianTable(logs.map((log) => fileSecondsFromLog(readFile(log))));
+  if (Object.keys(table).length === 0) {
+    stderr(`no file measurements found in the logs; ${out} left unchanged`);
+    return 1;
+  }
   writeFile(out, `${JSON.stringify(table, null, 2)}\n`);
   return 0;
 }
 
-// Ignored for coverage: the tests call `main` directly, and this block only wires it to the process.
+// Ignored for coverage because its tests run it in a CHILD process, which the v8 provider does not
+// measure.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("test-durations.mjs")) {
   process.exitCode = main(process.argv.slice(2), {
