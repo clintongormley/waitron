@@ -2027,7 +2027,7 @@ describe("zone-offer catalogue routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("reads the location catalogue values used by development fixtures", async () => {
+  it("reads the location's accessible menus and product values", async () => {
     const catalogue = await withTransaction(suite.db, async (tx) => ({
       menus: await listAccessibleCatalogues(tx, cfg.locationId),
       products: (await listAvailableProducts(tx, cfg.locationId)).products,

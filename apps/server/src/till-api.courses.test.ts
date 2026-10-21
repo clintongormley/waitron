@@ -232,7 +232,10 @@ async function offerIdsByName(): Promise<Map<string, string>> {
   });
   expect(res.status).toBe(200);
   const { offers } = (await res.json()) as { offers: { id: string; name: string }[] };
-  return new Map(offers.map((offer) => [offer.name, offer.id]));
+  const byName = new Map(offers.map((offer) => [offer.name, offer.id]));
+  expect([...byName.keys()].sort()).toEqual([SOPA, FILETE, PAN].sort());
+  expect(byName.size).toBe(offers.length);
+  return byName;
 }
 
 async function placeOrder(names: string[]): Promise<string> {
