@@ -415,7 +415,7 @@ this item stays open.)
   (`apps/server/src/backup-sweep.ts`), so a run that is cut off leaves them behind. Owner: "Every
   start deletes them, whatever the free space — so a plaintext copy never outlives a restart. (The
   start never deletes them while a running server holds the venue folder.)" Built in
-  `freeSpaceAtStart` (`apps/server/src/start-space.ts`), which keeps them only while another
+  `freeSpaceAtStart` (`apps/server/src/start-space.ts`), which keeps them while another
   process holds the venue folder's lock. The limits that remain: a cut-off run's copy stays until
   the next start; where the lock cannot be taken for another reason (measured on a full disk with
   no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s

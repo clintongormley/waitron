@@ -53,7 +53,8 @@ export interface StartSpaceDeps {
  * unless another process holds the venue folder's lock — or, when the lock cannot be taken for any
  * other reason, the folder's holder heartbeat is fresh. Below `floor` (or when forced) it also
  * deletes rotated logs but the newest and crash reports older than {@link CRASH_REPORT_KEEP_MS}. A
- * folder that is a symbolic link is skipped. A filesystem or lock failure is logged, never thrown.
+ * folder that is a symbolic link is skipped. Nothing is thrown; a failed listing, deletion or lock is
+ * logged, except another holder's refusal.
  */
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
@@ -79,7 +80,7 @@ export async function freeSpaceAtStart(
         await remove(join(stagingDir, name), true);
     }
   };
-  // The backup run that writes staging runs inside the process holding the venue folder's lock.
+  // On a box, only the server runs a backup, and it holds the venue folder's lock while it does.
   const removeBackupStaging = async () => {
     // Taking the lock would create a missing venue folder; with none, no process can hold it.
     if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteBackupStaging();

@@ -2591,16 +2591,17 @@ dies leaves its file behind; the next holder overwrites it.
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
 when the lock cannot be taken.** Whatever the free space, a start deletes the copies a backup run
 leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
-`lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it. The
-backup run writes staging only inside the server (`BackupSupervisor`, started in
-`apps/server/src/boot.ts` after its store has taken the lock), so the refusal is the running
-server's. With no venue folder it deletes without the lock, because taking it creates the folder.
-Measured 2026-10-21, Node v26.11.1, macOS, on the 64 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
+`lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it. On a
+box, only the server runs a backup (`BackupSupervisor`, started in
+`apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
+staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.
+Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
 makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
 refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other
-holder: 0 and 4 KiB left failed with `ENOSPC` opening `venue.holder.json.partial` (one earlier run
-with 0 left: `unable to open database file`, errcode 14), and 16 KiB left took the lock. So a full
-disk no longer costs a running server its staging, as the heartbeat-only check did (the slice 2
+holder: 0 left failed with `ENOSPC` opening `venue.holder.json.partial` (one earlier run:
+`unable to open database file`, errcode 14); 4 KiB left failed in one run and took the lock in a
+review rerun; 16 KiB left took the lock. On that image, then, a full disk did not cost a running
+server its staging, as the heartbeat-only check did (the slice 2
 plan's decision 5). Any failure other than that refusal falls back to the heartbeat: the copies stay
 while the holder file is fresh. There the old limits stand: on a full HFS+ filesystem the heartbeat
 rewrite failed with `ENOSPC` and the file kept its earlier `heartbeatAt` (F13 in the
