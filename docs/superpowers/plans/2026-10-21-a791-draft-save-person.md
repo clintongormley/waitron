@@ -4,7 +4,7 @@
 
 **Goal:** A till's order save says which person's order it is, and the server refuses a save whose person is not the one signed in on that device, so an order typed by Ana can never be saved as Ben's.
 
-**Architecture:** The till's save body gains `personId`, taken from the `DraftSync` that holds the order (fixed when the order was opened for that person). The save route `PUT /api/parties/:id/drafts` requires the field and compares it with the session's person before it opens a transaction, so a refusal writes nothing. When the till meets the new refusal while it still believes that person is signed in, it signs that person out on this screen only — locks to the sign-in screen and keeps their unsaved lines for their next sign-in — without ending the device's session, which now belongs to someone else.
+**Architecture:** The till's save body gains `personId`, taken from the `DraftSync` that holds the order (fixed when the order was opened for that person). The save route `PUT /api/parties/:id/drafts` requires the field and compares it with the session's person before it opens a transaction, so a refusal writes no order and takes no bill editor. When the till meets the new refusal while it still believes that person is signed in, it signs that person out on this screen only — locks to the sign-in screen and keeps their unsaved lines for their next sign-in — without ending the device's session, which now belongs to someone else.
 
 **Tech Stack:** TypeScript, Hono routes (`apps/server`), Lit till app (`apps/till`, Vitest browser mode in Chromium), `node:sqlite` venue database through `useVenueDb`.
 
@@ -42,7 +42,7 @@ These settle the questions the plan had to answer. Each says how it was establis
    (`git grep -n "saveDraft(" -- apps/till/src` outside tests).
 3. **Where the server compares.** In the route, right after it reads `draftId` and `revision`
    (`apps/server/src/till-api.ts:3507-3508`) and before `withTransaction` (`:3509`). The comparison
-   needs nothing from the database, so refusing there writes nothing and opens no transaction.
+   needs nothing from the database, so refusing there opens no transaction of its own and writes no order.
    The route already names the session's person `personId` (`const { personId } = session;`,
    `till-api.ts:3503`), so the body's value is read as **`namedPersonId`**. `saveDraft` itself is
    left alone: its direct callers (`saveDraftForTest`,
@@ -157,7 +157,7 @@ These settle the questions the plan had to answer. Each says how it was establis
 4. **The refusal reaching an order that is still on screen.** The till must lock rather than
    leave a dead order, must not retry every 15 s, must not show Ben anything of Ana's, and must
    not end the device's session. Task 1's live-order app case checks all four.
-5. **A refusal that writes nothing at all**, including no bill editor taken. Task 4 compares the
+5. **A refusal that writes no order and takes no bill editor.** Task 4 compares the
    whole database before and after, as the existing `snapshot()` cases do.
 
 ---
@@ -325,11 +325,11 @@ If either group passes about 60 tool calls unfinished, stop at a green point, co
 
 **Interfaces:**
 - Consumes: Task 3's `namedPersonId`.
-- Produces: `"draft.person_not_signed_in": { personId: string }` in `ErrorParams`, documented as "A till saved an order for a person who is not the one signed in on the device; nothing was written." `STATUS["draft.person_not_signed_in"] = 409`.
+- Produces: `"draft.person_not_signed_in": { personId: string }` in `ErrorParams`, documented as "A till saved an order for a person who is not the one signed in on the device." `STATUS["draft.person_not_signed_in"] = 409`.
 
 - [ ] **Step 1: Write the tests** (all through `send(…)` with an explicit `personId`, so the fixture does not fill it):
   - **`it("refuses 409 draft.person_not_signed_in for a new order saved for someone else, writing nothing")`** — must FAIL first. `seated()`; `before = snapshot()`; from `adminCookie`, a new-order save (`draftId: null, revision: 0`, `billId` the main bill, `lines: [dish("Pulpo")]`, `expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null }`) naming `personId: venue.operatorId`. Expect 409, body `{ code: "draft.person_not_signed_in", params: { personId: venue.operatorId } }`, `snapshot()` toEqual `before`. Today this answers 200 with an order owned by the administrator (receipt 1).
-  - **`it("refuses 409 draft.person_not_signed_in for an empty save for someone else")`** — must FAIL first. `lines: []`, naming `venue.operatorId` from `adminCookie` on a fresh party with no order: 409, same body, nothing written. (Today it answers 200 with `draft: null` — `order-drafts.ts:492`. On a bill where Ana already has an order the existing guard answers `draft.taken_over` instead, so that is not the case to use.)
+  - **`it("refuses 409 draft.person_not_signed_in for an empty save for someone else")`** — must FAIL first. `lines: []`, naming `venue.operatorId` from `adminCookie` on a fresh party with no order: 409, same body, no order written. (Today it answers 200 with `draft: null` — `order-drafts.ts:492`. On a bill where Ana already has an order the existing guard answers `draft.taken_over` instead, so that is not the case to use.)
   - **`it("still saves the signed-in person's own new order, whatever case the id is written in")`** — passes before and after. From Ana's cookie, `personId: venue.operatorId.toUpperCase()`; expect 200 and `draft.ownerId` toBe `venue.operatorId`. (The plain-case same-person save is every other case in the file, through the fixture.)
 
 - [ ] **Step 2: Run them and watch the two refusing cases fail**
@@ -363,6 +363,6 @@ If either group passes about 60 tool calls unfinished, stop at a green point, co
 
 Run `/finish-branch` on the worktree (full wave: the change is an authorisation check). Its
 checklist for the run-it seat: a save naming another person from a real session is refused with
-nothing written, for a new order and an empty one; the same person's save is served; the till
+no order written, for a new order and an empty one; the same person's save is served; the till
 sends the person of the order it holds; and a till that meets the refusal while showing that
 person locks, keeps their lines for them, and does not sign out the device's session.

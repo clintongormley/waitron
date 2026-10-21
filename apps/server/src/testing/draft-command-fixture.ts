@@ -119,11 +119,10 @@ export async function observedDraftCommandBody(
     save && personId !== undefined && !Object.hasOwn(given, "personId")
       ? { ...given, personId }
       : (given as Record<string, unknown>);
-  const body: unknown = ask;
-  if (Object.hasOwn(ask, "expectedEdit")) return body;
+  if (Object.hasOwn(ask, "expectedEdit")) return ask;
   const recall = /^\/api\/parties\/[^/]+\/lines\/([^/]+)\/recall$/.exec(path);
   const draft = /^\/api\/parties\/[^/]+\/drafts\/([^/]+)\/(take-over|submit)$/.exec(path);
-  if (!save && recall === null && draft === null) return body;
+  if (!save && recall === null && draft === null) return ask;
   return withTransaction(db, async (tx) => {
     let billId = typeof ask.billId === "string" ? ask.billId : undefined;
     if (recall !== null) {
@@ -147,7 +146,7 @@ export async function observedDraftCommandBody(
         .where(eq(parties.id, partyId?.toLowerCase() ?? ""));
       billId = party?.billId ?? undefined;
     }
-    if (billId === undefined || !isUuid(billId)) return body;
+    if (billId === undefined || !isUuid(billId)) return ask;
     billId = billId.toLowerCase();
     let cache = httpObservations.get(db);
     if (cache === undefined) {

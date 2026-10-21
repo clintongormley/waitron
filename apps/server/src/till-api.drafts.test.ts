@@ -709,7 +709,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(saved.json.draft).toMatchObject({ ownerId: venue.operatorId });
   });
 
-  it("saves the session's person's draft, whatever operator the body names", async () => {
+  it("saves the session's person's draft, whatever operatorId the body carries", async () => {
     const party = await seated();
 
     const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
