@@ -99,8 +99,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
       menus[name] = menuId;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] }, 0))
-        .id;
+      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     const ids = Object.fromEntries(
       (await ensureDefaultSeasons(tx, cfg)).map((season) => [season.name, season.id]),
@@ -384,13 +383,11 @@ describe("a day plan shared between resolvers", () => {
     const second = await scoped(async (tx) => {
       const id = (await createDepartment(tx, v.cfg, { name: "Second", orderStart: "table" })).id;
       const period = (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          id,
-          { name: "Second dinner", menuId: v.menus.Dinner!, staffMenuIds: [] },
-          0,
-        )
+        await saveMenuPeriod(tx, v.cfg, id, {
+          name: "Second dinner",
+          menuId: v.menus.Dinner!,
+          staffMenuIds: [],
+        })
       ).id;
       await replaceMenuWeek(
         tx,
@@ -605,13 +602,11 @@ describe("special-day paint over the season", () => {
     const later = await scoped(async (tx) => {
       const id = (await createDepartment(tx, v.cfg, { name: "Later", orderStart: "table" })).id;
       const period = (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          id,
-          { name: "Later dinner", menuId: v.menus.Dinner!, staffMenuIds: [] },
-          0,
-        )
+        await saveMenuPeriod(tx, v.cfg, id, {
+          name: "Later dinner",
+          menuId: v.menus.Dinner!,
+          staffMenuIds: [],
+        })
       ).id;
       await replaceMenuWeek(
         tx,

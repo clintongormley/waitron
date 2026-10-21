@@ -62,6 +62,10 @@ const scoped = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTrans
 const BASE = "/management-api/venue-service";
 const noopLog: Logger = () => {};
 
+const isPeriodSave = (method: string, path: string) =>
+  (method === "POST" && path.endsWith("/menu-periods")) ||
+  (method === "PATCH" && path.startsWith("/menu-periods/"));
+
 async function routed() {
   const [location] = await db
     .insert(locations)
@@ -99,17 +103,11 @@ async function routed() {
     const cafe = await menu("Café");
     const deliParaLlevar = await menu("Deli para llevar");
     const mananas = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        restaurant,
-        {
-          name: "Mañanas",
-          menuId: desayunos,
-          staffMenuIds: [],
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, restaurant, {
+        name: "Mañanas",
+        menuId: desayunos,
+        staffMenuIds: [],
+      })
     ).id;
     const christmas = (
       await saveSpecialDay(
@@ -170,7 +168,7 @@ async function routed() {
             body: JSON.stringify(
               body !== null && typeof body === "object" && !Array.isArray(body)
                 ? {
-                    expectedClockRevision: 0,
+                    ...(isPeriodSave(method, path) ? {} : { expectedClockRevision: 0 }),
                     ...(method === "PUT" && /\/(?:menu|closed)-week$/.test(path)
                       ? { seasonId: season }
                       : {}),
@@ -467,6 +465,25 @@ describe("the opening-hours routes", () => {
     );
   });
 
+  it("refuse a clock revision on a period create or update, changing nothing", async () => {
+    const r = await routed();
+    const before = await r.model();
+    for (const [method, path, body] of [
+      [
+        "POST",
+        `/departments/${r.restaurant}/menu-periods`,
+        { name: "Tardes", menuId: r.cafe, staffMenuIds: [], expectedClockRevision: 0 },
+      ],
+      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", expectedClockRevision: 0 }],
+      ["PATCH", `/menu-periods/${r.mananas}`, { expectedClockRevision: 0 }],
+    ] as const)
+      await answers(await r.send(method, path, r.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "expectedClockRevision" },
+      });
+    expect(await r.model()).toEqual(before);
+  });
+
   it("refuse a malformed id or body naming the field", async () => {
     const r = await routed();
     for (const [method, path, body, field] of [
@@ -732,44 +749,6 @@ describe("retired menu timetable routes", () => {
       restaurantOf(await r.model(), r).periods.find((period) => period.id === id)!.menuId,
     ).toBe(r.deliParaLlevar);
   });
-});
-
-it("reports offset placement refusals on the submitted field and retains the complete model", async () => {
-  const r = await routed();
-  const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
-    name: "Dinner",
-    menuId: r.almuerzo,
-    staffMenuIds: [],
-  });
-  expect(created.status).toBe(201);
-  const dinner = ((await created.json()) as { id: string }).id;
-  const days = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-    weekday,
-    slots: [
-      { periodId: r.mananas, startsAt: "12:00", endsAt: "14:00" },
-      { periodId: dinner, startsAt: "14:15", endsAt: "18:00" },
-    ],
-  }));
-  expect(
-    (await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, { days })).status,
-  ).toBe(204);
-  const before = await r.model();
-  await answers(
-    await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { endOffsetMinutes: 15 }),
-    400,
-    {
-      code: "menu_period.invalid",
-      params: {
-        field: "endOffsetMinutes",
-        reason: "placement",
-        periodId: r.mananas,
-        departmentId: r.restaurant,
-        seasonId: r.season,
-        weekday: 0,
-      },
-    },
-  );
-  expect(await r.model()).toEqual(before);
 });
 
 it("answers the unmatched-route 404 to the retired dated timetable and zone closure writers for a real date", async () => {

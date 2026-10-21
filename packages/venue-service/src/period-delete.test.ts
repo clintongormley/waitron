@@ -99,7 +99,7 @@ async function venue() {
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] }, 0)).id;
+      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
     const dinner = await period(restaurant, "Dinner");
     const lunch = await period(restaurant, "Lunch");
     const afternoon = await period(restaurant, "Afternoon");

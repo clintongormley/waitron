@@ -81,32 +81,20 @@ async function fixture(db: Transaction) {
   ).id;
   await addProductToMenu(db, { menuId: menu, productId: product });
   const lunch = (
-    await saveMenuPeriod(
-      db,
-      cfg,
-      department,
-      {
-        name: "Lunch",
-        menuId: menu,
-        staffMenuIds: [],
-        colour: "blue",
-      },
-      0,
-    )
+    await saveMenuPeriod(db, cfg, department, {
+      name: "Lunch",
+      menuId: menu,
+      staffMenuIds: [],
+      colour: "blue",
+    })
   ).id;
   const afternoon = (
-    await saveMenuPeriod(
-      db,
-      cfg,
-      department,
-      {
-        name: "Afternoon",
-        menuId: menu,
-        staffMenuIds: [],
-        colour: "green",
-      },
-      0,
-    )
+    await saveMenuPeriod(db, cfg, department, {
+      name: "Afternoon",
+      menuId: menu,
+      staffMenuIds: [],
+      colour: "green",
+    })
   ).id;
   const lunchRange = { periodId: lunch, startsAt: "12:00", endsAt: "16:00" };
   await replaceMenuWeek(
@@ -160,13 +148,12 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
     .returning();
   await configureZone(db, f.cfg, { zoneId: counter!.id, departmentId: takeaway });
   const period = (
-    await saveMenuPeriod(
-      db,
-      f.cfg,
-      takeaway,
-      { name: "Lunch", menuId: f.menu, staffMenuIds: [], colour: "blue" },
-      0,
-    )
+    await saveMenuPeriod(db, f.cfg, takeaway, {
+      name: "Lunch",
+      menuId: f.menu,
+      staffMenuIds: [],
+      colour: "blue",
+    })
   ).id;
   await replaceMenuWeek(
     db,
@@ -188,13 +175,12 @@ it("shows a special date's painted Dinner 19:00-01:00 for a station routed only 
   tx(async (db) => {
     const f = await fixture(db);
     const dinner = (
-      await saveMenuPeriod(
-        db,
-        f.cfg,
-        f.department,
-        { name: "Dinner", menuId: f.menu, staffMenuIds: [], colour: "red" },
-        0,
-      )
+      await saveMenuPeriod(db, f.cfg, f.department, {
+        name: "Dinner",
+        menuId: f.menu,
+        staffMenuIds: [],
+        colour: "red",
+      })
     ).id;
     await setRoutingCell(
       db,
@@ -430,18 +416,12 @@ it("reads products from staff menus and routes a variant by its parent's categor
     await db.update(products).set({ active: false }).where(eq(products.id, f.product));
     expect(variant!.parentId).toBe(f.product);
     const { updateMenuPeriod } = await import("./menu-timetable.js");
-    await updateMenuPeriod(
-      db,
-      f.cfg,
-      f.lunch,
-      {
-        name: "Lunch",
-        menuId: empty,
-        staffMenuIds: [variantMenu],
-        colour: "blue",
-      },
-      0,
-    );
+    await updateMenuPeriod(db, f.cfg, f.lunch, {
+      name: "Lunch",
+      menuId: empty,
+      staffMenuIds: [variantMenu],
+      colour: "blue",
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
   }));
 it("a repeating special day uses its occurrence, with an unpainted department still following the week", async () =>
@@ -504,18 +484,12 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
       .returning();
     await configureZone(db, f.cfg, { zoneId: zone!.id, departmentId: second });
     const period = (
-      await saveMenuPeriod(
-        db,
-        f.cfg,
-        second,
-        {
-          name: "Lunch",
-          menuId: f.menu,
-          staffMenuIds: [],
-          colour: "blue",
-        },
-        0,
-      )
+      await saveMenuPeriod(db, f.cfg, second, {
+        name: "Lunch",
+        menuId: f.menu,
+        staffMenuIds: [],
+        colour: "blue",
+      })
     ).id;
     await replaceMenuWeek(
       db,

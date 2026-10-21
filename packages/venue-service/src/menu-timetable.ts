@@ -61,8 +61,6 @@ import {
   scheduleCutovers,
   serviceDayContext,
   inForceClock,
-  lastOrdersClock,
-  type LastOrdersClock,
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
@@ -81,17 +79,11 @@ export async function placeOpenPeriod(
     .limit(1);
   if (existing !== undefined) return;
   const clockRevision = await readBusinessDayScheduleRevision(tx, cfg);
-  const { id } = await saveMenuPeriod(
-    tx,
-    cfg,
-    departmentId,
-    {
-      name: "Open",
-      menuId,
-      staffMenuIds: [],
-    },
-    clockRevision,
-  );
+  const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
+    name: "Open",
+    menuId,
+    staffMenuIds: [],
+  });
   await replaceMenuWeek(
     tx,
     cfg,
@@ -173,14 +165,7 @@ export async function readDepartmentWeekReads(
   };
 }
 
-/** With `only`, each listed department is checked as it would be alone, in list order. */
-async function endOffsetClash(
-  tx: Transaction,
-  cfg: VenueScope,
-  only?: readonly string[],
-  validateZeroOffsets = false,
-  acquiredClock?: BusinessDayClock | LastOrdersClock,
-) {
+async function endOffsetClash(tx: Transaction, cfg: VenueScope) {
   const periods = await tx
     .select({
       id: menuPeriods.id,
@@ -189,24 +174,10 @@ async function endOffsetClash(
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        only === undefined ? undefined : inArray(departments.id, [...only]),
-      ),
-    );
-  if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
-  const read = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
-  const { clock, from } = "clock" in read ? read : { clock: read, from: undefined };
+    .where(eq(departments.locationId, cfg.locationId));
+  const clock = await readLocationClock(tx, cfg.locationId);
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
-  const departmentIds =
-    only === undefined
-      ? [...new Set(periods.map((period) => period.departmentId))]
-      : only.filter((id) =>
-          periods.some(
-            (period) => period.departmentId === id && (validateZeroOffsets || period.offset !== 0),
-          ),
-        );
+  const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
   const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
   const holidays = await holidayDatesFor(tx, cfg, specialDays);
   const allSeasons = await readSeasons(tx, cfg);
@@ -232,7 +203,6 @@ async function endOffsetClash(
       })),
       offsets,
       clock,
-      from,
     );
     if (clash !== null) {
       return {
@@ -249,7 +219,7 @@ async function endOffsetClash(
 }
 
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
-  const clash = await endOffsetClash(tx, cfg, undefined, true);
+  const clash = await endOffsetClash(tx, cfg);
   if (clash !== null) invalidTimetable("dayCutover", { reason: "end_offset", ...clash });
 }
 
@@ -468,10 +438,8 @@ export async function saveMenuPeriod(
   cfg: VenueScope,
   departmentId: string,
   period: MenuPeriodInput,
-  expectedClockRevision: number,
-  at: Date = new Date(),
 ): Promise<{ id: string }> {
-  return writeMenuPeriod(tx, cfg, departmentId, null, period, expectedClockRevision, at);
+  return writeMenuPeriod(tx, cfg, departmentId, null, period);
 }
 
 async function writeMenuPeriod(
@@ -480,18 +448,12 @@ async function writeMenuPeriod(
   departmentId: string,
   periodId: string | null,
   period: MenuPeriodInput,
-  expectedClockRevision: number,
-  at: Date,
 ): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
   const endOffsetMinutes = parseEndOffsetMinutes(
     period.endOffsetMinutes === undefined ? 0 : period.endOffsetMinutes,
   );
   await assertDepartment(tx, cfg, departmentId);
-  const oldOffset =
-    periodId === null ? 0 : (await requirePeriod(tx, cfg, periodId)).endOffsetMinutes;
-  const changeKind = oldOffset === endOffsetMinutes ? "metadata" : "time";
-  await assertBusinessDayScheduleWrite(tx, cfg, changeKind, expectedClockRevision);
   if (
     period.colour !== undefined &&
     (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
@@ -569,20 +531,6 @@ async function writeMenuPeriod(
         displayOrder,
       })),
     );
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const clash = await endOffsetClash(tx, cfg, [departmentId], false, lastOrdersClock(clock, at));
-  if (clash !== null)
-    throw new AppError("menu_period.invalid", {
-      field: "endOffsetMinutes",
-      reason: "placement",
-      periodId: clash.periodId,
-      departmentId,
-      seasonId: clash.seasonId,
-      weekday: clash.weekday,
-      date: clash.date,
-      ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
-    });
-  if (changeKind === "time") await assertWaitingChangeFits(tx, cfg, at, clock);
   return { id: id! };
 }
 
@@ -591,8 +539,6 @@ export async function updateMenuPeriod(
   cfg: VenueScope,
   periodId: string,
   period: Partial<MenuPeriodInput>,
-  expectedClockRevision: number,
-  at: Date = new Date(),
 ): Promise<void> {
   const stored = await requirePeriod(tx, cfg, periodId);
   const staff = await tx
@@ -604,25 +550,17 @@ export async function updateMenuPeriod(
     .select({ colour: menuPeriods.colour })
     .from(menuPeriods)
     .where(eq(menuPeriods.id, periodId));
-  await writeMenuPeriod(
-    tx,
-    cfg,
-    stored.departmentId,
-    periodId,
-    {
-      name: period.name === undefined ? stored.name : period.name,
-      menuId: period.menuId === undefined ? stored.menuId : period.menuId,
-      colour: period.colour === undefined ? appearance!.colour : period.colour,
-      staffMenuIds:
-        period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
-      endOffsetMinutes:
-        period.endOffsetMinutes === undefined ? stored.endOffsetMinutes : period.endOffsetMinutes,
-      floorPlanSetId:
-        period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
-    },
-    expectedClockRevision,
-    at,
-  );
+  await writeMenuPeriod(tx, cfg, stored.departmentId, periodId, {
+    name: period.name === undefined ? stored.name : period.name,
+    menuId: period.menuId === undefined ? stored.menuId : period.menuId,
+    colour: period.colour === undefined ? appearance!.colour : period.colour,
+    staffMenuIds:
+      period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
+    endOffsetMinutes:
+      period.endOffsetMinutes === undefined ? stored.endOffsetMinutes : period.endOffsetMinutes,
+    floorPlanSetId:
+      period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
+  });
 }
 
 export async function replaceMenuWeek(

@@ -85,13 +85,7 @@ declare module "@waitron/shared" {
     "menu_period.invalid": {
       field:
         "staffMenuIds" | "colour" | "endOffsetMinutes" | "replacementPeriodId" | "floorPlanSetId";
-      reason?: "whole_minutes" | "range" | "placement";
-      periodId?: string;
-      departmentId?: string;
-      seasonId?: string;
-      weekday?: number;
-      date?: string;
-      specialDayId?: string;
+      reason?: "whole_minutes" | "range";
     };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };

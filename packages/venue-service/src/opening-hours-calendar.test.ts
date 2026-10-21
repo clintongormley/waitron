@@ -71,7 +71,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
         await createDepartment(tx, cfg, { name: `Sala ${index}`, orderStart: "table" })
       ).id;
       const lunch = (
-        await saveMenuPeriod(tx, cfg, department, { name: "Lunch", menuId, staffMenuIds: [] }, 0)
+        await saveMenuPeriod(tx, cfg, department, { name: "Lunch", menuId, staffMenuIds: [] })
       ).id;
       await replaceMenuWeek(
         tx,
@@ -287,7 +287,7 @@ async function monthVenue() {
     const department = async (name: string) =>
       (await createDepartment(tx, cfg, { name, orderStart: "table" })).id;
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] }, 0)).id;
+      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
     const everyDay = (periodId: string, startsAt: string, endsAt: string) =>
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -863,7 +863,7 @@ describe("a past day's range around a start change", () => {
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       const sala = (await createDepartment(tx, cfg, { name: "Sala", orderStart: "table" })).id;
       const period = async (name: string) =>
-        (await saveMenuPeriod(tx, cfg, sala, { name, menuId, staffMenuIds: [] }, 0)).id;
+        (await saveMenuPeriod(tx, cfg, sala, { name, menuId, staffMenuIds: [] })).id;
       const lunch = await period("Lunch");
       const dinner = await period("Dinner");
       await replaceMenuWeek(

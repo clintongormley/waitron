@@ -31,11 +31,11 @@ describe("OpeningHoursApi", () => {
       menuId: "lunch",
       staffMenuIds: ["deli"],
     };
-    expect(await api.createPeriod("d/1", input, 0)).toEqual({ id: "p1" });
-    expect(await api.updatePeriod("p/1", input, 0)).toBeUndefined();
+    expect(await api.createPeriod("d/1", input)).toEqual({ id: "p1" });
+    expect(await api.updatePeriod("p/1", input)).toBeUndefined();
     expect(request.mock.calls).toEqual([
-      [`${base}/departments/d%2F1/menu-periods`, "POST", { ...input, expectedClockRevision: 0 }],
-      [`${base}/menu-periods/p%2F1`, "PATCH", { ...input, expectedClockRevision: 0 }],
+      [`${base}/departments/d%2F1/menu-periods`, "POST", input],
+      [`${base}/menu-periods/p%2F1`, "PATCH", input],
     ]);
   });
 

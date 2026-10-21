@@ -1580,18 +1580,12 @@ it("refuses a changed cutover that empties an offset placement and rolls back ot
     });
     const menu = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`)).rows[0]!
       .id;
-    const period = await saveMenuPeriod(
-      tx,
-      venue.cfg,
-      department.id,
-      {
-        name: "Lunch",
-        menuId: menu,
-        staffMenuIds: [],
-        endOffsetMinutes: -119,
-      },
-      0,
-    );
+    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+      name: "Lunch",
+      menuId: menu,
+      staffMenuIds: [],
+      endOffsetMinutes: -119,
+    });
     await replaceMenuWeek(
       tx,
       venue.cfg,

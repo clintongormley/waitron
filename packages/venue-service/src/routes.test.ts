@@ -3339,18 +3339,12 @@ describe("a routing cell's period choices on the routes", () => {
         vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: fx.menuId, productId: product.id });
-      const period = await saveMenuPeriod(
-        tx,
-        cfg,
-        dining.id,
-        {
-          name: "Lunch",
-          menuId: fx.menuId,
-          staffMenuIds: [],
-          colour: "green",
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, cfg, dining.id, {
+        name: "Lunch",
+        menuId: fx.menuId,
+        staffMenuIds: [],
+        colour: "green",
+      });
       const [station] = await tx
         .insert(kitchenStations)
         .values({ locationId: fx.locationId, name: "Downstairs bar" })
@@ -3722,18 +3716,12 @@ it("the station planning route returns the configured period ranges for a non-de
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        departmentId,
-        {
-          name: "Lunch",
-          menuId: f.menuId,
-          staffMenuIds: [],
-          colour: "blue",
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Lunch",
+        menuId: f.menuId,
+        staffMenuIds: [],
+        colour: "blue",
+      })
     ).id;
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
@@ -4259,19 +4247,13 @@ it("A724: the station planning route returns last orders at its period's own end
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        departmentId,
-        {
-          name: "Lunch",
-          menuId: f.menuId,
-          staffMenuIds: [],
-          colour: "blue",
-          endOffsetMinutes: -30,
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Lunch",
+        menuId: f.menuId,
+        staffMenuIds: [],
+        colour: "blue",
+        endOffsetMinutes: -30,
+      })
     ).id;
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(

@@ -53,30 +53,18 @@ async function fixture(options: { afternoon?: boolean; spring?: boolean } = {}) 
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
     const menu = await createCatalogue(tx, { name: "Menu" });
     const lunch = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        departmentId,
-        {
-          name: "Lunch",
-          menuId: menu.id,
-          staffMenuIds: [],
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Lunch",
+        menuId: menu.id,
+        staffMenuIds: [],
+      })
     ).id;
     const afternoon = (
-      await saveMenuPeriod(
-        tx,
-        cfg,
-        departmentId,
-        {
-          name: "Afternoon",
-          menuId: menu.id,
-          staffMenuIds: [],
-        },
-        0,
-      )
+      await saveMenuPeriod(tx, cfg, departmentId, {
+        name: "Afternoon",
+        menuId: menu.id,
+        staffMenuIds: [],
+      })
     ).id;
     await replaceMenuWeek(
       tx,

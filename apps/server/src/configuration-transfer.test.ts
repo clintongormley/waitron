@@ -4532,18 +4532,12 @@ it("transfers a department's customer and staff period menus to its zone under n
     });
     const bebidas = await createCatalogue(tx, { name: "Bebidas transferidas" });
     const desayunos = await createCatalogue(tx, { name: "Desayunos transferidos" });
-    const period = await saveMenuPeriod(
-      tx,
-      scope,
-      department.id,
-      {
-        name: "Servicio de cartas",
-        colour: "red",
-        menuId: bebidas.id,
-        staffMenuIds: [desayunos.id],
-      },
-      0,
-    );
+    const period = await saveMenuPeriod(tx, scope, department.id, {
+      name: "Servicio de cartas",
+      colour: "red",
+      menuId: bebidas.id,
+      staffMenuIds: [desayunos.id],
+    });
     return [department.id, barra.id, bebidas.id, desayunos.id, period.id];
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4809,18 +4803,12 @@ it("carries a cell's period choices with their cell, including a period whose me
       vatClass: "general",
     });
     const vacia = await createCatalogue(tx, { name: "Carta vacía de periodos" });
-    const period = await saveMenuPeriod(
-      tx,
-      scope,
-      department.id,
-      {
-        name: "Comidas de periodos",
-        colour: "red",
-        menuId: vacia.id,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const period = await saveMenuPeriod(tx, scope, department.id, {
+      name: "Comidas de periodos",
+      colour: "red",
+      menuId: vacia.id,
+      staffMenuIds: [],
+    });
     const atBarra = { kind: "station" as const, stationId: barra!.id };
     await setRoutingCell(
       tx,
@@ -5645,19 +5633,13 @@ it.each([-15, 14])(
       const customer = await createCatalogue(tx, { name: "Period customer" });
       const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
       const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
-      const period = await saveMenuPeriod(
-        tx,
-        scope,
-        department.id,
-        {
-          name: "Night transfer",
-          endOffsetMinutes,
-          colour: "blue",
-          menuId: customer.id,
-          staffMenuIds: [staffSecond.id, staffFirst.id],
-        },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, scope, department.id, {
+        name: "Night transfer",
+        endOffsetMinutes,
+        colour: "blue",
+        menuId: customer.id,
+        staffMenuIds: [staffSecond.id, staffFirst.id],
+      });
       await replaceMenuWeek(
         tx,
         scope,
@@ -6676,13 +6658,12 @@ describe("dated business-day configuration transfer", () => {
         orderStart: "table",
       });
       const menu = await createCatalogue(tx, { name: "Clock menu" });
-      const period = await saveMenuPeriod(
-        tx,
-        scope,
-        department.id,
-        { name: "Clock period", menuId: menu.id, staffMenuIds: [], endOffsetMinutes: 14 },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, scope, department.id, {
+        name: "Clock period",
+        menuId: menu.id,
+        staffMenuIds: [],
+        endOffsetMinutes: 14,
+      });
       await replaceMenuWeek(
         tx,
         scope,
@@ -6869,17 +6850,11 @@ describe("seasons in a configuration transfer", () => {
       });
       const period = async (name: string) =>
         (
-          await saveMenuPeriod(
-            tx,
-            scope,
-            department.id,
-            {
-              name,
-              menuId: (await createCatalogue(tx, { name: `${name} boundary menu` })).id,
-              staffMenuIds: [],
-            },
-            0,
-          )
+          await saveMenuPeriod(tx, scope, department.id, {
+            name,
+            menuId: (await createCatalogue(tx, { name: `${name} boundary menu` })).id,
+            staffMenuIds: [],
+          })
         ).id;
       const late = await period("Boundary late");
       const lunch = await period("Boundary lunch");
@@ -6964,17 +6939,11 @@ describe("seasons in a configuration transfer", () => {
       });
       const period = async (name: string) =>
         (
-          await saveMenuPeriod(
-            tx,
-            scope,
-            department.id,
-            {
-              name,
-              menuId: (await createCatalogue(tx, { name: `${name} menu` })).id,
-              staffMenuIds: [],
-            },
-            0,
-          )
+          await saveMenuPeriod(tx, scope, department.id, {
+            name,
+            menuId: (await createCatalogue(tx, { name: `${name} menu` })).id,
+            staffMenuIds: [],
+          })
         ).id;
       const dinner = await period("Dinner");
       const lateBar = await period("Late bar");
@@ -7111,17 +7080,11 @@ describe("special days in a configuration transfer", () => {
         name: "Fiesta restaurant",
         orderStart: "table",
       });
-      const { id: bar } = await saveMenuPeriod(
-        tx,
-        scope,
-        department.id,
-        {
-          name: "Bar",
-          menuId: (await createCatalogue(tx, { name: "Fiesta bar menu" })).id,
-          staffMenuIds: [],
-        },
-        0,
-      );
+      const { id: bar } = await saveMenuPeriod(tx, scope, department.id, {
+        name: "Bar",
+        menuId: (await createCatalogue(tx, { name: "Fiesta bar menu" })).id,
+        staffMenuIds: [],
+      });
       const terrace = await createServiceZone(tx, scope, {
         name: "Fiesta terrace",
         departmentId: department.id,

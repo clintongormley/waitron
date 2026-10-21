@@ -174,39 +174,21 @@ export async function seedFloor(
       .where(and(eq(menuPeriods.departmentId, restaurantId), eq(menuPeriods.name, "Open")));
     const restaurant =
       existing ??
-      (await saveMenuPeriod(
-        tx,
-        cfg,
-        restaurantId,
-        {
-          name: "Open",
-          menuId: menuIds.restaurant,
-          staffMenuIds: [menuIds.lunch],
-        },
-        await readBusinessDayScheduleRevision(tx, cfg),
-      ));
-    if (existing !== undefined)
-      await updateMenuPeriod(
-        tx,
-        cfg,
-        existing.id,
-        {
-          menuId: menuIds.restaurant,
-          staffMenuIds: [menuIds.lunch],
-        },
-        await readBusinessDayScheduleRevision(tx, cfg),
-      );
-    const deli = await saveMenuPeriod(
-      tx,
-      cfg,
-      deliDepartmentId,
-      {
+      (await saveMenuPeriod(tx, cfg, restaurantId, {
         name: "Open",
-        menuId: menuIds.deli,
-        staffMenuIds: [],
-      },
-      await readBusinessDayScheduleRevision(tx, cfg),
-    );
+        menuId: menuIds.restaurant,
+        staffMenuIds: [menuIds.lunch],
+      }));
+    if (existing !== undefined)
+      await updateMenuPeriod(tx, cfg, existing.id, {
+        menuId: menuIds.restaurant,
+        staffMenuIds: [menuIds.lunch],
+      });
+    const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
+      name: "Open",
+      menuId: menuIds.deli,
+      staffMenuIds: [],
+    });
     await replaceMenuWeek(
       tx,
       cfg,

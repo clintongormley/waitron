@@ -174,13 +174,11 @@ export async function setsDepartment(
     const menu = await createCatalogue(tx, { name: name("Menu") });
     const period = async (periodName: string) =>
       (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          department.id,
-          { name: periodName, menuId: menu.id, staffMenuIds: [] },
-          0,
-        )
+        await saveMenuPeriod(tx, v.cfg, department.id, {
+          name: periodName,
+          menuId: menu.id,
+          staffMenuIds: [],
+        })
       ).id;
     const lunchPeriod = await period("Lunch");
     const dinnerPeriod = await period("Dinner");

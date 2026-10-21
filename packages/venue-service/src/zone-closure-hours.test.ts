@@ -68,7 +68,7 @@ async function venue() {
       [deli, "14:00", "18:00"],
     ] as const) {
       const periodId = (
-        await saveMenuPeriod(tx, cfg, departmentId, { name: "Día", menuId, staffMenuIds: [] }, 0)
+        await saveMenuPeriod(tx, cfg, departmentId, { name: "Día", menuId, staffMenuIds: [] })
       ).id;
       await replaceMenuWeek(
         tx,
@@ -257,13 +257,11 @@ describe("assertSeasonClosuresInHours", () => {
         dayCutover: "03:00:00",
       });
       const periodId = (
-        await saveMenuPeriod(
-          tx,
-          v.cfg,
-          v.restaurant,
-          { name: "Madrugada", menuId: v.menuId, staffMenuIds: [] },
-          1,
-        )
+        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          name: "Madrugada",
+          menuId: v.menuId,
+          staffMenuIds: [],
+        })
       ).id;
       await replaceMenuWeek(
         tx,

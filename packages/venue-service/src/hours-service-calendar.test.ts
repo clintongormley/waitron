@@ -48,34 +48,22 @@ async function fixture() {
       ])
       .returning();
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-    const period = await saveMenuPeriod(
-      tx,
-      cfg,
-      department!.id,
-      {
-        name: "Late",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const period = await saveMenuPeriod(tx, cfg, department!.id, {
+      name: "Late",
+      menuId: menu!.id,
+      staffMenuIds: [],
+    });
     const week = (weekday: number) =>
       [0, 1, 2, 3, 4, 5, 6].map((day) => ({
         weekday: day,
         slots: day === weekday ? [{ periodId: period.id, startsAt: "22:00", endsAt: "03:00" }] : [],
       }));
     await replaceMenuWeek(tx, cfg, department!.id, week(1), at, 0);
-    const inactivePeriod = await saveMenuPeriod(
-      tx,
-      cfg,
-      inactive!.id,
-      {
-        name: "Terrace",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const inactivePeriod = await saveMenuPeriod(tx, cfg, inactive!.id, {
+      name: "Terrace",
+      menuId: menu!.id,
+      staffMenuIds: [],
+    });
     await replaceMenuWeek(
       tx,
       cfg,
@@ -147,13 +135,11 @@ describe("calendar follows department service periods", () => {
     await withTransaction(suite.db, async (tx) => {
       const seasons = await readSeasons(tx, f.cfg);
       const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
-      const lunch = await saveMenuPeriod(
-        tx,
-        f.cfg,
-        f.department,
-        { name: "Lunch", menuId: (await tx.select().from(catalogues))[0]!.id, staffMenuIds: [] },
-        0,
-      );
+      const lunch = await saveMenuPeriod(tx, f.cfg, f.department, {
+        name: "Lunch",
+        menuId: (await tx.select().from(catalogues))[0]!.id,
+        staffMenuIds: [],
+      });
       const monday = (slots: readonly { periodId: string; startsAt: string; endsAt: string }[]) =>
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: weekday === 1 ? slots : [] }));
       await replaceMenuWeek(

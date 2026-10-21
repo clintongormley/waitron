@@ -50,17 +50,11 @@ async function fixture() {
       departmentId: live.id,
     });
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-    const period = await service.saveMenuPeriod(
-      tx,
-      cfg,
-      gone.id,
-      {
-        name: "Lunch",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      },
-      0,
-    );
+    const period = await service.saveMenuPeriod(tx, cfg, gone.id, {
+      name: "Lunch",
+      menuId: menu!.id,
+      staffMenuIds: [],
+    });
     await service.writeDepartmentReceipt(tx, cfg, gone.id, { email: "history@example.com" });
     await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone.id));
@@ -133,22 +127,16 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     "menu period create",
     "department.not_found",
     (tx, f) =>
-      service.saveMenuPeriod(
-        tx,
-        f.cfg,
-        f.gone,
-        {
-          name: "Dinner",
-          menuId: f.menu,
-          staffMenuIds: [],
-        },
-        0,
-      ),
+      service.saveMenuPeriod(tx, f.cfg, f.gone, {
+        name: "Dinner",
+        menuId: f.menu,
+        staffMenuIds: [],
+      }),
   ],
   [
     "menu period update derived department",
     "department.not_found",
-    (tx, f) => service.updateMenuPeriod(tx, f.cfg, f.period, { name: "Dinner" }, 0),
+    (tx, f) => service.updateMenuPeriod(tx, f.cfg, f.period, { name: "Dinner" }),
   ],
   [
     "menu period delete derived department",

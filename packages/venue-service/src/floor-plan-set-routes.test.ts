@@ -174,15 +174,8 @@ async function casaMarina() {
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (name: string, colour: "grey" | "blue") =>
-      (
-        await saveMenuPeriod(
-          tx,
-          cfg,
-          restaurant,
-          { name, menuId: menu, staffMenuIds: [], colour },
-          0,
-        )
-      ).id;
+      (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menu, staffMenuIds: [], colour }))
+        .id;
     const lunch = await period("Lunch", "grey");
     const dinner = await period("Dinner", "blue");
     const person = async (role: "manager" | "supervisor") => {

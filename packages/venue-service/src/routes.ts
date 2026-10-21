@@ -1221,7 +1221,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "staffMenuIds",
           "endOffsetMinutes",
           "floorPlanSetId",
-          "expectedClockRevision",
         ]);
         const name = requireString(body.name, "name");
         const menuId = requireBodyUuid(body.menuId, "menuId");
@@ -1236,7 +1235,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...floorPlanSetField(body),
         };
         const period = await gated(sessionId, (tx) =>
-          saveMenuPeriod(tx, ctx.cfg, departmentId, input, body.expectedClockRevision as number),
+          saveMenuPeriod(tx, ctx.cfg, departmentId, input),
         );
         return c.json(period, 201);
       }),
@@ -1300,9 +1299,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "staffMenuIds",
           "endOffsetMinutes",
           "floorPlanSetId",
-          "expectedClockRevision",
         ]);
-        if (Object.keys(body).every((key) => key === "expectedClockRevision"))
+        if (Object.keys(body).length === 0)
           throw new AppError("management.request_invalid", { field: "body" });
         const period = {
           ...(body.name === undefined ? {} : { name: requireString(body.name, "name") }),
@@ -1316,9 +1314,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
           ...floorPlanSetField(body),
         };
-        await gated(sessionId, (tx) =>
-          updateMenuPeriod(tx, ctx.cfg, periodId, period, body.expectedClockRevision as number),
-        );
+        await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period));
         return c.body(null, 204);
       }),
     );

@@ -82,7 +82,7 @@ async function routed() {
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const dinner = (
-      await saveMenuPeriod(tx, cfg, restaurant, { name: "Dinner", menuId, staffMenuIds: [] }, 0)
+      await saveMenuPeriod(tx, cfg, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
     ).id;
     const person = async (role: "manager" | "supervisor") => {
       const [row] = await tx
