@@ -1150,9 +1150,10 @@ A file's time is the seconds on its `[file-progress] end` line in the job log, a
    locally on `src/hour-recovery-placement-1.test.ts` with coverage, with the setup line in and out
    alternately at a load average of about 9 to 12: 70.0 and 69.7 s with it, 95.2 and 111.8 s
    without. That file asked for 164 keys, and 43 were derived. One N=2^17 derivation took about 175
-   to 195 ms on the Mac it ran on (two measurements, Node v26.11.1: 175–182 ms and 186–193 ms). The product still derives the archive's key once
-   in each of preview, validate and restore; deriving it once per restore is a behaviour change on
-   the restore path, left in the backlog.
+   to 195 ms on the Mac it ran on (two measurements, Node v26.11.1: 175–182 ms and 186–193 ms).
+   A restore from a backup file still derives the archive's key at preview, at staging and at the
+   next start; deriving it once is a behaviour change on the restore path, left in the backlog
+   ([detail](../backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-three-times)).
 2. **Packing by measured time.** `apps/server/vitest.config.ts` names
    `scripts/vitest-duration-sequencer.mjs` as its sequencer, with the committed table
    `apps/server/test-durations.json` (seconds per test file, keyed by its path under `apps/server`).
