@@ -1403,6 +1403,8 @@ For the runner to file; none is acted on here.
 
 **2026-10-21:** A942 implements the outage header in [its implementation plan](../plans/2026-10-21-a942-aeat-outage-flag.md). Item 1 and §2's local-only flag observation describe the earlier code; the original observations remain below.
 
+**2026-10-21:** A798-B slice 3 (#<this pull request>) closes item 4: both card paths now refuse `clock.unusable { clockAt, offsetMinutes }` before the reader, and every sale path refuses it at its issue reading. §2.5's `fiscal.record_invalid` answer and till sentence, and §8's slice 3 wording, describe the earlier code.
+
 1. **`Incidencia="S"` is never sent to AEAT.** The house reading of art. 16.4 lists it among the
    duties during an outage (`verifactu-findings.md:359`); the drain raises only a local `incidencia`
    column (`drain.ts:978-993`), and the batch header it builds carries the taxpayer alone

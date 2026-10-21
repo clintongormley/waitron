@@ -2404,7 +2404,7 @@ itself and keeps nothing.
 
 ### A full disk stops the till's writes
 
-Since A798-B slice 3 (#<this pull request>), one save refused for a full disk stops every write the
+Since A798-B slice 3 (#<this pull request>), one save refused for a full disk, or a start with less than 16 MiB free, stops every write the
 till app and the kitchen screens send, except a short open list (below), until the venue folder
 has 16 MiB free again. The owner chose this on 2026-10-21, following the design's §4.6 item 5:
 every sale, order, kitchen send and clock-in is refused, even one whose own save would still fit. The decisions behind it are numbered in the
@@ -2413,10 +2413,12 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 **How the box knows.**
 
 - Each of the venue folder's two database files tells its `onDiskFull` listeners when the engine
-  refuses a statement, a write lock's `begin`, a `commit` or a `release` because the disk is full,
-  before it throws `storage.disk_full` (`packages/store/src/index.ts`, the `onDiskFull` doc; the
+  refuses a statement, a write lock's `begin`, a `commit` or a `release` with result code 13
+  ("database or disk is full"), before it throws `storage.disk_full` (`packages/store/src/index.ts`, the `onDiskFull` doc; the
   call is `Connections.refusal` in `connections.ts`). An error the store had already turned into
-  `storage.disk_full` is not reported again.
+  `storage.disk_full` is not reported again. A full disk the engine reports another way (14, 4874,
+  `ENOSPC`; see [A full disk is not one error code](#a-full-disk-is-not-one-error-code)) is not
+  reported and does not start the stop.
 - Boot keeps one `DiskFullState` (`apps/server/src/disk-full-state.ts`) for the venue folder, listens
   to both files, and reads the folder's free space once at start: under 16 MiB (`FULL_DISK_BYTES`,
   `apps/server/src/boot-failure.ts`) the stop starts on; a reading the filesystem cannot give leaves
@@ -2427,7 +2429,8 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   the stop when another refusal was noted while it was in flight, even one noted after a faster
   reading had already cleared it. With the stop off, nothing is read: each of those checks awaits
   `full()` only while `since()` names a refusal, because the extra await would let another write's
-  transaction get into the write queue ahead of a payment's first transaction (b6283f6fd).
+  transaction get into the write queue ahead of a payment's first transaction (#<this pull request>;
+  the in-flight cases in `placed-order-one-payment.test.ts` and `bill-payments.in-flight.test.ts`).
 
 **What is refused, and where.**
 
@@ -2486,6 +2489,8 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
 
 **Weaker than the rule.**
 
+- Only result code 13 notes the stop (`asDiskFull`, `packages/store/src/disk-full.ts`); a full disk
+  reported as 14, 4874 or `ENOSPC` leaves it off.
 - `apps/server/src/boot.disk-full-wiring.test.ts` checks the arguments boot hands the state, the
   watch and the mounts, not a real full disk on a box.
 - The window cases in `till-pay.disk-full.test.ts`, `bill-payments.refuse-before-reader.test.ts`
