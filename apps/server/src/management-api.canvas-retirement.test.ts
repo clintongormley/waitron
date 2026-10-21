@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   installChangeFeed,
@@ -15,6 +15,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountThemesApi } from "./themes-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
@@ -119,6 +120,7 @@ function mountApp(): Hono {
     },
     noopLog,
   );
+  mountThemesApi(app, { db: suite.db }, noopLog);
   return app;
 }
 
@@ -133,6 +135,113 @@ async function login(app: Hono, email: string): Promise<string> {
 }
 
 const JSON_HEADERS = { "content-type": "application/json" };
+
+describe("Management API — custom themes", () => {
+  const RED = {
+    brandColor: "#ff0000",
+    brandFix: {},
+    background: "neutral",
+    corners: "standard",
+    handSet: { light: {}, dark: {} },
+  };
+  let managerCookie: string;
+  let redId: string;
+
+  beforeAll(async () => {
+    await setupTenant();
+    managerCookie = await login(mountApp(), MANAGER_EMAIL);
+  });
+
+  it("GET lists no custom themes and none in use for a venue that has saved none", async () => {
+    const app = mountApp();
+    const res = await app.request("/management-api/themes", {
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ themes: [], inUse: null });
+  });
+
+  it("POST → 201, then GET lists it (round trip)", async () => {
+    const app = mountApp();
+    const post = await app.request("/management-api/themes", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ name: "Red", theme: RED }),
+    });
+    expect(post.status).toBe(201);
+    const created = (await post.json()) as { id: string; name: string; choices: unknown };
+    expect(created).toMatchObject({ name: "Red", choices: RED });
+    redId = created.id;
+
+    const got = await app.request("/management-api/themes", {
+      headers: { cookie: managerCookie },
+    });
+    expect(got.status).toBe(200);
+    const { themes } = (await got.json()) as { themes: Record<string, unknown>[] };
+    expect(themes).toHaveLength(1);
+    expect(themes[0]).toMatchObject({ id: redId, name: "Red", choices: RED });
+  });
+
+  it("PUT with an unknown colour → 400 theme.invalid naming the field", async () => {
+    const app = mountApp();
+    const res = await app.request(`/management-api/themes/${redId}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        theme: { ...RED, handSet: { light: { evil: "#ff0000" }, dark: {} } },
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "theme.invalid",
+        params: { field: "handSet.light.evil", reason: "unknown_colour" },
+      },
+    });
+  });
+
+  it("PUT with a body omitting theme → 400 management.request_invalid naming the field", async () => {
+    const app = mountApp();
+    for (const body of [JSON.stringify({}), "null"]) {
+      const res = await app.request(`/management-api/themes/${redId}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "theme" } },
+      });
+    }
+  });
+
+  it("refuses the theme routes for a STAFF-role session with 403", async () => {
+    const app = mountApp();
+    const staffCookie = await login(app, STAFF_EMAIL);
+    for (const res of [
+      await app.request("/management-api/themes", { headers: { cookie: staffCookie } }),
+      await app.request(`/management-api/themes/${redId}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: staffCookie },
+        body: JSON.stringify({ theme: RED }),
+      }),
+    ]) {
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+        "authorization.not_permitted",
+      );
+    }
+  });
+
+  it("refuses the theme routes unauthenticated with 401", async () => {
+    const app = mountApp();
+    const res = await app.request("/management-api/themes");
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "management_session.required",
+    );
+  });
+});
 
 describe("A182 canvas retirement", () => {
   it("answers retired canvas routes like an unknown route while profiles remain available", async () => {
