@@ -1353,7 +1353,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   across. Read, not run; nothing unless transfers from older venues matter.
 
 - **A location's menu list is read by no sale.** **Next action:** owner to decide whether to retire
-  `location_catalogues` and those routes with `GET /api/products`.
+  `location_catalogues` and the management location routes.
   [Detail](backlog/catalogue.md#a-locations-menu-list-is-read-by-no-sale)
 
 - **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
@@ -3481,12 +3481,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   parked in** (`#onRetrieveOrder`, `apps/till/src/till-app.ts`; `HeldOrder` carries no zone), so it
   can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
   action:** send the order's zone with the retrieved order and read that zone's offer.
-
-- **A843. Retire `GET /api/products` and move the till's tests onto zone-offer fixtures (owner,
-  2026-10-17).** The route has no caller in the till app, and `listAvailableProducts` is off the sale
-  path. `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
-  stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. Done
-  when the route and `TillApi.listProducts` are gone and no till test stubs `listProducts`.
 
 - **Two branches still read a held line that names no menu offer**, which only an order parked
   before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve

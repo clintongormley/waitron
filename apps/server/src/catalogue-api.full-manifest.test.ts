@@ -188,10 +188,6 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
 });
 
 interface Venue {
-  /**
-   * This venue's single location id — the `:locationId` the location-menu routes act on, and the
-   * location-scoped read behind `GET /api/products` (`listAvailableProducts`).
-   */
   locationId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `catalogue.manage`). */
   managerCookie: string;

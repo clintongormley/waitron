@@ -454,10 +454,12 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       const sessionCookie = login.headers.get("set-cookie")!.split(";")[0]!;
       const bothCookies = `${sessionCookie}; ${DEVICE_COOKIE_HEADER}`;
 
-      const products = (await (
-        await fetch(`${primaryBase}/api/products`, { headers: { cookie: sessionCookie } })
-      ).json()) as { products: { id: string; pricingUnit: string }[] };
-      expect(products.products.find((p) => p.pricingUnit === "each")).toBeDefined();
+      const catalogue = (await (
+        await fetch(`${primaryBase}/api/default-service-zone/offers`, {
+          headers: { cookie: sessionCookie },
+        })
+      ).json()) as { offers: { id: string; pricingUnit: string }[] };
+      expect(catalogue.offers.find((offer) => offer.pricingUnit === "each")).toBeDefined();
 
       const saleRes = await fetch(`${primaryBase}/api/sales`, {
         method: "POST",

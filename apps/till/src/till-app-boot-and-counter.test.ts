@@ -32,10 +32,10 @@ import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
   KitchenScreenKind,
-  ProductCatalogue,
   ResolvedKitchenScreen,
   ServiceZoneSummary,
   TillApi,
+  TillMenu,
   TillProduct,
   TableParty,
   TillSaleResult,
@@ -94,7 +94,7 @@ const till = {
 };
 
 function zoneOffers(
-  catalogue: ProductCatalogue,
+  catalogue: { menus: TillMenu[]; products: TillProduct[] },
   zoneId: string,
   serviceMode: ServiceZoneSummary["serviceMode"] = "prepay",
   defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,

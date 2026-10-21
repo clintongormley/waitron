@@ -69,7 +69,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
-    listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products }),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
       service: {
         open: true,

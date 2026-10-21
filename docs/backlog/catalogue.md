@@ -623,11 +623,11 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
 `service_zone.default_missing` (`resolveNewOrderZone`, `packages/venue-service/src/operations.ts`).
 
 - **A location's menu list is read by no sale.** The location's list (`locations.catalogue_id`
-  plus `location_catalogues`) is still read and written by `GET /api/products`, the management API's
+  plus `location_catalogues`) is still read and written by the management API's
   location routes (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297),
   configuration transfer, both provisioning seeds, two dev scripts and the `offerProducts` test
-  helper. **Next action:** owner to decide whether to retire `location_catalogues` and those routes
-  with `GET /api/products`.
+  helper. **Next action:** owner to decide whether to retire `location_catalogues` and the management
+  location routes.
 
 ## Two signals say whether a dish is sold by weight, and they can disagree in storage
 

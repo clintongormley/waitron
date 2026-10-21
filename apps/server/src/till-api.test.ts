@@ -59,6 +59,8 @@ import {
   writeProductModifiers,
   addMember,
   listMembers,
+  listAccessibleCatalogues,
+  listAvailableProducts,
   removeMember,
 } from "@waitron/catalogue";
 import {
@@ -127,10 +129,6 @@ let eachUnit: {
   precision: number;
   hardwareUnit: string | null;
 };
-// A SECOND catalogue, attached to the location as a non-default accessible menu via
-// `addCatalogueToLocation` (not `locations.catalogue_id`), with its own product — so the multi-menu
-// `GET /api/products` response can be proven to carry BOTH the `menus` list (default flagged) and
-// products drawn from every accessible catalogue, not just the default one.
 let cervezaProduct: { id: string; catalogueId: string };
 let counterZoneId: string;
 let aguaOfferId: string;
@@ -185,9 +183,6 @@ const suite = useVenueDb({
     await db
       .insert(persons)
       .values({ displayName: "Zoe", pinHash: hashPin("2222"), role: "staff", status: "suspended" });
-    // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
-    // product in a SECOND catalogue attached as a non-default accessible menu
-    // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list.
     const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTransaction(
       db,
       async (tx) => {
@@ -200,8 +195,6 @@ const suite = useVenueDb({
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
-          // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
-          // `allergens` map to carry back — the field this route carries through unchanged.
           allergens: { sulphites: {} },
         });
         await assignCatalogueToLocation(tx, loc!.id, cat.id);
@@ -1740,7 +1733,20 @@ it("GET /api/till boots fixed till screens without a canvas for a cookieless req
   expect(body).not.toHaveProperty("canvas");
 });
 
-describe("GET /api/products (session-guarded catalogue)", () => {
+describe("zone-offer catalogue routes", () => {
+  it.each(["absent", "invalid", "valid"])(
+    "does not serve the retired product catalogue with a %s session",
+    async (session) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const token = session === "valid" ? await openSession(suite.db) : "not-a-uuid";
+      const res = await app.request("/api/products", {
+        headers: session === "absent" ? {} : { cookie: `${SESSION_COOKIE}=${token}` },
+      });
+      expect(res.status).toBe(404);
+    },
+  );
+
   it("offers the effective zone pay timing to the counter", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2002,7 +2008,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
 
     // No cookie: the guard must refuse before any catalogue is read.
-    const res = await app.request("/api/products");
+    const res = await app.request("/api/default-service-zone/offers");
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
@@ -2014,29 +2020,19 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     // Through the real route: a non-UUID cookie is refused by the guard as 401 before any catalogue
     // read. Weaker than its name: it does not pin `requireSession`'s `isUuid` screen, since the hashed
     // value matches no row either way.
-    const res = await app.request("/api/products", {
+    const res = await app.request("/api/default-service-zone/offers", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("RETURNS the location's menus and available products when an open session's cookie is sent", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-
-    const token = await openSession(suite.db);
-    const res = await app.request("/api/products", {
-      headers: { cookie: `${SESSION_COOKIE}=${token}` },
-    });
-    expect(res.status).toBe(200);
-    // The wrapped `{ menus, products }` shape: `menus` carries BOTH accessible catalogues — the
-    // location's default ("Carta", `isDefault: true`) sorted first, then the non-default one attached
-    // via `addCatalogueToLocation` ("Happy Hour") — and `products` carries a row from EACH of them,
-    // proving the route reads across the whole accessible set rather than just the default catalogue.
-    // The exact `AvailableProduct` shape: the resolved category NAME (not id), the EU-14 allergen
-    // declaration carried through unchanged, and the menu tag (`catalogueId`/`catalogueName`).
-    expect(await res.json()).toEqual({
+  it("reads the location catalogue values used by development fixtures", async () => {
+    const catalogue = await withTransaction(suite.db, async (tx) => ({
+      menus: await listAccessibleCatalogues(tx, cfg.locationId),
+      products: (await listAvailableProducts(tx, cfg.locationId)).products,
+    }));
+    expect(catalogue).toEqual({
       menus: [
         { id: aguaProduct.catalogueId, name: "Carta", isDefault: true },
         { id: cervezaProduct.catalogueId, name: "Happy Hour", isDefault: false },

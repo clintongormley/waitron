@@ -53,6 +53,10 @@ slot's till, dashboard and server ports, not this one.
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.
 
+**Historical note, 2026-10-22:** A843 retired `/api/products`. Use the till's
+`/api/default-service-zone/offers` or selected-zone offers request when investigating a current
+catalogue load. The following incident describes the earlier route and development stack.
+
 **Gotcha (cost ~an hour on 2026-09-01):** if the till shows a blank/error screen after login and
 `/api/products` returns 500, the `:8080` server is a **stale orphan** from a previous session that no
 longer matches the (re)seeded DB — it is not a `main` bug (the demo proves products serves fine).

@@ -43,7 +43,6 @@ import {
   withPassiveManagementRead,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
-import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
@@ -1469,19 +1468,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         venueDefault: deps.venueLocale,
         loginDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
       });
-    }),
-  );
-
-  app.get("/api/products", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const { menus, products } = await withTransaction(deps.db, async (tx) => {
-        return {
-          menus: await listAccessibleCatalogues(tx, deps.cfg.locationId),
-          products: (await listAvailableProducts(tx, deps.cfg.locationId)).products,
-        };
-      });
-      return c.json({ menus, products });
     }),
   );
 

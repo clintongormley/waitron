@@ -18,11 +18,11 @@ import {
   type MyAbsence,
   type MyShift,
   type MySwap,
-  type ProductCatalogue,
   type KitchenNotice,
   type TabLine,
   type TableState,
   type TillMenuOffer,
+  type ZoneOfferCatalogue,
   type UnpaidDepartureRequest,
   type UnpaidDepartureResult,
 } from "./client.js";
@@ -731,21 +731,73 @@ describe("TillApi", () => {
     expect(r).toEqual(roster);
   });
 
-  it("listProducts GETs the location's menus + products, carrying each product's allergens and menu tag", async () => {
-    // Typed as `ProductCatalogue` so `tsc` checks the client shape carries `menus`, `allergens` and
-    // `catalogueId`. One product carries a declaration (both presences plus the optional `source`), the
-    // other is unreviewed (`null`).
-    const payload: ProductCatalogue = {
+  it("listDefaultZoneOffers carries each offer's allergens and menu identity", async () => {
+    const offerFields = {
+      grossPrice: null,
+      pricingUnit: "each" as const,
+      available: true,
+      image: null,
+      color: null,
+      description: null,
+      placements: [[]],
+      kitchenName: null,
+      ordering: "public" as const,
+      unit: {
+        id: "unit-each",
+        staffName: "Each",
+        staffAbbreviation: "ea",
+        name: { en: "Each" },
+        abbreviation: { en: "ea" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    const payload: ZoneOfferCatalogue = {
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: null,
+        periodOccurrenceKey: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
+      context: {
+        departmentName: "Restaurant",
+        zoneId: "counter",
+        departmentId: "deli",
+        serviceMode: "prepay" as const,
+      },
+      defaultMenuId: "cat-food",
       menus: [
-        { id: "cat-food", name: "Comida", isDefault: true },
-        { id: "cat-drinks", name: "Bebidas", isDefault: false },
-      ],
-      products: [
+        { id: "cat-food", name: "Food", isDefault: true },
+        { id: "cat-drinks", name: "Drinks", isDefault: false },
+      ].map((menu) => ({
+        ...menu,
+        versionId: `version-${menu.id}`,
+        orderable: true,
+        sendable: true,
+        audience: "customer" as const,
+        structure: { members: [] },
+        home: {
+          shortcuts: [],
+          handheld: { columns: 3, tiles: "colours" as const, order: "home_first" as const },
+          till: { columns: 6, tiles: "colours" as const, order: "home_first" as const },
+        },
+      })),
+      offers: [
         {
-          id: "p",
-          name: "Café",
-          customerName: { es: "Café para el cliente" },
-          pricingUnit: "each",
+          ...offerFields,
+          id: "offer-p",
+          productId: "p",
+          name: "Coffee",
+          customerName: { en: "Customer coffee" },
           unitPrice: "1.50",
           vatClass: "general",
           category: null,
@@ -753,40 +805,39 @@ describe("TillApi", () => {
             milk: {},
             nuts: { kinds: ["almonds" as const] },
           },
-          catalogueId: "cat-drinks",
-          catalogueName: "Bebidas",
+          menuId: "cat-drinks",
+          menuName: "Drinks",
         },
         {
-          id: "q",
-          name: "Agua mineral",
-          customerName: { es: "Agua mineral para el cliente" },
-          pricingUnit: "each",
+          ...offerFields,
+          id: "offer-q",
+          productId: "q",
+          name: "Mineral water",
+          customerName: { en: "Customer mineral water" },
           unitPrice: "1.20",
           vatClass: "general",
-          category: "Bebidas",
+          category: "Drinks",
           allergens: null,
-          catalogueId: "cat-drinks",
-          catalogueName: "Bebidas",
+          menuId: "cat-drinks",
+          menuName: "Drinks",
         },
       ],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
 
-    const r = await new TillApi("", fetchStub).listProducts();
+    const r = await new TillApi("", fetchStub).listDefaultZoneOffers();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/products",
+      "/api/default-service-zone/offers",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(payload);
-    // The menus half round-trips (default-flagged) for the switcher.
     expect(r.menus).toEqual(payload.menus);
-    // The allergen map survives the round-trip typed — read a declaration off the returned product.
-    expect(r.products[0]!.allergens).toEqual({
+    expect(r.offers[0]!.allergens).toEqual({
       milk: {},
       nuts: { kinds: ["almonds" as const] },
     });
-    expect(r.products[1]!.allergens).toBeNull();
+    expect(r.offers[1]!.allergens).toBeNull();
   });
 
   it("listZoneOffers GETs menu-item identities for the selected service zone, cancellably", async () => {
