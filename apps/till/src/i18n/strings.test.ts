@@ -135,6 +135,34 @@ describe("the floor's held chip, the Waiting chip's own word, and no retenido in
   });
 });
 
+describe("the words for an order's item counts", () => {
+  const counts = ["items", "unsent", "held", "waiting", "ready"] as const;
+
+  it.each(counts)(
+    "order_counts.%s has a plural with {n} and a singular in both languages",
+    (name) => {
+      for (const strings of [en, es]) {
+        expect(strings[`order_counts.${name}`]).toContain("{n}");
+        expect(strings[`order_counts.${name}_one`]).toMatch(/^1 \S/);
+        expect(strings[`order_counts.${name}_one`]).not.toContain("{n}");
+      }
+    },
+  );
+
+  it("says held with the order screen's word", () => {
+    const held = es["table.group_held"].toLowerCase();
+    expect(es["order_counts.held"]).toBe(`{n} ${held}`);
+    expect(es["order_counts.held_one"]).toBe(`1 ${held}`);
+  });
+
+  it("says waiting with the Waiting chip's word, not held's", () => {
+    const waiting = es["signal.wait_warm"].toLowerCase();
+    expect(es["order_counts.waiting"]).toContain(waiting);
+    expect(es["order_counts.waiting_one"]).toContain(waiting);
+    expect(es["order_counts.waiting"]).not.toContain(es["table.group_held"].toLowerCase());
+  });
+});
+
 describe("the advice for a whole payment refused while an unanswered bill payment holds the bill", () => {
   it.each(["en-GB", "es-ES"])(
     "bill_pay.unconfirmed_elsewhere (%s) names the button that reopens that payment, then Check again",
