@@ -57,7 +57,6 @@ import {
   advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
-  fireCourse,
   getHeldOrder,
   listExpoQueue,
   listHeldOrders,
@@ -2685,11 +2684,6 @@ describe("markCollected (the counter handover)", () => {
   });
 });
 
-// Coursing editing verbs — the serialisation properties for the tab verbs
-// `setLineCourse`/`sendLines`/`recallLines`. `working-order.test.ts` covers their LOGIC; the cases
-// below cover a `sendLines` racing a `recallLines` (or a `fireCourse`) on the SAME line ending in
-// one clean serial outcome with no lost update. The file header states what serialises them.
-
 /** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
  *  → `addTabRound` entry point. */
 async function addTable(
@@ -2845,177 +2839,114 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
   });
 });
 
-describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #191, two concurrent callers)", () => {
-  it("concurrent setLineCourse + fireCourse on the same held line never re-courses a fired line", async () => {
-    const { cfg, cafe } = await setupVenue();
-
-    // A printer on the venue's default station so a fire enqueues a kitchen ticket (the fired line's
-    // paper trail); the invariant below reads the tab snapshot, not paper, but a real fire path is the
-    // faithful racer.
-    const station = await defaultStationId(cfg);
-    await withTransaction(suite.db, async (tx) => {
-      const printCfg: PrintConfig = { locationId: cfg.locationId };
-      const { id: printerId } = await createPrinter(tx, printCfg, {
-        name: "P-Cocina",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
+describe("coursing editing verbs — setLineCourse racing selected line release", () => {
+  it.each(["edit first", "fire first"] as const)(
+    "%s never changes a course after its dish fires",
+    async (sequence) => {
+      const { cfg, cafe } = await setupVenue();
+      const { original, other, tabId } = await withTransaction(suite.db, async (tx) => {
+        const original = await createCourse(tx, cfg, { name: "Desserts", displayOrder: 9 });
+        const other = await createCourse(tx, cfg, { name: "Other", displayOrder: 10 });
+        await setProductCourse(tx, cfg, cafe.id, original.id);
+        const tables = await offerProducts(tx, cfg, { zone: "tables" });
+        const tableId = await addTable(tx, cfg, tables.zoneId);
+        const { tabId } = await openPartyTab(tx, cfg, { tableId });
+        await addTabRound(
+          tx,
+          cfg,
+          tabId,
+          tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
+        );
+        return { original, other, tabId };
       });
-      await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
-        stationId: station,
-        printerId,
-      });
-    });
-
-    // Two live courses. `café` is routed to `postres`, so its HELD line 1 sits in `postres`; the racer
-    // `fireCourse(postres)` fires exactly that line, while `setLineCourse(line 1 → otros)` tries to move
-    // it out from under the pass.
-    const { postres, otros, tabId } = await withTransaction(suite.db, async (tx) => {
-      const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
-      const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
-      await setProductCourse(tx, cfg, cafe.id, postres.id);
-      const tables = await offerProducts(tx, cfg, { zone: "tables" });
-      const tableId = await addTable(tx, cfg, tables.zoneId);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addTabRound(
-        tx,
-        cfg,
-        tabId,
-        tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
-      );
-      return { postres, otros, tabId };
-    });
-    // Baseline: one HELD line in `postres`, nothing fired.
-    expect(await tabSnapshot(tabId)).toEqual([
-      { lineNo: 1, lineCourse: postres.id, itemCourse: postres.id, fired: false, state: "queued" },
-    ]);
-
-    // `setLineCourse` (move the held line to `otros`) against `fireCourse` (fire `postres`, which the
-    // held line is in), both transactions started before either has finished. `fireCourse` makes no
-    // open-tab check of its own; what keeps the two apart is the write queue, which runs whichever it
-    // admitted first to completion before starting the other. It takes them in the order handed to
-    // it, so only ONE of the invariant's two outcomes is reached here (`setLineCourse` first: the line
-    // ends re-coursed to `otros` and still HELD); the invariant below is written both ways because it
-    // is what must hold.
-    const [sc, fc] = await Promise.allSettled([
-      withTransaction(suite.db, async (tx) => {
-        await setLineCourse(tx, cfg, tabId, 1, otros.id);
-      }),
-      withTransaction(suite.db, async (tx) => {
-        await fireCourse(tx, cfg, tabId, postres.id, { personId: OPERATOR });
-      }),
-    ]);
-    // `fireCourse` is legal in either order — it fires the held line (setLineCourse went second) or
-    // matches nothing because the line has moved to `otros` (setLineCourse went first) — so it NEVER
-    // throws.
-    expect(fc.status).toBe("fulfilled");
-    const scStatus: "fulfilled" | "rejected" = sc.status;
-    const scReason: unknown = sc.status === "rejected" ? sc.reason : undefined;
-
-    const after = (await tabSnapshot(tabId))[0]!;
-    expect(after.state).toBe("queued"); // neither verb moves the kitchen state
-
-    // THE INVARIANT (order-independent, holds whichever verb goes first): a line that FIRED never ends
-    // up with a course changed after firing. Exactly two outcomes, and serialisation forbids any third:
-    //  • fireCourse went first → line FIRED, still in `postres` (course NOT moved), and setLineCourse read
-    //    `fired_at` set and threw `ticket.already_fired`.
-    //  • setLineCourse went first → line re-coursed to `otros` and still HELD; fireCourse then re-read the
-    //    moved row, its `course_id = postres` predicate no longer matched, and it fired nothing.
-    // A fired line sitting in `otros` (course moved post-fire) is precisely the torn state serialisation
-    // prevents — this assertion fails on it.
-    if (after.fired) {
-      expect(after.lineCourse).toBe(postres.id);
-      expect(after.itemCourse).toBe(postres.id);
-      expect(scStatus).toBe("rejected");
-      expect(scReason).toMatchObject({
-        code: "ticket.already_fired",
-        params: { workingOrderId: tabId },
-      });
-    } else {
-      expect(after.lineCourse).toBe(otros.id);
-      expect(after.itemCourse).toBe(otros.id);
-      expect(scStatus).toBe("fulfilled");
-    }
-  });
+      expect(await tabSnapshot(tabId)).toEqual([
+        {
+          lineNo: 1,
+          lineCourse: original.id,
+          itemCourse: original.id,
+          fired: false,
+          state: "queued",
+        },
+      ]);
+      const edit = () =>
+        withTransaction(suite.db, (tx) => setLineCourse(tx, cfg, tabId, 1, other.id));
+      const fire = () => withTransaction(suite.db, (tx) => sendLines(tx, cfg, tabId, [1]));
+      const operations = sequence === "edit first" ? [edit, fire] : [fire, edit];
+      const results = await Promise.allSettled(operations.map((operation) => operation()));
+      const [sc, fc] = sequence === "edit first" ? results : [...results].reverse();
+      expect(fc!.status).toBe("fulfilled");
+      const after = await tabSnapshot(tabId);
+      expect(after).toHaveLength(1);
+      expect(after[0]!.state).toBe("queued");
+      expect(after[0]!.fired).toBe(true);
+      if (sequence === "fire first") {
+        expect(after[0]!.lineCourse).toBe(original.id);
+        expect(after[0]!.itemCourse).toBe(original.id);
+        expect(sc!.status).toBe("rejected");
+        expect(sc!.status === "rejected" ? sc!.reason : undefined).toMatchObject({
+          code: "ticket.already_fired",
+          params: { workingOrderId: tabId },
+        });
+      } else {
+        expect(after[0]!.lineCourse).toBe(other.id);
+        expect(after[0]!.itemCourse).toBe(other.id);
+        expect(sc!.status).toBe("fulfilled");
+      }
+    },
+  );
 });
 
-describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191, two concurrent callers)", () => {
-  it("concurrent recallLines + fireCourse on the same held line never un-fires a printed line without a RECALLED slip", async () => {
-    const { cfg, cafe } = await setupVenue();
-
-    // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
-    // fired line enqueues a RECALLED correction slip — the paper trail the invariant reads.
-    const station = await defaultStationId(cfg);
-    await withTransaction(suite.db, async (tx) => {
-      const printCfg: PrintConfig = { locationId: cfg.locationId };
-      const { id: printerId } = await createPrinter(tx, printCfg, {
-        name: "P-Cocina",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
+describe("coursing editing verbs — recallLines racing selected line release", () => {
+  it.each(["recall first", "fire first"] as const)(
+    "%s never un-fires a printed dish without a RECALLED slip",
+    async (sequence) => {
+      const { cfg, cafe } = await setupVenue();
+      const station = await defaultStationId(cfg);
+      await withTransaction(suite.db, async (tx) => {
+        const printCfg: PrintConfig = { locationId: cfg.locationId };
+        const { id: printerId } = await createPrinter(tx, printCfg, {
+          name: "Kitchen printer",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: station,
+          printerId,
+        });
       });
-      await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
-        stationId: station,
-        printerId,
+      const { course, tabId } = await withTransaction(suite.db, async (tx) => {
+        const course = await createCourse(tx, cfg, { name: "Desserts", displayOrder: 9 });
+        await setProductCourse(tx, cfg, cafe.id, course.id);
+        const tables = await offerProducts(tx, cfg, { zone: "tables" });
+        const tableId = await addTable(tx, cfg, tables.zoneId);
+        const { tabId } = await openPartyTab(tx, cfg, { tableId });
+        await addTabRound(
+          tx,
+          cfg,
+          tabId,
+          tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
+        );
+        return { course, tabId };
       });
-    });
-
-    // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
-    // and `recallLines([1])` targets it. Nothing printed yet.
-    const { postres, tabId } = await withTransaction(suite.db, async (tx) => {
-      const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
-      await setProductCourse(tx, cfg, cafe.id, postres.id);
-      const tables = await offerProducts(tx, cfg, { zone: "tables" });
-      const tableId = await addTable(tx, cfg, tables.zoneId);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addTabRound(
-        tx,
-        cfg,
-        tabId,
-        tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
-      );
-      return { postres, tabId };
-    });
-    expect(await tabSnapshot(tabId)).toEqual([
-      { lineNo: 1, lineCourse: postres.id, itemCourse: postres.id, fired: false, state: "queued" },
-    ]);
-    const jobsBefore = await printJobIds();
-
-    // `recallLines([1])` (un-fire the line) against `fireCourse(postres)` (fire it), both transactions
-    // started before either has finished. `fireCourse` makes no open-tab check of its own; what keeps
-    // the two apart is the write queue, which runs whichever it admitted first to completion before
-    // starting the other. Both are legal on this line in either order, so BOTH succeed. The queue
-    // takes them in the order handed to it, so only ONE of the invariant's two outcomes is reached
-    // here (`recallLines` first: the line ends FIRED with zero RECALLED slips); the invariant below is
-    // written both ways because it is what must hold.
-    const results = await Promise.allSettled([
-      withTransaction(suite.db, async (tx) => {
-        await recallLines(tx, cfg, tabId, [1]);
-      }),
-      withTransaction(suite.db, async (tx) => {
-        await fireCourse(tx, cfg, tabId, postres.id, { personId: OPERATOR });
-      }),
-    ]);
-    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
-
-    const after = await tabSnapshot(tabId);
-    expect(after).toHaveLength(1);
-    expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" }); // neither verb moves the kitchen state
-
-    // THE INVARIANT (order-independent, holds whichever verb goes first): a line that FIRED (and
-    // PRINTED) is never un-fired by recall WITHOUT a RECALLED slip. Exactly two outcomes, and
-    // serialisation forbids any third:
-    //  • recall went first → it read the line HELD, un-fired a no-op, enqueued NO slip; `fireCourse` then
-    //    fired the still-held line and PRINTED it → line FIRED (fired true), no recalled slip (correct: the
-    //    printed ticket stands, nothing to pull).
-    //  • fireCourse went first → line FIRED + PRINTED; recall then read it as previously-fired, un-fired
-    //    it AND enqueued a RECALLED slip → line HELD (fired false) with ≥1 recalled slip.
-    // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the torn state
-    // serialisation prevents (recall un-firing off a stale pre-fire read, the paper kitchen never told to
-    // pull the ticket `fireCourse` printed) — this assertion fails on it.
-    const recalledSlips = await recalledSlipsSince(jobsBefore);
-    expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
-  });
+      expect(await tabSnapshot(tabId)).toEqual([
+        { lineNo: 1, lineCourse: course.id, itemCourse: course.id, fired: false, state: "queued" },
+      ]);
+      const jobsBefore = await printJobIds();
+      const recall = () => withTransaction(suite.db, (tx) => recallLines(tx, cfg, tabId, [1]));
+      const fire = () => withTransaction(suite.db, (tx) => sendLines(tx, cfg, tabId, [1]));
+      const operations = sequence === "recall first" ? [recall, fire] : [fire, recall];
+      const results = await Promise.allSettled(operations.map((operation) => operation()));
+      expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled"]);
+      const after = await tabSnapshot(tabId);
+      expect(after).toHaveLength(1);
+      expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" });
+      const recalledSlips = await recalledSlipsSince(jobsBefore);
+      expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
+      expect(after[0]!.fired).toBe(sequence === "recall first");
+      expect(recalledSlips).toBe(sequence === "fire first" ? 1 : 0);
+    },
+  );
 });
 
 /** The order's current revision, for an edit whose test is not about the out-of-date check. */
