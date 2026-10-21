@@ -145,6 +145,19 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
+- **A940. Waitron's declaración responsable — design written, the owner's answers awaited.**
+  The producer's statement that a version meets the Veri\*Factu rules, one per release, readable
+  on every terminal and before installation (compliance plan Step 8). The
+  [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
+  from AEAT's worked example, makes `pnpm release` write and freeze each version's copy, adds
+  About Waitron to the dashboard, the till's More menu and an ⓘ corner, serves it at
+  `/legal/declaracion-responsable` before setup, and attaches it to each GitHub Release. It found
+  two defects in what every record tells AEAT, fixed first in a fiscal slice the owner lands:
+  `Version` is always `0.0.0`, and the `SistemaInformatico` producer fields carry the taxpayer's
+  name and NIF (`packages/fiscal-verifactu/src/backend.ts:641-653`). Four questions in §11. No
+  build before the owner approves it.
+  [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
+
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
   DST included; old records stay unchanged. The owner's 2026-10-15 ~22:25 direction replaces

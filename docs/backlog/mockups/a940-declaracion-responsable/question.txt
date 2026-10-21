@@ -1,0 +1,77 @@
+A940 — Waitron's declaración responsable: four questions, asked one at a time
+
+Background in one paragraph: Spanish law says the maker of invoicing software must publish a
+written statement (the "declaración responsable") for every version it releases, saying that
+version meets the Veri*Factu rules. It is never filed with anyone. It must be readable inside the
+software on every till and the dashboard, and outside it before anyone installs. Nothing exists
+today. The design (docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts
+the text, makes one per release, and adds "About Waitron" to every terminal (pictures 1-4).
+
+While researching it, two things turned up in what every invoice record already tells AEAT: the
+version is always "0.0.0", and the "software producer" fields carry the restaurant's name and tax
+number instead of the producer's. Both get fixed before the first declaration, as a fiscal pull
+request you land yourself. Nothing has been filed in production, so no wrong record exists at AEAT.
+
+----------------------------------------------------------------------------------------------------
+Question 1 of 4 — who is the producer on the first declaration?
+
+The declaration must give the producer's name, Spanish tax number (NIF) and a full postal contact
+address. It is shown on every box and published on the public GitHub releases page, and every
+invoice record will carry the same name and tax number.
+
+Example: the deli goes live on version 1.0.0. Its declaration says, in item h), «Nombre y
+apellidos de la persona productora: <your name>», item i) your NIF, item j) the address you choose.
+When a Waitron company exists, the next release's declaration names the company instead (every
+release has its own declaration anyway).
+
+- A (recommended) — you personally, now: your name, your NIF, and a postal address you are content
+  to publish (it need not be your home, but it must reach you). Reply with the three facts, or say
+  you will put them in yourself.
+- B — form the company first (compliance plan Step 6) and wait to release until it exists.
+- Stop here — I'll write.
+
+----------------------------------------------------------------------------------------------------
+Question 2 of 4 — the two yes/no answers
+
+The declaration must say (e) whether Waitron can only work as Veri*Factu, and (f) whether one
+installation can keep the invoicing of several taxpayers. Each invoice record carries the same two
+answers, and they must agree.
+
+Example: a box holds exactly one company (the deli). It can only file the Veri*Factu way. So
+(e) = Yes and (f) = No. Today the records say (e) Yes, (f) Yes — the (f) Yes was a placeholder
+marked "unverified" in the code.
+
+- A (recommended) — (e) Yes, (f) No; records change to (f) No in the same fiscal fix; ask the
+  asesor to confirm both in the next batch.
+- B — keep (f) Yes, in case one box ever serves two companies (a future version could say Yes
+  when it can actually do that).
+- Stop here — I'll write.
+
+----------------------------------------------------------------------------------------------------
+Question 3 of 4 — the wording
+
+The full Spanish text is in the design, section 4, with an English summary under it. Its headings
+are the law's own words (they must be). The parts you choose: the description in item d) (what
+Waitron is, its parts, its main functions), "Waitron" rather than "Waitron POS" as the name, no
+hardware listed (the server is the venue's own machine), and the annex (info@waitron.io and the
+GitHub releases page as the archive of every version's declaration).
+
+- A (recommended) — approve as drafted, with question 1's facts filled in.
+- B — approve with changes (say which).
+- Stop here — I'll write.
+
+----------------------------------------------------------------------------------------------------
+Question 4 of 4 — production boxes run releases only
+
+Every version needs its own declaration, however small the change. A box that installs whatever is
+on main would be running a version with no declaration.
+
+Example: Friday you push a fix to main and run `waitron.sh install` on the deli's box, which
+installs main. On Saturday it is selling on a version nobody declared. With releases only, the fix reaches the
+deli when you cut 1.0.1 (one command, which writes and freezes 1.0.1's declaration).
+
+- A (recommended) — a production box refuses to trade on a build that is not a tagged release
+  (it shows the recovery page: "This box is running a test build. Install a release."), and
+  `waitron.sh install v1.0.1` pulls the published image. Test boxes run anything.
+- B — allow any build in production and rely on the habit of releasing.
+- Stop here — I'll write.

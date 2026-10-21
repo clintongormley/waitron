@@ -212,6 +212,10 @@ hardest cryptographic component from the build.
 
 ### Declaración responsable and source-available
 
+> **2026-10-21 pointer.** Superseded on who declares: Waitron is the producer and issues the
+> declaración responsable itself (asesor-questions.md Q9, decided 2026-07-27). The design for
+> it is [A940](2026-10-21-a940-declaracion-responsable-design.md).
+
 AEAT guidance (FAQ updated 26 March 2026) explicitly addresses this: whoever programs the
 code or integrates components, *"ya sea o no de código abierto"*, must make the declaration.
 Being publicly readable changes nothing about liability. There is no homologación or prior
