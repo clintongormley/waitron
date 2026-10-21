@@ -2,26 +2,37 @@ import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
 import { locations, readTenant, type Transaction } from "@waitron/db";
-import { getDeviceProfile } from "@waitron/layouts";
-import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
+import { getDeviceProfile, readThemeInUse } from "@waitron/layouts";
+import type { CapabilityFlag, NavigationScreen, ThemeInUse } from "@waitron/layouts";
 import { cardReaders, DEMO_READER_ID, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
 import { listCourses } from "./kitchen.js";
 import type { TillApiDeps } from "./till-api.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
+import { venueThemeAnswer } from "./venue-theme.js";
 
 /** The subset of `apps/till`'s `CardProvider` union this surface hands out. */
 type TillCardProvider = TillReaderProvider | "simulator" | "none";
 
-/** The till's start-read body, every field except `servers`. */
+type TillSetupDeps = Pick<
+  TillApiDeps,
+  "cfg" | "venueLocale" | "workforceEnabled" | "onboardingIntent" | "cardProvider"
+>;
+
+/** What the start read takes from the database; `completeTillSetup` turns it into the body. */
 export async function readTillSetup(
   tx: Transaction,
-  deps: Pick<
-    TillApiDeps,
-    "cfg" | "venueLocale" | "workforceEnabled" | "onboardingIntent" | "cardProvider"
-  >,
+  deps: TillSetupDeps,
   device: DeviceBinding | null,
 ) {
+  const setup = await readSetupFields(tx, deps, device);
+  const themeInUse: ThemeInUse | null = await readThemeInUse(tx);
+  return { setup, themeInUse };
+}
+
+export type TillSetupRead = Awaited<ReturnType<typeof readTillSetup>>;
+
+async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: DeviceBinding | null) {
   const taxpayer = await readTenant(tx);
   const [loc] = await tx
     .select({
@@ -110,7 +121,15 @@ export async function readTillSetup(
   };
 }
 
-export type TillSetup = Awaited<ReturnType<typeof readTillSetup>>;
+/**
+ * The till's start-read body, every field except `servers`. Works out the theme, so it runs after
+ * the read's transaction has ended.
+ */
+export function completeTillSetup(read: TillSetupRead) {
+  return { ...read.setup, themeHash: venueThemeAnswer(read.themeInUse).hash };
+}
+
+export type TillSetup = ReturnType<typeof completeTillSetup>;
 
 /** Moves whenever any field of the setup does; `JSON.stringify` keeps the fixed key order above. */
 export function setupRevisionOf(setup: TillSetup): string {
