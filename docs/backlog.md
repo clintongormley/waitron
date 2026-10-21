@@ -5727,13 +5727,11 @@ the tree. What remains, largest first:
   is established, and a passing retry is not a repair. Lane G retains the logs and captures
   under `resume-a669-land-20261020-090825`.
 
-- **Investigate the release-stamp bundle guard's child timeout.** An A669 normal hook on
-  2026-10-20 passed 7,600 root cases but `generate-hour-release.test.mjs:243` received
-  `status: null` from its 20-second bundle child. The captured output showed seven bundles
-  taking 1.87–3.36 seconds each before the timeout; the test and bundle scripts were unchanged
-  from its main base. Measure the child with bounded test concurrency before changing the
-  guard, retaining every entry and stamp assertion. The cause of those build durations is
-  unverified. Lane G retains `verified-recovery-push.log` in the same receipt directory.
+- **Decide whether browser tests stop replacing modules (A943 follow-up).** A spy mock of
+  the till's pricing module failed once in CI with its cause not found, and #1934 replaced it
+  with a function the store takes. Its convention reviewer proposed a CLAUDE.md rule against
+  module mocks in browser tests; #1934 did not add one, because one failure with no known
+  cause is thin ground for a house rule. The owner decides.
 
 - **Check the older capture suites' viewport cleanup (A669-5 review).**
   `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
