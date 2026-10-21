@@ -1630,3 +1630,24 @@ entry case checks that the hostname-valid saved pair continues serving verified 
 "reserved authority after" cases interrupt completion, then change the address or expire only the
 saved leaf; resumption signs a new leaf with the reserved CA rather than leaving an unfinished
 repair permanently refused. An expired or unusable reserved CA still refuses.
+
+
+## Receipt originals and marked copies
+
+`enqueueOriginalReceipt` keeps a sale's existing original job for both F1 and F2, including failed
+jobs. An absent printer reserves nothing, so the first later request can enqueue the original.
+A completed original and its failed predecessors cannot be resent through the printer-job action;
+an explicit reprint renders
+copy-marked bytes. `canResendPrintJob` also drives the dashboard's offered action through
+`print-api.ts`. Exhausted retries retain their bytes. The open physical-delivery limit is in
+[the fiscal backlog](../backlog/fiscal.md#uncertain-receipt-delivery).
+
+| Source, checked 2026-10-22 | Source words | Applied here |
+| --- | --- | --- |
+| [RD 1619/2012, art. 14.1](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696#a14) | “Los empresarios y profesionales o sujetos pasivos sólo podrán expedir un original de cada factura.” | A repeated original request does not create another original job. Explicit copies retain their duplicate designation. This job-level rule does not settle uncertain physical delivery. |
+
+Receipt: the receipt-original and completed-ancestor cases in `receipt-print.test.ts`,
+`invoice-print-api.test.ts`, `bill-payments-api.test.ts` and printing’s `outbox.test.ts`
+were run on 2026-10-22. The focused
+original-request control first failed with three originals where one was expected; the management
+control first offered resend for a completed original.

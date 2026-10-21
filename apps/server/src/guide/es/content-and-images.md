@@ -101,6 +101,10 @@ aunque elimines ese idioma del contenido. El idioma de los botones y pantallas s
 preferencia aparte. Estos ajustes también ofrecen los idiomas para futuro contenido en línea;
 no crean un sitio de pedidos en línea.
 
+Pedir de nuevo el ticket original conserva el trabajo de impresión existente. Para imprimir otra
+hoja cuando haya terminado, elige **Reimprimir**; la copia lleva el mismo número de factura y la
+marca de duplicado.
+
 ## Sube una fotografía una sola vez {#upload}
 
 Para varias fotos, abre la **Biblioteca de imágenes** y suéltalas en cualquier parte de la página, o

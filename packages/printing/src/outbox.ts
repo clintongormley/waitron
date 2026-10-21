@@ -65,18 +65,19 @@ async function insertPrintJob(
   return { jobId: job!.id };
 }
 
-/** Only documents whose automatic delivery has ended can be resent; a drawer job never can, nor a
- * job its printer's deletion ended. */
+/** Completed receipt originals need a marked copy; exhausted delivery attempts retain their bytes. */
 export function canResendPrintJob(job: {
   kind: "document" | "drawer";
   status: string;
   attempts: number;
   lastError?: string | null;
+  receiptCopy?: boolean | null;
 }): boolean {
   return (
     job.kind === "document" &&
     job.lastError !== PRINTER_DELETED &&
-    (job.status === "done" || (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS))
+    ((job.status === "done" && job.receiptCopy !== false) ||
+      (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS))
   );
 }
 
@@ -94,6 +95,20 @@ export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ 
     .where(eq(printers.id, job.printerId));
   if (target!.deletedAt !== null) throw new AppError("printer.not_found", { id: job.printerId });
   if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
+  if (job.receiptCopy === false && job.saleId !== null) {
+    const [completed] = await tx
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(
+        and(
+          eq(printJobs.saleId, job.saleId),
+          eq(printJobs.receiptCopy, false),
+          eq(printJobs.status, "done"),
+        ),
+      )
+      .limit(1);
+    if (completed !== undefined) throw new AppError("print_job.not_resendable", { id: jobId });
+  }
   return insertPrintJob(
     tx,
     { locationId: job.locationId },

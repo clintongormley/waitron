@@ -852,10 +852,82 @@ describe("receipt original and copy tracking", () => {
     await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
     await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
     const repeated = await withTransaction(suite.db, (tx) => tx.select().from(printJobs));
-    expect(repeated.filter((job) => job.receiptCopy === false)).toHaveLength(3);
+    expect(repeated.filter((job) => job.receiptCopy === false)).toHaveLength(1);
     expect(repeated.filter((job) => job.receiptCopy === true)).toHaveLength(1);
     expect(repeated.filter((job) => job.kind === "drawer")).toHaveLength(1);
     expect(await registroCount(cfg)).toBe(1);
+  });
+});
+
+describe("simplified invoice original requests", () => {
+  it.each(["queued", "printing", "failed", "done"] as const)(
+    "retains the F2 original and its bytes while it is %s",
+    async (status) => {
+      const { cfg, each, zoneId } = await setupVenue();
+      const printerId = await makePrinter(cfg);
+      await configureReceipt(cfg, { printerId });
+      const workingOrderId = randomUUID();
+      await recordTillSale(
+        deps(),
+        cfg,
+        {
+          workingOrderId,
+          zoneId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          tender: { method: "cash", amount: "2.00" },
+        },
+        OPERATOR,
+      );
+      const saleId = await onlySaleId(cfg);
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(printJobs)
+          .set({ status, attempts: status === "failed" ? 5 : 0 })
+          .where(eq(printJobs.saleId, saleId)),
+      );
+      const before = await suite.db.select().from(printJobs);
+      const fiscal = await suite.db.select().from(registrosFacturacion);
+      const invoices = await suite.db.select().from(sales);
+      await Promise.all([
+        printSaleReceipt(deps(), cfg, workingOrderId, false),
+        printSaleReceipt(deps(), cfg, workingOrderId, false),
+      ]);
+      expect(await suite.db.select().from(printJobs)).toEqual(before);
+      expect(await suite.db.select().from(sales)).toEqual(invoices);
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+    },
+  );
+
+  it("queues the first requested original after a sale had no printer", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const workingOrderId = randomUUID();
+    const ticket = await recordTillSale(
+      deps(),
+      cfg,
+      {
+        workingOrderId,
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "2.00" },
+      },
+      OPERATOR,
+    );
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    await Promise.all([
+      printSaleReceipt(deps(), cfg, workingOrderId, false),
+      printSaleReceipt(deps(), cfg, workingOrderId, false),
+    ]);
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      saleId: await onlySaleId(cfg),
+      receiptCopy: false,
+      kind: "document",
+    });
+    expect(decodeTicket(jobs[0]!.payload)).toContain(ticket.invoiceNumber);
+    expect(opensDrawer(jobs[0]!.payload)).toBe(false);
   });
 });
 

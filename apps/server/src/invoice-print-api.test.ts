@@ -1376,3 +1376,48 @@ describe("invoice receipt printer deletion", () => {
     ).toMatchObject({ active: false, deletedAt: null });
   });
 });
+
+describe("completed receipt original management actions", () => {
+  it.each(["done", "failed"] as const)(
+    "hides resend for a %s original after delivery completes",
+    async (status) => {
+      const ctx = await setup();
+      const command = await manager(ctx);
+      const sale = await issue(false);
+      const original = await withTransaction(suite.db, async (tx) => {
+        const job = await enqueuePrintJob(
+          tx,
+          { locationId: ctx.locationId },
+          ctx.printer.id,
+          new Uint8Array([27, 64]),
+          "document",
+          { saleId: sale.saleId, receiptCopy: false },
+        );
+        await tx
+          .update(printJobs)
+          .set({ status, attempts: status === "failed" ? 5 : 0 })
+          .where(eq(printJobs.id, job.jobId));
+        if (status === "failed") {
+          const retry = await resendPrintJob(tx, job.jobId);
+          await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, retry.jobId));
+        }
+        return job;
+      });
+      const session = await withTransaction(suite.db, async (tx) => {
+        const [person] = await tx.select().from(persons);
+        return startManagementSession(tx, { personId: person!.id });
+      });
+      const listing = await ctx.app.request("/management-api/print-jobs", {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
+      expect(listing.status).toBe(200);
+      const jobs = (await listing.json()) as { id: string; canResend: boolean }[];
+      expect(jobs.find((job) => job.id === original.jobId)).toMatchObject({ canResend: false });
+      const before = await suite.db.select().from(printJobs);
+      const response = await command(`/management-api/print-jobs/${original.jobId}/resend`, {});
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+      expect(await suite.db.select().from(printJobs)).toEqual(before);
+    },
+  );
+});
