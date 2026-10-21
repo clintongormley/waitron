@@ -12818,20 +12818,15 @@ describe("till-app", () => {
       expect(screen.bumpMode).toBe("ticket");
     });
 
-    it("threads the venue fire_control from boot to the station screen (a kitchen-fire venue gets the fire action)", async () => {
-      // The default `till` fixture is `waiter`; a venue configured `kitchen` must reach the station
-      // screen's `.fireControl` so its per-course fire affordance turns on — proving #boot reads
-      // `TillInfo.fireControl` rather than leaving the hardcoded `waiter` default.
+    it("A773 waiter authority: boot leaves the retired control out of the station screen", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "kitchen" }),
       });
       const c = await toCounter(el);
       emit(c, "show-station");
       await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-station-screen") as unknown as {
-        fireControl: string;
-      };
-      expect(screen.fireControl).toBe("kitchen");
+      const screen = el.shadowRoot!.querySelector("till-station-screen")!;
+      expect("fireControl" in screen).toBe(false);
     });
 
     it("show-expo: the counter nav switches to the expo/pass screen (basket-preserving)", async () => {

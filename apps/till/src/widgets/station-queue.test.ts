@@ -1226,7 +1226,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [coursedOrder, partyOrder],
         view,
-        fireControl,
+        ...{ fireControl },
         stationId: "st-1",
       });
       const fire = vi.fn();
@@ -1301,7 +1301,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     const fire = vi.fn();
     const advance = vi.fn();
@@ -1321,7 +1321,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelectorAll("[data-fire]")).toHaveLength(0);
     expect(el.shadowRoot!.querySelector('[data-fire="co-start"]')).toBeNull();
@@ -1333,7 +1333,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "waiter", // the default; the held course is still greyed, just not fireable here
+      ...{ fireControl: "waiter" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
@@ -1355,7 +1355,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
   });
@@ -1365,7 +1365,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       groups: [coursedOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
       advanceOnly: true,
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
@@ -1917,7 +1917,7 @@ describe("till-station-queue — a seated party's groups", () => {
       ],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-4", "g-2", "g-3"]);
     expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
@@ -1965,7 +1965,7 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [partyOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     const fire = vi.fn();
     const advance = vi.fn();
@@ -1989,7 +1989,7 @@ describe("till-station-queue — a seated party's groups", () => {
         groups: [partyOrder],
         view: "rail",
         stationId: "st-1",
-        fireControl,
+        ...{ fireControl },
       });
       expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
     },
@@ -2000,7 +2000,7 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [partyOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
       advanceOnly: true,
     });
     expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
@@ -2010,7 +2010,7 @@ describe("till-station-queue — a seated party's groups", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
   });
@@ -2020,7 +2020,7 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [coursedOrder, partyOrder],
       view: "rail",
       stationId: "st-1",
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     const counter = el.shadowRoot!.querySelector('[data-order="7"]')!;
     expect(

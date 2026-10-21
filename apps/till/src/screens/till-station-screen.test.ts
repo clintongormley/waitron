@@ -214,14 +214,14 @@ describe("till-station-screen", () => {
     expect(queueWidget(el)!.bumpMode).toBe("ticket");
   });
 
-  it("threads fireControl through to the widget", async () => {
+  it("A773 waiter authority: leaves the retired control out of the queue widget", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     await flush(el);
-    expect(queueWidget(el)!.fireControl).toBe("kitchen");
+    expect("fireControl" in queueWidget(el)!).toBe(false);
   });
 
   it.each(["waiter", "kitchen", "expo"] as const)(
@@ -230,7 +230,7 @@ describe("till-station-screen", () => {
       const api = stubApi({ fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
-        fireControl,
+        ...{ fireControl },
       });
       await flush(el);
       const before = queueWidget(el)!.groups;
@@ -916,7 +916,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
       deviceMode: true,
-      fireControl: "kitchen",
+      ...{ fireControl: "kitchen" },
     });
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
@@ -3772,7 +3772,7 @@ describe.each(["Table 4", null, "missing card"])(
       });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
-        fireControl: "kitchen",
+        ...{ fireControl: "kitchen" },
       });
       await flush(el);
       expect(queueWidget(el)!.groups).toEqual(queue);

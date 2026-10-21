@@ -76,13 +76,6 @@ interface GroupSection {
 /** A merged queue's order: one station's lines of it, so `stationId` names whose. */
 export type MergedQueueGroup = StationQueueGroup & { stationId?: string };
 
-/** What `fire-kitchen-group` carries: the held group, and the party at the revision the card was read. */
-export interface FireKitchenGroupDetail {
-  partyId: string;
-  groupId: string;
-  expectedPartyRevision: number;
-}
-
 /** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
 function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
@@ -631,7 +624,6 @@ export class TillStationQueue extends LitElement {
   @property() stationId?: string;
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */
   @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
-  @property() fireControl: FireControlMode = "waiter";
   /** For an enrolled device display: collection needs a session, so its button is hidden. */
   @property({ type: Boolean }) advanceOnly = false;
   /** Rail-only, like collect: kanban columns cut across orders, so a per-order action has no home there. */

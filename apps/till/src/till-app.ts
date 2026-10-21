@@ -17453,7 +17453,6 @@ export class TillApp extends LitElement {
           embedded
           .api=${this.api}
           .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}
@@ -17659,7 +17658,6 @@ export class TillApp extends LitElement {
           .canMoveStation=${this.capabilities.includes("take-orders")}
           .canEditKitchenNote=${this.capabilities.includes("take-orders")}
           .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}

@@ -2464,7 +2464,10 @@ check. No legacy move assertion was changed to hide this result.
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md).
-The station queue no longer offers course/group Fire buttons; held work stays non-advanceable. The newly landed floor map counts ready food without a legacy dispatch fallback.
+The station queue no longer offers course/group Fire buttons; held work stays non-advanceable.
+The station screen and widget no longer expose Fire control, and their app bindings omit it.
+Boot and setup refresh still apply preparation mode. Legacy-mode regression inputs remain
+test-only. The newly landed floor map counts ready food without a legacy dispatch fallback.
 Lane G's first build branch has service lifetime, backend retirement of the old kitchen Fire,
 Away and Done routes, and counter release of every course on Send or payment. Existing table
 holding checks use seated parties; counter retries retain their existing sale and print counts.

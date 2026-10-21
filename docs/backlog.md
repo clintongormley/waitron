@@ -2451,7 +2451,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   each slice. The plan carries A797's completed Q42 amendments; its revised design, pictures and FYI landed on 2026-10-21. A803's pass/station tail follows this build.
   The station queue no longer offers course/group Fire buttons; held work stays non-advanceable.
   The station screen ignores the retired Fire events without opening an allergy window or making
-  cooking requests. Expo still uses the shared allergy controller until its own retirement.
+  cooking requests. Its public Fire-control property and the station widget property are retired;
+  boot and setup refresh retain preparation mode without passing that control. Legacy-mode
+  regression inputs remain test-only. Expo still uses the shared allergy controller until its own retirement.
   The newly landed floor map counts ready food without a legacy dispatch fallback.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
