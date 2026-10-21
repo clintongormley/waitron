@@ -8,7 +8,6 @@ const SAME_REASON: readonly (readonly [StringKey, string])[] = [
   ["business_day.conflict_overlap", "hours.conflict.overlap"],
   ["business_day.conflict_endpoint", "hours.conflict.endpoint_day"],
   ["business_day.conflict_all_day", "hours.conflict.all_day"],
-  ["business_day.conflict_sending", "hours.conflict.sending_cutoff"],
   ["business_day.conflict_strip", "hours.conflict.transition_strip"],
 ];
 
@@ -21,4 +20,9 @@ it.each([
   const theirs = SAME_REASON.map(([, key]) => own[key]);
   expect(theirs.every((label) => typeof label === "string" && label !== "")).toBe(true);
   expect(SAME_REASON.map(([key]) => app[key])).toEqual(theirs);
+});
+
+it("names no last-orders clash in either language", () => {
+  for (const strings of [en, es, hours.en, hours.es])
+    expect(Object.keys(strings).filter((key) => /conflict(_|\.)sending/.test(key))).toEqual([]);
 });

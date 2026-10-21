@@ -658,14 +658,7 @@ export interface BusinessDayClockConflict {
   date?: string;
   periodId?: string;
   rangeIndex: number;
-  reason:
-    | "range"
-    | "overlap"
-    | "endpoint_day"
-    | "all_day"
-    | "sending_cutoff"
-    | "transition_strip"
-    | "kept_open";
+  reason: "range" | "overlap" | "endpoint_day" | "all_day" | "transition_strip" | "kept_open";
 }
 
 export interface FloorPlanSetSummary {

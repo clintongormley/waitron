@@ -48,7 +48,7 @@ const followsHoliday = (rule: SpecialDayDateRule) =>
 
 /** The holiday lists the rules need over `years` (by default their `holidayHorizon`): none, and
  *  nothing read, when no rule is a repeating date that follows a holiday's name. */
-export async function holidayDatesFor(
+async function holidayDatesFor(
   tx: Transaction,
   cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
@@ -81,7 +81,7 @@ function holidayNameOn(holidays: HolidayDates, date: LocalDate): string | null {
 
 /** The years a check over every future occurrence walks, from the earliest date: 400 from it, or
  *  from `walkFrom` when that is later. No years without rules. */
-export function holidayHorizon(
+function holidayHorizon(
   rules: readonly { date: LocalDate }[],
   walkFrom = -Infinity,
 ): [number, number] {
@@ -94,7 +94,7 @@ export function holidayHorizon(
  *  its first year on, and a 29 February only in leap years. A repeating date saved on a public
  *  holiday falls, after its first year, where `holidays` puts a holiday of that name that year, and
  *  nowhere when there is none. Null when it does not fall in `year`. */
-export function specialDateIn(
+function specialDateIn(
   rule: SpecialDayDateRule,
   year: number,
   holidays: HolidayDates,
@@ -110,7 +110,7 @@ function followsHolidayIn(rule: SpecialDayDateRule, year: number): boolean {
 }
 
 /** Which special-day date stands on each day of `year`, by `standingInYear`. */
-export function specialDatesStandingIn<T extends SpecialDayDateRule>(
+function specialDatesStandingIn<T extends SpecialDayDateRule>(
   rules: readonly T[],
   year: number,
   holidays: HolidayDates,

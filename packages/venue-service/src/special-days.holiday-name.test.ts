@@ -19,17 +19,10 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { businessDayClockConflicts } from "./business-day-schedule.js";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, listVenueReadiness, type VenueScope } from "./operations.js";
-import { menuPeriods } from "./schema/menus.js";
-import {
-  departmentDayRanges,
-  departmentDays,
-  specialDayDates,
-  specialDays,
-} from "./schema/seasons.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
 /** Calls to the invented calendar's `read`, so a test can count the holiday-list reads. */
@@ -608,82 +601,5 @@ describe("saving either special day of a pair that came to share a date", () => 
       "2027-03-26": friday.id,
       "2027-03-27": feria.id,
     });
-  });
-});
-
-describe("the clock-change check follows a repeating holiday date to each year's date", () => {
-  /** Wednesday's Dinner, 22:00 to 04:30, sends until 07:30; a special day's Thursday opens Lunch
-   *  at 07:15. The rows are written raw, as the special-day writer would refuse them under the
-   *  venue's own changeover. */
-  async function thursdayLunch(date: string, holidayName: string) {
-    const v = await venue();
-    await db.update(menuPeriods).set({ endOffsetMinutes: 180 }).where(eq(menuPeriods.id, v.dinner));
-    await scoped((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: weekday === 3 ? [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }] : [],
-        })),
-        AT,
-        0,
-      ),
-    );
-    await scoped(async (tx) => {
-      const [day] = await tx
-        .insert(specialDays)
-        .values({ locationId: v.cfg.locationId, name: holidayName, repeatsYearly: true })
-        .returning({ id: specialDays.id });
-      const [dated] = await tx
-        .insert(specialDayDates)
-        .values({ specialDayId: day!.id, locationId: v.cfg.locationId, date, holidayName })
-        .returning({ id: specialDayDates.id });
-      const [painted] = await tx
-        .insert(departmentDays)
-        .values({ departmentId: v.restaurant, specialDayDateId: dated!.id })
-        .returning({ id: departmentDays.id });
-      await tx.insert(departmentDayRanges).values({
-        dayId: painted!.id,
-        departmentId: v.restaurant,
-        periodId: v.lunch,
-        startsAt: "07:15:00",
-        endsAt: "09:00:00",
-      });
-    });
-    return v;
-  }
-  const reasons = async (v: Venue) =>
-    (
-      await scoped((tx) =>
-        businessDayClockConflicts(
-          tx,
-          v.cfg,
-          { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] },
-          {
-            timeZone: "Europe/Madrid",
-            dayCutover: "05:00",
-            cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
-          },
-          "2026-11-04",
-        ),
-      )
-    ).conflicts.map((conflict) => conflict.reason);
-
-  it("checks the Thursday the next year's list gives the holiday", async () => {
-    expect(await reasons(await thursdayLunch("2026-04-02", "Jueves Santo"))).toContain(
-      "sending_cutoff",
-    );
-  });
-
-  it("checks no later Thursday when no later list names the holiday", async () => {
-    expect(await reasons(await thursdayLunch("2026-10-01", "Fiesta de 2026"))).toEqual([]);
-  });
-
-  it("checks the Thursday a one-off Closed all day holds, not the holiday that moved onto it", async () => {
-    const v = await thursdayLunch("2026-04-02", "Jueves Santo");
-    await rawDay(v, "Cierre", "2027-03-25");
-    expect(await reasons(v)).toEqual([]);
   });
 });

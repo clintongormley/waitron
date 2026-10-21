@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { clockChangeConflictText } from "./clock-change-conflict.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -40,11 +41,15 @@ it.each([
   ["overlap", "Invalid or overlapping range"],
   ["endpoint_day", "Moves to another day"],
   ["all_day", "All-day range needs new hours"],
-  ["sending_cutoff", "Last orders clash with the new start or next period"],
 ])("words the %s reason", (reason, label) => {
   expect(clockChangeConflictText(conflict(reason))).toBe(
     `Dinner 21:00–02:45 clashes with the new business-day start, 03:00 from Wed 21 Oct, 03:00: ${label}.`,
   );
+});
+
+it("has no last-orders reason to word", () => {
+  expect(Object.keys(VENUE_SERVICE_STRINGS.en)).not.toContain("hours.conflict.sending_cutoff");
+  expect(Object.keys(VENUE_SERVICE_STRINGS.es)).not.toContain("hours.conflict.sending_cutoff");
 });
 
 it("falls back from the period to the zone, then the department", () => {

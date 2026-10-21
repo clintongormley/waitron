@@ -437,7 +437,6 @@ export class BusinessDayStartEditor extends LitElement {
         range: "business_day.conflict_range",
         endpoint_day: "business_day.conflict_endpoint",
         all_day: "business_day.conflict_all_day",
-        sending_cutoff: "business_day.conflict_sending",
         transition_strip: "business_day.conflict_strip",
         overlap: "business_day.conflict_overlap",
         kept_open: "business_day.conflict_kept_open",

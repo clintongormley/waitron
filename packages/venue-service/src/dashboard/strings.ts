@@ -370,7 +370,6 @@ const en = {
   "hours.conflict.overlap": "Invalid or overlapping range",
   "hours.conflict.endpoint_day": "Moves to another day",
   "hours.conflict.all_day": "All-day range needs new hours",
-  "hours.conflict.sending_cutoff": "Last orders clash with the new start or next period",
   "hours.conflict.transition_strip": "Hours overlap the changed start",
   "hours.clock_changed": "The business-day start changed. Reload hours.",
   "venue.business_day_hours_conflict": "Adjust the conflicting hours first.",
@@ -1284,8 +1283,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.conflict.overlap": "Tramo inválido o solapado",
   "hours.conflict.endpoint_day": "Pasa a otro día",
   "hours.conflict.all_day": "El día completo necesita otro horario",
-  "hours.conflict.sending_cutoff":
-    "Los últimos pedidos coinciden con el nuevo inicio o el siguiente período",
   "hours.conflict.transition_strip": "El horario coincide con el cambio de inicio",
   "hours.clock_changed": "Ha cambiado el inicio del día. Recarga los horarios.",
   "venue.business_day_hours_conflict": "Ajusta primero los horarios en conflicto.",

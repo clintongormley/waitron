@@ -363,17 +363,6 @@ describe("business-day schedule compatibility", () => {
   it.each(["03:00", "07:00"])("keeps an ordinary daytime range under %s", async (time) => {
     await expect(check(await fixture([range("09:00", "17:00")]), time)).resolves.toBeUndefined();
   });
-  it("checks a sending cutoff in the changed strip and a zero-offset endpoint", async () => {
-    const grace = await fixture([range("22:00", "04:30")], { offset: 60 });
-    await expect(check(grace, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: { conflicts: [{ reason: "transition_strip" }] },
-    });
-    const zero = await fixture([range("06:00", "09:00")]);
-    await expect(check(zero, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-    });
-  });
   it.each([
     { disabled: true },
     { annual: true, date: "2025-12-25" },
@@ -450,16 +439,6 @@ describe("business-day schedule compatibility", () => {
       },
     });
   });
-  it("leaves a crossing range out of a sending cutoff's later ranges", async () => {
-    const v = await fixture([range("09:00", "17:00"), range("17:30", "04:30")], { offset: 60 });
-    await expect(check(v, "03:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: {
-        conflictCount: 1,
-        conflicts: [{ startsAt: "17:30", endsAt: "04:30", reason: "range" }],
-      },
-    });
-  });
   it("marks each one-range night that crosses the new start (mockup 04)", async () => {
     const v = await fixture([]);
     await withTransaction(suite.db, async (tx) => {
@@ -478,13 +457,6 @@ describe("business-day schedule compatibility", () => {
           { startsAt: "21:00", endsAt: "04:30", weekday: 6, reason: "range" },
         ],
       },
-    });
-  });
-  it("checks grace against the next placement", async () => {
-    const v = await fixture([range("09:00", "17:00"), range("18:00", "20:00")], { offset: 60 });
-    await expect(check(v, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: { conflicts: [expect.objectContaining({ reason: "sending_cutoff" })] },
     });
   });
   it("bounds conflict references without losing the total", async () => {
@@ -699,19 +671,15 @@ describe("a waiting change checks the hours written while it waits", () => {
     });
     expect(await stored(v)).toEqual(before);
   });
-  it("refuses last orders running into the waiting start (mockup 06), writing nothing", async () => {
-    const v = await fixture([], { offset: 30 });
-    await waiting(v);
-    await expect(writeWeek(v, 6, [range("21:00", "02:45")])).rejects.toMatchObject({
-      code: "hours.clock_change_conflict",
-      params: {
-        dayCutover: "03:00",
-        timeZone: "Europe/Madrid",
-        conflicts: [expect.objectContaining({ reason: "transition_strip" })],
-      },
-    });
-    expect(await stored(v)).toEqual([]);
-  });
+  it.each([0, 30])(
+    "stores a week ending before the waiting start whatever its period's stored end offset (%s)",
+    async (offset) => {
+      const v = await fixture([], { offset });
+      await waiting(v);
+      await expect(writeWeek(v, 6, [range("21:00", "02:45")])).resolves.toBeUndefined();
+      expect(await stored(v)).toEqual(["6 21:00:00-02:45:00"]);
+    },
+  );
   it("accepts a period rename beside a stored range that clashes with the waiting start", async () => {
     const v = await fixture([]);
     await withTransaction(suite.db, (tx) =>
@@ -740,8 +708,8 @@ describe("a waiting change checks the hours written while it waits", () => {
       ),
     ).resolves.toMatchObject({ id: expect.any(String) });
   });
-  it("answers last orders clashing only under the waiting start as a waiting-change conflict", async () => {
-    const v = await fixture([], { offset: 30 });
+  it("answers a week clashing only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([]);
     await waiting(v);
     const week = weekOf(v.periodId, 5, [range("01:00", "03:00")]);
     week[6]!.slots = [{ periodId: v.periodId, ...range("03:00", "04:00") }];
@@ -759,7 +727,7 @@ describe("a waiting change checks the hours written while it waits", () => {
             weekday: 5,
             startsAt: "01:00",
             endsAt: "03:00",
-            reason: "sending_cutoff",
+            reason: "transition_strip",
           }),
           expect.objectContaining({
             weekday: 6,
@@ -850,9 +818,9 @@ describe("a waiting change checks the hours written while it waits", () => {
     );
   const removePeriod = (v: Awaited<ReturnType<typeof fixture>>, periodId: string) =>
     withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, periodId, null, at, 1));
-  /** Last orders 30 minutes after Fri 01:00–03:00 and Sat 03:00–04:00: each fits 05:00, and under
-   *  the waiting 03:00 Friday's runs into the new start and Saturday's opens on the day before. */
-  const offsetClash = {
+  /** Fri 01:00–03:00 and Sat 03:00–04:00 each fit 05:00; under the waiting 03:00 Friday's ends on
+   *  the new start and Saturday's opens on the day before. */
+  const waitingStartClash = {
     dayCutover: "03:00",
     timeZone: "Europe/Madrid",
     startsAt: "2026-11-04T02:00:00.000Z",
@@ -862,7 +830,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         weekday: 5,
         startsAt: "01:00",
         endsAt: "03:00",
-        reason: "sending_cutoff",
+        reason: "transition_strip",
       }),
       expect.objectContaining({
         weekday: 6,
@@ -1002,8 +970,8 @@ describe("a waiting change checks the hours written while it waits", () => {
     expect(await periodsLeft(v)).toEqual([otherPeriod]);
     expect(await stored(v)).toEqual([]);
   });
-  it("answers a period delete whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
-    const v = await fixture([], { offset: 30 });
+  it("answers a period delete beside hours clashing only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([]);
     await withTransaction(suite.db, async (tx) => {
       await seasonDay(tx, { ...v, weekday: 5, ranges: [range("01:00", "03:00")] });
       await seasonDay(tx, { ...v, weekday: 6, ranges: [range("03:00", "04:00")] });
@@ -1013,7 +981,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     const kept = await stored(v);
     await expect(removePeriod(v, otherPeriod)).rejects.toMatchObject({
       code: "hours.clock_change_conflict",
-      params: offsetClash,
+      params: waitingStartClash,
     });
     expect(await periodsLeft(v)).toEqual([v.periodId, otherPeriod].sort());
     expect(await stored(v)).toEqual(kept);
@@ -1171,8 +1139,8 @@ describe("a waiting change checks the hours written while it waits", () => {
     expect(await specialDayNames(v)).toEqual(["Special day"]);
   });
   // The two dates' conflicts came back in either order across repeat runs.
-  it("answers a special day whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
-    const v = await fixture([], { offset: 30 });
+  it("answers a special day clashing only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([]);
     await waiting(v);
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -1217,7 +1185,7 @@ describe("a waiting change checks the hours written while it waits", () => {
             date: "2026-11-06",
             startsAt: "01:00",
             endsAt: "03:00",
-            reason: "sending_cutoff",
+            reason: "transition_strip",
           }),
           expect.objectContaining({
             specialDayName: "Late weekend",
@@ -1269,8 +1237,8 @@ describe("a waiting change checks the hours written while it waits", () => {
     await expect(removeSpecialDay(v, clashing!)).resolves.toBeUndefined();
     expect(await specialDayNames(v)).toEqual(["Market"]);
   });
-  it("answers a special-day delete whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
-    const v = await fixture([], { offset: 30 });
+  it("answers a special-day delete beside hours clashing only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([]);
     const clean = await withTransaction(suite.db, async (tx) => {
       await seasonDay(tx, { ...v, weekday: 5, ranges: [range("01:00", "03:00")] });
       await seasonDay(tx, { ...v, weekday: 6, ranges: [range("03:00", "04:00")] });
@@ -1279,7 +1247,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     await waiting(v);
     await expect(removeSpecialDay(v, clean)).rejects.toMatchObject({
       code: "hours.clock_change_conflict",
-      params: offsetClash,
+      params: waitingStartClash,
     });
     expect(await specialDayNames(v)).toEqual(["Market"]);
   });
@@ -1310,8 +1278,8 @@ describe("a waiting change checks the hours written while it waits", () => {
     await expect(addSeason(fits)).resolves.toHaveLength(2);
     expect(await seasonNames(fits)).toEqual(["Summer", "Winter"]);
   });
-  it("answers a season save whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
-    const v = await fixture([], { offset: 30 });
+  it("answers a season save beside hours clashing only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([]);
     await withTransaction(suite.db, async (tx) => {
       await seasonDay(tx, { ...v, weekday: 5, ranges: [range("01:00", "03:00")] });
       await seasonDay(tx, { ...v, weekday: 6, ranges: [range("03:00", "04:00")] });
@@ -1330,7 +1298,7 @@ describe("a waiting change checks the hours written while it waits", () => {
           1,
         ),
       ),
-    ).rejects.toMatchObject({ code: "hours.clock_change_conflict", params: offsetClash });
+    ).rejects.toMatchObject({ code: "hours.clock_change_conflict", params: waitingStartClash });
     expect(
       await withTransaction(suite.db, async (tx) => (await readSeasons(tx, v.cfg))[0]!.startsOn),
     ).toBe("12-01");
@@ -1430,10 +1398,9 @@ describe("undated hours are checked against the start in force", () => {
     v: Awaited<ReturnType<typeof fixture>>,
     week: Parameters<typeof saveSeasonWeeks>[3],
   ) => withTransaction(suite.db, (tx) => saveSeasonWeeks(tx, v.cfg, v.seasonId, week, at, 1));
-  /** A Wednesday night to 04:30 with last orders 30 minutes later: it meets 05:00 exactly, and
-   *  ran into 03:00 while that start was in force. */
-  async function lateLastOrders() {
-    const v = await fixture([range("22:00", "04:30")], { offset: 30 });
+  /** A Wednesday night to 04:30: it fits 05:00, and crossed 03:00 while that start was in force. */
+  async function nightAcrossEarlierStart() {
+    const v = await fixture([range("22:00", "04:30")]);
     await hoursBack(v);
     return v;
   }
@@ -1511,8 +1478,8 @@ describe("undated hours are checked against the start in force", () => {
       ),
     ).resolves.toBeUndefined();
   });
-  it("checks last orders against the start in force after a special-day save and delete", async () => {
-    const v = await lateLastOrders();
+  it("accepts a special-day save and delete beside a night that crossed an earlier start", async () => {
+    const v = await nightAcrossEarlierStart();
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
@@ -1526,8 +1493,8 @@ describe("undated hours are checked against the start in force", () => {
       withTransaction(suite.db, (tx) => deleteSpecialDay(tx, v.cfg, day!.id, at, 1)),
     ).resolves.toBeUndefined();
   });
-  it("checks last orders against the start in force after a season save", async () => {
-    const v = await lateLastOrders();
+  it("accepts a season save beside a night that crossed an earlier start", async () => {
+    const v = await nightAcrossEarlierStart();
     await expect(
       withTransaction(suite.db, (tx) =>
         saveSeasons(
@@ -1543,8 +1510,8 @@ describe("undated hours are checked against the start in force", () => {
       ),
     ).resolves.toBeDefined();
   });
-  it("checks last orders against the start in force after a period delete", async () => {
-    const v = await lateLastOrders();
+  it("accepts a period delete beside a night that crossed an earlier start", async () => {
+    const v = await nightAcrossEarlierStart();
     const other = randomUUID();
     await withTransaction(suite.db, async (tx) => {
       const [period] = await tx
@@ -1774,51 +1741,6 @@ describe("dated calendar authoring after activation", () => {
         0,
       ),
     ).resolves.toBeUndefined();
-  });
-});
-
-describe("clock compatibility resolves neighboring special-day substitutions", () => {
-  async function neighbor(emptyOverride: boolean, closedAllDay: boolean) {
-    const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
-    await withTransaction(suite.db, async (tx) => {
-      await seasonDay(tx, {
-        departmentId: v.departmentId,
-        seasonId: v.seasonId,
-        weekday: 4,
-        periodId: v.periodId,
-        ranges: [range("07:15", "09:00")],
-      });
-      await paintedDay(tx, v, {
-        name: "Neighbor",
-        date: "2026-11-05",
-        closedAllDay,
-        ranges: emptyOverride ? [{ periodId: null, startsAt: "07:15", endsAt: "09:00" }] : [],
-      });
-    });
-    return v;
-  }
-  it.each([
-    [true, false],
-    [false, true],
-  ])("honors an empty override or closed neighbor (%s,%s)", async (emptyOverride, closedAllDay) => {
-    await expect(
-      check(await neighbor(emptyOverride, closedAllDay), "07:00"),
-    ).resolves.toBeUndefined();
-  });
-  it("includes the next occurrence of an annual override beside a normal week", async () => {
-    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
-    await withTransaction(suite.db, (tx) =>
-      paintedDay(tx, v, {
-        name: "Annual neighbor",
-        date: "2025-11-05",
-        repeatsYearly: true,
-        ranges: [{ periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" }],
-      }),
-    );
-    await expect(check(v, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: { conflicts: [expect.objectContaining({ reason: "sending_cutoff", weekday: 3 })] },
-    });
   });
 });
 
@@ -2123,31 +2045,6 @@ it("lists a department's season conflicts in the venue's season order", async ()
   ]);
 });
 
-it("checks a season's last day against the next season's first", async () => {
-  const v = await fixture([range("22:00", "04:30")], { offset: 180 });
-  await withTransaction(suite.db, async (tx) => {
-    const [summer] = await tx
-      .insert(seasons)
-      .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
-      .returning();
-    await seasonDay(tx, {
-      departmentId: v.departmentId,
-      seasonId: summer!.id,
-      weekday: 4,
-      periodId: v.periodId,
-      ranges: [range("07:15", "09:00")],
-    });
-  });
-  await expect(check(v, "07:00")).rejects.toMatchObject({
-    code: "venue.business_day_hours_conflict",
-    params: {
-      conflicts: [
-        expect.objectContaining({ reason: "sending_cutoff", weekday: 3, seasonId: v.seasonId }),
-      ],
-    },
-  });
-});
-
 it("counts a range painted in every season once, so a capped list still names every department", async () => {
   const v = await fixture([]);
   const result = await withTransaction(suite.db, async (tx) => {
@@ -2200,65 +2097,6 @@ it("counts a range painted in every season once, so a capped list still names ev
     new Set([v.departmentId, result.secondId]),
   );
   expect(result.conflicts.conflicts).toHaveLength(56);
-});
-
-describe("clock compatibility reads each day's neighbours from its own season", () => {
-  async function twoSeasons(v: Awaited<ReturnType<typeof fixture>>) {
-    const [summer] = await suite.db
-      .insert(seasons)
-      .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
-      .returning();
-    return summer!.id;
-  }
-  it("checks a season weekday against the same season's next weekday", async () => {
-    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
-    await twoSeasons(v);
-    await withTransaction(suite.db, (tx) =>
-      seasonDay(tx, {
-        departmentId: v.departmentId,
-        seasonId: v.seasonId,
-        weekday: 4,
-        periodId: v.periodId,
-        ranges: [range("07:15", "09:00")],
-      }),
-    );
-    await expect(check(v, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: {
-        conflicts: [
-          expect.objectContaining({ reason: "sending_cutoff", weekday: 3, seasonId: v.seasonId }),
-        ],
-      },
-    });
-  });
-  it("ignores a special day whose day before is another season's weekday", async () => {
-    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
-    await twoSeasons(v);
-    // 2026-11-04, the Wednesday before, is in Summer; the painted Wednesday is Winter's.
-    await withTransaction(suite.db, (tx) =>
-      paintedDay(tx, v, {
-        name: "Summer neighbour",
-        date: "2026-11-05",
-        ranges: [{ periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" }],
-      }),
-    );
-    await expect(check(v, "07:00")).resolves.toBeUndefined();
-  });
-  it("follows a special day with the next day's own season week", async () => {
-    const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
-    await twoSeasons(v);
-    // 2026-11-05 is a Summer Thursday; only Winter paints Thursday.
-    await withTransaction(suite.db, (tx) =>
-      seasonDay(tx, {
-        departmentId: v.departmentId,
-        seasonId: v.seasonId,
-        weekday: 4,
-        periodId: v.periodId,
-        ranges: [range("07:15", "09:00")],
-      }),
-    );
-    await expect(check(v, "07:00")).resolves.toBeUndefined();
-  });
 });
 
 describe("clock compatibility reads special-day paint", () => {
@@ -2361,70 +2199,6 @@ describe("clock compatibility reads special-day paint", () => {
     expect(await conflicts(v, "03:00")).toEqual({ conflictCount: 0, conflicts: [] });
   });
 
-  it("follows a season day with the special day's painted next day", async () => {
-    // Wednesday's range sends until 07:30; 2026-11-05 is a Thursday, empty in the season.
-    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
-    await expect(check(v, "07:00")).resolves.toBeUndefined();
-    await specialDay(v, "2026-11-05", [
-      { periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" },
-    ]);
-    await expect(check(v, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: { conflicts: [expect.objectContaining({ reason: "sending_cutoff", weekday: 3 })] },
-    });
-  });
-
-  it("follows a special day with the next day's paint laid over its season", async () => {
-    // 2026-11-19 is a Thursday whose painted range sends until 07:30; Friday's season opens at 07:15.
-    const v = await fixture([], { offset: 180 });
-    await withTransaction(suite.db, (tx) =>
-      seasonDay(tx, {
-        departmentId: v.departmentId,
-        seasonId: v.seasonId,
-        weekday: 5,
-        periodId: v.periodId,
-        ranges: [range("07:15", "09:00")],
-      }),
-    );
-    const late = await specialDay(v, "2026-11-19", [
-      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
-    ]);
-    await expect(check(v, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: {
-        conflicts: [expect.objectContaining({ reason: "sending_cutoff", specialDayId: late })],
-      },
-    });
-    await specialDay(v, "2026-11-20", [{ periodId: null, startsAt: "07:15", endsAt: "09:00" }]);
-    await expect(check(v, "07:00")).resolves.toBeUndefined();
-  });
-
-  it("walks a repeating special day into a one-off special day's year beyond its 400 years", async () => {
-    const v = await fixture([], { offset: 180 });
-    const eve = await withTransaction(suite.db, (tx) =>
-      paintedDay(tx, v, {
-        name: "Eve",
-        date: "2026-12-24",
-        repeatsYearly: true,
-        ranges: [{ periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" }],
-      }),
-    );
-    await expect(check(v, "07:00")).resolves.toBeUndefined();
-    await withTransaction(suite.db, (tx) =>
-      paintedDay(tx, v, {
-        name: "Far day",
-        date: "2500-12-25",
-        ranges: [{ periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" }],
-      }),
-    );
-    await expect(check(v, "07:00")).rejects.toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: {
-        conflicts: [expect.objectContaining({ reason: "sending_cutoff", specialDayId: eve })],
-      },
-    });
-  });
-
   it("reads the special days' dates", async () => {
     const v = await fixture([], { zone: true });
     await specialDay(v, "2026-11-20", [
@@ -2498,7 +2272,7 @@ async function busyCalendar(count: number, run = 0) {
               departmentId: id,
               periodId: dinner,
               startsAt: weekday === 6 ? "21:00:00" : "20:00:00",
-              endsAt: weekday === 6 ? "03:45:00" : "23:30:00",
+              endsAt: weekday === 6 ? "03:30:00" : "23:30:00",
             },
           ]);
         }
@@ -2577,7 +2351,7 @@ async function busyCalendar(count: number, run = 0) {
 it("lists the same conflicts for many yearly special days", async () => {
   const cfg = await busyCalendar(50);
   const result = await withTransaction(suite.db, (tx) =>
-    businessDayClockConflicts(tx, cfg, before, candidate("04:00"), E),
+    businessDayClockConflicts(tx, cfg, before, candidate("03:30"), E),
   );
   const lines = result.conflicts.map((c) =>
     [
@@ -2590,31 +2364,31 @@ it("lists the same conflicts for many yearly special days", async () => {
       c.reason,
     ].join(" | "),
   );
-  expect(result.conflictCount).toBe(41);
+  expect(result.conflictCount).toBe(153);
   expect(lines).toEqual([
-    "Department 0 | Season 0 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
-    "Department 0 | Season 1 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
-    "Department 0 | Season 2 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
-    "Department 0 | Season 3 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
-    "Department 0 | Special 0 | 2026-01-01 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 1 | 2026-02-02 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 2 | 2026-03-03 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 3 | 2026-04-04 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 5 | 2026-06-06 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 6 | 2026-07-07 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 7 | 2026-08-08 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 8 | 2026-09-09 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 10 | 2026-11-11 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 11 | 2026-12-12 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 12 | 2026-01-13 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 13 | 2026-02-14 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 15 | 2026-04-02 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 16 | 2026-05-03 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 17 | 2026-06-04 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 18 | 2026-07-05 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 20 | 2026-09-07 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
-    "Department 0 | Special 21 | 2026-10-08 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
-    "Department 0 | Special 22 | 2026-11-09 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Season 0 | 6 | Dinner 0 | 21:00-03:30 | 1 | transition_strip",
+    "Department 0 | Season 1 | 6 | Dinner 0 | 21:00-03:30 | 1 | transition_strip",
+    "Department 0 | Season 2 | 6 | Dinner 0 | 21:00-03:30 | 1 | transition_strip",
+    "Department 0 | Season 3 | 6 | Dinner 0 | 21:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 0 | 2026-01-01 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 1 | 2026-02-02 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 2 | 2026-03-03 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 3 | 2026-04-04 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 4 | 2026-05-05 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 5 | 2026-06-06 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 6 | 2026-07-07 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 7 | 2026-08-08 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 8 | 2026-09-09 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 9 | 2026-10-10 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 10 | 2026-11-11 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 11 | 2026-12-12 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 12 | 2026-01-13 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 13 | 2026-02-14 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 14 | 2026-03-01 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 15 | 2026-04-02 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
+    "Department 0 | Special 16 | 2026-05-03 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 17 | 2026-06-04 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
+    "Department 0 | Special 18 | 2026-07-05 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
   ]);
 });
 
