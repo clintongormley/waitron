@@ -3111,7 +3111,7 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages first in Settings, to a session holding catalogue.manage, and opens its page", async () => {
+  it("offers Content languages first in Settings to a session holding catalogue.manage and not venue.view, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),

@@ -72,7 +72,10 @@ describe("the Hard to read dialog", () => {
 
   it("Back sends one hard-to-read-back", async () => {
     const { el, heard } = await mount(true);
+    const closed = dialogClosed(inner(el));
     await userEvent.click(button(el, "back")!);
+    await closed;
+    await frame();
     expect(heard.back).toHaveBeenCalledTimes(1);
     expect(heard.anyway).not.toHaveBeenCalled();
     expect(heard.fix).not.toHaveBeenCalled();
