@@ -2438,6 +2438,24 @@ export class DashboardApi {
     return this.#request<ThemeView>(`/management-api/themes/${id}`, "PUT", { theme });
   }
 
+  createTheme(input: { name: string; theme: ThemeChoices; inUse: boolean }): Promise<ThemeView> {
+    return this.#request<ThemeView>("/management-api/themes", "POST", input);
+  }
+
+  renameTheme(id: string, name: string): Promise<ThemeView> {
+    return this.#request<ThemeView>(`/management-api/themes/${id}`, "PATCH", { name });
+  }
+
+  deleteTheme(id: string): Promise<{ inUse: string | null }> {
+    return this.#request<{ inUse: string | null }>(`/management-api/themes/${id}`, "DELETE");
+  }
+
+  useTheme(customThemeId: string | null): Promise<{ inUse: string | null }> {
+    return this.#request<{ inUse: string | null }>("/management-api/theme-in-use", "PUT", {
+      customThemeId,
+    });
+  }
+
   getContentLanguageRules(): Promise<ContentLanguageRules> {
     return this.#request<ContentLanguageRules>("/management-api/content-language-rules", "GET");
   }

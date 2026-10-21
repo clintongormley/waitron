@@ -2,11 +2,9 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, state } from "lit/decorators.js";
 import {
   CATEGORY_PALETTE,
-  applyVenueTheme,
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
-  readVenueTheme,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -37,6 +35,7 @@ import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";
+import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 import {
   codeInvalid,
   isWaitronLook,
@@ -263,11 +262,7 @@ export class LookCard extends LitElement {
     this.#scope?.commit(next);
   }
   #repaint(): void {
-    void readVenueTheme(() => this.api.getVenueTheme()).then(
-      ({ answer, sentAt }) => applyVenueTheme(answer, sentAt),
-      // The shell's live read follows the same change, so a failed read here costs only the wait.
-      () => {},
-    );
+    repaintVenueTheme(this.api);
   }
   #registerDraft(): void {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;

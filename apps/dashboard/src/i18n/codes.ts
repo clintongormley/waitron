@@ -1272,6 +1272,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Not recorded: the box's clock is wrong.",
     es: "No se ha registrado: la hora del equipo es incorrecta.",
   },
+  "theme.name_taken": {
+    en: "A theme with this name already exists.",
+    es: "Ya existe un tema con este nombre.",
+  },
+  "theme.not_found": {
+    en: "This theme no longer exists.",
+    es: "Este tema ya no existe.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",
