@@ -7,7 +7,11 @@ their full text.
 
 **The box the customer buys probably doubles as a till, so the image ships a screen and a browser**
 (owner, 2026-09-29: "we probably want the server the customer buys to also serve as a till, which
-means that we need to ship Debian with a UI and chromium"). A lean, not yet a decision. The hardware
+means that we need to ship Debian with a UI and chromium"). A lean then; **decided 2026-10-21 in
+B3's answers**: every box carries Chromium under `cage`, no desktop, and its screen opens the
+dashboard after setup and can become a till
+([B3 design §9](../superpowers/specs/2026-10-21-b3-usb-installer-design.md)). The rest of this entry
+is the lean as it was recorded. The hardware
 decisions already put the deli's box under the counter driving the counter touchscreen (O5,
 [handheld and till hardware §5](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)),
 but as a machine built by hand; this makes it how every box ships. What it asks of the image B3 lays
@@ -30,11 +34,12 @@ down, none of it built:
 
 ## a local maintenance account on each box
 
-Belongs with it: **a local maintenance account on each box**, its password printed on a sealed card
-and set when the box is imaged, with procedures for a lost card, a change of owner and a reinstall
+Belongs with it: **a local maintenance account on each box**. The 2026-09-11 discussion record
+proposed a password printed on a sealed card
 ([box maintenance and remote support](../superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md),
-a discussion record, not an approved spec). Its remote-support half is tracked in Cloud and not
-approved.
+not an approved spec); B3's revision (2026-10-21) replaces the card for a stick-installed box with a
+one-time password an admin opens from the dashboard, used only at the box's own console (B3 design
+§11). Its remote-support half is tracked in Cloud and not approved.
 
 ## Automatic upgrades that can be undone until the first order
 
@@ -58,7 +63,12 @@ approved.
   **The snapshot is a filesystem snapshot where the disk allows it** (owner, 2026-10-02). Debian's
   default filesystem, ext4, has none; btrfs (in Debian's own kernel) and LVM thin volumes do. ZFS
   does too but is built outside Debian's kernel because of its licence. The B3 installer lays the
-  disk out, so it can put the folder holding Docker's volumes on btrfs. What it should buy, none of
+  disk out, so it can put the folder holding Docker's volumes on btrfs — inside an encrypted
+  container since B3's revision (2026-10-21, B3 design §6–§7), which A950's snapshots do not see:
+  they are btrfs operations on the unlocked filesystem (B3's reading; its slice 1 tries a rollback on
+  the encrypted disk). B3 also gives A950 the host service it needs (§8) and holds the packages that
+  change the box's start-up back for A950's quiet hour, with a step that re-seals the disk key
+  (§7.4). What it should buy, none of
   it measured yet: taking and restoring a snapshot costs about the same whatever the size of
   `venue.db`, which holds the product photos, where a file copy grows with it; and it takes every
   volume at once, so nobody keeps a list of the files a restore needs (the hand-kept list already
@@ -363,8 +373,8 @@ today); generalise archive entry routing off declared source ids when a second n
   the image makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
-- Kiosk options, none built: Chromium in the box image, now the owner's lean for every box (B3,
-  2026-09-29), and, later, Fully Kiosk resale for dedicated tablets. Cloud-managed device enrolment is tracked in the
+- Kiosk options, none built: Chromium in the box image, every box (the owner's decision in B3's
+  answers, 2026-10-21, B3 design §9), and, later, Fully Kiosk resale for dedicated tablets. Cloud-managed device enrolment is tracked in the
   [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md). The counter till
   boots into the app with no operating-system login — automatic console login, one full-screen
   browser, and the till's own PIN as the boundary. Four traps to establish when the image is built

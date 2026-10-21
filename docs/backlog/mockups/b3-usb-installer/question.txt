@@ -1,94 +1,76 @@
-B3 — THE BOOTABLE USB INSTALLER: FIVE QUESTIONS, ONE AT A TIME
-Design: docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md (§13). Pictures in this folder.
-Ask 1, then 2, 3, 4, 5. Each has a recommendation; the last option is always "Stop here — I'll write".
+B3 — THE BOOTABLE USB INSTALLER: REVISED FOR YOUR FIVE ANSWERS — TWO QUESTIONS, ONE AT A TIME
+Design: docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md (revision note at the top; §18).
+Pictures in this folder. Ask 1, then 2. Each has a recommendation; the last option is always
+"Stop here — I'll write".
 
-In short: the stick boots a small installer that copies a ready-made Waitron box (Debian 13, Docker,
-the release's Waitron images) onto the mini PC's disk, then restarts into the setup wizard. CI builds
-the stick for every release and installs it in a virtual machine before publishing it. Both of a
-venue's boxes (A947) come from the same stick; the wizard asks which job each does.
-
-------------------------------------------------------------------------------------------------
-QUESTION 1 of 5 — what the stick does
-Pictures: 7-q1-what-the-stick-does.png (also 1-this-box.png and 2-venue-found.png)
-
-Example: Monday 10:00, the deli's new box arrives; the shop's internet line is not connected until
-Wednesday.
-
-A (recommended) — the stick carries everything and asks once. About 15 minutes (estimate; measured
-  in the first build), no internet needed. The box's screen shows the disk and what it holds
-  ("Windows"), and one press on «Borrar e instalar» starts it. If the box already holds a Waitron
-  restaurant, the screen names it («Bar Santet», Live, last sale 20/10/2026 23:41, 3 records not yet
-  sent to AEAT), says its own backups and its record of past filings go with the disk, and the button works only after the
-  restaurant's name is typed (`waitron.sh` asks for the word «production» in the same place). This
-  makes the stick the repair for ANY broken box, Live ones included. Your A732 answer ("you just
-  reinstall the box and start again") was about a box whose owner lost the password and recovery
-  sheet; choosing A confirms it for every broken box. The deli reaches the setup wizard by about 10:15 and can
-  prepare its menu before the line arrives. Cost: a large download per release for whoever writes
-  the stick; a box with no screen needs one plugged in for the install.
-B — a small stick that downloads the release during the install. Always the newest release, but the
-  deli waits until Wednesday or borrows a phone's connection for a download of several gigabytes.
-C — fully unattended: like A, but it erases and installs with no question, so a box with no screen
-  can be installed. A stick left in a box that restarts after a power cut can then erase a working
-  restaurant.
-Stop here — I'll write.
+In short: a small stick boots an installer that, with nobody at the box, fetches the newest release,
+checks its signature, writes it onto the box's disk inside an encrypted container and restarts once
+the stick is out. Your three guards are all in. The disk's key lives in the box's security chip; a
+printed recovery key opens it when the chip will not. The box's screen runs the setup wizard, then
+the dashboard, and can become a till; its settings are a Waitron page. A setup code stops a stranger
+setting up a new box first.
 
 ------------------------------------------------------------------------------------------------
-QUESTION 2 of 5 — a full-screen browser on every box (your lean of 2026-09-29)
-Pictures: 5-box-screen.png
+QUESTION 1 of 2 — approve the revision?
+Pictures: 1-unattended-install.png, 2-existing-box.png, 7-till-and-dashboard.png, 10-setup-code.png
+(then 3, 6, 8, 9)
 
-Example: the deli's box sits in the cupboard under the counter, with the counter touchscreen on top.
+Example: Monday 10:00, the deli's new box arrives with no screen. Marta plugs in the cable and the
+stick and presses the power button. At 10:01 the installer has copied itself into memory and
+written the box's setup code onto the stick; from then on the stick may come out (the card gives the
+time). It checks the box has its security chip and Secure Boot switched on. By 10:02 it has the
+internet time and has fetched and checked Waitron 1.4.0; at 10:03 it erases the Windows the box came
+with (60 seconds after the check — nobody sees it). She takes the stick out at 10:05 and the box
+restarts itself at 10:07, seals its disk key into its chip and restarts once more to prove it. At
+10:10 she opens waitron.local on her phone, types the setup code from the stick's
+WAITRON/codigos-de-configuracion.txt (read on the shop laptop), and sets up the venue. The recovery
+sheet the wizard prints now also carries the disk's recovery key. Friday: a power cut, and someone has put the stick back in. The
+box starts from the stick, sees «Bar Santet», waits 15 seconds, and starts its own disk: one extra
+restart, no erase.
 
-A (recommended) — every box carries the full-screen browser (Chromium under `cage`, no desktop) and
-  shows it whenever a screen is plugged in: the setup wizard first, then question 3's screen. Cost:
-  about a gigabyte of the box's memory while it runs (reasoning, not measured), and Chromium updates
-  from Debian every few weeks.
-B — a server-only box. The box's screen shows a text line with its address; tills are always
-  separate machines or tablets. Smaller and simpler; the deli needs a second machine for its
-  counter (the hardware notes price one at €300–450).
-Stop here — I'll write.
+The calls you might want to overturn (all mine, all in the design):
+  - a stick in a Waitron box STARTS the box after 15 seconds rather than stopping (your guard 3,
+    "refuse to do anything", without leaving the venue dark until someone finds the stick);
+  - 60 seconds' wait before erasing another system, which a key can stop;
+  - the installer's hotspot is open (no password), and passes nothing on; and once a box holds a
+    venue it opens NO hotspot — a passer-by could otherwise move it onto their own Wi-Fi and cut the
+    tills off; a set-up box changes Wi-Fi from Settings, or with a cable;
+  - a disk the installer cannot recognise (a damaged Waitron disk, someone else's encrypted disk)
+    is never erased without a keyboard;
+  - the installer refuses a box with Secure Boot or the security chip switched off, before erasing;
+  - NO hand-set clock: your answer listed "the clock" as a setting, but A798 (approved) says "No set
+    the clock action anywhere in Waitron". Every install now sets the clock from the internet, so I
+    kept A798. Say if you want it reopened;
+  - «Panel» in the till's menu signs the till's person out first, and «Volver a la caja» signs the
+    dashboard out, so a manager never comes back to the till as the waiter;
+  - maintenance access for admins only, shown once, used only at the box's own screen (no SSH);
+  - the setup code is made by the installer and written onto the stick before it says the stick can
+    come out (and already filled in on the box's own screen); every setup request needs it, the
+    box's naming page included.
+Found on the way: Debian 13 cannot unlock its main disk from the chip out of the box (an open
+Debian bug), so the box uses a different startup tool (dracut). The obvious chip setting would let
+any Debian stick unlock the disk, and systemd's own protections need a kind of signed kernel this box
+cannot use, so Waitron adds a small step of its own, and the first build must prove the result with
+eight experiments, each with a control. One case stays open: the day Debian moves to Microsoft's
+newer certificate, that update waits for a person with the recovery key until the first build
+settles how to take it unattended.
+
+  A (recommended) — approve as written. Plan slices 1, 2, 3, 5, 6 and 8 (the go-live minimum) next.
+  B — approve with changes (say which).
+  Stop here — I'll write.
 
 ------------------------------------------------------------------------------------------------
-QUESTION 3 of 5 — is the box's own screen a till? (your lean of 2026-09-29)
-Pictures: 5-box-screen.png
+QUESTION 2 of 2 — practising on a box installed from the stick
+Picture: 11-q2-practise.png (and 10-setup-code.png, lower half)
 
-Example: the deli has one counter. Its box drives the counter screen. Later it adds a spare box (A947)
-in the back room, with an old monitor on it.
+Example: the deli gets its box on Monday and wants to practise with its real menu before it starts
+filing with AEAT on the 1st.
 
-A (recommended) — the box's screen joins like any other till: a manager accepts it once, and staff
-  sign in with their PIN (no Linux login; the PIN is the lock). On the spare box, the same screen is
-  a till of the main box, so if the main box dies, the back-room screen keeps working once the spare
-  takes over. If the main box dies, the counter screen it drives dies with it (A947 §9 says so).
-B — the box's screen never sells. It shows the box's state: restaurant, selling or waiting, address,
-  spare up to date, last copy. The counter needs its own till machine.
-Stop here — I'll write.
-
-------------------------------------------------------------------------------------------------
-QUESTION 4 of 5 — a maintenance login on the box (the 2026-09-11 discussion record)
-Pictures: 8-q4-maintenance.png
-
-Example: a Friday night, the box will not start Waitron; Waitron's support person is at the venue
-with a keyboard and wants to look at the box before wiping it.
-
-A (recommended) — a `maintenance` account with no standing password. Booting the stick and choosing
-  «Abrir acceso de mantenimiento» shows a fresh six-word password valid until the box next restarts;
-  the person removes the stick, restarts, and signs in at the box's screen. No SSH. Anyone who has
-  the box and a stick can do this — but anyone with the box can already read its disk today.
-B — a password per box, set when it is installed and printed on a sealed card kept with the box.
-  Works without the stick; a lost card means a reinstall, or a procedure not yet designed.
-C — no login at all: every repair is a reinstall from the stick, then a restore from backup.
-Stop here — I'll write.
-
-------------------------------------------------------------------------------------------------
-QUESTION 5 of 5 — Wi-Fi for the box ("AP-mode WiFi onboarding" in the backlog)
-Pictures: 9-q5-wifi.png (also 3-network-clock.png)
-
-Example: a market stall with no cable to its router.
-
-A (recommended) — the box is wired whenever possible (A947 puts both boxes on one switch). With no
-  cable, the installer's own screen lists the Wi-Fi networks and asks for the password. Changing the
-  Wi-Fi later (a new router) needs a reinstall until a later item adds a way.
-B — the box also opens its own Wi-Fi hotspot «Waitron-4F2A», with a password unique to that box,
-  whenever it has no cable and no known network; a phone joins it, a page asks for the venue's
-  Wi-Fi, and the hotspot closes. Useful only for a box with neither screen nor cable. Intel Wi-Fi
-  cards, common in mini PCs, run a hotspot on 2.4 GHz only.
-Stop here — I'll write.
+  A (recommended) — a stick box offers only Live, restore or spare (like a production box). The deli
+    practises with Prepare on another computer (installed by hand with waitron.sh), then brings its
+    menus and layouts across at Live setup with the existing configuration copy. The box never holds
+    a practice database. This also fixes W60's "production box offers Demo and Prepare, then fails".
+  B — the stick box offers Prepare too, switching itself to pre-production. When the deli is ready it
+    exports its configuration, reinstalls the box from the stick, and brings the menus across at Live
+    setup. Practice happens on the real box and screen, at the cost of one reinstall before going live.
+  Stop here — I'll write.

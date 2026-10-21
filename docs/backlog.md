@@ -5419,21 +5419,27 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
   files; reconsider using a standard encryption and archive format.
 
-- **B3. The bootable USB installer** — DESIGNED 2026-10-21, waiting for the owner's answers to five
-  questions: [design](superpowers/specs/2026-10-21-b3-usb-installer-design.md) §13,
-  [pictures](backlog/mockups/b3-usb-installer/). The stick boots a small installer that writes a
-  ready-made Waitron disk (Debian 13, Docker, the release's images; btrfs subvolumes for A950) and
-  needs no internet; it erases nothing without a press on the box's screen, and a venue's name typed
-  if the disk holds one. Built and booted in CI for every release. Not built. Box image constraints
-  under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). The design's §12
-  lists what it leaves open, each to become its own entry once the design is approved (among them
-  moving a box from Debian 13 to 14 before Chromium's fixes stop, disk encryption, and setting the
-  clock by hand without a terminal, handed to A798).
+- **B3. The bootable USB installer** — DESIGNED 2026-10-21 and REVISED the same day for the
+  owner's five answers and W60; waiting for the owner to approve the revision and answer one new
+  question: [design](superpowers/specs/2026-10-21-b3-usb-installer-design.md) §18,
+  [pictures](backlog/mockups/b3-usb-installer/). A small stick boots an installer that, with nobody
+  at the box, fetches the newest release, checks its signature, and writes a ready-made Waitron disk
+  (Debian 13, Docker, the release's images; btrfs subvolumes for A950) inside an encrypted container
+  whose key the box's security chip holds, with a printed recovery key. The owner's three guards: the
+  box's own disk first in the boot order, no restart until the stick is out, and a stick that finds
+  Waitron starts the box unless a key is pressed. The box's screen runs Chromium with no desktop:
+  the setup wizard, then the dashboard, which can make the screen a till; its settings are a Waitron
+  page; a one-time maintenance login comes from the dashboard. A setup code stops a stranger setting
+  up a new box first (W60). Built and booted in CI for every release. Not built. Box image
+  constraints under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). The
+  design's §17 lists what it leaves open, each to become its own entry once the revision is approved
+  (among them moving a box from Debian 13 to 14 before Chromium's fixes stop, and notes for A940,
+  A947 and A798).
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 
-- **Kiosk options, none built:** Chromium in the box image, now the owner's lean for every box (B3,
-  2026-09-29), and, later, Fully Kiosk resale for dedicated tablets.
+- **Kiosk options, none built:** Chromium in the box image, every box (the owner's decision in B3's
+  answers, 2026-10-21), and, later, Fully Kiosk resale for dedicated tablets.
   [Detail](backlog/box.md#box-image-constraints-b3)
 
 - **The box the customer buys probably doubles as a till, so the image ships a screen and a browser** — owner, 2026-09-29. A lean, not yet a decision. **Open:** whether the box's own screen enrols as a till like any other device or is treated differently because it is local, and what address it opens the till at. [Detail](backlog/box.md#the-box-the-customer-buys-probably-doubles-as-a-till-so-the-image-ships-a-screen-and-a-browser)

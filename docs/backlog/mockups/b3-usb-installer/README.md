@@ -1,15 +1,18 @@
 # B3 — the bootable USB installer: pictures
 
 Design: [`docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md`](../../../superpowers/specs/2026-10-21-b3-usb-installer-design.md).
-Drawn 2026-10-21 from HTML using the real `--wt-*` tokens. Screens in Spanish as the venue sees
-them; captions in English. Owner questions: [`question.txt`](question.txt).
+Redrawn 2026-10-21 for the revision (the owner's five answers and W60), from HTML using the real
+`--wt-*` tokens. Screens in Spanish as the venue sees them; captions in English. Owner questions:
+[`question.txt`](question.txt).
 
-1. `1-this-box.png` — the installer's first screen: the disk, what it holds, one press.
-2. `2-venue-found.png` — reinstalling a box that holds a restaurant: type its name to erase.
-3. `3-network-clock.png` — choosing Wi-Fi when there is no cable; confirming the clock when offline.
-4. `4-installing-done.png` — progress, then "remove the stick".
-5. `5-box-screen.png` — the box's own screen with the full-screen browser (Q2 A): the setup wizard, then a till (Q3 A) or a status page (Q3 B).
-6. `6-stick-and-disk.png` — the stick's WAITRON folder on any computer; the disk layout.
-7. `7-q1-what-the-stick-does.png` — question 1's three options.
-8. `8-q4-maintenance.png` — question 4's three options.
-9. `9-q5-wifi.png` — question 5's two options.
+1. `1-unattended-install.png` — nobody at the box: the release fetched and checked, then 60 seconds before erasing another system; the status page.
+2. `2-existing-box.png` — a stick in a box that holds Waitron starts the box after 15 seconds; a key opens the reinstall screen.
+3. `3-no-network.png` — no cable: the installer's open Wi-Fi network and the page a phone sees.
+4. `4-installing-done.png` — installing, then waiting for the stick to come out.
+5. `5-box-screen.png` — the box's own screen: the setup wizard, then the dashboard offering «Usar esta pantalla como caja».
+6. `6-stick-and-disk.png` — the stick's WAITRON folder, and the encrypted disk.
+7. `7-till-and-dashboard.png` — «Panel» in the till's menu, «Volver a la caja» in the dashboard.
+8. `8-box-settings.png` — Settings → Este equipo, and maintenance access.
+9. `9-recovery-key.png` — the disk's printed recovery key, and the prompt that asks for it.
+10. `10-setup-code.png` — the setup code: from a phone, on the stick, and a production box's mode screen.
+11. `11-q2-practise.png` — question 2's two options.
