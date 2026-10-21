@@ -503,7 +503,6 @@ describe("till-app session activity", () => {
           courseName: "Starter",
           displayOrder: null,
           fired: true,
-          away: false,
           allReady: false,
           items: [
             {
@@ -514,7 +513,6 @@ describe("till-app session activity", () => {
               stationName: "Barra",
               state: "preparing",
               firedAt: "2026-08-17T10:00:00.000Z",
-              awayAt: null,
               queuedAt: "2026-08-17T10:00:00.000Z",
               thresholds: {
                 warmAfterMinutes: 5,

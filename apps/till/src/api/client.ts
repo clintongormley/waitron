@@ -583,8 +583,6 @@ export interface OrderGroup {
   remindAt: string | null;
   /** Present only when a person recorded every fired kitchen item of the group ready. */
   ready?: true;
-  /** Present only when every fired kitchen item of the group has left the pass. */
-  away?: true;
   lineIds: string[];
   courseIds: string[];
   summary: string;
@@ -1849,8 +1847,6 @@ export interface ExpoItem {
   state: TicketState;
   /** `null` while the item's course is HELD; a timestamp once fired. */
   firedAt: string | null;
-  /** `null` until the expediter dispatches it; a timestamp once away to the floor. */
-  awayAt: string | null;
   /** Absent on a bill with no party, and on a line moved in from another bill. */
   group?: QueueGroup;
   /** The kitchen note as frozen at fire, as {@link StationQueueItem.note}. */
@@ -1876,21 +1872,19 @@ export interface ExpoItem {
 
 /**
  * One course section of an expo order; a null course has `courseId`/`courseName`/`displayOrder` null
- * and sorts EARLIEST. `fired` is true once EVERY item carries `firedAt`; `away` once every item carries
- * `awayAt`.
+ * and sorts EARLIEST. `fired` is true once EVERY item carries `firedAt`.
  */
 export interface ExpoCourse {
   courseId: string | null;
   courseName: string | null;
   displayOrder: number | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
 /**
  * One group section of a seated party's bill on the expo board. The section of lines with no group
- * has every group field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s.
+ * has every group field `null` and sorts first.
  */
 export interface ExpoGroup {
   groupId: string | null;
@@ -1900,16 +1894,12 @@ export interface ExpoGroup {
   numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
 /**
  * One order on the cross-station expo/pass board, its items grouped BY COURSE, or by group for a
- * seated party's bill. `tableLabel` is omitted
- * when the order maps to no table. The server excludes abandoned, collected and FULLY-away orders; a
- * surviving order still carries its away items, so the SCREEN hides fully-away courses and groups
- * (via {@link ExpoCourse.away} and {@link ExpoGroup.away}).
+ * seated party's bill. `tableLabel` is omitted when the order maps to no table.
  */
 export interface ExpoOrder {
   kitchenNote: string | null;
@@ -1942,15 +1932,12 @@ export interface WatcherOrder extends Omit<ExpoOrder, "courses" | "groups"> {
   courses: WatcherCourse[];
   groups: WatcherGroup[];
 }
-/** `GET /api/device/pass-screen`: dishes stay until this device marks them Done. */
 export interface DevicePassScreen {
   orders: WatcherOrder[];
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
 }
-/** `GET /api/device/pass-monitor`: what All stations shows, narrowed to the monitor's stations and
- *  zones; no Done marks. */
 export interface DevicePassMonitor {
   orders: ExpoOrder[];
   stations: ScreenSlot[];

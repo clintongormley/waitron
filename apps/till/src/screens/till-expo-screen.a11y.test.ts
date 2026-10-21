@@ -16,7 +16,6 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 };
 
 // A single mount that exercises every visual branch axe should sweep, including — under
-// `fire_control = 'expo'` — each of the three per-course levers.
 const queue: ExpoOrder[] = [
   {
     kitchenNote: null,
@@ -31,7 +30,6 @@ const queue: ExpoOrder[] = [
         courseName: null,
         displayOrder: null,
         fired: true,
-        away: false,
         items: [
           {
             allergy: null,
@@ -50,7 +48,6 @@ const queue: ExpoOrder[] = [
             stationName: "Barra",
             state: "ready",
             firedAt: FIRED,
-            awayAt: null,
             modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
             asServed: { allergens: { milk: {} }, pending: false },
             asServedDiet: { vegan: "no", vegetarian: "yes", contains: [], halal: "yes" },
@@ -65,7 +62,6 @@ const queue: ExpoOrder[] = [
         courseName: "Entrantes",
         displayOrder: 0,
         fired: true,
-        away: false,
         items: [
           {
             allergy: null,
@@ -76,7 +72,6 @@ const queue: ExpoOrder[] = [
             stationName: "Cocina",
             state: "ready", // all-ready → the En camino (away) lever
             firedAt: FIRED,
-            awayAt: null,
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",
@@ -88,7 +83,6 @@ const queue: ExpoOrder[] = [
         courseName: "Principales",
         displayOrder: 1,
         fired: false, // held → the Fire lever + a greyed item
-        away: false,
         items: [
           {
             allergy: null,
@@ -99,7 +93,6 @@ const queue: ExpoOrder[] = [
             stationName: "Parrilla",
             state: "queued",
             firedAt: null,
-            awayAt: null,
             // A contains-meat chip + the NEUTRAL "not reviewed" diet note, swept here (a held/greyed item).
             asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: ["meat"] },
             note: "poco hecho por dentro",
@@ -123,7 +116,6 @@ const queue: ExpoOrder[] = [
         courseName: "Postres",
         displayOrder: 2,
         fired: true,
-        away: false,
         items: [
           {
             allergy: null,
@@ -133,7 +125,6 @@ const queue: ExpoOrder[] = [
             stationName: "Cocina",
             state: "preparing", // fired, not-all-ready → the Curso listo lever
             firedAt: FIRED,
-            awayAt: null,
             // Own allergens unreviewed (null base) ⇒ pending — the "not reviewed" warning, swept here.
             asServed: { allergens: {}, pending: true },
             queuedAt: FIRED,
@@ -155,7 +146,6 @@ function passItem(id: string, name: string, over: Partial<ExpoItem> = {}): ExpoI
     stationName: "Cocina",
     state: "queued",
     firedAt: FIRED,
-    awayAt: null,
     queuedAt: FIRED,
     thresholds: DEFAULT_THRESHOLDS,
     band: "fresh",
@@ -176,7 +166,6 @@ function section(
     numberPartyId: groupId === null ? null : "v-4",
     state,
     fired: state !== "held",
-    away: false,
     items,
   };
 }

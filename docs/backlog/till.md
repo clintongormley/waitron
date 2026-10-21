@@ -2463,65 +2463,20 @@ check. No legacy move assertion was changed to hide this result.
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md).
-The station queue no longer offers course/group Fire buttons; held work stays non-advanceable.
-The station screen and widget no longer expose Fire control, and their app bindings omit it.
-Boot and setup refresh still apply preparation mode. Legacy-mode regression inputs remain
-test-only. The table screen also omits Fire control and both app bindings; its waiter Fire
-actions remain independent of that retired setting. The newly landed floor map counts ready
-food without a legacy dispatch fallback.
-The pass no longer offers Done, All done or their Undo, including automatic Done after legacy Away.
-Ready still drives device-refusal screen switching; table serving retains its own Undo.
-The pass also omits Away actions and ignores legacy dispatch stamps when showing dishes, allergy markers and late flags.
-The pass no longer initiates held work, and its kitchen allergy controller is removed.
-The app no longer reads or forwards Fire control. The till client omits the retired course/device
-Fire, Away and Done methods; its dispatch fields and unused catalogue labels still need retirement
-before PR A publication.
-Lane G's first build branch has service lifetime, backend retirement of the old kitchen Fire,
-Away and Done routes, and counter release of every course on Send or payment. Existing table
-holding checks use seated parties; counter retries retain their existing sale and print counts.
-The Done helper and split-copy operation are removed; dark-pass alerts use remaining service
-quantity and ignore legacy Done/Away stamps. Historical mark rows remain until schema retirement.
-The server's movement predicate ignores Away; queued/unserved and made-here restrictions remain.
-Closing/deletion checks include work only while its kitchen quantity exceeds what was served;
-the existing allowance for fired ready history on station deletion remains. Rest-of-order reads show only the remaining
-quantity, and kitchen-note corrections still reach unserved food carrying an old Away stamp.
-The department-transfer preview includes remaining held/ready work regardless of old Away stamps,
-excludes fully served/cancelled quantities and omits its unused Away wire field.
-Group readiness uses the remaining kitchen quantity: fully served/cancelled and made-here
-components no longer hold up ready food, and a group with no remaining kitchen work is not ready.
-Floor and counter ready/waiting signals use remaining kitchen quantities; fully served or cancelled
-work contributes neither signal, and separately routed extras count remaining parent dishes.
-Expo server items and course/group sections no longer expose Away. Real table and counter reads
-retain their ready work with identical projections after legacy Away/Done stamps. The floor
-server projection omits en-route; Serve and Undo still update ready/pending line counts, and old
-Away stamps leave those counts unchanged. The dashboard Kitchen tab retains preparation mode
-and timing defaults and omits the retired firing-mode choice and its API/query contracts.
-Floor details count every ready dish without subtracting or separately showing legacy dispatch;
-table-state precedence ignores dispatch too. Floor list cards keep the complete ready count and
-omit the en-route badge, retaining station-ready chip de-duplication. The floor client contract and
-default fixtures omit dispatch; regression fixtures still supply old counts to check that they
-have no effect. Kitchen clients still require coordinated retirement before PR A publication.
-Client/internal-helper retirement, Requested and scoped pass release, station configuration,
-ticket presentation and schema retirement remain. Recheck A756's
-settings and current lane reservations before each working slice. A803's station/pass additions follow it. The plan
-records A797's completed Q42 amendments; its revised design, pictures and FYI landed on 2026-10-21.
-This plan adds no runtime behavior. The table panel and per-bill editing contracts belong to
-[A773-1's plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and the
-[ownership amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
+with PRs B–D remaining. Old nonempty stamps remain in regression fixtures, outside the till's
+public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
-Two physical-till trials remain separate from browser and API checks:
+PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
+expose station settings and coverage warnings, finish tickets, then remove the retired schema and
+configuration fields. Preserve separately routed extras and the allergy snapshot child when
+rebuilding ticket items. Recheck current main, A756 and other lanes' actual reservations before
+each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
+Q42 answer is required. New copy still follows the plan's wording-review gate.
 
-- Try long-press dragging of New order lines and held headings. If it does not work reliably,
-  keep Move to… and the heading's Move earlier/later actions.
-- Try serving part of a line through the dish window during service before deciding whether
-  the interaction needs to change.
-
-[Course mockups](mockups/a773-courses-and-groups/),
-[panel mockups](mockups/a773-order-panel/), [ownership pictures](mockups/a773-one-editor/).
-A758 owns its later reason rules, starter list, reports, filled refund form, refund links and
-counter-collection path. Its [section 10](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#10-for-other-lanes)
-defines the cancellation and Finish-table handoff built by A773-1.
+The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
+[ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
+Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
+separate backlog entries. A803 owns its bill naming and pass/station presentation tail.
 
 ## A678. Two readers answer "where is this order"
 

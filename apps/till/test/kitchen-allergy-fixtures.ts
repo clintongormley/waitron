@@ -82,7 +82,6 @@ export function allergyOrder(): ExpoOrder {
         courseName: null,
         displayOrder: null,
         fired: true,
-        away: false,
         items: group.items.map((item) => ({
           id: item.id,
           allergy: item.allergy,
@@ -91,7 +90,6 @@ export function allergyOrder(): ExpoOrder {
           stationName: "Grill",
           state: item.state,
           firedAt: item.firedAt,
-          awayAt: null,
           note: item.note,
           queuedAt: allergyTime,
           thresholds: allergyThresholds,

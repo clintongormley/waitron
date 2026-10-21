@@ -1889,14 +1889,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - KDS-4 follow-up: device-mode reprint behind `requireDevice`.
 
-- **A908. Dishes left on the pass after Record unpaid departure (left open by A758's Q43 revision,
-  2026-10-19).** Record unpaid departure closes the party without asking about dishes not served
-  (`closeParty`, `apps/server/src/unpaid-departure.ts`); it refuses only dishes not fired, so fired
-  dishes not yet served stay on every pass screen until each screen marks them Done (the mark is per
-  device, `apps/server/src/pass-board.ts`). Finish table no longer leaves any (A758 §3.8), and the
-  paid receipt's "Cancel items…" that used to be the way back was dropped. Decide how the departure
-  clears them — most likely the same per-dish question as Finish table, with nothing to refund —
-  and bring it to the owner with a worked example.
+- **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision,
+  2026-10-19).** Decide whether departure should ask about each unserved dish and send kitchen
+  cancellation slips before closing the party, using Finish table's choices without a refund.
+  A773-2 retires the pass's per-device Done action; assess this decision against its service
+  lifetime rather than adding another manual clearing action. Bring the owner a worked example.
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
@@ -1940,12 +1937,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
     line, because nothing records a unit's kind (a unit field would need a migration).
   - The kitchen-ticket grouping setting sits on Venue settings' **Kitchen** tab, and so does "Print
     held groups in advance", which is not about sent work at all.
-  - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire still
-    fires a party's held groups, is to be removed in a follow-up.
   - Setting up a venue from an imported configuration deletes every kitchen station, and the
     `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold link
     rows at that point was not tested (read, not run).
-  - The pass's Ready and Away record no `order_group_events` row, so who pressed them is recorded
+  - The pass's Ready records no `order_group_events` row, so who pressed them is recorded
     nowhere readable; a new kind changes that append-only table's check, which is a core migration.
 
 - **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
@@ -2355,7 +2350,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
 
 - **A785. A kitchen screen in device mode keeps its start-up settings until reload (left open by
-  A768, 2026-10-17).** Its bump mode and fire control never refresh: the menu-state poll that
+  A768, 2026-10-17).** Its bump mode never refreshes: the menu-state poll that
   carries the setup revision starts only when someone signs in, and a kitchen screen in device mode
   has nobody signed in. Its station queue read could name the revision, as `/api/menu-state` does.
 
@@ -2415,56 +2410,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-  is being built in Lane G (PR A): service lifetime and backend retirement of course Fire, device
-  Fire, Away, Done/Undo and Fire-control management/setup are implemented. Counter Send and
-  payment now release every recorded course; table holding remains separate. Client and helper
-  retirement remains, apart from the removed Done helper and split-copy operation. Dark-pass alerts
-  now follow remaining service quantity, ignoring legacy Done/Away stamps. Server movement, closing/deletion checks,
-  rest-of-order reads and note corrections now ignore Away too. Rest-of-order quantities exclude
-  served food. The transfer preview uses remaining kitchen quantity too, retains old-Away work
-  and drops its unused Away field. Group readiness counts only remaining kitchen work, excluding
-  fully served/cancelled and made-here components. Floor and counter attention signals use remaining
-  kitchen quantities, counting separately routed extras by their remaining parent dishes.
-  The group and course Away writers and group dispatch flag are retired; legacy stamps do not
-  replace group readiness. Current-order kitchen rows omit Away, and the table dish window keeps
-  ready food Ready with its recorded age in Sent. Deletion history, station rerouting, moved
-  dishes, made-here and multi-round printing tests use group or line release rather than course
-  Fire. Split-extra release and allergy snapshot fixtures also use waiter group/line sends;
-  the mixed-routing group check keeps a second group of the same course held. The reprint
-  fixture checks that its later dish is held before release. Tab stamp, revision and payment-lock
-  fixtures use selected line release; course-edit and recall races use line Send in both queue
-  orders. The remaining database fixtures use named group/line commands, retain the unknown-course
-  refusal on course editing, and check that unselected same-course work stays held. Allergy release
-  preserves cross-bill groups while refusing ticks from another group. The obsolete server course
-  Fire helpers are removed. Expo server items and course/group sections omit the retired Away
-  fields; legacy stamps leave their remaining ready work unchanged. The floor server projection
-  omits en-route; ready/pending line counts still follow Serve and Undo, regardless of old Away
-  stamps. The dashboard Kitchen tab omits the retired firing-mode choice and its API/query
-  contracts, retaining preparation mode and late timing defaults. Floor details count every ready
-  dish without an en-route subtraction or separate count, and table-state precedence ignores legacy
-  dispatch. Floor list cards keep the complete ready count and omit the en-route badge, retaining
-  station-ready chip de-duplication. The floor client contract and default fixtures omit dispatch;
-  regression fixtures still supply old counts to check that they have no effect. The app omits Fire-control
-  state and bindings, and the till client omits retired course/device Fire, Away and Done methods.
-  Client dispatch fields, unused labels and the complete consumer audit remain before PR A publication.
-  Add Requested and pass release,
-  remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
-  each slice. The plan carries A797's completed Q42 amendments; its revised design, pictures and FYI landed on 2026-10-21. A803's pass/station tail follows this build.
-  The station queue no longer offers course/group Fire buttons; held work stays non-advanceable.
-  The station screen ignores the retired Fire events without opening an allergy window or making
-  cooking requests. Its public Fire-control property and the station widget property are retired;
-  boot and setup refresh retain preparation mode without passing that control. Legacy-mode
-  regression inputs remain test-only. The table screen also omits Fire control and both app
-  bindings; its waiter Fire actions remain independent of that retired setting. The pass no longer
-  offers held-course/group Fire or owns an allergy editor. The shared kitchen allergy controller,
-  pass Fire-control property and unused action label are retired. Legacy application setup
-  state/type, its pass bindings and client contracts still need cleanup, preserving A841's
-  setup-refresh integration. Retained Ready operations still handle device refusals and table revisions.
-  The newly landed floor map counts ready food without a legacy dispatch fallback.
-  The pass no longer offers Done, All done or their Undo, including automatic Done after legacy Away.
-  Ready still drives device-refusal screen switching; table serving retains its own Undo.
-  The pass also omits Away actions and ignores legacy dispatch stamps when showing dishes, allergy markers and late flags.
-  Expo Fire and shared kitchen client/controller retirement remain before PR A publication.
+  leaves PRs B–D: Requested, scoped pass release, station
+  settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
+  Recheck A756 and other lanes' reservations before each slice. A797's revised design, pictures
+  and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

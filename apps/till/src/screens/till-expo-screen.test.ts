@@ -30,8 +30,6 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
   forgottenAfterMinutes: 15,
 };
 
-/** The null (auto-fired) course, a FIRED all-ready course (the away lever) and a HELD later course (the
- *  fire lever). Each item carries a distinct station so the cross-station labelling is visible. */
 const threeCourseOrder: ExpoOrder = {
   kitchenNote: null,
   orderId: "wo-1",
@@ -45,7 +43,6 @@ const threeCourseOrder: ExpoOrder = {
       courseName: null,
       displayOrder: null,
       fired: true,
-      away: false,
       items: [
         {
           allergy: null,
@@ -55,7 +52,6 @@ const threeCourseOrder: ExpoOrder = {
           stationName: "Barra",
           state: "ready",
           firedAt: FIRED,
-          awayAt: null,
           queuedAt: FIRED,
           thresholds: DEFAULT_THRESHOLDS,
           band: "fresh",
@@ -67,7 +63,6 @@ const threeCourseOrder: ExpoOrder = {
       courseName: "Entrantes",
       displayOrder: 0,
       fired: true,
-      away: false,
       items: [
         {
           allergy: null,
@@ -77,7 +72,6 @@ const threeCourseOrder: ExpoOrder = {
           stationName: "Cocina",
           state: "ready",
           firedAt: FIRED,
-          awayAt: null,
           queuedAt: FIRED,
           thresholds: DEFAULT_THRESHOLDS,
           band: "fresh",
@@ -89,7 +83,6 @@ const threeCourseOrder: ExpoOrder = {
       courseName: "Principales",
       displayOrder: 1,
       fired: false,
-      away: false,
       items: [
         {
           allergy: null,
@@ -99,7 +92,6 @@ const threeCourseOrder: ExpoOrder = {
           stationName: "Parrilla",
           state: "queued",
           firedAt: null,
-          awayAt: null,
           queuedAt: FIRED,
           thresholds: DEFAULT_THRESHOLDS,
           band: "fresh",
@@ -129,7 +121,6 @@ const firedNotReadyOrder: ExpoOrder = {
       courseName: "Postres",
       displayOrder: 2,
       fired: true,
-      away: false,
       items: [
         {
           allergy: null,
@@ -139,7 +130,6 @@ const firedNotReadyOrder: ExpoOrder = {
           stationName: "Cocina",
           state: "preparing",
           firedAt: FIRED,
-          awayAt: null,
           queuedAt: FIRED,
           thresholds: DEFAULT_THRESHOLDS,
           band: "fresh",
@@ -161,7 +151,7 @@ const withAwayCourse: ExpoOrder = {
       courseName: "Entrantes",
       displayOrder: 0,
       fired: true,
-      away: true,
+      ...{ away: true },
       items: [
         {
           allergy: null,
@@ -171,7 +161,7 @@ const withAwayCourse: ExpoOrder = {
           stationName: "Cocina",
           state: "ready",
           firedAt: FIRED,
-          awayAt: FIRED,
+          ...{ awayAt: FIRED },
           queuedAt: FIRED,
           thresholds: DEFAULT_THRESHOLDS,
           band: "fresh",
@@ -183,7 +173,6 @@ const withAwayCourse: ExpoOrder = {
       courseName: "Principales",
       displayOrder: 1,
       fired: true,
-      away: false,
       items: [
         {
           allergy: null,
@@ -193,7 +182,6 @@ const withAwayCourse: ExpoOrder = {
           stationName: "Cocina",
           state: "ready",
           firedAt: FIRED,
-          awayAt: null,
           queuedAt: FIRED,
           thresholds: DEFAULT_THRESHOLDS,
           band: "fresh",
@@ -1202,6 +1190,7 @@ describe("till-expo-screen", () => {
   });
 
   it("keeps ready dishes and their lateness regardless of a legacy Away stamp", async () => {
+    setLocale("en");
     const old = { ...threeCourseOrder.courses[0]!.items[0]!, awayAt: FIRED, queuedAt: FIRED };
     const fresh = {
       ...threeCourseOrder.courses[1]!.items[0]!,
@@ -1213,7 +1202,7 @@ describe("till-expo-screen", () => {
     };
     const el = await mount({ api: passApi([order]), now: Date.parse("2026-08-17T11:01:00.000Z") });
     expect(el.shadowRoot!.querySelector('[data-item="ti-0"]')!.textContent).not.toContain(
-      t("expo.sent_out"),
+      "Sent out",
     );
     expect(el.shadowRoot!.querySelector('[data-item="ti-0"] [data-forgotten]')).not.toBeNull();
     expect(orderCard(el, 5)!.classList.contains("age-forgotten")).toBe(true);
@@ -1221,9 +1210,10 @@ describe("till-expo-screen", () => {
   });
 
   it("keeps a ready section on a pass choice without a sent-out label or lever", async () => {
+    setLocale("en");
     const el = await mount({ api: passApi([withAwayCourse]), fireControl: "expo" });
     expect(el.shadowRoot!.querySelector('[data-item="ti-4"]')!.textContent).not.toContain(
-      t("expo.sent_out"),
+      "Sent out",
     );
     expect(el.shadowRoot!.querySelector('[data-course="co-4"] .lever')).toBeNull();
   });
@@ -1292,7 +1282,6 @@ describe("till-expo-screen", () => {
           numberPartyId: "party-1",
           state: "fired" as const,
           fired: true,
-          away: false,
           allReady: true,
           items: [threeCourseOrder.courses[1]!.items[0]!],
         },
@@ -1488,7 +1477,6 @@ describe("till-expo-screen", () => {
           courseName: "Postres",
           displayOrder: 1,
           fired: false,
-          away: false,
           items: [item("ti-late")],
         },
         {
@@ -1496,7 +1484,6 @@ describe("till-expo-screen", () => {
           courseName: null,
           displayOrder: null,
           fired: false,
-          away: false,
           items: [item("ti-unordered")],
         },
         threeCourseOrder.courses[0]!,
@@ -1588,7 +1575,6 @@ describe("till-expo-screen", () => {
           courseName: null,
           displayOrder: null,
           fired: true,
-          away: false,
           items: [
             {
               allergy: null,
@@ -1598,7 +1584,6 @@ describe("till-expo-screen", () => {
               stationName: "Cocina",
               state: "queued",
               firedAt: FIRED,
-              awayAt: null,
               queuedAt: FIRED,
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
@@ -1642,7 +1627,6 @@ describe("till-expo-screen", () => {
           courseName: null,
           displayOrder: null,
           fired: true,
-          away: false,
           items: [
             {
               allergy: null,
@@ -1652,7 +1636,6 @@ describe("till-expo-screen", () => {
               stationName: "Cocina",
               state: "queued",
               firedAt: FIRED,
-              awayAt: null,
               queuedAt: FIRED,
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
@@ -1720,7 +1703,6 @@ describe("till-expo-screen", () => {
           courseName: null,
           displayOrder: null,
           fired: true,
-          away: false,
           items: [
             {
               allergy: null,
@@ -1730,7 +1712,6 @@ describe("till-expo-screen", () => {
               stationName: "Cocina",
               state: "queued",
               firedAt: FIRED,
-              awayAt: null,
               queuedAt: FIRED,
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
@@ -1744,7 +1725,6 @@ describe("till-expo-screen", () => {
               stationName: "Cocina",
               state: "queued",
               firedAt: FIRED,
-              awayAt: null,
               queuedAt: FIRED,
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
@@ -1784,7 +1764,6 @@ describe("till-expo-screen", () => {
       stationName: "Cocina",
       state: "queued",
       firedAt: FIRED,
-      awayAt: null,
       queuedAt: FIRED,
       thresholds: DEFAULT_THRESHOLDS,
       band: "fresh",
@@ -1802,7 +1781,6 @@ describe("till-expo-screen", () => {
           courseName: null,
           displayOrder: null,
           fired: true,
-          away: false,
           items: [item],
         },
       ],
@@ -1987,7 +1965,6 @@ describe("till-expo-screen", () => {
           courseName: "Postres",
           displayOrder: 0,
           fired: true,
-          away: false,
           items: [
             {
               allergy: null,
@@ -1997,7 +1974,6 @@ describe("till-expo-screen", () => {
               stationName: "Cocina",
               state: "preparing",
               firedAt: FIRED,
-              awayAt: null,
               queuedAt,
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh", // the server's fetch-time value — likewise re-derived, not read
@@ -2211,7 +2187,6 @@ describe("till-expo-screen — a seated party's groups", () => {
       stationName: "Cocina",
       state: "queued",
       firedAt: FIRED,
-      awayAt: null,
       queuedAt: FIRED,
       thresholds: DEFAULT_THRESHOLDS,
       band: "fresh",
@@ -2233,7 +2208,7 @@ describe("till-expo-screen — a seated party's groups", () => {
       numberPartyId: groupId === null ? null : "v-4",
       state,
       fired: state !== "held",
-      away,
+      ...{ away },
       items,
     };
   }
@@ -2255,7 +2230,7 @@ describe("till-expo-screen — a seated party's groups", () => {
         "g-1",
         1,
         "fired",
-        [passItem("it-beer", "Caña", { state: "ready", awayAt: FIRED })],
+        [passItem("it-beer", "Caña", { state: "ready", ...{ awayAt: FIRED } })],
         true,
       ),
       section(null, null, null, [passItem("it-moved", "Pan", { state: "ready" })]),
@@ -2751,7 +2726,6 @@ describe("till-expo-screen — a pass monitor", () => {
         numberPartyId: "v-4",
         state: "fired",
         fired: true,
-        away: false,
         items: [{ ...threeCourseOrder.courses[1]!.items[0]!, id: "it-croq" }],
       },
       {
@@ -2761,7 +2735,6 @@ describe("till-expo-screen — a pass monitor", () => {
         numberPartyId: "v-4",
         state: "held",
         fired: false,
-        away: false,
         items: [{ ...threeCourseOrder.courses[2]!.items[0]!, id: "it-steak" }],
       },
     ],

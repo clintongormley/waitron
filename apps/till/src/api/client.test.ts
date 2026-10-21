@@ -1764,7 +1764,6 @@ describe("TillApi", () => {
             courseName: "Entrantes",
             displayOrder: 0,
             fired: true,
-            away: false,
             items: [
               {
                 allergy: null,
@@ -1774,7 +1773,6 @@ describe("TillApi", () => {
                 stationName: "Cocina",
                 state: "ready",
                 firedAt: "2026-08-17T10:00:00.000Z",
-                awayAt: null,
               },
             ],
           },

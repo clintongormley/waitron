@@ -19,7 +19,7 @@ describe("A669 boards pass", () => {
         const [ticked, unticked] = order.courses[0]!.items;
         if (kind === "courses") {
           order.courses = [
-            { ...order.courses[0]!, away: true, items: [ticked!] },
+            { ...order.courses[0]!, ...{ away: true }, items: [ticked!] },
             { ...order.courses[0]!, courseId: "visible-course", away: false, items: [unticked!] },
           ];
         } else {
@@ -32,7 +32,7 @@ describe("A669 boards pass", () => {
             numberPartyId: "party-1",
             state: "fired",
             fired: true,
-            away,
+            ...{ away },
             items: [away ? ticked! : unticked!],
           }));
         }

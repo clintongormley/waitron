@@ -20,7 +20,7 @@ function item(id: string, state: ExpoItem["state"]): ExpoItem {
     stationName: "Kitchen",
     state,
     firedAt: queuedAt,
-    awayAt: queuedAt,
+    ...{ awayAt: queuedAt },
     queuedAt,
     thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
     band: "fresh",
@@ -112,7 +112,7 @@ describe("A773 no dispatch presentation", () => {
         const dish = root.querySelector('[data-item="ready-item"]');
         expect(dish).not.toBeNull();
         expect(dish!.textContent).toContain(t("station.state.ready"));
-        expect(dish!.textContent).not.toContain(t("expo.sent_out"));
+        expect(dish!.textContent).not.toContain("Sent out");
         expect(dish!.querySelector("[data-forgotten]")).not.toBeNull();
         expect(root.querySelector("[data-order]")!.classList.contains("age-forgotten")).toBe(true);
         expect(root.querySelector(".overdue-count")!.textContent).toContain("1");
