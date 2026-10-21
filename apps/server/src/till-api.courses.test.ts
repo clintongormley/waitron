@@ -626,19 +626,15 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
   });
 });
 
-// KDS-3 expo (pass) routes: the cross-station queue read + the whole-course `ready`/`away` verbs, over
-// the SAME seeded courses/products/station as the KDS-2 block above (shared `suite`/`app`/`cookie`).
 type ExpoItem = {
   name: string;
   stationName: string;
   state: string;
   firedAt: string | null;
-  awayAt: string | null;
 };
 type ExpoCourse = {
   courseId: string | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 };
 type ExpoOrder = {
@@ -646,8 +642,6 @@ type ExpoOrder = {
   courses: ExpoCourse[];
 };
 
-/** One order located by id in the expo queue read back through `GET /api/expo/queue`. The queue returns
- *  EVERY live order on the node, so tests find their own by id (the KDS-2 block leaves orders behind). */
 async function expoOrder(orderId: string): Promise<ExpoOrder> {
   const res = await app.request("/api/expo/queue", { headers: { cookie } });
   expect(res.status).toBe(200);
@@ -660,8 +654,8 @@ function itemsByName(order: ExpoOrder): Map<string, ExpoItem> {
   return new Map(order.courses.flatMap((c) => c.items).map((i) => [i.name, i]));
 }
 
-describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away", () => {
-  it("GET /api/expo/queue aggregates the node's order into courses; each item carries its station name + fired/away roll-ups", async () => {
+describe("KDS-3 expo routes: cross-station queue read + whole-course ready", () => {
+  it("GET /api/expo/queue aggregates the node's order into courses; each item carries its station name and course release", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
     const order = await expoOrder(orderId);
     const items = itemsByName(order);
@@ -678,9 +672,8 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(items.get(SOPA)!.firedAt).not.toBeNull();
     expect(items.get(FILETE)!.firedAt).not.toBeNull();
 
-    // Nothing dispatched yet → away:false everywhere, and the loose PAN line sits in the null course.
-    expect(ent.away).toBe(false);
-    expect(items.get(SOPA)!.awayAt).toBeNull();
+    expect(ent).not.toHaveProperty("away");
+    expect(items.get(SOPA)).not.toHaveProperty("awayAt");
     expect(order.courses.find((c) => c.courseId === null)!.items[0]!.name).toBe(PAN);
   });
 
@@ -702,7 +695,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     });
     expect(away.status).toBe(404);
     expect(await away.text()).toBe("404 Not Found");
-    expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.awayAt).toBeNull();
+    expect(itemsByName(await expoOrder(orderId)).get(SOPA)).not.toHaveProperty("awayAt");
     expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
   });
 

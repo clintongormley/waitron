@@ -2329,11 +2329,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 });
 
-// The cross-station expo/pass read. `listExpoQueue` gathers every order that is not abandoned
-// or collected and has an item not yet away (open, placed or settled) across ALL stations; unlike
-// the per-station `listStationQueue` it takes NO station arg, and it is not node-scoped either
-// (#259). `working-order.test.ts` covers the join/grouping/exclusions; this case takes
-// the SAME venue-wide shape the `listStationQueue` test above uses.
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");

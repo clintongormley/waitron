@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parties, passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -41,6 +41,77 @@ const EVERY: PassScope = { stationIds: null, zoneIds: null };
 const items = (orders: ExpoOrder[]) =>
   orders.flatMap((order) => [...order.courses, ...order.groups].flatMap((part) => part.items));
 const counts = (orders: ExpoOrder[]) => items(orders).map(({ id, qty }) => ({ id, qty }));
+
+describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", (service) => {
+  it.each(["expo", "pass", "monitor"] as const)(
+    "keeps the %s read identical after legacy Away and Done stamps",
+    async (reader) => {
+      const work =
+        service === "table"
+          ? await tableWork()
+          : await (async () => {
+              const v = await setupPartyVenue(suite.db);
+              const id = await counterOrder(v, "Burger");
+              await pay(v, id, "12.00");
+              const [item] = await inTx(v, (tx) =>
+                tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+              );
+              await inTx(v, async (tx) => {
+                await advanceTicketItem(tx, v.cfg, item!.id, "preparing");
+                await advanceTicketItem(tx, v.cfg, item!.id, "ready");
+              });
+              return { v, item: item! };
+            })();
+      const { v, item } = work;
+      const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+      try {
+        const read = () =>
+          inTx(v, async (tx) => {
+            if (reader === "expo") return listExpoQueue(tx, v.cfg);
+            if (reader === "pass") {
+              return (await listPassScreen(tx, v.cfg, v.cfg.origin.deviceId, EVERY)).orders;
+            }
+            return (await listPassMonitor(tx, v.cfg, EVERY)).orders;
+          });
+        const before = await read();
+        expect(counts(before)).toEqual([{ id: item.id, qty: "1.000" }]);
+        expect(items(before).map((dish) => dish.state)).toEqual(["ready"]);
+        for (const order of before) {
+          expect(order[service === "table" ? "groups" : "courses"]).toHaveLength(1);
+          for (const section of [...order.groups, ...order.courses]) {
+            expect(section).not.toHaveProperty("away");
+            for (const dish of section.items) expect(dish).not.toHaveProperty("awayAt");
+          }
+        }
+        await inTx(v, async (tx) => {
+          await tx
+            .update(ticketItems)
+            .set({ awayAt: "2026-10-20T12:00:00.000Z" })
+            .where(eq(ticketItems.id, item.id));
+          await tx.insert(passItemMarks).values({
+            deviceId: v.cfg.origin.deviceId,
+            ticketItemId: item.id,
+            doneAt: "2026-10-20T12:00:00.000Z",
+            doneByPersonId: OPERATOR,
+          });
+        });
+        const stored = await inTx(v, async (tx) => ({
+          ticket: await tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
+          marks: await tx.select().from(passItemMarks),
+        }));
+        expect(await read()).toEqual(before);
+        expect(
+          await inTx(v, async (tx) => ({
+            ticket: await tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
+            marks: await tx.select().from(passItemMarks),
+          })),
+        ).toEqual(stored);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+});
 
 async function boards(
   v: Pick<PartyVenue, "db" | "cfg">,

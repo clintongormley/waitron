@@ -7707,7 +7707,6 @@ export interface ExpoItem {
   stationName: string;
   state: TicketState;
   firedAt: string | null;
-  awayAt: string | null;
   note: string | null;
   modifiers: QueueModifier[];
   crossRefs?: QueueCrossRef[];
@@ -7721,19 +7720,16 @@ export interface ExpoItem {
   band: TimingBand;
 }
 
-/** One course of an expo order; the null course sorts earliest. `fired` and `away` are true only once
- *  EVERY item of the course carries that stamp. */
+/** One course of an expo order; the null course sorts earliest. */
 export interface ExpoCourse {
   courseId: string | null;
   courseName: string | null;
   displayOrder: number | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
-/** One group of a seated party's bill on the expo board; the section of lines with no group has
- *  every group field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
+/** One group of a seated party's bill on the expo board; ungrouped lines sort first. */
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;
@@ -7742,7 +7738,6 @@ export interface ExpoGroup {
   numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
-  away: boolean;
   items: ExpoItem[];
 }
 
@@ -7807,7 +7802,6 @@ export async function readPassBoard(
       lineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
-      awayAt: ticketItems.awayAt,
       note: ticketItems.note,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
@@ -7937,7 +7931,6 @@ export async function readPassBoard(
             : { numberPartyLabel: group.numberPartyLabel }),
           state: group?.state ?? null,
           fired: true,
-          away: true,
           items: [],
         };
         order.groups.push(expoGroup);
@@ -7948,7 +7941,6 @@ export async function readPassBoard(
           courseName: row.courseId === null ? null : row.courseName!,
           displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
           fired: true,
-          away: true,
           items: [],
         };
         order.courses.push(course);
@@ -7979,7 +7971,6 @@ export async function readPassBoard(
       stationName: row.stationName,
       state: row.state,
       firedAt: row.firedAt,
-      awayAt: row.awayAt,
       note: row.note,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
       ...optional("crossRefs", crossRefsByLine.get(row.lineId)),
@@ -7998,7 +7989,6 @@ export async function readPassBoard(
       band,
     });
     if (row.firedAt === null) section.fired = false;
-    if (row.awayAt === null) section.away = false;
     if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
   }
   for (const order of orders.values()) {

@@ -3951,7 +3951,7 @@ describe("the kitchen and the pass read a party's groups", () => {
       numberPartyId: s.partyId,
       state: "fired",
     });
-    expect(order.groups.every((group) => !group.away)).toBe(true);
+    expect(order.groups.every((group) => !("away" in group))).toBe(true);
   });
 
   // Fails if the pass orders groups by course (the rows' own order) rather than by position.
@@ -4014,11 +4014,13 @@ describe("the kitchen and the pass read a party's groups", () => {
     expect(tab.groups.find((group) => group.groupId === s.cold)).toMatchObject({
       position: 2,
       fired: true,
-      away: true,
     });
     expect(board.find((row) => row.orderId === s.checkId)!.groups).toMatchObject([
-      { groupId: s.cold, position: 2, fired: true, away: true },
+      { groupId: s.cold, position: 2, fired: true },
     ]);
+    for (const bill of [tab, board.find((row) => row.orderId === s.checkId)!]) {
+      expect(bill.groups.find((group) => group.groupId === s.cold)).not.toHaveProperty("away");
+    }
   });
 
   it("puts a fired line in no group in one section with no group, first", async () => {

@@ -5936,13 +5936,6 @@ describe("addTabRound hold-on-send (A3)", () => {
   });
 });
 
-// The cross-station expo/pass read. `listExpoQueue` aggregates every order that is not abandoned or
-// collected and has an item not yet away (open, placed or settled), gathers its ticket items ACROSS
-// stations, and groups them by course in display_order with per-course fired/away roll-ups. Unlike
-// `listStationQueue` (one station, no station name) it joins `kitchen_stations` to label each
-// item's station. These cases prove the join, the collected/abandoned/fully-away exclusions, the
-// course grouping and the roll-ups.
-// ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -5962,20 +5955,19 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(expo).toHaveLength(1);
       const order = expo[0]!;
       expect(order.orderId).toBe(orderId);
-      // A single earliest course, both items auto-fired, neither away.
       expect(order.courses).toHaveLength(1);
       const course = order.courses[0]!;
       expect(course.courseId).toBe(ent.id);
       expect(course.courseName).toBe("Entrantes");
       expect(course.displayOrder).toBe(0);
       expect(course.fired).toBe(true);
-      expect(course.away).toBe(false);
+      expect(course).not.toHaveProperty("away");
       // Both lines under the one course, each labelled with its OWN station — the join listStationQueue omits.
       expect(course.items).toHaveLength(2);
       expect(course.items.map((i) => i.stationName).sort()).toEqual(["Barra", "Cocina"]);
       expect(course.items.every((i) => i.state === "queued")).toBe(true);
       expect(course.items.every((i) => i.firedAt !== null)).toBe(true);
-      expect(course.items.every((i) => i.awayAt === null)).toBe(true);
+      expect(course.items.every((i) => !("awayAt" in i))).toBe(true);
       // The display snapshot rides through: `name` is the resolved kitchen label, `qty` the
       // quantity as a three-place decimal string.
       const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
@@ -6000,7 +5992,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
-  it("keeps counter course labels in display order, releases every course and rolls up legacy Away", async () => {
+  it("keeps counter course labels in display order and releases every course independently of legacy Away", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6017,7 +6009,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(order.courses.map((c) => c.courseName)).toEqual(["Entrantes", "Principales"]);
       const [c0, c1] = order.courses;
       expect(c0!.fired).toBe(true); // earliest course auto-fired
-      expect(c0!.away).toBe(false);
+      expect(c0).not.toHaveProperty("away");
       expect(c1!.fired).toBe(true); // Counter Send releases every course.
       expect(c1!.items.every((i) => i.firedAt !== null)).toBe(true);
 
@@ -6030,10 +6022,10 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(after).toHaveLength(1);
       const c0b = after[0]!.courses.find((c) => c.courseId === ent.id)!;
       const c1b = after[0]!.courses.find((c) => c.courseId === pri.id)!;
-      expect(c0b.away).toBe(true);
-      expect(c0b.items[0]!.awayAt).not.toBeNull();
+      expect(c0b).not.toHaveProperty("away");
+      expect(c0b.items[0]).not.toHaveProperty("awayAt");
       expect(c1b.fired).toBe(true); // released
-      expect(c1b.away).toBe(false);
+      expect(c1b).not.toHaveProperty("away");
     });
   });
 
