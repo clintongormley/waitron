@@ -383,6 +383,18 @@ the disk has under 256 MiB free** (design §4.7 item 1).
   `provisioning.database_unreachable` (errcode 14, F5) or `unknown` (errcode 4874 or `ENOSPC`,
   F5, F14), when under 16 MiB is free.
 - The full-disk page's action without the sentence slice 1 left out (build plan decision 12).
+- (Added 2026-10-21, after the pre-merge review.) A start sent to first-setup resolution never
+  touched the recovery count before; below 256 MiB free it now writes the count back first
+  (`countWritable`, `apps/server/src/node-entry.ts:353`, before the resolution branch at `:373`).
+  That write always writes (`updateRecoveryState`, `apps/server/src/recovery-state.ts:231`), and a
+  missing `recovery.json` reads as `FRESH` (`:87`), so it creates `recovery.json`, and the lock it
+  takes creates `recovery.lock` (`apps/server/src/recovery-lock.ts:26`). A failure of that write
+  that is not a full disk is rethrown (`node-entry.ts:410`), so the start fails where it used to
+  serve the resolution screen. Run in a scratch Vitest probe on a claimed folder with no first-setup
+  record and 10 bytes free (floor 1000): with the real reader and writer the start served
+  resolution and left `recovery.json` and `recovery.lock` in the state folder; with a writer
+  refusing `EACCES` it rejected with that error, served nothing, and left `recovery.lock`; with
+  room, it served resolution and the state folder stayed empty.
 
 `/usr/bin/grep -rnE "4874|errcode: 14|ENOSPC|serveRecovery\).not" apps/server/src --include='*.test.ts'`
 at `f17a43ad5` found no assertion that runs through `runEntry` with a full disk: its hits are
