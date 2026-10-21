@@ -101,6 +101,8 @@ import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import type { Logger } from "./logger.js";
+import { diskFullRefusal, type DiskFullState } from "./disk-full-state.js";
 
 export type BillPaymentDeps = TillSaleDeps & { attendance?: AttendanceRecorder };
 
@@ -1043,7 +1045,8 @@ async function beginBillPayment(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
   state: "received" | "pending",
-  now: Date,
+  reading: { instant: Date; offsetMinutes: number },
+  refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
   // Before the replay lookup: a retry the route would now refuse is refused too.
@@ -1076,6 +1079,8 @@ async function beginBillPayment(
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await storedOrderTotal(tx, workingOrderId);
+  backend.assertRecordableAt(reading);
+  if (state === "pending" && refusals.diskFull()) refuseForStop(workingOrderId, refusals.log);
   await selectOrderInvoice(tx, backend, cfg, workingOrderId, total);
   await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
   const allocation = confirmAllocation(
@@ -1101,7 +1106,7 @@ async function beginBillPayment(
       requestedBy: operator.personId,
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
-      receivedAt: state === "received" ? now.toISOString() : null,
+      receivedAt: state === "received" ? reading.instant.toISOString() : null,
     })
     .returning();
   if (items !== null) {
@@ -1116,7 +1121,7 @@ async function beginBillPayment(
     state === "received" ? "qualified" : "pending",
     {
       locationId: cfg.locationId,
-      at: now.toISOString(),
+      at: reading.instant.toISOString(),
     },
   );
   return { payment: payment!, total };
@@ -1161,7 +1166,8 @@ export async function takeBillPayment(
   operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
   return withTransaction(deps.db, async (tx) => {
-    const receivedAt = deps.clock.now().instant;
+    const reading = deps.clock.now();
+    const receivedAt = reading.instant;
     const begun = await beginBillPayment(
       tx,
       deps.backend,
@@ -1170,7 +1176,8 @@ export async function takeBillPayment(
       req,
       operator,
       "received",
-      receivedAt,
+      reading,
+      { diskFull: () => false },
       deps.attendance,
     );
     if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
@@ -1214,6 +1221,11 @@ export function billPaymentIsLive(db: Database, billPaymentId: string): boolean 
   return liveBillPaymentsOf(db).has(billPaymentId);
 }
 
+function refuseForStop(workingOrderId: string, log: Logger | undefined): never {
+  log?.("warn", "storage.disk_full_stop_refused", { workingOrderId });
+  throw diskFullRefusal();
+}
+
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
 export type ReaderBillPaymentDeps = BillPaymentDeps & {
   provider: PaymentProvider;
@@ -1223,6 +1235,7 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   deviceProfileId?: string;
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
+  disk?: DiskFullState;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -1339,6 +1352,8 @@ export async function takeReaderBillPayment(
 ): Promise<BillPaymentResult> {
   let release = (): void => {};
   try {
+    // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
+    const preRead = (await deps.disk?.full()) ?? false;
     const begun = await withTransaction(deps.db, async (tx) => {
       const started = await beginBillPayment(
         tx,
@@ -1348,7 +1363,8 @@ export async function takeReaderBillPayment(
         req,
         operator,
         "pending",
-        deps.clock.now().instant,
+        deps.clock.now(),
+        { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
       );
       if ("replay" in started) {
@@ -1363,6 +1379,12 @@ export async function takeReaderBillPayment(
     });
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
+    if (deps.disk?.noted() === true) {
+      await withTransaction(deps.db, (tx) =>
+        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
+      );
+      refuseForStop(workingOrderId, deps.log);
+    }
 
     let result: PaymentResult;
     try {

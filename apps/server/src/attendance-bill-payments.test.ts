@@ -18,6 +18,7 @@ import {
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { setupPartyVenue, seat, order, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 import { openTillSession } from "./testing/session-device.js";
+import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -266,5 +267,59 @@ describe("accepted bill payment attendance", () => {
       ),
     );
     expect(await operations()).toEqual([{ sequence: 1, ...evidence(pending!.id, "refused") }]);
+  });
+});
+
+describe("bill payments refused before the reader", () => {
+  it("keeps no attendance row when a reader payment is refused for a full disk", async () => {
+    at("2026-01-05T11:00:00.987Z");
+    const disk = createDiskFullState({
+      dir: "/unused",
+      now: () => new Date(),
+      log: () => {},
+      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
+    });
+    disk.noteRefused();
+    const p = provider();
+    const collect = vi.spyOn(p, "collect");
+    await expect(
+      takeReaderBillPayment({ ...deps(), provider: p, disk }, v.cfg, billId, ask(true), collector),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(collect).not.toHaveBeenCalled();
+    expect(await suite.db.select().from(billPayments)).toEqual([]);
+    expect(await operations()).toEqual([]);
+  });
+
+  it("finishes the attendance as refused when a full disk is noted just before the reader", async () => {
+    at("2026-01-05T11:00:00.987Z");
+    let calls = 0;
+    const disk: DiskFullState = {
+      noteRefused: () => {},
+      noted: () => ++calls >= 2,
+      since: () => null,
+      full: () => Promise.resolve(false),
+    };
+    const p = provider();
+    const collect = vi.spyOn(p, "collect");
+    await expect(
+      takeReaderBillPayment({ ...deps(), provider: p, disk }, v.cfg, billId, ask(true), collector),
+    ).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(collect).not.toHaveBeenCalled();
+    const [failed] = await suite.db.select().from(billPayments);
+    expect(failed!.state).toBe("failed");
+    expect(await operations()).toEqual([{ sequence: 1, ...evidence(failed!.id, "refused") }]);
+  });
+
+  it("keeps no attendance row when a reader or cash payment is refused under a clock in 2001", async () => {
+    at("2001-01-01T11:00:00.000Z");
+    const p = provider();
+    const collect = vi.spyOn(p, "collect");
+    await expect(reader(p)).rejects.toMatchObject({ code: "clock.unusable" });
+    await expect(takeBillPayment(deps(), v.cfg, billId, ask(), collector)).rejects.toMatchObject({
+      code: "clock.unusable",
+    });
+    expect(collect).not.toHaveBeenCalled();
+    expect(await suite.db.select().from(billPayments)).toEqual([]);
+    expect(await operations()).toEqual([]);
   });
 });
