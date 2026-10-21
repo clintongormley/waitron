@@ -36,6 +36,8 @@ async function torn() {
   return { root, stateDir, venueDir };
 }
 const stopped = () => Promise.resolve({ close: async () => {} });
+/** Keeps the start's free-space step out of cases that do not test it, whatever the temp folder holds. */
+const plentyOfSpace = async () => ({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 });
 
 async function replacement() {
   const f = await firstFiscalFixture();
@@ -138,6 +140,7 @@ it.each([FRESH, { ...FRESH, level: "recovery" as const, failures: 3 }])(
     await entry.runEntry({
       ...f,
       args: [],
+      statfs: plentyOfSpace,
       baseEnv: {},
       readRecoveryState: async () => recovery,
       writeRecoveryState: forbidden,
@@ -228,6 +231,7 @@ it("supervised entry stages and boots only the checked replacement", async () =>
     await entry.runEntry({
       ...f.anchor,
       args: [],
+      statfs: plentyOfSpace,
       baseEnv: {},
       readRecoveryState: async (path) => {
         effects.push(`recovery:${path}`);

@@ -281,7 +281,10 @@ describe("a start below the free-space floor", () => {
     const writeFailures = vi
       .mocked(failing.log)
       .mock.calls.filter(([, event]) => event === "recovery.state_write_failed");
-    expect(writeFailures).toHaveLength(2);
+    expect(writeFailures.map(([, , fields]) => fields)).toEqual([
+      { errorCode: "unknown", errno: null },
+      { errorCode: "unknown", errno: null },
+    ]);
     expect(failing.writeRecoveryState).not.toHaveBeenCalled();
   });
 

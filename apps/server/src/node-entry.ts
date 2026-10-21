@@ -147,9 +147,10 @@ function changeState(
 /**
  * Persist the escalation state, logging a write failure rather than letting it become the outcome:
  * on the failure path the boot's own error is what matters, and in the stayed-up callback a
- * floating rejection would kill a healthy server. The pre-boot counter is the one write not routed
- * through here, and is allowed to throw: a box whose count cannot be written can never escalate.
- * A full disk is the case `runEntry` checks first, serving the page instead (`countWritable`).
+ * floating rejection would kill a healthy server. The pre-boot counter, and the write-back before
+ * it, are the writes not routed through here, and are allowed to throw: a box whose count cannot be
+ * written can never escalate. A full disk found below the free-space floor serves the page instead
+ * (`countWritable`).
  */
 async function persistState(
   deps: EntryDeps,
@@ -158,7 +159,10 @@ async function persistState(
   try {
     await changeState(deps, change);
   } catch (error) {
-    deps.log("warn", "recovery.state_write_failed", { errorCode: codeOf(error) });
+    deps.log("warn", "recovery.state_write_failed", {
+      errorCode: codeOf(error),
+      errno: errnoOf(error) ?? null,
+    });
   }
 }
 
