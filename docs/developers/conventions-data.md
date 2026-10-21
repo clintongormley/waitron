@@ -2583,7 +2583,7 @@ heartbeat is written as a new file and a rename (`writeVenueHolder`,
 [slice 2 plan](../superpowers/plans/2026-10-21-a798-2-full-disk-at-start.md#measured-for-this-plan)),
 so about half a minute after the disk fills (30 s after its last heartbeat, which is rewritten
 every 5 s) a running server's holder reads stale, and a start beside it deletes
-its staging. Accepted (the plan's decision 5): that one backup run fails, and the database and every
+its staging. Accepted (the plan's decision 5): that one backup run may fail, and the database and every
 archive already at a destination are untouched. Between a full disk and 256 MiB free, where the
 heartbeat still writes, the guard holds. Read, not run: when `WAITRON_VENUE_DIR` puts the venue
 folder on another disk, a full venue disk with room on the state disk still makes the start delete

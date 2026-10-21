@@ -618,7 +618,8 @@ classified `storage.disk_full`, whatever the free space (`runAdmittedEntry`'s ca
 venue folder's holder file shows a fresh heartbeat. Outside those two cases they stay
 indefinitely: each backup run deletes only its own files (the dump is named from the run's own
 time, `dumpFileName`, and the encrypted copy goes in a fresh `mkdtemp` folder, both in
-`apps/server/src/backup-sweep.ts`), and nothing else deletes from `backup-staging`.
+`apps/server/src/backup-sweep.ts`), and nothing else in the server deletes from `backup-staging`;
+a box reset does (`wipe_box`, `deploy/waitron.sh`).
 The first case is run on a real disk by the leftovers case of
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
