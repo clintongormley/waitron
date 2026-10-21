@@ -3,12 +3,9 @@ import { priceBasket } from "@waitron/catalogue/src/pricing.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { WorkingOrderStore } from "./working-order.js";
 
-vi.mock("@waitron/catalogue/src/pricing.js", { spy: true });
-
 const original = currentContentLanguages();
 afterEach(() => {
   setContentLanguages(original);
-  vi.mocked(priceBasket).mockClear();
 });
 
 describe("till future customer preparation", () => {
@@ -36,11 +33,12 @@ describe("till future customer preparation", () => {
       },
     };
     const before = structuredClone(product);
-    const store = new WorkingOrderStore();
+    const price = vi.fn(priceBasket);
+    const store = new WorkingOrderStore(price);
     store.addProduct(product, "2");
     expect(store.vatBreakdown).toEqual([{ rate: "21.00", base: "20.00", tax: "4.20" }]);
     expect(store.total).toBe("24.20");
-    const [basket] = vi.mocked(priceBasket).mock.calls.at(-1)!;
+    const [basket] = price.mock.calls.at(-1)!;
     expect(basket[0]!.product.descriptions).toEqual({
       fr: "Other dish",
       en: "Staff dish",
