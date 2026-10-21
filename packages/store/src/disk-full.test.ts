@@ -26,7 +26,7 @@ const open = async () => {
   const fill = () => db.execute("insert into sale (body, pad) values ('fill', zeroblob(65536))");
   const bodies = () =>
     db.execute<{ body: string }>("select body from sale order by id").rows.map((row) => row.body);
-  /** A page limit is per connection (E6); with no body running this reaches the writer. */
+  /** A page limit is per connection; with no body running this reaches the writer. */
   const limit = (headroom: number) => {
     const [{ page_count }] = db.execute<{ page_count: number }>("pragma page_count").rows;
     db.execute(`pragma max_page_count = ${page_count + headroom}`);
@@ -473,9 +473,9 @@ const scriptExec = (
 };
 
 /**
- * Stands in for a disk that fills at `commit`, as E7 and K in
- * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` measured a real one: the
- * commit refused with errcode 13 and the whole transaction already rolled back by the engine.
+ * Stands in for a disk that fills at `commit`, as E7 in `docs/developers/conventions-data.md`, "A
+ * full disk sometimes ends the whole transaction", measured a real one: the commit refused with
+ * errcode 13 and the whole transaction already rolled back by the engine.
  */
 const fullAtCommit = (real: DatabaseSync) =>
   scriptExec(real, (text, target) => {

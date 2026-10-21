@@ -263,8 +263,8 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "content.language_invalid": 400,
 };
 
-// The tag is a log label for a non-`AppError` fault, never a wire code: the client sees
-// `server.internal`.
+// The tag is a log label for a non-`AppError` fault other than a full disk, never a wire code: the
+// client sees `server.internal`.
 const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_failed");
 
 /**

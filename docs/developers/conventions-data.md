@@ -42,7 +42,8 @@ data → 409; a file or copy that cannot be opened → 422. So one code can righ
 route and 400 on another: `service_zone.not_found` for `GET /api/service-zones/:zoneId/offers`,
 and for a zone a body names. A boundary (`createErrorBoundary`,
 `packages/server-kit/src/error-boundary.ts`) answers the status its table gives a code, and 400
-for a code its table leaves out; a route that needs another status for one code gets a second
+for a code its table leaves out — except a full disk anywhere in the error's causes, which answers
+`storage.disk_full`, at 507 unless the table names it; a route that needs another status for one code gets a second
 boundary over a spread of the table, as `runVariant` in `apps/server/src/catalogue-api.ts` does.
 On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three
 status reads: the till's 403 check (`department-transfer-monitor.ts`), the setup app's 404 read as
@@ -2191,7 +2192,15 @@ duplicate primary key (errcode 1555), a null in a `not null` column (1299) and a
 `RAISE(ABORT)` (1811) were each caught and the next statement ran normally, and at `commit` the rows
 written before AND after every refusal were all present while the refused rows were not.
 `bench/sqlite-failover/README.md` records the same codes from its own probe, plus 2067 for a
-two-column `UNIQUE`.
+two-column `UNIQUE`. A `RAISE(FAIL)` leaves the transaction usable too, but does not back out its
+own statement: measured 2026-10-21 on `node:sqlite`, Node v26.11.1, inside one `begin immediate`,
+a three-row insert whose `before insert` trigger raised `FAIL` on the second row failed with
+errcode 1811 and `isTransaction` still true, and after an insert of a fourth row and `commit` the
+table held rows 1 and 4. Control, the same trigger raising `ABORT`: the table held row 4 alone.
+The `FAIL` conflict algorithm does the same: measured 2026-10-21 on Node v26.11.1, `insert or fail`
+of rows 1, 2 and 3 where 2 already existed failed with errcode 2067 and the transaction still open,
+and after an insert of 4 and `commit` the table held 1, 2 and 4; a column declared
+`unique on conflict fail` gave the same. Control, `insert or abort`: 2 and 4.
 
 **So what a savepoint can still buy here is confinement, and the sites named below say whether they
 need it.** Among the nested calls, `enqueueSuccessor` (`packages/scheduler/src/store.ts`), the two

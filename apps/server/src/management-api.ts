@@ -218,8 +218,8 @@ async function issueRecovery(
 }
 
 /**
- * Every AppError code the management API answers, and its HTTP status. Client faults only: a
- * non-AppError becomes a 500. A code absent from this table answers 400.
+ * Every AppError code the management API answers, and its HTTP status. Client faults only. A code
+ * absent from this table answers 400.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,

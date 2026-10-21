@@ -125,9 +125,8 @@ export interface DeviceApiDeps {
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
 
 /**
- * CLIENT faults only: a non-AppError becomes an opaque `server.internal` 500, and a code absent here
- * takes the boundary's 400 default. A code this surface does not throw itself is mapped to the status
- * its own surface gives it.
+ * CLIENT faults only: a code absent here takes the boundary's 400 default. A code this surface does
+ * not throw itself is mapped to the status its own surface gives it.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,

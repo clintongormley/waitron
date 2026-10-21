@@ -99,7 +99,8 @@ describe("a full database", () => {
     try {
       fillDatabase();
       const before = counts();
-      // Plan E12: a one-line sale fitted into pages already allocated; a 20-line one did not.
+      // A one-line sale fitted into pages already allocated (plan, "Measured for this plan", E12); a
+      // 20-line one did not.
       expect(await cashSale(20)).toEqual({ status: 507, json: DISK_FULL });
       expect(counts()).toEqual(before);
     } finally {

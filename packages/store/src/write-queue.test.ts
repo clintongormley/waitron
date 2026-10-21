@@ -45,10 +45,10 @@ const diskFullError = () =>
   Object.assign(new Error("database or disk is full"), { errcode: 13, code: "ERR_SQLITE_ERROR" });
 
 /**
- * Stands in for a disk that fills at `commit`. E7 and K in
- * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` measured a real full disk
- * answering this way: the commit refused with errcode 13 and the engine had already rolled the
- * whole transaction back, leaving none open. `endsTransaction: false` is a commit refused with
+ * Stands in for a disk that fills at `commit`. E7 in `docs/developers/conventions-data.md`, "A
+ * full disk sometimes ends the whole transaction", measured a real full disk answering this way:
+ * the commit refused with errcode 13 and the engine had already rolled the whole transaction back,
+ * leaving none open. `endsTransaction: false` is a commit refused with
  * errcode 13 that leaves the transaction open, which no measurement produced.
  */
 const fullAtCommit = (real: DatabaseSync, { endsTransaction = true } = {}) =>

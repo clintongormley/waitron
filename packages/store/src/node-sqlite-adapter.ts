@@ -73,11 +73,11 @@ export function adaptNodeSqlite(connections: Connections) {
        * A bare `rollback` issued outside any body after a statement ended the transaction throws
        * that statement's failure, not "cannot rollback": drizzle's migrator issues its own `begin`
        * and `rollback` as ordinary statements and would otherwise hide a full disk behind its
-       * failed rollback (E9 and decision 7 in
-       * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`). Clearing the
-       * record cannot take it from a running body: while one runs, a bare `rollback` from outside
-       * it goes to the read connection (`forStatement`, `./connections.ts:210`), which refuses it
-       * with code 1, not the read-only code 8 that `issue` re-runs on the writer.
+       * failed rollback (E9 in `docs/developers/conventions-data.md`, "A full disk sometimes ends
+       * the whole transaction"). Clearing the record cannot take it from a running body: while one
+       * runs, a bare `rollback` from outside it goes to the read connection (`forStatement`,
+       * `./connections.ts`), which refuses it with code 1, not the read-only code 8 that `issue`
+       * re-runs on the writer.
        */
       const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
         const ended = connections.endedBy();
@@ -139,25 +139,23 @@ export function adaptNodeSqlite(connections: Connections) {
      *
      * **A failed statement sometimes ends the whole transaction inside the engine, and sometimes
      * backs out only itself.** A full disk did either, depending on the statement (E1, E2, E7 and
-     * E13 in `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`); a
-     * `RAISE(ROLLBACK)` ends it (E5). Once the engine has ended it, every statement after that in
-     * the same body would run with no transaction open and commit by itself (E8 Q2), and a nested
-     * `transaction()` would open a fresh top-level one that commits by itself (E8 N2). So the
-     * failure that ended it is recorded (`Connections.noteEnded`), and from then until the
-     * outermost level finishes, a statement or a `transaction()` from inside a body throws that
+     * E13 in `docs/developers/conventions-data.md`, "A full disk sometimes ends the whole
+     * transaction"); a `RAISE(ROLLBACK)` ends it (E5). Once the engine has ended it, every
+     * statement after that in the same body would run with no transaction open and commit by
+     * itself, and a nested `transaction()` would open a fresh top-level one that commits by itself
+     * (E8). So the failure that ended it is recorded (`Connections.noteEnded`), and from then until
+     * the outermost level finishes, a statement or a `transaction()` from inside a body throws that
      * failure without running. The record is the connection pair's, not the body's: an outermost
      * `transaction()` opened outside the queue while a queue body's transaction is ended clears it
-     * early. Measured: the body's later write was kept either way; the run rejected with the
-     * queue's generic error when the outside transaction finished first, and resolved when the
-     * body wrote while it was open. Left open because product writes go through `withWriteLock`
-     * (decision 16). A full disk that left the transaction open is not recorded: code that catches
-     * it may carry on.
+     * early, and the body's later writes can then be kept (`docs/backlog/box.md`, "A transaction
+     * opened outside the write queue can let a body's writes after a full disk commit"). A full
+     * disk that left the transaction open is not recorded: code that catches it may carry on.
      *
      * A nested level whose transaction the engine ended throws an error of its own, never the
      * object its body threw: a caller that tells "my body's failure, already undone" from "the
      * transaction around me is gone" by comparing the two (`apps/server/src/optional-document.ts`)
-     * would otherwise read the second as the first (decision 13 in the same plan). The outermost
-     * level throws the recorded failure.
+     * would otherwise read the second as the first. The outermost level throws the recorded
+     * failure.
      *
      * A body that returns a promise finishes when the promise settles, not when it returns. That
      * has to hold at EVERY depth, and Drizzle emits a nested transaction itself without calling

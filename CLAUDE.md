@@ -492,17 +492,17 @@ called weaker than its name, the topic file lists what it does not see.
   [conventions-data.md](docs/developers/conventions-data.md#a-read-taken-while-another-callers-write-transaction-is-open-sees-committed-rows-only).
 - **A statement this engine refuses backs out ITSELF, not the transaction around it — except a
   full disk, which sometimes ends the whole transaction** (as `RAISE(ROLLBACK)`,
-  `INSERT OR ROLLBACK` and `ON CONFLICT ROLLBACK` always do; nothing here uses them). Measured at a
-  page limit: an insert into a table with no insert trigger ended it; a multi-row update, an index
-  build, or an insert into a table with an insert trigger (one shaped like the change feed's
-  included) backed out only the statement. So catching a refusal and carrying on in the same
-  `tx` is safe. Either way the caller gets `storage.disk_full`, and after one that ended the
-  transaction the store refuses every later statement in that body — inside the write queue; a
-  transaction opened outside it in between defeats this. **A TEST still catches such a refusal
-  OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
-  Guard: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than their
-  names — a page limit, not a real disk, and both at-commit cases are a stand-in. Receipt:
-  [conventions-data.md](docs/developers/conventions-data.md#a-full-disk-sometimes-ends-the-whole-transaction).
+  `INSERT OR ROLLBACK` and `ON CONFLICT ROLLBACK` always do), **and a `RAISE(FAIL)`,
+  `INSERT OR FAIL` or `ON CONFLICT FAIL`, which keep the rows their statement wrote before it**
+  (no product code uses any of the six). So, apart from those exceptions, catching a refusal and
+  carrying on in the same `tx` is safe. A full disk answers `storage.disk_full`, and after one
+  that ended the transaction the store refuses every later statement in that body — inside the
+  write queue; a transaction opened outside it in between defeats this. **A TEST still catches
+  such a refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard
+  enforces that. Cost: a full disk read as `cannot rollback`, and a statement after it committed
+  by itself. Guard: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than
+  their names — a page limit, not a real disk, and both at-commit cases are a stand-in. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-refused-statement-does-not-abort-the-transaction-here-and-all-a-savepoint-still-buys-is-confinement-of-a-losing-attempts-own-writes).
 - **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
   `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
   too. Nothing guards it.

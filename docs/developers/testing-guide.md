@@ -1946,7 +1946,12 @@ parallel.
 **Start a writer through `withTransaction`, never through a bare `db.transaction(...)`.** Only the
 former takes the write queue (`packages/db/src/tenancy.ts` → `db.withWriteLock`). Twenty bare
 `db.transaction(...)` calls started together against one venue file fail
-`no such savepoint: wt_sp_1` — measured on a suite since deleted, which is how it was found.
+`no such savepoint: wt_sp_1` — measured on a suite since deleted, which is how it was found. Re-run
+2026-10-21 on A798-B slice 1's store (twenty bare `transaction` calls on one `openVenueStore`, each
+writing, waiting a timer, writing again): one resolved, and nineteen failed
+`the engine ended the transaction this savepoint was in`, whose cause is
+`no such savepoint: wt_sp_1`, and the table held all twenty first writes, the rejected callers'
+included.
 
 ## A test that runs the server in its own process writes to the database only while the server is down
 
