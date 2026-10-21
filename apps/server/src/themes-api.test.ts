@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { mountThemesApi } from "./themes-api.js";
+import { forgetVenueTheme } from "./venue-theme.js";
 
 let managerCookie: string;
 let supervisorCookie: string;
@@ -23,7 +24,7 @@ const suite = useVenueDb({
       const cookieFor = async (role: "manager" | "supervisor" | "staff") => {
         const [person] = await tx
           .insert(persons)
-          .values({ displayName: role, pinHash: hashPin("1234"), role })
+          .values({ displayName: role, role })
           .returning({ id: persons.id });
         const session = await startManagementSession(tx, { personId: person!.id });
         return `${MANAGEMENT_COOKIE}=${session.token}`;
@@ -35,6 +36,7 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   await suite.db.execute(sql`delete from custom_themes`);
+  forgetVenueTheme();
 });
 
 const PATH = "/management-api/themes";
@@ -119,6 +121,34 @@ const refusal = (code: string, params: Record<string, unknown> = {}) => ({
 });
 
 describe("the custom theme routes", () => {
+  it("refuses every management theme route without a session", async () => {
+    const id = await created("Lemon", LEMON);
+    const before = await storedRows();
+    const json = { "content-type": "application/json" };
+    for (const [method, path, body] of [
+      ["GET", PATH, undefined],
+      ["POST", PATH, { name: "Green", theme: DARK_GREEN, inUse: true }],
+      ["PUT", `${PATH}/${id}`, { theme: DARK_GREEN }],
+      ["PUT", "/management-api/theme-in-use", { customThemeId: id }],
+    ] as const) {
+      const res = await app().request(path, {
+        method,
+        headers: json,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      expect({ method, path, status: res.status }).toEqual({ method, path, status: 401 });
+      expect(await res.json()).toEqual(refusal("management_session.required"));
+    }
+    expect(await storedRows()).toEqual(before);
+    expect(await rowsInUse()).toEqual([]);
+  });
+
+  it("lists no themes and none in use for a venue that has saved none", async () => {
+    const res = await list(managerCookie);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ themes: [], inUse: null });
+  });
+
   it("refuses invalid choices naming the field", async () => {
     const id = await created("Lemon", LEMON);
     const before = await storedRows();
@@ -140,6 +170,11 @@ describe("the custom theme routes", () => {
       ],
       [{ ...LEMON, logo: "x" }, "theme", "unknown_key"],
       [{ ...LEMON, textScale: 1 }, "theme", "unknown_key"],
+      [
+        { ...LEMON, handSet: { light: { evil: "#ff0000" }, dark: {} } },
+        "handSet.light",
+        "unknown_colour",
+      ],
     ] as const) {
       const res = await save(managerCookie, id, { theme });
       expect(res.status).toBe(400);
@@ -289,6 +324,12 @@ describe("the custom theme routes", () => {
       expect(await res.json()).toEqual(refusal("management.request_invalid", { field }));
     }
     expect(await storedRows()).toEqual([]);
+    const id = await created("Lemon", LEMON);
+    for (const body of [{}, null]) {
+      const res = await save(managerCookie, id, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(refusal("management.request_invalid", { field: "theme" }));
+    }
   });
 });
 
