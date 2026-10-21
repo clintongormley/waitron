@@ -1240,7 +1240,8 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "POST /api/working-orders/:id/adjustments/preview",
   "POST /api/parties/:id/allergy/send-preview",
   "POST /api/bills/:id/move/allergy-preview",
-  // Registered only for the practice card simulator; refusing it would strand a practice payment.
+  // Registered only for the practice card simulator; refusing it would leave a practice payment
+  // waiting at the reader.
   "POST /api/demo-reader/cancel",
 ]);
 
