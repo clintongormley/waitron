@@ -5222,8 +5222,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   required secrets, full fiscal history, stored heads, immutable rows and the read-only barriers.
   The opt-in v2 recovery client now binds its saved request and signed proofs to the complete target,
   checks every selected verification descriptor and refuses downgrades or changed targets. The
-  running setup caller stays on v1 pending the coordinated Cloud release. Local staging/restart/
-  placement comparisons and final branch qualification remain open. Cloud integration
+  running setup caller stays on v1 pending the coordinated Cloud release. Local staging, restart
+  and final placement now compare the saved approval, fresh key and current target; measured
+  ciphertext checks and retry-marker controls are covered locally. Final branch qualification remains
+  open. Cloud integration
   follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
   target-bound recovery and joint acceptance pass.
 

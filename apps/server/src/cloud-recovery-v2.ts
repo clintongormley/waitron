@@ -40,6 +40,11 @@ export type SavedCloudRecoveryState = RecoveryIdentity &
 export function cloudRecoveryUnavailable(): never {
   throw new Error("Cloud recovery is unavailable. Try again.");
 }
+export class SnapshotPlacementRefused extends Error {
+  constructor() {
+    super("Cloud recovery is unavailable. Try again.");
+  }
+}
 const record = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
 const uuid = (v: unknown): v is string =>
@@ -121,6 +126,38 @@ export function sameSnapshotRecoveryVerification(
     a.target.digest === b.target.digest &&
     a.policyDigest === b.policyDigest
   );
+}
+export async function readSnapshotRecoveryBinding(
+  stateDir: string,
+  input: {
+    managedCloud?: { requestId: string; pointId: string };
+    snapshotVerification?: SnapshotRecoveryVerification;
+  },
+): Promise<{ verification: SnapshotRecoveryVerification; publicKey: string } | undefined> {
+  const state = await readCloudRecoveryState(stateDir);
+  if (state?.version !== 2 && input.snapshotVerification === undefined) return undefined;
+  if (state?.version !== 2 || !input.snapshotVerification || !input.managedCloud)
+    cloudRecoveryUnavailable();
+  if (!record(input.managedCloud)) cloudRecoveryUnavailable();
+  keys(input.managedCloud, ["requestId", "pointId"]);
+  const verification = readSnapshotRecoveryVerification(input.snapshotVerification);
+  if (
+    !state.snapshotVerification ||
+    state.requestId !== input.managedCloud.requestId ||
+    state.pointId !== input.managedCloud.pointId ||
+    verification.pointId !== state.pointId ||
+    !sameSnapshotRecoveryVerification(state.snapshotVerification, verification)
+  )
+    cloudRecoveryUnavailable();
+  return { verification, publicKey: state.publicKey };
+}
+export function assertSnapshotRecoveryArchive(
+  verification: SnapshotRecoveryVerification,
+  sha256: string | undefined,
+  bytes: number | undefined,
+): void {
+  if (verification.archiveSha256 !== sha256 || verification.archiveBytes !== bytes)
+    cloudRecoveryUnavailable();
 }
 export async function readCloudRecoveryState(
   stateDir: string,

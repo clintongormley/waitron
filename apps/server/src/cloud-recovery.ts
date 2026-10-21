@@ -484,14 +484,13 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       unavailable();
     checkedVerification(state, after, p);
     assertCurrent(state);
-    const request: ArchiveRestoreRequest & { snapshotVerification?: SnapshotRecoveryVerification } =
-      {
-        artifact: archive,
-        recoveryKey: grant.recoveryKey,
-        environment: "preproduction",
-        managedCloud: { requestId: state.requestId, pointId: p.id },
-        ...(verification === undefined ? {} : { snapshotVerification: verification }),
-      };
+    const request: ArchiveRestoreRequest = {
+      artifact: archive,
+      recoveryKey: grant.recoveryKey,
+      environment: "preproduction",
+      managedCloud: { requestId: state.requestId, pointId: p.id },
+      ...(verification === undefined ? {} : { snapshotVerification: verification }),
+    };
     return { state, request };
   }
   return {

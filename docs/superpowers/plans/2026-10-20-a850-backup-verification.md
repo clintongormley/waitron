@@ -616,13 +616,13 @@ Each task's checklist means: write the named red assertions; run its exact comma
 ### Task 26: Recheck target at staging, restart and actual placement
 
 **Files:** create `apps/server/src/restore-request.verification.test.ts`; modify `apps/server/src/restore-request.ts`, `apps/server/src/restore.ts` (RestoreDeps/restoreOwned only), `apps/server/src/cloud-recovery.ts`, `apps/server/src/cloud-recovery-v2.ts`; preserve existing staged/stream/boot tests.
-**Consumes:** Task 25 binding/read/assert functions and ordinary recovery authority input. **Produces:** optional `snapshotVerification?:SnapshotRecoveryVerification` on `ArchiveRestoreRequest` and `RestoreDeps`; strict staged **version 2** archive marker for qualified snapshots. Stream request remains unchanged.
+**Consumes:** Task 25 binding/read/assert functions and ordinary recovery authority input. **Produces:** optional `snapshotVerification?:SnapshotRecoveryVerification` on `ArchiveRestoreRequest` and `RestoreDeps`, plus the staged `snapshotRequestKey` on `RestoreDeps`; strict staged **version 2** archive marker for qualified snapshots. Stream request remains unchanged.
 
-- [ ] RED `binary change after approval prevents staging`, `binary change after staging prevents placement`, `stripped binding or v1 marker cannot downgrade a saved v2 operation`, `refusal changes no destination files or placementStarted marker`, `matching v2 still requires ordinary fiscal authority`. Assert old DB/identity/secrets unchanged and zero restoreDatabase calls on mismatch; legitimate matching control reaches ordinary authority refusal or authorised restore.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/restore-request.verification.test.ts src/restore-request.test.ts src/restore-request.node-key.test.ts src/boot.restore.test.ts src/restore-stream.test.ts`; expect changed-binary/stripped-binding acceptance denial red.
-- [ ] Carry full verification descriptor with requestId/pointId/fresh key and archive hash/size into the version-2 marker. Stage compares fresh current target. On restart, read saved v2 binding as well as marker, reject stripped/downgraded marker, and compare current binary **before placementStarted, payload or destination mutation**. After validation, restoreOwned compares again immediately before writeValidated; measured artifact binding must still match. Preserve all operation/key/old-machine/resume/first-setup gates. Nonqualified v1 and continuous paths retain original behavior, never acquire current qualification from old evidence.
-- [ ] GREEN same command; in installed disposable copies omit the staging, restart and immediate pre-placement comparisons separately, run each corresponding changed-binary case with accepting control, restore and require green. Never weaken ordinary restore authority to reach placement.
-- [ ] Commit `git commit -s -m "feat(recovery): compare qualified snapshot target before placement"`.
+- [x] RED `binary change after approval prevents staging`, `binary change after staging prevents placement`, `stripped binding or v1 marker cannot downgrade a saved v2 operation`, `refusal changes no destination files or placementStarted marker`, `matching v2 still requires ordinary fiscal authority`. Assert old DB/identity/secrets unchanged and zero restoreDatabase calls on mismatch; legitimate matching control reaches ordinary authority refusal or authorised restore.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/restore-request.verification.test.ts src/restore-request.test.ts src/restore-request.node-key.test.ts src/boot.restore.test.ts src/restore-stream.test.ts`; expect changed-binary/stripped-binding acceptance denial red.
+- [x] Carry full verification descriptor with requestId/pointId/fresh key and archive hash/size into the version-2 marker. Stage compares fresh current target. On restart, read saved v2 binding as well as marker, reject stripped/downgraded marker, and compare current binary **before placementStarted, payload or destination mutation**. After validation, restoreOwned compares again immediately before writeValidated; measured artifact binding must still match. Preserve all operation/key/old-machine/resume/first-setup gates. Nonqualified v1 and continuous paths retain original behavior, never acquire current qualification from old evidence.
+- [x] GREEN same command; in installed disposable copies omit the staging, restart and immediate pre-placement comparisons separately, run each corresponding changed-binary case with accepting control, restore and require green. Never weaken ordinary restore authority to reach placement.
+- [x] Commit `git commit -s -m "feat(recovery): compare qualified snapshot target before placement"`.
 
 ### Task 27: Finish evidence, branch review and release handoff
 
@@ -1054,3 +1054,42 @@ results. Enabling the qualified caller waits for the coordinated v2 interface; l
 comparisons remain Task 26. There is no Cloud deployment, snapshot-availability or fiscal-authority
 change. The scoped two-file coverage diagnostic is below the package thresholds; final package
 coverage remains due.
+
+### Task 26 local recovery comparisons — 21 October 2026
+
+Qualified archive staging checks the locally built target and saved v2 approval before validation
+and again before replacing the pending request. Its version-2 marker retains the complete
+verification descriptor, request/point IDs and fresh public request key. Restart checks the saved
+approval and marker before reading the ciphertext, setting `placementStarted` or opening the
+restore target. Ordinary stream markers stay on their own path; a saved snapshot approval does
+not qualify a stream or prevent its independent ordinary restore.
+
+After archive validation and the source-liveness callback, `restoreOwned` checks the saved request,
+fresh key, validated ciphertext hash, length and current target immediately before `writeValidated`.
+Only that pre-placement block raises `SnapshotPlacementRefused`; the staged caller restores a
+newly set start marker for that refusal and retains the pending ciphertext and node credential.
+Later ordinary restore errors retain their previous replay behavior. No allocation, fiscal restore
+hook, key admission or first-setup gate was relaxed. The setup caller remains on v1 pending the
+Cloud release; these local checks do not enable snapshots or deployment enforcement.
+
+The new suite has 39 cases. Its real preproduction archive uses the actual migrated composition
+and encrypted file validation. The matching authority control runs `createRecoveryRestoreRunner`
+and receives `promotion.break_glass_invalid` before changing the destination. This is a local
+boundary test with synthetic target approval, not a Cloud qualification or an authorised fiscal
+activation. Task 24's production-environment genuine fiscal archive and ordinary authority
+assertions remain unchanged.
+
+Ten separate installed omissions each produced their intended assertion failures: staging,
+restart and final target comparisons, final and marker fresh-key checks, duplicate marker keys,
+saved descriptor equality, final measured archive checks, late-refusal marker recovery and
+staging archive checks. Each restored accepting selection passed, and the final restored suite
+passed all 39 cases. The first restart control was inconclusive because a deliberately missing
+ciphertext also raised the expected refusal. Keeping the ciphertext present made deletion of the
+restart comparison fail its assertion. Both control runs are retained; the first is no proof.
+
+Related server suites passed 300 cases; the protected commands passed 18, 2 and 13 cases without
+editing their tests. Five focused root suites passed 5,376 cases. Server types, scoped lint and
+build passed. Existing tracked tests, guards, fiscal writers and migrations are unchanged in this
+task. Earlier scoped coverage failures remain recorded; these noncoverage checks do not qualify
+package coverage or the whole branch. Task 27's complete audit, Claude review, normal push hook
+and current-head CI remain required before landing.

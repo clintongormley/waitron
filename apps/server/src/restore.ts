@@ -71,6 +71,15 @@ import type { BundleFiles } from "./recovery-bundle.js";
 import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
+import { currentBackupVerificationTarget } from "./backup-verification-target.js";
+import {
+  assertSnapshotRecoveryArchive,
+  assertSnapshotRecoveryTarget,
+  cloudRecoveryUnavailable,
+  readSnapshotRecoveryBinding,
+  SnapshotPlacementRefused,
+  type SnapshotRecoveryVerification,
+} from "./cloud-recovery-v2.js";
 
 const MANIFEST_NAME = "manifest.json";
 /** Holds a whole SQLite venue database, the file `archiveTo` (`packages/store/src/archive.ts`) writes. */
@@ -92,6 +101,8 @@ const VENUE_FILE_MODE = 0o600;
 /** `RestoreDeps` has no seam for {@link restoreDatabase}: a fake would hide the two failures named
  * in its own comment. */
 export interface RestoreDeps extends ValidationDeps {
+  readonly snapshotVerification?: SnapshotRecoveryVerification;
+  readonly snapshotRequestKey?: string;
   /** A managed replacement must receive fresh destination credentials. */
   readonly managedCloud?: { requestId: string; pointId: string };
   /** The directory holding `venue.db` and `node.db` (`packages/store/src/index.ts`). */
@@ -418,9 +429,29 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   return restoreOwned(await validateArtifact(deps), deps);
 }
 
-async function restoreOwned(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
+async function restoreOwned(
+  validated: ValidatedArtifact,
+  deps: PlacementDeps & {
+    readonly artifact?: Uint8Array;
+    readonly artifactPath?: string;
+  },
+): Promise<void> {
   try {
     if (!deps.skipSecrets) await deps.checkSourceLive?.(validated);
+    try {
+      const snapshot = await readSnapshotRecoveryBinding(deps.stateDir, deps);
+      if (snapshot) {
+        if (deps.skipSecrets || deps.snapshotRequestKey !== snapshot.publicKey)
+          cloudRecoveryUnavailable();
+        const bytes =
+          deps.artifact?.byteLength ??
+          (deps.artifactPath === undefined ? undefined : (await lstat(deps.artifactPath)).size);
+        assertSnapshotRecoveryArchive(snapshot.verification, validated.sourceId, bytes);
+        assertSnapshotRecoveryTarget(snapshot.verification, currentBackupVerificationTarget());
+      }
+    } catch {
+      throw new SnapshotPlacementRefused();
+    }
     await writeValidated(
       deps.managedCloud
         ? {
