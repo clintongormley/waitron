@@ -72,9 +72,16 @@ import {
   finishIntegratedAttendance,
   pendingIntegratedAttendanceKey,
 } from "./attendance-integrated.js";
-type TillSaleDeps = BaseTillSaleDeps & { attendance?: AttendanceRecorder };
+type TillSaleDeps = BaseTillSaleDeps & {
+  attendance?: AttendanceRecorder;
+  /**
+   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
+   * boot supplies it.
+   */
+  disk?: DiskFullState;
+};
 import { issuancePass } from "./issuance-pass.js";
-import { diskFullRefusal, type DiskFullState } from "./disk-full-state.js";
+import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
@@ -604,11 +611,6 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
   /**
-   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
-   * boot supplies it.
-   */
-  disk?: DiskFullState;
-  /**
    * Set by the till's routes: a full disk after a card was charged answers
    * `sale.charged_not_recorded`, so staff are told not to charge again. Unset, it answers
    * `storage.disk_full`.
@@ -658,6 +660,9 @@ async function runPayWorkingOrder(
   operatorId: string | undefined,
   admit: WriteAdmission,
 ): Promise<TillSaleResult> {
+  // Awaited only while `since()` names a refusal: otherwise the sale enters the write queue in this
+  // turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   try {
     return await withTransaction(deps.db, async (tx) => {
       await admit(tx);
@@ -675,6 +680,7 @@ async function runPayWorkingOrder(
       if (locked?.status === "settled") {
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
+      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
 
       const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
 
@@ -1125,10 +1131,7 @@ async function payIntegrated(
   admit: WriteAdmission,
   onLive: (entry: string) => void,
 ): Promise<IntegratedPayOutcome> {
-  const refuseForStop = (): never => {
-    deps.log?.("warn", "storage.disk_full_stop_refused", { workingOrderId: req.id });
-    throw diskFullRefusal();
-  };
+  const refuseForStop = (): never => refuseForDiskStop(deps.log, req.id);
   // Read before the queue wait; `noted()` then catches a refusal noted while this pay waited.
   // Awaited only while `since()` names a refusal: otherwise P1 enters the write queue in this turn.
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
@@ -1200,6 +1203,7 @@ async function payIntegrated(
       await assertBillHasNoUnsent(tx, req.id);
 
       if (outstanding !== undefined) {
+        if (stopped()) refuseForStop();
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
           // Called only to refuse a malformed tip when tips are on; none is charged on a bill that
           // owes nothing.
@@ -1212,7 +1216,6 @@ async function payIntegrated(
             ticket,
           };
         }
-        if (stopped()) refuseForStop();
         if (locked.status === "placed") onLive(PLACED_ATTEMPT);
         const attendanceKey = await beginIntegratedAttendance(
           tx,
@@ -1261,6 +1264,7 @@ async function payIntegrated(
     await selectOrderInvoice(tx, deps.backend, cfg, req.id, order.gross.total);
     await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: req.id });
     const wasPlaced = locked?.status === "placed";
+    if (stopped()) refuseForStop();
     if (compareDecimal(order.gross.total, ZERO) === 0) {
       // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a
       // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
@@ -1283,7 +1287,6 @@ async function payIntegrated(
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
       return { kind: "owes-nothing" as const, ticket };
     }
-    if (stopped()) refuseForStop();
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
     const gross = await issuancePass(tx, cfg, req.id, order);
@@ -2094,6 +2097,9 @@ async function runCollectOrder(
   operatorId: string | undefined,
   admit: WriteAdmission,
 ): Promise<TillSaleResult> {
+  // Awaited only while `since()` names a refusal: otherwise the collect enters the write queue in
+  // this turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   return withTransaction(deps.db, async (tx) => {
     await admit(tx);
     const [locked] = await tx
@@ -2108,6 +2114,7 @@ async function runCollectOrder(
     if (locked?.status === "settled") {
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     }
+    if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
 
     const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
 

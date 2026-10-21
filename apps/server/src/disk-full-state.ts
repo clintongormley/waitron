@@ -85,3 +85,9 @@ export function watchForDiskFull(
 export function diskFullRefusal(): AppError<"storage.disk_full"> {
   return new AppError("storage.disk_full", {});
 }
+
+/** Logs and throws the refusal a sale or payment gets while the stop holds. */
+export function refuseForDiskStop(log: Logger | undefined, workingOrderId: string): never {
+  log?.("warn", "storage.disk_full_stop_refused", { workingOrderId });
+  throw diskFullRefusal();
+}

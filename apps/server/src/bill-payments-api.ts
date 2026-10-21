@@ -236,7 +236,12 @@ export function mountBillPaymentsApi(
       if (request.entry !== "reader") {
         const saleCfg = sendingCfg(cfg, c, session.device);
         assertTakesTender(session.device, request.method === "cash" ? "cash" : "hand-keyed-card");
-        return c.json(await takeBillPayment(fiscal, saleCfg, id, request, { personId, sessionId }));
+        return c.json(
+          await takeBillPayment({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
+            personId,
+            sessionId,
+          }),
+        );
       }
       // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
       // answered 200 even for a decline.

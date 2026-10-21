@@ -103,9 +103,16 @@ import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import type { Logger } from "./logger.js";
-import { diskFullRefusal, type DiskFullState } from "./disk-full-state.js";
+import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 
-export type BillPaymentDeps = TillSaleDeps & { attendance?: AttendanceRecorder };
+export type BillPaymentDeps = TillSaleDeps & {
+  attendance?: AttendanceRecorder;
+  /**
+   * Unset in suites that test no full-disk stop; unset, nothing is refused for a full disk. A live
+   * boot supplies it.
+   */
+  disk?: DiskFullState;
+};
 
 /**
  * Payments taken against a bill before its invoice exists (bill payments design): the balance they
@@ -1081,7 +1088,7 @@ async function beginBillPayment(
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await storedOrderTotal(tx, workingOrderId);
   backend.assertRecordableAt(reading);
-  if (state === "pending" && refusals.diskFull()) refuseForStop(workingOrderId, refusals.log);
+  if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
   await selectOrderInvoice(tx, backend, cfg, workingOrderId, total);
   await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
   const allocation = confirmAllocation(
@@ -1166,6 +1173,9 @@ export async function takeBillPayment(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
+  // Awaited only while `since()` names a refusal: otherwise the payment enters the write queue in
+  // this turn.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   return withTransaction(deps.db, async (tx) => {
     const reading = deps.clock.now();
     const receivedAt = reading.instant;
@@ -1178,7 +1188,7 @@ export async function takeBillPayment(
       operator,
       "received",
       reading,
-      { diskFull: () => false },
+      { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
       deps.attendance,
     );
     if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
@@ -1222,11 +1232,6 @@ export function billPaymentIsLive(db: Database, billPaymentId: string): boolean 
   return liveBillPaymentsOf(db).has(billPaymentId);
 }
 
-function refuseForStop(workingOrderId: string, log: Logger | undefined): never {
-  log?.("warn", "storage.disk_full_stop_refused", { workingOrderId });
-  throw diskFullRefusal();
-}
-
 /**
  * Runs work that follows a card charged on a connected reader. When `deps` opts in, a full disk
  * becomes `sale.charged_not_recorded`, so the till can say the card was charged; any other error,
@@ -1257,7 +1262,6 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   deviceProfileId?: string;
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
-  disk?: DiskFullState;
   /**
    * Set by the till's routes: a full disk after a card was charged answers
    * `sale.charged_not_recorded`, so staff are told not to charge again. Unset, it answers
@@ -1414,7 +1418,7 @@ export async function takeReaderBillPayment(
       await withTransaction(deps.db, (tx) =>
         failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
       );
-      refuseForStop(workingOrderId, deps.log);
+      refuseForDiskStop(deps.log, workingOrderId);
     }
 
     let result: PaymentResult;

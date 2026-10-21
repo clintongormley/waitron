@@ -1756,7 +1756,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await recordTillSale(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          clock: deps.clock,
+          log,
+          attendance: deps.attendance,
+          disk: deps.disk,
+        },
         saleCfg,
         { ...body, zoneId, guests },
         { personId, sessionId: session.sessionId },
@@ -2646,7 +2653,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const guests = readGuestsChoice(body.guests);
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
+        {
+          db: deps.db,
+          backend: deps.backend,
+          clock: deps.clock,
+          log,
+          attendance: deps.attendance,
+          disk: deps.disk,
+        },
         cfg,
         {
           id,
