@@ -27,6 +27,8 @@ export const envios = table(
     // restart and a week-long offline period.
     proximoIntentoEn: ts("proximo_intento_en").notNull().$defaultFn(now),
     incidencia: flag("incidencia").notNull().default(false),
+    // Technical submission interruptions are separate from operator holds and fiscal refusals.
+    technicalIncidence: flag("technical_incidence").notNull().default(false),
     // Written in the same transaction as the response that carried it. AEAT: the CSV "no podrá
     // ser recuperado a través de consultas posteriores" — neither consulta nor resubmission ever
     // returns it, so losing it is unrecoverable.

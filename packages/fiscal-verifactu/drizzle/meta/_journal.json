@@ -64,6 +64,13 @@
       "when": 1792358085639,
       "tag": "0008_envio_confirmado_index",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792550481436,
+      "tag": "0009_aeat_outage_flag",
+      "breakpoints": true
     }
   ]
 }

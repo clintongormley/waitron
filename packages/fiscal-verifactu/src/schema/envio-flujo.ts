@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/sqlite-core";
-import { count, table, ts } from "@waitron/db";
+import { count, id, table, ts } from "@waitron/db";
 
 /**
  * Flow-control state for the obligado tributario this database belongs to. Holds when the NEXT
@@ -23,6 +23,8 @@ export const envioFlujo = table(
     // The last TiempoEsperaEnvio AEAT returned, in seconds: `\d{0,4}` in AEAT's XSD, so at most
     // 9999.
     tiempoEsperaSeg: count("tiempo_espera_seg").notNull(),
+    // A response may close only the interruption its own request observed.
+    technicalIncidentToken: id("technical_incident_token"),
   },
   /* v8 ignore start */
   (t) => [check("envio_flujo_singleton_ck", sql`${t.id} = 1`)],
