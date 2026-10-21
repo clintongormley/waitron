@@ -1,6 +1,6 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { checkThemeName, readThemeDocument, themeNameKey } from "@waitron/ui-core/theme";
+import { checkThemeName, readThemeDocument } from "@waitron/ui-core/theme";
 
 type Tables = Readonly<Record<string, readonly Record<string, unknown>[]>>;
 
@@ -18,11 +18,9 @@ function parsedTheme(text: unknown): unknown {
 }
 
 function checkRow(row: Readonly<Record<string, unknown>>): void {
-  const name = row.name;
-  if (typeof name !== "string" || !checkThemeName(name).ok || name !== name.trim()) {
-    refuse("name");
-  }
-  if (row.name_key !== themeNameKey(name)) refuse("name_key");
+  const name = typeof row.name === "string" ? checkThemeName(row.name) : null;
+  if (name === null || !name.ok || name.name !== row.name) refuse("name");
+  if (row.name_key !== name.key) refuse("name_key");
   if (row.in_use !== null && row.in_use !== 1) refuse("in_use");
   if (!readThemeDocument(parsedTheme(row.theme)).ok) refuse("theme");
 }
