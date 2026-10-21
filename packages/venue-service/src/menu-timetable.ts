@@ -283,7 +283,6 @@ export async function departmentDay(
       id: menuPeriods.id,
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
-      offset: menuPeriods.endOffsetMinutes,
     })
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId))
@@ -406,7 +405,6 @@ export async function resolveDepartmentService(
     periodName: null,
     customerMenuId: null,
     orderableMenuIds: [],
-    sendableMenuIds: [],
     endedMenuIds: [],
     keepOpen: null,
   };
@@ -415,48 +413,26 @@ export async function resolveDepartmentService(
       ...closed,
       open: true,
       orderableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
-      sendableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
     };
 
   const context = serviceDayContext(clock, moment.businessDay);
-  const previousContext = serviceDayContext(clock, addDays(moment.businessDay, -1));
   const ranges = withExtension(day.ranges, day.extension, context.dayCutover);
   const running = rangeInForce(serviceRuns(ranges), moment.minute, context.dayCutover, context);
   const period =
     running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
-  const occurrences = [
-    ...day.previousRanges.map((range) => ({ range, previous: true })),
-    ...serviceRuns(ranges).map((range) => ({ range, previous: false })),
-  ];
-  const eligibleMenus = (selection: boolean): string[] => [
+  const orderableMenuIds = [
     ...new Set(
-      occurrences.flatMap(({ range, previous }) => {
-        const cutover = previous ? previousContext.dayCutover : context.dayCutover;
-        const span = rangeSpan(range, cutover);
-        const relativeMinute = previous
-          ? moment.minute +
-            1440 +
-            (Number(context.dayCutover.slice(0, 2)) - Number(cutover.slice(0, 2))) * 60 +
-            Number(context.dayCutover.slice(3, 5)) -
-            Number(cutover.slice(3, 5))
-          : moment.minute;
-        const offset = periods.find((entry) => entry.id === range.periodId)!.offset;
-        const cutoff = span.end + (selection ? Math.min(offset, 0) : offset);
+      serviceRuns(ranges).flatMap((range) => {
+        const span = rangeSpan(range, context.dayCutover);
         const boundaryEnd =
-          !previous &&
-          range.endsAt === context.dayCutover &&
-          context.endMinute === 1440 &&
-          cutoff >= 1440;
-        return relativeMinute >= span.start &&
-          (boundaryEnd ||
-            relativeMinute < Math.min(cutoff, previous ? Infinity : context.endMinute))
+          range.endsAt === context.dayCutover && context.endMinute === 1440 && span.end >= 1440;
+        return moment.minute >= span.start &&
+          (boundaryEnd || moment.minute < Math.min(span.end, context.endMinute))
           ? menusOf(range.periodId)
           : [];
       }),
     ),
   ];
-  const orderableMenuIds = eligibleMenus(true);
-  const sendableMenuIds = eligibleMenus(false);
   const ended = [
     ...day.previousRanges,
     ...ranges.filter((range) => rangeSpanInDay(range, context).end <= moment.minute),
@@ -472,7 +448,6 @@ export async function resolveDepartmentService(
     periodName: period?.name ?? null,
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,
-    sendableMenuIds,
     keepOpen: keepOpenSubject(ranges, day, moment, context.dayCutover, context),
     endedMenuIds: [...new Set(ended.flatMap((range) => menusOf(range.periodId)))].filter(
       (id) => !orderableMenuIds.includes(id),

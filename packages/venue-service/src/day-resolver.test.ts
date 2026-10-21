@@ -26,12 +26,7 @@ import {
   resolveDepartmentsDays,
   resolveZoneClosedDays,
 } from "./day-resolver.js";
-import {
-  replaceMenuWeek,
-  resolveDepartmentService,
-  saveMenuPeriod,
-  updateMenuPeriod,
-} from "./menu-timetable.js";
+import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   configureZone,
@@ -299,22 +294,6 @@ describe("the till's service on a season boundary", () => {
       at: "2030-12-01 00:15",
       period: "Dinner",
     });
-  });
-
-  it("yesterday's grace uses yesterday's season", async () => {
-    const v = await venue();
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.dinner, { endOffsetMinutes: 30 }, 0, AT));
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lateBar, { endOffsetMinutes: 30 }, 0, AT));
-    await menuSeason(v, v.seasons.Autumn!, {
-      [SATURDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "05:45" }],
-    });
-    await menuSeason(v, v.seasons.Winter!, {
-      [SATURDAY]: [{ periodId: v.lateBar, startsAt: "20:00", endsAt: "05:45" }],
-    });
-    const at = new Date("2030-12-01T05:05:00Z"); // 06:05 in Madrid, business day Sunday
-    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.departmentId, at));
-    expect(service.sendableMenuIds).toContain(v.menus.Dinner);
-    expect(service.sendableMenuIds).not.toContain(v.menus["Late bar"]);
   });
 
   it("an unreadable clock still opens every period's menus", async () => {

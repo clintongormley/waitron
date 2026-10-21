@@ -546,7 +546,6 @@ describe("service boundaries remain chronological", () => {
     const running = await read(instant);
     expect(running.open).toBe(true);
     expect(running.orderableMenuIds).toHaveLength(1);
-    expect(running.sendableMenuIds).toHaveLength(1);
     expect(running.endedMenuIds).toEqual([]);
     expect(running.keepOpen).toMatchObject({ periodId: v.periodId, running: true });
     expect((await read(end)).open).toBe(false);
@@ -1938,43 +1937,28 @@ describe("dated runtime service and yesterday sending", () => {
         const result = await read(instant);
         expect(result.open).toBe(false);
         expect(result.orderableMenuIds).toEqual([]);
-        expect(result.sendableMenuIds).toEqual([]);
         expect(result.endedMenuIds).toHaveLength(1);
       }
       const boundary = time === "07:00" ? "2026-11-04T06:00:00Z" : "2026-11-04T02:00:00Z";
       expect(await read(boundary)).toMatchObject({
         open: false,
-        sendableMenuIds: [],
         orderableMenuIds: [],
       });
     },
   );
-  it("uses yesterday's own 05:00 start for positive grace after the 07:00 boundary", async () => {
-    const v = await writtenFixture([range("22:00", "04:30")], { offset: 180, weekday: 2 });
-    await timeline(v, "07:00");
-    const read = (instant: string) =>
-      withTransaction(suite.db, (tx) =>
+  it("after the start moves from 05:00 to 03:00, yesterday's menus are not orderable", async () => {
+    const v = await writtenFixture([range("22:00", "02:30")], { weekday: 2 });
+    await timeline(v, "03:00");
+    for (const instant of [
+      "2026-11-04T02:00:00Z",
+      "2026-11-04T02:30:00Z",
+      "2026-11-04T03:59:00Z",
+    ]) {
+      const result = await withTransaction(suite.db, (tx) =>
         resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
       );
-    const grace = await read("2026-11-04T06:00:00Z");
-    expect(grace).toMatchObject({ open: false, orderableMenuIds: [] });
-    expect(grace.sendableMenuIds).toHaveLength(1);
-    expect((await read("2026-11-04T06:30:00Z")).sendableMenuIds).toEqual([]);
-  });
-  it("retains yesterday's negative offset and the exact early sending cutoff", async () => {
-    const v = await writtenFixture([range("22:00", "04:30")], { offset: -60, weekday: 2 });
-    await timeline(v, "07:00");
-    const read = (instant: string) =>
-      withTransaction(suite.db, (tx) =>
-        resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
-      );
-    expect((await read("2026-11-04T02:29:00Z")).sendableMenuIds).toHaveLength(1);
-    expect(await read("2026-11-04T02:30:00Z")).toMatchObject({
-      open: true,
-      orderableMenuIds: [],
-      sendableMenuIds: [],
-    });
-    expect((await read("2026-11-04T06:00:00Z")).sendableMenuIds).toEqual([]);
+      expect(result.orderableMenuIds).toEqual([]);
+    }
   });
 });
 

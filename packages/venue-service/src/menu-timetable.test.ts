@@ -327,7 +327,6 @@ describe("service-period writers", () => {
       resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:10:00Z")),
     );
     expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
-    expect(running.sendableMenuIds).toContain(running.customerMenuId);
     expect(
       (
         await scoped((tx) =>
@@ -2778,124 +2777,31 @@ describe("department service periods", () => {
   });
 
   it.each([
-    [-15, "13:44", true, true],
-    [-15, "13:45", false, false],
-    [0, "13:59", true, true],
-    [0, "14:00", false, false],
-    [15, "13:59", true, true],
-    [15, "14:00", false, true],
-    [15, "14:14", false, true],
-    [15, "14:15", false, false],
-    [15, "11:59", false, false],
-  ] as const)(
-    "end-offset %s at %s separates selection %s from sending %s",
-    async (offset, time, select, send) => {
-      const v = await serviceVenue();
-      await scoped(async (tx) => {
-        await replaceMenuWeek(
-          tx,
-          v.cfg,
-          v.restaurant,
-          weekOf((day) => (day === 5 ? [slot(v.lunch, "12:00", "14:00")] : [])),
-          AT,
-          0,
-        );
-        await updateMenuPeriod(tx, v.cfg, v.lunch, { endOffsetMinutes: offset }, 0);
-      });
-      const service = await read(v, FRIDAY, time);
-      const menus = [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café];
-      expect(service.orderableMenuIds).toEqual(select ? menus : []);
-      expect(service).toMatchObject({ sendableMenuIds: send ? menus : [] });
-      expect(service.open).toBe(time >= "12:00" && time < "14:00");
-    },
-  );
-
-  it("end-offset grace survives changeover into a whole-venue closed day then expires", async () => {
+    ["13:59", true],
+    ["14:00", false],
+    ["11:59", false],
+  ] as const)("at %s Lunch's menus are orderable: %s", async (time, select) => {
     const v = await serviceVenue();
-    await scoped(async (tx) => {
-      await replaceMenuWeek(
+    await scoped((tx) =>
+      replaceMenuWeek(
         tx,
         v.cfg,
         v.restaurant,
-        weekOf((day) => (day === 5 ? [slot(v.night, "21:00", "06:00")] : [])),
+        weekOf((day) => (day === 5 ? [slot(v.lunch, "12:00", "14:00")] : [])),
         AT,
         0,
-      );
-      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: 15 }, 0);
-    });
-    await saveDay(v, SATURDAY, { closedAllDay: true });
-    expect(await read(v, SATURDAY, "06:14")).toMatchObject({
-      open: false,
-      orderableMenuIds: [],
-      sendableMenuIds: [v.menus.Cena],
-    });
-    expect(await read(v, SATURDAY, "06:15")).toMatchObject({
-      open: false,
-      orderableMenuIds: [],
-      sendableMenuIds: [],
-    });
+      ),
+    );
+    const service = await read(v, FRIDAY, time);
+    const menus = [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café];
+    expect(service.orderableMenuIds).toEqual(select ? menus : []);
+    expect(service.open).toBe(time >= "12:00" && time < "14:00");
   });
 
-  it("end-offset unions a shared staff menu without reviving its ended selling root", async () => {
+  it("unions a shared staff menu without reviving its ended selling root", async () => {
     const v = await serviceVenue();
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lunch, { endOffsetMinutes: -15 }, 0));
-    expect(await read(v, FRIDAY, "13:45")).toMatchObject({
-      open: true,
-      periodName: "Lunch",
-      orderableMenuIds: [],
-      sendableMenuIds: [],
-    });
     expect(await read(v, FRIDAY, "14:00")).toMatchObject({
       orderableMenuIds: [v.menus.Café],
-      sendableMenuIds: [v.menus.Café],
-    });
-  });
-
-  it("end-offset uses the same repeated wall minute and crosses a skipped cutoff", async () => {
-    const v = await serviceVenue();
-    await scoped(async (tx) => {
-      await replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf((day) => (day === 6 ? [slot(v.night, "21:00", "03:00")] : [])),
-        AT,
-        0,
-      );
-      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: -30 }, 0);
-    });
-    const repeated = localTimeOccurrences("2026-10-25", "02:20", ZONE);
-    expect(repeated).toHaveLength(2);
-    for (const instant of repeated) {
-      expect(
-        await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, instant)),
-      ).toMatchObject({ orderableMenuIds: [v.menus.Cena], sendableMenuIds: [v.menus.Cena] });
-    }
-    expect(await read(v, "2026-10-25", "02:30")).toMatchObject({
-      open: true,
-      orderableMenuIds: [],
-      sendableMenuIds: [],
-    });
-    // The placement endpoint exists; its last-order cutoff is the skipped minute.
-    await scoped(async (tx) => {
-      await replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.restaurant,
-        weekOf((day) => (day === 6 ? [slot(v.night, "21:00", "04:00")] : [])),
-        AT,
-        0,
-      );
-      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: -90 }, 0);
-    });
-    expect(await read(v, "2027-03-28", "01:59")).toMatchObject({
-      orderableMenuIds: [v.menus.Cena],
-      sendableMenuIds: [v.menus.Cena],
-    });
-    expect(await read(v, "2027-03-28", "03:00")).toMatchObject({
-      open: true,
-      orderableMenuIds: [],
-      sendableMenuIds: [],
     });
   });
 
@@ -2916,7 +2822,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Almuerzo,
       orderableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
-      sendableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
       endedMenuIds: [],
     });
     expect(await read(v, FRIDAY, "14:00")).toEqual({
@@ -2934,7 +2839,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Café,
       orderableMenuIds: [v.menus.Café],
-      sendableMenuIds: [v.menus.Café],
       endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas],
     });
   });
@@ -2956,7 +2860,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Cena,
       orderableMenuIds: [v.menus.Cena],
-      sendableMenuIds: [v.menus.Cena],
       endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
     });
     expect(await read(v, SATURDAY, "03:00")).toEqual({
@@ -2974,7 +2877,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena],
     });
     expect(await read(v, SATURDAY, "06:10")).toEqual({
@@ -2986,7 +2888,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena],
     });
   });
@@ -3008,7 +2909,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
     });
     expect(await read(v, "2026-10-18", "06:10")).toEqual({
@@ -3020,7 +2920,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [],
     });
   });
@@ -3036,7 +2935,6 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "12:30")).toMatchObject({
       open: false,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [],
     });
     expect(await read(v, FRIDAY, "15:00")).toMatchObject({
@@ -3063,7 +2961,6 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [],
     });
     await saveDay(v, FRIDAY, { id: date.id });
@@ -3083,7 +2980,6 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [],
     });
     await saveDay(v, FRIDAY, { id: date.id, closedAllDay: true });
@@ -3124,7 +3020,6 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      sendableMenuIds: [],
       endedMenuIds: [],
     });
     const other = await venue({ timetable: false });

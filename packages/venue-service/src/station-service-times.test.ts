@@ -22,7 +22,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
@@ -1040,45 +1040,3 @@ it.each([
       });
     }),
 );
-
-it("A724 all-day negative offsets match sending on consecutive weekdays", async () =>
-  tx(async (db) => {
-    const f = await fixture(db);
-    await replaceMenuWeek(
-      db,
-      f.cfg,
-      f.department,
-      Array.from({ length: 7 }, (_, weekday) => ({
-        weekday,
-        slots: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:00" }],
-      })),
-      at,
-      0,
-    );
-    await db.update(menuPeriods).set({ endOffsetMinutes: -30 }).where(eq(menuPeriods.id, f.lunch));
-    const forecast = await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13");
-    expect(forecast.days).toEqual(
-      [day, "2026-10-13"].map((date) => ({
-        date,
-        departments: [
-          {
-            departmentId: f.department,
-            ranges: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "05:30" }],
-          },
-        ],
-      })),
-    );
-    const accepts = [];
-    for (const at of [
-      "2026-10-13T05:20:00+02:00",
-      "2026-10-13T05:45:00+02:00",
-      "2026-10-13T06:00:00+02:00",
-    ]) {
-      accepts.push(
-        (
-          await resolveDepartmentService(db, f.cfg, f.department, new Date(at))
-        ).sendableMenuIds.includes(f.menu),
-      );
-    }
-    expect(accepts).toEqual([true, false, true]);
-  }));
