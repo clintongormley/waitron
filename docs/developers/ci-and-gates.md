@@ -1225,7 +1225,14 @@ sequencer runs the server's tests on a pull request because `ROOT_SCOPE_CONSUMER
 `scripts/changed-scope.mjs` lists it. Nothing checks, on every run, that each server test file ran in
 exactly one shard.
 
-The pull request's own CI run is measured in its description (A938).
+Measured on the pull request's own run (#1930, run 39535880036 at 8ea96e7be; job =
+`completed_at − started_at` from the jobs API). Before, main run 39530877061 (b1be04e2a, the same
+day, 11 shards): slowest 420 s, median 298 s. After, attempt 1: slowest 292 s (shard 1), median
+219 s; attempt 2: slowest 250 s (shard 11), median 216 s. On attempt 1, shard 1's last file to end
+was `first-fiscal-hour.e2e`, at 245.1 s: the job was that file plus 47 s of setup, the floor this
+section names. On both attempts the 16 logs held 878 `[file-progress] end` lines with no path
+repeated; against main run 39530877061's 877, the one difference was this branch's new
+`src/testing/derived-key-cache.test.ts`. The per-shard times are in #1930's description.
 
 ### A cheap job can still be the critical path
 

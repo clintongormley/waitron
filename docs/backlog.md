@@ -5748,8 +5748,9 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run)
 
 - **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard** (208 s median
-  and 255 s worst over six runs in A938), since no packing goes below one file. Split it once A733
-  has landed, or find why each restart test boots the real entry point twice. Left open by A938.
+  and 255 s worst over six runs in A938), since no packing goes below one file: on #1930's run
+  39535880036 (attempt 1) it took 245.1 s and its shard 292 s. A733 has landed (#1929), so it can be
+  split now, or find why each restart test boots the real entry point twice. Left open by A938 (#1930).
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **The server's duration table is refreshed by hand.** Nothing says when
@@ -5763,8 +5764,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **Nothing checks, on every CI run, that each server test file ran in exactly one shard.** The
-  guard checks the packing over a walk of the tree, and A938's pull request records one run's
-  `[file-progress] end` count. A standing check, for example in `test-server-merge` comparing the shards' `end`
+  guard checks the packing over a walk of the tree, and A938's pull request (#1930) recorded both
+  attempts of one run: 878 `[file-progress] end` lines each, no path repeated. A standing check, for example in `test-server-merge` comparing the shards' `end`
   lines with the file list, is open. Left open by A938. [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **Other server test files still hash fixed PINs and passwords on every test.** A801 moved the
