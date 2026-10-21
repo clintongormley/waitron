@@ -203,7 +203,7 @@ export const venueEn = {
   "cert.refusal.expired": "This certificate has expired. Choose its replacement.",
   "cert.refusal.not_yet_valid":
     "This certificate is not valid yet. Check the date or choose another file.",
-  "cert.refusal.too_large": "Choose a certificate file no larger than 100 KiB.",
+  "cert.guide": "Certificate help",
   "cert.back": "Back",
   "cert.next": "Next",
 
@@ -444,7 +444,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.refusal.expired": "Este certificado ha caducado. Elige su sustituto.",
   "cert.refusal.not_yet_valid":
     "Este certificado aún no es válido. Revisa la fecha o elige otro archivo.",
-  "cert.refusal.too_large": "Elige un archivo de certificado de 100 KiB como máximo.",
+  "cert.guide": "Ayuda con el certificado",
   "cert.file_unreadable":
     "No hemos podido leer ese archivo. Vuelve a elegir el archivo del certificado.",
   "cert.back": "Volver",

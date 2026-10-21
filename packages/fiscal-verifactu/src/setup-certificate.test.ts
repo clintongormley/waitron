@@ -30,7 +30,6 @@ describe("setup certificate local validation", () => {
     ["key without certificate", KEY_ONLY_CANDIDATE, "pfxBase64", "unreadable"],
     ["expired at its exact end", body(expired.pfx), "pfxBase64", "expired"],
     ["not yet valid", body(future.pfx), "pfxBase64", "not_yet_valid"],
-    ["oversized file", body(Buffer.alloc(100 * 1024 + 1)), "pfxBase64", "too_large"],
   ])("refuses %s with only the field and reason", (_label, certificate, field, reason) => {
     expect(() => secret.validate({ ...certificate, certKind: "sello" })).toThrowError(
       expect.objectContaining({ code: "setup.certificate_refused", params: { field, reason } }),

@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
-import { format, t } from "../i18n/t.js";
+import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { certificateExportHelp } from "../certificate-export-help.js";
@@ -40,7 +40,6 @@ const REFUSAL_MESSAGES: Readonly<Record<string, StringKey>> = {
   no_private_key: "cert.refusal.no_private_key",
   expired: "cert.refusal.expired",
   not_yet_valid: "cert.refusal.not_yet_valid",
-  too_large: "cert.refusal.too_large",
 };
 
 interface CertificateForm {
@@ -312,6 +311,15 @@ export class SetupCertScreen extends LitElement {
       <h1>${t("cert.heading")}</h1>
       <p>${t("cert.intro")}</p>
       ${certificateExportHelp(navigator.userAgent)}
+      <p>
+        <a
+          data-test="certificate-guide"
+          href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/aeat-certificate#refusals`}
+          target="_blank"
+          rel="noopener"
+          >${t("cert.guide")}</a
+        >
+      </p>
       <label class="field file" ?invalid=${errors.pfx !== undefined}>
         <span
           >${t("cert.file_label")} *

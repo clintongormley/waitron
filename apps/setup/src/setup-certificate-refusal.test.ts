@@ -10,6 +10,20 @@ import type { SetupCertScreen } from "./screens/cert-screen.js";
 import { mountWidget, cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 
 const mounted: HTMLElement[] = [];
+it.each(["en-GB", "es-ES"])(
+  "links the certificate form to its translated refusal guide (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=certificate-guide]");
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe(
+      `/help/${locale === "es-ES" ? "es" : "en"}/aeat-certificate#refusals`,
+    );
+    expect(link!.target).toBe("_blank");
+    expect(link!.rel).toBe("noopener");
+  },
+);
 afterEach(async () => {
   mounted.splice(0).forEach((host) => host.remove());
   cleanupWidgets();
@@ -25,7 +39,6 @@ for (const locale of ["en-GB", "es-ES"]) {
     "no_private_key",
     "expired",
     "not_yet_valid",
-    "too_large",
     "passphrase_wrong",
   ])(`shows the local %s refusal beside its field (${locale})`, async (reason) => {
     setLocale(locale);

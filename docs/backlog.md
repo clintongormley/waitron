@@ -571,6 +571,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
     intent is preparation or live (`apps/server/src/boot.ts`).
 
+- **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
+  own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
+  Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
+
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   Several small wizard leftovers remain: a fiscal-test banner that may outlive its screen, an
   earlier attempt's message a cloud restore may show, a mistyped adopt answer, the mode screen's

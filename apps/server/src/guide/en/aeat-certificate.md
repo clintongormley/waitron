@@ -7,7 +7,7 @@ you used when exporting it. Demo and Preparation do not ask for this certificate
 
 Setup checks the file before running the fiscal test or provisioning the venue. A wrong passphrase
 is explained under **Certificate passphrase**. A file that cannot be opened, uses old RC2
-encryption, has no private key, is larger than 100 KiB, has expired or is not valid yet is explained
+encryption, has no private key, has expired or is not valid yet is explained
 under **Certificate file**.
 
 Correct the passphrase or choose a replacement file, then select **Next** and run the fiscal test
