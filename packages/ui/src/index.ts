@@ -137,6 +137,14 @@ export {
 } from "./theme-choice.js";
 export type { ThemeChoice } from "./theme-choice.js";
 export {
+  VENUE_THEME_STORAGE_KEY,
+  VENUE_THEME_TIME_LIMIT_MS,
+  applyVenueTheme,
+  isVenueThemeAnswer,
+  startVenueTheme,
+} from "./venue-theme.js";
+export type { VenueThemeAnswer, VenueThemeOptions } from "./venue-theme.js";
+export {
   HelpModeController,
   currentHelpMode,
   setHelpMode,
