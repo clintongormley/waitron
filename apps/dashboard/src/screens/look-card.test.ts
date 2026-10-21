@@ -3,8 +3,8 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LeaveController } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
-import { deriveTheme } from "@waitron/ui-core/theme/waitron";
+import { WAITRON_CHOICES, fixAll, type ThemeChoices } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
@@ -510,6 +510,135 @@ describe("another dashboard changes the themes while this one edits", () => {
     await expect.poll(() => bottom(el)).toBe(codeMessage("theme.not_found"));
     expect(button(el, "save").disabled).toBe(false);
     expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
+  });
+});
+
+describe("readability warnings in the editor", () => {
+  const TWO_FIXES = theme("t-hand", "By hand", {
+    ...WAITRON_CHOICES,
+    handSet: { light: { text: "#6a6a6a", "surface-sunken": "#bbbbbb" }, dark: {} },
+  });
+
+  async function lemonEditing() {
+    const opened = await mountEditing(inUse(lucia));
+    await typeInCode(opened.el, "#f2d300");
+    return opened;
+  }
+
+  it("the lemon warns, as picked, and never blocks Save", async () => {
+    setLocale("en-GB");
+    const { el } = await lemonEditing();
+    const warning = q(el, "[data-test=brand-warning-light]")!;
+    expect(text(warning)).toBe(t("appearance.brand_warning_light"));
+    expect(warning.querySelector("wt-icon")?.getAttribute("name")).toBe("warning");
+    expect(text(q(el, "[data-test=brand-fix-light]"))).toBe("Use #9d8a15 on light screens");
+    expect(q(el, "[data-test=brand-warning-dark]")).toBeNull();
+    expect(preview(el).theme.light["--wt-color-primary"]).toBe("#f2d300");
+    expect(button(el, "save").disabled).toBe(false);
+    expect(button(el, "save").variant).toBe("primary");
+    expect(await bottom(el)).toBe("");
+    expect(codeField(el).error).toBe("");
+    expect(segmented(el, "background").error).toBe("");
+    expect(segmented(el, "corners").error).toBe("");
+  });
+
+  it("the fix is a draft change, and Undo puts the lemon back", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await lemonEditing();
+    await userEvent.click(button(el, "brand-fix-light"));
+    await el.updateComplete;
+    expect(preview(el).theme.light["--wt-color-primary"]).toBe("#9d8a15");
+    expect(text(q(el, "[data-test=brand-fixed-light]"))).toBe("Buttons on light screens: #9d8a15");
+    expect(text(q(el, "[data-test=brand-undo-light]"))).toBe(t("appearance.undo"));
+    expect(q(el, "[data-test=brand-warning-light]")).toBeNull();
+    expect(button(el, "save").disabled).toBe(false);
+    await userEvent.click(button(el, "brand-undo-light"));
+    await el.updateComplete;
+    expect(text(q(el, "[data-test=brand-warning-light]"))).toBe(
+      t("appearance.brand_warning_light"),
+    );
+    expect(q(el, "[data-test=brand-fixed-light]")).toBeNull();
+    expect(preview(el).theme.light["--wt-color-primary"]).toBe("#f2d300");
+    await userEvent.click(button(el, "brand-fix-light"));
+    await el.updateComplete;
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(row(el, "brand")).toBe("Custom · #1e5b3a · dark screens #437e5b");
+    expect(row(el, "background")).toBe("Tinted");
+    expect(row(el, "corners")).toBe("Round");
+  });
+
+  it("a saved fix shows as fixed when the editor opens", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    expect(text(q(el, "[data-test=brand-fixed-dark]"))).toBe("Buttons on dark screens: #437e5b");
+    expect(q(el, "[data-test=brand-undo-dark]")).not.toBeNull();
+    expect(q(el, "[data-test=brand-warning-dark]")).toBeNull();
+    expect(button(el, "save").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("picking another brand colour drops the fix", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await el.updateComplete;
+    expect(q(el, "[data-test=brand-fixed-dark]")).toBeNull();
+    expect(text(q(el, "[data-test=brand-warning-dark]"))).toBe(t("appearance.brand_warning_dark"));
+    const tinted = deriveTheme({ ...LUCIA, brandColor: "#b12525", brandFix: {} }).warnings;
+    expect(tinted.map((w) => [w.field, w.mode])).toEqual([["brandColor", "dark"]]);
+    expect(text(q(el, "[data-test=brand-fix-dark]"))).toBe(`Use ${tinted[0]!.fix} on dark screens`);
+    await chooseSegment(el, "background", "Neutral");
+    expect(text(q(el, "[data-test=brand-fix-dark]"))).toBe("Use #cd423d on dark screens");
+  });
+
+  it("Fix all shows for two fixable warnings and fixes them", async () => {
+    setLocale("en-GB");
+    const rig = editRig(inUse(TWO_FIXES));
+    const { el } = await mountWidget<Card>("dashboard-look-card", {
+      api: rig.api,
+      list: inUse(TWO_FIXES),
+      canEdit: true,
+    });
+    const handRow = row(el, "hand");
+    expect(handRow).toBe("Sunken areas (light), Text (light)");
+    await userEvent.click(q(el, "[data-test=edit]")!);
+    await el.updateComplete;
+    expect(text(q(el, "[data-test=fix-all-line]"))).toBe("2 colours are hard to read.");
+    expect(text(q(el, "[data-test=fix-all]"))).toBe(t("appearance.fix_all"));
+    await userEvent.click(button(el, "fix-all"));
+    await el.updateComplete;
+    const fixed = fixAll(WAITRON_DEFAULTS, TWO_FIXES.choices!);
+    expect(fixed.handSet.light).toEqual({ text: "#4a4a4a", "surface-sunken": "#bbbbbb" });
+    expect(preview(el).theme).toEqual(deriveTheme(fixed));
+    expect(q(el, "[data-test=fix-all-line]")).toBeNull();
+    expect(button(el, "save").disabled).toBe(false);
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(rig.api.saveTheme).not.toHaveBeenCalled();
+    expect(row(el, "hand")).toBe(handRow);
+  });
+
+  it("shows no Fix all line for the lemon alone", async () => {
+    const { el } = await lemonEditing();
+    expect(q(el, "[data-test=brand-warning-light]")).not.toBeNull();
+    expect(q(el, "[data-test=fix-all-line]")).toBeNull();
+    expect(q(el, "[data-test=fix-all]")).toBeNull();
+  });
+
+  it("the warnings follow the screen language", async () => {
+    setLocale("en-GB");
+    const { el } = await lemonEditing();
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(text(q(el, "[data-test=brand-warning-light]"))).toBe(
+      es["appearance.brand_warning_light"],
+    );
+    expect(text(q(el, "[data-test=brand-fix-light]"))).toBe(
+      es["appearance.brand_fix_light"].replace("{colour}", "#9d8a15"),
+    );
   });
 });
 

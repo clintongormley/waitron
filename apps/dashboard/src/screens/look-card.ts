@@ -22,6 +22,7 @@ import {
   MODES,
   THEME_COLOURS,
   WAITRON_CHOICES,
+  fixAll,
   normaliseChoices,
   type Background,
   type Corners,
@@ -48,7 +49,15 @@ import {
 } from "../widgets/look-draft.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import "../widgets/theme-preview.js";
-import { savedWarningLine, themeColourName } from "../widgets/theme-words.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
+import {
+  brandFixLabel,
+  brandFixedText,
+  brandWarningText,
+  fixAllText,
+  savedWarningLine,
+  themeColourName,
+} from "../widgets/theme-words.js";
 
 const PRIMARY = "--wt-color-primary";
 
@@ -115,6 +124,13 @@ export class LookCard extends LitElement {
         margin: var(--wt-space-3) 0 0;
         color: var(--wt-color-warning);
       }
+      .fixed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: 0;
+      }
       .note {
         margin: var(--wt-space-4) 0 0;
         color: var(--wt-color-text-muted);
@@ -160,6 +176,11 @@ export class LookCard extends LitElement {
   #scope?: DraftScope<LookDraft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -256,6 +277,72 @@ export class LookCard extends LitElement {
     this.actionError = "";
     this.#scope?.changed();
   }
+  #setBrandFix(mode: Mode, taken: boolean): void {
+    this.#change((d) => {
+      const brandFix = Object.fromEntries(
+        MODES.filter((m) => (m === mode ? taken : d.choices.brandFix[m])).map((m) => [m, true]),
+      ) as ThemeChoices["brandFix"];
+      return { ...d, choices: { ...d.choices, brandFix } };
+    });
+  }
+  #brandLines(draft: LookDraft, busy: boolean): TemplateResult[] {
+    const derived = this.#derived!;
+    return MODES.flatMap((mode: Mode) => {
+      if (draft.choices.brandFix[mode]) {
+        return [
+          html`<p class="fixed">
+            <span data-test="brand-fixed-${mode}"
+              >${brandFixedText(mode, derived[mode][PRIMARY]!)}</span
+            >
+            <wt-button
+              data-test="brand-undo-${mode}"
+              variant="ghost"
+              size="sm"
+              ?disabled=${busy}
+              @click=${() => this.#setBrandFix(mode, false)}
+              >${t("appearance.undo")}</wt-button
+            >
+          </p>`,
+        ];
+      }
+      const warning = derived.warnings.find((w) => w.field === "brandColor" && w.mode === mode);
+      if (!warning) return [];
+      return [
+        html`<p class="warning" data-test="brand-warning-${mode}">
+            <wt-icon name="warning"></wt-icon><span>${brandWarningText(mode)}</span>
+          </p>
+          ${
+            warning.fix === null
+              ? nothing
+              : html`<p class="fixed">
+                  <wt-button
+                    data-test="brand-fix-${mode}"
+                    size="sm"
+                    ?disabled=${busy}
+                    @click=${() => this.#setBrandFix(mode, true)}
+                    >${brandFixLabel(mode, warning.fix)}</wt-button
+                  >
+                </p>`
+          }`,
+      ];
+    });
+  }
+  #fixAllLine(busy: boolean): TemplateResult | typeof nothing {
+    const warnings = this.#derived!.warnings;
+    if (warnings.filter((warning) => warning.fix !== null).length < 2) return nothing;
+    return html`<p class="warning">
+      <wt-icon name="warning"></wt-icon
+      ><span data-test="fix-all-line">${fixAllText(warnings.length)}</span>
+      <wt-button
+        data-test="fix-all"
+        size="sm"
+        ?disabled=${busy}
+        @click=${() =>
+          this.#change((d) => ({ ...d, choices: fixAll(WAITRON_DEFAULTS, d.choices) }))}
+        >${t("appearance.fix_all")}</wt-button
+      >
+    </p>`;
+  }
   async #save(): Promise<void> {
     const draft = this.draft;
     const editing = this.#editing;
@@ -336,6 +423,7 @@ export class LookCard extends LitElement {
                 change: (text) => this.#change((d) => typeCode(d, text, this.#expected), true),
               },
             })}
+            ${this.#brandLines(draft, busy)}
             <wt-segmented-control
               name="background"
               label=${t("appearance.background")}
@@ -367,6 +455,7 @@ export class LookCard extends LitElement {
           </div>
           <dashboard-theme-preview .theme=${this.#derived!} .name=${name}></dashboard-theme-preview>
         </div>
+        ${this.#fixAllLine(busy)}
         <wt-form-actions .error=${codeError ? t("form.fix_fields") : this.actionError}>
           <wt-button
             slot="cancel"
