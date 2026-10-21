@@ -188,7 +188,7 @@ it("hides unavailable refund choices and points to a till without asking for app
   const el = await mount({ refunds: {}, refundAtTill: true });
   await reason(el);
   expect(root(el).querySelector("input[name=refund]")).toBeNull();
-  expect(root(el).textContent).toContain("Give the money back at a till");
+  expect(root(el).textContent).toContain("Refund the payment at a till");
   expect(button(el).textContent?.trim()).toBe("Cancel");
   const calls = collect(el);
   await click(el, "[data-confirm]");

@@ -821,7 +821,7 @@ describe("till-app: the party's bills and Finish table", () => {
 
     const text = banner(el)!.textContent!;
     expect(text).toContain(
-      "A bill on this table owes nothing but still holds money. Give it back before finishing the table",
+      "A bill on this table owes nothing but still holds money. Refund it before finishing the table",
     );
     expect(text).not.toContain(codeMessage("bill.payments_received"));
     expect(tableOrder(el)!.finishRefused).toBe(false);

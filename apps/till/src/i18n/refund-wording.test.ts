@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { en } from "./strings.js";
+import { codeMessage } from "./codes.js";
 
 describe("A803 refund wording", () => {
   it.each([
@@ -51,5 +52,36 @@ describe("A803 refund wording", () => {
     ],
   ] as const)("calls the payment return a refund in %s", (key, wording) => {
     expect(en[key]).toBe(wording);
+  });
+});
+
+describe("A803 refund refusal wording", () => {
+  it.each([
+    [
+      "unpaid_departure.bill_holds_payment",
+      "A bill on this table already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",
+    ],
+    [
+      "bill.refund_exceeds_payment",
+      "That is more than can be refunded from this payment. A tip is refunded only with the whole payment",
+    ],
+    [
+      "tender.refund_exceeds_payment",
+      "That is more than can be refunded from this payment. A tip is refunded only with all the remaining payment",
+    ],
+    [
+      "bill.refund_not_whole",
+      "A payment for particular items can only be refunded in full, which frees those items to be paid for again",
+    ],
+    [
+      "payment.not_refundable",
+      "This card payment can no longer be refunded. Reload the bill and try again",
+    ],
+    [
+      "payment.refund_exceeds_capture",
+      "That is more than is left to refund on this card payment. Reload the bill and check the amount",
+    ],
+  ] as const)("calls the payment return a refund in %s", (code, wording) => {
+    expect(codeMessage(code, "en")).toBe(wording);
   });
 });
