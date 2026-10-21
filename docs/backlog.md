@@ -4034,10 +4034,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
   open: supplied-reference lookup and deduplication, actual webhook headers, signature-card
-  handling, and fresh full/partial-refund observations. **A949, 2026-10-21:** all eight read-only
-  probes returned `401`; the saved experiment file has no affiliate credentials. Published refund units conflict
-  with September's measurement. Restore experiment credentials and run the operator checks in
-  [the checkpoint](research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21).
+  handling, and fresh full/partial-refund observations. **A949, 2026-10-22:** the replacement API key
+  passed account, reader and transaction reads; the Solo reports `OFFLINE`. Affiliate credentials
+  are present but untested in a checkout. Historical payment/refund rows are readable; current
+  refund units still need the live control. Bring the Solo online with the operator and follow
+  [the checklist](research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22).
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
 - **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine.

@@ -122,14 +122,15 @@ From the pre-merge review:
 
 ## The SumUp Solo experiments
 
-**A949 checkpoint, 2026-10-21:** every read-only request with the saved API credential returned
-`401`, including memberships, readers, reader status, history and transaction lookup. An invalid-key
-control also returned `401`; reader permissions and availability were not established. The saved
-experiment file has no affiliate credentials. No checkout, refund or pairing write was sent. See the
-[probe results and operator steps](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21).
-The current published refund description explicitly uses major units, conflicting with §4b's
-September cents measurement; the adapter's three fake-HTTP wire checks still pass with cents.
-Keep the adapter unchanged until the controlled live re-test settles this.
+**A949 checkpoint, 2026-10-22:** the replacement credential passed account, reader and transaction
+reads. The configured Solo is paired but reports `OFFLINE`. Affiliate credentials are present;
+their checkout validity remains untested. History returns separate payment and refund rows;
+filtering each type returned the exact expected sets. The original payment's detail agrees by
+UUID, transaction code and client transaction id. See the
+[authenticated baseline and operator checklist](../research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22).
+The 2026-10-21 `401` checkpoint remains historical. No checkout, refund or pairing write was sent.
+Published refund units still conflict with September's measurement; keep the adapter unchanged
+until the controlled live re-test settles this.
 
 - **The SumUp Solo experiments** ([runbook](../research/2026-09-10-sumup-solo-experiments.md)). Question
   4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
@@ -147,7 +148,7 @@ Keep the adapter unchanged until the controlled live re-test settles this.
   by amount and time, with unmatched payments listed for a manager; identify other providers'
   manual payments as paid outside Waitron, carrying the operation number and machine through the
   till, day report and accountant exports; and check cash-only service without a backup machine.
-  Live history and standalone-payment samples remain unavailable at the experiment checkpoint.
+  Historical API-payment rows are now readable; a standalone-payment sample remains missing.
   A barcode scanner only if the deli sells barcoded goods; nothing in the till reads one today.
 
 ## The SumUp reconciler
@@ -155,9 +156,9 @@ Keep the adapter unchanged until the controlled live re-test settles this.
 **A949, owner 2026-10-21:** build after the reference experiments establish the matching inputs.
 Include the backup-machine contract above and W44's durable reversal attempts: write an attempt
 before the provider call, then recover an uncertain outcome without a fresh blind refund. The
-[experiment checkpoint](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21)
-records the refused credential and the unresolved refund-unit discrepancy. No reconciler was built
-by that checkpoint.
+[authenticated baseline](../research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22)
+records separate payment/refund history rows and working detail lookups. Supplied-reference
+creation, standalone matching samples and current refund units remain open; no reconciler was built.
 
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
   interim backstop; without an affiliate key a create whose response is lost resolves `failed` and

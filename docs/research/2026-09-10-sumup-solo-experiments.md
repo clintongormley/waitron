@@ -1,10 +1,10 @@
 # SumUp Solo experiments — answering the four questions with the reader in hand
 
-**2026-10-21, A949:** the saved API credential returned `401` on every read-only probe.
-The affiliate experiments, webhook capture and signature-card observation remain open.
-Read [the current checkpoint](#8-a949-checkpoint-2026-10-21) before following the historical
-instructions below, especially the partial-refund commands: today's published units conflict
-with September's measured result. No new checkout or refund was sent.
+**2026-10-22, A949:** the replacement credential passed the read-only account, reader and
+transaction checks. The configured Solo reports `OFFLINE`; affiliate credentials are present,
+but have not been exercised by a checkout. Read [the authenticated baseline](#9-a949-authenticated-baseline-2026-10-22)
+before continuing with the operator. Supplied-reference creation, duplicate checkout, webhook
+headers, signature handling and current refund units remain open. No new checkout or refund was sent.
 
 **Date written:** 2026-09-10. **Runs from:** 2026-09-11.
 **Status:** IN PROGRESS (2026-09-11). Setup 0.2–0.6 are run and recorded below: the Solo is paired
@@ -977,3 +977,77 @@ hashes; `openapi.yaml` and `schema-extracts.json` retain the schema; `adapter-re
 retains the three passing checks. Public developer pages were read through the web tool; direct
 Python downloads were refused, so no local HTML capture is claimed. API keys remain outside these
 artifacts and the repository.
+
+## 9. A949 authenticated baseline, 2026-10-22
+
+The replacement API key restores read access, and both affiliate values are now saved for the
+operator session. Their checkout acceptance still needs testing. Bring the Solo online first: the reader lookup returned
+`paired`, while its status endpoint returned `OFFLINE` and `IDLE`, firmware `3.3.43.6`. Its reported
+Wi-Fi connection and last activity (`2026-10-13T00:11:50.289200Z`) accompany that offline response;
+they do not establish a live connection.
+
+These requests ran from 22:47:58 to 22:49:26 UTC on 2026-10-21 (00:47–00:49 CEST on
+2026-10-22). The probe plan recorded expected results before each batch. All 21 requests were
+GETs; no payment, refund, termination or pairing change was sent.
+
+| Read-only request | Observed result |
+| --- | --- |
+| Memberships, reader list and configured-reader lookup | All `200`; membership matches the configured merchant, and the single listed reader matches the configured id with status `paired`. |
+| Configured-reader status | `200`, `OFFLINE`, as described above. |
+| Absent reader, with the saved key and then a deliberately invalid key | `404 Reader not found`, then `401 Unauthorized.` |
+| History, `limit=25&order=descending` | `200`, nine items dated 2026-09-11: five `PAYMENT` and four `REFUND`; `links` is empty. |
+| History filtered by `types[]=PAYMENT` and `types[]=REFUND` | Both `200`; exact id sets match the five payment rows and four refund rows respectively. |
+| Original payment lookup by UUID, transaction code and client transaction id | All `200`; each agrees with its history row on id, amount, currency and status. |
+| Lookup by the first history row's numeric refund-event id | `404 Resource not found`; it is not the original payment's UUID. |
+| Lookup by a fresh, never-submitted foreign reference | `404 Resource not found`. This does not test lookup of a reference supplied at checkout. |
+
+The absent-reader control needed correction. Two generated ids returned `400` for invalid suffixes,
+so neither established authorised absence. The final control changed only the last character of
+the configured reader's uppercase id. That request reached `404` with the saved key and `401`
+with the invalid key. The private receipt retains both rejected controls.
+
+### What the historical transactions establish
+
+For `TAAA6BZVL7X`, the history returns a EUR 1 `PAYMENT` with `status: SUCCESSFUL` and
+`refunded_amount: 1`, plus separate EUR 0.40 and EUR 0.60 `REFUND` rows. The rows share the
+transaction code and client transaction id. Reading the original payment returns the same two
+refund-event ids in both `events` and `transaction_events`. The reconciler must distinguish these
+rows before matching or summing them, or it would count refund history as additional payments.
+
+The earlier full-refund control (`TAAA6BYAS7B`) still returns a EUR 1 refund event and a cancelled
+payout. The partial-refund control (`TAAA6BYTP3G`) returns its EUR 0.40 refund and payout/deduction
+events. These are reads of September transactions. They establish neither today's refund-request
+units nor the customer's statement outcome, and do not replace §8's fresh refund controls.
+All nine history rows are dated September; this run supplied no standalone-machine sample.
+
+### Affiliate credentials and the operator session
+
+The experiment env file has mode `0600` and contains both affiliate variables. Their values were
+kept outside the repository and receipts. Presence is not checkout acceptance. The sources below
+explain why §2 uses them; none of these GET requests exercised them.
+
+| Question | Source's words, read 2026-10-22 | Consequence |
+| --- | --- | --- |
+| Does the Solo experiment need affiliate credentials? | [Affiliate Keys](https://developer.sumup.com/tools/authorization/affiliate-keys): “Affiliate Keys are mandatory for card-present integrations”, explicitly listing Solo API. | Keep the supplied app id and key in §2's checkout. Test the supplied values in that session; live acceptance remains untested. |
+| How should history distinguish rows? | [List transactions](https://developer.sumup.com/api/transactions/list): “PAYMENT”, “REFUND”, “CHARGE_BACK” are the `types[]` choices. | The two filters returned their exact expected sets here. Pagination and a standalone-payment sample still need coverage in the reconciler work. |
+
+For the hands-on session, follow §8's detailed predictions and read-backs:
+
+1. Power on the configured Solo, confirm its identity and wait for a fresh `ONLINE`/`IDLE`
+   read. Keep a card ready. Do not re-pair or disconnect it to clear an offline status.
+2. Run one EUR 1 affiliate checkout with a fresh foreign reference and the HTTPS callback
+   listener (§§2a/3a). Read the reference before and after the tap; retain response ids and
+   callback headers. After completion, repeat the reference once (§2b), cancel any new checkout
+   without paying, then read the reference again.
+3. Use two separate fresh EUR 1 captures for §8's `0.40` versus `40` partial-refund controls.
+   Read events and refundable amounts before and after each single request. Stop and read back
+   an uncertain answer; do not repeat its refund. Use another capture for the immediate full refund.
+4. With a known signature-required card, record the Solo's prompts, signature/merchant actions
+   and API completion order. Without that card, leave signature handling open. A separate
+   standalone machine on the same account is needed for the backup-machine matching sample.
+
+The private receipt is `~/waitron-campaign-g/receipts/a949-auth-20261022-004658/`.
+`probe-plan.md` records the predictions and control corrections; `http-manifest.json` records every
+GET path, UTC time, HTTP result and response hash. Saved JSON projections omit credentials and
+card data. No current refund-unit, vendor-deduplication, webhook-signature or signing conclusion
+is claimed. The reconciler, W44 and the three backup-machine paths remain open.
