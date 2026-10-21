@@ -21,7 +21,6 @@ export function fixAllText(count: number): string {
   return fill("appearance.fix_all_count", { n: String(count) });
 }
 
-/** The colour a `handSet.<mode>.<colour>` warning field names. */
 function handSetColour(warning: ThemeWarning): ThemeColour {
   return warning.field.split(".")[2] as ThemeColour;
 }

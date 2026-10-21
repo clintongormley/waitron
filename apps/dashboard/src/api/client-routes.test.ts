@@ -492,7 +492,7 @@ describe("DashboardApi routes", () => {
     const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
     const view = {
       id: "t1",
-      name: "Café Limón",
+      name: "Lemon Bar",
       updatedAt: "2026-10-21T10:00:00.000Z",
       choices: LEMON,
       light: { "--wt-color-primary": "#f2d300" },

@@ -6,6 +6,7 @@ import {
   type ThemeWarning,
 } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
+import { es, type StringKey } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import {
   brandFixLabel,
@@ -51,6 +52,12 @@ beforeEach(() => {
   setLocale("en-GB");
 });
 
+function esFill(key: StringKey, values: Readonly<Record<string, string>>): string {
+  return es[key].replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
+}
+
+const ES_LIGHT = es["appearance.mode.light"];
+
 afterEach(() => {
   setLocale("en-GB");
 });
@@ -63,11 +70,13 @@ describe("theme words", () => {
     expect(brandFixLabel("light", "#9d8a15")).toBe("Use #9d8a15 on light screens");
     expect(brandFixedText("dark", "#437e5b")).toBe("Buttons on dark screens: #437e5b");
     setLocale("es-ES");
-    expect(brandWarningText("light")).toBe(
-      "Los botones de este color se ven mal en pantallas claras.",
+    expect(brandWarningText("light")).toBe(es["appearance.brand_warning_light"]);
+    expect(brandFixLabel("light", "#9d8a15")).toBe(
+      esFill("appearance.brand_fix_light", { colour: "#9d8a15" }),
     );
-    expect(brandFixLabel("light", "#9d8a15")).toBe("Usar #9d8a15 en pantallas claras");
-    expect(brandFixedText("dark", "#437e5b")).toBe("Botones en pantallas oscuras: #437e5b");
+    expect(brandFixedText("dark", "#437e5b")).toBe(
+      esFill("appearance.brand_fixed_dark", { colour: "#437e5b" }),
+    );
   });
 
   it("words the dark brand warning and fix too", () => {
@@ -81,7 +90,7 @@ describe("theme words", () => {
   it("counts the colours that are hard to read", () => {
     expect(fixAllText(2)).toBe("2 colours are hard to read.");
     setLocale("es-ES");
-    expect(fixAllText(2)).toBe("2 colores se leen mal.");
+    expect(fixAllText(2)).toBe(esFill("appearance.fix_all_count", { n: "2" }));
   });
 
   it("words the save dialog's line for a brand warning", () => {
@@ -93,9 +102,7 @@ describe("theme words", () => {
       "Brand colour: buttons are hard to see on dark screens.",
     );
     setLocale("es-ES");
-    expect(saveDialogLine(lemon, LEMON)).toBe(
-      "Color de marca: los botones se ven mal en pantallas claras.",
-    );
+    expect(saveDialogLine(lemon, LEMON)).toBe(es["appearance.dialog_brand_light"]);
   });
 
   it("words a hand-set warning that has a fix with the saved card's sentence", () => {
@@ -103,7 +110,12 @@ describe("theme words", () => {
     expect(sunken.fix).not.toBeNull();
     expect(saveDialogLine(sunken, TWO_FIXES)).toBe("Sunken areas (light) is hard to read.");
     setLocale("es-ES");
-    expect(saveDialogLine(sunken, TWO_FIXES)).toBe("Zonas hundidas (versión clara) se lee mal.");
+    expect(saveDialogLine(sunken, TWO_FIXES)).toBe(
+      esFill("appearance.hard_to_read", {
+        name: es["appearance.colour.surface-sunken"],
+        mode: ES_LIGHT,
+      }),
+    );
   });
 
   it("names the hand-set colour that blocks every shade, with its colour", () => {
@@ -115,7 +127,14 @@ describe("theme words", () => {
     );
     setLocale("es-ES");
     expect(saveDialogLine(text, OUTLASTS)).toBe(
-      "Texto (versión clara): no se puede leer ningún tono mientras Zonas hundidas está fijado a mano en #555555.",
+      esFill("appearance.dialog_blocked", {
+        name: es["appearance.colour.text"],
+        mode: ES_LIGHT,
+        blockers: esFill("appearance.blocker", {
+          name: es["appearance.colour.surface-sunken"],
+          colour: "#555555",
+        }),
+      }),
     );
   });
 
@@ -123,7 +142,7 @@ describe("theme words", () => {
     expect(saveDialogLine(NO_SHADE, OUTLASTS)).toBe("Text (light): no shade can be read.");
     setLocale("es-ES");
     expect(saveDialogLine(NO_SHADE, OUTLASTS)).toBe(
-      "Texto (versión clara): no se puede leer ningún tono.",
+      esFill("appearance.dialog_no_shade", { name: es["appearance.colour.text"], mode: ES_LIGHT }),
     );
   });
 
@@ -132,8 +151,20 @@ describe("theme words", () => {
       "Text (light): no shade can be read while Page is set by hand to #666666 and Sunken areas is set by hand to #555555.",
     );
     setLocale("es-ES");
+    const page = esFill("appearance.blocker", {
+      name: es["appearance.colour.bg"],
+      colour: "#666666",
+    });
+    const sunken = esFill("appearance.blocker", {
+      name: es["appearance.colour.surface-sunken"],
+      colour: "#555555",
+    });
     expect(saveDialogLine(TWO_BLOCKERS, TWO_BLOCKERS_CHOICES)).toBe(
-      "Texto (versión clara): no se puede leer ningún tono mientras Página está fijado a mano en #666666 y Zonas hundidas está fijado a mano en #555555.",
+      esFill("appearance.dialog_blocked", {
+        name: es["appearance.colour.text"],
+        mode: ES_LIGHT,
+        blockers: `${page} ${es["appearance.and"]} ${sunken}`,
+      }),
     );
   });
 
@@ -151,10 +182,13 @@ describe("theme words", () => {
       "Page (dark) is hard to read.",
     );
     setLocale("es-ES");
-    expect(savedWarningLine(lemon)).toBe(
-      "Los botones del color de marca se ven mal en pantallas claras.",
+    expect(savedWarningLine(lemon)).toBe(es["appearance.saved_brand_light"]);
+    expect(savedWarningLine(sunken)).toBe(
+      esFill("appearance.hard_to_read", {
+        name: es["appearance.colour.surface-sunken"],
+        mode: ES_LIGHT,
+      }),
     );
-    expect(savedWarningLine(sunken)).toBe("Zonas hundidas (versión clara) se lee mal.");
   });
 
   it("gives each of the 22 theme colours its own plain name in both languages", () => {
@@ -169,7 +203,7 @@ describe("theme words", () => {
     expect(themeColourName("bg")).toBe("Page");
     expect(themeColourName("stepper-button")).toBe("+ and − buttons");
     setLocale("es-ES");
-    expect(themeColourName("bg")).toBe("Página");
-    expect(themeColourName("stepper-button")).toBe("Botones + y −");
+    expect(themeColourName("bg")).toBe(es["appearance.colour.bg"]);
+    expect(themeColourName("stepper-button")).toBe(es["appearance.colour.stepper-button"]);
   });
 });
