@@ -137,7 +137,7 @@ black brand's dark case, the field line's warning adds `table-calm` and its fix 
 the text `#6a6a6a` beside sunken areas `#bbbbbb` names the five tab tints. 10 of the 40 reference
 cases and 1 of the 16 made-up-palette cases changed (`t9/output-pins2b-h5-a757-5-diff.txt`,
 `t9/output-pins3-h5-a757-5-diff.txt`); in two, colours moved: `derive.ts:238:18 (Task 9 run 3)`'s
-worked-out light field line is `#777d8a`, not `#b9bfcd`, and `derive.ts:239:5 (Task 9 run 3)`'s is
+worked-out light field line is `#777d8a`, not `#b9bfcd`, its field fill's warning (fix `#9fffb1`) gone and its page and card warnings now naming the field line, and `derive.ts:239:5 (Task 9 run 3)`'s is
 `#060812`, not `#e2e8f6`, its page warning gaining the fix `#ffc8c6` and losing its two blockers.
 Tried one at a time, only the field line on the calm fill moves a colour or a fix; the others change
 only which colours a warning names (`output-h5-a757-5-one-at-a-time.txt`). Outputs:

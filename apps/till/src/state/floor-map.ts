@@ -3,8 +3,6 @@ import type { TableState } from "../api/client.js";
 import { mapLook } from "./floor-look.js";
 import { onTodaysPlan } from "./floor-today.js";
 
-export { readyText } from "./floor-look.js";
-
 type Look = Pick<FloorMapTable, "fill" | "outline" | "pulse" | "cue" | "description" | "allergy">;
 
 function lookOf(members: readonly TableState[], now: number): Look {

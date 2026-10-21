@@ -2401,7 +2401,7 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  /** Decision 14: the most urgent tab with a state beyond `side` of the strip, or nothing. */
+  /** The most urgent tab with a state beyond `side` of the strip, or nothing. */
   #tabsEdge(
     side: TabsEdge,
     tabs: readonly ZoneTab[],
@@ -2424,7 +2424,7 @@ export class TillFloorScreen extends LitElement {
       aria-label=${t("floor.show_zone").replace("{zone}", () => tab.name)}
       @click=${() => this.#showTab(tab.key, side)}
     >
-      ${renderFloorPulse(pulse, moving)}${side === "start" ? "‹" : nothing}${this.#markIcon(mark)}${side === "end" ? "›" : nothing}
+      ${renderFloorPulse(pulse, moving)}${side === "start" ? html`<span aria-hidden="true">‹</span>` : nothing}${this.#markIcon(mark)}${side === "end" ? html`<span aria-hidden="true">›</span>` : nothing}
     </button>`;
   }
 

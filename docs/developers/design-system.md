@@ -1011,7 +1011,7 @@ with the floor read. The flag describes the party; it makes no claim about a dis
 member's. A touch or pen tap on a table, and Enter or Space on a focused one, send `wt-table-tap` at
 once; a mouse click waits 300 ms and sends it unless a second click on the same table makes a
 double-click, which sends `wt-table-details`. A second tap on a different table counts as a tap on
-it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`,
+it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a 1 px `--wt-color-primary` line inside them,
 plus `--wt-selected-ring` outside a single table's edge, or once around a merge's whole box, which
 is then raised above a table touching it) and its release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
 nothing. A held table that is dragged is drawn moved by whole squares, the step held so every member's

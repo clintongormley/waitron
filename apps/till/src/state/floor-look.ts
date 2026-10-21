@@ -112,12 +112,13 @@ function readyCount(table: TableState): number {
 
 // A merge's ready count comes from one member, never a sum: every table a party sits at carries its
 // signals (packages/shared/src/table-signals.ts:4-5) and its whole family's ready and on-the-way
-// counts (the `tab` subquery joins each table to the party's bills, working-order.ts:8267-8270).
+// counts (the `tab` subquery joins each table to the party's bills, `listTablesWithState`,
+// `apps/server/src/working-order.ts`).
 const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 
-// Counter deliveries are counted per table (`group by delivery_table_id`, working-order.ts:8289), so
-// a merge's add up.
+// Counter deliveries are counted per table (`group by delivery_table_id`, `listTablesWithState`,
+// `apps/server/src/working-order.ts`), so a merge's add up.
 const totalDeliveries = (members: readonly TableState[]): number =>
   members.reduce((sum, member) => sum + member.pendingDeliveries, 0);
 
