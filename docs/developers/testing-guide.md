@@ -2539,3 +2539,18 @@ WebKit cases printed `Tests 6 failed | 2 passed (8)`, the stored-copy case
 `expected '#f7f7f8' to be '#edf6f0'` and the dark case `expected '#101216' to be '#0b110d'`.
 The fixture's light background was typed by hand then; it is now derived from the theme and reads
 `#f0f9f3`.
+
+## Qualify the compiled backup-verification entry and its owners separately
+
+The private verifier has two boundaries: its compiled distribution and the data each module owns.
+Run `pnpm exec vitest run scripts/backup-verification-runtime.test.mjs` for the compiled import,
+embedded target identity and complete exported composition. Its image-copy check reads Dockerfile
+text; it does not build or run an image. CI's image checks and the separate pinned Cloud runtime
+acceptance supply that evidence.
+
+Run the server's `backup-verification.authority.test.ts` and
+`backup-verification.installed.test.ts` for the genuine encrypted local archive and prohibited
+operational calls. Keep ordinary restore authority tests and fiscal golden files unchanged.
+Use installed disposable copies for independent omission controls, then restore each change and
+run an accepting control. The [A850 plan](../superpowers/plans/2026-10-20-a850-backup-verification.md)
+records the owner checks and the remaining Cloud isolation/admission requirements.

@@ -640,3 +640,24 @@ inside the workspace's state folder is not deleted by it. The forced clean-up af
 failed on a full disk runs inside `runAdmittedEntry` with the workspace's folders, and the count
 check uses them too. Accepted for A798-B slice 2 (its plan's decision 15).
 
+
+
+## Backup data verification and Cloud release
+
+The A850 interface checks a private restored copy without running ordinary restore hooks or
+acquiring fiscal authority. The server builds `dist/backup-verification.js`; the production
+image copies it and its dependency notices. Its local authority tests use an encrypted archive
+with actual sale history and every generated owner. These checks do not qualify Cloud's
+container or catalogue admission.
+
+Keep Cloud snapshots unavailable until its integration uses the implementing pinned release,
+validates the complete private result, confirms its own child and scratch cleanup, and admits
+only a current claim. The opt-in target-bound recovery client uses version 2; the running setup
+caller stays on version 1 until Cloud implements that exchange. Joint acceptance must include
+recovery with the continuous source absent. Separate recovery authority still applies.
+
+The current release trust list contains no historical Cloud or paper public roots. A historical
+signature requiring an absent reviewed root remains unsupported. External vault-key custody
+also needs its separately versioned archive contract. Full-history work under the configured
+resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
+See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).

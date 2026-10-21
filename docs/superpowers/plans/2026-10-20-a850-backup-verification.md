@@ -1093,3 +1093,42 @@ build passed. Existing tracked tests, guards, fiscal writers and migrations are 
 task. Earlier scoped coverage failures remain recorded; these noncoverage checks do not qualify
 package coverage or the whole branch. Task 27's complete audit, Claude review, normal push hook
 and current-head CI remain required before landing.
+
+
+### Task 27 distribution audit and local qualification — 21 October 2026
+
+The initial integration rebased all implementation commits onto `f17a43ad5f52c54fb9e502b7b97f45117a1e21ae`.
+The compiled import test exposed the missing final verifier in its earlier export assertion.
+The complete entry now also exports `BACKUP_VERIFICATION_MODULES`, so a controller can supply
+the actual owner callbacks from the compiled bundle without importing a source checkout.
+The Dockerfile copies the verification bundle and its generated dependency notices into the
+production image. Both missing-distribution assertions failed before those changes and passed
+afterwards. The Dockerfile check reads text; it does not establish image execution.
+
+A new fiscal-history fixture used a column-position insert into `envio_flujo`. After A942's
+additive migration it failed with four columns versus three values. Naming the original columns
+keeps its values and all assertions; the five complete backup-fiscal suites then pass 258 cases.
+No existing fiscal golden, writer, allocation or migration is edited.
+
+The focused server run includes every new verification suite and the ordinary restore/recovery
+consumers. Its diagnostic report over the new verifier sources passes the unchanged aggregate
+thresholds: statements 98.55%, branches 96.55%, functions 99.42%, lines 99.67%. This replaces
+neither package-wide coverage nor current-head CI. Earlier narrower reports remain historical
+failures. The requested twenty-package type check passes. Protected commands pass 18, 2 and 13
+cases with original assertions and bytes. The seven planned root/build suites pass 3,567 cases.
+
+The current developer guide documents the private entry and exact dependency inputs. The
+backlog leaves Cloud integration, current-claim admission, real child cleanup, target-bound
+negotiation and joint pinned runtime acceptance open. The setup caller remains on v1;
+no snapshot availability, deployment enforcement or fiscal activation is enabled here.
+Whole-branch Claude review, normal push hook, current-head package coverage and landing
+remain pending at this checkpoint.
+
+
+The distribution omissions were then deleted independently in an installed disposable clone:
+removing the bundle copy, notice copy or compiled owner export each failed its intended assertion.
+The restored build suite passes 19 cases. The existing image/bundler suites pass 113 cases;
+six further ordinary restore, setup-recovery and replacement consumers pass 82 cases.
+The final source changes name only the new fixture's insert columns and the compiled distribution;
+no existing protected fiscal assertion changes. The earlier guessed `recovery-replacement.test.ts`
+selector matched no file; the actual `cloud-replacement.test.ts` is included in this final readback.

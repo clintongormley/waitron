@@ -3437,3 +3437,54 @@ metadata and create local scratch files, so the placed database is not promised 
 the archived database. Validation owns and disposes that directory; the encrypted input remains
 caller-owned. The review's rollback-journal probe observed changed file bytes after open/close,
 while its WAL-mode control observed unchanged bytes.
+
+
+## Backup data verification has a separate authority boundary
+
+You can check backup data before recovering a trading server. Import the production bundle's
+private entry, `/app/backup-verification.js`, instead of starting the server. Use its exported
+`BACKUP_VERIFICATION_MODULES` for the real composition and
+`currentBackupVerificationTarget()` for the embedded release and migration identity.
+
+```ts
+import {
+  BACKUP_VERIFICATION_MODULES,
+  currentBackupVerificationTarget,
+  readBackupVerificationRequest,
+  verifyBackupArtifact,
+} from "/app/backup-verification.js";
+
+const request = readBackupVerificationRequest(privateRequestJson);
+const target = currentBackupVerificationTarget();
+const result = await verifyBackupArtifact(request, {
+  artifactPath,
+  recoveryKey: deliveredArchiveKey,
+  scratchRoot,
+  modules: BACKUP_VERIFICATION_MODULES,
+  migrationsRoot: "/app/drizzle",
+  runtime: target.runtime,
+  signal,
+  now: () => new Date(),
+});
+```
+
+The controller supplies the private request, the closed ciphertext path, its separately delivered
+versioned archive key, an owned private scratch parent and cancellation signal. The verifier
+measures the ciphertext it consumes, authenticates the archive, migrates a separate private copy,
+and checks every declared owner through query-only handles. A passing result requires its owned
+handles to close and scratch to be removed; uncertain cleanup returns `unavailable`.
+`activation: "not_attempted"` is part of every admitted result; a passing check grants no recovery
+allocation or trading authority.
+
+A module declares every owned table, required data check, secret and non-database entry in its
+`BackupVerificationContribution`. Its restore effects are data checks or explicitly excluded
+activation effects. Absence of a declaration is unsupported. `not_applicable` requires the host's
+schema and empty-data checks; it is not a substitute for a missing callback. Use the common
+query handle instead of opening a writable connection inside an owner.
+
+The trusted Cloud parent must still validate the complete result against the request, the actual
+child and pinned image, its current claim and deadline, and its own cleanup before catalogue
+admission. Keep snapshots unavailable until the joint release checks pass. The
+[plan](../superpowers/plans/2026-10-20-a850-backup-verification.md) records the protocol vectors,
+local checks and remaining release gates. The current host setup caller uses recovery version 1;
+version 2 remains opt-in until Cloud supports the target-bound exchange.

@@ -5190,44 +5190,16 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
-- **A850. Verify backup data without fiscal activation.** Implement the
-  [Waitron plan](superpowers/plans/2026-10-20-a850-backup-verification.md) for the
-  [approved Cloud contract](https://github.com/waitron-io/waitron-cloud/blob/f8e243f4b6fa232756a64c7113f05e3bf835158b/docs/superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md).
-  The plan's declaration, query-only reader, inventory and strict private protocol foundations are
-  implemented, together with core row/counter, membership signature and key-pair, amendment, daily-close and complete
-  fiscal-chain, registration/allocation, retained filing-history, authenticated application-vault, offline fiscal-certificate, retained-hour and identity authenticator/TOTP checks, plus catalogue versions/references, database image bytes, digests and edits, and complete workforce time chains, stored heads and pay-period snapshots. Service and adjustment
-  owners compare retained configuration, staged/live references, issued headings and historical adjustments.
-  Agreement and staffing owners preserve configuration and assignments without recomputing work.
-  Strict compatibility reconciles source module maps, migration hash/timestamp prefixes, ownership,
-  captured module configuration, identity, environment and declared archive entries before migration.
-  Authenticated file validation also checks raw manifest keys, private capture binding and exact framing;
-  ordinary archive callers retain their trailing-byte behavior.
-  Private placement uses the existing file writers and real migrations, with a populated catalogue
-  predecessor check; it validates captured backup settings and excludes the old destination file.
-  Scheduler and bookings compare captured state without actions; fiscal-none explicitly declares
-  its empty obligations. The payment owner preserves payment/refund and immutable hold/resolution
-  evidence, checks reader/sale relationships and authenticates provider payloads through offline
-  adapter checks. Complete owner registration now matches the real migrated database, including
-  media and inactive owners; removing each real owner refuses verification.
-  Host state checks now validate TLS key pairs, captured optional settings and selected-node sealed
-  material; scratch-layout checks compare effective vault/account keys with the real boot loader.
-  Signed paper needs release-reviewed public roots; stored Cloud receipt references remain unsupported.
-  Embedded build identity and an importable verification bundle now have local build checks.
-  The artifact verifier now measures a sealed input copy, runs real private placement and owner
-  checks, and withholds its result until owned handles and scratch have been disposed. Local
-  orchestration cases cover binding, key refusals, cleanup failures and cancellation. A locally
-  generated encrypted fiscal archive now exercises complete owner checks without activation,
-  original-to-placed row equality, encrypted authenticator enrolment and ordinary restore refusals.
-  Installed omission controls cover verification coverage, compatibility, archive paths and entries,
-  required secrets, full fiscal history, stored heads, immutable rows and the read-only barriers.
-  The opt-in v2 recovery client now binds its saved request and signed proofs to the complete target,
-  checks every selected verification descriptor and refuses downgrades or changed targets. The
-  running setup caller stays on v1 pending the coordinated Cloud release. Local staging, restart
-  and final placement now compare the saved approval, fresh key and current target; measured
-  ciphertext checks and retry-marker controls are covered locally. Final branch qualification remains
-  open. Cloud integration
-  follows the implementing Waitron release. Snapshots stay unavailable until complete module checks,
-  target-bound recovery and joint acceptance pass.
+- **Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.**
+  Wire Cloud to the boot-free `backup-verification.js` bundle and its generated owner inventory,
+  then negotiate recovery v2 before enabling the qualified caller. Preserve the separate fiscal
+  authority checks. Snapshots remain unavailable until the pinned capture, publication, full data
+  verification, cleanup, current-claim admission and recovery proof passes with the continuous
+  source absent. Qualify timeout, resource limits, wrong/missing keys, unsupported public trust,
+  stale/forged output and uncertain cleanup under the existing limits. Cloud owns its child,
+  catalogue and deployment gates; see the
+  [Waitron implementation and release handoff](superpowers/plans/2026-10-20-a850-backup-verification.md#task-27-finish-evidence-branch-review-and-release-handoff)
+  and [box limits](backlog/box.md#backup-data-verification-and-cloud-release).
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
   2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
