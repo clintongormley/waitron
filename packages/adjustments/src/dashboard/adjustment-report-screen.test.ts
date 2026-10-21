@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { AdjustmentsApi } from "./client.js";
-import { ADJUSTMENTS_STRINGS, tf } from "./strings.js";
+import { ADJUSTMENTS_STRINGS, kindTotalName, tf } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
 import {
@@ -151,7 +151,7 @@ describe("the adjustment report", () => {
   it("says which bills are counted and what the rate measures", async () => {
     const el = await mount(fakeApi());
     expect(text(part(el, "intro"))).toBe(
-      "Counts the cancellations, give-aways and discounts on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+      "Counts the voids and comps on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
     );
   });
 
@@ -231,10 +231,8 @@ describe("the adjustment report", () => {
         [...tr.querySelectorAll("th, td")].map((cell) => text(cell)),
       );
     expect(lines("by-action")).toEqual([
-      ["Cancellations", "2", "€25.00", "€37.00"],
-      ["Give-aways", "1", "€12.00", "€0.00"],
-      ["Percentage discounts", "0", "€0.00", "€0.00"],
-      ["Amount discounts", "1", "€3.00", "€0.00"],
+      ["Voids", "2", "€25.00", "€37.00"],
+      ["Comps", "2", "€15.00", "€0.00"],
     ]);
     expect(lines("by-stage")).toEqual([
       ["Before firing", "0", "€0.00", "€0.00"],
@@ -256,10 +254,8 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-stage-heading"))).toBe("Alex's adjustments by stage");
     expect(text(part(el, "by-reason-heading"))).toBe("Alex's adjustments by reason");
     expect(breakdown(el, "by-action")).toEqual([
-      ["Cancellations", "2", "€25.00", "€37.00"],
-      ["Give-aways", "1", "€12.00", "€0.00"],
-      ["Percentage discounts", "0", "€0.00", "€0.00"],
-      ["Amount discounts", "0", "€0.00", "€0.00"],
+      ["Voids", "2", "€25.00", "€37.00"],
+      ["Comps", "1", "€12.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-stage")).toEqual([
       ["Before firing", "0", "€0.00", "€0.00"],
@@ -274,10 +270,8 @@ describe("the adjustment report", () => {
     await open(el, SAM);
     expect(text(part(el, "by-action-heading"))).toBe("Sam's adjustments by action");
     expect(breakdown(el, "by-action")).toEqual([
-      ["Cancellations", "0", "€0.00", "€0.00"],
-      ["Give-aways", "0", "€0.00", "€0.00"],
-      ["Percentage discounts", "0", "€0.00", "€0.00"],
-      ["Amount discounts", "1", "€3.00", "€0.00"],
+      ["Voids", "0", "€0.00", "€0.00"],
+      ["Comps", "1", "€3.00", "€0.00"],
     ]);
     expect(breakdown(el, "by-stage")[3]).toEqual(["Whole bill", "1", "€3.00", "€0.00"]);
     expect(breakdown(el, "by-reason")).toEqual([["Staff meal", "1", "€3.00", "€0.00"]]);
@@ -289,7 +283,7 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-action-heading"))).toBe("Guests' adjustments by action");
     expect(text(part(el, "by-stage-heading"))).toBe("Guests' adjustments by stage");
     expect(text(part(el, "by-reason-heading"))).toBe("Guests' adjustments by reason");
-    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0", "0", "0"]);
+    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0"]);
     expect(part(el, "no-reasons")).not.toBeNull();
     part(el, "show-all")!.click();
     await settle(el);
@@ -301,7 +295,7 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-action-heading"))).toBe("By action");
     expect(text(part(el, "by-stage-heading"))).toBe("By stage");
     expect(text(part(el, "by-reason-heading"))).toBe("By reason");
-    expect(breakdown(el, "by-action")[3]).toEqual(["Amount discounts", "1", "€3.00", "€0.00"]);
+    expect(breakdown(el, "by-action")[1]).toEqual(["Comps", "2", "€15.00", "€0.00"]);
   });
 
   it("breaks down nothing for an open person the range holds no row for", async () => {
@@ -313,8 +307,17 @@ describe("the adjustment report", () => {
     await open(el, ALEX);
     await pick(el, "from", "2026-09-01");
     expect(text(part(el, "by-action-heading"))).toBe("Alex's adjustments by action");
-    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0", "0", "0"]);
+    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0"]);
     expect(part(el, "no-reasons")).not.toBeNull();
+  });
+
+  it("names the Voids and Comps rows in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi());
+    expect(breakdown(el, "by-action").map((line) => line[0])).toEqual([
+      kindTotalName("void", "es"),
+      kindTotalName("comp", "es"),
+    ]);
   });
 
   it("names the open person in Spanish breakdown headings", async () => {

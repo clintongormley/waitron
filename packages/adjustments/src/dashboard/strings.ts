@@ -106,7 +106,7 @@ const en = {
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
   "adjustment_report.intro":
-    "Counts the cancellations, give-aways and discounts on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+    "Counts the voids and comps on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
   "adjustment_report.from": "From",
   "adjustment_report.to": "To",
   "adjustment_report.range_backwards": "Choose a first day on or before the last day.",
@@ -267,7 +267,7 @@ const es: Record<keyof typeof en, string> = {
   "nav.adjustment_report": "Informe de ajustes",
   "adjustment_report.title": "Informe de ajustes",
   "adjustment_report.intro":
-    "Cuenta las anulaciones, invitaciones y descuentos de las cuentas abiertas en estas jornadas. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
+    "Cuenta las cancelaciones y descuentos de las cuentas abiertas en estas jornadas. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
   "adjustment_report.from": "Desde",
   "adjustment_report.to": "Hasta",
   "adjustment_report.range_backwards": "Elige un primer día igual o anterior al último.",
@@ -371,12 +371,10 @@ const KIND_NAMES: NameTable = {
   comp: { en: "Comp", es: "Descuento" },
 };
 
-/** How a report heads each action's total. */
-const ACTION_TOTALS: NameTable = {
-  cancel: { en: "Cancellations", es: "Anulaciones" },
-  comp: { en: "Give-aways", es: "Invitaciones" },
-  discount_percent: { en: "Percentage discounts", es: "Descuentos en porcentaje" },
-  discount_amount: { en: "Amount discounts", es: "Descuentos en importe" },
+/** How a report heads each kind's total. */
+const KIND_TOTALS: NameTable = {
+  void: { en: "Voids", es: "Cancelaciones" },
+  comp: { en: "Comps", es: "Descuentos" },
 };
 
 /** How far an item had got when it was adjusted; a whole-bill discount has no item. */
@@ -410,8 +408,8 @@ export function roleName(role: string, locale?: string): string {
   return resolveNameTable(ROLE_NAMES, role, locale);
 }
 
-export function actionTotalName(action: string, locale?: string): string {
-  return resolveNameTable(ACTION_TOTALS, action, locale);
+export function kindTotalName(kind: string, locale?: string): string {
+  return resolveNameTable(KIND_TOTALS, kind, locale);
 }
 
 export function stageName(stage: string, locale?: string): string {

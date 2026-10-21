@@ -8,7 +8,7 @@ import {
   formatIsoMinute,
   tableNoMatches,
 } from "@waitron/dashboard-kit";
-import { formatMoney } from "@waitron/shared";
+import { addDecimal, decimal, formatMoney } from "@waitron/shared";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { MAX_ENTRY_PAGE_SIZE } from "../entry-pages.js";
 import type {
@@ -26,13 +26,12 @@ import type {
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
-import { actionName, actionTotalName, stageName, t, tf } from "./strings.js";
+import { actionName, kindTotalName, stageName, t, tf } from "./strings.js";
 
-const ACTIONS: readonly AdjustmentAction[] = [
-  "cancel",
-  "comp",
-  "discount_percent",
-  "discount_amount",
+const COMP_ACTIONS: readonly AdjustmentAction[] = ["comp", "discount_percent", "discount_amount"];
+const KINDS: readonly { kind: "void" | "comp"; actions: readonly AdjustmentAction[] }[] = [
+  { kind: "void", actions: ["cancel"] },
+  { kind: "comp", actions: COMP_ACTIONS },
 ];
 const STAGES: readonly AdjustmentStageGroup[] = [
   "beforeFiring",
@@ -95,6 +94,18 @@ const count = (value: number): string => countFormat(currentLocale()).format(val
 /** The route writes a rate as a one-place decimal string; it is only ever displayed. */
 function rate(value: string | null): string {
   return value === null ? NONE : rateFormat(currentLocale()).format(Number(value) / 100);
+}
+
+/** The tallies of several actions, added together. */
+function sumTallies(tallies: AdjustmentTally[]): AdjustmentTally {
+  return tallies.reduce((sum, tally) => ({
+    count: sum.count + tally.count,
+    reduction: addDecimal(decimal(sum.reduction), decimal(tally.reduction)),
+    cancelledNominalValue: addDecimal(
+      decimal(sum.cancelledNominalValue),
+      decimal(tally.cancelledNominalValue),
+    ),
+  }));
 }
 
 /** How many, and what they took off; just the count when there were none. */
@@ -798,9 +809,9 @@ export class AdjustmentReportScreen extends LitElement {
         "by-action",
         heading("action"),
         t("adjustment_report.column.action"),
-        ACTIONS.map((action) => ({
-          label: actionTotalName(action),
-          tally: totals.byAction[action],
+        KINDS.map(({ kind, actions }) => ({
+          label: kindTotalName(kind),
+          tally: sumTallies(actions.map((action) => totals.byAction[action])),
         })),
       )}
       ${this.#breakdown(
