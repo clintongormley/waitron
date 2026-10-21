@@ -1766,6 +1766,74 @@ offer, and whether what Waitron already does is allowed.
 > organismo notificado, el Centro Español de Metrología o el órgano de metrología de la comunidad
 > autónoma?
 
+### Q53. The software's declaración responsable: our draft of item d), and what the system code and the yes/no answers mean for us (added 2026-10-21)
+
+**Why we ask.** The first release a venue runs needs its own declaración responsable (Orden
+HAC/1177/2024, art. 15; design in
+[`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md`](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md)).
+The owner approved the producer (himself, for now) and asked for the points below to be checked
+with you before the first release. Art. 15.1 d) asks only for «Componentes, hardware y software, de
+que consta el sistema informático …, junto con una breve descripción de lo que hace dicho sistema
+informático y de sus principales funcionalidades». Our draft of d) is below, in Spanish, as it would
+be published; the list of functions is filled in per release from what that release can actually do.
+
+**What we would like confirmed:**
+
+- **(a) Is the draft of d) enough, and accurate?** In particular: we supply no hardware and the
+  server may run on the venue's own computer or on a server in the cloud; an optional second server
+  on site keeps a continuous copy and can take over. Does running the server in the cloud (operated
+  by Waitron or by the venue) change anything in the declaration, or in who is the SIF?
+- **(b) Item e) for this version.** The product is designed so that each country's fiscal rules come
+  from a "country pack", and Spain could one day offer both VERI\*FACTU and non-VERI\*FACTU; each
+  installation only ever uses one. But the first version only supports VERI\*FACTU. We read e) as a
+  statement about the version declared, so «S» for this version (and g) not applicable), changing to
+  «N» in the first version that ships a non-VERI\*FACTU mode, with its signature types in g). Is that
+  right?
+- **(c) Item f)** = «N»: each installation keeps the invoicing of a single taxpayer. Agreed?
+- **(d) The two-character system code (b).** Art. 15.1 b) and the developer FAQ §4 (pp. 9–10): the
+  code is ours, must not match another system of the same producer, and is globally unique only
+  together with the producer's NIF («como si formara parte de él»); a new version does not make a
+  new system. When the producer changes from the owner personally to a future Waitron company:
+  (1) may the same two characters continue under the new producer's NIF, or must they change?
+  (2) we read the change of producer as making a new system, so every installation then running
+  starts a new installation number and a new chain — confirm, and what else it costs (each venue
+  needs its new declaration; anything to notify?). We intend the box to do this automatically
+  whenever the identity it runs under changes.
+- **(e) Failover between hosting places.** A venue whose server fails over from its own box on site
+  to a server hosted in the cloud (or back): the same software, the same producer, the same
+  taxpayer; the server that takes over starts its own new installation number and chain (as our
+  failover between two boxes on site already does). Does moving from on-site to cloud-hosted
+  require a different two-character code, or any other change in the declaration or the records?
+
+> **Borrador del apartado d) (para revisar):**
+>
+> d) Componentes, hardware y software, de que consta el sistema informático, junto con una breve
+> descripción de lo que hace dicho sistema informático y de sus principales funcionalidades:
+>
+> Waitron es un software de punto de venta para restaurantes y bares. Se ejecuta en un servidor
+> —un equipo del propio establecimiento o un servidor en la nube— con Linux y Docker, y los
+> terminales del establecimiento (cajas, comanderos, pantallas de cocina y el panel de gestión) se
+> conectan a él por la red mediante un navegador. Opcionalmente, un segundo servidor de reserva en
+> el establecimiento mantiene una copia continua de los datos y puede sustituir al principal si este
+> falla.
+>
+> Hardware: Waitron no incluye hardware propio; funciona en cualquier ordenador que cumpla lo
+> anterior.
+>
+> Software: el servidor Waitron, que genera, encadena, conserva y remite los registros de
+> facturación; la biblioteca @waitron/verifactu (versión indicada en el sistema), que construye cada
+> registro, su huella y el contenido del código QR, y lo remite, y que cuenta con su propia
+> declaración responsable; las aplicaciones de los terminales, que no generan registros de
+> facturación; el agente de impresión; y los componentes de terceros de los que nos hacemos
+> responsables: Node.js, SQLite, Litestream, Linux y Docker (la lista completa se muestra en el
+> propio sistema).
+>
+> Cada instalación lleva la facturación de un único obligado tributario y aplica una única modalidad
+> de cumplimiento, determinada por el paquete de país instalado; esta versión solo funciona como
+> VERI\*FACTU.
+>
+> Principales funcionalidades: [lista de la versión, comprobada en cada publicación].
+
 ## USEFUL — reduces uncertainty, not blocking
 
 ### Q6. Consequences of breaching the hourly-retry duty
