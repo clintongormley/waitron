@@ -3,9 +3,9 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Review path: FULL.** Every task below touches a risk trigger (CLAUDE.md, global rules): a
-migration (Tasks 3 and 10), a permission-gated route or its retirement (Tasks 4, 5, 8), or a
+migration (Tasks 3 and 10), a permission-gated route or its retirement (Tasks 4, 5, 8a, 8b), or a
 contract between packages — the theme document, `/api/theme`'s answer, the till's start read, the
-configuration bundle (Tasks 1, 2, 6, 7, 9, 10). Implementers are dispatched as
+configuration bundle (Tasks 1, 2, 6, 7a, 7b, 9, 10). Implementers are dispatched as
 `subagent_type: "implementer"`. An implementer that passes about 150 tool calls with its task
 unfinished stops at a passing or cleanly failing point, commits, and hands over: done, left, files,
 each check's state.
@@ -15,6 +15,15 @@ stores their choices, answers their worked-out colours and readability warnings,
 in use as a stylesheet at `GET /api/theme`, tells a signed-in till when it changes, and carries
 the themes in a configuration copy. `tenant_themes` and everything that reads it are retired. No
 screen changes.
+
+**Scope.** Design section 16 item 2 (lines 2500-2519): the migration, the theme document and its
+check, the list, create, save and switch routes with their read permission, `theme.invalid` with
+`field` for invalid choices only, `warnings` in the answers, the import check, `/api/theme`, the
+till's `themeHash`, and the retirements. **Rename and delete are not here:** section 16 gives them to
+slice 13 ("the rename, copy and delete routes", line 2594); the brief's summary listed `PATCH` and
+`DELETE` for this slice, and lane A accepted the deferral on 2026-10-21 (D13). Out of scope as the
+brief says: every screen (slice 5 on), delivery in the apps' `main.ts` (slice 3), the logo (slices
+7-9) and text (slices 10-11).
 
 **Architecture:** three pure pieces join `@waitron/ui-core/theme` beside slice 1's derivation — the
 document check, the name rules and the three-block stylesheet — so slices 5 and 13 reuse them in
@@ -92,9 +101,11 @@ too — every `db` dependent would rerun on every token or component change (`ou
 So the theme rows' import check is `validateThemeConfiguration` in `@waitron/layouts`, and the core
 module's transfer in `packages/composition/src/modules.ts:117` runs `validateCoreConfiguration` and
 then it. The design's words "adds to `validateCoreConfiguration`" (line 2152) become "adds to the
-core module's import check"; what is checked is unchanged. `scripts/workspace-cycles.test.ts` and
-`scripts/module-seams.test.ts` passed with these edges (`Tests 3395 passed`, `output-guards.txt`).
-The `lit` peer of `ui-core` (`package.json:49-51`): the install printed no peer line, but a control
+core module's import check"; what is checked is unchanged (listed under "Departures from the
+design"). The probe ran `scripts/workspace-cycles.test.ts` and `scripts/module-seams.test.ts` twice
+(`output-guards.txt`), but its record does not say which edges were in place for each run, so it is
+not offered as proof: Tasks 4, 6 and 9 each re-run both guards with their edge in place.
+The `lit` peer of `ui-core` (`package.json:51-53`): the install printed no peer line, but a control
 (the peer raised to `^99.0.0`) printed none either, so that silence is no evidence; what settles it
 is that a server bundle importing `@waitron/ui-core/theme` holds no `lit` code (`grep -cE
 'LitElement|lit-html|@lit/'` printed 0; the control, a bundle of `wt-button`, printed 21;
@@ -113,8 +124,10 @@ stored stays valid without a migration.
 gives, or two rows whose names give one key.** The catalogue's way — omit the column and set it in
 `afterImport` (`packages/db/src/configuration-transfer.ts:36-37`,
 `packages/catalogue/src/product-names.ts:15-34`) — cannot work here: `name_key` is `NOT NULL` with
-a unique index, so the insert would fail before `afterImport` runs. The stored key is therefore
-always the recomputed one.
+a unique index, so the insert would fail before `afterImport` runs (products may do it because
+`products.name_key` is nullable, `packages/db/src/schema/catalogue.ts:76`). The stored key is
+therefore always the one its name gives. This departs from the design's words; see "Departures from
+the design".
 
 **D5. Two migrations, not one.** drizzle-kit 0.31.11, asked to create `custom_themes` and drop
 `tenant_themes` in one generation, stopped to ask whether the table was renamed and failed
@@ -124,11 +137,20 @@ always the recomputed one.
 **D6. `POST /management-api/themes` takes an optional `inUse: true`**, so "Save as new theme" with
 "Use it on every screen now" switched on (design lines 1752-1757) is one transaction.
 
-**D7. A stored document this release refuses** (written by hand, or by a later release before a
-downgrade) is served as Waitron's look — `/api/theme` answers the empty sheet and the till's
-`themeHash` its hash — and is listed with `choices`, `light` and `dark` `null` and no warnings, so a
-manager can still save over it (and, from slice 13, rename or delete it). The till's start read
-never fails because of a theme row.
+**D7. A stored document this release cannot use** — text that is not JSON (`'{broken'`), or JSON
+this release's check refuses (`'{"tokens":{}}'`), written by hand or by a later release before a
+downgrade — is served as Waitron's look: `/api/theme` answers the empty sheet and the till's
+`themeHash` its hash. It is listed with `choices`, `light` and `dark` `null` and no warnings, so a
+manager can still save over it (and, from slice 13, rename or delete it). The store never reads the
+`theme` column through the `json` builder's read mapping (`packages/db/src/schema/columns.ts:47`,
+`text(name, { mode: "json" })`), which runs `JSON.parse` and throws on `'{broken'` (the review's
+probe, `~/waitron-campaign/a841-plan2/review-probes/json-mode.mjs`). It follows the receipt
+settings store: select the column through an SQL projection that hands back `null` for text that
+is not JSON, `case when json_valid(…) then … else null end` (`packages/layouts/src/receipt-store.ts:24`),
+and parse what comes back inside a `try`, falling back as `getPrintedReceipt` does
+(`receipt-store.ts:121-137`; its test inserts `'{broken'`, `receipt-store.test.ts:476-484`). So no
+theme row can make the till's start read, `/api/theme` or the list fail; Tasks 5, 7a, 7b and 8a
+each test both kinds of row, beside a valid row as the control.
 
 **D8. `/api/theme` answers `Cache-Control: no-store`**, so the browser's HTTP cache never stands in
 for the stored copy slice 3 keeps.
@@ -137,10 +159,18 @@ for the stored copy slice 3 keeps.
 beside them. Waitron's built-in theme is the dashboard's to draw from `WAITRON_CHOICES`
 (`theme.ts:18-24`).
 
-**D10. The answer cache** is one module-level entry in `apps/server/src/venue-theme.ts`, keyed by
-`themeCacheKey(row)` = `JSON.stringify([id, document])` of the row in use. Slice 7 extends that one
-function with each logo image's source and framing (design lines 2176-2184); `logo` is `null` in
-slice 2's answer and already inside the hash's input.
+**D10. The answer cache, and colours are never worked out inside a transaction.** The cache is
+one module-level entry in `apps/server/src/venue-theme.ts`, keyed by `themeCacheKey(row)` =
+`JSON.stringify([id, choices])` of the row in use (the choices as the store parsed them; a row with
+`choices: null` never reaches the cache). Slice 7 extends that one function with each logo image's
+source and framing (design lines 2176-2184); `logo` is `null` in slice 2's answer and already inside
+the hash's input. `withTransaction` is the database's single write lock
+(`packages/db/src/tenancy.ts:19-44`), and sales wait behind it, so every route here reads its rows
+inside its one transaction and works colours out only after that transaction has returned:
+`/api/theme` and the till's start read and menu-state poll (`venueThemeAnswer`, a function of the
+row with no `tx`, Tasks 7a and 7b), and the management list and every write's answer (Task 8a). On
+a cache miss that is about a millisecond per theme, `0.1` ms or less on a repeat (D1's
+measurements), all of it outside the lock.
 
 **D11. The bundle format moves 5 → 6 once, in Task 10**, which both drops `tenant_themes` from the
 transfer and is the last change to the declared table set (Task 9 adds `custom_themes`). The branch
@@ -156,8 +186,24 @@ routes" (line 2594); the brief's summary listed `PATCH` and `DELETE` here, and t
 design wins. "Copy" needs no route of its own: it is a `POST` of another theme's choices. So this
 slice has `GET` and `POST /management-api/themes`, `PUT /management-api/themes/{id}` and
 `PUT /management-api/theme-in-use`; section 15's rename and delete server cases are slice 13's
-("Left for later slices"). If the controller wants them here, they are one more task after Task 8:
-two store functions and two routes on the same patterns.
+("Left for later slices"). Lane A accepted this deferral on 2026-10-21.
+
+---
+
+## Departures from the design
+
+- **The import refuses a `name_key` that is not the one its name gives, rather than recomputing it**
+  (D4). The design says each `name_key` is "recomputed from its `name` rather than taken as sent"
+  (line 2152-2154) and that a copy "recomputes `name_key`" (section 15, line 2452). Recomputing in
+  `afterImport` cannot work on a `NOT NULL` unique column, so the copy keeps the key it carries
+  only when it is the recomputed one; a copy with a doctored or differently normalised key is
+  refused instead of repaired. Lane A ruled to keep the refusal (2026-10-21).
+- **The theme rows' import check runs in the core module's check, not inside
+  `validateCoreConfiguration`** (D2; design line 2152). What is checked is what the design lists.
+- **The `--wt-color-primary-text` backlog entry is rewritten, not closed** (driver step). The design
+  says it "closes" (line 2146); a deployment that overrides `--wt-color-primary` by hand, and the
+  danger hover and disabled colours no theme writes, still leave it open. Lane A ruled to rewrite it
+  (2026-10-21).
 
 ---
 
@@ -175,7 +221,7 @@ two store functions and two routes on the same patterns.
 - **Switching** "clears the old row's `in_use` and then sets the new one's, in one transaction, in
   that order" (lines 2060-2062).
 - **One `withTransaction` per request**; write functions take `tx` and never open their own
-  (CLAUDE.md §3).
+  (CLAUDE.md §3). No colour is worked out inside a transaction (D10).
 - **Errors:** `theme.invalid` with `field` and `reason`, for choices that are not valid and nothing
   else; `theme.name_taken` with `field: "name"`; `theme.not_found` (lines 2124-2139). Readability is
   never a refusal: it goes in `warnings`.
@@ -210,16 +256,18 @@ task:
 
 1. **A stored document this release refuses** (a row written by hand, or by a later release before a
    downgrade): `/api/theme` answers Waitron's empty sheet, `GET /api/till` still answers 200 with
-   Waitron's `themeHash`, and the list shows the row with `choices: null` (D7). Tests: Task 5
-   (store), Task 7 (`/api/theme`, the till), Task 8 (the list).
+   Waitron's `themeHash`, and the list shows the row with `choices: null` (D7) — for text that is
+   not JSON (`'{broken'`) as for JSON this release refuses. Tests: Task 5 (store), Task 7a
+   (`/api/theme`), Task 7b (the till), Task 8a (the list).
 2. **Uppercase hex** (`#F2D300`) sent by a script: stored lowercase, and the same `css` and `hash` as
-   the lowercase document. Tests: Task 1 (the check lowercases), Task 8 (round trip and hash).
+   the lowercase document. Tests: Task 1 (the check lowercases), Task 8a (stored lowercase), Task 8b
+   (the hash).
 3. **A new theme whose name differs from another's only by case or accent form** ("ZOË STUDIO",
    or "Zoë" typed with a decomposed accent, `zoe\u0308`) is `theme.name_taken`, while a name
    that holds another inside it ("Zoë Studio 2") is not. Test: Task 5.
 4. **Switching to the theme already in use**, and switching to Waitron's while Waitron's is in use:
    both answer 200, leave exactly the rows in use they found, and leave `/api/theme`'s hash unchanged.
-   Tests: Task 5 (store), Task 8 (hash).
+   Tests: Task 5 (store), Task 8b (hash).
 5. **A 60-character name made of code points outside the Basic Multilingual Plane** ("🍋" × 60 is
    120 UTF-16 units) is accepted and 61 are refused. Test: Task 1.
 
@@ -243,9 +291,9 @@ task:
 | `packages/composition/src/modules.ts` | 9 | the core module runs the theme check |
 | `apps/server/src/theme-defaults.ts` (new) | 6 | Waitron's values read from the token files |
 | `apps/server/scripts/copy-migrations.mjs`, `deploy/Dockerfile` | 6 | ship the two files beside the bundle and in the image |
-| `apps/server/src/venue-theme.ts` (new) | 7 | the answer, its hash and its cache |
-| `apps/server/src/themes-api.ts` (new) | 7, 8 | `/api/theme`, then the management routes |
-| `apps/server/src/till-setup.ts` | 7 | `themeHash` |
+| `apps/server/src/venue-theme.ts` (new) | 7a | the answer, its hash and its cache |
+| `apps/server/src/themes-api.ts` (new) | 7a, 8a, 8b | `/api/theme`, then the list, create and save routes, then the switch |
+| `apps/server/src/till-setup.ts`, `till-api.ts` | 7b | `themeHash`, worked out after the transaction |
 | `apps/server/src/management-api.ts` | 4 | the two old routes go |
 | `packages/provisioning/src/configuration-transfer.ts` | 10 | format 6 |
 | `apps/till/src/layout.ts` | 4 | `ThemeOverride` goes |
@@ -299,7 +347,10 @@ order and answers the first refusal:
 6. `corners`: absent → `missing`; not in `CORNER_CHOICES` → `bad_value`;
 7. `handSet`: absent → `missing`; not a plain object → `bad_value`; a key other than `light`/`dark` → `handSet.<key>` `unknown_key`; `light` or `dark` absent → `handSet.<mode>` `missing`; not a plain object → `handSet.<mode>` `bad_value`; a colour key outside `THEME_COLOURS` → `handSet.<mode>.<key>` `unknown_colour`; a value not `#rrggbb` → `handSet.<mode>.<key>` `bad_value`;
 8. for `light` then `dark`: `brandFix[mode]` with `brandColor` `null` → `{ field: "brandFix.<mode>", reason: "fix_without_brand" }`; `brandFix[mode]` with `handSet[mode].primary` set → `fix_with_hand_set`;
-9. otherwise `{ ok: true, choices: normaliseChoices(document) }` (hex lower-cased).
+9. otherwise `{ ok: true, choices: normaliseChoices(…) }` (hex lower-cased).
+
+Name no local variable `document` (call it `input` or `sent`): `sources.test.ts:14` refuses
+`\bdocument\s*\.` in any theme source, so `document.brandColor` would fail that guard.
 
 - [ ] **Step 1: Write the failing tests.** `document.test.ts`:
   - "accepts Waitron's own choices": `readThemeDocument(WAITRON_CHOICES)` is `{ ok: true, choices: WAITRON_CHOICES }`.
@@ -443,7 +494,7 @@ means "not in use".
 Risk trigger: permission-gated routes removed; a cross-package export removed.
 
 Nothing on `main` reads these but the code retired with them (design lines 2488-2490; this plan's
-grep is under "What was checked"). The six HTTP cases go here and come back rewritten in Task 8.
+grep is under "What was checked"). The six HTTP cases go here and come back rewritten in Task 8a.
 
 **Files:** Delete `packages/layouts/src/theme.ts`, `theme.test.ts`, `theme-store.ts`,
 `theme-store.test.ts`, `theme-registry.test.ts`. Modify `packages/layouts/src/index.ts` (drop
@@ -452,7 +503,8 @@ grep is under "What was checked"). The six HTTP cases go here and come back rewr
 (drop `getTenantTheme` and `putTenantTheme` from the import at `:80,82`, the `"theme.invalid": 400`
 entry at `:260`, and both routes at `:1260-1289`),
 `apps/server/src/management-api.canvas-retirement.test.ts` (drop `import type { ThemeOverride }` at
-`:14` and the `describe` at `:138-235`; the file header at `:22-25` names the canvas routes only),
+`:14` and the `describe` at `:138-235`; the header at `:22-25`, "The theme and retired canvas routes
+over HTTP", stays as it is, because Task 8a puts theme cases back),
 `apps/till/src/layout.ts` (drop `ThemeOverride`, `:58-60`), `docs/developers/design-system.md`
 (three sentences, step 4).
 
@@ -497,8 +549,7 @@ gains `"@waitron/ui-core": "workspace:*"` here (run `pnpm install`; commit the l
   prints nothing.
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Retire the single-document tenant theme and its two routes"`,
-  the body naming the six HTTP cases removed here and rewritten for the new routes in the themes API
-  task.
+  the body naming the six HTTP cases removed here and rewritten for the new routes in Task 8a.
 
 ---
 
@@ -529,14 +580,22 @@ export interface StoredTheme {
 }
 export interface ThemeList { readonly themes: readonly StoredTheme[]; readonly inUse: string | null }
 export function listCustomThemes(tx: Transaction): Promise<ThemeList>; // ordered by name_key; no gate (the route gates)
-export function readThemeInUse(tx: Transaction): Promise<{ readonly id: string; readonly choices: ThemeChoices | null } | null>;
+export interface ThemeInUse { readonly id: string; readonly choices: ThemeChoices | null }
+export function readThemeInUse(tx: Transaction): Promise<ThemeInUse | null>;
 export function createCustomTheme(tx: Transaction, input: { managementSessionId: string; name: string; theme: unknown; inUse?: boolean }): Promise<StoredTheme>;
 export function saveCustomTheme(tx: Transaction, input: { managementSessionId: string; id: string; theme: unknown }): Promise<StoredTheme>;
 export function setThemeInUse(tx: Transaction, input: { managementSessionId: string; customThemeId: string | null }): Promise<string | null>;
 ```
 
-Every write function authorizes `layout.configure` first, then checks its input, then writes;
-an id that is not a UUID, or names no row, is `theme.not_found`. A unique violation whose target is
+Every write function works in this order: authorize `layout.configure` (403), then the id — one
+that is not a UUID, or names no row, is `theme.not_found` (404) — then the document and the name
+(`theme.invalid`, 400), then the write. The route has already checked the body's shape (Task 8a).
+
+Both readers select `theme` through one SQL projection, never the column itself:
+`` sql<string | null>`case when json_valid(${customThemes.theme}) then ${customThemes.theme} else null end` ``,
+the receipt store's pattern (`receipt-store.ts:24`), and turn the text into choices with one helper
+that runs `JSON.parse` and `readThemeDocument` inside a `try`; `null`, a parse failure or a refusal
+gives `choices: null` (D7). A unique violation whose target is
 `custom_themes(name_key)` becomes `theme.name_taken { field: "name" }`. `setThemeInUse` checks the
 target exists, then runs `update custom_themes set in_use = null where in_use = 1` and then
 `update … set in_use = 1 where id = ?`. `createCustomTheme` with `inUse: true` inserts with
@@ -559,7 +618,8 @@ is set by every write to its row.
   - "creates a theme in use in one call": A in use, `createCustomTheme({ …, inUse: true })` → only the new row in use.
   - "create and save change only their own row": two rows; after saving A, and after creating C from A's choices (a copy), B's full row (`select * … where id = B`) equals its value before, and A's is unchanged by the copy.
   - "answers theme.not_found for an unknown or malformed id" — save and switch, with a random UUID and with `"not-a-uuid"`.
-  - "reads back a stored document this release refuses as null choices" (Review Focus 1): a row inserted with raw SQL holding `'{"tokens":{}}'` and `in_use = 1` → `listCustomThemes` lists it with `choices: null`, and `readThemeInUse` → `{ id, choices: null }`; saving a valid document over it then reads back that document.
+  - "reads back a stored document this release cannot use as null choices" (Review Focus 1), an `it.each` over `'{broken'` and `'{"tokens":{}}'`: a row inserted with raw SQL holding that text and `in_use = 1` → `listCustomThemes` lists it with `choices: null` and does not throw, and `readThemeInUse` → `{ id, choices: null }`; saving a valid document over it then reads back that document. Control in the same case: a second row holding the lemon reads back `choices: LEMON`.
+  - "checks permission before the id, and the id before the document": a supervisor saving a random UUID with a bad document → `authorization.not_permitted`; a manager saving a random UUID with a bad document → `theme.not_found`.
 
 - [ ] **Step 2: Run, expect failure.** `pnpm --filter @waitron/layouts exec vitest run src/theme-input.test.ts src/theme-store.test.ts` — FAIL: the modules do not resolve.
 
@@ -614,7 +674,7 @@ resolved by name) to `dist/node_modules/@waitron/ui-core/package.json` and the t
 
 - [ ] **Step 4: Run, expect pass**, then `pnpm --filter @waitron/server build` and check
   `ls apps/server/dist/node_modules/@waitron/ui-core/src/tokens` prints `colors.css structure.css`.
-  (Nothing imports `theme-defaults.ts` at boot until Task 7, whose step 5 runs the bundle.)
+  (Nothing imports `theme-defaults.ts` at boot until Task 7a, whose step 5 runs the bundle.)
   Then `pnpm --filter @waitron/server typecheck`, `lint`, and
   `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts`.
 
@@ -623,18 +683,16 @@ resolved by name) to `dist/node_modules/@waitron/ui-core/package.json` and the t
 
 ---
 
-### Task 7: `/api/theme`, its cache, and the till's `themeHash`
+### Task 7a: `/api/theme` and its cache
 
-Risk trigger: an unauthenticated route; the till's start-read contract.
+Risk trigger: an unauthenticated route; the stylesheet contract slice 3 applies.
 
 **Files:** Create `apps/server/src/venue-theme.ts`, `venue-theme.test.ts`,
-`apps/server/src/themes-api.ts`, `themes-api.public.test.ts`. Modify `apps/server/src/till-setup.ts`
-(`:78-110`, one field), `apps/server/src/boot.ts` (mount beside `:1852`),
-`apps/server/src/till-api.test.ts` (`:1220-1258`), `apps/server/src/till-api.setup-revision.test.ts`,
-`apps/server/src/boot.test.ts` (the trading-boot case at `:1729`).
+`apps/server/src/themes-api.ts`, `themes-api.public.test.ts`. Modify `apps/server/src/boot.ts`
+(mount beside `:1852`), `apps/server/src/boot.test.ts` (the trading-boot case at `:1729`).
 
-**Interfaces — Consumes:** `readThemeInUse` (Task 5), `deriveThemeFrom`, `themeSheet` (Task 2),
-`SERVER_THEME_DEFAULTS` (Task 6). **Produces:**
+**Interfaces — Consumes:** `readThemeInUse`, `ThemeInUse` (Task 5), `deriveThemeFrom`, `themeSheet`
+(Task 2), `SERVER_THEME_DEFAULTS` (Task 6). **Produces:**
 
 ```ts
 // venue-theme.ts
@@ -642,76 +700,119 @@ export interface VenueThemeAnswer { readonly hash: string; readonly css: string;
 export function themeHashOf(css: string, logo: null): string; // sha256 hex of JSON.stringify({ css, logo })
 export const WAITRON_THEME_ANSWER: VenueThemeAnswer; // { hash: themeHashOf("", null), css: "", logo: null }
 export function themeCacheKey(row: { id: string; choices: ThemeChoices }): string; // JSON.stringify([id, choices])
-export function readVenueTheme(tx: Transaction): Promise<VenueThemeAnswer>;
+export function venueThemeAnswer(inUse: ThemeInUse | null): VenueThemeAnswer; // no tx: called after the transaction returns (D10)
 export function forgetVenueTheme(): void; // tests only: empties the cache
 
 // themes-api.ts
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void;
 ```
 
-`readVenueTheme` reads the row in use; none, or `choices: null` (D7), answers
-`WAITRON_THEME_ANSWER`; otherwise it answers the cached entry when `themeCacheKey` matches, and
-derives, builds and replaces the one entry when not. `GET /api/theme` opens one transaction, answers
-`readVenueTheme`'s value as JSON with `Cache-Control: no-store`, and needs no session.
-`readTillSetup` adds `themeHash: (await readVenueTheme(tx)).hash` as its last field, so
-`setupRevisionOf` (`till-setup.ts:116-118`) moves with it.
+`venueThemeAnswer(null)` and a row with `choices: null` (D7) answer `WAITRON_THEME_ANSWER`;
+otherwise it answers the cached entry when `themeCacheKey` matches, and derives, builds and replaces
+the one entry when not. `GET /api/theme` needs no session: `const inUse = await
+withTransaction(deps.db, (tx) => readThemeInUse(tx))`, then `venueThemeAnswer(inUse)` outside it,
+answered as JSON with `Cache-Control: no-store` (D8).
 
 - [ ] **Step 1: Write the failing tests.**
-  `venue-theme.test.ts` (`useVenueDb({ migrations: [CORE_MIGRATIONS] })`; rows written with
-  `suite.db.insert(customThemes)` and updated directly — the store's own cases are Task 5's;
-  `forgetVenueTheme()` in `beforeEach`):
-  - "answers Waitron's empty sheet with no theme in use": `{ hash: "e5b913bdac6111b271019fdd50363b9b68977f24809cb00fb7a0cb54c2e72146", css: "", logo: null }` (the sha256 of `{"css":"","logo":null}`, `output-empty-hash.txt`), also with a theme stored but none in use.
-  - "serves the theme in use as picked, warnings and all": the lemon brand in use → `css` equals `themeSheet(deriveThemeFrom(SERVER_THEME_DEFAULTS, LEMON))`, contains `--wt-color-primary: #f2d300;` and not `#9d8a15`; `hash` equals `themeHashOf(css, null)`.
-  - "derives once while nothing changes": with `vi.mock("@waitron/ui-core/theme", …)` wrapping `deriveThemeFrom` in `vi.fn`, two reads give equal answers and one call; updating the row's document gives a new hash and a second call (the control).
-  - "returns to Waitron's hash when the theme stops being in use, and to its own when used again".
-  - "serves Waitron's look for a stored document this release refuses" (Review Focus 1): raw SQL row `'{"tokens":{}}'`, `in_use = 1` → `WAITRON_THEME_ANSWER`.
+  `venue-theme.test.ts` (no database: `venueThemeAnswer` takes the row; `forgetVenueTheme()` in
+  `beforeEach`):
+  - "answers Waitron's empty sheet with no theme in use, or one this release cannot use": `venueThemeAnswer(null)` and `venueThemeAnswer({ id, choices: null })` each equal `{ hash: "e5b913bdac6111b271019fdd50363b9b68977f24809cb00fb7a0cb54c2e72146", css: "", logo: null }` (the sha256 of `{"css":"","logo":null}`, `output-empty-hash.txt`).
+  - "serves the theme in use as picked, warnings and all": the lemon brand → `css` equals `themeSheet(deriveThemeFrom(SERVER_THEME_DEFAULTS, LEMON))`, contains `--wt-color-primary: #f2d300;` and not `#9d8a15`; `hash` equals `themeHashOf(css, null)`.
+  - "derives once while nothing changes": with `vi.mock("@waitron/ui-core/theme", …)` wrapping `deriveThemeFrom` in `vi.fn`, two calls with equal rows give equal answers and one derivation; a row with other choices gives a new hash and a second derivation (the control).
+  - "returns to Waitron's hash when no theme is in use, and to its own when used again".
 
-  `themes-api.public.test.ts` (same suite shape, `mountThemesApi` on a bare `Hono`): `GET /api/theme`
-  with no cookie → 200, `cache-control` `no-store`, body `WAITRON_THEME_ANSWER`; with the lemon
-  in use → the same body `readVenueTheme` gives.
-
-  `till-api.test.ts:1220-1258`: the `toEqual` gains `themeHash: "e5b913bd…2146"` (the full value).
-
-  `till-api.setup-revision.test.ts`, three cases with `setupTill()` and direct row writes:
-  "switching the theme in use moves the revision, and themeHash is /api/theme's hash" (compare with
-  `readVenueTheme` in a transaction); "saving a theme that is not in use leaves the revision"; "a
-  stored document this release refuses still answers the start read" (200, Waitron's `themeHash`).
+  `themes-api.public.test.ts` (`useVenueDb({ migrations: [CORE_MIGRATIONS] })`, `mountThemesApi`
+  on a bare `Hono`, rows written with `suite.db.insert(customThemes)` or raw SQL):
+  - "answers Waitron's sheet with no session and no theme in use": 200, `cache-control` `no-store`, body `WAITRON_THEME_ANSWER`.
+  - "serves the theme in use": the lemon in use → the body `venueThemeAnswer` gives for it (the control for the next case).
+  - "serves Waitron's sheet for a stored document this release cannot use" (Review Focus 1), an `it.each` over `'{broken'` and `'{"tokens":{}}'` in use → 200 with `WAITRON_THEME_ANSWER`.
 
   `boot.test.ts`, in "boots in trading mode when a venue is bound…" (`:1729`): `fetch(.../api/theme)`
   is 200 with `css: ""` and `logo: null`.
 
 - [ ] **Step 2: Run, expect failure.**
-  `pnpm --filter @waitron/server exec vitest run src/venue-theme.test.ts src/themes-api.public.test.ts src/till-api.test.ts src/till-api.setup-revision.test.ts`
-  — FAIL: the modules do not resolve; the `/api/till` `toEqual` lacks `themeHash`.
+  `pnpm --filter @waitron/server exec vitest run src/venue-theme.test.ts src/themes-api.public.test.ts`
+  — FAIL: the modules do not resolve.
 
-- [ ] **Step 3: Implement** `venue-theme.ts`, `themes-api.ts` with `/api/theme` only, the
-  `readTillSetup` field and the boot mount.
+- [ ] **Step 3: Implement** `venue-theme.ts`, `themes-api.ts` with `/api/theme` only, and the boot
+  mount.
 
-- [ ] **Step 4: Run, expect pass** (same command, then `src/boot.test.ts -t "boots in trading mode"`).
+- [ ] **Step 4: Run, expect pass** (same command, then `src/boot.test.ts -t "boots in trading mode"`),
+  then `pnpm --filter @waitron/server typecheck` and `lint`.
 
 - [ ] **Step 5: The bundle starts, beside and away from the workspace, and fails without the files.**
   `pnpm --filter @waitron/server build`, then run CI's two smoke steps by hand (`ci.yml:570-605` and
   `:622-645`), each with `gtimeout 60s`, a port of its own (`WAITRON_HTTP_PORT`), a fresh
   `WAITRON_VENUE_DIR` from `mktemp -d`, its process id recorded and stopped by that id: in place, and
   with `apps/server/dist/.` copied to a `mktemp -d` folder. Each must log
-  `"event":"server.listening"`. **Control:** delete `node_modules/@waitron` from the copied folder
+  `"event":"server.listening"` (the bundle imports `themes-api.ts`, and through it
+  `theme-defaults.ts`, at load). **Control:** delete `node_modules/@waitron` from the copied folder
   and run it again: it must not reach `server.listening`, and its log must name `@waitron/ui-core`
   (`ERR_MODULE_NOT_FOUND`). Record the three outcomes in the commit body.
 
-- [ ] **Step 6: Commit** — `git commit -s -m "Serve the theme in use at /api/theme and tell a signed-in till when it changes"`.
+- [ ] **Step 6: Commit** — `git commit -s -m "Serve the theme in use at /api/theme, worked out outside the write lock"`.
 
 ---
 
-### Task 8: The management routes, and the six cases rewritten
+### Task 7b: The till's `themeHash`
 
-Risk trigger: permissions (a read under `venue.view`, every write under `layout.configure`).
+Risk trigger: the till's start-read contract.
+
+**Files:** Modify `apps/server/src/till-setup.ts` (`:17-118`), `apps/server/src/till-api.ts` (the two
+callers, `/api/till` at `:1473-1486` and `/api/menu-state` at `:1581-1612`; `git grep -n
+"readTillSetup("` over `apps/server` finds every caller, tests included),
+`apps/server/src/till-api.test.ts` (`:1220-1258`), `apps/server/src/till-api.setup-revision.test.ts`.
+
+**Interfaces — Consumes:** `readThemeInUse`, `ThemeInUse` (Task 5), `venueThemeAnswer` (Task 7a).
+**Produces:**
+
+```ts
+// till-setup.ts
+export async function readTillSetup(tx, deps, device): Promise<TillSetupRead>;
+// TillSetupRead = { setup: <today's fields, unchanged>, themeInUse: ThemeInUse | null }
+export function completeTillSetup(read: TillSetupRead): TillSetup;
+// TillSetup = { ...read.setup, themeHash: venueThemeAnswer(read.themeInUse).hash }, themeHash last
+```
+
+`setupRevisionOf` (`:116-118`) keeps its body and takes the completed setup, so it moves with
+`themeHash`. `/api/till` completes the setup after its `withTransaction` returns. In
+`/api/menu-state` the transaction returns the setup read beside the menu state, and the handler
+answers `setupRevision: setupRevisionOf(completeTillSetup(read))` after it, keeping `setupRevision`
+the answer's last key. No colour is worked out inside either transaction (D10).
+
+- [ ] **Step 1: Write the failing tests.**
+  `till-api.test.ts:1220-1258`: the `toEqual` gains `themeHash: "e5b913bdac6111b271019fdd50363b9b68977f24809cb00fb7a0cb54c2e72146"`.
+
+  `till-api.setup-revision.test.ts`, with `setupTill()` and direct row writes:
+  - "switching the theme in use moves the revision, and themeHash is /api/theme's hash": compare with `venueThemeAnswer(await withTransaction(suite.db, readThemeInUse)).hash`.
+  - "saving a theme that is not in use leaves the revision".
+  - "the menu-state poll's revision is the start read's" with the lemon in use.
+  - "a stored document this release cannot use still answers the start read" (Review Focus 1), an `it.each` over `'{broken'` and `'{"tokens":{}}'` in use: `/api/till` 200 with Waitron's `themeHash`, and `/api/menu-state` 200. Control: the lemon in use gives the lemon's hash.
+
+- [ ] **Step 2: Run, expect failure.**
+  `pnpm --filter @waitron/server exec vitest run src/till-api.test.ts src/till-api.setup-revision.test.ts`
+  — FAIL: the start read has no `themeHash`.
+
+- [ ] **Step 3: Implement** the split and the two callers.
+
+- [ ] **Step 4: Run, expect pass**, then `pnpm --filter @waitron/server exec vitest run
+  src/till-api.sell-published.test.ts src/boot.test.ts -t "boots in trading mode"` (the other suites
+  that read `/api/till` or `/api/menu-state`), `typecheck` and `lint`.
+
+- [ ] **Step 5: Commit** — `git commit -s -m "Tell a signed-in till when the theme in use changes"`.
+
+---
+
+### Task 8a: The list, create and save routes, and the six cases rewritten
+
+Risk trigger: permissions (a read under `venue.view`, writes under `layout.configure`).
 
 **Files:** Modify `apps/server/src/themes-api.ts`. Create `apps/server/src/themes-api.test.ts`.
 Modify `apps/server/src/management-api.canvas-retirement.test.ts` (the rewritten six, where Task 4
 removed them; `mountApp` mounts `mountThemesApi` beside `mountManagementApi`).
 
 **Interfaces — Consumes:** Task 5's store and parsers, `SERVER_THEME_DEFAULTS`, `deriveThemeFrom`.
-**Produces** (answers; every route opens one `withTransaction`):
+**Produces** (every route opens one `withTransaction`, and works colours out after it returns, D10):
 
 ```ts
 interface ThemeAnswer {
@@ -721,56 +822,97 @@ interface ThemeAnswer {
   dark: Record<string, string> | null;
   warnings: readonly ThemeWarning[];      // [] with choices null
 }
-// GET    /management-api/themes              venue.view        200 { themes: ThemeAnswer[], inUse: string | null }
-// POST   /management-api/themes              layout.configure  201 ThemeAnswer   body { name, theme, inUse? }
-// PUT    /management-api/themes/:id          layout.configure  200 ThemeAnswer   body { theme }
-// PUT    /management-api/theme-in-use        layout.configure  200 { inUse: string | null }   body { customThemeId: string | null }
+export function themeAnswerOf(stored: StoredTheme): ThemeAnswer; // no tx
+// GET    /management-api/themes      venue.view        200 { themes: ThemeAnswer[], inUse: string | null }
+// POST   /management-api/themes      layout.configure  201 ThemeAnswer   body { name, theme }
+// PUT    /management-api/themes/:id  layout.configure  200 ThemeAnswer   body { theme }
 ```
 
-A body that is not an object, or lacks or mistypes `name`, `theme`, `inUse` or `customThemeId`,
-is `management.request_invalid { field }` (`readJsonBody` turns `null` into `{}`,
-`packages/server-kit/src/read-json-body.ts:9-15`). Error table: `management_session.required` 401,
-`management_session.expired` 401, `person.suspended` 403, `authorization.not_permitted` 403,
-`management.request_invalid` 400, `theme.invalid` 400, `theme.name_taken` 409, `theme.not_found` 404.
+A request is checked in this order: the session (401), the body's shape — not an object, or `name`
+or `theme` missing or of the wrong type, is `management.request_invalid { field }`
+(`readJsonBody` turns `null` into `{}`, `packages/server-kit/src/read-json-body.ts:9-15`) — (400),
+then, in the store, permission (403), the id (404), the document and the name (400), and a name
+clash (409). Error table: `management_session.required` 401, `management_session.expired` 401,
+`person.suspended` 403, `authorization.not_permitted` 403, `management.request_invalid` 400,
+`theme.invalid` 400, `theme.name_taken` 409, `theme.not_found` 404.
 
 - [ ] **Step 1: Write the failing tests.**
   The six, rewritten in `management-api.canvas-retirement.test.ts` (same order — the suite does not
-  reset between tests; `RED` = `{ brandColor: "#ff0000", brandFix: {}, background: "neutral", corners: "standard", handSet: { light: {}, dark: {} } }`):
+  reset between tests, `:31-35`; `RED` = `{ brandColor: "#ff0000", brandFix: {}, background: "neutral", corners: "standard", handSet: { light: {}, dark: {} } }`;
+  case 2 keeps the id it creates in a `let redId`, and cases 3 to 5 send that id):
   1. "GET lists no custom themes and none in use for a venue that has saved none" → 200 `{ themes: [], inUse: null }`.
   2. "POST → 201, then GET lists it (round trip)" → POST `{ name: "Red", theme: RED }` answers 201 with `name` and `choices: RED`; GET's `themes` holds one answer with the same `id`, `name` and `choices`.
-  3. "PUT with an unknown colour → 400 theme.invalid naming the field" → PUT the theme `{ theme: { ...RED, handSet: { light: { evil: "#ff0000" }, dark: {} } } }` → `{ code: "theme.invalid", params: { field: "handSet.light.evil", reason: "unknown_colour" } }`.
-  4. "PUT with a body omitting theme → 400 management.request_invalid naming the field" → `{}` and `null` bodies → `params: { field: "theme" }`.
-  5. "refuses the theme routes for a STAFF-role session with 403" → the GET and the PUT each `authorization.not_permitted`.
+  3. "PUT with an unknown colour → 400 theme.invalid naming the field" → `PUT /management-api/themes/${redId}` `{ theme: { ...RED, handSet: { light: { evil: "#ff0000" }, dark: {} } } }` → `{ code: "theme.invalid", params: { field: "handSet.light.evil", reason: "unknown_colour" } }`.
+  4. "PUT with a body omitting theme → 400 management.request_invalid naming the field" → `{}` and `null` bodies to `redId` → `params: { field: "theme" }`.
+  5. "refuses the theme routes for a STAFF-role session with 403" → the GET and a PUT of `RED` to `redId` each `authorization.not_permitted`.
   6. "refuses the theme routes unauthenticated with 401" → GET `/management-api/themes` → `management_session.required`.
 
   `themes-api.test.ts` (manager, supervisor and staff sessions as `venue-defaults-permission.test.ts:40-62`
-  makes them; `CORE_MIGRATIONS`, `IDENTITY_MIGRATIONS`; `forgetVenueTheme()` in `beforeEach`):
+  makes them; `CORE_MIGRATIONS`, `IDENTITY_MIGRATIONS`):
   - "refuses invalid choices naming the field" — PUT with `handSet.light.bg: "#fff"` → `handSet.light.bg`/`bad_value`; `brandColor: null, brandFix: { light: true }` → `brandFix.light`/`fix_without_brand`; `brandFix: { light: true }, handSet: { light: { primary: "#1e5b3a" }, dark: {} }` → `brandFix.light`/`fix_with_hand_set`; `logo` and `textScale` added → `unknown_key`; the stored document unchanged after each.
   - "stores the lemon brand (#f2d300) as sent and answers its warning in keys": PUT → 200, `choices.brandColor` `"#f2d300"`, `brandFix` `{}`, `warnings` toEqual `[{ field: "brandColor", mode: "light", against: ["field-fill", "bg", "surface", "surface-raised", "stepper-button"], fix: "#9d8a15", blockedBy: [] }]` (slice 1's pin, `brand-warnings.test.ts:22-30`); the code is never `theme.invalid`.
   - "answers the same warning from GET, to a supervisor too".
-  - "serves the lemon from /api/theme as picked once it is in use": PUT `theme-in-use` → `css` contains `--wt-color-primary: #f2d300;`.
-  - "an uppercase document is stored, served and hashed as the lowercase one" (Review Focus 2): POST `#F2D300` as theme A and switch to it; note the hash; switch to a theme B saved with `#f2d300`; the hash is the same and both answers' `choices.brandColor` are `"#f2d300"`.
-  - "a supervisor reads the list and is refused every write": GET 200; POST, PUT and PUT `theme-in-use` each 403 `authorization.not_permitted`, and `custom_themes` unchanged.
+  - "stores an uppercase document lowercase" (Review Focus 2): POST `#F2D300` → `choices.brandColor` `"#f2d300"`, and GET answers the same.
+  - "a supervisor reads the list and is refused every write here": GET 200; POST and PUT each 403 `authorization.not_permitted`, and `custom_themes` unchanged.
   - "staff are refused the read" — GET 403.
   - "a name another theme holds is name_taken, and Waitron's name is refused": POST "red" with "Red" stored → 409 `{ code: "theme.name_taken", params: { field: "name" } }`; POST "WaItRoN" → 400 `{ field: "name", reason: "reserved" }`.
-  - "switching moves /api/theme's hash, and back to Waitron's returns it": hashes h0 (none in use) → A in use h1 ≠ h0 → B h2 ≠ h1 → `customThemeId: null` h0 → A again h1.
-  - "switching to the theme already in use changes nothing" (Review Focus 4): 200, same hash, one row in use.
-  - "saving or copying a theme not in use leaves the hash, and saving the one in use moves it": copy = POST of A's `choices` under a new name; the last part is the control.
-  - "POST with inUse switches in the same request": A in use; POST B with `inUse: true` → GET's `inUse` is B's id.
-  - "the list answers each theme's warnings, and null for a document this release refuses" (Review Focus 1): A lemon, B the dark-green brand (#1e5b3a) — B's dark warning present; a raw SQL row listed with `choices: null`, `light: null`, `dark: null`, `warnings: []`; PUT a valid theme over it → 200.
-  - "an unknown or malformed id is theme.not_found" — PUT with a random UUID and with `"x"`; PUT `theme-in-use` with a random UUID.
-  - "malformed bodies name their field" — POST without `name` → `name`; POST `name: 7` → `name`; POST `inUse: "yes"` → `inUse`; PUT `theme-in-use` `{}` → `customThemeId`.
+  - "the list answers each theme's warnings, and null for a document this release cannot use" (Review Focus 1): A the lemon, B the dark-green brand (#1e5b3a) — B's dark warning present (the control); raw SQL rows holding `'{broken'` and `'{"tokens":{}}'` listed with `choices: null`, `light: null`, `dark: null`, `warnings: []`, and the GET is 200; PUT a valid theme over each → 200.
+  - "checks a request in its stated order": a staff PUT with a body lacking `theme` → 400 `management.request_invalid`; a supervisor PUT of a bad document to a random UUID → 403; a manager PUT of a bad document to a random UUID → 404 `theme.not_found`.
+  - "an unknown or malformed id is theme.not_found" — PUT with a random UUID and with `"x"`.
+  - "malformed bodies name their field" — POST without `name` → `name`; POST `name: 7` → `name`; POST without `theme` → `theme`.
 
 - [ ] **Step 2: Run, expect failure.**
   `pnpm --filter @waitron/server exec vitest run src/themes-api.test.ts src/management-api.canvas-retirement.test.ts`
-  — FAIL: every route answers 404.
+  — FAIL: the three routes answer 404.
 
-- [ ] **Step 3: Implement** the four routes in `themes-api.ts`.
+- [ ] **Step 3: Implement** the three routes and `themeAnswerOf` in `themes-api.ts`.
 
 - [ ] **Step 4: Run, expect pass** (same command), then `pnpm --filter @waitron/server typecheck`,
   `lint`, and `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/english-only.test.ts`.
 
-- [ ] **Step 5: Commit** — `git commit -s -m "Add the custom theme routes: list for supervisors and up, every change for managers and up"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "Add the custom theme list for supervisors and up, and create and save for managers and up"`.
+
+---
+
+### Task 8b: Switching the theme in use
+
+Risk trigger: a permission-gated write that changes every screen.
+
+**Files:** Modify `apps/server/src/themes-api.ts`, `apps/server/src/themes-api.test.ts`.
+
+**Interfaces — Consumes:** `setThemeInUse`, `createCustomTheme`'s `inUse` (Task 5),
+`venueThemeAnswer` (Task 7a). **Produces:**
+
+```ts
+// PUT  /management-api/theme-in-use  layout.configure  200 { inUse: string | null }   body { customThemeId: string | null }
+// POST /management-api/themes gains an optional `inUse: boolean` (D6)
+```
+
+The order of checks is Task 8a's. A body without `customThemeId`, or with one that is neither a
+string nor `null`, is `management.request_invalid { field: "customThemeId" }`; an `inUse` that is
+not a boolean is `management.request_invalid { field: "inUse" }`.
+
+- [ ] **Step 1: Write the failing tests** in `themes-api.test.ts` (A is the lemon; B the dark-green
+  brand (#1e5b3a), so the two have different choices and different sheets):
+  - "serves the lemon from /api/theme as picked once it is in use": PUT `theme-in-use` A → `css` contains `--wt-color-primary: #f2d300;`.
+  - "switching moves /api/theme's hash, and back to Waitron's returns it": h0 with none in use → A in use h1 ≠ h0 → B h2 ≠ h1 → `customThemeId: null` h0 → A again h1.
+  - "switching to the theme already in use, or to Waitron's while it is in use, changes nothing" (Review Focus 4): each 200, the same hash, the same rows in use.
+  - "an uppercase document hashes as the lowercase one" (Review Focus 2): C saved with `#F2D300` and D with `#f2d300`, otherwise equal; the hash with C in use equals the hash with D in use.
+  - "saving or copying a theme not in use leaves the hash, and saving the one in use moves it": copy = POST of A's `choices` under a new name; the last part is the control.
+  - "POST with inUse switches in the same request": A in use; POST B2 with `inUse: true` → GET's `inUse` is B2's id.
+  - "a supervisor is refused the switch": PUT `theme-in-use` and POST with `inUse: true` each 403; the rows in use unchanged.
+  - "switching to an unknown or malformed id is theme.not_found" — a random UUID and `"x"`.
+  - "malformed bodies name their field" — PUT `theme-in-use` `{}` and `{ customThemeId: 7 }` → `customThemeId`; POST `inUse: "yes"` → `inUse`.
+
+- [ ] **Step 2: Run, expect failure.**
+  `pnpm --filter @waitron/server exec vitest run src/themes-api.test.ts` — FAIL: `theme-in-use`
+  answers 404 and POST ignores `inUse`.
+
+- [ ] **Step 3: Implement** the route and the `inUse` field.
+
+- [ ] **Step 4: Run, expect pass**, then `typecheck` and `lint` for `@waitron/server`.
+
+- [ ] **Step 5: Commit** — `git commit -s -m "Switch the custom theme in use, for managers and up"`.
 
 ---
 
@@ -807,7 +949,7 @@ the whole `bundle.tables` (`:611-614`, the call at `:613`), so the order modules
 can read; slice 7's logo check reads `tables.media_images` from the same argument.
 
 In `modules.ts` the core entry's `configurationTransfer` becomes `CORE_TRANSFER`:
-`{ ...CORE_CONFIGURATION_TRANSFER, validate: (tables) => { CORE_CONFIGURATION_TRANSFER.validate(tables); validateThemeConfiguration(tables); } }` (D2).
+`{ ...CORE_CONFIGURATION_TRANSFER, validate: (tables, bundle) => { CORE_CONFIGURATION_TRANSFER.validate(tables, bundle); validateThemeConfiguration(tables); } }` (D2). The wrapper passes on the second argument the import supplies (`provisioning/configuration-transfer.ts:613`; the type allows it, `packages/module/src/module.ts:1527-1534`), so a core check that one day reads it is not silently cut off.
 
 - [ ] **Step 1: Write the failing tests.** `theme-configuration.test.ts`: a valid two-row bundle
   (one `in_use: 1`, one `null`) passes; a hard-to-read one (the lemon, unfixed) passes; one `it.each`
@@ -822,9 +964,11 @@ In `modules.ts` the core entry's `configurationTransfer` becomes `CORE_TRANSFER`
   `apps/server/src/configuration-transfer.test.ts`, three cases in the shape of the station-colour
   case (`:2383-2415`: source venue, `buildConfigurationBundle`, `applyVenue(…, beforeCommit:
   importConfigurationTables…)` into `targetSuite`):
-  - "carries the custom themes and which one is in use": two themes stored on the source, one in use →
-    the target holds both names, `choices` and `name_key`, exactly one row in use, its name the
-    source's, and new ids.
+  - "carries the custom themes and which one is in use, a hard-to-read one included": two themes
+    stored on the source, one of them the lemon brand unfixed (it warns, and must still be accepted:
+    design section 15, "one that is only hard to read is accepted"), the other in use → the target
+    holds both names, `choices` and `name_key`, exactly one row in use, its name the source's, and
+    new ids.
   - "refuses a copy with two themes in use without keeping venue rows": both rows' `in_use` set to
     `1` in the bundle → `setup.request_invalid { field: "custom_themes.in_use" }`, `tenants` count 0.
   - "refuses a copy whose name key is not its name's": `name_key` edited → `custom_themes.name_key`.
@@ -842,7 +986,9 @@ In `modules.ts` the core entry's `configurationTransfer` becomes `CORE_TRANSFER`
   `pnpm --filter @waitron/composition test:coverage`,
   `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts`, the whole
   `apps/server/src/configuration-transfer.test.ts` and `configuration-import.test.ts`, and
-  `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts scripts/errors-reachable.test.ts`.
+  `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts scripts/errors-reachable.test.ts scripts/id-columns-are-references.test.ts scripts/two-file-foreign-keys.test.ts`
+  (the last two read the transferred-table declarations and the foreign keys; `custom_themes` has no
+  `_id` column and no key, so both are expected to pass unchanged).
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Carry custom themes in a configuration copy and check them on import"`.
 
@@ -883,8 +1029,14 @@ and meta. Modify `packages/db/src/schema/index.ts` (drop `:43`), `packages/db/sr
 - [ ] **Step 3: Retire the table and generate.** Delete the schema file and make the edits in
   **Files**, then `pnpm --filter @waitron/db exec drizzle-kit generate --name retire_tenant_themes`. Read the SQL:
   expected exactly `DROP TABLE \`tenant_themes\`;` (`output-migration-sql.txt`). Nothing references
-  `tenant_themes` (`git grep -i 'references.*tenant_themes' apps packages` printed nothing, design
-  line 2109), so the drop deletes no other rows. Then the format-5 → 6 edits and the docs:
+  `tenant_themes`, so the drop deletes no other rows: `git grep -n tenantThemes -- apps packages
+  scripts` printed only its schema file (`schema/tenant-themes.ts:9`), the db barrel (`index.ts:174`)
+  and the old store Task 4 deletes (`theme-store.ts:1,14,29,32`) — no `.references(() =>
+  tenantThemes.id)` — and ``git grep -n -i 'REFERENCES `tenant_themes`' -- 'packages/*/drizzle/*.sql'``
+  printed nothing (exit 1), where the same search for ``REFERENCES `locations` `` counts 11 lines in
+  the core baseline alone, the control that the search finds a key when there is one. Re-run both
+  before generating. The review's probe also dropped the table with the live-update triggers
+  installed and found the drop clean (`~/waitron-campaign/a841-plan2/review-probes/drop-probe.mjs`). Then the format-5 → 6 edits and the docs:
   `conventions-data.md:1625-1627` gains "and A841 slice 2 (format 6, 2026-10-21, when it replaced
   `tenant_themes` with `custom_themes`)" and pins format 6; `design-system.md:5063-5065` reads
   "custom themes" for "tenant themes" and "format 6" for "format 5".
@@ -893,8 +1045,10 @@ and meta. Modify `packages/db/src/schema/index.ts` (drop `:43`), `packages/db/sr
   again (the list and `inmutabilidad.test.ts`); `pnpm --filter @waitron/provisioning exec vitest run`;
   `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/configuration-import.test.ts`;
   `pnpm --filter @waitron/db typecheck`, `@waitron/provisioning typecheck`, `@waitron/server typecheck`.
-  Then `git grep -n -i "tenant_themes\|tenantThemes\|tenant-themes" -- ':!packages/db/drizzle' ':!docs/superpowers' ':!docs/backlog*' ':!docs/developers/grants-retirement-audit.md' ':!apps/server/src/testing/fixtures'`
-  prints only the new format-5 test rows.
+  Then `git grep -n -i "tenant_themes\|tenantThemes\|tenant-themes" -- ':!packages/db/drizzle' ':!docs/superpowers' ':!docs/backlog*' ':!docs/developers/grants-retirement-audit.md' ':!docs/developers/conventions-data.md' ':!apps/server/src/testing/fixtures'`
+  prints only the two new "A841 pre-theme-retirement export" rows of
+  `configuration-import.test.ts`. (`conventions-data.md` is excluded because step 3 writes the
+  table's name into it; the new schema file names only `custom_themes`.)
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Drop tenant_themes and move configuration copies to format 6"`, the
   body saying a format-5 copy is now refused as outdated and why (a format-5 copy carries
