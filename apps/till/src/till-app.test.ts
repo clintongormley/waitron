@@ -10191,6 +10191,11 @@ describe("till-app", () => {
       expect(text).toContain(codeMessage("clock.unusable"));
     });
 
+    it("a wrong clock with no clockAt at all shows the code table's sentence", async () => {
+      const text = await payCash({ code: "clock.unusable", offsetMinutes: 60, status: 409 });
+      expect(text).toContain(codeMessage("clock.unusable"));
+    });
+
     it("a wrong clock without a reading shows the code table's sentence", async () => {
       const text = await payCash({
         code: "clock.unusable",

@@ -411,8 +411,10 @@ describe("till clocking integration", () => {
     expect(f.el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
     expect(f.api.getClockState).toHaveBeenCalledTimes(1);
   });
+
   it.each([
     [{ code: "storage.disk_full", status: 507 }, codeMessage("storage.disk_full")],
+    [{ code: "server.internal", status: 500 }, codeMessage("server.internal")],
     [{ status: 500 }, t("clock.write_error")],
   ])(
     "a Clock in refused %o shows that refusal's sentence on the clock page",

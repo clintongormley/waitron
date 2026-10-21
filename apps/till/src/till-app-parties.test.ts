@@ -3869,6 +3869,26 @@ describe("till-app: paying a bill by its state", () => {
     );
     expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
+
+  it.each([
+    ["cash", { method: "cash", amount: "14.00" }, "sale.disk_full", "sale.disk_full_manual_card"],
+    ["manual card", { method: "card", amount: "14.00" }, "sale.disk_full_manual_card", null],
+  ] as const)(
+    "a %s single payment refused for a full disk says so in that tender's words",
+    async (_case, tender, shown, absent) => {
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+      });
+      const order = await openMesa(el);
+
+      emit(order, "pay-tab", tender);
+      await flush(el);
+
+      expect(api.recordSale).toHaveBeenCalledOnce();
+      expect(banner(el)!.textContent).toContain(t(shown));
+      if (absent !== null) expect(banner(el)!.textContent).not.toContain(t(absent));
+    },
+  );
 });
 
 describe("till-app: opening a seated table", () => {

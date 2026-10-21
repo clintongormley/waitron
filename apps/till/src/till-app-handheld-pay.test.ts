@@ -1010,6 +1010,29 @@ describe("an unanswered presented payment on a handheld", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ["cash", "sale.disk_full"],
+    ["manual", "sale.disk_full_manual_card"],
+  ] as const)(
+    "a %s resend refused for a full disk says so on the sheet in that tender's words",
+    async (method, key) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(noAnswer())
+        .mockRejectedValueOnce({ code: "storage.disk_full", status: 507 });
+      const { el } = await sentWithNoAnswer(method, send);
+      await resend(el);
+      await presented(el)!.updateComplete;
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(
+        presented(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "wt-form-actions",
+        )!.error,
+      ).toBe(t(key));
+    },
+  );
+
   it("a part payment of the bill is refused as unconfirmed", async () => {
     const send = vi.fn().mockRejectedValue(noAnswer());
     const { el, order } = await sentWithNoAnswer("cash", send);
