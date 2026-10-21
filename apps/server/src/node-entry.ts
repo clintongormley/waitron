@@ -411,7 +411,7 @@ const recordedCodes = new WeakMap<object, string>();
 /**
  * The code a failed attempt classified its failure as, or undefined for a failure outside one.
  * Reading free space again is no substitute: the deletion after a full disk can leave room, which
- * would name the same failure `unknown`.
+ * would name the same failure something other than a full disk.
  */
 export function recordedStartFailureCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;

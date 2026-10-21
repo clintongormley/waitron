@@ -562,8 +562,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();
 
   app.get("/", async (c) => {
-    const log = await readLog(deps.logDir);
-    const freeBytes = await readFreeSpace(deps);
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
     // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");

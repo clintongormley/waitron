@@ -988,10 +988,10 @@ jobs:
   # of their own beside the server shards. The loop and pause tests run the pinned Litestream and
   # versitygw as child processes, the rehearsal scenarios and those two suites run versitygw, and
   # the S3 test server's suite runs versitygw in some of its cases; each fails rather than skips in CI without what it runs, so only
-  # this job downloads the two binaries. It also runs the full-disk start tests, which fail in CI
-  # without a small filesystem, on a tmpfs it mounts. Downloaded, not cached (docs/developers/ci-and-gates.md says
+  # this job downloads the two binaries. Downloaded, not cached (docs/developers/ci-and-gates.md says
   # why). Its blob joins the shards' in test-server-merge, so the coverage gate counts what these
-  # tests reach.
+  # tests reach. It also runs the full-disk start tests, which fail in CI without a small
+  # filesystem, on a tmpfs it mounts.
   test-server-stream:
     timeout-minutes: 10
     needs: changes

@@ -385,7 +385,7 @@ describe("a start that fails on a full disk", () => {
     );
     await expect(runEntry(d)).rejects.toBe(error);
     expect(existsSync(leftover)).toBe(false);
-    expect(seen[1]).toBe(false);
+    expect(seen).toEqual([true, false]);
   });
 
   it("deletes nothing for any other failure", async () => {
@@ -410,7 +410,7 @@ describe("a start that fails on a full disk", () => {
       ...volume.deps,
       logDir,
       statfs,
-      // Above 10, so the leftover survives the start and is still there when the attempt fails.
+      // Below the 10 bytes free, so the start's own clean-up leaves the leftover in place for the attempt to fail on.
       freeSpaceFloor: 1,
       startServer: vi.fn<StartServer>(() => Promise.reject(diskIoError())),
     });

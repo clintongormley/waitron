@@ -976,6 +976,9 @@ describe("the full-disk page's free space and uncounted start", () => {
     expect(await bodyOf(some)).toContain(
       `<p>${escapeHtml("Free space on the box's disk: 1.2 MB.")}</p>`,
     );
+    expect(await bodyOf(some)).toContain(
+      `<p>${escapeHtml("Level: recovery. Failed 0 times.")}</p>\n<p>${escapeHtml("Free space on the box's disk: 1.2 MB.")}</p>`,
+    );
     expect(await bodyOf(some, SPANISH)).toContain(
       `<p>${escapeHtml("Espacio libre en el disco del equipo: 1,2 MB.")}</p>`,
     );
@@ -1044,9 +1047,11 @@ describe("the full-disk page's free space and uncounted start", () => {
       `<p>${escapeHtml("Level: recovery. This start was not counted: the disk is full.")}</p>`,
     );
     expect(english).not.toContain("Failed 0 times");
-    expect(await bodyOf(app, SPANISH)).toContain(
+    const spanish = await bodyOf(app, SPANISH);
+    expect(spanish).toContain(
       `<p>${escapeHtml("Nivel: recovery. Este arranque no se ha contado: el disco está lleno.")}</p>`,
     );
+    expect(spanish).not.toContain("Intentos fallidos: 0");
     const refused = appWith({ uncounted: true }, { ...diskFull, refused: true });
     const stopped = await bodyOf(refused);
     expect(stopped).toContain("Stopped while running.");

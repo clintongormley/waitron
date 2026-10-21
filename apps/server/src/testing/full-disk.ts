@@ -15,7 +15,7 @@ import { join } from "node:path";
 export const REQUIRE_FULL_DISK =
   process.env.CI === "true" || process.env.WAITRON_REQUIRE_FULL_DISK === "1";
 
-/** The largest filesystem the harness will fill, so it can never fill a machine's real disk. */
+/** The largest filesystem the harness will fill, so a folder on a machine's main disk is refused. */
 const MAX_FILESYSTEM_BYTES = 64 * 1024 * 1024;
 const HDIUTIL_TIMEOUT_MS = 60_000;
 const FILL_WRITES = [64 * 1024, 512, 1];
@@ -99,11 +99,9 @@ function hdiutilImage(): { ok: true; disk: SmallDisk } {
     execFileSync("hdiutil", args, { timeout: HDIUTIL_TIMEOUT_MS, stdio: "pipe" });
   let attached = false;
   const close = () => {
-    try {
-      if (attached) run(["detach", mount, "-force", "-quiet"]);
-    } finally {
-      rmSync(base, { recursive: true, force: true });
-    }
+    // A failed detach leaves the image mounted: removing its folder would throw and hide why.
+    if (attached) run(["detach", mount, "-force", "-quiet"]);
+    rmSync(base, { recursive: true, force: true });
   };
   try {
     mkdirSync(mount);

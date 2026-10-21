@@ -323,6 +323,7 @@ describe("a start on a real full disk", () => {
       });
       expect(bodies()).toEqual(["committed before", "after freeing"]);
     } finally {
+      small.unfill();
       await store.close();
     }
   });

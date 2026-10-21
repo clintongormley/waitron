@@ -9,6 +9,7 @@ import { runOnce } from "../src/backup-sweep.js";
 import { validateArtifact, writeValidated } from "../src/restore.js";
 import { ALL_MODULES } from "../src/modules.js";
 import { parseEnvFile } from "../src/env-file.js";
+import { BACKUP_STAGING_DIR } from "../src/start-space.js";
 
 // This process handles only disposable integration roots and never starts a server or workers.
 const root = await realpath(resolve(process.env.CLOUD_TEST_ROOT ?? ""));
@@ -48,7 +49,7 @@ const stateDir = request.stateSubdir === "state" ? join(root, "state") : root;
 const validation = {
   recoveryKey: request.recoveryKey,
   stateDir,
-  stagingDir: join(stateDir, "backup-staging"),
+  stagingDir: join(stateDir, BACKUP_STAGING_DIR),
   modules: ALL_MODULES,
   migrationsRoot: null,
   environment: "preproduction" as const,
