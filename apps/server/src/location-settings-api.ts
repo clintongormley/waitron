@@ -29,6 +29,7 @@ import "./errors.js";
 
 const run = createErrorBoundary(
   {
+    "venue.time_zone_not_ready": 409,
     "management_session.required": 401,
     "management_session.expired": 401,
     "person.suspended": 403,

@@ -1,5 +1,10 @@
-import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-kit";
-import { t } from "./t.js";
+import {
+  codeMessage as registeredCodeMessage,
+  codeOf,
+  registerCodeMessages,
+} from "@waitron/dashboard-kit";
+import { t, currentLocale, pickLocale } from "./t.js";
+import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
@@ -1366,11 +1371,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
 
 registerCodeMessages(CODE_MESSAGES);
 
-export { codeMessage, codeOf };
+export { codeOf };
+
+export function codeMessage(
+  code: string,
+  locale: string = currentLocale(),
+  params?: { reason?: unknown },
+): string {
+  if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
+  return registeredCodeMessage(code, locale);
+}
 
 export function allergenRefusalText(error: unknown): string {
   const params = (error as { params?: { code?: unknown } }).params;
   return codeOf(error) === "allergen.kinds_required" && params?.code === "nuts"
     ? t("allergen.choose_nuts")
     : codeMessage(codeOf(error));
+}
+
+function zoneAdmissionMessage(reason: unknown, locale: string): string {
+  const key =
+    reason === "missing" || reason === "invalid"
+      ? "venue.time_zone_confirm"
+      : reason === "restart_required"
+        ? "venue.time_zone_restart"
+        : "venue.time_zone_wait";
+  return pickLocale({ en: en[key], es: es[key] }, locale);
 }

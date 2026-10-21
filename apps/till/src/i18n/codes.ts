@@ -811,9 +811,24 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
 const GENERIC = CODE_MESSAGES["server.internal"]!;
 
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
-export function codeMessage(code: string, locale: string = currentLocale()): string {
+export function codeMessage(
+  code: string,
+  locale: string = currentLocale(),
+  params?: { reason?: unknown },
+): string {
+  if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   // Own-key check, not `?? GENERIC`: a code such as `constructor` would resolve an inherited
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;
   return pickLocale(entry, locale);
+}
+
+function zoneAdmissionMessage(reason: unknown, locale: string): string {
+  const key =
+    reason === "missing" || reason === "invalid"
+      ? "venue.time_zone_confirm"
+      : reason === "restart_required"
+        ? "venue.time_zone_restart"
+        : "venue.time_zone_wait";
+  return pickLocale({ en: en[key], es: es[key] }, locale);
 }

@@ -8,6 +8,10 @@ export const en = {
   "permission_sign_in.unresolved":
     "The dashboard account has not been confirmed. Read the session again before continuing.",
   "permission_sign_in.read_again": "Read again",
+  "venue.time_zone_wait": "Trading is starting. Wait and try again.",
+  "venue.time_zone_confirm": "Trading is stopped. Ask a manager to confirm the venue time zone.",
+  "venue.time_zone_restart": "The time zone was saved. Wait for restart, then reload.",
+
   "attendance_export.heading": "Export working-time record",
   "attendance_export.from": "From",
   "attendance_export.before": "Before",
@@ -3725,6 +3729,12 @@ export const es: Record<StringKey, string> = {
   "permission_sign_in.unresolved":
     "No se ha confirmado la cuenta del panel. Vuelve a consultar la sesión antes de continuar.",
   "permission_sign_in.read_again": "Volver a consultar",
+  "venue.time_zone_wait": "El servicio se está iniciando. Espera y vuelve a intentarlo.",
+  "venue.time_zone_confirm":
+    "El servicio está detenido. Pide a un responsable que confirme la zona horaria del local.",
+  "venue.time_zone_restart":
+    "La zona horaria se ha guardado. Espera al reinicio y vuelve a cargar.",
+
   "attendance_export.heading": "Exportar el registro de jornada",
   "attendance_export.from": "Desde",
   "attendance_export.before": "Antes de",

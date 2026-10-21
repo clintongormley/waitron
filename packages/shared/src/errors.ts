@@ -28,6 +28,7 @@ export interface ErrorParams {
   "venue.time_zone_invalid": { reason: "missing" | "invalid" | "country" };
   "venue.time_zone_conversion_failed": { reason: "invalid_instant" | "unreadable_offset" };
   "venue.time_zone_target_invalid": { reason: "node" | "location" | "mismatch" };
+  "venue.time_zone_not_ready": { reason: "unchecked" | "missing" | "invalid" | "restart_required" };
   "business_day.clock_invalid": {
     reason:
       | "invalid_date"

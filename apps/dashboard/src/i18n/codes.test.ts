@@ -1,3 +1,4 @@
+import { en, es } from "./strings.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { codeMessage, codeOf } from "./codes.js";
 import { setLocale, t } from "./t.js";
@@ -825,4 +826,18 @@ it("has a sentence in both languages for the box's refused or failed clock set",
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
   }
+});
+
+it.each([
+  ["unchecked", "venue.time_zone_wait"],
+  ["missing", "venue.time_zone_confirm"],
+  ["invalid", "venue.time_zone_confirm"],
+  ["restart_required", "venue.time_zone_restart"],
+  ["unexpected", "venue.time_zone_wait"],
+] as const)("explains zone admission %s without offering the wrong action", (reason, key) => {
+  expect(codeMessage("venue.time_zone_not_ready", "en-GB", { reason })).toBe(en[key]);
+  expect(codeMessage("venue.time_zone_not_ready", "es-ES", { reason })).toBe(es[key]);
+  expect(codeMessage("venue.time_zone_not_ready", "en-GB", { reason })).not.toBe(
+    codeMessage("unknown", "en-GB"),
+  );
 });

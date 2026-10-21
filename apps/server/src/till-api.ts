@@ -423,6 +423,7 @@ export async function resolveCardCollector(
 
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 export const STATUS: Record<string, ContentfulStatusCode> = {
+  "venue.time_zone_not_ready": 409,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
   "receipt.not_printed": 409,

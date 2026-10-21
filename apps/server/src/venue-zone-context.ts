@@ -16,8 +16,8 @@ import {
   type BusinessDayClock,
   type SavedTimeZone,
 } from "@waitron/shared";
+import type { IssueScope } from "@waitron/fiscal";
 
-type IssueScope = { nodeId: string; locationId?: string };
 export interface ZoneContext {
   nodeId: string;
   locationId: string;
