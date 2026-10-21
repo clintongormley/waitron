@@ -315,14 +315,25 @@ describe("an engine rollback that ends the transaction", () => {
 });
 
 describe("a refused statement inside a nested transaction", () => {
-  const refusals: [string, string[], string][] = [
-    ["a duplicate unique key", [], "insert into sale (body) values ('before')"],
+  const refusals: [string, string[], string, RegExp][] = [
+    [
+      "a duplicate unique key",
+      [],
+      "insert into sale (body) values ('before')",
+      /UNIQUE constraint failed/,
+    ],
     [
       "a null into a not null column",
       ["create table nn (v text not null)"],
       "insert into nn values (null)",
+      /NOT NULL constraint failed/,
     ],
-    ["a failing check", ["create table ck (v integer check (v > 0))"], "insert into ck values (0)"],
+    [
+      "a failing check",
+      ["create table ck (v integer check (v > 0))"],
+      "insert into ck values (0)",
+      /CHECK constraint failed/,
+    ],
     [
       "an immediate foreign key",
       [
@@ -330,6 +341,7 @@ describe("a refused statement inside a nested transaction", () => {
         "create table child (p integer references parent (id))",
       ],
       "insert into child values (99)",
+      /FOREIGN KEY constraint failed/,
     ],
     [
       "RAISE(ABORT)",
@@ -337,6 +349,7 @@ describe("a refused statement inside a nested transaction", () => {
         "create trigger refuse_abort before insert on sale when new.body = 'abort' begin select raise(abort, 'refused abort'); end",
       ],
       "insert into sale (body) values ('abort')",
+      /refused abort/,
     ],
     [
       "RAISE(FAIL)",
@@ -344,13 +357,14 @@ describe("a refused statement inside a nested transaction", () => {
         "create trigger refuse_fail before insert on sale when new.body = 'fail' begin select raise(fail, 'refused fail'); end",
       ],
       "insert into sale (body) values ('fail')",
+      /refused fail/,
     ],
-    ["a missing table", [], "insert into nowhere values (1)"],
+    ["a missing table", [], "insert into nowhere values (1)", /no such table/],
   ];
 
   it.each(refusals)(
     "leaves the transaction usable after each refusal the product can meet: %s",
-    async (_name, setup, refused) => {
+    async (_name, setup, refused, message) => {
       const { store, db, insert, bodies, errorOf } = await open();
       for (const statement of setup) db.execute(statement);
       let nested: unknown;
@@ -365,7 +379,7 @@ describe("a refused statement inside a nested transaction", () => {
           insert("after");
         }),
       ).resolves.toBeUndefined();
-      expect(nested).toBeInstanceOf(Error);
+      expect((nested as Error).message).toMatch(message);
       expect(nested).not.toMatchObject(DISK_FULL);
       expect(bodies()).toEqual(["before", "after"]);
     },
@@ -559,7 +573,10 @@ describe("a full disk while migrating", () => {
       thrown = error;
     }
     expect(diskFullIn(thrown)).toBe(true);
-    expect((thrown as Error).message).not.toContain("cannot rollback");
+    const messages: string[] = [];
+    for (let link = thrown; link instanceof Error; link = link.cause) messages.push(link.message);
+    expect(messages.filter((message) => message.includes("cannot rollback"))).toEqual([]);
     expect(db.execute("select name from sqlite_master where name = 'filler'").rows).toEqual([]);
+    expect(() => db.execute("rollback")).toThrow("cannot rollback - no transaction is active");
   });
 });

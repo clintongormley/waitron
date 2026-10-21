@@ -75,8 +75,9 @@ export function adaptNodeSqlite(connections: Connections) {
        * and `rollback` as ordinary statements and would otherwise hide a full disk behind its
        * failed rollback (E9 and decision 7 in
        * `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md`). Clearing the
-       * record cannot take it from a running body: while one runs, a statement from outside it goes
-       * to the read connection (`forStatement`, `./connections.ts:210`) and never reaches here.
+       * record cannot take it from a running body: while one runs, a bare `rollback` from outside
+       * it goes to the read connection (`forStatement`, `./connections.ts:210`), which refuses it
+       * with code 1, not the read-only code 8 that `issue` re-runs on the writer.
        */
       const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
         const ended = connections.endedBy();
@@ -146,8 +147,11 @@ export function adaptNodeSqlite(connections: Connections) {
      * outermost level finishes, a statement or a `transaction()` from inside a body throws that
      * failure without running. The record is the connection pair's, not the body's: an outermost
      * `transaction()` opened outside the queue while a queue body's transaction is ended clears it
-     * early, and that body's later statements then run and commit by themselves (decision 16). A
-     * full disk that left the transaction open is not recorded: code that catches it may carry on.
+     * early. Measured: the body's later write was kept either way; the run rejected with the
+     * queue's generic error when the outside transaction finished first, and resolved when the
+     * body wrote while it was open. Left open because product writes go through `withWriteLock`
+     * (decision 16). A full disk that left the transaction open is not recorded: code that catches
+     * it may carry on.
      *
      * A nested level whose transaction the engine ended throws an error of its own, never the
      * object its body threw: a caller that tells "my body's failure, already undone" from "the
