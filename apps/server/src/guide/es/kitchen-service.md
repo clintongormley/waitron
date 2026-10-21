@@ -69,6 +69,10 @@ que las reúne.
 En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
 como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
 
+La tarjeta de la mesa en la sala también cuenta como listo cada plato listo que aún no has servido.
+Si una etiqueta de estación muestra ese recuento, sustituye al de la tarjeta para que lo veas una
+sola vez al decidir qué servir.
+
 En los detalles de una mesa en el plano, cada plato listo pendiente de servir cuenta como listo.
 Cuando las etiquetas de las estaciones muestran esas cantidades, la línea de progreso las omite
 para que cada plato se cuente una sola vez.

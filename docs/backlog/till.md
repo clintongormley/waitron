@@ -2485,7 +2485,8 @@ server projection omits en-route; Serve and Undo still update ready/pending line
 Away stamps leave those counts unchanged. The dashboard Kitchen tab retains preparation mode
 and timing defaults and omits the retired firing-mode choice and its API/query contracts.
 Floor details count every ready dish without subtracting or separately showing legacy dispatch;
-table-state precedence ignores dispatch too. Kitchen clients and the remaining floor client/badge
+table-state precedence ignores dispatch too. Floor list cards keep the complete ready count and
+omit the en-route badge, retaining station-ready chip de-duplication. Kitchen clients and the remaining floor client
 consumers still require coordinated retirement before PR A publication.
 Client/internal-helper retirement, Requested and scoped pass release, station configuration,
 ticket presentation and schema retirement remain. Recheck A756's

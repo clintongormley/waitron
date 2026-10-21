@@ -64,6 +64,8 @@ The Sent list keeps showing how long it has been ready so you can see what still
 
 In a table's details on the floor, every unserved ready dish counts as ready. When the station
 chips show those counts, the progress line leaves them out so you see each dish counted once.
+The floor's table card also keeps every unserved ready dish in its ready count. A station's ready
+chip replaces that count on the card, so you see it once while deciding what to serve.
 
 When you serve one of two dishes on a line, the pass shows the one still to serve. Undo restores
 the served quantity without restarting the kitchen's preparation or ready time. A cancelled

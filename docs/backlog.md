@@ -2442,7 +2442,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   stamps. The dashboard Kitchen tab omits the retired firing-mode choice and its API/query
   contracts, retaining preparation mode and late timing defaults. Floor details count every ready
   dish without an en-route subtraction or separate count, and table-state precedence ignores legacy
-  dispatch. Kitchen clients and the remaining floor client/badge consumers still need coordinated
+  dispatch. Floor list cards keep the complete ready count and omit the en-route badge, retaining
+  station-ready chip de-duplication. Kitchen clients and the remaining floor client fixtures still need coordinated
   retirement before PR A can be published.
   Add Requested and pass release,
   remove Away/Done, and finish the station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before

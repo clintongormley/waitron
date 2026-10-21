@@ -672,15 +672,6 @@ export class TillFloorScreen extends LitElement {
         color: inherit;
       }
 
-      /* "N en camino" -- dispatched by the pass, awaiting the waiter (KDS-3 §3c). The TOP-precedence hint,
-         so it carries the strongest weight: the filled primary chip (the primary/on-primary token pair
-         guarantees contrast in both themes), a step up from the ready chip's border and the to-serve
-         chip's neutral fill. Only one hint renders per card (see #hint), so this never sits beside them. */
-      .badge.en-route {
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-      }
-
       /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
          neutral chip (the a11y-safe pattern wt-table-token's status chip uses). */
@@ -2854,18 +2845,7 @@ export class TillFloorScreen extends LitElement {
     return parts.length === 0 ? nothing : html`<span class="party">${parts.join(" · ")}</span>`;
   }
 
-  /** Only the MOST ADVANCED of the three service signals renders: a dispatched line is still `ready`
-   * and unserved, so all three counts can be positive at once. The stations' ready chips stand in
-   * for the ready count when the table carries them. */
   #hint(table: TableState): CardMark | null {
-    if (table.enRoute > 0) {
-      return {
-        kind: "ready",
-        mark: html`<span class="badge en-route" data-en-route
-          >${table.enRoute} ${t("floor.en_route")}</span
-        >`,
-      };
-    }
     if (table.readyToServe > 0) {
       if (signalOf(table.signals, "ready") !== undefined) return null;
       return {

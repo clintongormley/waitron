@@ -40,8 +40,6 @@ const zones: FloorZone[] = [
   },
 ];
 
-// A spread of occupancy states + a zoneless table, plus one card for EACH of the three service hints
-// (t1, t5, t6), so axe sees every card variant in one mount. All UNPLACED, so the LIST view shows.
 const tables: TableState[] = [
   {
     id: "t1",
@@ -53,8 +51,6 @@ const tables: TableState[] = [
     tabLineCount: 3,
     tabTotal: "47.50",
     pendingDeliveries: 0,
-    // All three counts positive — a dispatched line is still ready + unserved — so en camino wins and
-    // its filled-primary chip is what axe scans.
     pendingToServe: 2,
     readyToServe: 1,
     enRoute: 1,
