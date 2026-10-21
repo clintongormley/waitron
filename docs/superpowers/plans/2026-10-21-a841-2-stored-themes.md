@@ -115,7 +115,7 @@ is that a server bundle importing `@waitron/ui-core/theme` holds no `lit` code (
 `brandFix`, `background`, `corners`, `handSet` (`ThemeChoices`,
 `packages/ui-core/src/theme/theme.ts:9-16`) — **all five required**. A document carrying `logo`
 (slice 7), `textScale` (slice 10), `text` (slice 11), `printedLogo` (slice 7) or any other key is
-refused `theme.invalid { field: "<key>", reason: "unknown_key" }`. Nothing on `main` writes a theme
+refused `theme.invalid { field: "<key>", reason: "unknown_key" }` (changed at the finish-branch review, 2026-10-21: `field` names the known field holding the stray key, `theme` at the top level, never the key itself — commit 538852f2a). Nothing on `main` writes a theme
 (design line 2491), so nothing breaks; each later slice adds its key to the accepted list as
 **optional with a stated default** (`logo` null, `textScale` 100, `text` `{}`), so every row slice 2
 stored stays valid without a migration.
