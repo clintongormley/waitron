@@ -300,7 +300,7 @@ export interface DietProfile {
 /**
  * One sellable product as the till's widgets consume it, built from exactly two payloads:
  * {@link menuOfferToTillProduct} adapts a zone offer, and `getHeldOrder` synthesises one per line of a
- * retrieved order. It is NOT the shape of `GET /api/products`.
+ * retrieved order.
  */
 export interface TillProduct {
   id: string;
@@ -421,15 +421,7 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
   };
 }
 
-/** One menu. In {@link ProductCatalogue.menus} `isDefault` flags the location's default. */
 export type TillMenu = AccessibleCatalogue;
-
-/** The `GET /api/products` payload. The app builds its product grid from zone offers, not this route;
- * the test harness uses it as its fixture seam. */
-export interface ProductCatalogue {
-  menus: TillMenu[];
-  products: TillProduct[];
-}
 
 /** A product's selling identity on one menu — the `offers[]` of `GET /api/service-zones/:zoneId/offers`:
  * the menu's published version, each offer, variant, extras item and option label marked with whether
@@ -2723,11 +2715,6 @@ export class TillApi {
     options: ReadOptions = {},
   ): Promise<void> {
     await this.#request<void>("/api/device/battery", "PUT", report, options.signal);
-  }
-
-  /** `GET /api/products` — see {@link ProductCatalogue}. */
-  listProducts(): Promise<ProductCatalogue> {
-    return this.#request<ProductCatalogue>("/api/products", "GET");
   }
 
   async listZoneOffers(zoneId: string, options: ReadOptions = {}): Promise<ZoneOfferCatalogue> {

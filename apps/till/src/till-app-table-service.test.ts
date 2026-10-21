@@ -26,11 +26,11 @@ import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
   PartyBill,
-  ProductCatalogue,
   Station,
   TabLine,
   TableState,
   TillApi,
+  TillMenu,
   TillProduct,
   TillSaleResult,
   ZoneOfferCatalogue,
@@ -154,7 +154,10 @@ const till = {
   servers: [],
 };
 
-function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
+function zoneOffers(
+  catalogue: { menus: TillMenu[]; products: TillProduct[] },
+  defaultMenuId: string | null,
+): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
     service: {
       open: true,

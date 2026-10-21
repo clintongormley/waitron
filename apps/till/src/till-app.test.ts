@@ -63,7 +63,6 @@ import type {
   InvoiceDeliveryStatus,
   PayOutcome,
   PartyBill,
-  ProductCatalogue,
   ResolvedKitchenScreen,
   RoleEquipment,
   ServiceZoneSummary,
@@ -71,6 +70,7 @@ import type {
   TabLine,
   TableState,
   TillApi,
+  TillMenu,
   TillProduct,
   TillSaleResult,
   ZoneOfferCatalogue,
@@ -318,7 +318,7 @@ function servedAs(menuItemId: string, productId: string) {
 }
 
 function fixtureOffers(
-  catalogue: ProductCatalogue,
+  catalogue: { menus: TillMenu[]; products: TillProduct[] },
   zonePolicy: Partial<ZoneOfferCatalogue["context"]> = {},
 ): ZoneOfferCatalogue {
   const defaultMenuId = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null;
@@ -458,7 +458,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     putLocale: vi.fn().mockResolvedValue(undefined),
     reportBattery: vi.fn().mockResolvedValue(undefined),
-    listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe] }),
+    listDefaultZoneOffers: vi
+      .fn()
+      .mockResolvedValue(
+        fixtureOffers(
+          { menus: [defaultMenu], products: [cafe] },
+          overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
+        ),
+      ),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     cancelDemoReaderPayment: vi.fn().mockResolvedValue(true),
@@ -530,21 +537,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
-  if (!("listDefaultZoneOffers" in overrides)) {
-    api.listDefaultZoneOffers = vi.fn(async () =>
-      fixtureOffers(
-        await api.listProducts(),
-        overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
-      ),
-    );
-  }
   if (!("listZoneOffers" in overrides)) {
-    api.listZoneOffers = vi.fn(async () =>
-      fixtureOffers(
-        await api.listProducts(),
-        overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
-      ),
-    );
+    api.listZoneOffers = vi.fn(async () => api.listDefaultZoneOffers());
   }
   return api;
 }
@@ -1520,7 +1514,7 @@ describe("till-app", () => {
   it("logs in: fetches products, shows the counter with the operator name", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    expect(currentApi.listProducts).toHaveBeenCalledOnce();
+    expect(currentApi.listDefaultZoneOffers).toHaveBeenCalledOnce();
     expect(lock(el)).toBeNull();
     expect(c).not.toBeNull();
     expect(c.products).toEqual([
@@ -1639,7 +1633,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
 
     expect(listDefaultZoneOffers).toHaveBeenCalledOnce();
-    expect(currentApi.listProducts).not.toHaveBeenCalled();
+    expect(currentApi.listZoneOffers).not.toHaveBeenCalled();
     expect(c.selectedServiceZoneId).toBe("zone-counter");
     expect(c.serviceZones.map((zone) => zone.name)).toEqual(["Bar"]);
     expect(
@@ -6488,7 +6482,9 @@ describe("till-app", () => {
   it("rebuilds a retrieved line's picks under the list its dish still offers", async () => {
     const offering: TillProduct = { ...cafe, offeredModifiers: [milkList] };
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
           scope: { workingOrderId: "wo-customised" },
@@ -6601,7 +6597,9 @@ describe("till-app", () => {
 
   it("a reopened held line on a dish now sold in a measure offers no extras list", async () => {
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [vinoLive] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [vinoLive] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue(heldVino([])),
     });
     const counter = await toCounter(el);
@@ -6617,7 +6615,9 @@ describe("till-app", () => {
 
   it("a held pick on a dish now sold in a measure is marked not offered", async () => {
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [vinoLive] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [vinoLive] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue(heldVino([heldMilk])),
     });
     const counter = await toCounter(el);
@@ -6819,7 +6819,9 @@ describe("till-app", () => {
         lines: [answered],
       });
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
       retrieveWorkingOrder,
     });
     const counter = await toCounter(el);
@@ -6946,7 +6948,9 @@ describe("till-app", () => {
   it("re-sends a retrieved line's options answer, matched to the list its dish still offers", async () => {
     const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(frozenPunto)),
     });
     const counter = await toCounter(el);
@@ -7020,7 +7024,9 @@ describe("till-app", () => {
     // about to be billed, so the answer is left off and the operator is told to choose again.
     const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
       retrieveWorkingOrder: vi
         .fn()
         .mockResolvedValue(answeredOrder({ ...frozenPunto, labelName: { es: "Muy hecho" } })),
@@ -7740,7 +7746,9 @@ describe("till-app", () => {
 
   it("retrieve-order: an each quantity displays without trailing zeros; a weight keeps its decimals", async () => {
     const { el } = await mountApp({
-      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe, jamon] }),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [cafe, jamon] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
@@ -13031,14 +13039,14 @@ describe("till-app", () => {
     });
 
     it("uses the latest history destination when the login product load finishes", async () => {
-      let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+      let resolve!: (value: Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>) => void;
       history.replaceState(null, "", "/tabs/floor");
       history.pushState(null, "", "/tabs/counter");
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
-        listProducts: vi.fn(
+        listDefaultZoneOffers: vi.fn(
           () =>
-            new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
+            new Promise<Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>>((done) => {
               resolve = done;
             }),
         ),
@@ -13051,7 +13059,7 @@ describe("till-app", () => {
       history.back();
       await back;
       expect(location.pathname).toBe("/tabs/floor");
-      resolve({ menus: [], products: [] });
+      resolve(fixtureOffers({ menus: [], products: [] }));
       await flush(el);
       expect(shell(el)!.activeScreen).toBe("floor");
       expect(location.pathname).toBe("/tabs/floor");
@@ -14174,7 +14182,9 @@ describe("till-app", () => {
     };
     const twoMenuProducts = vi
       .fn()
-      .mockResolvedValue({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] });
+      .mockResolvedValue(
+        fixtureOffers({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] }),
+      );
 
     const switcher = (el: TillApp) =>
       counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-menu-switcher")!;
@@ -14192,7 +14202,7 @@ describe("till-app", () => {
 
     it("ignores the retired session menu key on login while menu changes stay out of history and leave the basket intact", async () => {
       sessionStorage.setItem("waitron.lastMenu", "cat-drinks");
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       const c = await toCounter(el);
       expect(gridNames(el)).toEqual(["Bocadillo"]);
       expect(counter(el)!.selectedMenuId).toBe("cat-food");
@@ -14206,7 +14216,7 @@ describe("till-app", () => {
       expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
       expect(c.store.lines[0]!.product.id).toBe("bocadillo");
       el.remove();
-      const refreshed = await mountApp({ listProducts: twoMenuProducts });
+      const refreshed = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       await toCounter(refreshed.el);
       expect(gridNames(refreshed.el)).toEqual(["Cerveza"]);
       expect(counter(refreshed.el)!.selectedMenuId).toBe("cat-drinks");
@@ -14214,7 +14224,7 @@ describe("till-app", () => {
     });
 
     it("keeps the menu after logout and a new login as p1", async () => {
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       const c = await toCounter(el);
       switcherButtons(el)[1]!.click();
       await flush(el);
@@ -14235,7 +14245,7 @@ describe("till-app", () => {
     it.each(["p2"])(
       "keeps the device menu after logout and a new login as %s",
       async (personId) => {
-        const { el } = await mountApp({ listProducts: twoMenuProducts });
+        const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
         const c = await toCounter(el);
         switcherButtons(el)[1]!.click();
         await flush(el);
@@ -14264,7 +14274,7 @@ describe("till-app", () => {
       });
       /** The profile's starting zone: Comida by default, Bebidas beside it. */
       const startOffers = async (): Promise<ZoneOfferCatalogue> => {
-        const catalogue = fixtureOffers(await twoMenuProducts());
+        const catalogue = structuredClone(await twoMenuProducts());
         catalogue.context = { ...catalogue.context, zoneId: "zone-start" };
         catalogue.zones = [zone("zone-start", "Sala"), zone("zone-terrace", "Terraza")];
         return catalogue;
@@ -14302,7 +14312,6 @@ describe("till-app", () => {
         getDeviceZones: vi
           .fn()
           .mockResolvedValue(deviceZonesFixture(["zone-start", "zone-terrace"])),
-        listProducts: twoMenuProducts,
         listDefaultZoneOffers: vi.fn(startOffers),
         listZoneOffers: vi.fn(async (zoneId: string) =>
           zoneId === "zone-terrace" ? terraceOffers() : startOffers(),
@@ -14409,29 +14418,29 @@ describe("till-app", () => {
 
     it("ignores a stale stored menu and selects the default at login", async () => {
       sessionStorage.setItem("waitron.lastMenu", "removed");
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       await toCounter(el);
       expect(gridNames(el)).toEqual(["Bocadillo"]);
     });
 
     it("does not overwrite the live app's remembered menu after a detached login finishes", async () => {
-      let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+      let resolve!: (value: Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>) => void;
       const { el } = await mountApp({
-        listProducts: vi.fn(
+        listDefaultZoneOffers: vi.fn(
           () =>
-            new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
+            new Promise<Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>>((done) => {
               resolve = done;
             }),
         ),
       });
       await toCounter(el);
       el.remove();
-      const { el: live } = await mountApp({ listProducts: twoMenuProducts });
+      const { el: live } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       await toCounter(live);
       switcherButtons(live)[1]!.click();
       await flush(live);
       expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
-      resolve({ menus: [foodMenu], products: [bocadillo] });
+      resolve(fixtureOffers({ menus: [foodMenu], products: [bocadillo] }));
       await flush(el);
       expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
       expect(gridNames(live)).toEqual(["Cerveza"]);
@@ -14445,7 +14454,7 @@ describe("till-app", () => {
         throw new Error("blocked");
       });
       try {
-        const { el } = await mountApp({ listProducts: twoMenuProducts });
+        const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
         await toCounter(el);
         switcherButtons(el)[1]!.click();
         await flush(el);
@@ -14457,7 +14466,7 @@ describe("till-app", () => {
     });
 
     it("shows the switcher and only the DEFAULT menu's products on the grid at login", async () => {
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       await toCounter(el);
 
       // Both menus offered, default (Comida) first and marked pressed.
@@ -14468,7 +14477,7 @@ describe("till-app", () => {
     });
 
     it("re-filters the grid when a second menu is picked, and the in-flight cart line survives", async () => {
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       const c = await toCounter(el);
 
       // Ring the default menu's product into the working order (an in-flight cart line).
@@ -14493,7 +14502,7 @@ describe("till-app", () => {
       (el as unknown as { selectedCatalogueId: string }).selectedCatalogueId;
 
     it("keeps the last menu through payment and the next order without adding history", async () => {
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       const c = await toCounter(el);
 
       // Login lands on the zone's default menu (Comida).
@@ -14526,7 +14535,7 @@ describe("till-app", () => {
     });
 
     it("keeps the last menu when the basket is parked", async () => {
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       const c = await toCounter(el);
 
       // Switch to the non-default menu and ring a line — the switch sticks mid-order (the control).
@@ -14652,8 +14661,8 @@ describe("remembered dietary filters", () => {
     customerName: { es: "Mixto para el cliente" },
     diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] },
   };
-  const listProducts = () =>
-    vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [salad, mixed] });
+  const listDefaultZoneOffers = () =>
+    vi.fn().mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [salad, mixed] }));
   const filter = (screen: HTMLElement) => screen.shadowRoot!.querySelector("till-diet-filter")!;
   const pick = async (screen: HTMLElement, predicate: string) => {
     const widget = filter(screen) as HTMLElement & { updateComplete: Promise<unknown> };
@@ -14680,7 +14689,7 @@ describe("remembered dietary filters", () => {
   it.each(["vegetarian", "vegan", "no-meat", "no-fish"])(
     "remembers %s across screen changes, then clears it on a new login",
     async (predicate) => {
-      const { el } = await mountApp({ listProducts: listProducts() });
+      const { el } = await mountApp({ listDefaultZoneOffers: listDefaultZoneOffers() });
       const c = await toCounter(el);
       c.store.addProduct(mixed, "1");
       const push = vi.spyOn(history, "pushState");
@@ -14711,7 +14720,7 @@ describe("remembered dietary filters", () => {
 
   it("shares the selection with table ordering and remembers clearing it", async () => {
     const { el } = await mountApp({
-      listProducts: listProducts(),
+      listDefaultZoneOffers: listDefaultZoneOffers(),
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
     });
@@ -14740,7 +14749,7 @@ describe("remembered dietary filters", () => {
       throw new Error("blocked");
     });
     try {
-      const { el } = await mountApp({ listProducts: listProducts() });
+      const { el } = await mountApp({ listDefaultZoneOffers: listDefaultZoneOffers() });
       const c = await toCounter(el);
       await pick(c, "vegan");
       await flush(el);
@@ -14759,25 +14768,25 @@ describe("remembered dietary filters", () => {
   });
 
   it("does not clear a live app's filter when a detached login finishes", async () => {
-    let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+    let resolve!: (value: Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>) => void;
     const { el } = await mountApp({
-      listProducts: vi.fn(
+      listDefaultZoneOffers: vi.fn(
         () =>
-          new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
+          new Promise<Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>>((done) => {
             resolve = done;
           }),
       ),
     });
     await toCounter(el);
     el.remove();
-    const { el: live } = await mountApp({ listProducts: listProducts() });
+    const { el: live } = await mountApp({ listDefaultZoneOffers: listDefaultZoneOffers() });
     const c = await toCounter(live);
     await pick(c, "vegetarian");
     await flush(live);
     expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
       JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
     );
-    resolve({ menus: [defaultMenu], products: [salad, mixed] });
+    resolve(fixtureOffers({ menus: [defaultMenu], products: [salad, mixed] }));
     await flush(el);
     expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
       JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
@@ -14786,8 +14795,8 @@ describe("remembered dietary filters", () => {
   });
 
   it("A738 shares filters across Counter and table Order without changing the basket or history", async () => {
-    const almond = { ...salad, allergens: { nuts: { kinds: ["almonds"] } } };
-    const walnut = {
+    const almond: TillProduct = { ...salad, allergens: { nuts: { kinds: ["almonds"] } } };
+    const walnut: TillProduct = {
       ...salad,
       id: "walnut",
       menuItemId: "menu-item-walnut",
@@ -14795,9 +14804,11 @@ describe("remembered dietary filters", () => {
       allergens: { nuts: { kinds: ["walnuts"] } },
     };
     const { el } = await mountApp({
-      listProducts: vi
+      listDefaultZoneOffers: vi
         .fn()
-        .mockResolvedValue({ menus: [defaultMenu], products: [almond, walnut, mixed] }),
+        .mockResolvedValue(
+          fixtureOffers({ menus: [defaultMenu], products: [almond, walnut, mixed] }),
+        ),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
@@ -14875,7 +14886,7 @@ describe("remembered dietary filters", () => {
   });
 
   it("keeps a filter through payment, new orders and parked orders", async () => {
-    const { el } = await mountApp({ listProducts: listProducts() });
+    const { el } = await mountApp({ listDefaultZoneOffers: listDefaultZoneOffers() });
     const c = await toCounter(el);
     await pick(c, "vegan");
     c.store.addProduct(salad, "1");
@@ -15040,9 +15051,9 @@ describe("persistent till destinations", () => {
   it("uses the current destination when login is pending and leaves history inert after logout", async () => {
     history.replaceState(null, "", "/tabs/counter/view/expo");
     history.pushState(null, "", "/tabs/counter/view/schedule");
-    let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+    let resolve!: (value: Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>) => void;
     const { el } = await mountApp({
-      listProducts: vi.fn(
+      listDefaultZoneOffers: vi.fn(
         () =>
           new Promise((done) => {
             resolve = done;
@@ -15051,7 +15062,7 @@ describe("persistent till destinations", () => {
     });
     await toCounter(el);
     await traverse("back", el);
-    resolve({ menus: [], products: [] });
+    resolve(fixtureOffers({ menus: [], products: [] }));
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
     emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
@@ -16180,23 +16191,25 @@ describe("a failed list refresh after a successful write", () => {
               const { el } = await mountApp(
                 {
                   listWorkingOrders,
-                  listProducts: vi.fn().mockResolvedValue({
-                    menus: [defaultMenu],
-                    products: [
-                      {
-                        ...cafe,
-                        unit: {
-                          staffName: "Staff unit",
-                          staffAbbreviation: "su",
-                          id: "unit-each",
-                          name: { en: "Each", es: "Unidad" },
-                          abbreviation: { en: "ea", es: "ud" },
-                          precision: 0,
-                          hardwareUnit: null,
+                  listDefaultZoneOffers: vi.fn().mockResolvedValue(
+                    fixtureOffers({
+                      menus: [defaultMenu],
+                      products: [
+                        {
+                          ...cafe,
+                          unit: {
+                            staffName: "Staff unit",
+                            staffAbbreviation: "su",
+                            id: "unit-each",
+                            name: { en: "Each", es: "Unidad" },
+                            abbreviation: { en: "ea", es: "ud" },
+                            precision: 0,
+                            hardwareUnit: null,
+                          },
                         },
-                      },
-                    ],
-                  }),
+                      ],
+                    }),
+                  ),
                   getTill: vi.fn().mockResolvedValue({ ...till, locale }),
                 },
                 theme,
@@ -19845,20 +19858,22 @@ describe("switching the device's profile from the header", () => {
   };
   const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
   const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
-  const twoMenus = vi.fn().mockResolvedValue({
-    menus: [foodMenu, drinksMenu],
-    products: [
-      { ...cafe, catalogueId: "cat-food", catalogueName: "Comida" },
-      {
-        ...cafe,
-        id: "cerveza",
-        menuItemId: "menu-item-cerveza",
-        name: "Cerveza",
-        catalogueId: "cat-drinks",
-        catalogueName: "Bebidas",
-      },
-    ],
-  });
+  const twoMenus = vi.fn().mockResolvedValue(
+    fixtureOffers({
+      menus: [foodMenu, drinksMenu],
+      products: [
+        { ...cafe, catalogueId: "cat-food", catalogueName: "Comida" },
+        {
+          ...cafe,
+          id: "cerveza",
+          menuItemId: "menu-item-cerveza",
+          name: "Cerveza",
+          catalogueId: "cat-drinks",
+          catalogueName: "Bebidas",
+        },
+      ],
+    }),
+  );
   const profileDialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillProfileDialog>("till-profile-dialog");
   const profileButton = (el: TillApp) =>
@@ -20330,7 +20345,7 @@ describe("switching the device's profile from the header", () => {
       .mockResolvedValueOnce(till)
       .mockResolvedValue({ ...till, formFactor: "till" });
     const { el } = await openProfile({
-      listProducts: twoMenus,
+      listDefaultZoneOffers: twoMenus,
       getTill,
       getDeviceZones: vi
         .fn()

@@ -163,8 +163,6 @@ export interface AvailableProduct {
   offeredModifiers: OfferedModifier[];
 }
 
-/** One catalogue (menu) — its id, display name, and whether it is the default. From
- * `GET /api/products` the default is the location's (`locations.catalogue_id`). */
 export interface AccessibleCatalogue {
   id: string;
   name: string;

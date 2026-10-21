@@ -331,8 +331,7 @@ beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `Of
 `OfferedOptionsList`, `OfferedExtraItem`). The till app reads neither directly: its zone-offer
 routes serve each menu's published version (`listZoneOffers`, `packages/venue-service/src/operations.ts`),
 which `listMenuOffers` built when the menu was published, with each extras item and option label
-marked with whether it can be sold now; nothing in `apps/till` outside its tests calls
-`GET /api/products`, the route over `listAvailableProducts`.
+marked with whether it can be sold now.
 
 Nothing else on those two payloads describes a modifier. The till's picker
 (`apps/till/src/widgets/modifier-picker.ts`) walks `offeredModifiers` through `offeredListsOf`

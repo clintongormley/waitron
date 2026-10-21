@@ -673,6 +673,8 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   runs `syncMenuOffers` once against the FINAL structure, and `POST …/members/:memberId/replace`.
   `duplicateSection` takes an optional `replaceIn: { sectionId, memberId }` so duplicate-and-replace
   is one route and one transaction. Task 4's screen calls that.
+> **2026-10-22:** A843 retired `/api/products`; the D20 scope below records this plan's original boundary.
+
 - **D20. Out of scope:** the service spec's public, staff-only and not-sold-separately setting;
   guest ordering; popularity ranking, inventory, scheduled publication and a rollback interface
   (spec §8); a legacy location's menus (`locations.catalogue_id`, `location_catalogues`) and

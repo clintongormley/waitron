@@ -226,13 +226,16 @@ async function queueItemsByName(orderId: string, station: string): Promise<Map<s
   return new Map(group.items.map((i) => [i.name, i]));
 }
 
-// The queue serialises names, not ids, so the product ids are resolved once, by staff name, and each
-// is mapped to its offer so park and round bodies can name it.
 async function offerIdsByName(): Promise<Map<string, string>> {
-  const res = await app.request("/api/products", { headers: { cookie } });
+  const res = await app.request(`/api/service-zones/${counterOffers.zoneId}/offers`, {
+    headers: { cookie },
+  });
   expect(res.status).toBe(200);
-  const { products } = (await res.json()) as { products: { id: string; name: string }[] };
-  return new Map(products.map((p) => [p.name, counterOffers.offerFor(p.id)]));
+  const { offers } = (await res.json()) as { offers: { id: string; name: string }[] };
+  const byName = new Map(offers.map((offer) => [offer.name, offer.id]));
+  expect([...byName.keys()].sort()).toEqual([SOPA, FILETE, PAN].sort());
+  expect(byName.size).toBe(offers.length);
+  return byName;
 }
 
 async function placeOrder(names: string[]): Promise<string> {
