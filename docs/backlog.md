@@ -226,6 +226,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and how consent is withdrawn._
 
 - **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
+  A985 prepares the real-service probes; the library owner gate and live observations remain
+  open. [Execution handoff](compliance/aeat-four-behaviours-probe-handoff.md).
   - A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
     matches the cancellation's (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
     `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
@@ -456,6 +458,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose total is
   zero, file one; whether AEAT accepts it was not tested. Left open by service Task 17 (#991, a
   table that leaves without paying).
+  A985's [probe handoff](compliance/aeat-four-behaviours-probe-handoff.md) keeps this open until the
+  library owner gate and actual AEAT test-service run are complete.
 
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
