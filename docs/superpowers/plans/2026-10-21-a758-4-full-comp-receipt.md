@@ -37,9 +37,13 @@ replaces: `docs/superpowers/plans/2026-10-19-a758-reason-rules.md`, "# A758-4" (
 "Global constraints" (`:130-209`) and Open point 3 (`:1167-1169`). Backlog: `docs/backlog.md` "A758"
 (`:2194-2231`) and "A911" (`:2318-2320`), `docs/backlog/till.md` "## A758" (`:1472-1569`).
 
-Every `file:line` below was read on 2026-10-21 in this worktree at `main` `c7b301702` with
-`sed -n`/`grep -n`, unless it names a command that was run. A773-1 (#1897), A758-1 (#1906), A758-2
-(#1909) and A758-3 (#1937) are all in that history.
+Every `file:line` below was read on 2026-10-21 in this worktree with `sed -n`/`grep -n`, unless it
+names a command that was run: first at `main` `c7b301702`, then re-checked after rebasing onto
+`origin/main` `f17a43ad5` (#1936, A798-B slice 1, and its backlog note). That rebase changed none of
+the source or test files this plan cites (`git diff --name-only c7b301702 f17a43ad5` lists none of
+them); of the docs it cites, `docs/backlog.md` and `docs/developers/testing-guide.md` changed, and
+every line cited in them was re-read and holds. A773-1 (#1897), A758-1 (#1906), A758-2 (#1909) and
+A758-3 (#1937) are all in that history.
 
 ---
 
@@ -66,7 +70,8 @@ Every `file:line` below was read on 2026-10-21 in this worktree at `main` `c7b30
 | `docs/backlog.md`, `docs/backlog/till.md`, `docs/compliance/asesor-questions.md` | 5 |
 
 **Every reader of the `comp` label and of the receipt entry's `kind`**, found with
-`git grep -nE "\.comp([^a-zA-Z]|$)" -- apps packages`, `git grep -n "ReceiptAdjustment\|billAdjustments" -- apps packages`
+`git grep -nE "[A-Za-z_]\.comp([^a-zA-Z_\"]|$)" -- apps packages ':!*.test.ts'` (property reads,
+leaving out i18n keys such as `"adjustment_report.entries.comp"`), `git grep -n "ReceiptAdjustment\|billAdjustments" -- apps packages`
 and `git grep -n "receiptLabels\|ReceiptLabels\|RECEIPT_LABEL_KEYS" -- apps packages scripts`:
 
 - **Who writes `kind`:** `receiptLines` (`apps/server/src/receipt-adjustments.ts:95`, from each
@@ -101,9 +106,14 @@ and `git grep -n "receiptLabels\|ReceiptLabels\|RECEIPT_LABEL_KEYS" -- apps pack
 
 - **The filed record does not change.** No task touches `computeHuella`, the chain, invoice-number
   allocation, `registros_facturacion`, the alta builders or anything `recordSale` is given. Every
-  code task ends by running, unedited:
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
-  Task 1's test is the measurement, and it is written before any other change (Decision 6).
+  code task ends by running these **gates**, unedited:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`
+  — which file through `packages/core` and cannot see this branch's server code — and
+  `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-sales.golden.test.ts`, which
+  pins the demo's `registros_facturacion` rows column by column, `huella` included
+  (`REGISTROS_COLUMNS`, `seed-sales.golden.test.ts:89-117`; compared at `:208`), through the server's sale path. That one is broad,
+  not targeted: the demo seed applies no comps. Task 1's test is the targeted measurement, written
+  before any other change (Decision 6).
 - **A test's check changes only where this item's design changes what it checks** (owner,
   2026-10-05). Every such change is listed under "Changed test checks" with its line, old and new
   value and design point. A helper or fixture that gains something is listed under "Fixtures grown".
@@ -147,23 +157,26 @@ in the task named:
 4. **A full invoice whose dish was cut partly by its own amount comp and the rest by a bill comp**
    prints that dish's row with its own comp's words («Descuento»), not "100%", though the dish's
    filed base is zero. Today it prints «Invitación». Task 3.
-5. **The longest new words on the narrow roll** — «Deskontua 100% (BEZa barne)» on a 58 mm full
-   invoice — stay within the printer's columns. Task 3.
+5. **The longest new words on the narrow roll stay within the printer's columns**, on both paths
+   that print them: a ticket line with «(BEZa barne)» after it (`takenOff`, suffix at
+   `receipt-document.ts:168`) and a full invoice's table row «Deskontua 100%» (`discountRow`).
+   Task 3, cases (e) and (e2).
 
-## Where the outline drifted (re-read on `c7b301702`)
+## Where the outline drifted (re-read on `c7b301702`, re-checked on `f17a43ad5`)
 
 1. **The outline's mechanism is not the one built.** It sent a full comp as
    `{ kind: "discount", percentBp: 10000, amount }`. That would leave `kind: "comp"` with no writer
    in two type copies (`apps/server/src/till-sale.ts:266`, `apps/till/src/api/client.ts:1034`), or
    force removing it, which changes the wire pins at `adjustments-apply.test.ts:450`, `:2791` and
-   `receipt-adjustments.test.ts:441`, `:487`, `:523`, `:540` and about twenty hand-written `kind:
-   "comp"` fixture inputs (`git grep -n 'kind: "comp"' -- 'apps/**/*.test.ts'`). This plan keeps
+   `receipt-adjustments.test.ts:441`, `:487`, `:523`, `:540` and the hand-written receipt fixtures
+   among the `kind: "comp"` hits of `git grep -n 'kind: "comp"' -- 'apps/**/*.test.ts'` (many of
+   those hits are reasons, not receipt entries). This plan keeps
    `kind: "comp"` and changes its meaning to "a full comp" (Decision 1): no wire shape changes,
    only printed words.
 2. **Lines moved.** `BillAdjustment` is `packages/adjustments/src/record.ts:188-196` (outline
    `:176-184`); the receipt entry is `receipt-adjustments.ts:94-98` (outline `:93-97`); the full
    invoice's row words are `receipt-document.ts:290-299`, the comp branch at `:292-293` (outline
-   `:290-294`); the till's label is `till-ticket-view.ts:109-123`, comp at `:116` (outline
+   `:290-294`); the till's label is `till-ticket-view.ts:110-123`, comp at `:116` (outline
    `:114-127`). Test pins: `adjustments-apply.test.ts:455`, `:483` (outline `:447`, `:475`);
    `adjustments-bill-payments.test.ts:247` (`:244`); `receipt-adjustments.test.ts:594` (`:592`);
    `receipt-document.test.ts:843`, `:846` (`:787`); `till-ticket-view.test.ts:1575-1576`, `:1836`
@@ -231,16 +244,23 @@ in the task named:
 6. **The filed record is measured by a committed test written before any other change.** The
    design reached its §8 conclusion by reading; the owner asked for it confirmed. The test files
    the same full-comp bill in two fresh databases provisioned identically under one fixed clock —
-   once with the receipt labels as shipped, once with every label replaced by a marker — and
-   compares the stored `registros_facturacion` row, the sale's lines and the alta XML serialised
-   from the row. A control proves the marker reached the printed receipt. It also pins the filed
-   figures, the record's fingerprint (`huella`) and the XML's SHA-256 as literals. Written and
-   committed in Task 1, when the branch's code is still `c7b301702`'s, and run unedited after
-   Tasks 2 to 4, it measures before and after with one file. That is what the outline's throwaway
-   worktree would have measured, and it stays as a guard, as
+   once with the receipt words as shipped, once with every word replaced by a marker **at its
+   source**, `@waitron/country-es` — and compares the stored `registros_facturacion` row, the
+   sale's lines and the alta XML serialised from the row. Marking at the source matters: a word can
+   reach other code without `receiptLabelsFor`, through `getCountryPack(…).receiptLabels`
+   (`packages/core/src/counterparty.ts:3` loads the registry; the pack carries the labels,
+   `packages/country-es/src/spain.ts:294`) or through `SPAIN_RECEIPT_LABELS` itself
+   (`packages/country-packs/src/registry.ts:9`), and a word taken those ways would be the same in
+   both runs if only `receiptLabelsFor` were mocked. A control proves the marker reached the
+   printed receipt, and a planted leak, not committed, proves the comparison catches a word that
+   reaches the record either way. The test also pins the filed figures, the record's fingerprint
+   (`huella`) and the XML's SHA-256 as literals. Written and committed in Task 1, while the
+   branch's `apps` and `packages` are still those of the commit Task 1 starts on (the rebased
+   base), and run unedited after Tasks 2 to 4, it measures before and after with one file. That
+   is what the outline's throwaway worktree would have measured, and it stays as a guard, as
    `apps/server/src/list-unit-price.fiscal-identity.test.ts` (A663) does for the list price. If
    Task 1 is ever committed after a product change, fall back to the outline: `git worktree add
-   --detach <dir> c7b301702`, `pnpm install` there, copy the test file and the helper change in, run
+   --detach <dir> <base>`, `pnpm install` there, copy the test file and the helper change in, run
    it, `git worktree remove` after (CLAUDE.md §4).
 
 ---
@@ -260,24 +280,41 @@ with `migrationOptionsFor(manifestSets(), null)` and `timeoutMs: 60_000` (`:54-5
 `TrustedClock` (`:58-71`), the compared column lists (`:72-95`) and `vi.hoisted` + `vi.mock` for
 the injection (`:34-46`). Here both databases take `resetPerTest: false`
 (`packages/db/src/testing/venue-db.ts:36-41`), and the two filings run once, in a `beforeAll`
-registered after both `useVenueDb` calls, so the three cases read the same two results. The bill and the adjustments come from the adjustment harness as
-`adjustments-apply.test.ts` uses it (`adjust` `:98-122`, `payWorkingOrder` `:459-463`,
-`formatReceipt` + `printedLines` `:468-481`).
+registered after both `useVenueDb` calls, so the three cases read the same two results. The bill
+and the adjustments come from the adjustment harness as `adjustments-apply.test.ts` uses it
+(`adjust` `:98-122`, `payWorkingOrder` `:459-463`, `formatReceipt` + `printedLines` `:468-481`).
 
+- [ ] **Before writing anything, record the base:** `BASE=$(git rev-parse HEAD)` and check
+  `git diff --stat origin/main...HEAD -- apps packages` prints nothing (the branch so far holds only
+  this plan). Keep `$BASE` for "Prove the base" below and for the PR.
+- [ ] **The time zone.** The file's first statement, as
+  `apps/server/scripts/demo-seed/seed-sales.golden.test.ts:1-3` does:
+  `process.env.TZ = "Europe/Madrid";` with its one-line reason — the host's offset can be stamped
+  on a record and hashed (`apps/server/src/till-backend.ts:21`).
 - [ ] **The helper option.** Add `options: { clock?: TrustedClock } = {}` to
   `provisionAdjustmentVenue`; `const clock = options.clock ?? systemClock();`. `src/testing/` is
   outside coverage (`apps/server/vitest.config.ts:43`). Listed under "Fixtures grown".
-- [ ] **The injection.** Mock `@waitron/country-packs`, spreading the real module; while
-  `inject.on`, `receiptLabelsFor(locale)` answers the real set with every value replaced by
-  `` `MARK-${key}` `` (map over `Object.keys` of the real set, so the file runs the same before and
-  after the `comp` key goes).
+- [ ] **The marker, at the source.** `vi.mock("@waitron/country-es", …)` spreading the real module
+  and replacing two exports, because both are read when modules load (`registry.ts:9`, `:15`,
+  `:142-143`):
+  - `SPAIN_RECEIPT_LABELS`: a `Proxy` over the real map whose `get` answers, for each language, one
+    `Proxy` over that language's real set (built once per language); the inner `get` answers
+    `` `MARK-${key}` `` for any key the set has while `inject.on`, else the real value;
+  - `SPAIN`: a `Proxy` over the real pack whose `get` answers the marked map above for
+    `receiptLabels` and the real value for everything else.
+  Keys come from the real set, so the file runs the same before and after the `comp` key goes. No
+  other module is mocked.
 - [ ] **`fileFullComps(db)`** provisions with the fixed clock (`ISSUED_AT =
-  new Date("2026-09-25T11:30:00.000Z")`, `offsetMinutes: 120`), and fakes `Date` at `ISSUED_AT` for
-  the whole run as `packages/adjustments/src/record.test.ts:622-630` does
-  (`vi.useFakeTimers({ toFake: ["Date"] })`, restored in `finally`), so every wall-clock read agrees
-  with the fiscal clock. It opens one bill with `billWith(venue, [{ name: "Burger" }, { name:
-  "Bottle" }, { name: "Bread" }, { name: "Water" }])` and, under the `house` reason as
-  supervisor:
+  new Date("2026-09-25T11:30:00.000Z")`, `offsetMinutes: 120`) and fakes `Date`
+  (`vi.useFakeTimers({ toFake: ["Date"] })`, restored in `finally`, as
+  `packages/adjustments/src/record.test.ts:622-630` does). Time moves forward a step at a time, so
+  every row has its own `created_at` and the bill's adjustments are read back in the order they
+  were made — with one frozen instant, Bread's two rows would tie and be ordered by their random
+  ids (`readBillAdjustments`'s `orderBy(createdAt, id)`, `record.ts:215`):
+  `vi.setSystemTime` at `ISSUED_AT` − 10 min to open the bill, − 8, − 6, − 4 and − 2 min for the
+  four adjustments, and `ISSUED_AT` for the payment. It opens one bill with
+  `billWith(venue, [{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }, { name: "Water" }])`
+  and, under the `house` reason as supervisor:
   - Burger: `comp` (Free, full);
   - Bottle (€30.00): `discount_amount` `"30.00"` (full: the whole list price);
   - Bread (€2.50): `discount_percent` 5000, then `discount_amount` `"1.25"` (not full: it took what
@@ -302,22 +339,74 @@ registered after both `useVenueDb` calls, so the three cases read the same two r
   `toEqual` a literal of `tipo_factura`, `num_serie_factura`, `importe_total`, `cuota_total`,
   `desglose`, `descripcion_operacion`, `fecha_hora_huso_gen_registro` and `huella`; and
   `createHash("sha256").update(shipped.xml).digest("hex")` `toBe` a literal. Write the literals as
-  `"?"` first, run, and copy the values from the failure. Check them by arithmetic before pinning:
-  `importe_total` is the Water alone, `"2.00"`; at 21% its base is 1.65 and its tax `"0.35"`;
-  `descripcion_operacion` is `"Restaurante"` (`adjustment-venue.ts:319`). A value that disagrees is
-  a stop and a report.
-- [ ] **Case 3 — "serialises no receipt word into the alta XML".** Control: `shipped.xml` contains
+  `"?"` first, run, and copy the values from the failure. Before pinning, check them against what
+  reading predicts:
+  - `tipo_factura` `"F2"`; `importe_total` `"2.00"` (the Water alone); `cuota_total` `"0.35"`;
+    `descripcion_operacion` `"Restaurante"` (`adjustment-venue.ts:319`);
+  - `desglose`, two rows in this order — the 21% group first, because `rateLines` groups every line,
+    zero-priced ones included, in the order the lines come (`packages/catalogue/src/pricing.ts:180-205`),
+    and the pay path files that breakdown as it is (`apps/server/src/till-sale.ts:961`); each row's
+    shape is `toDetalleDesglose`'s (`packages/fiscal-verifactu/src/backend.ts:141-149`); the rates'
+    spelling is `vat-rates.ts:23`'s:
+
+    ```ts
+    [
+      { ClaveRegimen: "01", CalificacionOperacion: "S1", BaseImponibleOimporteNoSujeto: "1.65",
+        TipoImpositivo: "21.00", CuotaRepercutida: "0.35" },
+      // Bread: a zero row at 10%, kept because rateLines does not drop empty groups.
+      { ClaveRegimen: "01", CalificacionOperacion: "S1", BaseImponibleOimporteNoSujeto: "0.00",
+        TipoImpositivo: "10.00", CuotaRepercutida: "0.00" },
+    ]
+    ```
+
+  A different spelling of the same value (`"21"` for `"21.00"`) is reported, not a stop. A
+  different amount, a missing or extra row, or a different order is a stop and a report: the
+  reading above was wrong, and the PR says so.
+- [ ] **Case 3 — "serialises no receipt word into the alta XML".** The word checks come first, so a
+  leaked word fails on the word: for each of `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`, the real
+  `discount` word (`(await vi.importActual<typeof import("@waitron/country-es")>("@waitron/country-es")).SPAIN_RECEIPT_LABELS[locale].discount`)
+  is not in `shipped.xml`; nor are the four old comp words, typed as literals because the label
+  key is gone after Task 4 — `"Invitación"`, `"Invitació"`, `"Gonbidapena"` (Galician's is
+  `"Invitación"` too) — nor `"100%"` nor `"MARK-"`. `apps/` is not scanned by the English-only
+  guard (`packages/db/src/english-only.ts:70-77`). Last, the control: `shipped.xml` contains
   `"<sf:DescripcionOperacion>Restaurante</sf:DescripcionOperacion>"` (the probe reads text the
-  record does carry). Then for each of `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`, the real
-  `receiptLabelsFor(locale).discount` (from `vi.importActual`) is not in `shipped.xml`, and neither
-  is `"100%"` nor `"MARK-"`.
+  record does carry).
 - [ ] **Run:** `pnpm --filter @waitron/server exec vitest run src/full-comp.fiscal-identity.test.ts`.
   Expected first: Case 2 fails on the `"?"` literals, Cases 1 and 3 pass. After pinning: 3 passed.
-- [ ] **Negative control, not committed.** Change `marked`'s Bread amount to `"1.24"` and run: Case
-  1 must fail on `importe_total`/`desglose` and the line columns. Revert; `git diff --stat` shows
-  only the two files above. Record the command and both results for the PR.
-- [ ] **Prove the base.** `git diff --stat c7b301702 HEAD -- apps packages` before this commit lists
-  nothing; after it, only the two files above. Then the golden gates, unedited. Typecheck
+- [ ] **Time zones.** Run Case 2 under two other zones:
+  `TZ=UTC pnpm --filter @waitron/server exec vitest run src/full-comp.fiscal-identity.test.ts -t "these figures"`
+  and the same with `TZ=Pacific/Auckland`; both pass. Those two runs agree whether or not the
+  pin works, so also run once under `TZ=Pacific/Auckland` with the pin line removed, and record
+  whether Case 2 still passes — that says whether the record depends on the host's zone at all.
+  Put the pin back. Record all three results for the PR.
+- [ ] **Controls, not committed — each changed, run, reverted:**
+  1. **A filed difference is seen.** Change `marked`'s Bread amount to `"1.24"`. Case 1 must fail
+     with a diff on `importe_total`, `desglose` and the line columns.
+  2. **A word that leaves through `receiptLabelsFor` is seen.** In
+     `apps/server/src/sale-operation-description.ts:50`, return `receiptLabelsFor("es-ES").discount`
+     (import it from `@waitron/country-packs`) in place of `receipt.operationDescription`. The pay
+     path reads it (`till-sale.ts:931`). Expected:
+     - Case 1 fails on `marked.registros` with Vitest's diff showing
+       ```
+       -     "descripcion_operacion": "Descuento",
+       +     "descripcion_operacion": "MARK-discount",
+       ```
+       (expected is `shipped`, received is `marked`);
+     - Case 3 fails on its first word check:
+       `AssertionError: expected '<?xml …' not to contain 'Descuento'`;
+     - Case 2 fails on `descripcion_operacion` (`"Descuento"` against `"Restaurante"`).
+  3. **A word that leaves through the pack is seen.** The same line returns
+     `getCountryPack("ES")!.receiptLabels!["es-ES"]!.discount` instead. The same three failures are
+     expected. A run where Case 1 passes here means the marker does not reach the pack's own copy,
+     and the mock is wrong — a stop.
+  After each, revert and check `git diff --stat` shows only the two Task 1 files. Record each
+  command and the failure lines it printed, for the PR.
+- [ ] **Prove the base.** `git diff --stat $BASE HEAD -- apps packages` lists nothing before this
+  commit and only the two files above after it. Then the gates, unedited:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-sales.golden.test.ts`
+  (it pins every `registros_facturacion` column of the demo's sales, `huella` included, through the
+  server's sale path; it is broad, not targeted — the demo seed applies no comps). Typecheck
   `pnpm --filter @waitron/server typecheck`. Commit — "Test that a full comp's filed record ignores
   the receipt's words".
 
@@ -361,7 +450,7 @@ registered after both `useVenueDb` calls, so the three cases read the same two r
   `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/adjustment-report-screen.test.ts`
   — every case passes unedited, among them A758-3's "Comp 100%" and "Comp €6.00" cases. Then
   `pnpm --filter @waitron/adjustments typecheck`, `pnpm exec vitest run scripts/english-only.test.ts`
-  from the root, Task 1's test and the golden gates.
+  from the root, Task 1's test and the gates.
 - [ ] Commit — "One rule for a full comp, read with a bill's adjustments".
 
 ## Task 3: the server prints a full comp as "Descuento 100%"
@@ -394,16 +483,23 @@ registered after both `useVenueDb` calls, so the three cases read the same two r
     `at80("Descuento 100%", "-6,50")` after the goods (Review Focus 3); (e) "keeps a full
     comp's line within 58 mm in every language": `ADJUSTED` as `invoiceType: "F1"` and as F2, in
     `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`, `PRINTER_58`; every printed line's length ≤
-    `columnsFor("58mm")`, and the joined text contains «Deskontua 100%» for `eu-ES` (Review Focus 5).
+    `columnsFor("58mm")`, and the joined text contains «Deskontua 100%» for `eu-ES`. `ADJUSTED`'s
+    lines carry no `net`, so this covers the ticket-line path (`takenOff`, `receipt-document.ts:167-171`),
+    with «(BEZa barne)» after the words on F1; (e2) "keeps a full invoice's Descuento 100% row within
+    58 mm in Basque", inside `describe("the receipt's fixed words follow its language")` where
+    `FULL_SALE` (`:2408-2428`) is declared: `FULL_SALE` (its Hamburguesa is a filed comp at base
+    zero) in `eu-ES` on `PRINTER_58`; every line ≤ `columnsFor("58mm")`, and a line contains
+    «Deskontua 100%» — the table-row path (`discountRow`) (Review Focus 5).
   - `receipt-document.test.ts`: (f) "names a dish's row by its own part comp when a bill comp took
     the rest": one filed line at a filed base of zero, list 10.00, `adjustments: [{ kind:
     "discount", amount: "6.00" }]`, `billAdjustments: [{ kind: "discount", percentBp: 10000,
     amount: "4.00" }]`; the table's discount row under the dish reads «Descuento», and the end row
     «Descuento 100%» (Review Focus 4, Decision 4).
   Run `pnpm --filter @waitron/server exec vitest run src/receipt-ticket.test.ts src/receipt-document.test.ts src/receipt-figures.test.ts src/receipt-adjustments.test.ts src/adjustments-apply.test.ts src/adjustments-bill-payments.test.ts`.
-  Expected: every changed and new check fails on «Invitación» / «Invitació» / «Gonbidapena», (a) on
-  `kind: "discount"`, (f) on «Invitación»; (b), (c) and (e) may already pass — say which in the
-  task's report.
+  Expected: every changed check fails on «Invitación» / «Invitació» / «Gonbidapena»; (a) fails on
+  `kind: "discount"`; (d) and (f) on «Invitación»; (e) and (e2) on the missing «Deskontua 100%» (Basque
+  prints «Gonbidapena» today, `receipt-labels.ts:145`). Only (b) and (c) may already pass — say
+  which in the task's report.
 - [ ] **The entry.** `receipt-adjustments.ts:95`: `kind: record.full ? "comp" : "discount"`.
   `perDish` (`:200-201`) is unchanged.
 - [ ] **The words.** In `receipt-document.ts`, `adjustmentLabel` prints `kind: "comp"` as a 10000
@@ -420,8 +516,8 @@ registered after both `useVenueDb` calls, so the three cases read the same two r
   script is typechecked (`apps/server/tsconfig.json:7` includes `scripts`), never run by CI.
 - [ ] **Run** the six files again (read each count), the receipt and invoice neighbours that pin
   amount entries — `src/invoice-document.test.ts src/receipt-language.test.ts` — and Task 1's test
-  unedited, the golden gates, `pnpm --filter @waitron/server typecheck`. Search for anything left
-  reading the label: `git grep -nE "label\.comp|labels\.comp" -- apps/server` prints nothing.
+  unedited, the gates, `pnpm --filter @waitron/server typecheck`. Search for anything left
+  reading the label: `git grep -nE "labels?\.comp([^a-zA-Z_]|$)" -- apps/server` prints nothing.
 - [ ] Commit — "Receipts print a full comp as Descuento 100%".
 
 ## Task 4: the till's ticket, and the `comp` label goes
@@ -441,17 +537,23 @@ registered after both `useVenueDb` calls, so the three cases read the same two r
   `pnpm --filter @waitron/till exec vitest run src/screens/till-ticket-view.test.ts`. Expected:
   those three cases fail on «Invitación» / «Invitació» / «Gonbidapena».
 - [ ] **The words.** `adjustmentLabel` in `till-ticket-view.ts` reads `percentBp` as 10000 for
-  `kind: "comp"`, as the server does (Task 3); its doc comment keeps naming the server file it
-  mirrors. Update `ReceiptAdjustment`'s doc in `client.ts` to Task 3's sentence.
+  `kind: "comp"`, as the server does (Task 3). Its doc comment (`:110`) names
+  `apps/server/src/receipt-ticket.ts`, but the words are built in `receipt-document.ts`
+  (`adjustmentLabel`, `:95-108`): point it there. Update `ReceiptAdjustment`'s doc in `client.ts` to Task 3's sentence.
 - [ ] **Retire the key.** Delete `"comp"` from `RECEIPT_LABEL_KEYS` and `comp:` from the four sets.
-  `git grep -nE "\.comp([^a-zA-Z]|$)" -- apps packages | grep -v "\.test\.ts"` then lists only
-  `receipt-document.ts`'s `discount.comp` and `receipt-figures.ts`'s `entry.comp` (the zero-base
-  flag, not a label).
+  Then two sweeps, each with its expected answer:
+  - `git grep -nE "labels?\.comp([^a-zA-Z_]|$)" -- apps packages` prints nothing (today it prints
+    `receipt-document.ts:100`, `:293` and `till-ticket-view.ts:116`);
+  - `git grep -nE "[A-Za-z_]\.comp([^a-zA-Z_\"]|$)" -- apps packages ':!*.test.ts'` prints only
+    `receipt-document.ts`'s `discount.comp` and `receipt-figures.ts`'s two `entry.comp` (`:118`,
+    `:176`), the zero-base flag, not a label. (The broader `"\.comp([^a-zA-Z]|$)"` also matches
+    i18n keys such as `"table.comp_line"` and `"adjustment_report.entries.comp"`; those are not
+    readers.)
 - [ ] **Run:** the ticket view suite and `src/screens/till-ticket-view.a11y.test.ts` (unedited:
   its `kind: "comp"` inputs at `:501`, `:516` are wire data); `pnpm --filter @waitron/country-es
   exec vitest run src/spain.test.ts`; `pnpm --filter @waitron/country-packs exec vitest run
   src/registry.test.ts`; typecheck `@waitron/till`, `@waitron/country`, `@waitron/country-es`,
-  `@waitron/country-packs`, `@waitron/server`; Task 1's test unedited; the golden gates. Re-run
+  `@waitron/country-packs`, `@waitron/server`; Task 1's test unedited; the gates. Re-run
   the label sweep: `git grep -n -i "invitaci\|Gonbidapena" -- 'apps/**' 'packages/**'` lists only
   the staff invitations and the demo seed's reason name (Where the outline drifted, item 7).
 - [ ] Commit — "The till shows a full comp as Descuento 100%; the comp receipt label goes".
@@ -512,13 +614,16 @@ Tests read text; nobody has seen the new words on paper or on the till. Look at 
   keeps the adjustment rows readable. Fix a defect test-first; list a judgement call as an owner
   point.
 
-**PR description** (plain English): first line, the review path and that it changes printed
-invoice wording only — by the 2026-10-21 rule "truly fiscal PRs (invoices…) wait for the owner",
-so the driver asks the owner before landing; what a receipt now prints, with the pictures' paths;
-**the filed-record measurement** — Task 1's three cases, that they were written and pinned on
-`c7b301702`'s code and pass unedited at the tip (`git diff <task-1-sha> HEAD -- apps/server/src/full-comp.fiscal-identity.test.ts`
-empty), the negative control's command and result, and the golden gates' counts; **Changed test
-checks** and **Fixtures grown** below; **owner points** below.
+**PR description** (plain English): first line, the review path and that it changes the printed
+wording of receipts and invoices, not any filed figure; what a receipt now prints, with the
+pictures' paths; **reprints**: a receipt or invoice of an earlier sale, printed again, re-reads the
+stored adjustments through `receiptLines` (`apps/server/src/transaction-receipt.ts:98`,
+`invoice-document.ts:63`), so it now prints «Descuento 100%» where its first print said
+«Invitación» — pre-live, so no venue has such a sale; **the filed-record measurement** — Task 1's
+three cases, that they were written and pinned on `$BASE`'s code and pass unedited at the tip
+(`git diff <task-1-sha> HEAD -- apps/server/src/full-comp.fiscal-identity.test.ts` empty), the three
+controls' commands and the failure lines each printed, the three time-zone runs, and the gates'
+counts; **Changed test checks** and **Fixtures grown** below; **owner points** below.
 
 ---
 
@@ -549,7 +654,7 @@ as a comp"; their `comp: true` checks stand, because `GroupDiscount.comp` does n
 
 **Unchanged, checked:** every `kind: "comp"` wire pin and fixture input (Decision 1); the
 adjustment report's suites (Task 2 runs them unedited); `spain.test.ts` and `registry.test.ts`;
-`till-ticket-view.a11y.test.ts`; the golden gates.
+`till-ticket-view.a11y.test.ts`; the gates.
 
 If a suite turns red on a check not in this table — for instance a pin of a whole-price amount comp
 as `kind: "discount"` that `git grep -n 'kind: "discount", amount' -- 'apps/server/src/*.test.ts'`
@@ -572,5 +677,6 @@ did not show as whole-price on 2026-10-21 — it is a stop and a report, then a 
 3. **A full invoice names a dish's discount row by its own comp when it has exactly one** (Decision
    4). Left as it is: a row with two or more of its own comps and a bill comp that together left the
    dish at zero prints «Descuento 100%» beside only its own part.
-4. **This is invoice wording.** No filed figure changes (Task 1's measurement), but a simplified
-   invoice's printed words do; the driver asks the owner before landing.
+4. **This changes invoice wording.** No filed figure changes (Task 1's measurement), but a
+   simplified invoice's printed words do, including on reprints of earlier sales (pre-live, so no
+   venue is affected).
