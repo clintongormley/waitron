@@ -1,10 +1,10 @@
 import { LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { baseStyles, CATEGORY_PALETTE } from "@waitron/ui";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
-import { colorField, colorFieldStyles } from "./color-field.js";
+import { colorField, colorFieldStyles, type ColorFieldOptions } from "./color-field.js";
 import { t } from "../i18n/t.js";
 
 /** The smallest host the field renders into: it owns the colour and adds the field's styles. */
@@ -15,8 +15,14 @@ class ColorFieldHost extends LitElement {
   @property({ attribute: false }) categoryColor: string | null | undefined = undefined;
   @property({ attribute: false }) customEvent: "input" | "change" | undefined = undefined;
   @property({ attribute: false }) inheritedFrom: "category" | "default" | undefined = undefined;
+  @property({ attribute: false }) legend: string | undefined = undefined;
+  @property({ attribute: false }) noneChoice: ColorFieldOptions["noneChoice"] = undefined;
+  @property({ attribute: false }) code: ColorFieldOptions["code"] = undefined;
   override render() {
     return colorField({
+      ...(this.legend === undefined ? {} : { legend: this.legend }),
+      ...(this.noneChoice === undefined ? {} : { noneChoice: this.noneChoice }),
+      ...(this.code === undefined ? {} : { code: this.code }),
       ...(this.inheritedFrom === undefined ? {} : { inheritedFrom: this.inheritedFrom }),
       ...(this.categoryColor === undefined ? {} : { categoryColor: this.categoryColor }),
       ...(this.customEvent === undefined ? {} : { customEvent: this.customEvent }),
@@ -42,7 +48,12 @@ afterEach(cleanupWidgets);
 const mount = (
   color: string | null,
   theme?: "light" | "dark",
-  extra: Partial<Pick<ColorFieldHost, "categoryColor" | "customEvent" | "inheritedFrom">> = {},
+  extra: Partial<
+    Pick<
+      ColorFieldHost,
+      "categoryColor" | "customEvent" | "inheritedFrom" | "legend" | "noneChoice" | "code"
+    >
+  > = {},
 ) => mountWidget<ColorFieldHost>("test-color-field-host", { color, ...extra }, theme);
 
 const noneButton = (el: ColorFieldHost) =>
@@ -275,4 +286,50 @@ it("A498 keeps category inheritance selectable without an empty-colour note", as
   none.click();
   await el.updateComplete;
   expect(el.color).toBeNull();
+});
+
+it("a legend and a none choice of the caller's own", async () => {
+  const { el } = await mount("#b12525", undefined, {
+    legend: "Brand colour",
+    noneChoice: { label: "Waitron's", chip: "#1f6feb" },
+  });
+  expect(el.shadowRoot!.querySelector("legend")!.textContent!.trim()).toBe("Brand colour");
+  expect(el.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-label")).toBe(
+    "Brand colour",
+  );
+  const none = noneButton(el);
+  expect(none.textContent!.trim()).toBe("Waitron's");
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Waitron's");
+  const chip = none.querySelector<HTMLElement>(".chip")!;
+  expect(getComputedStyle(chip).backgroundColor).toBe("rgb(31, 111, 235)");
+  await click(el, "");
+  expect(el.color).toBeNull();
+});
+
+it("a code field beside the custom colour", async () => {
+  const change = vi.fn();
+  const code = { name: "brandColor", label: "Colour code", value: "", error: "", change };
+  const { el } = await mount(null, undefined, { code });
+  const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "wt-input[name=brandColor]",
+  )!;
+  expect(field).not.toBeNull();
+  expect(field.closest("label")).toBeNull();
+  expect(field.hideLabel).toBe(true);
+  expect(field.label).toBe("Colour code");
+  const inner = field.shadowRoot!.querySelector("input")!;
+  await expect.element(page.elementLocator(inner)).toHaveAccessibleName("Colour code");
+  const outer = vi.fn();
+  el.addEventListener("wt-change", outer);
+  await page.elementLocator(inner).fill("#1E5B3A");
+  expect(change).toHaveBeenLastCalledWith("#1E5B3A");
+  expect(outer).not.toHaveBeenCalled();
+
+  el.code = { ...code, value: "#12", error: "Enter a colour as # and six digits or letters a–f." };
+  await el.updateComplete;
+  await field.updateComplete;
+  expect(field.shadowRoot!.querySelector("[data-error]")!.textContent).toBe(
+    "Enter a colour as # and six digits or letters a–f.",
+  );
+  expect(inner.getAttribute("aria-invalid")).toBe("true");
 });
