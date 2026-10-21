@@ -638,46 +638,39 @@ describe("till-floor-screen: the zone strip's edge", () => {
     "Patio",
   ].map((name, i) => zone(`z${i + 1}`, name, i));
 
-  it.each<[number, "out" | "in"]>([
-    [390, "out"],
-    [390, "in"],
-    [768, "out"],
-    [768, "in"],
-  ])(
-    "at %i px, a tab a slow swipe moves %s of the strip gets its edge right",
-    async (width, way) => {
+  const mountEight = async () =>
+    mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: eight,
+      tables: [seated("t1", "z1"), seated("t8", "z8", { readyToServe: 2 })],
+      now,
+      reducedMotion: false,
+    });
+
+  const mod = (x: number) => ((x % 1) + 1) % 1;
+
+  it.each([390, 768])(
+    "at %i px, a tab a slow swipe moves out of the strip gets its edge right",
+    async (width) => {
       const viewport = { width: window.innerWidth, height: window.innerHeight };
       await page.viewport(width, 844);
       try {
-        const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
-          zones: eight,
-          tables: [seated("t1", "z1"), seated("t8", "z8", { readyToServe: 2 })],
-          now,
-          reducedMotion: false,
-        });
+        const { el, host } = await mountEight();
         const strip = stripOf(el);
         const patio = tabOf(el, "z8").closest<HTMLElement>(".zone-tab")!;
-        // Going out, Patio is hidden once the strip cuts it; coming in, once it is clear of the
-        // shown end edge's inner side, `inset` in from the strip's end.
-        let inset = 0;
-        const cut = () => patio.getBoundingClientRect().right - (paddingBox(strip).right - inset);
+        // Patio is hidden once the strip cuts it.
+        const cut = () => patio.getBoundingClientRect().right - paddingBox(strip).right;
         const label = () => edgeOf(el, "end")?.getAttribute("aria-label");
         await expect.poll(label).toBe("Show Patio");
         strip.scrollLeft = strip.scrollWidth;
         await expect.poll(() => edgeOf(el, "end")).toBeNull();
-        if (way === "in") {
-          strip.scrollLeft -= Math.ceil(-cut()) + 30;
-          await expect.poll(label).toBe("Show Patio");
-          inset = paddingBox(strip).right - edgeOf(el, "end")!.getBoundingClientRect().left;
-        }
         // Jump to a few pixels short of the crossing before the slow steps.
-        strip.scrollLeft += way === "in" ? Math.floor(cut()) - 3 : Math.ceil(cut()) + 3;
+        strip.scrollLeft += Math.ceil(cut()) + 3;
         await nextFrames();
 
-        // The whole-number clientWidth misplaces the strip's end by `gap`. For "out", pick a screen
-        // width, to the sixteenth of a pixel, where it says "further out": the side on which a tab
-        // crossing the strip's end reads wrongly.
-        const want = way === "out" ? 0.4 : -0.4;
+        // The whole-number clientWidth misplaces the strip's end by `gap`. Pick a screen width, to
+        // the sixteenth of a pixel, where it says "further out": the side on which a tab crossing
+        // the strip's end reads wrongly.
+        const want = 0.4;
         const base = Math.floor(host.getBoundingClientRect().width) - 1;
         const gap = () => strip.clientWidth - (paddingBox(strip).right - paddingBox(strip).left);
         let best = 0;
@@ -689,34 +682,85 @@ describe("till-floor-screen: the zone strip's edge", () => {
         }
         host.style.width = `${base - best / 16}px`;
         const miss = gap();
-        expect(Math.abs(miss)).toBeGreaterThanOrEqual(0.25);
-        expect(Math.sign(miss)).toBe(Math.sign(want));
+        expect(miss).toBeGreaterThanOrEqual(0.25);
 
         // Widen Patio's tab by under a pixel so the whole-pixel step that crosses the end lands
         // half-way into that misplaced band.
-        const mod = (x: number) => ((x % 1) + 1) % 1;
         patio.style.paddingRight = `${mod(miss / 2 - cut())}px`;
-        const step = way === "out" ? -1 : 1;
         let crossing = cut();
-        for (let i = 0; i < 40 && (way === "out" ? crossing <= 0 : crossing > 0); i++) {
-          strip.scrollLeft += step;
+        for (let i = 0; i < 40 && crossing <= 0; i++) {
+          strip.scrollLeft -= 1;
           crossing = cut();
           await nextFrames();
         }
-        if (way === "out") {
-          expect(crossing).toBeGreaterThan(0);
-          expect(crossing).toBeLessThan(miss);
-        } else {
-          expect(crossing).toBeLessThanOrEqual(0);
-          expect(crossing).toBeGreaterThan(miss);
-        }
+        expect(crossing).toBeGreaterThan(0);
+        expect(crossing).toBeLessThan(miss);
         // Read at the crossing itself: the next scroll re-reads the strip.
-        if (way === "out") await expect.poll(label).toBe("Show Patio");
-        else await expect.poll(() => edgeOf(el, "end")).toBeNull();
-        strip.scrollLeft += 10 * step;
+        await expect.poll(label).toBe("Show Patio");
+        strip.scrollLeft -= 10;
         await nextFrames();
-        if (way === "out") await expect.poll(label).toBe("Show Patio");
-        else await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        await expect.poll(label).toBe("Show Patio");
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
+
+  // Coming in, Patio stays hidden while any of it is under the end edge, and is shown once clear of
+  // it. The first case leaves 0.15 px of Patio under the edge, which the edge's inner side read up
+  // to a whole pixel, or Patio's end read to the nearest one, would call clear; the second steps
+  // Patio a quarter pixel clear, which the edge's inner side read down to a whole pixel still covers.
+  it.each([
+    [390, 0.15, 0.2],
+    [768, 0.75, 0.375],
+  ])(
+    "at %i px, the end edge stays while a tab swiped in is %s px under it, and goes once it is clear",
+    async (width, under, fraction) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 844);
+      try {
+        const { el, host } = await mountEight();
+        const strip = stripOf(el);
+        const patio = tabOf(el, "z8").closest<HTMLElement>(".zone-tab")!;
+        const label = () => edgeOf(el, "end")?.getAttribute("aria-label");
+        await expect.poll(label).toBe("Show Patio");
+        strip.scrollLeft = strip.scrollWidth;
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        // Back until the strip cuts Patio, so the end edge is drawn over it.
+        strip.scrollLeft -=
+          Math.ceil(paddingBox(strip).right - patio.getBoundingClientRect().right) + 30;
+        await expect.poll(label).toBe("Show Patio");
+
+        const edgeLeft = () => edgeOf(el, "end")!.getBoundingClientRect().left;
+        const base = Math.floor(host.getBoundingClientRect().width) - 1;
+        let best = 0;
+        let bestOff = Infinity;
+        for (let k = 0; k < 16; k++) {
+          host.style.width = `${base - k / 16}px`;
+          const off = Math.abs(mod(edgeLeft()) - fraction);
+          if (off < bestOff) [best, bestOff] = [k, off];
+        }
+        host.style.width = `${base - best / 16}px`;
+        expect(Math.abs(mod(edgeLeft()) - fraction)).toBeLessThan(0.04);
+
+        // Widen Patio's tab by under a pixel so a whole-pixel scroll leaves `under` of it under the
+        // edge, and one more pixel brings it `1 - under` clear.
+        const inner = edgeLeft();
+        const cut = () => patio.getBoundingClientRect().right - inner;
+        patio.style.paddingRight = `${mod(under - cut())}px`;
+        strip.scrollLeft += Math.round(cut() - under);
+        await nextFrames();
+        await el.updateComplete;
+        expect(cut()).toBeCloseTo(under, 1);
+        expect(label()).toBe("Show Patio");
+        strip.scrollLeft += 1;
+        await nextFrames();
+        expect(cut()).toBeCloseTo(under - 1, 1);
+        await expect.poll(() => edgeOf(el, "end")).toBeNull();
+        strip.scrollLeft += 10;
+        await nextFrames();
+        await el.updateComplete;
+        expect(edgeOf(el, "end")).toBeNull();
       } finally {
         await page.viewport(viewport.width, viewport.height);
       }
