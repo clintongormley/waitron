@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { applyTokens } from "@waitron/ui";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentsApi } from "./client.js";
-import { ADJUSTMENTS_STRINGS, kindTotalName, tf } from "./strings.js";
+import { ADJUSTMENTS_STRINGS, kindTotalName, t, tf } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
 import {
@@ -1597,5 +1597,30 @@ describe("the reason filter", () => {
     expect(reasonField(el).options[0]!.label).toBe(
       ADJUSTMENTS_STRINGS.es["adjustment_report.entries.all_reasons"],
     );
+  });
+
+  it("words the search box of a long reason list, and its no-match line, in Spanish", async () => {
+    setLocale("es");
+    const manyReasons = (from?: string, to?: string) => {
+      const report = fixtureReport(from, to);
+      const model = report.overall.byReason[0]!;
+      for (const n of [1, 2, 3, 4, 5]) {
+        report.overall.byReason.push({ ...model, reasonId: `r-${n}`, reasonName: `Reason ${n}` });
+      }
+      return report;
+    };
+    const el = await mount(
+      fakeApi({ getReport: vi.fn((range?: Range) => Promise.resolve(answer(manyReasons, range))) }),
+    );
+    await showAll(el);
+    const field = reasonField(el) as ReasonField & { updateComplete: Promise<unknown> };
+    expect(field.options.length).toBeGreaterThan(7);
+    await userEvent.click(field);
+    await field.updateComplete;
+    const search = field.shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
+    expect(search.placeholder).toBe(t("adjustments.search", "es"));
+    await userEvent.fill(search, "zzz");
+    await field.updateComplete;
+    expect(text(field.shadowRoot!.querySelector(".empty"))).toBe(t("adjustments.no_results", "es"));
   });
 });

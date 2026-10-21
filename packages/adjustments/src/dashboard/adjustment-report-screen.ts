@@ -978,6 +978,8 @@ export class AdjustmentReportScreen extends LitElement {
         stable-width
         label=${t("adjustment_report.column.reason")}
         search="auto"
+        searchPlaceholder=${t("adjustments.search")}
+        noResultsLabel=${t("adjustments.no_results")}
         .options=${this.#reasonOptions(report)}
         .value=${this.reasonFilter?.id ?? ALL_REASONS}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onReasonChange(event, report)}
