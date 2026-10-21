@@ -2378,8 +2378,9 @@ After the theme request is answered (or, for a server that never answers, receiv
 waits five more animation frames, not a fixed time. Measured 2026-10-21 in both apps: making a
 refused answer empty the sheet and the stored copy failed the refused case (`expected '#f7f7f8' to be '#f0f9f3'`);
 making a failed or non-JSON answer empty it failed the till's failed and not-JSON cases; and
-dropping an answer that took over 300 ms failed the late case. A fault that acts later than
-those five frames after the answer is not seen.
+dropping an answer that took over 300 ms failed the late case. A fault that acts later can be
+missed: in the dashboard in Chromium, a refused answer that emptied the sheet 300 ms after it
+arrived still failed the refused case, and one that emptied it 1 s or 3 s after passed (2026-10-21).
 
 **Route API calls by PATH, never by glob.** The page's own modules are served by the Vitest server
 from the same origin, so a Playwright route on `**/api/**` also catches `/src/api/client.ts`; the

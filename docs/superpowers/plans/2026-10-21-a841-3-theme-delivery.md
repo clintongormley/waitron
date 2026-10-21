@@ -823,6 +823,8 @@ changed or 5 s have passed.
   theme read sends EVERY read passively, its first included, through `DashboardApi.background`
   (`getVenueTheme`), unlike `DashboardQueries`' usual active first read, because it starts on its own
   at sign-in and must not count as activity — so a later session does not "fix" it back.
+  (After review, 2026-10-21: the "because" clause was dropped from that doc; the shell's sibling
+  reads that also start at sign-in keep an active first read.)
 
 - [ ] **Step 6: Focused checks**
 
