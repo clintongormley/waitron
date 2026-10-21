@@ -694,7 +694,7 @@ del obligado a expedir facturas … incluso aunque en dichas instalaciones se em
 un productor» (Orden, annex block 2.6, `NumeroInstalacion`, read by eye). Three ways, put to the
 owner as the revision's second question:
 
-1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with [Dated pointer, 2026-10-21: superseded by the owner's 22:25 answer — every series name is five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here.]
+1. **Recommended: A947's promotion name** — the hour, a hyphen and the minute (`06XV-40`), with
    A947's check against every code the box knows
    ([A947 design](2026-10-21-a947-two-box-failover-design.md) §6.5, its slice 4a). No question and
    no wait for the next hour: normally the box takes the current minute and invoices again as soon
@@ -707,7 +707,7 @@ owner as the revision's second question:
    taxpayer's venues changing identity in the same UTC minute, with the same series prefixes,
    would take the same names. The runbook (§5.4) has the main boxes of one taxpayer's venues
    upgraded one at a time. It depends on the owner approving A947's revision; today the only venue
-   is the owner's own.
+   is the owner's own. [Dated pointer, 2026-10-22: the owner's answer of 2026-10-21 ~22:25 replaces this: every series name is to be five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet, once A947's slice 4a and its test land; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here. A947 also notes a decision for A940: at a one-box venue with no internet, A993's change at start-up would need a phone's clock before the first sale (A947 §13).]
 2. A679's four-symbol hour, taking the "I don't know" path: the box invoices nothing until the next
    UTC hour — up to an hour without invoices after the upgrade — and two boxes of one taxpayer
    changing identity in the same hour still collide.

@@ -13,8 +13,10 @@ rewritten, and carries a dated pointer here.
 
 > **Second revision 2026-10-21 — the owner's answers of about 22:25.** What changed, section by
 > section. (An "installation code" is the short name a box's invoices carry, such as the `0CZZW`
-> in `A-0CZZW/1`; AEAT, the tax agency, receives it as the installation number. The "recovery
-> sheet" is the page printed at setup that holds a box's recovery key.)
+> in `A-0CZZW/1`; AEAT, the tax agency, receives it as the installation number. A box "takes a
+> name" — the code calls it an allocation — at setup, at a switch and the other moments listed
+> below. The "recovery sheet" is the page printed at setup that holds a box's recovery key. A
+> "floor" is a check that stops a box taking a name earlier than one it should know about.)
 >
 > - **§6.5, one name form for everything.** Every installation code is now **five symbols that
 >   count the minutes since 1 January 2026, in UTC** (world time; Madrid is two hours ahead in
@@ -23,16 +25,18 @@ rewritten, and carries a dated pointer here.
 >   for switches, is gone, and so is its comparison of two forms. Five symbols last until October
 >   2089 (worked out in §6.5). The worked example now reads `A-0CZZW/1` and `A-0D00B/1`. A second
 >   name in the same minute waits for the next minute — under a minute when the clocks agree, as
->   they normally do; 130 seconds is the worst the clock check allows, a departure from goal 2's
+>   they normally do; 150 seconds is the worst the clock check allows, a departure from goal 2's
 >   "at most the next minute".
 > - **The clock check is tightened from 120 to 30 seconds, and nobody can click past it**
->   (§6.5), at every allocation: a second clock from another device or the internet is required,
->   and a box clock more than 30 seconds behind **or ahead** of it is refused. A name now lasts a
->   minute, not an hour; and review showed that a name taken by a fast clock is repeated later by a
->   box whose clock is right. **My call**, on the coordinator's ruling after review. The cost, said
->   plainly in §6.5: a spare whose clock has drifted cannot be switched to until its clock is put
->   right, so the spare now watches its own clock and raises an alert early; correcting a clock with
->   no internet and no terminal is an open point (§13).
+>   (§6.5), every time a box takes a name: a second clock from another device or the internet is
+>   required, and a box clock more than 30 seconds behind **or ahead** of it is refused. A name now
+>   lasts a minute, not an hour; and a test showed that a name taken by a fast clock is taken again
+>   later by a box whose clock is right. **My call**, following lane A's decision after the review.
+>   The cost, said plainly in §6.5: when two clocks disagree by more than 30 seconds nothing takes a
+>   name until one is put right — a drifted spare cannot be switched to, a drifted till blocks a
+>   right box, and a drifting main box goes unseen without a new alert — so every box now watches
+>   its clock against the others and warns early; correcting a clock with no internet and no
+>   terminal is an open point (§13).
 > - **The setup question "Has anyone set up a Waitron box for this business in the last hour?"
 >   goes**, from setup, from the restore form and from the switch (§6.2, §6.5); the build slice
 >   says where it lives today.
@@ -41,20 +45,26 @@ rewritten, and carries a dated pointer here.
 >   new series asks for no reprint. The first revision's "print the new sheet" prompt after a
 >   switch is gone (§6.5, slice 4c).
 > - **The owner's condition, "prove it" — run as a test, and not yet met** (§6.7). The run is
->   against today's selection with the code requirement removed, as slice 4a would leave it (today's
->   form cannot leave the code out: it refuses an empty one). It **does not refuse**: once a person
->   confirms past the clock warning it took a name earlier than one already used; Thursday's sheet,
->   which carries the old main box's own code, did not stop it; and a restore in the same hour as a
->   name it could not see took that very name, even with both clocks right (that is the hour unit,
->   which minutes remove). So this revision adds a floor: the clock rule above, and, for a setup or a
->   restore — the two that cannot see every name already used — a wait of 70 to 130 seconds before
->   the name is taken. **That the new rules refuse is not proven yet**: the proof is slice 4a's
+>   against the part of today's code that picks the name, with its demand for a typed code taken
+>   out, as slice 4a would leave it (today's form cannot leave the code out: it refuses an empty
+>   one). It **does not refuse**: once a person confirms past the clock warning it took a name
+>   earlier than one already used; Thursday's sheet, which carries the old main box's own code, did
+>   not stop it; and a restore in the same hour as a name it could not see took that very name, even
+>   with both clocks right — because today's names change only once an hour, a case that goes away
+>   with a name per minute. So this revision adds a floor: the clock rule above, and, for a setup or
+>   a restore — the two that cannot see every name already used — a wait of 90 to 150 seconds before
+>   the name is taken, checked by a sweep of clock errors; a till, phone or internet clock more than
+>   15 seconds wrong can still lead to a repeat, and that is disclosed. **That the new rules refuse is not proven yet**: the proof is slice 4a's
 >   committed test, and slice 4a takes the code off the sheet and the form only if that test passes
 >   in the same pull request.
-> - **Two things found against B3, the USB installer design.** B3 runs a first setup on the box's own
->   screen, whose browser shares the box's clock and does not count as a second clock — so a first
->   setup there with no internet is refused unless a phone or till on the venue's network opens the
->   setup page too (§6.5, §13). And B3 §7.5 puts the disk's recovery key on the same recovery sheet
+> - **Things found against B3, the USB installer design, and A993.** B3 runs a first setup on the
+>   box's own screen, whose browser shares the box's clock and does not count as a second clock — so
+>   a first setup there with no internet is refused unless a phone or till on the venue's network
+>   opens the setup page too; the same holds for a switch started on the spare's own screen (§6.5,
+>   §6.6, §13). A993's automatic change at start-up would then sell nothing until a second clock
+>   exists, which at a one-box venue with no internet means a phone opening a page before the first
+>   sale — an outside dependency that blocks a sale, which CLAUDE.md §5 forbids; A940's revision has
+>   to decide it (§13). And B3 §7.5 puts the disk's recovery key on the same recovery sheet
 >   and prints «Guarda esta hoja aunque otra la sustituya», which assumes later sheets; this
 >   revision's "one sheet per box, no reprint" leaves that wording to B3's next revision (§6.7).
 > - **Slice 4a** (§11) is now "the five-symbol minute name": its own fiscal pull request, which the
@@ -133,7 +143,7 @@ where it names code.
 1. A venue with two boxes keeps selling when either box dies, with **no internet at all**.
 2. Switching to the spare takes **one manager, at any till, in under two minutes**, during service —
    and **never waits for the next clock hour** (owner, 2026-10-21): normally at most for the next
-   minute, when another name was already taken in this one; 130 seconds at the very worst the clock
+   minute, when another name was already taken in this one; 150 seconds at the very worst the clock
    check allows (§6.5) — a departure named in §12.
 3. Open tables survive the switch: an open bill on table 4 is still open on the spare.
 4. Nothing is filed with AEAT twice, no invoice number is reused, and no chain forks — the fiscal
@@ -409,9 +419,11 @@ names to be settled against their siblings by the builder):
 - **the spare is not answering** — the main box cannot reach the store for two minutes. The main box
   then streams to the bucket directly if the venue has one (topology §4.4, "Box B dies"; a retarget
   opens a new generation), and warns that the venue has one copy again if it does not.
-- **the spare's clock is off** — the spare's clock differs from the main box's or a till's by more
-  than 15 seconds, half the switch's 30-second clock check (§6.5), so a drift is found before it
-  would block a switch (added in the second revision's review round).
+- **the clocks disagree** — a box's clock differs from the other box's, or from a till's or phone's
+  that talks to it, by more than 15 seconds, half the 30-second clock check (§6.5), so a drift is
+  found before it blocks a switch, a restore or a re-registration. Every box raises it, the main box
+  included, and it names both clocks without saying which is wrong (added in the second revision's
+  review rounds).
 
 They show on the bell and on the Box status page that A798 designs (A798 §4.3), as a "Spare box"
 row. Staff see nothing while the spare is merely behind; what staff need is in §6.
@@ -649,23 +661,24 @@ and:
    checked at `hour-selection.ts:468`).
 2. **Takes the current minute if it is allowed**, read once from the box's own clock after the
    clock check has passed. That is the normal case.
-3. **Otherwise waits, when the earliest allowed minute begins at most 130 seconds ahead** of this
-   box's clock. The clock check (below) keeps every box's clock within 35 seconds of the true time
-   when it takes a name (30 seconds, plus at most 5 seconds of uncertainty in the clock it is
-   checked against). So an earlier name was taken by a clock at most 35 seconds fast, and this box's
-   clock is at most 35 seconds slow: the minute after that name begins at most 35 + 35 + 60 = 130
-   seconds after this box's reading. The case that matters day to day is an earlier name taken in
-   this same minute (the owner: the second one waits for the next minute): with clocks that agree
-   to within a few seconds the wait is under a minute; 130 seconds is the worst the clock check
-   allows. The wait ends when this box's own clock reaches that minute, and the box takes it then,
-   as the current minute. The box never takes "the last minute plus one" ahead of its own clock:
-   that is A679's `maximum + 1`, refused for the same reason (line 131).
-4. **Refuses when the earliest allowed minute begins more than 130 seconds ahead.** With every
-   clock checked that cannot happen unless some clock the boxes compared with was itself wrong, so
-   it is refused rather than waited out. Nothing is recorded, and a switching spare resumes
-   following. "Manual confirmation … cannot override release, history or exhaustion floors" (A679
-   line 120), and this design adds no confirmation at all. The refusal names the time from which it
-   will be allowed.
+3. **Otherwise waits, when the earliest allowed minute begins at most 150 seconds ahead** of this
+   box's clock. The clock check (below) keeps a box's clock within 45 seconds of the true time when
+   it takes a name — 30 seconds from the other clock's reading, plus 15 seconds allowed for that
+   reading's own error — as long as the other clock really is within those 15 seconds. So an earlier
+   name was taken by a clock at most 45 seconds fast, and this box's clock is at most 45 seconds
+   slow: the minute after that name begins at most 45 + 45 + 60 = 150 seconds after this box's
+   reading. The case that matters day to day is an earlier name taken in this same minute (the
+   owner: the second one waits for the next minute): with clocks that agree to within a few
+   seconds the wait is under a minute; 150 seconds is the worst the clock check allows. The wait
+   ends when this box's own clock reaches that minute, and the box takes it then, as the current
+   minute. The box never takes "the last minute plus one" ahead of its own clock: that is A679's
+   `maximum + 1`, refused for the same reason (line 131).
+4. **Refuses when the earliest allowed minute begins more than 150 seconds ahead.** With every
+   clock checked that cannot happen unless some clock the boxes compared with was itself more than
+   15 seconds wrong, so it is refused rather than waited out. Nothing is recorded, and a switching
+   spare resumes following. "Manual confirmation … cannot override release, history or exhaustion
+   floors" (A679 line 120), and this design adds no confirmation at all. The refusal names the time
+   from which it will be allowed.
 5. **Records the chosen code as spent before activating** (A679 line 134), so an interrupted
    allocation never reuses it.
 
@@ -681,66 +694,86 @@ and:
   database still on the disk being restored onto, and the backup's own saved preparation state
   (`apps/server/src/recovery-preparation.ts:146-199`). Names made after the backup, or by a box
   this one never saw, are invisible. That is what the recovery sheet's code and the "last hour"
-  question were meant to cover, and both go. §6.7 shows by a test what today's selection does then,
-  and the extra floor this design adds for these two kinds.
+  question were meant to cover, and both go. §6.7 shows by a test what today's code does then,
+  and the extra check this design adds for these two kinds.
 
 **The clock check today.** Each usable reading becomes a range — the box's own clock with no
 uncertainty (`packages/fiscal-verifactu/src/hour-setup-clock.ts:51-63`), the browser's with half the
 challenge's round trip, which may last at most 5 seconds (`hour-setup-clock.ts:96-115`), and the
-internet's (an HTTP `Date` header from AEAT or an already configured Waitron origin,
-`hour-clock-internet.ts:106-114`) with up to 5 seconds allowed (`hour-clock.ts:52-55`); each range
-is the reading plus and minus its uncertainty (`hour-clock.ts:96-108`). A disagreement is the
-earliest range's start to the latest range's end being more than 120 seconds
-(`hour-clock.ts:111-114`). What it **refuses** outright, confirmation or not: a box clock before
-the running release was committed (`:122-126`), outside the code's range (`:127-128`), and readings
-that straddle a UTC hour (`:120-121`; after a confirmed disagreement only the box's own range
-counts, `:148-151`). What it **only flags**: a disagreement, or no clock other than the box's —
-either needs a person's confirmation (`:119`), and a confirmation then lets the selection through
-(`:152-157`). The probe in §6.7 confirmed both halves on the running code.
+internet's (an HTTP `Date` header from AEAT or an already configured Waitron origin) with half a
+second plus half the request's time, the request lasting at most 5 seconds — so at most 3 seconds
+(`hour-clock-internet.ts:125-139`); the check itself would accept up to 5 seconds
+(`hour-clock.ts:52-55`). Each range is the reading plus and minus its uncertainty
+(`hour-clock.ts:96-108`). A disagreement is the earliest range's start to the latest range's end
+being more than 120 seconds (`hour-clock.ts:111-114`). What it **refuses** outright, confirmation or
+not: a box clock before the running release was committed (`:122-126`), outside the code's range
+(`:127-128`), and readings that straddle a UTC hour (`:120-121`; after a confirmed disagreement only
+the box's own range counts, `:148-151`). What it **only flags**: a disagreement, or no clock other
+than the box's — either needs a person's confirmation (`:119`), and a confirmation then lets the
+selection through (`:152-157`). The probe in §6.7 confirmed both halves on the running code.
 
-**The clock check in this design — at every allocation, with no confirmation** (**my call**, on the
-coordinator's ruling after review; the owner decides).
+**The clock check in this design — every time a box takes a name, with no confirmation**
+(**my call**, following lane A's decision after the review; the owner decides).
 
 1. **A second clock from another machine is required**: the browser of a device that is not the box,
-   or the internet clock. A browser whose request reaches the server from any address the box itself
-   owns — the loopback address, its own LAN addresses, its own name or the venue's name answered by
-   itself — does not count, because it shares the box's clock. With none, the allocation is refused.
+   or the internet clock. A browser whose request reaches the server **from a source address that is
+   the loopback address or one of the box's own network interface addresses** does not count,
+   because it runs on the box and shares its clock. The rule looks at where the request comes from,
+   never at the name it was sent to: tills reach the spare at `waitron.local` answered by the spare
+   itself, and phones at the box's own name (§6.6), and their clocks count. The app runs with the
+   host's network (`network_mode: host`, `deploy/compose.yml:17`), so it sees the real source
+   address. With no second clock, the box takes no name.
 2. **The box's clock must lie within 30 seconds of every other usable clock's reading** (the middle
-   of its range). That reading is itself within its own uncertainty — at most 5 seconds — of the
-   true time, so a box that passes is within 35 seconds of the true time. (Measuring from the edge
-   of the range instead would forgive the uncertainty but double it in the arithmetic, 40 seconds;
-   30 seconds already sits well above the measurement noise.) **Behind or ahead, it is refused, and
-   no confirmation gets past it.** The first version of this revision refused only a
-   box clock that was behind, at setups and restores, and kept today's confirmation for a clock that
-   was ahead. Review showed why that is not enough: a name taken by a fast clock lies in the future,
-   and a later box with a right clock reaches it. Run on today's code (§6.7, case F): a box two
-   hours fast took `06XX`; a restore at the true time two hours later, both its clocks right, took
-   `06XX` again. A confirmed fast clock also pushes rule 4's refusal onto every later switch.
+   of its range). **Behind or ahead, it is refused, and no confirmation gets past it.** The first
+   version of this revision refused only a box clock that was behind, at setups and restores, and
+   kept today's confirmation for a clock that was ahead. Review showed why that is not enough: a
+   name taken by a fast clock lies in the future, and a later box with a right clock reaches it.
+   Run on today's code (§6.7, cases F1 and F2): a box whose clock read 21:10 when the true time was
+   19:10, with the browser right and the clock warning confirmed, took `06XX`; a restore at the true
+   21:10, both its clocks right, from a backup that did not know it, took `06XX` again. A confirmed
+   fast clock would also push rule 4's refusal onto every later switch.
 
-So every box that takes a name has a clock within 35 seconds of the true time, provided the clock it
-was checked against was right. That is what rules 3 and 4 above, and §6.7's wait, rest on.
+So, **if every clock a box was checked against was within 15 seconds of the true time**, every box
+that takes a name has a clock within 45 seconds of it. The 15 seconds is an allowance, not a
+measurement: the readings' own measured uncertainty is at most 3 seconds (internet) or 2.5 seconds
+(browser), and the remaining 12 seconds is a margin for a till's or a phone's clock being a little
+wrong itself. A reference clock more than 15 seconds wrong, in either direction, can still lead to a
+repeated name (§6.7 shows the arithmetic and a sweep); that is disclosed, not prevented.
 
-**Why 30 seconds.** Readings that agree can still be about 10 seconds apart from measurement
-alone — the internet's ±5 seconds and the browser's ±2.5 seconds — so the threshold must sit well
-above 10 seconds, or a slow link refuses comparisons that are fine. A name now lasts 60 seconds: at
-120, two clocks that pass the check could be two names apart; at 30 they are at most about half a
-name apart, which is what bounds the switch's wait at 130 seconds and the setup's and restore's
-wait (§6.7) at about two minutes. How far real tills and boxes drift with the internet down has
-**not been measured**; the 30 seconds is a starting value the two-box rehearsal checks (§11, §13).
-The hour-boundary wait goes for minute names (**my call**): it existed so that clocks on either side
-of an hour could not quietly pick different codes (A679 line 122), and here the rules above are what
+**Why 30 seconds.** Readings that agree are at most about 5.5 seconds apart from measurement alone
+(the internet reading's ±3 seconds and the browser's ±2.5 seconds), so the threshold must sit well
+above that, or a slow link refuses comparisons that are fine. A name now lasts 60 seconds: at 120,
+two clocks that pass the check could be two names apart; at 30 they are at most about half a name
+apart, which is what keeps the switch's wait at 150 seconds and the setup's and restore's wait
+(§6.7) at 90 to 150 seconds. How far real tills and boxes drift with the internet down has **not
+been measured**; the 30 seconds is a starting value the two-box rehearsal checks (§11, §13). The
+hour-boundary wait goes for minute names (**my call**): it existed so that clocks on either side of
+an hour could not quietly pick different codes (A679 line 122), and here the rules above are what
 keep names apart, so it would add up to 30 seconds' wait and no protection.
 
-**What this costs, said plainly.** A box whose clock is more than 30 seconds out cannot take a
-name: no first setup, no restore and — the hard one — **no switch to a spare whose clock has
-drifted**, until its clock is put right. Two things soften it. While both boxes are up, the spare
-compares its clock with the main box's and the tills' and raises an alert on the bell well before
-30 seconds («El reloj del equipo de reserva va desajustado»), so a drifting clock is found on a
-quiet afternoon, not at 21:40 (**my call**, a small addition to §5's alerts). And a box that is
-online keeps its clock synchronised: A798-B switches the host's time synchronisation on at
-install (`docs/backlog/box.md:366-373`). What is **not** solved: correcting a box's clock when the
-internet is down and nobody has a terminal — A798 no longer has the box correct its own clock
-(A798 design, revision 2, line 33). That is the open point in §13.
+**What this costs, said plainly.** Whenever two clocks disagree by more than 30 seconds, no name is
+taken until one of them is put right — and the box cannot tell which one is wrong. The cases:
+
+- **A spare whose clock has drifted cannot be switched to** — the hard one, mid-service.
+- **A till or phone whose clock has drifted blocks a box whose clock is right**: the switch or the
+  restore is refused although the box is fine. So the refusal must not say the box is wrong. It
+  says «La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos). Prueba
+  desde otra caja o móvil, o corrige la que esté mal», with both readings, and a manager can try
+  from another device.
+- **The main box's clock drifting goes unseen.** If the main box runs 20 seconds fast and the spare
+  31 seconds fast, they differ by 11 seconds, no spare-against-main alert fires, and a switch checked
+  against a right till is refused. And a main box out by more than 30 seconds blocks its own
+  re-registration and A993's automatic change, with nothing having warned.
+
+What softens them. **Every box watches its own clock**: while both boxes are up, each compares its
+clock with the other box's and with the tills' and phones' that talk to it, and raises an alert on
+the bell well before 30 seconds — at 15 — worded without blaming one side: «Los relojes no
+coinciden: este equipo y la caja 2 difieren 18 segundos» (**my call**, an addition to §5's alerts).
+A one-box venue gets the same alert against its tills. And a box that is online keeps its clock
+synchronised: A798-B switches the host's time synchronisation on at install
+(`docs/backlog/box.md:366-373`). What is **not** solved: correcting a box's clock when the internet
+is down and nobody has a terminal — A798 no longer has the box correct its own clock (A798 design,
+revision 2, line 33). That is an open point in §13.
 
 **An alternative, not recommended.** Take the name from the checked reference clock (the other
 machine's reading) instead of the box's, so that a wrong box clock never blocks a switch. It would
@@ -870,7 +903,9 @@ the spare's status, nothing that sells — and any device reaches it:
    — and the words «Si el equipo principal falla, escanea esto desde cualquier caja o móvil del
    local». Both boxes get one, because either can be the spare. Mock-up 7.
 3. **On the spare's own screen**, if one is plugged in (B3 asks whether a box's screen is also a
-   till): it shows the switch page.
+   till): it shows the switch page. That screen's browser runs on the spare and shares its clock, so
+   it is not the second clock §6.5 requires: with the internet down, a switch started there is
+   refused, and the manager switches from a till or a phone instead (§13).
 
 **Trap (a): a passkey works only under the name it was registered for.** The box registers every
 passkey for `waitron.local` (§2). A browser lets a page use that passkey only when its address is
@@ -994,8 +1029,8 @@ prints "this node's current installation code", A679 line 399), and the probe's 
 
 **The owner's condition: show by a test that a restore from an old backup, with the box's clock set
 behind, refuses rather than reusing a name.** Run on 2026-10-21 against today's code (the main
-branch at `dad6caf1c`; re-run in the review round on this branch, which changes no code; Node
-v26.11.1, Vitest 4.1.11):
+branch at `dad6caf1c`; re-run in the review round and again in the third check on 2026-10-22, on
+this branch, which changes no code; Node v26.11.1, Vitest 4.1.11):
 
 ```
 env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/zz-a947r2-old-backup-probe.test.ts
@@ -1003,8 +1038,8 @@ env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/fiscal-verifactu exec vites
       Tests  19 passed (19)
 ```
 
-"19 passed" says only that every case ran: the probe asserts nothing about selections, it prints
-them, and the results are the printed lines in the table below. The probe is kept outside the
+"19 passed" counts the probe's 19 tests and says only that each ran: the probe asserts nothing
+about selections, it prints them (one test prints the three F lines), and the results are the printed lines in the table below. The probe is kept outside the
 repository, with its full output beside it:
 `~/waitron-campaign/a947r2-probes/zz-a947r2-old-backup-probe.test.ts` and
 `zz-a947r2-old-backup-probe.output.txt`. It calls the restore's own selection —
@@ -1026,8 +1061,8 @@ later name it does **not** know was taken by the spare's switch on 23 October 19
 (`06XV`); the restore really happens on 24 October 09:00 UTC; the running release was committed on
 15 October (an older image, so its floor does not help). Written down before the first run: a
 **failing** case prints `selected` with a code at or below `06XV`; a **passing** one prints
-`refused`; the **control** prints `selected` with a code above `06XV`. Cases C0, S, F and P were
-added in the review round.
+`refused`; the **control** prints `selected` with a code above `06XV`. Cases C0, S and P were
+added in the review round, and F1–F2 (which run the fast box's own allocation) in the third check.
 
 | Case | Box clock | Other clocks | Typed code | Printed |
 | --- | --- | --- | --- | --- |
@@ -1046,19 +1081,22 @@ added in the review round.
 | D2 — as B2 with the old database still on the disk | 20 Oct 10:00 | browser right | none | refused `hour_not_later` |
 | D3 — AEAT's clock right, no browser, not confirmed | 20 Oct 10:00 | internet right | none | refused `clock_unconfirmed` |
 | **D4 — the same, confirmed** | 20 Oct 10:00 | internet right | none | **selected `06VA`** |
-| **F — an unseen name `06XX` taken by a box 2 h fast; restore at the true time** | 23 Oct 21:10 | browser the same | none | **selected `06XX` — the same name** |
+| F1 — a box 2 h fast takes a name, not confirmed | 23 Oct 21:10 (true 19:10) | browser right | none | refused `clock_unconfirmed` |
+| **F1 — the same, the clock warning confirmed** | 23 Oct 21:10 (true 19:10) | browser right | none | **selected `06XX`** |
+| **F2 — a later restore at the true 21:10, from a backup that does not know F1** | 23 Oct 21:10 | browser the same | none | **selected `06XX` — F1's name again** |
 | E1 — control: clock right | 24 Oct 09:00 | browser the same | none | selected `06Y9`, later than `06XV` |
 | E2 — control: clock right, with the code | 24 Oct 09:00 | browser the same | `06XV` | selected `06Y9` |
 
-**The finding: with the code requirement removed, today's selection does not refuse a restore
+**The finding: with the code requirement removed, today's name-picking code does not refuse a restore
 from an old backup with the box's clock behind.** It refuses only until a person confirms the clock
 (B1 → B2, D3 → D4), and then picks an earlier name than one already used; with a browser that
 shares the box's wrong clock it asks nothing (B4). The typed code saves it only when the sheet
 carries the newest name (D1); the sheet in the owner's own example carries an older one, and does
 not (S). A restore in the same hour as a name it cannot see repeats that name even with right clocks
-(C, C0), which is the hour unit, and which the "last hour" question covered by waiting for the next
-hour (C2) — but not a clock days behind (B3). And a name taken by a fast clock is repeated later by
-a box whose clocks are right (F). What did refuse, and is therefore a floor today, each proven by
+(C, C0) — because today's names change only once an hour; with a name per minute that case goes
+away — and the "last hour" question covered it by waiting for the next hour (C2), but not a clock
+days behind (B3). And a name taken by a box whose fast clock someone confirmed (F1) is taken again
+later by a box whose clocks are right (F2). What did refuse, and is therefore a floor today, each proven by
 the run:
 
 - **the backup's own history** — A: `hour_not_later` from `hour-selection.ts:466-471`, fed by
@@ -1082,40 +1120,57 @@ installations**: no code asks AEAT for one; `reportedIdentities` come only from 
 AEAT's **clock** is a source today (`hour-clock-internet.ts:106-114`), and D3–D4 show what it does:
 it flags, and a confirmation passes it.
 
-**The floor this design adds** (**my call**; slice 4a builds it, fiscal). Two parts.
+**The extra check this design adds** (**my call**; slice 4a builds it, fiscal). Two parts.
 
-- **At every allocation: §6.5's clock check** — a second clock from another machine, and the box
-  within 30 seconds of it, ahead or behind, with no confirmation (B2, B4, C's 90 seconds, D4, F).
-- **At a first setup and a restore** — the two allocations that cannot see every name already used:
+- **Every time a box takes a name: §6.5's clock check** — a second clock from another machine, and
+  the box within 30 seconds of it, ahead or behind, with no confirmation. That stops B2, C's
+  90-second lag, D4 and F1; it stops B4 only when B4's browser runs on the box itself (a till with
+  the same wrong date is the disclosed limit below).
+- **At a first setup and a restore** — the two that cannot see every name already used:
   1. **The time floor also counts the backup's newest invoice record and the moment the backup was
      made**, not only its allocations, so a clock between the backup's last allocation and its last
      sale is refused by the backup itself. This reads records; it changes none.
-  2. **The name is taken 70 to 130 seconds after the check**: the box waits until its
-     own clock has passed its checked reading by 70 seconds, then takes the next whole minute — 70
-     to 130 seconds in all. Why: since every box's clock is within 35 seconds of the true time when
-     it takes a name (§6.5), a name made just before this one, which this box cannot see, begins at
-     most 35 seconds after the true time; this box's clock is at most 35 seconds slow, so the true
-     time is at most its reading plus 35 seconds; that unseen name's minute therefore begins at most
-     70 seconds after this box's reading, and the next whole minute after that is later than it.
-     The owner's words were "wait at most for the next minute"; this is up to about two minutes, for
-     setups and restores only. The alternative, if the owner prefers it: take the current minute and
-     disclose that a name made within the last minute or two by a box this one cannot know about
-     could repeat.
+  2. **The name is taken 90 to 150 seconds after the check.** The box waits until its own clock has
+     passed its checked reading by 90 seconds, then waits for the next minute to begin on its own
+     clock, and takes that minute as the current one — it never takes a minute ahead of its own
+     clock (A679 line 131). Why 90: if every reference clock is within §6.5's 15-second allowance,
+     every box's clock is within 45 seconds of the true time when it takes a name. A name made just
+     before this one, which this box cannot see, then begins at most 45 seconds after the true time
+     of the check; this box's clock is at most 45 seconds slow, so the true time is at most its
+     reading plus 45 seconds; that unseen name's minute begins at most 90 seconds after this box's
+     reading, and the next minute to begin after that is later than it.
 
-What it still does not catch, disclosed: every clock the box can compare being wrong the same way
-(a till set to the same wrong date, with no internet), and another of the taxpayer's venues taking
-a name in the same minute, neither knowing of the other (§6.5).
+     Checked by a sweep rather than by this paragraph alone, run 2026-10-22 under Node v26.11.1:
+     `node ~/waitron-campaign/a947r2-probes/restore-wait-sweep.mjs` (output beside it). It tries
+     every half-second phase within a minute, gaps of 0–10 seconds between the unseen name and the
+     check, and the two boxes' clocks at either extreme or exact, for a range of real reference
+     errors. With this design's 90 seconds: no repeat for reference errors up to 15 seconds; a repeat
+     becomes possible from 15.5 seconds (first at phase 14.5 s, the unseen box 45.5 s fast and this
+     box 45.5 s slow). With the first fix round's 70 seconds, which had no allowance: a repeat from a
+     reference error of 5.5 seconds (phase 24.5 s), the defect the third claim check found.
+
+     The owner's words were "wait at most for the next minute"; this is up to two and a half
+     minutes, for setups and restores only. The alternative, if the owner prefers it: take the
+     current minute and disclose that a name made within the last two minutes or so by a box this
+     one cannot know about could repeat.
+
+What it still does not catch, disclosed: **a reference clock — a till, a phone, or the internet's —
+more than 15 seconds wrong, in either direction**, at this box or at the box that took the unseen
+name (the errors need not point the same way: one fast and one slow is the worst case in the sweep);
+**every clock the box can compare being wrong together** (a till set to the same wrong date, with no
+internet: B4's case with a separate device); and another of the taxpayer's venues taking a name in
+the same minute, neither knowing of the other (§6.5).
 
 **What the run proves, and what it does not — the owner's condition is not met yet.** Proven on
-today's code: the five floors above, and that with the code requirement removed a confirmed or
-shared wrong clock, a stale sheet, the hour unit, or an earlier fast clock reuses or undercuts a
-name. **Not proven, because it is not built: that the new rules refuse.** That proof is slice 4a's
+today's code: the five checks above that refused, and that with the code requirement removed a
+confirmed or shared wrong clock, a stale sheet, a restore in the same hour as an unseen name, or an
+earlier confirmed fast clock (F1, then F2) reuses or undercuts a name. **Not proven, because it is not built: that the new rules refuse.** That proof is slice 4a's
 committed test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, run against
-the minute code: B2, S, D4 and B4 (its browser sample arriving from the loopback address and, in a
-second case, from the box's own LAN address) must refuse; F's fast box must be refused when it tries
-to take its name; a restore inside the same minute as a name it cannot see, both clocks right, and
-one whose clock is 20 seconds behind with an unseen name taken 10 seconds earlier by a clock 30
-seconds fast, must each take a later minute after the wait; A, A2, D1, D2 still refuse; E1 and E2
+the minute code: B2, S, D4 and B4 (its browser sample arriving from the loopback source address and,
+in a second case, from one of the box's own interface addresses) must refuse; F1's fast box must be
+refused when it tries to take its name; a restore inside the same minute as a name it cannot see,
+both clocks right, and one whose clock is 45 seconds slow with an unseen name taken just before by a
+clock 45 seconds fast, must each take a later minute after the wait; A, A2, D1, D2 still refuse; E1 and E2
 still select; and the new refusal is proven by deletion — with the clock rule removed, B2 selects
 again. **Slice 4a removes the code from the sheet and the restore form only if that test passes,
 in the same pull request.**
@@ -1425,8 +1480,9 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     `:141-157` goes — no confirmation passes the clock any more, and a check with no clock from
     another machine refuses (§6.5); the hour-boundary wait `:120-121` and `:148-151` goes. The
     browser sample needs the request's source address, so the route that carries it
-    (`hosted-hour-recovery.ts:97-113`) learns whether it came from any address the box owns
-    (loopback, its LAN addresses, its own name, the venue's name answered by itself). The setup
+    (`hosted-hour-recovery.ts:97-113`) learns whether its source address is the loopback address or
+    one of the box's own interface addresses — the source, never the name the request was sent to
+    (the app runs on the host's network, `deploy/compose.yml:17`). The setup
     screens' confirm-the-clock controls go with it (`setup/recovery-hour.ts:288-289`, the
     `confirm-clock` call). The spare's early clock alert joins §5's alerts (slice 3c).
   - **CLAUDE.md §5**, in the same pull request: its sentence "the box does not mint an
@@ -1456,7 +1512,7 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     four-character code) and `docs/operations/first-live-fiscal-setup.md:20,33,42` (the "last hour"
     question and the sheet's code).
   - **Tests it adds**: §6.5's rules (two names in one minute, a third, a known later minute inside
-    and beyond 130 seconds, the refusal naming its time, the durable record before activation); a
+    and beyond 150 seconds, the refusal naming its time, the durable record before activation); a
     five-symbol series with hyphenated and slashed prefixes beside the retired forms; and
     `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, §6.7's old-backup cases
     with its proof by deletion.
@@ -1532,21 +1588,23 @@ Asked one at a time in the campaign's questions file by the watcher, each with a
 **What is left for the owner:** approval of this second revision before the build is planned. The
 calls marked **my call** are the ones to look at:
 
-- **The clock check** (§6.5): 30 seconds instead of 120, at every allocation; a second clock from
-  another machine required; a box clock behind **or ahead** by more than that refused, with no
-  confirmation (the ahead half on the coordinator's ruling after review). Its cost: a drifted spare
-  cannot be switched to until its clock is right — hence the spare's early clock alert — and a box
-  with no internet and a wrong clock has no way, in this design, to be put right (§13). The
-  hour-boundary wait dropped.
+- **The clock check** (§6.5): 30 seconds instead of 120, every time a box takes a name; a second
+  clock from another machine required (judged by where the request comes from); a box clock behind
+  **or ahead** by more than that refused, with no confirmation (the ahead half following lane A's
+  decision after the review); a 15-second allowance for a reference clock's own error. Its cost:
+  when two clocks disagree by more than 30 seconds nothing takes a name — a drifted spare cannot be
+  switched to, a drifted till blocks a right box, a drifting main box would go unseen — hence the
+  clock alert on every box; and a box with no internet and a wrong clock has no way, in this design,
+  to be put right (§13). The hour-boundary wait dropped.
 - **Two departures from what the owner said.** A second switch in the same minute normally waits
-  under a minute, but up to 130 seconds at the worst the clock check allows, where goal 2 says "at
-  most for the next minute". A setup or a restore takes its name 70 to 130 seconds after the
+  under a minute, but up to 150 seconds at the worst the clock check allows, where goal 2 says "at
+  most for the next minute". A setup or a restore takes its name 90 to 150 seconds after the
   check (§6.7), where the owner expected at most the next minute; the alternative is no wait and a
   disclosed residual.
 - The spare answering the venue's name with its switch page while the main box is silent (§6.6); a
   manager overriding only the health check, and the archive kept 90 days (§7.2).
 
-And the owner's "prove it" condition is **not yet met**: §6.7's run shows today's selection fails;
+And the owner's "prove it" condition is **not yet met**: §6.7's run shows today's name-picking code fails;
 the proof that the new rules refuse is slice 4a's committed test, on which slice 4a's removal of
 the code depends.
 
@@ -1574,7 +1632,15 @@ the code depends.
 - B3 §7.5's «Guarda esta hoja aunque otra la sustituya» on the recovery sheet assumes later sheets;
   with one sheet per box and no reprint (§6.7) B3's next revision rewords it.
 - A993's automatic change runs at a start with no person present, so it has no browser clock: it
-  needs the internet clock, or waits for a person (A940's revision settles which).
+  needs the internet clock, or waits for a person. If it waits, the box sells nothing until a second
+  clock exists — and at a one-box venue whose counter till is the box's own screen (B3's default)
+  with no internet, that means a phone opening a page before the first sale: an outside dependency
+  blocking a sale, which CLAUDE.md §5 ("Nothing EXTERNAL may block a sale") forbids. A940's revision
+  must decide it.
+- A switch started on the spare's own screen with no internet has no second clock and is refused
+  (§6.6, way 3); the manager switches from a till or phone instead.
+- A reference clock (till, phone or internet) more than 15 seconds wrong can still lead to a
+  repeated name at a setup or restore (§6.7); the 15-second allowance is a starting value.
 - Sizing the UPS for two boxes.
 
 ## Provenance
@@ -1598,7 +1664,9 @@ the code depends.
 | A series is prefix, hyphen, installation code; prefixes up to 21 characters of `[A-Za-z0-9/_.-]`; the retired forms; the table admits 1–30 characters | `packages/fiscal-verifactu/src/allocation-identity.ts:1-7,56-72`; `schema/sif.ts:37` | read 2026-10-21 |
 | A promotion's hour selection takes an `answer` and a non-empty `installationCodes` list | `packages/fiscal-verifactu/src/hosted-hour-recovery.ts:79-86`; `reported-hour-codes.ts:7` | read 2026-10-21 |
 | The typed code is a floor only; the restore's path from the form to the selection; what the history reader reads | `hosted-hour-recovery.ts:78-87`; `hour-selection.ts:189-201,447,466-471`; `apps/server/src/recovery-preparation.ts:90-113,125-131,146-199,206-215`; `hour-recovery-state.ts:34-92`; `hour-history-reader.ts:51-102` | read 2026-10-21 |
-| With the code requirement removed, today's restore selection undercuts a name once a wrong clock is confirmed or shared, with a stale sheet code, and repeats one in the same hour or after a fast clock; today's form refuses an empty code list; the five floors that refused | the probe, `~/waitron-campaign/a947r2-probes/zz-a947r2-old-backup-probe.test.ts`, output beside it | run 2026-10-21 at `dad6caf1c` (15 cases), re-run in the review round with C0, S, F and P added (19 cases), Node v26.11.1, Vitest 4.1.11; results are the printed lines quoted in §6.7, not the pass count; not committed |
+| With the code requirement removed, today's restore selection undercuts a name once a wrong clock is confirmed or shared, with a stale sheet code, and repeats one in the same hour or after a fast clock; today's form refuses an empty code list; the five floors that refused | the probe, `~/waitron-campaign/a947r2-probes/zz-a947r2-old-backup-probe.test.ts`, output beside it | run 2026-10-21 at `dad6caf1c` (15 tests), re-run in the review round with C0, S, F and P added (19 tests), and on 2026-10-22 with F replaced by F1–F2, which run the fast box's own allocation (still 19 tests); Node v26.11.1, Vitest 4.1.11; results are the printed lines quoted in §6.7, not the pass count; not committed |
+| With a 15-second allowance for a reference clock's error, a 90-second restore wait repeats no unseen name for reference errors up to 15 s, and can from 15.5 s; the earlier 70 s wait could from 5.5 s | `~/waitron-campaign/a947r2-probes/restore-wait-sweep.mjs`, output beside it | run 2026-10-22 under Node v26.11.1 |
+| The internet clock reading's uncertainty is at most 3 s; the box runs on the host's network | `packages/fiscal-verifactu/src/hour-clock-internet.ts:125-139`; `deploy/compose.yml:17` | read 2026-10-22 |
 | CLAUDE.md §5's "does not mint an installation number from its clock" was already stale after #1752 | `git log -S` on `CLAUDE.md` (added by #1700, 2026-10-14) and on `hour-selection.ts`'s `identity: encodeHourIdentity(now)` (added by #1752, 2026-10-20) | run 2026-10-21 |
 | Activation revokes the box's SIF, inserts a new one, empties its chain head, retires and inserts series — its own rows only | `packages/fiscal-verifactu/src/allocation.ts:434-460` | read 2026-10-21 |
 | A chain's first record carries `PrimerRegistro = "S"` | `packages/fiscal-verifactu/src/chain.ts:148-151` | read 2026-10-21 |

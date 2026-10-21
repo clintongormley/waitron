@@ -18,21 +18,23 @@ sees 0CNNW, 0CZZW, 0D00B: three installations, nothing repeated.
 Saturday, a restore from an old backup with a wrong clock. Both boxes are lost; the only backup is
 Thursday's, which knows 0CNNW but not Friday's two names. The new box's clock says Tuesday 12:00;
 Marta's phone, doing the restore, says Saturday 11:00. What refuses it: the clock check — the box
-is more than 30 seconds out from the phone, and that is now a refusal nobody can click past
-(«ponla en hora para recuperar»). Once the clock is right it waits 70 seconds, until 11:01:10,
-and takes the next minute, 11:02 Madrid: 0D0RY.
+and the phone are more than 30 seconds apart, and that is now a refusal nobody can click past
+(«la hora de este equipo y la de este móvil no coinciden»; it does not say which is wrong). Once
+the clock is right, checked at 11:00:00, the box waits 90 seconds, to 11:01:30, then for the next
+minute to begin on its own clock, and at 11:02:00 takes that minute: 0D0RY.
 
-You asked for a test, not reasoning. What I could run is today's code with its demand for the
-code taken out (today's form will not even accept a restore without one). It does NOT refuse:
-once someone clicks past the clock warning it picks Tuesday's name, earlier than Friday's — and
-typing the code from Thursday's sheet does not stop it, because that sheet carries the old main
+You asked for a test, not reasoning. What I could run is today's name-picking code with its demand
+for a typed code taken out (today's form will not even accept a restore without one). It does NOT
+refuse: once someone clicks past the clock warning it picks Tuesday's name, earlier than Friday's —
+and typing the code from Thursday's sheet does not stop it, because that sheet carries the old main
 box's own code, from before the switch. A restore in the same hour as a name it cannot see took
-that very name, even with both clocks right; and a name made by a box whose clock ran two hours
-fast was taken again later by a box whose clocks were right. So today the sheet's code protects
-only when someone has printed a new sheet since the last switch, and the "last hour" question only
-inside one hour. Your condition is NOT met yet: the test shows today's code fails; the proof that
-the new rules refuse is a test the fiscal pull request must include, and that pull request takes
-the code off the sheet only if its test passes.
+that very name, even with both clocks right (today's names change once an hour; with a name per
+minute that case goes away). And I ran a box whose clock was two hours fast: once its clock warning
+was clicked past it took 06XX, and a restore two hours later with right clocks took 06XX again. So
+today the sheet's code protects only when someone has printed a new sheet since the last switch,
+and the "last hour" question only inside one hour. Your condition is NOT met yet: the test shows
+today's code fails; the proof that the new rules refuse is a test the fiscal pull request must
+include, and that pull request takes the code off the sheet only if its test passes.
 
 What changed, in short:
 - Every installation code, everywhere, is five symbols counting UTC minutes since 1 January 2026
@@ -43,32 +45,43 @@ What changed, in short:
 - The "anyone set up a box in the last hour?" question goes, from setup, the restore form and the
   switch.
 - The recovery sheet keeps only the box's recovery key, printed once per box. The restore form
-  stops asking for the installation code, and nothing asks for a reprint after a new series.
-  One clash to settle in the USB installer design (B3): it puts the disk's recovery key on the
-  same sheet and prints "keep this sheet even if another replaces it", which expects reprints.
+  stops asking for the installation code, and nothing asks for a reprint after a new series —
+  once that pull request's test passes. One clash to settle in the USB installer design (B3): it
+  puts the disk's recovery key on the same sheet and prints "keep this sheet even if another
+  replaces it", which expects reprints.
 - My calls, to look at:
-  - The clock check tightens from 120 to 30 seconds and applies at every name: a second clock from
-    another device or the internet, and the box's clock more than 30 seconds behind OR ahead of
-    it refused, with no button past it. The cost: a spare whose clock has drifted cannot be
-    switched to until its clock is right, so the spare warns early when its clock drifts; and a
-    box with no internet and a wrong clock has no way, yet, to be put right.
-  - The box's own screen does not count as a second clock (it shares the box's clock). So a first
-    setup on the box's own screen with no internet needs a phone or till on the venue's network to
-    open the setup page too.
+  - The clock check tightens from 120 to 30 seconds and applies every time a box takes a name: at
+    least one clock on another device or the internet, and the box's clock more than 30 seconds
+    behind OR ahead of any clock refused, with no button past it. The cost: when two clocks
+    disagree, nothing takes a name until one is put right — a spare whose clock drifted cannot be
+    switched to, a till whose clock drifted blocks a box that is right (the manager tries from
+    another till), and a drifting main box would go unseen. So every box now warns early when its
+    clock and another's differ by 15 seconds. A box with no internet and a wrong clock has no way,
+    yet, to be put right.
+  - The box's own screen does not count as a second clock (it shares the box's clock; the box
+    tells by where the request comes from). So with no internet, a first setup on the box's own
+    screen, or a switch started on the spare's own screen, needs a phone or till on the venue's
+    network instead.
   - Two departures from what you said. A second switch in the same minute normally waits under a
-    minute, but up to 130 seconds if the two boxes' clocks sit at opposite ends of what the check
-    allows — you said "at most the next minute". And a setup or a restore takes its name 70 to 130
+    minute, but up to 150 seconds if the two boxes' clocks sit at opposite ends of what the check
+    allows — you said "at most the next minute". And a setup or a restore takes its name 90 to 150
     seconds after the clock check, so that a name made just before by a box it cannot see is
-    behind it. The alternative: no wait for setups and restores, and accept that such a name could
-    repeat.
+    behind it; I checked that with a sweep of clock errors. It holds while the till, phone or
+    internet clock it was checked against is within 15 seconds of the true time; one more than 15
+    seconds wrong could still let a name repeat. The alternative: no wait for setups and restores,
+    and accept a wider chance of a repeat.
+- For A940 (next): A993's change at start-up has no person and so no browser clock. With no
+  internet, at a one-box venue whose till is the box's own screen, the box would sell nothing until
+  a phone opened a page — something outside blocking a sale, which the rules forbid. A940's revision
+  has to decide it.
 - Every place in the code the change touches is listed by file and line in the build plan (slice
   4a). Development and demo boxes holding four-symbol names are reset, not migrated.
 
 - A (recommended) — approve. The build plan is written next; slice 4a (the five-symbol name, the
   clock rule, the sheet without its code once its test passes) comes first, and the fiscal slices
   wait for you to land them.
-- B — approve with changes: say which (for example, no wait for setups and restores, or confirm
-  past a fast clock).
+- B — approve with changes: say which (for example, no wait for setups and restores, or allow a
+  person to confirm past a fast clock).
 - Stop here — I'll write.
 
 ==========================================================================================

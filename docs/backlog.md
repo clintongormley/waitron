@@ -5778,11 +5778,12 @@ outstanding on code that exists.
   in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
   switch never waits for the next hour, because every series name is five symbols for the UTC
   minute (`A-0CZZW`, §6.5; the owner's 22:25 follow-up), with no "last hour" question anywhere;
-  the recovery sheet and the restore form drop the installation code. A test of today's selection
-  with the code requirement removed showed it takes an earlier name once a wrong clock is
+  the recovery sheet and the restore form would drop the installation code once slice 4a's test
+  passes. A test of today's name-picking code with its demand for a typed code taken out showed it takes an earlier name once a wrong clock is
   confirmed, even with Thursday's stale sheet code, and repeats a name it cannot see in the same
-  hour or after a fast clock; so every allocation now refuses a box clock more than 30 seconds
-  behind or ahead, and a setup or restore waits 70–130 seconds before naming (§6.5, §6.7). That
+  hour or after a fast clock; so once slice 4a is built, every name a box takes would refuse a box
+  clock more than 30 seconds behind or ahead of another device's, and a setup or restore would wait
+  90–150 seconds before naming (§6.5, §6.7). That
   the new rules refuse is slice 4a's test, still to be built — fiscal, the owner lands it, first;
   any device, even a reloaded one, reaches the
   switch (§6.6); the returning box hands over and becomes the spare by itself after three checks

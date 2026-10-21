@@ -168,7 +168,7 @@ last hour?", waiting until the next hour if the answer is yes or don't know. A b
 itself after an upgrade cannot answer that.
 
 Example: the bar's box starts on 1.4.0 at 11:15 on 1 March 2027.
-- With A, it takes the hour-and-minute name A947 proposes for a switch to the spare box: 09YA-15, [Dated pointer, 2026-10-21: superseded by the owner's 22:25 answer — every series name is five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here.]
+- With A, it takes the hour-and-minute name A947 proposes for a switch to the spare box: 09YA-15,
   series A-09YA-15, and normally sells at 11:15. Your second venue's main box, upgraded at 11:17,
   gets 09YA-17.
 - With B, it uses the four-character hour and takes the "don't know" path: it sells nothing until
@@ -181,7 +181,7 @@ Example: the bar's box starts on 1.4.0 at 11:15 on 1 March 2027.
   names, then tries again by itself at that minute (no invoices meanwhile). Limit: two of the same business's venues changing in the same
   minute would take the same name, so the release runbook says to upgrade one venue's main box at
   a time, a minute apart (each venue's spare in the same visit). Needs you to approve A947's
-  revision (its slice 4a builds the name).
+  revision (its slice 4a builds the name). [Dated pointer, 2026-10-22: the owner's answer of 2026-10-21 ~22:25 replaces this: every series name is to be five symbols for the UTC minute, with no "last hour" question and no code on the recovery sheet, once A947's slice 4a and its test land; see the A947 design's second revision, §6.5 and §6.7. Not rewritten here. A947 also notes a decision for A940: at a one-box venue with no internet, A993's change at start-up would need a phone's clock before the first sale (A947 §13).]
 - B — the four-character hour after waiting for the next hour: no new name form, but up to an hour
   without invoices after such an upgrade, and the same limit within one hour.
 - C — a manager answers on the dashboard; no invoices until one does.
