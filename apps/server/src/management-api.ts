@@ -77,9 +77,7 @@ import {
   deleteDeviceProfile,
   emptyPrinterLists,
   getDeviceProfileWithPrinters,
-  getTenantTheme,
   listDeviceProfiles,
-  putTenantTheme,
   readProfilePrinterLists,
   updateDeviceProfile,
   type DeviceProfileRow,
@@ -257,7 +255,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "receipt.invalid": 400,
   "image.invalid_file": 422,
-  "theme.invalid": 400,
   "shared.invalid_id": 400,
   "zone.not_found": 404,
   "zone.table_in_use": 409,
@@ -1254,38 +1251,6 @@ export function mountManagementApi(
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
-    }),
-  );
-
-  app.get("/management-api/theme", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const theme = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        return getTenantTheme(tx);
-      });
-      return c.json({ theme: theme ?? null });
-    }),
-  );
-
-  app.put("/management-api/theme", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ theme?: unknown }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body) || !("theme" in body)) {
-        throw new AppError("management.request_invalid", { field: "theme" });
-      }
-      const { theme } = body;
-      await withTransaction(deps.db, async (tx) => {
-        await putTenantTheme(tx, {
-          managementSessionId: sessionId,
-          theme,
-        });
-      });
-      return c.body(null, 204);
     }),
   );
 

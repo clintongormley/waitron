@@ -25,8 +25,6 @@ export type {
   ProfileAction,
   ProfileScreen,
 } from "./device-types.js";
-export type { ThemeOverride } from "./theme.js";
-export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
 export {
   isSharedDisplay,
   profileAllows,
@@ -76,7 +74,6 @@ export type {
   SelectDevicePrinterResult,
 } from "./device-equipment.js";
 export type { PrinterRole, ProfilePrinterRole, ProfilePrinterLists } from "./device-printers.js";
-export { getTenantTheme, putTenantTheme } from "./theme-store.js";
 export {
   encodeLogoRaster,
   getPrintedReceipt,

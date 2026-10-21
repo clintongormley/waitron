@@ -54,7 +54,3 @@ export type CapabilityFlag =
 
 /** A screen a profile may start on (`NAVIGATION_SCREENS` in `packages/layouts/src/device-types.ts`). */
 export type NavigationScreen = "show-station" | "show-expo" | "show-schedule";
-
-export interface ThemeOverride {
-  tokens: Record<string, string>;
-}

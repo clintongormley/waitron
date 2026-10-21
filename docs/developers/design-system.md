@@ -196,9 +196,9 @@ highlighted table row; the new value is 4.5:1 or more on `--wt-color-bg`, `--wt-
 text" cases in `packages/ui-core/src/tokens/colors.test.ts` hold. It
 holds its own value rather than reading `--wt-color-primary`, so a deployment that overrides the
 primary colour has to override this one as well, with a light and a dark value: no single colour
-reaches 4.5:1 on both themes' `--wt-color-bg`. A tenant theme cannot set it: `THEMEABLE_TOKENS`
-(`packages/layouts/src/theme.ts`) does not list it, and no screen applies a stored tenant theme
-yet.
+reaches 4.5:1 on both themes' `--wt-color-bg`. A venue's custom theme writes it, worked
+out from the theme's own button colour (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`),
+but no screen applies a venue's theme yet (A841).
 
 `--wt-color-primary-hover` and `--wt-color-danger-hover` are the fills a primary and a danger
 `wt-button` take under the pointer: `#1a5fd0` and `#9a1f18` light, `#78a9ff` and `#ffa197` dark,
@@ -207,7 +207,8 @@ more on it, and at least 1.2:1 from the resting fill, so the hover shows (the "h
 in `colors.test.ts`). Like `--wt-color-primary-text` they hold
 their own values, so a deployment rule that overrides `--wt-color-primary` or `--wt-color-danger`
 must set the matching hover token too, in both
-themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
+themes; and a venue's custom theme writes `--wt-color-primary-hover` but never
+`--wt-color-danger-hover`: danger is a colour with a meaning, outside `THEME_COLOURS`.
 
 `--wt-color-primary-disabled` / `--wt-color-on-primary-disabled` and `--wt-color-danger-disabled` /
 `--wt-color-on-danger-disabled` are the fill and text of a disabled, not loading, primary and danger
@@ -215,7 +216,7 @@ themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cann
 `#3d2828`/`#c09894` dark. In dark each fill is within 1.5:1 of `--wt-color-surface` and
 `--wt-color-surface-raised`, and each text reads at 4.5:1 or more on its fill (the "disabled button
 colours" cases in `colors.test.ts`). Like the hover tokens they hold their own values, and
-`THEMEABLE_TOKENS` does not list them, so a tenant theme cannot set them.
+a venue's custom theme writes the two primary ones but neither danger one.
 
 Opening hours → Year (`packages/venue-service/src/dashboard/opening-hours-year.ts`) fills a day
 with its season's stored colour, painted with that colour's station tint (`season-tint.ts`, below),

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import * as api from "./index.js";
 
 describe("@waitron/layouts barrel", () => {
-  it("exports the device and theme surface", () => {
+  it("exports the device surface and no longer the retired theme check", () => {
     expect(api.FORM_FACTORS).toBeDefined();
-    expect(typeof api.validateThemeOverride).toBe("function");
+    expect("validateThemeOverride" in api).toBe(false);
   });
   it("exports the receipt-trim surface", () => {
     expect(api.DEFAULT_RECEIPT).toBeDefined();

@@ -16,6 +16,7 @@
     "@waitron/identity": "workspace:*",
     "@waitron/printing": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/ui-core": "workspace:*",
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
