@@ -202,9 +202,9 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "Tardes", menuId: r.cafe, staffMenuIds: [], endOffsetMinutes: 0 },
+        { name: "Afternoons", menuId: r.cafe, staffMenuIds: [], endOffsetMinutes: 0 },
       ],
-      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", endOffsetMinutes: 0 }],
+      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Afternoons", endOffsetMinutes: 0 }],
       ["PATCH", `/menu-periods/${r.mananas}`, { endOffsetMinutes: 0 }],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
@@ -453,9 +453,9 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "Tardes", menuId: r.cafe, staffMenuIds: [], expectedClockRevision: 0 },
+        { name: "Afternoons", menuId: r.cafe, staffMenuIds: [], expectedClockRevision: 0 },
       ],
-      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", expectedClockRevision: 0 }],
+      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Afternoons", expectedClockRevision: 0 }],
       ["PATCH", `/menu-periods/${r.mananas}`, { expectedClockRevision: 0 }],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {

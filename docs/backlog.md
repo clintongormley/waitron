@@ -1621,7 +1621,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
     at a skipped 02:30 are refused, while the joined range is accepted.
   - The special-day-then-season rule is written out in several places, and special-day paint is
-    read by four separately written queries; each could collapse to one place.
+    read by separately written queries; each could collapse to one place.
     [Detail](backlog/service-periods.md#the-special-day-then-season-rule-is-written-out-in-several-places)
   - `business-day-schedule.ts` copies the changeover lookup of
     `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on

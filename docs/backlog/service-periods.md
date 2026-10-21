@@ -71,10 +71,9 @@ Left open by A506-4, #1597.
 
 With named days gone (A506-5), the rule "special day, then season" is still written out in
 `day-resolver.ts` (twice, for departments and for zones) and `business-day-schedule.ts`; special-day paint is
-read by four separately written queries in `special-days.ts` and `business-day-schedule.ts`;
+read by separately written queries in `special-days.ts` and `business-day-schedule.ts`;
 `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
-the browser-safe repeat rules, which leaves import loops with `business-day-schedule.ts` and
-`menu-timetable.ts`. Each could collapse to one place.
+the browser-safe repeat rules. Each could collapse to one place.
 
 ## A department or zone delete's preview never counts a special day's painted hours
 

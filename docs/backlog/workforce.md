@@ -191,7 +191,7 @@ tests stay unchanged; a later zoom/readability design remains open above.
 The season painter is headed “{season}: standard week”. A department's opening periods are named,
 faded bands in their own colours, with their times at the top. Its paint row says “Shaded:
 {department}'s opening hours, by period”. A prep station's guides show when it gets orders from the
-period menus that route it dishes, from each period's start to last orders. Sending departments keep
+period menus that route it dishes, from each period's start to its end. Sending departments keep
 separate, stable lanes, each band named by department and period. Staffing paint remains independent
 of those guides. The [Part 1 plan](../superpowers/plans/2026-10-16-a724-staffing-guide-bands.md)
 records the implementation and its verification checks.

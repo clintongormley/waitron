@@ -1677,8 +1677,9 @@ bundle's `createdAt` (`refuseSkippedPaint`). The menu validator takes only the t
 
 ### Service-period configuration
 
-(2026-10-21, A789: the period end offset is gone; the two measurements below tested the earlier
-rule.)
+(2026-10-21, A789: the period end offset is gone. The first measurement below tested it; the
+second's `-t` filter names a test since renamed "round-trips service periods with colours, ordered
+staff menus and remapped business-day ranges".)
 
 Measured 2026-10-08 for A432 with `pnpm --filter @waitron/venue-service exec vitest run
 src/schema/schema-conformance.test.ts src/migrations.test.ts src/period-end-offset.test.ts
