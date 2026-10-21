@@ -1208,8 +1208,11 @@ pnpm exec prettier --check apps/server/test-durations.json
 ```
 
 `scripts/test-durations.mjs` takes each file's median over the logs (the mean of the middle two for
-an even count), rounded to 0.1 s, at least 0.1 s. The first table came from the six runs named at the
-top of this section: 66 logs, 872 paths. The first refresh expected is when the
+an even count), rounded to 0.1 s, at least 0.1 s. The models above used the six runs named at the top
+of this section (872 paths). The table this branch commits was rebuilt after #1929 landed, from the
+six newest `main` runs that ran the server shards (39449527877, 39500330558, 39503634628,
+39507125783, 39518421998, 39530877061): 66 logs, 877 paths, the five more being #1929's new test
+files. The next refresh expected is when the
 `a850-backup-verification` branch lands with its new server test files.
 
 **Guards, each weaker than its name.** The "apps/server's config packs every server test file into
