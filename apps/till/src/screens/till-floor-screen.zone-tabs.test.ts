@@ -146,6 +146,24 @@ const nextFrames = () =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
 
+/** Pads a zone's tab out to `width(span)`, `span` being the strip's padding box across while its
+ * tabs overflow it, so a case's geometry rests on measurement rather than on how wide the
+ * machine's fonts draw the zone's name. */
+async function sizeTab(strip: HTMLElement, zoneTab: HTMLElement, width: (span: number) => number) {
+  zoneTab.style.paddingRight = "";
+  const name = zoneTab.getBoundingClientRect().width;
+  zoneTab.style.paddingRight = `${window.innerWidth}px`;
+  const box = paddingBox(strip);
+  const target = width(box.right - box.left);
+  expect(name).toBeLessThan(target);
+  zoneTab.style.paddingRight = `${target - name}px`;
+  await nextFrames();
+}
+
+/** Halfway between too wide to clear an edge at each end and too wide to clear one edge. */
+const wideBetweenEdges = (span: number, clear: number, ring: number) =>
+  (span - 2 * clear + (span - clear - ring)) / 2;
+
 const originalUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
@@ -292,14 +310,11 @@ describe("till-floor-screen: zone tabs", () => {
     expect(reach).toBeGreaterThan(0);
 
     const ring = pulseOf(el, "z2")!.getBoundingClientRect();
-    const nav = el.shadowRoot!.querySelector<HTMLElement>(".tabs")!;
-    const box = nav.getBoundingClientRect();
-    const left = box.left + nav.clientLeft;
-    const top = box.top + nav.clientTop;
-    expect(ring.left - reach).toBeGreaterThanOrEqual(left);
-    expect(ring.top - reach).toBeGreaterThanOrEqual(top);
-    expect(ring.right + reach).toBeLessThanOrEqual(left + nav.clientWidth);
-    expect(ring.bottom + reach).toBeLessThanOrEqual(top + nav.clientHeight);
+    const box = paddingBox(el.shadowRoot!.querySelector<HTMLElement>(".tabs")!);
+    expect(ring.left - reach).toBeGreaterThanOrEqual(box.left);
+    expect(ring.top - reach).toBeGreaterThanOrEqual(box.top);
+    expect(ring.right + reach).toBeLessThanOrEqual(box.right);
+    expect(ring.bottom + reach).toBeLessThanOrEqual(box.bottom);
   });
 
   it("the strip leaves room for the first tab's ring", async () => {
@@ -1029,7 +1044,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
   ])(
     "shows a tab too wide to clear the edges that can cover it whenever it is whole in the strip (Bar has a state: %s, nearly the strip's width: %s)",
     async (barHasState, nearlyStrip) => {
-      const name = "Upstairs private dining room and bar";
+      const name = "Upstairs";
       const wide = [zone("z1", "Inside", 0), zone("z2", "Bar", 1), zone("z3", name, 2)];
       await onPhone(
         [
@@ -1045,17 +1060,17 @@ describe("till-floor-screen: the zone strip's edge", () => {
             (["start", "end"] as const).filter(
               (side) => edgeOf(el, side)?.getAttribute("aria-label") === `Show ${name}`,
             );
-          await expect.poll(named).toEqual(["end"]);
-          // Narrower than the strip, but wider than the room between the two edges.
+          // Narrower than the strip, but too wide to clear even the one edge over it.
           const clear = tapProbe(host, "calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5)");
+          const ring = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+          await sizeTab(strip, tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!, (span) =>
+            nearlyStrip ? span - 4.5 : (span - clear - ring + span - 4) / 2,
+          );
+          await expect.poll(named).toEqual(["end"]);
           const span = box().right - box().left;
-          if (nearlyStrip) {
-            const zoneTab = tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!;
-            zoneTab.style.paddingRight = `${span - 4.5 - tab().width}px`;
-            await nextFrames();
-          }
           expect(tab().width).toBeLessThan(span - 4);
           expect(tab().width).toBeGreaterThan(span - 2 * clear);
+          expect(tab().width).toBeGreaterThan(span - clear - ring);
 
           await userEvent.click(edgeOf(el, "end")!);
           await expect.poll(named).toEqual([]);
@@ -1083,7 +1098,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
   );
 
   it("counts a whole wide tab under the end edge as hidden when no earlier tab has a state", async () => {
-    const name = "Upstairs private dining room";
+    const name = "Upstairs";
     const order = [
       zone("z1", "Inside", 0),
       zone("z2", "Bar", 1),
@@ -1102,12 +1117,11 @@ describe("till-floor-screen: the zone strip's edge", () => {
         const tab = () => zoneTab.getBoundingClientRect();
         const box = () => paddingBox(strip);
         const label = () => edgeOf(el, "end")?.getAttribute("aria-label");
-        await expect.poll(label).toBe(`Show ${name}`);
-        zoneTab.style.paddingRight = `${251 - tab().width}px`;
-        await nextFrames();
         // Too wide to clear both edges, narrow enough to clear the end edge alone.
         const clear = tapProbe(host, "calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5)");
         const ring = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+        await sizeTab(strip, zoneTab, (span) => wideBetweenEdges(span, clear, ring));
+        await expect.poll(label).toBe(`Show ${name}`);
         const span = box().right - box().left;
         expect(tab().width).toBeGreaterThan(span - 2 * clear);
         expect(tab().width).toBeLessThan(span - clear - ring);
@@ -1135,7 +1149,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
   ])(
     "shows a whole wide tab under its own %s edge when a tab beyond the other end has a state",
     async (side, bar, patio) => {
-      const name = "Upstairs private dining room";
+      const name = "Upstairs";
       const order = [
         zone("z1", "Inside", 0),
         zone("z2", "Bar", 1),
@@ -1149,7 +1163,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
           seated("t3", "z3", { timingBand: "forgotten" }),
           seated("t4", "z4", patio),
         ],
-        async (el) => {
+        async (el, host) => {
           const strip = stripOf(el);
           const zoneTab = tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!;
           const tab = () => zoneTab.getBoundingClientRect();
@@ -1158,8 +1172,10 @@ describe("till-floor-screen: the zone strip's edge", () => {
             (["start", "end"] as const).filter(
               (end) => edgeOf(el, end)?.getAttribute("aria-label") === `Show ${name}`,
             );
+          const clear = tapProbe(host, "calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5)");
+          const ring = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+          await sizeTab(strip, zoneTab, (span) => wideBetweenEdges(span, clear, ring));
           await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
-          zoneTab.style.paddingRight = `${251 - tab().width}px`;
           if (side === "start") strip.scrollLeft = strip.scrollWidth;
           await expect.poll(named).toEqual([side]);
           strip.scrollLeft +=
@@ -1175,7 +1191,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
   );
 
   it("brings a whole wide tab clear of its own start edge when that edge is tapped", async () => {
-    const name = "Upstairs private dining room";
+    const name = "Upstairs";
     const order = [
       zone("z1", "Inside", 0),
       zone("z2", "Bar", 1),
@@ -1184,14 +1200,16 @@ describe("till-floor-screen: the zone strip's edge", () => {
     ];
     await onPhone(
       [seated("t1", "z1"), seated("t3", "z3", { timingBand: "forgotten" })],
-      async (el) => {
+      async (el, host) => {
         const strip = stripOf(el);
         const zoneTab = tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!;
         const tab = () => zoneTab.getBoundingClientRect();
         const box = () => paddingBox(strip);
         const label = () => edgeOf(el, "start")?.getAttribute("aria-label");
+        const clear = tapProbe(host, "calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5)");
+        const ring = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+        await sizeTab(strip, zoneTab, (span) => wideBetweenEdges(span, clear, ring));
         await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
-        zoneTab.style.paddingRight = `${251 - tab().width}px`;
         strip.scrollLeft = strip.scrollWidth;
         await expect.poll(label).toBe(`Show ${name}`);
         // Whole, but under the start edge it can clear.
@@ -1253,7 +1271,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
   );
 
   it("brings a tab within a pixel of the strip's width to its start, as one wider than the strip", async () => {
-    const name = "Upstairs private dining room and bar";
+    const name = "Upstairs";
     await onPhone(
       [seated("t1", "z1"), seated("t3", "z3", { timingBand: "forgotten" })],
       async (el, host) => {
@@ -1262,9 +1280,10 @@ describe("till-floor-screen: the zone strip's edge", () => {
         const tab = () => zoneTab.getBoundingClientRect();
         const box = () => paddingBox(strip);
         const label = () => edgeOf(el, "end")?.getAttribute("aria-label");
+        await sizeTab(strip, zoneTab, (span) => span - 0.5);
         await expect.poll(label).toBe(`Show ${name}`);
-        zoneTab.style.paddingRight = `${box().right - box().left - 0.5 - tab().width}px`;
-        await nextFrames();
+        expect(tab().width).toBeLessThan(box().right - box().left);
+        expect(tab().width).toBeGreaterThan(box().right - box().left - 1);
         await userEvent.click(edgeOf(el, "end")!);
         const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
         await expect.poll(() => tab().left - reach).toBeGreaterThanOrEqual(box().left - 1);
@@ -1277,39 +1296,31 @@ describe("till-floor-screen: the zone strip's edge", () => {
   });
 
   it("brings a tab wider than the strip clear of the start edge an earlier tab's state draws", async () => {
-    const wide = [
-      zone("z1", "Inside", 0),
-      zone("z2", "Bar", 1),
-      zone("z3", "Upstairs private dining room and terrace", 2),
-    ];
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(320, 844);
-    try {
-      const { el, host } = await mountWidget<TillFloorScreen>("till-floor-screen", {
-        zones: wide,
-        tables: [
-          seated("t1", "z1"),
-          seated("t2", "z2", { readyToServe: 2 }),
-          seated("t3", "z3", { readyToServe: 2 }),
-        ],
-        now,
-        reducedMotion: true,
-      });
-      const strip = stripOf(el);
-      const tab = () => tabOf(el, "z3").closest(".zone-tab")!.getBoundingClientRect();
-      await expect
-        .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
-        .toBe("Show Upstairs private dining room and terrace");
-      expect(tab().width).toBeGreaterThan(paddingBox(strip).right - paddingBox(strip).left);
-      await userEvent.click(edgeOf(el, "end")!);
-      await expect.poll(() => edgeOf(el, "start")?.getAttribute("aria-label")).toBe("Show Bar");
-      const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
-      const start = edgeOf(el, "start")!.getBoundingClientRect();
-      expect(tab().left - reach).toBeGreaterThanOrEqual(start.right - 1);
-      expect(tab().left - reach).toBeLessThanOrEqual(start.right + 1);
-    } finally {
-      await page.viewport(viewport.width, viewport.height);
-    }
+    const name = "Upstairs";
+    await onPhone(
+      [
+        seated("t1", "z1"),
+        seated("t2", "z2", { readyToServe: 2 }),
+        seated("t3", "z3", { readyToServe: 2 }),
+      ],
+      async (el, host) => {
+        const strip = stripOf(el);
+        const zoneTab = tabOf(el, "z3").closest<HTMLElement>(".zone-tab")!;
+        const tab = () => zoneTab.getBoundingClientRect();
+        const clear = tapProbe(host, "calc(var(--wt-tap-min) + var(--wt-space-1) * 1.5)");
+        await sizeTab(strip, zoneTab, (span) => span + clear);
+        await expect.poll(() => edgeOf(el, "end")?.getAttribute("aria-label")).toBe(`Show ${name}`);
+        expect(tab().width).toBeGreaterThan(paddingBox(strip).right - paddingBox(strip).left);
+        await userEvent.click(edgeOf(el, "end")!);
+        await expect.poll(() => edgeOf(el, "start")?.getAttribute("aria-label")).toBe("Show Bar");
+        const reach = tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+        const start = edgeOf(el, "start")!.getBoundingClientRect();
+        expect(tab().left - reach).toBeGreaterThanOrEqual(start.right - 1);
+        expect(tab().left - reach).toBeLessThanOrEqual(start.right + 1);
+      },
+      true,
+      [zone("z1", "Inside", 0), zone("z2", "Bar", 1), zone("z3", name, 2)],
+    );
   });
 
   it("stops listening to the strip's scroll and size when the screen leaves the page", async () => {
