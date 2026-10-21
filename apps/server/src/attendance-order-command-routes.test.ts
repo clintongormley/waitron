@@ -194,17 +194,18 @@ describe("accepted till order command attendance", () => {
     vi.spyOn(v.clock, "now").mockImplementation(() => {
       throw new Error("replayed command clock");
     });
-    expect(await command(app, id, action)).toMatchObject({
-      status: 409,
-      json: {
-        code:
-          action === "place"
-            ? "working_order.not_open"
-            : action === "cancel"
-              ? "working_order.not_placed"
-              : "working_order.out_of_date",
-      },
-    });
+    if (action === "place")
+      expect(await command(app, id, action)).toEqual({
+        status: 200,
+        json: { id, status: "placed" },
+      });
+    else
+      expect(await command(app, id, action)).toMatchObject({
+        status: 409,
+        json: {
+          code: action === "cancel" ? "working_order.not_placed" : "working_order.out_of_date",
+        },
+      });
     expect(await state()).toEqual(before);
   });
   it.each(actions)("%s with attendance disabled creates no attendance state", async (action) => {

@@ -36,6 +36,7 @@ describe("the user guides", () => {
       const markdown = readGuide(root, lang, "kitchen-service");
       expect(markdown).toBeDefined();
       expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+        "counter-send-retry",
         "allergy-copies",
         "corrections",
         "held-work",

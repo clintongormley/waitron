@@ -536,8 +536,9 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
   expect(await registroCount(cfg)).toBe(0);
   expect(await drawerOpensFor(cfg)).toEqual([]);
-  await expect(placeOrder(deps(), cfg, id, OPERATOR)).rejects.toMatchObject({
-    code: "working_order.not_open",
+  await expect(placeOrder(deps(), cfg, id, OPERATOR)).resolves.toEqual({
+    id,
+    status: "placed",
   });
   expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toHaveLength(1);
 });

@@ -3144,8 +3144,9 @@ export class TillApi {
 
   /**
    * Place a working order → `POST /api/working-orders/:id/place` (`open → placed`): freezes its
-   * composition and opens its amendment log. A non-open or absent id rejects with
-   * `working_order.not_open`.
+   * composition and opens its amendment log. An identical retry returns the saved placed result.
+   * A different placement rejects with `submission.id_reused`; an absent order or one closed
+   * without this placement rejects with `working_order.not_open`.
    */
   placeOrder(id: string, expectedEdit: BillEditExpected | null): Promise<PlaceOrderResult> {
     return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST", {

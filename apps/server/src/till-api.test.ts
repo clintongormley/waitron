@@ -3022,7 +3022,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     expect(ticket.rows[0]).toEqual({ state: "queued" });
   });
 
-  it("POST on a non-open order (a re-place of an already-placed one) is 409 working_order.not_open", async () => {
+  it("POST repeats the original placed result when the first place already committed", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -3033,16 +3033,12 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
     });
 
-    // The re-place carries the device cookie too, so it reaches `placeOrder`'s open-only guard
-    // (`working_order.not_open`) rather than being short-circuited by the sale-time device gate.
     const rePlace = await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
     });
-    expect(rePlace.status).toBe(409);
-    expect(await rePlace.json()).toMatchObject({
-      error: { code: "working_order.not_open", params: { workingOrderId: id } },
-    });
+    expect(rePlace.status).toBe(200);
+    expect(await rePlace.json()).toEqual({ id, status: "placed" });
   });
 
   it("POST with a malformed id is 409 working_order.not_open, not an opaque 500 (the 7b isUuid follow-up)", async () => {

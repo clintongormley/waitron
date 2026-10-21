@@ -11314,16 +11314,7 @@ describe("till-app", () => {
       expect(tenderPay(el).stage).toBe("collect");
     });
 
-    it("place-order on an EDITED retrieved order already placed elsewhere: the re-tap surfaces place.error (placeOrder is not idempotent)", async () => {
-      // The concurrent-place race / lost-response re-tap: the order has already moved past `open` (placed
-      // on another register, or the first place landed and its response was lost). The edit-gated re-sync
-      // calls `updateWorkingOrder`, which returns `working_order.not_open` — SWALLOWED by `#syncIfDirty` —
-      // and then the server's `placeOrder`, which is NOT idempotent (it refuses ANY non-open order with
-      // the same `working_order.not_open`; till-api.test.ts pins that 409), returns `not_open` too. So
-      // `#onPlaceOrder` surfaces `place.error` and stays on the ORDER stage — it does NOT fall through to
-      // collect: placing has no `sales_working_order_id_key` replay the way pay does. Both server calls are
-      // mocked to reject `not_open`, matching the real server: `placeOrder` succeeds only when the order
-      // is open, which is exactly when `updateWorkingOrder` would not have thrown.
+    it("place-order on an edited retrieved order already placed elsewhere keeps the edits and shows place.error", async () => {
       const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const placeOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const { el } = await mountApp({

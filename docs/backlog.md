@@ -2585,11 +2585,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - Recorded, not blocking: a handheld's Order tab is tappable with no active table; Counter has no
   prep-queue rail.
 
-- **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
-  result — leave it, or build the replay?** — a product decision to take before production. Placing
-  files no invoice (`placeOrder`, `apps/server/src/working-order.ts`). The gain if built is that a
-  re-tap after a lost response moves the till on as placed instead of showing an error.
-  [Detail](backlog/till.md#a-re-sent-place-on-an-already-placed-order-answers-409-rather-than-replaying-the-original-result--leave-it-or-build-the-replay)
+- **A lost counter Send reply still tells you to check whether a sale went through.**
+  `#onPlaceOrder` uses `sale.unconfirmed`; its English and Spanish strings refer to a sale.
+  The HTTP retry case in `apps/server/src/place-replay.test.ts` checks that placement leaves
+  `sales` empty. **Next action:** give a counter send its own
+  uncertainty message, telling you how to retry without implying a payment was taken.
 
 - **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;
   a helper would collapse it.** Cosmetic, and cheapest alongside A848 (the empty-order message) that

@@ -6484,44 +6484,54 @@ export async function placeOrder(
   operatorId: string,
   expectedEdit: OrderEditAuthority["expectedEdit"],
 ): Promise<PlaceOrderResult> {
-  return withTransaction(deps.db, async (tx) => {
-    const [locked] = await tx
-      .select({ status: workingOrders.status, orderNumber: workingOrders.orderNumber })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    if (locked === undefined || locked.status !== "open") {
-      throw new AppError("working_order.not_open", { workingOrderId: id });
-    }
-    await requireOrderBillEditor(tx, id, { operatorId, expectedEdit });
-    await refusePaymentInFlight(tx, [id]);
-    await refuseBillWithPayments(tx, id);
-    const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-    const orderFlow = serviceContext?.serviceMode ?? "prepay";
-
-    await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
-    // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
-    // Read before the stamp below. A bill moved here from a table has dishes already sent.
-    const lines = await unsentDishLines(tx, id);
-    await assertSendable(
+  return withTransaction(deps.db, (tx) =>
+    runServiceCommand(
       tx,
-      lines.map((line) => line.id),
-    );
-    // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
-    await tx
-      .update(workingOrderLines)
-      .set({ sentAt: nowIso() })
-      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
+      { kind: "bill", workingOrderId: id },
+      `place:${id}`,
+      "order.place",
+      { workingOrderId: id, operatorId, origin: cfg.origin, expectedEdit },
+      async () => {
+        const [locked] = await tx
+          .select({ status: workingOrders.status, orderNumber: workingOrders.orderNumber })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id));
+        if (locked === undefined || locked.status !== "open") {
+          throw new AppError("working_order.not_open", { workingOrderId: id });
+        }
+        await requireOrderBillEditor(tx, id, { operatorId, expectedEdit });
+        await refusePaymentInFlight(tx, [id]);
+        await refuseBillWithPayments(tx, id);
+        const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+        const orderFlow = serviceContext?.serviceMode ?? "prepay";
 
-    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, deps.attendance);
+        await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
+        // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
+        // Read before the stamp below. A bill moved here from a table has dishes already sent.
+        const lines = await unsentDishLines(tx, id);
+        await assertSendable(
+          tx,
+          lines.map((line) => line.id),
+        );
+        // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
+        await tx
+          .update(workingOrderLines)
+          .set({ sentAt: nowIso() })
+          .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
 
-    if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
-      await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
-    }
+        await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, deps.attendance);
 
-    await fireLines(tx, cfg, id, lines);
+        if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
+          await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
+        }
 
-    return { id, status: "placed" };
-  });
+        await fireLines(tx, cfg, id, lines);
+
+        return { id, status: "placed" as const };
+      },
+      cfg.madeHereSink,
+    ),
+  );
 }
 
 /** An order's invoice priced from its stored lines at the rates of today, its issue date. */
