@@ -219,20 +219,22 @@ describe("custom theme store against a real migrated database", () => {
     const { manager } = await setup();
     const a = await create(manager, "A");
     const b = await create(manager, "B", DARK_GREEN);
-    const bBefore = await rawRow(b.id);
-    const saved = await inTx((tx) =>
-      saveCustomTheme(tx, { managementSessionId: manager, id: a.id, theme: DARK_GREEN }),
+    await suite.db.execute(
+      sql`update custom_themes set updated_at = '2000-01-01T00:00:00.000Z' where id = ${b.id}`,
     );
-    expect(saved).toEqual({
-      id: a.id,
-      name: "A",
-      choices: DARK_GREEN,
-      updatedAt: expect.any(String),
-    });
-    expect(await rawRow(b.id)).toEqual(bBefore);
+    const bBefore = await rawRow(b.id);
+    const ROUND: ThemeChoices = { ...LEMON, corners: "round" };
+    const saved = await inTx((tx) =>
+      saveCustomTheme(tx, { managementSessionId: manager, id: a.id, theme: ROUND }),
+    );
+    expect(saved).toEqual({ id: a.id, name: "A", choices: ROUND, updatedAt: expect.any(String) });
+    const bAfter = (await rawRow(b.id)) as { theme: string; updated_at: string };
+    expect(JSON.parse(bAfter.theme)).toEqual(DARK_GREEN);
+    expect(bAfter.updated_at).toBe("2000-01-01T00:00:00.000Z");
+    expect(bAfter).toEqual(bBefore);
     const aBefore = await rawRow(a.id);
     const copy = await create(manager, "C", saved.choices);
-    expect(copy.choices).toEqual(DARK_GREEN);
+    expect(copy.choices).toEqual(ROUND);
     expect(await rawRow(a.id)).toEqual(aBefore);
     expect(await rawRow(b.id)).toEqual(bBefore);
   });
@@ -289,6 +291,25 @@ describe("custom theme store against a real migrated database", () => {
       expect(await inTx(readThemeInUse)).toEqual({ id, choices: null });
       await inTx((tx) => saveCustomTheme(tx, { managementSessionId: manager, id, theme: LEMON }));
       expect(await inTx(readThemeInUse)).toEqual({ id, choices: LEMON });
+    },
+  );
+
+  it("checks permission before the document and name on create", async () => {
+    const { manager } = await setup();
+    const supervisor = await seedSession("supervisor");
+    const createBad = (session: string) => create(session, "Waitron", BAD_DOCUMENT);
+    expect(await codeOf(() => createBad(supervisor))).toBe("authorization.not_permitted");
+    expect(await codeOf(() => createBad(manager))).toBe("theme.invalid");
+    expect(await rowCount()).toBe(0);
+  });
+
+  it.each([randomUUID(), "not-a-uuid"])(
+    "checks permission before the id on switch, for the missing id %s",
+    async (id) => {
+      const { manager } = await setup();
+      const supervisor = await seedSession("supervisor");
+      expect(await codeOf(() => switchTo(supervisor, id))).toBe("authorization.not_permitted");
+      expect(await codeOf(() => switchTo(manager, id))).toBe("theme.not_found");
     },
   );
 
